@@ -1,0 +1,542 @@
+"use client"
+
+import Link from "next/link"
+import { PartnerLayout } from "@/components/partner-layout"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { isDemoMode } from "@/lib/demo-data"
+import { EmptyState } from "@/components/empty-state"
+import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
+import { AlertTriangle, Clock, FileText, MessageSquare, DollarSign, ChevronRight, Building2, Check, X, Clock3, Send } from "lucide-react"
+
+// Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
+const demoProfileCompletion = {
+  capabilities: 100,
+  credentials: 80,
+  legal: 60,
+  payments: 100,
+}
+
+const demoOpenRFPs = [
+  {
+    id: "1",
+    title: "Video Production Partner — Sports Creator Series",
+    deadline: "8 days",
+    status: "new",
+  },
+  {
+    id: "2", 
+    title: "Documentary Series — Tech Startup Profile",
+    deadline: "12 days",
+    status: "new",
+  },
+]
+
+const demoActiveProjects = [
+  {
+    id: "1",
+    name: "NWSL Creator Content Series",
+    client: "Electric Animal",
+    status: "In Production",
+    nextMilestone: "Mid-point Delivery",
+    nextMilestoneDate: "Feb 28, 2026",
+    progress: 45,
+  },
+]
+
+const demoUpcomingPayments = [
+  {
+    id: "1",
+    project: "NWSL Creator Content Series",
+    milestone: "Delivery",
+    amount: 29100,
+    date: "Apr 15, 2026",
+    status: "pending",
+  },
+]
+
+const demoProjectAlerts = [
+  {
+    id: "1",
+    type: "deadline",
+    title: "Mid-point Delivery Due",
+    message: "NWSL Creator Content Series deliverables due in 5 days",
+    date: "Feb 28, 2026",
+    priority: "high",
+    project: "NWSL Creator Content Series",
+    actionUrl: "/partner/projects",
+    actionLabel: "View Details",
+  },
+  {
+    id: "2",
+    type: "document",
+    title: "Document Acknowledgment Required",
+    message: "Please review and acknowledge the updated Brand Guidelines",
+    date: "Mar 20, 2026",
+    priority: "medium",
+    project: "NWSL Creator Content Series",
+    actionUrl: "/partner/documents",
+    actionLabel: "Review Document",
+  },
+  {
+    id: "3",
+    type: "feedback",
+    title: "Client Feedback Received",
+    message: "New feedback on Episode 1 rough cut — 3 comments pending review",
+    date: "Mar 18, 2026",
+    priority: "medium",
+    project: "NWSL Creator Content Series",
+    actionUrl: "/partner/projects",
+    actionLabel: "View Feedback",
+  },
+  {
+    id: "4",
+    type: "payment",
+    title: "Payment Processing",
+    message: "Your milestone payment of $29,100 is being processed",
+    date: "Mar 15, 2026",
+    priority: "low",
+    project: "NWSL Creator Content Series",
+    actionUrl: "/partner/payments",
+    actionLabel: "View Payment",
+  },
+]
+
+export default function PartnerDashboardPage() {
+  const isDemo = isDemoMode()
+  const { connections, acceptInvitation, declineInvitation, isLoading: connectionsLoading } = useLeadAgencyFilter()
+  
+  // Use demo data or empty arrays for production
+  const profileCompletion = isDemo ? demoProfileCompletion : { capabilities: 0, credentials: 0, legal: 0, payments: 0 }
+  const totalCompletion = Math.round(
+    Object.values(profileCompletion).reduce((a, b) => a + b, 0) / Object.keys(profileCompletion).length
+  )
+  const openRFPs = isDemo ? demoOpenRFPs : []
+  const activeProjects = isDemo ? demoActiveProjects : []
+  const upcomingPayments = isDemo ? demoUpcomingPayments : []
+  const projectAlerts = isDemo ? demoProjectAlerts : []
+  
+  // Show simplified empty state for production users
+  if (!isDemo && activeProjects.length === 0 && openRFPs.length === 0) {
+    return (
+      <PartnerLayout>
+        <div className="space-y-8">
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="font-display font-bold text-3xl text-[#0C3535]">
+                Welcome to Ligament
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Complete your profile to start receiving project opportunities
+              </p>
+            </div>
+          </div>
+          <EmptyState type="projects" />
+        </div>
+      </PartnerLayout>
+    )
+  }
+  
+  return (
+    <PartnerLayout>
+      <div className="space-y-8">
+        {/* Welcome Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="font-display font-bold text-3xl text-[#0C3535]">
+              Welcome back{isDemo ? ", Fieldhouse Films" : ""}
+            </h1>
+            <p className="text-gray-600 mt-1">
+              Here&apos;s an overview of your partner account and opportunities
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Profile Completion</div>
+            <div className="font-display font-bold text-3xl text-[#0C3535]">{totalCompletion}%</div>
+          </div>
+        </div>
+        
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
+            <div className="font-display font-bold text-3xl text-[#0C3535]">{openRFPs.length}</div>
+            <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Open RFPs</div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
+            <div className="font-display font-bold text-3xl text-[#0C3535]">{activeProjects.length}</div>
+            <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Active Projects</div>
+          </div>
+          <div className="bg-white rounded-xl border border-green-200 p-5 text-center bg-green-50">
+            <div className="font-display font-bold text-3xl text-green-600">$58,200</div>
+            <div className="font-mono text-[10px] text-green-600 uppercase tracking-wider mt-1">Paid to Date</div>
+          </div>
+          <div className="bg-white rounded-xl border border-yellow-200 p-5 text-center bg-yellow-50">
+            <div className="font-display font-bold text-3xl text-yellow-600">$29,100</div>
+            <div className="font-mono text-[10px] text-yellow-600 uppercase tracking-wider mt-1">Pending</div>
+          </div>
+        </div>
+        
+        {/* Lead Agency Connections */}
+        {connections.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Building2 className="w-5 h-5 text-[#0C3535]" />
+                <h2 className="font-display font-bold text-lg text-[#0C3535]">Lead Agency Connections</h2>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-600">
+                  {connections.filter(c => c.status === 'confirmed').length} Confirmed
+                </span>
+                {connections.filter(c => c.status === 'pending').length > 0 && (
+                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600">
+                    {connections.filter(c => c.status === 'pending').length} Pending
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {connections.map((connection) => {
+                const getStatusConfig = () => {
+                  switch (connection.status) {
+                    case 'confirmed':
+                      return { 
+                        bg: 'bg-green-50', 
+                        border: 'border-green-200', 
+                        icon: <Check className="w-4 h-4 text-green-600" />,
+                        label: 'Confirmed',
+                        labelBg: 'bg-green-100 text-green-700'
+                      }
+                    case 'accepted':
+                      return { 
+                        bg: 'bg-blue-50', 
+                        border: 'border-blue-200', 
+                        icon: <Clock3 className="w-4 h-4 text-blue-600" />,
+                        label: 'Awaiting Confirmation',
+                        labelBg: 'bg-blue-100 text-blue-700'
+                      }
+                    case 'pending':
+                      return { 
+                        bg: 'bg-yellow-50', 
+                        border: 'border-yellow-200', 
+                        icon: <Send className="w-4 h-4 text-yellow-600" />,
+                        label: 'Invitation Pending',
+                        labelBg: 'bg-yellow-100 text-yellow-700'
+                      }
+                    case 'declined':
+                      return { 
+                        bg: 'bg-gray-50', 
+                        border: 'border-gray-200', 
+                        icon: <X className="w-4 h-4 text-gray-400" />,
+                        label: 'Declined',
+                        labelBg: 'bg-gray-100 text-gray-500'
+                      }
+                    default:
+                      return { 
+                        bg: 'bg-gray-50', 
+                        border: 'border-gray-200', 
+                        icon: null,
+                        label: 'Unknown',
+                        labelBg: 'bg-gray-100 text-gray-500'
+                      }
+                  }
+                }
+                
+                const statusConfig = getStatusConfig()
+                
+                return (
+                  <div 
+                    key={connection.id} 
+                    className={cn(
+                      "p-4 rounded-lg border transition-colors",
+                      statusConfig.bg,
+                      statusConfig.border
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#0C3535] flex items-center justify-center flex-shrink-0">
+                        <span className="text-xs font-bold text-white">
+                          {connection.agencyName.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-display font-bold text-sm text-[#0C3535] truncate">
+                          {connection.agencyName}
+                        </h4>
+                        <p className="font-mono text-[10px] text-gray-500 mt-0.5">
+                          {connection.agencyLocation}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-2">
+                          {statusConfig.icon}
+                          <span className={cn(
+                            "font-mono text-[10px] px-1.5 py-0.5 rounded",
+                            statusConfig.labelBg
+                          )}>
+                            {statusConfig.label}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {connection.invitationMessage && connection.status === 'pending' && (
+                      <p className="text-xs text-gray-600 mt-3 italic border-t border-gray-200/50 pt-3">
+                        &quot;{connection.invitationMessage}&quot;
+                      </p>
+                    )}
+                    
+                    {connection.status === 'pending' && (
+                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200/50">
+                        <Button 
+                          size="sm" 
+                          onClick={() => acceptInvitation(connection.id)}
+                          className="flex-1 bg-[#0C3535] hover:bg-[#0C3535]/90 text-white text-xs"
+                        >
+                          Accept
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => declineInvitation(connection.id)}
+                          className="flex-1 text-xs border-gray-300"
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {connection.status === 'confirmed' && (
+                      <div className="mt-3 pt-3 border-t border-green-200/50">
+                        <p className="font-mono text-[10px] text-green-600">
+                          Connected since {connection.confirmedAt ? new Date(connection.confirmedAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'N/A'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        
+        {/* Project Alerts */}
+        {projectAlerts.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display font-bold text-lg text-[#0C3535]">Project Alerts</h2>
+              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600">
+                {projectAlerts.filter(a => a.priority === "high").length} urgent
+              </span>
+            </div>
+            <div className="space-y-3">
+              {projectAlerts.map((alert) => {
+                const getAlertIcon = () => {
+                  switch (alert.type) {
+                    case "deadline": return <Clock className="w-4 h-4" />
+                    case "document": return <FileText className="w-4 h-4" />
+                    case "feedback": return <MessageSquare className="w-4 h-4" />
+                    case "payment": return <DollarSign className="w-4 h-4" />
+                    default: return <AlertTriangle className="w-4 h-4" />
+                  }
+                }
+                
+                const getPriorityStyles = () => {
+                  switch (alert.priority) {
+                    case "high": return "bg-red-50 border-red-200 text-red-600"
+                    case "medium": return "bg-yellow-50 border-yellow-200 text-yellow-600"
+                    case "low": return "bg-green-50 border-green-200 text-green-600"
+                    default: return "bg-gray-50 border-gray-200 text-gray-600"
+                  }
+                }
+                
+                return (
+                  <div key={alert.id} className={cn(
+                    "flex items-start gap-4 p-4 rounded-lg border",
+                    alert.priority === "high" ? "bg-red-50 border-red-200" : "bg-white border-gray-200"
+                  )}>
+                    <div className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                      getPriorityStyles()
+                    )}>
+                      {getAlertIcon()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-display font-bold text-sm text-[#0C3535]">{alert.title}</span>
+                        <span className={cn(
+                          "font-mono text-[10px] px-1.5 py-0.5 rounded uppercase",
+                          getPriorityStyles()
+                        )}>
+                          {alert.priority}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-1">{alert.message}</p>
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-[10px] text-gray-500">{alert.project}</span>
+                        <span className="font-mono text-[10px] text-gray-400">|</span>
+                        <span className="font-mono text-[10px] text-gray-500">{alert.date}</span>
+                      </div>
+                    </div>
+                    <Link href={alert.actionUrl} className="shrink-0">
+                      <Button size="sm" className="text-xs bg-[#0C3535] text-white hover:bg-[#0C3535]/90">
+                        {alert.actionLabel}
+                        <ChevronRight className="w-3 h-3 ml-1" />
+                      </Button>
+                    </Link>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        
+        {/* Profile Completion Alert */}
+        {totalCompletion < 100 && (
+          <div className="bg-[#0C3535]/5 border border-[#0C3535]/20 rounded-xl p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-display font-bold text-lg text-[#0C3535]">Complete Your Profile</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Finish setting up your profile to receive more RFP opportunities.
+                </p>
+              </div>
+              <Link href="/partner/profile">
+                <Button className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
+                  Complete Profile →
+                </Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-4 gap-4 mt-6">
+              {Object.entries(profileCompletion).map(([key, value]) => (
+                <div key={key} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wider capitalize">{key}</span>
+                    <span className={cn(
+                      "font-mono text-[10px]",
+                      value === 100 ? "text-green-600" : "text-yellow-600"
+                    )}>{value}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-full rounded-full transition-all",
+                        value === 100 ? "bg-green-500" : "bg-yellow-500"
+                      )}
+                      style={{ width: `${value}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Open RFPs */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display font-bold text-lg text-[#0C3535]">Open RFPs</h2>
+              <Link href="/partner/rfps" className="font-mono text-xs text-[#0C3535] hover:underline">
+                View All →
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {openRFPs.map((rfp) => (
+                <Link 
+                  key={rfp.id} 
+                  href="/partner/rfps"
+                  className="block p-4 rounded-lg border border-gray-200 hover:border-[#0C3535]/30 transition-colors"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="font-display font-bold text-sm text-[#0C3535]">{rfp.title}</h4>
+                      <div className="font-mono text-[10px] text-gray-500 mt-1">Deadline: {rfp.deadline}</div>
+                    </div>
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-[#C8F53C] text-[#0C3535] uppercase">
+                      {rfp.status}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+          
+          {/* Active Projects */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display font-bold text-lg text-[#0C3535]">Active Projects</h2>
+              <Link href="/partner/projects" className="font-mono text-xs text-[#0C3535] hover:underline">
+                View All →
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {activeProjects.map((project) => (
+                <div key={project.id} className="p-4 rounded-lg border border-gray-200">
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h4 className="font-display font-bold text-sm text-[#0C3535]">{project.name}</h4>
+                      <div className="font-mono text-[10px] text-gray-500 mt-0.5">for {project.client}</div>
+                    </div>
+                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                      {project.status}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600">Next: {project.nextMilestone}</span>
+                      <span className="font-mono text-gray-500">{project.nextMilestoneDate}</span>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-[#0C3535] rounded-full"
+                        style={{ width: `${project.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        {/* Upcoming Payments */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display font-bold text-lg text-[#0C3535]">Upcoming Payments</h2>
+            <Link href="/partner/payments" className="font-mono text-xs text-[#0C3535] hover:underline">
+              Payment Settings →
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Project</th>
+                  <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Milestone</th>
+                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Amount</th>
+                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Date</th>
+                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {upcomingPayments.map((payment) => (
+                  <tr key={payment.id} className="border-b border-gray-100">
+                    <td className="py-4 font-display font-bold text-sm text-[#0C3535]">{payment.project}</td>
+                    <td className="py-4 text-sm text-gray-600">{payment.milestone}</td>
+                    <td className="py-4 text-right font-mono text-sm text-[#0C3535]">${payment.amount.toLocaleString()}</td>
+                    <td className="py-4 text-right font-mono text-xs text-gray-500">{payment.date}</td>
+                    <td className="py-4 text-right">
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 capitalize">
+                        {payment.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </PartnerLayout>
+  )
+}

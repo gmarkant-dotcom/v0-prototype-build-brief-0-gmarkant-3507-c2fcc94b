@@ -1,0 +1,734 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { AgencyLayout } from "@/components/agency-layout"
+import { useSelectedProject } from "@/contexts/selected-project-context"
+import { cn } from "@/lib/utils"
+import { isDemoMode, demoMasterProjects } from "@/lib/demo-data"
+import { usePaidUser } from "@/contexts/paid-user-context"
+import { EmptyState } from "@/components/empty-state"
+import { mapDbProjectToMaster } from "@/lib/project-mapper"
+import { 
+  Search, 
+  Filter, 
+  AlertTriangle, 
+  TrendingUp, 
+  Users, 
+  DollarSign, 
+  Calendar,
+  MoreVertical,
+  FolderOpen,
+  Clock,
+  ArrowUpRight,
+  Plus,
+  ChevronRight
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+
+type ProjectStatus = "active" | "onboarding" | "completed" | "on_hold"
+
+type AlertType = "utilization" | "payment" | "deadline" | "scope" | "partner"
+
+type ProjectAlert = {
+  id: string
+  type: AlertType
+  severity: "warning" | "critical"
+  title: string
+  description: string
+  section: string
+  actionUrl: string
+  createdAt: string
+}
+
+type MasterProject = {
+  id: string
+  name: string
+  client: string
+  clientLogo?: string
+  status: ProjectStatus
+  budget: number
+  spent: number
+  startDate: string
+  endDate: string
+  partnerCount: number
+  activeRfps: number
+  pendingBids: number
+  alerts: ProjectAlert[]
+  progress: number
+  lastActivity: string
+  stage: string
+}
+
+// Demo projects are now only loaded from demo-data.ts when in demo mode
+// Production uses real projects from the database
+
+const statusConfig: Record<ProjectStatus, { label: string; color: string; bg: string }> = {
+  active: { label: "Active", color: "text-green-400", bg: "bg-green-500/10 border-green-500/30" },
+  onboarding: { label: "Onboarding", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/30" },
+  completed: { label: "Completed", color: "text-gray-400", bg: "bg-gray-500/10 border-gray-500/30" },
+  on_hold: { label: "On Hold", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/30" },
+}
+
+function formatBudget(amount: number): string {
+  if (amount >= 1000000) {
+    return "$" + (amount / 1000000).toFixed(1) + "M"
+  }
+  return "$" + (amount / 1000).toFixed(0) + "K"
+}
+
+function formatUtilization(spent: number, budget: number): string {
+  return Math.round((spent / budget) * 100) + "%"
+}
+
+function DashboardContent() {
+  const router = useRouter()
+  const { refreshProjects, addProject, setSelectedProject } = useSelectedProject()
+  const { checkFeatureAccess } = usePaidUser()
+  const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "all">("all")
+  const [isNewProjectOpen, setIsNewProjectOpen] = useState(false)
+  const [newProject, setNewProject] = useState({
+    name: "",
+    client: "",
+    budget: "",
+    startDate: "",
+    endDate: "",
+    description: ""
+  })
+  const [realProjects, setRealProjects] = useState<MasterProject[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  
+  const isDemo = isDemoMode()
+  
+  // Fetch real projects from database in production mode
+  useEffect(() => {
+    if (!isDemo) {
+      fetchProjects()
+    } else {
+      setIsLoading(false)
+    }
+  }, [isDemo])
+  
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch('/api/projects')
+      if (response.ok) {
+        const data = await response.json()
+        const mapped = (data.projects || []).map(
+          (p: {
+            id: string
+            title?: string
+            name?: string
+            client_name?: string | null
+            status?: string | null
+            budget_range?: string | null
+            start_date?: string | null
+            end_date?: string | null
+            project_assignments?: { status: string }[]
+          }) => {
+            const m = mapDbProjectToMaster(p)
+            const bids = p.project_assignments || []
+            const pendingBids = bids.filter(
+              (a) => a.status === 'invited' || a.status === 'accepted'
+            ).length
+            return {
+              id: m.id,
+              name: m.name,
+              client: m.client,
+              status: m.status,
+              budget: 0,
+              spent: 0,
+              startDate: p.start_date
+                ? new Date(p.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                : 'TBD',
+              endDate: p.end_date
+                ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                : 'TBD',
+              partnerCount: bids.length,
+              activeRfps: (p.status || '').toLowerCase() === 'open' ? 1 : 0,
+              pendingBids,
+              alerts: [],
+              progress: 0,
+              lastActivity: 'Recently',
+              stage:
+                m.status === 'active'
+                  ? 'Production'
+                  : m.status === 'completed'
+                    ? 'Closed'
+                    : 'Setup',
+            }
+          }
+        )
+        setRealProjects(mapped)
+      }
+    } catch (error) {
+      console.error('Error fetching projects:', error)
+    }
+    setIsLoading(false)
+  }
+  
+  // Use demo data or real projects from database
+  const projects = isDemo ? demoMasterProjects : realProjects
+  
+  const filteredProjects = projects.filter(project => {
+    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          project.client.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesStatus = statusFilter === "all" || project.status === statusFilter
+    return matchesSearch && matchesStatus
+  })
+  
+  const activeProjects = projects.filter(p => p.status === "active").length
+  const totalBudget = projects.reduce((sum, p) => sum + p.budget, 0)
+  const totalSpent = projects.reduce((sum, p) => sum + p.spent, 0)
+  const totalAlerts = projects.reduce((sum, p) => sum + p.alerts.length, 0)
+  const totalPartners = projects.reduce((sum, p) => sum + p.partnerCount, 0)
+
+  const handleCreateProject = async () => {
+    if (!checkFeatureAccess("project creation")) return
+
+    if (isDemo) {
+      const createdProject = addProject({
+        name: newProject.name,
+        client: newProject.client,
+        status: "onboarding",
+      })
+      setSelectedProject(createdProject)
+      setIsNewProjectOpen(false)
+      setNewProject({
+        name: "",
+        client: "",
+        budget: "",
+        startDate: "",
+        endDate: "",
+        description: "",
+      })
+      router.push("/agency")
+      return
+    }
+
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newProject.name,
+          clientName: newProject.client,
+          description: newProject.description || undefined,
+          budgetRange: newProject.budget || undefined,
+          startDate: newProject.startDate || undefined,
+          endDate: newProject.endDate || undefined,
+        }),
+      })
+      if (!res.ok) {
+        return
+      }
+      const { project } = await res.json()
+      await refreshProjects()
+      setSelectedProject(mapDbProjectToMaster(project))
+      setIsNewProjectOpen(false)
+      setNewProject({
+        name: "",
+        client: "",
+        budget: "",
+        startDate: "",
+        endDate: "",
+        description: "",
+      })
+      router.push("/agency")
+      await fetchProjects()
+    } catch {
+      // ignore
+    }
+  }
+  
+  // Show empty state for production users with no projects (after loading)
+  if (!isDemo && !isLoading && projects.length === 0) {
+    return (
+      <div className="p-8 max-w-7xl">
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <h1 className="font-display font-black text-4xl text-foreground tracking-tight">
+              Project Dashboard
+            </h1>
+            <p className="text-foreground-muted mt-2">
+              Manage all your master projects and dive into individual workflows
+            </p>
+          </div>
+          <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
+                <Plus className="w-4 h-4 mr-2" />
+                New Project
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="text-foreground">Create New Project</DialogTitle>
+                <DialogDescription className="text-foreground-muted">
+                  Start a new master project to begin vendor coordination.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-foreground">Project Name</Label>
+                  <Input
+                    id="name"
+                    value={newProject.name}
+                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                    placeholder="e.g., Q2 Brand Campaign"
+                    className="bg-white/5 border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client" className="text-foreground">Client</Label>
+                  <Input
+                    id="client"
+                    value={newProject.client}
+                    onChange={(e) => setNewProject({ ...newProject, client: e.target.value })}
+                    placeholder="e.g., Acme Corp"
+                    className="bg-white/5 border-border"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline" className="border-border">Cancel</Button>
+                </DialogClose>
+                <Button 
+                  onClick={handleCreateProject}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                  disabled={!newProject.name || !newProject.client}
+                >
+                  Create Project
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+        <EmptyState 
+          type="projects" 
+          onAction={() => setIsNewProjectOpen(true)}
+        />
+      </div>
+    )
+  }
+  
+  return (
+    <div className="p-8 max-w-7xl">
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="font-display font-black text-4xl text-foreground tracking-tight">
+            Project Dashboard
+          </h1>
+          <p className="text-foreground-muted mt-2">
+            Manage all your master projects and dive into individual workflows
+          </p>
+        </div>
+        <Dialog open={isNewProjectOpen} onOpenChange={setIsNewProjectOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-accent text-accent-foreground hover:bg-accent/90 font-mono">
+              <Plus className="w-4 h-4 mr-2" />
+              New Project
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[600px] bg-background border-border">
+            <DialogHeader>
+              <DialogTitle className="font-display font-black text-2xl text-foreground">
+                Create New Project
+              </DialogTitle>
+              <DialogDescription className="text-foreground-muted">
+                Set up a new master project to begin the vendor orchestration workflow.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-6">
+              <div className="grid gap-2">
+                <Label htmlFor="project-name" className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
+                  Project Name
+                </Label>
+                <Input
+                  id="project-name"
+                  placeholder="e.g., Q3 Brand Campaign"
+                  value={newProject.name}
+                  onChange={(e) => setNewProject(prev => ({ ...prev, name: e.target.value }))}
+                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="client-name" className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
+                  Client Name
+                </Label>
+                <Input
+                  id="client-name"
+                  placeholder="e.g., Acme Corporation"
+                  value={newProject.client}
+                  onChange={(e) => setNewProject(prev => ({ ...prev, client: e.target.value }))}
+                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="budget" className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
+                    Budget
+                  </Label>
+                  <Input
+                    id="budget"
+                    placeholder="$150,000"
+                    value={newProject.budget}
+                    onChange={(e) => setNewProject(prev => ({ ...prev, budget: e.target.value }))}
+                    className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="start-date" className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
+                    Start Date
+                  </Label>
+                  <Input
+                    id="start-date"
+                    type="date"
+                    value={newProject.startDate}
+                    onChange={(e) => setNewProject(prev => ({ ...prev, startDate: e.target.value }))}
+                    className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="end-date" className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
+                    End Date
+                  </Label>
+                  <Input
+                    id="end-date"
+                    type="date"
+                    value={newProject.endDate}
+                    onChange={(e) => setNewProject(prev => ({ ...prev, endDate: e.target.value }))}
+                    className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description" className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
+                  Project Description
+                </Label>
+                <Textarea
+                  id="description"
+                  placeholder="Describe the project scope, objectives, and any key requirements..."
+                  value={newProject.description}
+                  onChange={(e) => setNewProject(prev => ({ ...prev, description: e.target.value }))}
+                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 min-h-[100px]"
+                />
+              </div>
+            </div>
+            <DialogFooter className="flex gap-3">
+              <DialogClose asChild>
+                <Button variant="outline" className="border-border text-foreground hover:bg-white/5">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button 
+                className="bg-accent text-accent-foreground hover:bg-accent/90 font-mono"
+                onClick={handleCreateProject}
+                disabled={!newProject.name || !newProject.client}
+              >
+                Create Project
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+      
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <div className="glass rounded-xl p-5 text-center">
+          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center mx-auto mb-3">
+            <FolderOpen className="w-5 h-5 text-accent" />
+          </div>
+          <div className="font-display font-bold text-3xl text-foreground">{activeProjects}</div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Active Projects</div>
+        </div>
+        <div className="glass rounded-xl p-5 text-center">
+          <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+            <DollarSign className="w-5 h-5 text-green-400" />
+          </div>
+          <div className="font-display font-bold text-3xl text-foreground">{formatBudget(totalBudget)}</div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Total Budget</div>
+        </div>
+        <div className="glass rounded-xl p-5 text-center">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
+            <TrendingUp className="w-5 h-5 text-blue-400" />
+          </div>
+          <div className="font-display font-bold text-3xl text-foreground">{formatUtilization(totalSpent, totalBudget)}</div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Utilized</div>
+        </div>
+        <div className="glass rounded-xl p-5 text-center">
+          <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
+            <Users className="w-5 h-5 text-purple-400" />
+          </div>
+          <div className="font-display font-bold text-3xl text-foreground">{totalPartners}</div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Partner Teams</div>
+        </div>
+        <div className="glass rounded-xl p-5 text-center">
+          <div className={cn(
+            "w-10 h-10 rounded-lg flex items-center justify-center mx-auto mb-3",
+            totalAlerts > 0 ? "bg-red-500/10" : "bg-green-500/10"
+          )}>
+            <AlertTriangle className={cn("w-5 h-5", totalAlerts > 0 ? "text-red-400" : "text-green-400")} />
+          </div>
+          <div className={cn("font-display font-bold text-3xl", totalAlerts > 0 ? "text-red-400" : "text-foreground")}>{totalAlerts}</div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Alerts</div>
+        </div>
+      </div>
+      
+      <div className="flex items-center gap-4 mb-6">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted" />
+          <Input
+            placeholder="Search projects or clients..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-foreground-muted" />
+          <div className="flex gap-1">
+            {(["all", "active", "onboarding", "completed", "on_hold"] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg font-mono text-[10px] uppercase tracking-wider transition-colors",
+                  statusFilter === status
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-white/5 text-foreground-muted hover:bg-white/10"
+                )}
+              >
+                {status === "all" ? "All" : status.replace("_", " ")}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      
+      <div className="space-y-4">
+        {filteredProjects.map((project) => {
+          const config = statusConfig[project.status]
+          const budgetDisplay = formatBudget(project.budget)
+          const spentDisplay = formatBudget(project.spent)
+          const hasCriticalAlert = project.alerts.some(a => a.severity === "critical")
+          
+          return (
+            <Link 
+              key={project.id} 
+              href="/agency/project"
+              className="block glass rounded-xl p-6 hover:bg-white/10 transition-all group"
+            >
+              <div className="flex items-start gap-6">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="font-display font-bold text-xl text-foreground truncate">
+                      {project.name}
+                    </h3>
+                    <span className={cn(
+                      "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+                      config.bg, config.color
+                    )}>
+                      {config.label}
+                    </span>
+                    {project.alerts.length > 0 && (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={(e) => e.stopPropagation()}
+                              className={cn(
+                                "flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded-full border hover:scale-105 transition-transform cursor-pointer",
+                                hasCriticalAlert
+                                  ? "bg-red-500/20 text-red-400 border-red-500/50"
+                                  : "bg-yellow-500/20 text-yellow-400 border-yellow-500/50"
+                              )}
+                            >
+                              <AlertTriangle className="w-3 h-3" />
+                              {project.alerts.length} Alert{project.alerts.length > 1 ? "s" : ""}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent 
+                            side="bottom" 
+                            align="start"
+                            className="max-w-md p-0 bg-background border border-border shadow-xl"
+                          >
+                            <div className="p-3 border-b border-border">
+                              <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-1">
+                                {project.alerts.length} Active Alert{project.alerts.length > 1 ? "s" : ""}
+                              </div>
+                              <div className="font-display font-bold text-sm text-foreground">
+                                {project.name}
+                              </div>
+                            </div>
+                            <div className="max-h-[300px] overflow-y-auto">
+                              {project.alerts.map((alert, idx) => (
+                                <Link
+                                  key={alert.id}
+                                  href={`${alert.actionUrl}?alert=${alert.id}&project=${project.id}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className={cn(
+                                    "block p-3 hover:bg-white/5 transition-colors",
+                                    idx < project.alerts.length - 1 && "border-b border-border/50"
+                                  )}
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <div className={cn(
+                                      "w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                                      alert.severity === "critical" ? "bg-red-500/20" : "bg-yellow-500/20"
+                                    )}>
+                                      <AlertTriangle className={cn(
+                                        "w-3 h-3",
+                                        alert.severity === "critical" ? "text-red-400" : "text-yellow-400"
+                                      )} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-display font-bold text-xs text-foreground mb-1 line-clamp-1">
+                                        {alert.title}
+                                      </div>
+                                      <p className="text-[11px] text-foreground-muted leading-relaxed line-clamp-2 mb-2">
+                                        {alert.description}
+                                      </p>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className={cn(
+                                            "font-mono text-[9px] px-1.5 py-0.5 rounded uppercase",
+                                            alert.severity === "critical"
+                                              ? "bg-red-500/20 text-red-400"
+                                              : "bg-yellow-500/20 text-yellow-400"
+                                          )}>
+                                            {alert.severity}
+                                          </span>
+                                          <span className="font-mono text-[9px] text-foreground-muted/60">
+                                            {alert.section}
+                                          </span>
+                                        </div>
+                                        <span className="font-mono text-[9px] text-accent flex items-center gap-1">
+                                          View <ArrowUpRight className="w-2.5 h-2.5" />
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </Link>
+                              ))}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-foreground-muted mb-4">
+                    <span>{project.client}</span>
+                    <span className="text-foreground-muted/50">|</span>
+                    <span>{project.startDate} - {project.endDate}</span>
+                    <span className="text-foreground-muted/50">|</span>
+                    <span className="text-foreground-muted/60">Stage: {project.stage}</span>
+                  </div>
+                  
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
+                        Progress
+                      </span>
+                      <span className="font-mono text-xs text-accent">{project.progress}%</span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div 
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          project.status === "completed" ? "bg-green-500" :
+                          project.status === "on_hold" ? "bg-yellow-500" :
+                          "bg-accent"
+                        )}
+                        style={{ width: `${project.progress}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Budget</div>
+                      <div className="font-display font-bold text-lg text-foreground">{budgetDisplay}</div>
+                    </div>
+                    <div>
+                      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Spent</div>
+                      <div className="font-display font-bold text-lg text-foreground">{spentDisplay}</div>
+                    </div>
+                    <div>
+                      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Partners</div>
+                      <div className="font-display font-bold text-lg text-foreground">{project.partnerCount}</div>
+                    </div>
+                    {project.activeRfps > 0 && (
+                      <div>
+                        <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Open RFPs</div>
+                        <div className="font-display font-bold text-lg text-accent">{project.activeRfps}</div>
+                      </div>
+                    )}
+                    {project.pendingBids > 0 && (
+                      <div>
+                        <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Pending Bids</div>
+                        <div className="font-display font-bold text-lg text-blue-400">{project.pendingBids}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-white/5 group-hover:bg-accent/20 transition-colors shrink-0">
+                  <ChevronRight className="w-6 h-6 text-foreground-muted group-hover:text-accent transition-colors" />
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-border/50 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-foreground-muted">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span className="font-mono text-[10px]">Last activity: {project.lastActivity}</span>
+                </div>
+              </div>
+            </Link>
+          )
+        })}
+        
+        {filteredProjects.length === 0 && (
+          <div className="glass rounded-xl p-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
+              <FolderOpen className="w-8 h-8 text-foreground-muted" />
+            </div>
+            <h3 className="font-display font-bold text-lg text-foreground mb-2">No projects found</h3>
+            <p className="text-foreground-muted text-sm">
+              {searchQuery ? "Try adjusting your search or filters" : "Create your first project to get started"}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function AgencyDashboardPage() {
+  return (
+    <AgencyLayout>
+      <DashboardContent />
+    </AgencyLayout>
+  )
+}

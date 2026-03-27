@@ -1,0 +1,247 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* LIGAMENT Design System */
+  --background: #0C3535;
+  --background-deep: #081F1F;
+  --surface: #1A5252;
+  --surface-glass: rgba(4, 20, 20, 0.88);
+  --card: rgba(255, 255, 255, 0.07);
+  --card-foreground: #FFFFFF;
+  --border: rgba(255, 255, 255, 0.12);
+  --border-accent: rgba(200, 245, 60, 0.4);
+  
+  /* Text Colors */
+  --foreground: #FFFFFF;
+  --foreground-secondary: #E8E8E8;
+  --foreground-muted: #9BB8B8;
+  
+  /* Accent */
+  --accent: #C8F53C;
+  --accent-foreground: #0C3535;
+  
+  /* Status Colors */
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --destructive: #EF4444;
+  
+  /* Shadcn compatibility */
+  --primary: #C8F53C;
+  --primary-foreground: #0C3535;
+  --secondary: #1A5252;
+  --secondary-foreground: #FFFFFF;
+  --muted: #1A5252;
+  --muted-foreground: #9BB8B8;
+  --popover: rgba(4, 20, 20, 0.95);
+  --popover-foreground: #FFFFFF;
+  --input: rgba(255, 255, 255, 0.1);
+  --ring: #C8F53C;
+  
+  --radius: 0.625rem;
+  
+  /* Sidebar */
+  --sidebar: rgba(4, 20, 20, 0.88);
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #C8F53C;
+  --sidebar-primary-foreground: #0C3535;
+  --sidebar-accent: rgba(200, 245, 60, 0.1);
+  --sidebar-accent-foreground: #C8F53C;
+  --sidebar-border: rgba(255, 255, 255, 0.12);
+  --sidebar-ring: #C8F53C;
+
+  /* Vendor Portal Light Mode */
+  --vendor-background: #FAFAFA;
+  --vendor-surface: #FFFFFF;
+  --vendor-foreground: #0C3535;
+  --vendor-muted: #6B7280;
+  --vendor-border: #E5E7EB;
+}
+
+@theme inline {
+  --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
+  --font-display: var(--font-barlow-condensed), 'Barlow Condensed', sans-serif;
+  
+  --color-background: var(--background);
+  --color-background-deep: var(--background-deep);
+  --color-surface: var(--surface);
+  --color-surface-glass: var(--surface-glass);
+  --color-foreground: var(--foreground);
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: #FFFFFF;
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-border-accent: var(--border-accent);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Holographic Blob Animations */
+@keyframes blob-float {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(32px, -42px) scale(1.06);
+  }
+  66% {
+    transform: translate(-20px, 26px) scale(0.94);
+  }
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.blob-1 {
+  width: 800px;
+  height: 800px;
+  top: -250px;
+  right: -150px;
+  background: radial-gradient(
+    circle,
+    rgba(224, 64, 251, 0.6) 0%,
+    rgba(255, 64, 129, 0.4) 35%,
+    rgba(255, 234, 0, 0.2) 65%,
+    transparent 80%
+  );
+  filter: blur(80px);
+  animation: blob-float 20s ease-in-out infinite;
+}
+
+.blob-2 {
+  width: 600px;
+  height: 600px;
+  bottom: -100px;
+  left: -100px;
+  background: radial-gradient(
+    circle,
+    rgba(38, 198, 218, 0.65) 0%,
+    rgba(124, 77, 255, 0.4) 50%,
+    transparent 75%
+  );
+  filter: blur(70px);
+  animation: blob-float 24s ease-in-out infinite reverse;
+}
+
+.blob-3 {
+  width: 450px;
+  height: 450px;
+  top: 40%;
+  left: 32%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 109, 0, 0.35) 0%,
+    rgba(255, 64, 129, 0.2) 55%,
+    transparent 75%
+  );
+  filter: blur(100px);
+  animation: blob-float 30s ease-in-out infinite 8s;
+}
+
+/* Glassmorphism utilities */
+.glass {
+  background: var(--surface-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-card {
+  background: var(--card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+}
+
+/* AI-powered badge pulse */
+@keyframes ai-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.ai-badge {
+  animation: ai-pulse 2s ease-in-out infinite;
+}
+
+/* Streaming text animation */
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.streaming-cursor::after {
+  content: '|';
+  animation: blink 1s step-end infinite;
+  color: var(--accent);
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
