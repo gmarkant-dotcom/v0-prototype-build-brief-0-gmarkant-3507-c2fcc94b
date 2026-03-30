@@ -6,6 +6,7 @@ import { StageHeader } from "@/components/stage-header"
 import { SelectedProjectHeader } from "@/components/selected-project-header"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
@@ -116,7 +117,9 @@ function AgencyRFPContent() {
   /** Extracted text from uploaded RFP output template (drives AI structure) */
   const [templateSourceText, setTemplateSourceText] = useState("")
   const [briefUploadError, setBriefUploadError] = useState<string | null>(null)
+  const [briefExtractWarning, setBriefExtractWarning] = useState<string | null>(null)
   const [rfpTemplateUploadError, setRfpTemplateUploadError] = useState<string | null>(null)
+  const [rfpTemplateExtractWarning, setRfpTemplateExtractWarning] = useState<string | null>(null)
   const [isExtractingBrief, setIsExtractingBrief] = useState(false)
   /** Optional extra copy pasted by user; always appended to the primary brief for AI */
   const [briefAugmentText, setBriefAugmentText] = useState("")
@@ -128,6 +131,8 @@ function AgencyRFPContent() {
   const [briefDocumentUrl, setBriefDocumentUrl] = useState<string | null>(null)
   const [briefDocumentContentType, setBriefDocumentContentType] = useState<string | null>(null)
   const [briefDocumentUploadError, setBriefDocumentUploadError] = useState<string | null>(null)
+  /** User accepts TBD skeleton when extraction is missing/thin (no 80-char paste required) */
+  const [acceptLimitedBrief, setAcceptLimitedBrief] = useState(false)
 
   const MIN_BRIEF_AUGMENT_CHARS = 80
   const MIN_COMBINED_BRIEF_CHARS = 200
@@ -139,13 +144,25 @@ function AgencyRFPContent() {
     briefAugmentText,
   }).trim()
   /** No real PDF text: must paste real brief. Thin extract: need enough total characters for AI to work with */
-  const briefBlockedByQuality =
+  const baseQualityBlock =
     briefExtractUsedFallback
       ? briefAugmentText.trim().length < MIN_BRIEF_AUGMENT_CHARS
       : briefExtractThin && combinedBriefForGate.length < MIN_COMBINED_BRIEF_CHARS
+  const briefBlockedByQuality = acceptLimitedBrief ? false : baseQualityBlock
   const briefPasteProminent =
-    briefExtractUsedFallback ||
-    (briefExtractThin && combinedBriefForGate.length < MIN_COMBINED_BRIEF_CHARS)
+    !acceptLimitedBrief &&
+    (briefExtractUsedFallback ||
+      (briefExtractThin && combinedBriefForGate.length < MIN_COMBINED_BRIEF_CHARS))
+  const showLimitedBriefOptIn =
+    baseQualityBlock || (acceptLimitedBrief && (briefExtractUsedFallback || briefExtractThin))
+
+  useEffect(() => {
+    if (!baseQualityBlock) setAcceptLimitedBrief(false)
+  }, [baseQualityBlock])
+
+  useEffect(() => {
+    if (!briefExtractUsedFallback && !briefExtractThin) setAcceptLimitedBrief(false)
+  }, [briefExtractUsedFallback, briefExtractThin])
   
   // Step 2: Master RFP (AI generated)
   const [masterRfp, setMasterRfp] = useState<{
@@ -186,9 +203,11 @@ function AgencyRFPContent() {
     if (!file) return
     if (!checkFeatureAccess("file uploads")) return
     setBriefUploadError(null)
+    setBriefExtractWarning(null)
     setBriefDocumentUploadError(null)
     setBriefDocumentUrl(null)
     setBriefDocumentContentType(null)
+    setAcceptLimitedBrief(false)
     setBriefUploaded(true)
     setBriefFileName(file.name)
     setBriefSourceText("")
@@ -209,6 +228,7 @@ function AgencyRFPContent() {
       if (!extractRes.ok) {
         throw new Error(payload?.error || "Could not read this file")
       }
+      setBriefExtractWarning(typeof payload?.warning === "string" ? payload.warning : null)
       setBriefSourceText((payload.text || "").toString())
       setBriefExtractUsedFallback(Boolean(payload.usedFallback))
       setBriefExtractThin(Boolean(payload.thinExtraction) && !payload.usedFallback)
@@ -233,6 +253,7 @@ function AgencyRFPContent() {
       setBriefDocumentUploadError(null)
       setBriefExtractUsedFallback(false)
       setBriefExtractThin(false)
+      setBriefExtractWarning(null)
       setBriefUploadError(err instanceof Error ? err.message : "Brief extraction failed")
     } finally {
       setIsExtractingBrief(false)
@@ -278,6 +299,7 @@ function AgencyRFPContent() {
           clientName: selectedProject?.client || "Client TBD",
           briefText: sourceText,
           templateHint,
+          ...(acceptLimitedBrief ? { acceptLimitedBrief: true } : {}),
           ...(templateBody ? { templateText: templateBody } : {}),
         }),
       })
@@ -416,6 +438,8 @@ function AgencyRFPContent() {
     setBriefUploaded(false)
     setBriefFileName("")
     setUploadMethod(null)
+    setBriefExtractWarning(null)
+    setRfpTemplateExtractWarning(null)
     setPastedContent("")
     setGoogleLink("")
     setMasterRfp(null)
@@ -567,11 +591,13 @@ function AgencyRFPContent() {
                         disabled={!googleLink}
                         onClick={() => {
                           setBriefUploadError(null)
+                          setBriefExtractWarning(null)
                           setBriefUploaded(true)
                           setBriefFileName("Google Doc imported")
                           setBriefSourceText(`Imported Google document: ${googleLink}`)
                           setBriefExtractUsedFallback(false)
                           setBriefExtractThin(false)
+                          setAcceptLimitedBrief(false)
                           setBriefDocumentUrl(null)
                           setBriefDocumentContentType(null)
                           setBriefDocumentUploadError(null)
@@ -598,11 +624,13 @@ function AgencyRFPContent() {
                         disabled={!pastedContent}
                         onClick={() => {
                           setBriefUploadError(null)
+                          setBriefExtractWarning(null)
                           setBriefUploaded(true)
                           setBriefFileName("Pasted content")
                           setBriefSourceText(pastedContent)
                           setBriefExtractUsedFallback(false)
                           setBriefExtractThin(false)
+                          setAcceptLimitedBrief(false)
                           setBriefDocumentUrl(null)
                           setBriefDocumentContentType(null)
                           setBriefDocumentUploadError(null)
@@ -618,6 +646,11 @@ function AgencyRFPContent() {
               {briefUploadError && (
                 <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
                   {briefUploadError}
+                </div>
+              )}
+              {briefExtractWarning && !briefUploadError && (
+                <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-200">
+                  {briefExtractWarning}
                 </div>
               )}
 
@@ -668,6 +701,8 @@ function AgencyRFPContent() {
                       setIsExtractingBrief(false)
                       setBriefExtractUsedFallback(false)
                       setBriefExtractThin(false)
+                      setBriefExtractWarning(null)
+                      setAcceptLimitedBrief(false)
                       setBriefDocumentUrl(null)
                       setBriefDocumentContentType(null)
                       setBriefDocumentUploadError(null)
@@ -694,7 +729,11 @@ function AgencyRFPContent() {
 
               <div className="mt-6 space-y-2">
                 <label className="font-mono text-[10px] text-foreground-muted uppercase block">
-                  {briefPasteProminent ? "Required: Client brief text (paste)" : "Optional: Additional brief details"}
+                  {briefPasteProminent
+                    ? "Required: Client brief text (paste)"
+                    : acceptLimitedBrief
+                      ? "Optional: Real brief text (recommended)"
+                      : "Optional: Additional brief details"}
                 </label>
                 <Textarea
                   placeholder={
@@ -702,7 +741,9 @@ function AgencyRFPContent() {
                       ? briefExtractUsedFallback
                         ? `Paste the full client RFP/brief here (${MIN_BRIEF_AUGMENT_CHARS}+ characters). The upload had no selectable text — the AI would only see the file name otherwise.`
                         : `Paste missing sections so the combined brief is at least ${MIN_COMBINED_BRIEF_CHARS} characters (${combinedBriefForGate.length}/${MIN_COMBINED_BRIEF_CHARS} now).`
-                      : "Paste extra requirements or missing text if extraction was incomplete. Appended when you generate."
+                      : acceptLimitedBrief
+                        ? "Optional: paste real brief text for a client-specific Master RFP. Without it, output stays generic (TBD)."
+                        : "Paste extra requirements or missing text if extraction was incomplete. Appended when you generate."
                   }
                   value={briefAugmentText}
                   onChange={(e) => setBriefAugmentText(e.target.value)}
@@ -711,11 +752,27 @@ function AgencyRFPContent() {
                     briefBlockedByQuality && "border-amber-500/40 ring-1 ring-amber-500/20"
                   )}
                 />
+                {showLimitedBriefOptIn && (
+                  <div className="flex items-start gap-2 rounded-md border border-border/60 bg-white/[0.03] p-3">
+                    <Checkbox
+                      id="agency-limited-brief"
+                      checked={acceptLimitedBrief}
+                      onCheckedChange={(v) => setAcceptLimitedBrief(v === true)}
+                      className="mt-0.5"
+                    />
+                    <label
+                      htmlFor="agency-limited-brief"
+                      className="font-mono text-[10px] text-foreground-muted leading-relaxed cursor-pointer"
+                    >
+                      Generate with limited brief — build a TBD-heavy skeleton from project/client names only. The model cannot read image-only or scanned PDFs; use the preview above and edit the result, or paste text here for accuracy.
+                    </label>
+                  </div>
+                )}
                 {briefBlockedByQuality && (
                   <p className="font-mono text-[10px] text-amber-300">
                     {briefExtractUsedFallback
-                      ? `Paste at least ${MIN_BRIEF_AUGMENT_CHARS} characters of real brief content to enable Generate (${briefAugmentText.trim().length}/${MIN_BRIEF_AUGMENT_CHARS} in the box above).`
-                      : `Combined brief is too short for reliable output (${combinedBriefForGate.length}/${MIN_COMBINED_BRIEF_CHARS} characters). Paste more detail above.`}
+                      ? `Paste at least ${MIN_BRIEF_AUGMENT_CHARS} characters of real brief content to enable Generate (${briefAugmentText.trim().length}/${MIN_BRIEF_AUGMENT_CHARS} in the box above), or enable “Generate with limited brief” below.`
+                      : `Combined brief is too short for reliable output (${combinedBriefForGate.length}/${MIN_COMBINED_BRIEF_CHARS} characters). Paste more detail above, or enable “Generate with limited brief” below.`}
                   </p>
                 )}
                 {briefAugmentText.trim() && (
@@ -750,6 +807,7 @@ function AgencyRFPContent() {
                             setUploadedRfpTemplate(null)
                             setTemplateSourceText("")
                             setRfpTemplateUploadError(null)
+                            setRfpTemplateExtractWarning(null)
                           }
                         }}
                         className={cn(
@@ -804,6 +862,7 @@ function AgencyRFPContent() {
                             setTemplateSourceText("")
                             setSelectedRfpTemplate(null)
                             setRfpTemplateUploadError(null)
+                            setRfpTemplateExtractWarning(null)
                           }}
                         >
                           Remove template
@@ -820,6 +879,7 @@ function AgencyRFPContent() {
                           if (!file) return
                           if (!checkFeatureAccess("file uploads")) return
                           setRfpTemplateUploadError(null)
+                          setRfpTemplateExtractWarning(null)
                           setIsUploadingRfpTemplate(true)
                           try {
                             const extractFd = new FormData()
@@ -834,10 +894,19 @@ function AgencyRFPContent() {
                             }
 
                             setUploadedRfpTemplate({ name: file.name, url: "" })
-                            setTemplateSourceText((extractPayload.text || "").toString())
+                            const usedFallback = Boolean(extractPayload?.usedFallback)
+                            const warning =
+                              typeof extractPayload?.warning === "string"
+                                ? extractPayload.warning
+                                : usedFallback
+                                  ? "No selectable text found in template. Please upload a text-based PDF/DOCX template."
+                                  : null
+                            setRfpTemplateExtractWarning(warning)
+                            setTemplateSourceText(usedFallback ? "" : (extractPayload.text || "").toString())
                             setSelectedRfpTemplate("uploaded")
                           } catch (err) {
                             setRfpTemplateUploadError(err instanceof Error ? err.message : "Template processing failed")
+                            setRfpTemplateExtractWarning(null)
                             setUploadedRfpTemplate(null)
                             setTemplateSourceText("")
                           } finally {
@@ -860,6 +929,9 @@ function AgencyRFPContent() {
                     </label>
                     {rfpTemplateUploadError && (
                       <p className="text-xs text-red-300 px-1">{rfpTemplateUploadError}</p>
+                    )}
+                    {rfpTemplateExtractWarning && !rfpTemplateUploadError && (
+                      <p className="text-xs text-amber-300 px-1">{rfpTemplateExtractWarning}</p>
                     )}
                   </div>
                 </div>

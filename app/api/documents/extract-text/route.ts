@@ -36,6 +36,31 @@ async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
   return full.replace(/\u0000/g, "").trim()
 }
 
+/** Supports both pdf-parse v1 (function export) and v2 (PDFParse class). */
+async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string> {
+  const mod: any = await import("pdf-parse")
+
+  // pdf-parse v2 style
+  if (typeof mod.PDFParse === "function") {
+    const parser = new mod.PDFParse({ data: buffer })
+    try {
+      const result = await parser.getText()
+      return (result?.text || "").toString()
+    } finally {
+      if (typeof parser.destroy === "function") await parser.destroy()
+    }
+  }
+
+  // pdf-parse v1 style
+  const fn = typeof mod.default === "function" ? mod.default : typeof mod === "function" ? mod : null
+  if (fn) {
+    const result = await fn(buffer)
+    return (result?.text || "").toString()
+  }
+
+  return ""
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
@@ -85,11 +110,7 @@ export async function POST(req: Request) {
       } else if (lower.endsWith(".doc")) {
         warning = "Legacy .doc is not directly readable; using filename fallback."
       } else if (lower.endsWith(".pdf")) {
-        const { PDFParse } = await import("pdf-parse")
-        const parser = new PDFParse({ data: buffer })
-        const textResult = await parser.getText()
-        text = textResult.text
-        await parser.destroy()
+        text = await extractPdfTextWithPdfParse(buffer)
         if (!text.replace(/\u0000/g, "").trim()) {
           const alt = await extractPdfTextWithPdfJs(buffer)
           if (alt) {
@@ -110,10 +131,15 @@ export async function POST(req: Request) {
     const trimmed = text.replace(/\u0000/g, "").trim()
     if (!trimmed) {
       const fallback = `Document uploaded: ${file.name}`
+      const isPdf = lower.endsWith(".pdf")
       return NextResponse.json({
         text: fallback,
         fileName: file.name,
-        warning: warning || "Fallback used",
+        warning:
+          warning ||
+          (isPdf
+            ? "No selectable text was found in this PDF. Scanned/image PDFs are not supported. Please upload a text-based PDF or use Paste Text mode."
+            : "Could not extract usable text from this file. Please use a text-based file or paste the content."),
         usedFallback: true,
         thinExtraction: false,
       })
