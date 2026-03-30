@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useRef, useCallback } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
-import { usePaidUser } from "@/contexts/paid-user-context"
+import { createClient } from "@/lib/supabase/client"
 import {
   BUDGET_CURRENCY_OPTIONS,
   TIMELINE_UNIT_OPTIONS,
@@ -253,12 +253,12 @@ const demoInbox: InboxRow = {
 
 export default function PartnerRfpDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const id = typeof params?.id === "string" ? params.id : ""
   const isDemo = isDemoMode()
   const demoIds = ["1", "2", "3"]
   const isDemoDetail = isDemo && demoIds.includes(id)
 
-  const { checkFeatureAccess, isLoading: accessLoading } = usePaidUser()
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const [loading, setLoading] = useState(!isDemoDetail)
@@ -348,11 +348,31 @@ export default function PartnerRfpDetailPage() {
     }
   }, [id, isDemoDetail])
 
+  /** Bid response + uploads are core partner actions — not gated by lead-agency paid features. */
+  const ensurePartnerAuth = useCallback(async (): Promise<boolean> => {
+    if (isDemoDetail) return true
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      const returnPath =
+        typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/partner/rfps"
+      router.push(`/auth/login?redirect=${encodeURIComponent(returnPath)}`)
+      return false
+    }
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+    if (profile?.role !== "partner") {
+      setSubmitError("Only partner accounts can submit bid responses. Sign in with a partner profile.")
+      return false
+    }
+    return true
+  }, [isDemoDetail, router])
+
   useEffect(() => {
     const submittedNow = existing?.status === "submitted" || inbox?.status === "bid_submitted"
     const canEditNow = !submittedNow || isDemoDetail
     console.log("[partner/rfps/detail] trace state", {
-      accessLoading,
       savingKind,
       canEdit: canEditNow,
       submitted: submittedNow,
@@ -361,12 +381,11 @@ export default function PartnerRfpDetailPage() {
       isDemoDetail,
       id,
     })
-  }, [accessLoading, savingKind, existing, inbox, isDemoDetail, id])
+  }, [savingKind, existing, inbox, isDemoDetail, id])
 
   const save = async (status: "draft" | "submitted") => {
     console.log("[partner/rfps/detail] save() entered", {
       status,
-      accessLoading,
       isDemoDetail,
       savingKindBefore: savingKind,
     })
@@ -377,16 +396,8 @@ export default function PartnerRfpDetailPage() {
       setSuccessMsg(status === "submitted" ? "Demo mode — response not saved." : "Demo mode — draft not saved.")
       return
     }
-    // Do not block on accessLoading — PaidUserContext already allows actions while loading; server enforces auth.
-    const feature = status === "submitted" ? "submit bid response" : "save draft"
-    const allowed = checkFeatureAccess(feature)
-    console.log("[partner/rfps/detail] save() after checkFeatureAccess", { allowed, feature, accessLoading })
-    if (!allowed) {
-      setSubmitError(
-        "This action isn’t available on your current plan. If an upgrade dialog opened, use that — otherwise refresh the page or contact support."
-      )
-      return
-    }
+    const authOk = await ensurePartnerAuth()
+    if (!authOk) return
 
     const budget_proposal = buildBudgetProposalForSave(
       budgetAmount,
@@ -480,19 +491,14 @@ export default function PartnerRfpDetailPage() {
     console.log("[partner/rfps/detail] onFileForDraft() entered", {
       draftId,
       fileCount: e.target.files?.length ?? 0,
-      accessLoading,
     })
     const file = e.target.files?.[0]
     if (!file) {
       console.log("[partner/rfps/detail] onFileForDraft() exit: no file")
       return
     }
-    const uploadAllowed = checkFeatureAccess("file uploads")
-    console.log("[partner/rfps/detail] onFileForDraft after checkFeatureAccess", { uploadAllowed, accessLoading })
-    if (!uploadAllowed) {
-      setSubmitError("File uploads aren’t available on your current plan. Check the upgrade dialog or contact support.")
-      return
-    }
+    const authOk = await ensurePartnerAuth()
+    if (!authOk) return
     setUploadingId(draftId)
     setSubmitError(null)
     try {
