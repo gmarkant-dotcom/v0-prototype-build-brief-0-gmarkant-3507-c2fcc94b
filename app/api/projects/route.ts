@@ -136,12 +136,8 @@ export async function POST(request: NextRequest) {
     // Create with a minimal payload first to avoid schema/type mismatch blockers.
     // Optional fields are applied in a second pass (best-effort).
     const attempts: Record<string, unknown>[] = [
-      { agency_id: user.id, title: safeName, status: 'draft' },
       { agency_id: user.id, name: safeName, status: 'draft' },
-      { agency_id: user.id, project_name: safeName, status: 'draft' },
-      { agency_id: user.id, title: safeName },
       { agency_id: user.id, name: safeName },
-      { agency_id: user.id, project_name: safeName },
     ]
 
     let project: any = null
