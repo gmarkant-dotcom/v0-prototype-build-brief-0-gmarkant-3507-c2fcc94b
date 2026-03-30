@@ -15,6 +15,7 @@ import { useSelectedProject } from "@/contexts/selected-project-context"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2, Sparkles } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
+import { AgencyBroadcastResponsesPanel } from "@/components/agency-broadcast-responses"
 
 // Types
 type UploadMethod = "pdf" | "docx" | "pptx" | "google" | "paste" | null
@@ -594,6 +595,8 @@ function AgencyRFPContent() {
           subtitle="Upload your client brief, generate a master RFP, allocate scope between internal and external partners, and broadcast targeted RFPs."
           aiPowered
         />
+
+        <AgencyBroadcastResponsesPanel />
         
         {/* Progress Steps */}
         <div className="flex items-center gap-1 mb-8 overflow-x-auto pb-2">
