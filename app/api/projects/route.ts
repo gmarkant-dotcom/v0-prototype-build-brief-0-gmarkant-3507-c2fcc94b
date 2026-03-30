@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
     let projects
     
     if (profile?.role === 'agency') {
-      const { data, error } = await supabase
+      // Try rich query first (with relationships), then fallback to plain projects query.
+      const rich = await supabase
         .from('projects')
         .select(`
           *,
@@ -37,8 +38,18 @@ export async function GET(request: NextRequest) {
         .eq('agency_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
-      projects = data
+      if (!rich.error) {
+        projects = rich.data
+      } else {
+        const simple = await supabase
+          .from('projects')
+          .select('*')
+          .eq('agency_id', user.id)
+          .order('created_at', { ascending: false })
+
+        if (simple.error) throw simple.error
+        projects = simple.data
+      }
     } else {
       const { data: userPartnerships, error: pErr } = await supabase
         .from('partnerships')
@@ -127,8 +138,14 @@ export async function POST(request: NextRequest) {
     const attempts: Record<string, unknown>[] = [
       { agency_id: user.id, title: safeName, status: 'draft' },
       { agency_id: user.id, name: safeName, status: 'draft' },
+      { agency_id: user.id, project_name: safeName, status: 'draft' },
+      { lead_agency_id: user.id, title: safeName, status: 'draft' },
+      { owner_id: user.id, title: safeName, status: 'draft' },
       { agency_id: user.id, title: safeName },
       { agency_id: user.id, name: safeName },
+      { agency_id: user.id, project_name: safeName },
+      { lead_agency_id: user.id, title: safeName },
+      { owner_id: user.id, title: safeName },
     ]
 
     let project: any = null
@@ -173,7 +190,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ project })
   } catch (error) {
     console.error('Error creating project:', error)
-    const message = error instanceof Error ? error.message : 'Failed to create project'
-    return NextResponse.json({ error: message || 'Failed to create project' }, { status: 500 })
+    const message =
+      (error as any)?.message ||
+      (error as any)?.details ||
+      (error as any)?.hint ||
+      'Failed to create project'
+    return NextResponse.json({ error: String(message) }, { status: 500 })
   }
 }

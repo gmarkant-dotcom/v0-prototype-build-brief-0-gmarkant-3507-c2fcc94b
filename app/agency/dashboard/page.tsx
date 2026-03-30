@@ -244,7 +244,8 @@ function DashboardContent() {
       })
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))
-        setCreateProjectError(payload?.error || "Project creation failed. Please try again.")
+        const statusHint = res.status ? ` (HTTP ${res.status})` : ""
+        setCreateProjectError((payload?.error || "Project creation failed. Please try again.") + statusHint)
         return
       }
       const { project } = await res.json()
