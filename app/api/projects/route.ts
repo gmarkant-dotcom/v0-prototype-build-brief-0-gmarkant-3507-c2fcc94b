@@ -120,22 +120,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Project name required' }, { status: 400 })
     }
 
-    const basePayload = {
-      agency_id: user.id,
-      client_name: clientName || null,
-      description: description || null,
-      budget_range: budgetRange || null,
-      status: 'draft',
-    }
+    const safeName = name.trim()
 
-    // Support multiple production schema variants:
-    // - title vs name
-    // - start_date/end_date may not exist
+    // Create with a minimal payload first to avoid schema/type mismatch blockers.
+    // Optional fields are applied in a second pass (best-effort).
     const attempts: Record<string, unknown>[] = [
-      { ...basePayload, title: name.trim(), start_date: startDate || null, end_date: endDate || null },
-      { ...basePayload, name: name.trim(), start_date: startDate || null, end_date: endDate || null },
-      { ...basePayload, title: name.trim() },
-      { ...basePayload, name: name.trim() },
+      { agency_id: user.id, title: safeName, status: 'draft' },
+      { agency_id: user.id, name: safeName, status: 'draft' },
+      { agency_id: user.id, title: safeName },
+      { agency_id: user.id, name: safeName },
     ]
 
     let project: any = null
@@ -156,9 +149,31 @@ export async function POST(request: NextRequest) {
 
     if (lastError || !project) throw lastError || new Error('Project creation failed')
 
+    // Best-effort update of optional fields. Any mismatch is ignored so creation still succeeds.
+    const optionalFields: Record<string, unknown> = {
+      client_name: clientName || null,
+      description: description || null,
+      budget_range: budgetRange || null,
+      start_date: startDate || null,
+      end_date: endDate || null,
+    }
+
+    for (const [key, value] of Object.entries(optionalFields)) {
+      if (value === null || value === undefined || value === '') continue
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({ [key]: value })
+        .eq('id', project.id)
+
+      if (updateError) {
+        console.warn(`Optional field update skipped (${key}):`, updateError.message)
+      }
+    }
+
     return NextResponse.json({ project })
   } catch (error) {
     console.error('Error creating project:', error)
-    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to create project'
+    return NextResponse.json({ error: message || 'Failed to create project' }, { status: 500 })
   }
 }
