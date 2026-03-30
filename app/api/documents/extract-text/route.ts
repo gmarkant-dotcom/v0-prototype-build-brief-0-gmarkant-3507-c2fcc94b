@@ -1,44 +1,13 @@
 import { NextResponse } from "next/server"
 import mammoth from "mammoth"
 import { createClient } from "@/lib/supabase/server"
-import { installPdfNodePolyfills } from "@/lib/pdf-node-polyfills"
+import { extractPdfTextFromBuffer } from "@/lib/extract-pdf-text"
 
 export const runtime = "nodejs"
 
 const MAX_CHARS = 120_000
 /** Treat near-empty PDF extraction as scanned/image-only. */
 const MIN_PDF_TEXT_CHARS = 80
-
-/** pdf-parse v2: `PDFParse` + buffer; must not be bundled with Turbopack (see next.config.mjs). */
-async function extractPdfText(buffer: Buffer, fileName: string): Promise<string> {
-  installPdfNodePolyfills()
-  const mod: any = await import("pdf-parse")
-  const PDFParse = mod.PDFParse as typeof import("pdf-parse").PDFParse
-  if (typeof PDFParse !== "function") {
-    console.error("[extract-text][pdf-parse] PDFParse export missing", { fileName })
-    return ""
-  }
-  const parser = new PDFParse({ data: buffer })
-  try {
-    const result = await parser.getText()
-    const raw = (result?.text ?? "").toString()
-    const normalized = raw.replace(/\u0000/g, "").replace(/\s+/g, " ").trim()
-    console.log("[extract-text][pdf-parse]", {
-      fileName,
-      extractedChars: normalized.length,
-      preview: normalized.slice(0, 200),
-    })
-    return normalized
-  } catch (error) {
-    console.error("[extract-text][pdf-parse-error]", {
-      fileName,
-      error: error instanceof Error ? error.message : String(error),
-    })
-    return ""
-  } finally {
-    if (typeof parser.destroy === "function") await parser.destroy()
-  }
-}
 
 export async function POST(req: Request) {
   try {
@@ -94,7 +63,7 @@ export async function POST(req: Request) {
       } else if (lower.endsWith(".doc")) {
         warning = "Legacy .doc is not directly readable. Please upload .docx or paste text."
       } else if (lower.endsWith(".pdf")) {
-        text = await extractPdfText(buffer, file.name)
+        text = await extractPdfTextFromBuffer(buffer, file.name)
       } else if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) {
         warning = "PowerPoint text extraction is limited. Please paste relevant text manually."
       } else {

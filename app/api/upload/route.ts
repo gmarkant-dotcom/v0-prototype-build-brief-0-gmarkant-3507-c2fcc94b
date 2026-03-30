@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     const filename = `${folder}/${user.id}/${timestamp}-${file.name}`
 
     const blob = await put(filename, file, {
-      access: 'public', // Using public for simpler access, files are isolated by user ID in path
+      access: 'private',
     })
 
     return NextResponse.json({ 

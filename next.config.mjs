@@ -6,8 +6,9 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Run pdf tooling as native Node modules (Turbopack must not bundle them).
-  serverExternalPackages: ["pdfjs-dist", "pdf-parse"],
+  // Keep pdfjs-dist out of the server bundle (native Node resolution; avoids DOMMatrix/Turbopack issues).
+  serverExternalPackages: ["pdfjs-dist"],
+  // Next 16 defaults to Turbopack; do not add a webpack() hook here or production build fails.
 }
 
 export default nextConfig
