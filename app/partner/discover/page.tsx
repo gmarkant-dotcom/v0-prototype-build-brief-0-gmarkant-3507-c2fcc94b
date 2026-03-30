@@ -151,9 +151,26 @@ export default function DiscoverAgenciesPage() {
         }
       }
 
-      const collaboratorIds = [...new Set([...leadAgencyIds, ...otherPartnerIds])]
+      // Build collaborator list from API relationships first (most reliable source)
+      // so lead agencies always appear even if profile table read policies are strict.
+      const collaboratorMap = new Map<string, Agency>()
+      for (const p of activePartnerships) {
+        const agencyId = p.agency?.id || p.agency_id
+        if (!agencyId) continue
+        collaboratorMap.set(agencyId, {
+          id: agencyId,
+          role: "agency",
+          company_name: p.agency?.company_name || p.agency?.full_name || p.agency?.email || "Lead Agency",
+          full_name: p.agency?.full_name || p.agency?.company_name || p.agency?.email || "Lead Agency",
+          email: p.agency?.email,
+          location: p.agency?.location || "",
+          website: p.agency?.website || "",
+          bio: p.agency?.bio || "",
+          collaborated: true,
+        })
+      }
 
-      // Primary requirement: show historic collaborators first (lead + partner agencies).
+      const collaboratorIds = [...new Set([...leadAgencyIds, ...otherPartnerIds])]
       if (collaboratorIds.length > 0) {
         const { data: collaborators, error: collaboratorsError } = await supabase
           .from("profiles")
@@ -163,14 +180,21 @@ export default function DiscoverAgenciesPage() {
         if (collaboratorsError) {
           console.error("Error loading collaborator profiles:", collaboratorsError)
         } else {
-          const mapped = (collaborators || []).map((p) => ({
-            ...p,
-            collaborated: true,
-          }))
-          setAgencies(mapped)
-          setIsLoading(false)
-          return
+          for (const p of collaborators || []) {
+            collaboratorMap.set(p.id, {
+              ...p,
+              company_name: p.company_name || p.full_name || p.email || "Agency",
+              full_name: p.full_name || p.company_name || p.email || "Agency",
+              collaborated: true,
+            })
+          }
         }
+      }
+
+      if (collaboratorMap.size > 0) {
+        setAgencies(Array.from(collaboratorMap.values()))
+        setIsLoading(false)
+        return
       }
 
       // Fallback directory if no historical collaborators exist yet.
