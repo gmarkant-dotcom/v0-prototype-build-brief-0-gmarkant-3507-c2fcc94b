@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
+import { useSelectedProject } from "@/contexts/selected-project-context"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2 } from "lucide-react"
 import { FileUpload } from "@/components/file-upload"
 
@@ -68,6 +69,7 @@ const demoTemplates = [
 
 export default function AgencyRFPPage() {
   const { checkFeatureAccess } = usePaidUser()
+  const { selectedProject } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Use demo partners only in demo mode - production shows empty (partners come from DB)
@@ -83,6 +85,7 @@ export default function AgencyRFPPage() {
   const [googleLink, setGoogleLink] = useState("")
   const [briefUploaded, setBriefUploaded] = useState(false)
   const [briefFileName, setBriefFileName] = useState("")
+  const [briefSourceText, setBriefSourceText] = useState("")
   const [selectedRfpTemplate, setSelectedRfpTemplate] = useState<string | null>(null)
   const [selectedSowTemplate, setSelectedSowTemplate] = useState<string | null>(null)
   const [uploadedRfpTemplate, setUploadedRfpTemplate] = useState<{ name: string; url: string } | null>(null)
@@ -129,6 +132,7 @@ export default function AgencyRFPPage() {
       if (!checkFeatureAccess("file uploads")) return
       setBriefUploaded(true)
       setBriefFileName(file.name)
+      setBriefSourceText(`Uploaded file: ${file.name}`)
     }
   }
   
@@ -137,38 +141,67 @@ export default function AgencyRFPPage() {
     fileInputRef.current?.click()
   }
 
-  // Generate Master RFP (simulated AI)
-  const generateMasterRfp = () => {
+  // Generate Master RFP (AI-backed)
+  const generateMasterRfp = async () => {
     setIsGenerating(true)
-    setTimeout(() => {
-      const generated = {
-        projectName: "NWSL Creator Content Series",
-        client: "National Women's Soccer League",
-        overview: "A multi-platform content series celebrating the athletes, culture, and community of the NWSL through authentic creator partnerships and premium video storytelling. The program will span 6 months and include documentary-style episodic content, social-first short-form videos, and behind-the-scenes coverage.",
-        objectives: [
-          "Increase brand awareness among Gen Z and Millennial audiences by 40%",
-          "Drive social engagement through creator-led content (target: 5M+ engagements)",
-          "Build emotional connection between fans and players through authentic storytelling",
-          "Generate 50M+ earned media impressions across all platforms",
-        ],
-        totalBudget: "$250,000",
-        timeline: "6 months (February - July 2024)",
-        scopeItems: [
-          { id: "1", name: "Strategy & Planning", description: "Campaign strategy, audience research, content framework, creator identification", allocation: null, estimatedBudget: "$15,000", timeline: "2 weeks" },
-          { id: "2", name: "Creative Direction", description: "Visual identity system, tone of voice guidelines, creative concepts for each content pillar", allocation: null, estimatedBudget: "$20,000", timeline: "2 weeks" },
-          { id: "3", name: "Video Production", description: "8-part documentary series, 24 social-first videos, behind-the-scenes content. 12 shoot days across 4 markets.", allocation: null, estimatedBudget: "$120,000", timeline: "16 weeks" },
-          { id: "4", name: "Post-Production", description: "Editing, color grading, motion graphics, sound design. Fast turnaround for social content (48-72 hrs).", allocation: null, estimatedBudget: "$35,000", timeline: "Ongoing" },
-          { id: "5", name: "Social Media Management", description: "Content calendar, community management, paid amplification strategy, platform optimization", allocation: null, estimatedBudget: "$25,000", timeline: "6 months" },
-          { id: "6", name: "Copywriting", description: "Scripts, captions, PR materials, brand voice consistency across all touchpoints", allocation: null, estimatedBudget: "$12,000", timeline: "Ongoing" },
-          { id: "7", name: "Talent Management", description: "Creator outreach, contracts, scheduling, on-set coordination, relationship management", allocation: null, estimatedBudget: "$15,000", timeline: "Ongoing" },
-          { id: "8", name: "Analytics & Reporting", description: "KPI tracking, weekly dashboards, monthly reports, final campaign analysis", allocation: null, estimatedBudget: "$8,000", timeline: "6 months" },
-        ],
+    try {
+      const templateHint =
+        uploadedRfpTemplate?.name ||
+        (selectedRfpTemplate && isDemoMode()
+          ? demoTemplates.find((t) => t.id === selectedRfpTemplate)?.name
+          : "") ||
+        "Default RFP template"
+
+      const sourceText =
+        pastedContent.trim() ||
+        googleLink.trim() ||
+        briefSourceText ||
+        briefFileName
+
+      const response = await fetch("/api/ai/master-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName: selectedProject?.name || "New Project",
+          clientName: selectedProject?.client || "Client TBD",
+          briefText: sourceText,
+          templateHint,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to generate master brief")
       }
-      setMasterRfp(generated)
-      setScopeItems(generated.scopeItems)
-      setIsGenerating(false)
+
+      const payload = await response.json()
+      const generated = payload.masterBrief || {}
+      const normalizedScope = (generated.scopeItems || []).map((item: any, index: number) => ({
+        id: item.id || `${index + 1}`,
+        name: item.name || `Scope Item ${index + 1}`,
+        description: item.description || "No description provided",
+        allocation: null,
+        estimatedBudget: item.estimatedBudget || "",
+        timeline: item.timeline || "",
+      }))
+
+      const normalized = {
+        projectName: generated.projectName || selectedProject?.name || "New Project",
+        client: generated.client || selectedProject?.client || "Client TBD",
+        overview: generated.overview || "",
+        objectives: generated.objectives || [],
+        totalBudget: generated.totalBudget || "TBD",
+        timeline: generated.timeline || "TBD",
+        scopeItems: normalizedScope,
+      }
+
+      setMasterRfp(normalized)
+      setScopeItems(normalizedScope)
       setCurrentStep(2)
-    }, 3000)
+    } catch (error) {
+      console.error("Master brief generation failed:", error)
+    } finally {
+      setIsGenerating(false)
+    }
   }
   
   // Allocate scope item
@@ -409,6 +442,7 @@ export default function AgencyRFPPage() {
                         onClick={() => {
                           setBriefUploaded(true)
                           setBriefFileName("Google Doc imported")
+                          setBriefSourceText(`Imported Google document: ${googleLink}`)
                         }}
                       >
                         Import from Google
@@ -433,6 +467,7 @@ export default function AgencyRFPPage() {
                         onClick={() => {
                           setBriefUploaded(true)
                           setBriefFileName("Pasted content")
+                          setBriefSourceText(pastedContent)
                         }}
                       >
                         Use Pasted Content
@@ -459,6 +494,7 @@ export default function AgencyRFPPage() {
                     onClick={() => {
                       setBriefUploaded(false)
                       setBriefFileName("")
+                      setBriefSourceText("")
                     }}
                     className="border-border text-foreground-muted hover:bg-white/5"
                   >
@@ -655,7 +691,7 @@ export default function AgencyRFPPage() {
             {/* Generate Button */}
             <div className="flex justify-end">
               <Button
-                disabled={!briefUploaded || isGenerating}
+                disabled={!briefUploaded || isGenerating || !selectedProject}
                 onClick={generateMasterRfp}
                 className="bg-accent text-accent-foreground hover:bg-accent/90 px-8"
               >
@@ -670,6 +706,11 @@ export default function AgencyRFPPage() {
                 )}
               </Button>
             </div>
+            {!selectedProject && (
+              <p className="mt-3 font-mono text-xs text-warning text-right">
+                Select a project in Current Project View before generating the master brief.
+              </p>
+            )}
           </div>
         )}
         
