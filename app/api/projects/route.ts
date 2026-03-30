@@ -139,17 +139,14 @@ export async function POST(request: NextRequest) {
       { agency_id: user.id, title: safeName, status: 'draft' },
       { agency_id: user.id, name: safeName, status: 'draft' },
       { agency_id: user.id, project_name: safeName, status: 'draft' },
-      { lead_agency_id: user.id, title: safeName, status: 'draft' },
-      { owner_id: user.id, title: safeName, status: 'draft' },
       { agency_id: user.id, title: safeName },
       { agency_id: user.id, name: safeName },
       { agency_id: user.id, project_name: safeName },
-      { lead_agency_id: user.id, title: safeName },
-      { owner_id: user.id, title: safeName },
     ]
 
     let project: any = null
     let lastError: any = null
+    const attemptErrors: string[] = []
     for (const payload of attempts) {
       const { data, error } = await supabase
         .from('projects')
@@ -162,9 +159,14 @@ export async function POST(request: NextRequest) {
         break
       }
       lastError = error
+      const msg = error?.message || error?.details || error?.hint
+      if (msg) attemptErrors.push(String(msg))
     }
 
-    if (lastError || !project) throw lastError || new Error('Project creation failed')
+    if (lastError || !project) {
+      const unique = [...new Set(attemptErrors)].slice(0, 3)
+      throw new Error(unique.join(' | ') || 'Project creation failed')
+    }
 
     // Best-effort update of optional fields. Any mismatch is ignored so creation still succeeds.
     const optionalFields: Record<string, unknown> = {
