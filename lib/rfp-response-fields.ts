@@ -1,0 +1,236 @@
+/** Stored in TEXT columns `budget_proposal` / `timeline_proposal` as JSON or legacy free text. */
+
+const STANDARD_CURRENCIES = new Set([
+  "USD",
+  "EUR",
+  "GBP",
+  "CAD",
+  "AUD",
+  "JPY",
+  "MXN",
+  "BRL",
+  "AED",
+  "SGD",
+  "Other",
+])
+
+export type StoredBudget = {
+  amount: number
+  currency: string
+  /** When currency is "Other", optional custom code/name */
+  custom?: string
+}
+
+export type StoredTimeline = {
+  duration: number
+  unit: "Days" | "Weeks" | "Months"
+}
+
+const TIMELINE_UNITS = new Set(["Days", "Weeks", "Months"])
+
+export function serializeBudget(amount: number, currency: string, customOther?: string): string {
+  const cur = currency === "Other" ? "Other" : currency
+  const payload: StoredBudget = {
+    amount,
+    currency: cur,
+    ...(currency === "Other" && customOther?.trim() ? { custom: customOther.trim() } : {}),
+  }
+  return JSON.stringify(payload)
+}
+
+export function serializeTimeline(duration: number, unit: "Days" | "Weeks" | "Months"): string {
+  return JSON.stringify({ duration, unit } satisfies StoredTimeline)
+}
+
+/** Persisted TEXT value for `budget_proposal` from form fields. */
+export function buildBudgetProposalForSave(
+  amountStr: string,
+  currency: string,
+  currencyOther: string,
+  legacyFallback: string | null
+): string {
+  const raw = amountStr.trim().replace(/,/g, "")
+  const amt = parseFloat(raw)
+  if (Number.isFinite(amt) && amt > 0) {
+    const c = currency === "Other" ? "Other" : currency
+    const other = currency === "Other" ? currencyOther.trim() : ""
+    if (c === "Other" && !other) return ""
+    return serializeBudget(amt, c, other || undefined)
+  }
+  if (legacyFallback?.trim()) return legacyFallback.trim()
+  return ""
+}
+
+/** Persisted TEXT value for `timeline_proposal` from form fields. */
+export function buildTimelineProposalForSave(
+  durationStr: string,
+  unit: "Days" | "Weeks" | "Months",
+  legacyFallback: string | null
+): string {
+  const raw = durationStr.trim()
+  const d = parseFloat(raw)
+  if (Number.isFinite(d) && d > 0) {
+    return serializeTimeline(d, unit)
+  }
+  if (legacyFallback?.trim()) return legacyFallback.trim()
+  return ""
+}
+
+export function parseBudgetProposal(raw: string): {
+  amount: string
+  currency: string
+  customOther: string
+  legacyHint: string | null
+} {
+  const empty = { amount: "", currency: "USD", customOther: "", legacyHint: null as string | null }
+  const t = (raw ?? "").trim()
+  if (!t) return empty
+  try {
+    const j = JSON.parse(t) as Record<string, unknown>
+    if (j && typeof j === "object" && "amount" in j && "currency" in j) {
+      const amount = j.amount
+      const num = typeof amount === "number" ? amount : parseFloat(String(amount))
+      let currency = String(j.currency ?? "USD")
+      let customOther = typeof j.custom === "string" ? j.custom.trim() : ""
+      if (!STANDARD_CURRENCIES.has(currency)) {
+        customOther = [currency, customOther].filter(Boolean).join(" ").trim()
+        currency = "Other"
+      }
+      return {
+        amount: Number.isFinite(num) ? String(num) : "",
+        currency,
+        customOther: currency === "Other" ? customOther : "",
+        legacyHint: null,
+      }
+    }
+  } catch {
+    /* legacy */
+  }
+  const legacy = /^([\d.,]+)\s+(USD|EUR|GBP|CAD|AUD|JPY|MXN|BRL|AED|SGD|Other)(?:\s+(.+))?$/i.exec(t)
+  if (legacy) {
+    return {
+      amount: legacy[1].replace(/,/g, ""),
+      currency: legacy[2].toLowerCase() === "other" ? "Other" : legacy[2].toUpperCase(),
+      customOther: legacy[3]?.trim() ?? "",
+      legacyHint: null,
+    }
+  }
+  return { ...empty, legacyHint: t }
+}
+
+export function parseTimelineProposal(raw: string): {
+  duration: string
+  unit: "Days" | "Weeks" | "Months"
+  legacyHint: string | null
+} {
+  const empty = { duration: "", unit: "Weeks" as const, legacyHint: null as string | null }
+  const t = (raw ?? "").trim()
+  if (!t) return empty
+  try {
+    const j = JSON.parse(t) as Record<string, unknown>
+    if (j && typeof j === "object" && "duration" in j && "unit" in j) {
+      const d = j.duration
+      const num = typeof d === "number" ? d : parseFloat(String(d))
+      const u = String(j.unit ?? "Weeks")
+      const unit = TIMELINE_UNITS.has(u) ? (u as "Days" | "Weeks" | "Months") : "Weeks"
+      return {
+        duration: Number.isFinite(num) ? String(num) : "",
+        unit,
+        legacyHint: null,
+      }
+    }
+  } catch {
+    /* legacy */
+  }
+  const legacy = /^(\d+(?:\.\d+)?)\s*(days?|weeks?|months?)$/i.exec(t)
+  if (legacy) {
+    const n = legacy[1]
+    const u = legacy[2].toLowerCase()
+    let unit: "Days" | "Weeks" | "Months" = "Weeks"
+    if (u.startsWith("day")) unit = "Days"
+    else if (u.startsWith("month")) unit = "Months"
+    return { duration: n, unit, legacyHint: null }
+  }
+  return { ...empty, legacyHint: t }
+}
+
+export function formatBudgetForDisplay(raw: string): string {
+  const t = (raw ?? "").trim()
+  if (!t) return "—"
+  try {
+    const j = JSON.parse(t) as StoredBudget
+    if (j && typeof j.amount === "number" && j.currency) {
+      const cur =
+        j.currency === "Other" && j.custom?.trim() ? j.custom.trim() : j.currency
+      return `${j.amount.toLocaleString("en-US")} ${cur}`
+    }
+  } catch {
+    /* fall through */
+  }
+  return t
+}
+
+export function formatTimelineForDisplay(raw: string): string {
+  const t = (raw ?? "").trim()
+  if (!t) return "—"
+  try {
+    const j = JSON.parse(t) as StoredTimeline
+    if (j && typeof j.duration === "number" && j.unit) {
+      return `${j.duration} ${j.unit}`
+    }
+  } catch {
+    /* fall through */
+  }
+  return t
+}
+
+export function isBudgetValidForSubmit(stored: string): boolean {
+  const t = (stored ?? "").trim()
+  if (!t) return false
+  try {
+    const j = JSON.parse(t) as StoredBudget
+    if (j && typeof j === "object") {
+      const num = typeof j.amount === "number" ? j.amount : parseFloat(String(j.amount))
+      if (!Number.isFinite(num) || num <= 0) return false
+      const c = String(j.currency ?? "").trim()
+      if (!c) return false
+      if (c === "Other" && !String((j as StoredBudget).custom ?? "").trim()) return false
+      return true
+    }
+  } catch {
+    return t.length > 0
+  }
+  return false
+}
+
+export function isTimelineValidForSubmit(stored: string): boolean {
+  const t = (stored ?? "").trim()
+  if (!t) return false
+  try {
+    const j = JSON.parse(t) as StoredTimeline
+    if (j && typeof j === "object") {
+      const num = typeof j.duration === "number" ? j.duration : parseFloat(String(j.duration))
+      if (!Number.isFinite(num) || num <= 0) return false
+      return TIMELINE_UNITS.has(String(j.unit ?? ""))
+    }
+  } catch {
+    return t.length > 0
+  }
+  return false
+}
+
+export const BUDGET_CURRENCY_OPTIONS = [
+  "USD",
+  "EUR",
+  "GBP",
+  "CAD",
+  "AUD",
+  "JPY",
+  "MXN",
+  "BRL",
+  "AED",
+  "SGD",
+  "Other",
+] as const
+
+export const TIMELINE_UNIT_OPTIONS = ["Days", "Weeks", "Months"] as const

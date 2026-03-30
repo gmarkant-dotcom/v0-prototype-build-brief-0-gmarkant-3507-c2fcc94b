@@ -11,6 +11,16 @@ import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import {
+  BUDGET_CURRENCY_OPTIONS,
+  TIMELINE_UNIT_OPTIONS,
+  parseBudgetProposal,
+  parseTimelineProposal,
+  buildBudgetProposalForSave,
+  buildTimelineProposalForSave,
+  isBudgetValidForSubmit,
+  isTimelineValidForSubmit,
+} from "@/lib/rfp-response-fields"
+import {
   Loader2,
   FileText,
   Building2,
@@ -259,11 +269,16 @@ export default function PartnerRfpDetailPage() {
   const [existing, setExisting] = useState<ResponseRow | null>(null)
 
   const [proposalText, setProposalText] = useState("")
-  const [budgetProposal, setBudgetProposal] = useState("")
-  const [timelineProposal, setTimelineProposal] = useState("")
+  const [budgetAmount, setBudgetAmount] = useState("")
+  const [budgetCurrency, setBudgetCurrency] = useState<string>("USD")
+  const [budgetCurrencyOther, setBudgetCurrencyOther] = useState("")
+  const [budgetLegacyHint, setBudgetLegacyHint] = useState<string | null>(null)
+  const [timelineDuration, setTimelineDuration] = useState("")
+  const [timelineUnit, setTimelineUnit] = useState<"Days" | "Weeks" | "Months">("Weeks")
+  const [timelineLegacyHint, setTimelineLegacyHint] = useState<string | null>(null)
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([])
   const [uploadingId, setUploadingId] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [savingKind, setSavingKind] = useState<null | "draft" | "submitted">(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
@@ -298,12 +313,27 @@ export default function PartnerRfpDetailPage() {
           if (r) {
             setExisting(r)
             setProposalText(r.proposal_text || "")
-            setBudgetProposal(r.budget_proposal || "")
-            setTimelineProposal(r.timeline_proposal || "")
+            const bp = parseBudgetProposal(r.budget_proposal || "")
+            setBudgetAmount(bp.amount)
+            setBudgetCurrency(bp.currency)
+            setBudgetCurrencyOther(bp.customOther)
+            setBudgetLegacyHint(bp.legacyHint)
+            const tp = parseTimelineProposal(r.timeline_proposal || "")
+            setTimelineDuration(tp.duration)
+            setTimelineUnit(tp.unit)
+            setTimelineLegacyHint(tp.legacyHint)
             const att = Array.isArray(r.attachments) ? r.attachments : []
             setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
           } else {
             setExisting(null)
+            setProposalText("")
+            setBudgetAmount("")
+            setBudgetCurrency("USD")
+            setBudgetCurrencyOther("")
+            setBudgetLegacyHint(null)
+            setTimelineDuration("")
+            setTimelineUnit("Weeks")
+            setTimelineLegacyHint(null)
             setDraftAttachments([])
           }
         }
@@ -330,22 +360,54 @@ export default function PartnerRfpDetailPage() {
       return
     }
     const feature = status === "submitted" ? "submit bid response" : "save draft"
-    if (!checkFeatureAccess(feature)) {
+    const allowed = checkFeatureAccess(feature)
+    if (!allowed) {
       setSubmitError(
         "This action isn’t available on your current plan. If an upgrade dialog opened, use that — otherwise refresh the page or contact support."
       )
       return
     }
-    setSaving(true)
+
+    const budget_proposal = buildBudgetProposalForSave(
+      budgetAmount,
+      budgetCurrency,
+      budgetCurrencyOther,
+      budgetLegacyHint
+    )
+    const timeline_proposal = buildTimelineProposalForSave(
+      timelineDuration,
+      timelineUnit,
+      timelineLegacyHint
+    )
+
+    if (status === "submitted") {
+      if (!proposalText.trim()) {
+        setSubmitError("Proposal text is required to submit.")
+        return
+      }
+      if (!isBudgetValidForSubmit(budget_proposal)) {
+        setSubmitError(
+          "Budget: enter a positive amount, choose a currency, and if you pick Other, specify the currency or region."
+        )
+        return
+      }
+      if (!isTimelineValidForSubmit(timeline_proposal)) {
+        setSubmitError("Timeline: enter a positive duration and choose Days, Weeks, or Months.")
+        return
+      }
+    }
+
+    setSavingKind(status)
     try {
       const attachments = draftsToPayload(draftAttachments)
       const payload = {
         proposal_text: proposalText,
-        budget_proposal: budgetProposal,
-        timeline_proposal: timelineProposal,
+        budget_proposal,
+        timeline_proposal,
         attachments,
         status,
       }
+      console.log("[partner/rfps] POST /response", { inboxId: id, status, attachmentCount: attachments.length })
       const res = await fetch(`/api/partner/rfps/${id}/response`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -353,23 +415,30 @@ export default function PartnerRfpDetailPage() {
         body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => ({}))
+      console.log("[partner/rfps] response status", res.status, data)
       if (!res.ok) {
         const msg =
           [data?.error, data?.detail].filter(Boolean).join(" — ") || `Request failed (HTTP ${res.status})`
         throw new Error(msg)
       }
       if (data.response) {
-        setExisting(data.response as ResponseRow)
-        const att = Array.isArray((data.response as ResponseRow).attachments)
-          ? (data.response as ResponseRow).attachments!
-          : []
-        if (att.length > 0) {
-          setDraftAttachments(savedToDrafts(att as SavedAttachment[]))
-        }
+        const row = data.response as ResponseRow
+        setExisting(row)
+        const bp = parseBudgetProposal(row.budget_proposal || "")
+        setBudgetAmount(bp.amount)
+        setBudgetCurrency(bp.currency)
+        setBudgetCurrencyOther(bp.customOther)
+        setBudgetLegacyHint(bp.legacyHint)
+        const tp = parseTimelineProposal(row.timeline_proposal || "")
+        setTimelineDuration(tp.duration)
+        setTimelineUnit(tp.unit)
+        setTimelineLegacyHint(tp.legacyHint)
+        const att = Array.isArray(row.attachments) ? row.attachments : []
+        setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
       }
       setSuccessMsg(
         status === "submitted"
-          ? "Your response was submitted successfully. The lead agency will see it in RFP Broadcast → Partner responses."
+          ? "Your response was submitted successfully. The lead agency will see it under RFP Broadcast → Partner responses."
           : "Draft saved. You can return anytime to finish and submit."
       )
       if (status === "submitted" && inbox) {
@@ -379,7 +448,7 @@ export default function PartnerRfpDetailPage() {
       console.error("[partner/rfps] save error:", e)
       setSubmitError(e instanceof Error ? e.message : "Save failed. Check your connection and try again.")
     } finally {
-      setSaving(false)
+      setSavingKind(null)
     }
   }
 
@@ -519,9 +588,12 @@ export default function PartnerRfpDetailPage() {
           </p>
 
           {successMsg && (
-            <div className="mb-4 flex items-center gap-2 text-green-800 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm">
-              <CheckCircle className="w-4 h-4 shrink-0" />
-              {successMsg}
+            <div
+              role="status"
+              className="mb-4 flex items-start gap-3 text-green-900 bg-green-50 border-2 border-green-300 rounded-xl px-4 py-3 text-sm shadow-sm"
+            >
+              <CheckCircle className="w-5 h-5 shrink-0 text-green-700 mt-0.5" />
+              <span className="leading-relaxed font-medium">{successMsg}</span>
             </div>
           )}
           {submitError && (
@@ -542,23 +614,90 @@ export default function PartnerRfpDetailPage() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Budget proposal *</label>
-                <Input
-                  value={budgetProposal}
-                  onChange={(e) => setBudgetProposal(e.target.value)}
-                  placeholder="e.g. 95000 or $85k–$100k"
-                  className={inputClass}
-                  disabled={!canEdit}
-                />
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="any"
+                    value={budgetAmount}
+                    onChange={(e) => {
+                      setBudgetAmount(e.target.value)
+                      if (budgetLegacyHint) setBudgetLegacyHint(null)
+                    }}
+                    placeholder="Amount"
+                    className={cn(inputClass, "min-w-[120px] flex-1 sm:max-w-[200px]")}
+                    disabled={!canEdit}
+                  />
+                  <select
+                    value={budgetCurrency}
+                    onChange={(e) => {
+                      setBudgetCurrency(e.target.value)
+                      if (budgetLegacyHint) setBudgetLegacyHint(null)
+                    }}
+                    disabled={!canEdit}
+                    className={cn(inputClass, "h-10 rounded-md text-sm w-[min(100%,140px)]")}
+                  >
+                    {BUDGET_CURRENCY_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {budgetCurrency === "Other" && (
+                  <Input
+                    value={budgetCurrencyOther}
+                    onChange={(e) => setBudgetCurrencyOther(e.target.value)}
+                    placeholder="Specify currency (e.g. CHF, INR)"
+                    className={cn(inputClass, "mt-2")}
+                    disabled={!canEdit}
+                  />
+                )}
+                {budgetLegacyHint && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 mt-2">
+                    Previous value (edit above to replace): <span className="font-mono">{budgetLegacyHint}</span>
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Timeline proposal *</label>
-                <Input
-                  value={timelineProposal}
-                  onChange={(e) => setTimelineProposal(e.target.value)}
-                  placeholder="e.g. 6 weeks from kickoff"
-                  className={inputClass}
-                  disabled={!canEdit}
-                />
+                <div className="flex flex-wrap gap-2 items-center">
+                  <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    step={1}
+                    value={timelineDuration}
+                    onChange={(e) => {
+                      setTimelineDuration(e.target.value)
+                      if (timelineLegacyHint) setTimelineLegacyHint(null)
+                    }}
+                    placeholder="Duration"
+                    className={cn(inputClass, "min-w-[100px] flex-1 sm:max-w-[160px]")}
+                    disabled={!canEdit}
+                  />
+                  <select
+                    value={timelineUnit}
+                    onChange={(e) => {
+                      setTimelineUnit(e.target.value as "Days" | "Weeks" | "Months")
+                      if (timelineLegacyHint) setTimelineLegacyHint(null)
+                    }}
+                    disabled={!canEdit}
+                    className={cn(inputClass, "h-10 rounded-md text-sm w-[min(100%,140px)]")}
+                  >
+                    {TIMELINE_UNIT_OPTIONS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {timelineLegacyHint && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 mt-2">
+                    Previous value (edit above to replace): <span className="font-mono">{timelineLegacyHint}</span>
+                  </p>
+                )}
               </div>
             </div>
 
@@ -574,7 +713,7 @@ export default function PartnerRfpDetailPage() {
                     variant="outline"
                     size="sm"
                     className={btnOutlineLight}
-                    disabled={draftAttachments.length >= 6 || accessLoading}
+                    disabled={draftAttachments.length >= 6}
                     onClick={addDraft}
                   >
                     <Plus className="w-4 h-4 mr-1" />
@@ -694,7 +833,7 @@ export default function PartnerRfpDetailPage() {
                           type="button"
                           variant="outline"
                           className={btnOutlineLight}
-                          disabled={!canEdit || uploadingId === d.id || accessLoading}
+                          disabled={!canEdit || uploadingId === d.id}
                           onClick={() => fileRefs.current[d.id]?.click()}
                         >
                           {uploadingId === d.id ? (
@@ -737,20 +876,36 @@ export default function PartnerRfpDetailPage() {
                 type="button"
                 variant="outline"
                 className={btnOutlineLight}
-                disabled={saving || accessLoading}
+                disabled={savingKind !== null}
                 onClick={() => void save("draft")}
               >
-                Save draft
+                {savingKind === "draft" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save draft"
+                )}
               </Button>
               <Button
                 type="button"
                 variant="default"
                 className={btnPrimaryDark}
-                disabled={saving || accessLoading}
+                disabled={savingKind !== null}
                 onClick={() => void save("submitted")}
               >
-                <Send className="w-4 h-4 mr-2" />
-                Submit response
+                {savingKind === "submitted" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Submit response
+                  </>
+                )}
               </Button>
             </div>
           ) : (

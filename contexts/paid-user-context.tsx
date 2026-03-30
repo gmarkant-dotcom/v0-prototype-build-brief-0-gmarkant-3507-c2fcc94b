@@ -94,6 +94,10 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
     // Demo preview: full access
     if (isDemo) return true
 
+    // While profile is loading, do not open the upgrade modal or return false — that
+    // made buttons feel “dead” (role/is_paid unknown). The API still enforces auth.
+    if (isLoading) return true
+
     // Platform admins
     if (isAdmin) return true
 

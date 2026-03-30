@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
+import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import { Loader2, ChevronDown, ChevronRight, ExternalLink } from "lucide-react"
 
 type InboxSnippet = {
@@ -167,11 +168,11 @@ export function AgencyBroadcastResponsesPanel() {
                   <div className="grid sm:grid-cols-2 gap-3 text-sm pt-3">
                     <div>
                       <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
-                      <div className="text-foreground">{r.budget_proposal || "—"}</div>
+                      <div className="text-foreground">{formatBudgetForDisplay(r.budget_proposal)}</div>
                     </div>
                     <div>
                       <div className="font-mono text-[10px] uppercase text-foreground-muted">Timeline</div>
-                      <div className="text-foreground">{r.timeline_proposal || "—"}</div>
+                      <div className="text-foreground">{formatTimelineForDisplay(r.timeline_proposal)}</div>
                     </div>
                   </div>
                   {sent && (

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
 
 export const dynamic = "force-dynamic"
 
@@ -98,28 +99,39 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const body = (await req.json().catch(() => ({}))) as Body
-    console.log("[partner/rfps/response] body keys", {
-      status: body.status,
-      hasAttachments: Array.isArray(body.attachments),
-      attachmentCount: Array.isArray(body.attachments) ? body.attachments.length : 0,
-    })
+    console.log("[partner/rfps/response] request body (full)", JSON.stringify(body))
 
     const status = body.status === "submitted" ? "submitted" : "draft"
     const proposal_text = (body.proposal_text ?? "").toString()
     const budget_proposal = (body.budget_proposal ?? "").toString()
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
     const attachments = normalizeAttachments(body.attachments)
-    console.log("[partner/rfps/response] normalized attachments", attachments.length)
+    console.log("[partner/rfps/response] normalized attachments", JSON.stringify(attachments))
 
     if (status === "submitted") {
       if (!proposal_text.trim()) {
+        console.error("[partner/rfps/response] submit rejected: empty proposal_text")
         return NextResponse.json({ error: "Proposal text is required to submit" }, { status: 400 })
       }
-      if (!budget_proposal.trim()) {
-        return NextResponse.json({ error: "Budget proposal is required to submit" }, { status: 400 })
+      if (!isBudgetValidForSubmit(budget_proposal)) {
+        console.error("[partner/rfps/response] submit rejected: budget", { budget_proposal })
+        return NextResponse.json(
+          {
+            error: "Budget proposal is required to submit",
+            detail: "Enter a positive amount and currency (or use a valid saved value).",
+          },
+          { status: 400 }
+        )
       }
-      if (!timeline_proposal.trim()) {
-        return NextResponse.json({ error: "Timeline proposal is required to submit" }, { status: 400 })
+      if (!isTimelineValidForSubmit(timeline_proposal)) {
+        console.error("[partner/rfps/response] submit rejected: timeline", { timeline_proposal })
+        return NextResponse.json(
+          {
+            error: "Timeline proposal is required to submit",
+            detail: "Enter a positive duration and unit (Days, Weeks, or Months).",
+          },
+          { status: 400 }
+        )
       }
     }
 
@@ -188,10 +200,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq("id", inboxId)
     }
 
-    console.log("[partner/rfps/response] POST ok", { responseId: saved?.id, status: saved?.status })
+    console.log("[partner/rfps/response] response saved (full)", JSON.stringify(saved))
     return NextResponse.json({ response: saved })
   } catch (e) {
-    console.error("[partner/rfps] response POST:", e)
-    return NextResponse.json({ error: "Failed to save response" }, { status: 500 })
+    console.error("[partner/rfps/response] POST exception:", e)
+    return NextResponse.json(
+      { error: "Failed to save response", detail: e instanceof Error ? e.message : String(e) },
+      { status: 500 }
+    )
   }
 }
