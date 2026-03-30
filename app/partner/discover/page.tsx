@@ -18,6 +18,8 @@ interface Agency {
   website?: string
   bio?: string
   partner_count?: number
+  role?: "agency" | "partner"
+  collaborated?: boolean
 }
 
 interface AccessRequest {
@@ -82,18 +84,91 @@ export default function DiscoverAgenciesPage() {
 
     try {
       const supabase = createClient()
-      
-      // Get all agency profiles (public directory)
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, company_name, full_name, location, website, bio")
-        .eq("role", "agency")
-        .not("company_name", "is", null)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setIsLoading(false)
+        return
+      }
 
-      if (error) {
-        console.error("Error loading agencies:", error)
+      // Tier 1: direct lead-agency relationships for this partner
+      const { data: myPartnerships, error: partnershipsError } = await supabase
+        .from("partnerships")
+        .select("id, agency_id")
+        .eq("partner_id", user.id)
+
+      if (partnershipsError) {
+        console.error("Error loading partnerships:", partnershipsError)
+        setIsLoading(false)
+        return
+      }
+
+      const myPartnershipIds = [...new Set((myPartnerships || []).map((p) => p.id))]
+      const leadAgencyIds = [...new Set((myPartnerships || []).map((p) => p.agency_id))]
+
+      // Tier 2: project-level collaborators (other partner agencies on shared projects)
+      let projectIds: string[] = []
+      if (myPartnershipIds.length > 0) {
+        const { data: myAssignments } = await supabase
+          .from("project_assignments")
+          .select("project_id")
+          .in("partnership_id", myPartnershipIds)
+
+        projectIds = [...new Set((myAssignments || []).map((a) => a.project_id))]
+      }
+
+      let otherPartnerIds: string[] = []
+      if (projectIds.length > 0) {
+        const { data: allAssignments } = await supabase
+          .from("project_assignments")
+          .select("partnership_id")
+          .in("project_id", projectIds)
+
+        const allPartnershipIds = [...new Set((allAssignments || []).map((a) => a.partnership_id))]
+        const otherPartnershipIds = allPartnershipIds.filter((id) => !myPartnershipIds.includes(id))
+
+        if (otherPartnershipIds.length > 0) {
+          const { data: otherPartnerships } = await supabase
+            .from("partnerships")
+            .select("partner_id")
+            .in("id", otherPartnershipIds)
+
+          otherPartnerIds = [...new Set((otherPartnerships || []).map((p) => p.partner_id).filter((id) => id && id !== user.id))]
+        }
+      }
+
+      const collaboratorIds = [...new Set([...leadAgencyIds, ...otherPartnerIds])]
+
+      // Primary requirement: show historic collaborators first (lead + partner agencies).
+      if (collaboratorIds.length > 0) {
+        const { data: collaborators, error: collaboratorsError } = await supabase
+          .from("profiles")
+          .select("id, role, company_name, full_name, location, website, bio")
+          .in("id", collaboratorIds)
+
+        if (collaboratorsError) {
+          console.error("Error loading collaborator profiles:", collaboratorsError)
+        } else {
+          const mapped = (collaborators || []).map((p) => ({
+            ...p,
+            collaborated: true,
+          }))
+          setAgencies(mapped)
+          setIsLoading(false)
+          return
+        }
+      }
+
+      // Fallback directory if no historical collaborators exist yet.
+      const { data: fallbackDirectory, error: fallbackError } = await supabase
+        .from("profiles")
+        .select("id, role, company_name, full_name, location, website, bio")
+        .in("role", ["agency", "partner"])
+        .neq("id", user.id)
+
+      if (fallbackError) {
+        console.error("Error loading fallback directory:", fallbackError)
       } else {
-        setAgencies(data || [])
+        setAgencies(fallbackDirectory || [])
       }
     } catch (error) {
       console.error("Error:", error)
@@ -185,7 +260,7 @@ export default function DiscoverAgenciesPage() {
   return (
     <PartnerLayout 
       title="Discover Agencies" 
-      subtitle="Find and request access to join lead agency partner networks"
+      subtitle="Historic collaborators from your lead and project-level relationships"
     >
       <div className="space-y-6">
         {/* Search */}
@@ -260,7 +335,12 @@ export default function DiscoverAgenciesPage() {
                       )}
                       
                       <div className="mt-4">
-                        {request?.status === "approved" ? (
+                        {agency.collaborated ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0C3535]/10 text-[#0C3535] text-xs font-medium">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Worked Together
+                          </span>
+                        ) : request?.status === "approved" ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-medium">
                             <CheckCircle className="w-3.5 h-3.5" />
                             In Network
