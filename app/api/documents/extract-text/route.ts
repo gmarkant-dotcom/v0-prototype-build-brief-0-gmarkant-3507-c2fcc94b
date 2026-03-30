@@ -83,6 +83,17 @@ export async function POST(req: Request) {
         warning = "Legacy .doc is not directly readable. Please upload .docx or paste text."
       } else if (lower.endsWith(".pdf")) {
         text = await extractPdfTextWithPdfParse(buffer)
+        const normalizedPreview = text
+          .replace(/\u0000/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+        const preview = normalizedPreview.slice(0, 200)
+        // Diagnostic log for production debugging (Vercel function logs).
+        console.log("[extract-text][pdf-parse]", {
+          fileName: file.name,
+          extractedChars: normalizedPreview.length,
+          preview,
+        })
       } else if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) {
         warning = "PowerPoint text extraction is limited. Please paste relevant text manually."
       } else {
