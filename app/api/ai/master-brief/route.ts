@@ -56,7 +56,6 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const acceptLimitedBrief = Boolean(body.acceptLimitedBrief)
     const projectName = (body.projectName || "New Project").toString()
     const clientName = (body.clientName || "Client TBD").toString()
     let briefText = (body.briefText || "").toString()
@@ -74,48 +73,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Brief content is required" }, { status: 400 })
     }
 
-    const augmentDelimiter = "\n\n---\nAdditional brief details (user-provided):\n"
-    const augmentIdx = briefText.indexOf(augmentDelimiter)
-    const primaryPart = augmentIdx >= 0 ? briefText.slice(0, augmentIdx).trim() : briefText.trim()
-    const augmentPart = augmentIdx >= 0 ? briefText.slice(augmentIdx + augmentDelimiter.length).trim() : ""
-    const pTrim = primaryPart.trim()
-    const primaryIsFilePlaceholder =
-      pTrim.startsWith("Document uploaded:") &&
-      pTrim.split(/\r?\n/).length === 1 &&
-      pTrim.length < 600
-
-    if (!acceptLimitedBrief && primaryIsFilePlaceholder && augmentPart.length < 80) {
-      return NextResponse.json(
-        {
-          error: "No selectable text was found in your uploaded brief file.",
-          hint: "Paste the full client RFP in the text area (80+ characters), or check “Generate with limited brief” to build a TBD-heavy skeleton you can edit.",
-        },
-        { status: 400 }
-      )
-    }
-
-    if (!acceptLimitedBrief && briefText.trim().length < 150) {
-      return NextResponse.json(
-        {
-          error: "Brief content is too short for a client-specific Master RFP.",
-          hint: "Add more detail from the client document: objectives, deliverables, audience, timeline, budget, or constraints.",
-        },
-        { status: 400 }
-      )
-    }
-
     const hasTemplateBody = templateText.length > 0
-
-    const skeletonRules = `MODE — LIMITED / NO EXTRACTABLE BRIEF TEXT (user opted in; e.g. scanned PDF):
-The uploaded file could not be read as text. Do NOT invent client-specific campaigns, brands, or metrics.
-- projectName and client: use exactly the Project context names below.
-- overview: 2–4 sentences stating that detailed requirements are pending until the written brief is provided or OCR/retype is done; mention reviewing the original document manually.
-- objectives: 3–5 concise placeholders (e.g. clarify goals, align stakeholders, deliver creative work, measure outcomes) using "TBD" where specifics belong.
-- totalBudget and timeline: "TBD" unless the brief text below contains a real value.
-- scopeItems: 5–8 items with generic creative-agency workstream names (Strategy, Creative, Production, etc.) and descriptions that say details will be filled from the client brief — no fake client facts.
-
-CLIENT BRIEF INPUT (may be only a filename line — that is expected):
-`
 
     const groundingRules = `CRITICAL GROUNDING (must follow):
 1) The CLIENT BRIEF text below is the ONLY source of truth for requirements, audiences, deliverables, constraints, names, budgets, dates, and success metrics.
@@ -126,12 +84,10 @@ CLIENT BRIEF INPUT (may be only a filename line — that is expected):
 6) "totalBudget" and "timeline" must come from the brief when present; otherwise "TBD" or a short honest placeholder.
 7) Project Name / Client fields: use values from the brief if they appear; otherwise use the Project context below.`
 
-    const rulesBlock = acceptLimitedBrief ? skeletonRules : groundingRules
-
     const prompt = hasTemplateBody
       ? `You integrate a CLIENT BRIEF into a structured master RFP for an agency workflow.
 
-${rulesBlock}
+${groundingRules}
 
 The OUTPUT FORMAT TEMPLATE defines STRUCTURE ONLY: section order, headings, implied fields, and tone. It is NOT a second source of facts. Ignore any lorem ipsum, sample company names, or example metrics in the template unless the same facts appear in the CLIENT BRIEF.
 
@@ -153,7 +109,7 @@ OUTPUT FORMAT TEMPLATE (structure / layout reference only):
 ${templateText}`
       : `You generate a structured master brief for an agency RFP workflow from the CLIENT BRIEF.
 
-${rulesBlock}
+${groundingRules}
 
 Produce the structured master brief fields as specified. Prefer 5–10 scope items.
 

@@ -5,36 +5,8 @@ import { createClient } from "@/lib/supabase/server"
 export const runtime = "nodejs"
 
 const MAX_CHARS = 120_000
-/** Below this, extracted text is unlikely to be a real brief (headers only, etc.) */
-const THIN_EXTRACTION_THRESHOLD = 120
-
-/** When pdf-parse returns empty (some PDFs / encodings), try raw pdf.js text content. */
-async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
-  const data = new Uint8Array(buffer)
-  const loadingTask = pdfjs.getDocument({
-    data,
-    useSystemFonts: true,
-    disableFontFace: true,
-  } as any)
-  const pdf = await loadingTask.promise
-  let full = ""
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const textContent = await page.getTextContent()
-    for (const item of textContent.items) {
-      if (item && typeof item === "object" && "str" in item) {
-        const s = (item as { str?: string }).str
-        if (s) full += s + " "
-      }
-    }
-    full += "\n"
-  }
-  if (typeof (pdf as any).destroy === "function") {
-    await (pdf as any).destroy()
-  }
-  return full.replace(/\u0000/g, "").trim()
-}
+/** Treat near-empty PDF extraction as scanned/image-only. */
+const MIN_PDF_TEXT_CHARS = 80
 
 /** Supports both pdf-parse v1 (function export) and v2 (PDFParse class). */
 async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string> {
@@ -108,40 +80,35 @@ export async function POST(req: Request) {
         const result = await mammoth.extractRawText({ buffer })
         text = result.value
       } else if (lower.endsWith(".doc")) {
-        warning = "Legacy .doc is not directly readable; using filename fallback."
+        warning = "Legacy .doc is not directly readable. Please upload .docx or paste text."
       } else if (lower.endsWith(".pdf")) {
         text = await extractPdfTextWithPdfParse(buffer)
-        if (!text.replace(/\u0000/g, "").trim()) {
-          const alt = await extractPdfTextWithPdfJs(buffer)
-          if (alt) {
-            text = alt
-            warning = "Used alternate PDF text extraction."
-          }
-        }
       } else if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) {
-        warning = "PowerPoint text extraction is limited; using filename fallback."
+        warning = "PowerPoint text extraction is limited. Please paste relevant text manually."
       } else {
-        warning = "Unsupported type for text extraction; using filename fallback."
+        warning = "Unsupported type for text extraction. Please paste the content manually."
       }
     } catch (parseError) {
       console.error("extract-text parse warning:", parseError)
-      warning = "Could not parse this file format; using filename fallback."
+      warning = "Could not parse this file format. Please paste the content manually."
     }
 
     const trimmed = text.replace(/\u0000/g, "").trim()
+    if (lower.endsWith(".pdf") && trimmed.length < MIN_PDF_TEXT_CHARS) {
+      return NextResponse.json(
+        {
+          error:
+            "This PDF appears to be scanned/image-based and has no extractable text. Please upload a text-based PDF or paste the brief text manually.",
+        },
+        { status: 422 }
+      )
+    }
+
     if (!trimmed) {
-      const fallback = `Document uploaded: ${file.name}`
-      const isPdf = lower.endsWith(".pdf")
       return NextResponse.json({
-        text: fallback,
+        text: "",
         fileName: file.name,
-        warning:
-          warning ||
-          (isPdf
-            ? "No selectable text was found in this PDF. Scanned/image PDFs are not supported. Please upload a text-based PDF or use Paste Text mode."
-            : "Could not extract usable text from this file. Please use a text-based file or paste the content."),
-        usedFallback: true,
-        thinExtraction: false,
+        warning: warning || "No extractable text found. Paste the content manually.",
       })
     }
 
@@ -150,17 +117,10 @@ export async function POST(req: Request) {
       out = `${out.slice(0, MAX_CHARS)}\n\n[... truncated for processing ...]`
     }
 
-    const thinExtraction = out.length > 0 && out.length < THIN_EXTRACTION_THRESHOLD
-    const thinWarning = thinExtraction
-      ? "Very little text was extracted (image-based PDF, complex layout, or short doc). Paste the full brief below for accurate Master RFP output."
-      : null
-
     return NextResponse.json({
       text: out,
       fileName: file.name,
-      warning: thinWarning || warning,
-      usedFallback: false,
-      thinExtraction,
+      warning,
     })
   } catch (error) {
     console.error("extract-text error:", error)
