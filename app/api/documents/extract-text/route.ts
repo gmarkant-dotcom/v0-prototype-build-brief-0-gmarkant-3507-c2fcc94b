@@ -6,6 +6,34 @@ export const runtime = "nodejs"
 
 const MAX_CHARS = 120_000
 
+/** When pdf-parse returns empty (some PDFs / encodings), try raw pdf.js text content. */
+async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+  const data = new Uint8Array(buffer)
+  const loadingTask = pdfjs.getDocument({
+    data,
+    useSystemFonts: true,
+    disableFontFace: true,
+  } as any)
+  const pdf = await loadingTask.promise
+  let full = ""
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const textContent = await page.getTextContent()
+    for (const item of textContent.items) {
+      if (item && typeof item === "object" && "str" in item) {
+        const s = (item as { str?: string }).str
+        if (s) full += s + " "
+      }
+    }
+    full += "\n"
+  }
+  if (typeof (pdf as any).destroy === "function") {
+    await (pdf as any).destroy()
+  }
+  return full.replace(/\u0000/g, "").trim()
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
@@ -60,6 +88,13 @@ export async function POST(req: Request) {
         const textResult = await parser.getText()
         text = textResult.text
         await parser.destroy()
+        if (!text.replace(/\u0000/g, "").trim()) {
+          const alt = await extractPdfTextWithPdfJs(buffer)
+          if (alt) {
+            text = alt
+            warning = "Used alternate PDF text extraction."
+          }
+        }
       } else if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) {
         warning = "PowerPoint text extraction is limited; using filename fallback."
       } else {

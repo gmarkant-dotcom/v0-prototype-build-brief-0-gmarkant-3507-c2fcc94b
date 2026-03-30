@@ -43,88 +43,80 @@ export async function POST(req: Request) {
 
     const hasTemplateBody = templateText.length > 0
 
+    const jsonSchemaBlock = `Return ONLY valid JSON. No markdown.
+
+Schema:
+{
+  "projectName": string,
+  "client": string,
+  "overview": string,
+  "objectives": string[],
+  "totalBudget": string,
+  "timeline": string,
+  "scopeItems": [
+    {
+      "id": string,
+      "name": string,
+      "description": string,
+      "estimatedBudget": string,
+      "timeline": string
+    }
+  ]
+}`
+
+    const groundingRules = `CRITICAL GROUNDING (must follow):
+1) The CLIENT BRIEF text below is the ONLY source of truth for requirements, audiences, deliverables, constraints, names, budgets, dates, and success metrics.
+2) Do NOT invent campaigns, brands, products, KPIs, or scope that are not clearly stated or strongly implied in the CLIENT BRIEF.
+3) "overview" must be a faithful synthesis of the brief (specific themes, goals, and constraints from the brief — not generic agency filler).
+4) "objectives" must map to goals/outcomes described in the brief (or split one stated goal into clear bullets). If the brief lists none, derive the minimum from the brief context; use "TBD" only if truly absent.
+5) "scopeItems" must reflect actual workstreams/deliverables from the brief. Name and describe them using terminology from the brief when possible. Prefer 5–10 items unless the brief implies fewer.
+6) "totalBudget" and "timeline" must come from the brief when present; otherwise "TBD" or a short honest placeholder.
+7) Project Name / Client fields: use values from the brief if they appear; otherwise use the Project context below.`
+
     const prompt = hasTemplateBody
-      ? `You are producing a structured master brief for an agency RFP workflow by integrating SOURCE CLIENT BRIEF material into the OUTPUT FORMAT TEMPLATE below.
+      ? `You integrate a CLIENT BRIEF into a structured master RFP for an agency workflow.
 
-The OUTPUT FORMAT TEMPLATE is the canonical structure: follow its section order, headings, implied fields, tone, and level of detail. Map and synthesize content from the CLIENT BRIEF into that structure. Do not invent facts; you may use neutral placeholders only where the brief is silent and the template expects a field.
+${groundingRules}
 
-Return ONLY valid JSON. No markdown.
+The OUTPUT FORMAT TEMPLATE defines STRUCTURE ONLY: section order, headings, implied fields, and tone. It is NOT a second source of facts. Ignore any lorem ipsum, sample company names, or example metrics in the template unless the same facts appear in the CLIENT BRIEF.
 
-Schema:
-{
-  "projectName": string,
-  "client": string,
-  "overview": string,
-  "objectives": string[],
-  "totalBudget": string,
-  "timeline": string,
-  "scopeItems": [
-    {
-      "id": string,
-      "name": string,
-      "description": string,
-      "estimatedBudget": string,
-      "timeline": string
-    }
-  ]
-}
+${jsonSchemaBlock}
 
-Rules:
-- Keep scopeItems between 5 and 10 unless the template clearly implies fewer or more; prefer 5–10.
-- Name scope items and descriptions so they mirror the template’s deliverable groupings where possible.
-- If budget/timeline missing in the brief, use practical placeholders (e.g. "TBD").
-
-Project context:
+Project context (use when the brief does not name these):
 Project Name: ${projectName}
 Client Name: ${clientName}
-Template label (reference): ${templateHint}
+Template file label: ${templateHint}
 
 ---
 
-OUTPUT FORMAT TEMPLATE (structure and style to follow):
-${templateText}
+CLIENT BRIEF (read first — primary content):
+${briefText}
 
 ---
 
-CLIENT BRIEF (source material to integrate):
-${briefText}`
-      : `You are generating a structured master brief for an agency RFP workflow.
-Return ONLY valid JSON. No markdown.
+OUTPUT FORMAT TEMPLATE (structure / layout reference only):
+${templateText}`
+      : `You generate a structured master brief for an agency RFP workflow from the CLIENT BRIEF.
 
-Schema:
-{
-  "projectName": string,
-  "client": string,
-  "overview": string,
-  "objectives": string[],
-  "totalBudget": string,
-  "timeline": string,
-  "scopeItems": [
-    {
-      "id": string,
-      "name": string,
-      "description": string,
-      "estimatedBudget": string,
-      "timeline": string
-    }
-  ]
-}
+${groundingRules}
 
-Rules:
-- Keep scopeItems between 5 and 10.
-- Use realistic agency workflow deliverables.
-- If budget/timeline missing, provide practical placeholders.
+${jsonSchemaBlock}
 
-Inputs:
+Project context (use when the brief does not name these):
 Project Name: ${projectName}
 Client Name: ${clientName}
-Template Hint: ${templateHint}
-Brief Content:
+Template label: ${templateHint}
+
+---
+
+CLIENT BRIEF:
 ${briefText}`
 
     const result = await generateText({
       model: "anthropic/claude-sonnet-4-20250514" as any,
       prompt,
+      temperature: 0.25,
+      maxOutputTokens: 8192,
     })
 
     const parsed = tryParseJsonObject(result.text)

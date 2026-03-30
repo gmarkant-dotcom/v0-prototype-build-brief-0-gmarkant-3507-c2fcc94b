@@ -47,6 +47,26 @@ type NewRecipient = {
   requireNda: boolean
 }
 
+/** Primary brief + optional user augment, sent to /api/ai/master-brief */
+function buildMasterBriefSourceText(input: {
+  briefSourceText: string
+  pastedContent: string
+  googleLink: string
+  briefFileName: string
+  briefAugmentText: string
+}): string {
+  const primary =
+    input.briefSourceText.trim() ||
+    input.pastedContent.trim() ||
+    input.googleLink.trim() ||
+    input.briefFileName.trim()
+  const augment = input.briefAugmentText.trim()
+  if (!primary && !augment) return ""
+  if (!augment) return primary
+  if (!primary) return augment
+  return `${primary}\n\n---\nAdditional brief details (user-provided):\n${augment}`
+}
+
 // Demo partners - only shown in demo mode
 const demoPartners: Partner[] = [
   { id: "1", name: "Fieldhouse Films", type: "production", discipline: "Video Production", bookmarked: true, ndaSigned: true, ndaSignedDate: "2023-06-15", msaApproved: true, msaApprovedDate: "2023-07-01", rating: 4.8, pastProjects: ["Q4 Brand Campaign", "Summer Series"] },
@@ -97,6 +117,8 @@ function AgencyRFPContent() {
   const [briefUploadError, setBriefUploadError] = useState<string | null>(null)
   const [rfpTemplateUploadError, setRfpTemplateUploadError] = useState<string | null>(null)
   const [isExtractingBrief, setIsExtractingBrief] = useState(false)
+  /** Optional extra copy pasted by user; always appended to the primary brief for AI */
+  const [briefAugmentText, setBriefAugmentText] = useState("")
   
   // Step 2: Master RFP (AI generated)
   const [masterRfp, setMasterRfp] = useState<{
@@ -175,11 +197,13 @@ function AgencyRFPContent() {
           : "") ||
         "Default RFP template"
 
-      const sourceText =
-        briefSourceText.trim() ||
-        pastedContent.trim() ||
-        googleLink.trim() ||
-        briefFileName
+      const sourceText = buildMasterBriefSourceText({
+        briefSourceText,
+        pastedContent,
+        googleLink,
+        briefFileName,
+        briefAugmentText,
+      })
 
       const templateBody = templateSourceText.trim()
 
@@ -525,6 +549,16 @@ function AgencyRFPContent() {
                       <div className="font-mono text-[10px] text-success">
                         {isExtractingBrief ? "Extracting text from document…" : "Ready for AI — text extracted from your file"}
                       </div>
+                      {!isExtractingBrief && briefSourceText.trim() && (
+                        <div className="font-mono text-[10px] text-foreground-muted mt-1">
+                          {briefSourceText.length.toLocaleString()} characters will be sent to the model
+                          {briefSourceText.trim().startsWith("Document uploaded:") && (
+                            <span className="text-amber-400 block mt-1">
+                              Limited text was read from this file. Use Paste Text or export to Word/PDF with selectable text for full fidelity.
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <Button
@@ -543,6 +577,23 @@ function AgencyRFPContent() {
                   </Button>
                 </div>
               )}
+
+              <div className="mt-6 space-y-2">
+                <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                  Optional: Additional brief details
+                </label>
+                <Textarea
+                  placeholder="Paste extra requirements or missing text if extraction was incomplete (e.g. scanned PDF). Appended to the primary brief when you generate."
+                  value={briefAugmentText}
+                  onChange={(e) => setBriefAugmentText(e.target.value)}
+                  className="min-h-[100px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                />
+                {briefAugmentText.trim() && (
+                  <p className="font-mono text-[10px] text-foreground-muted">
+                    +{briefAugmentText.trim().length.toLocaleString()} characters appended when generating
+                  </p>
+                )}
+              </div>
             </GlassCard>
             
             {/* Output format template + SOW (RFP format drives Generate Master RFP) */}
@@ -773,15 +824,21 @@ function AgencyRFPContent() {
               <p className="font-mono text-[10px] text-foreground-muted text-right max-w-md">
                 {templateSourceText.trim()
                   ? "Using your uploaded output template to structure the Master RFP."
-                  : "Upload an RFP output template in Step 1b for best results, or continue with a default structure."}
+                  : "Upload an RFP output template in Step 1b for best results, or continue with a default structure."}{" "}
+                Optional additional brief details above are included automatically.
               </p>
               <Button
                 disabled={
-                  !briefUploaded ||
                   isGenerating ||
                   !selectedProject ||
                   isExtractingBrief ||
-                  !briefSourceText.trim()
+                  !buildMasterBriefSourceText({
+                    briefSourceText,
+                    pastedContent,
+                    googleLink,
+                    briefFileName,
+                    briefAugmentText,
+                  }).trim()
                 }
                 onClick={generateMasterRfp}
                 className="bg-accent text-accent-foreground hover:bg-accent/90 px-8"
