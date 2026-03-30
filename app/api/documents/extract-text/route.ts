@@ -37,56 +37,43 @@ export async function POST(req: Request) {
     const formData = await req.formData()
     const file = formData.get("file") as File | null
 
-    if (!file || !(file instanceof Blob)) {
+    if (!file || typeof (file as any).arrayBuffer !== "function") {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
     const lower = file.name.toLowerCase()
     let text = ""
+    let warning: string | null = null
 
-    if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv")) {
-      text = buffer.toString("utf-8")
-    } else if (lower.endsWith(".docx")) {
-      const result = await mammoth.extractRawText({ buffer })
-      text = result.value
-    } else if (lower.endsWith(".doc")) {
-      return NextResponse.json(
-        {
-          error:
-            "Legacy .doc format is not supported. Please save as .docx or PDF and upload again.",
-        },
-        { status: 415 }
-      )
-    } else if (lower.endsWith(".pdf")) {
-      const { PDFParse } = await import("pdf-parse")
-      const parser = new PDFParse({ data: buffer })
-      const textResult = await parser.getText()
-      text = textResult.text
-      await parser.destroy()
-    } else if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) {
-      return NextResponse.json(
-        {
-          error:
-            "PowerPoint files cannot be read automatically. Export to PDF or copy the outline into Paste Text.",
-        },
-        { status: 415 }
-      )
-    } else {
-      return NextResponse.json(
-        {
-          error: "Unsupported type. Use PDF, Word (.docx), or plain text (.txt / .md).",
-        },
-        { status: 415 }
-      )
+    try {
+      if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv")) {
+        text = buffer.toString("utf-8")
+      } else if (lower.endsWith(".docx")) {
+        const result = await mammoth.extractRawText({ buffer })
+        text = result.value
+      } else if (lower.endsWith(".doc")) {
+        warning = "Legacy .doc is not directly readable; using filename fallback."
+      } else if (lower.endsWith(".pdf")) {
+        const { PDFParse } = await import("pdf-parse")
+        const parser = new PDFParse({ data: buffer })
+        const textResult = await parser.getText()
+        text = textResult.text
+        await parser.destroy()
+      } else if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) {
+        warning = "PowerPoint text extraction is limited; using filename fallback."
+      } else {
+        warning = "Unsupported type for text extraction; using filename fallback."
+      }
+    } catch (parseError) {
+      console.error("extract-text parse warning:", parseError)
+      warning = "Could not parse this file format; using filename fallback."
     }
 
     const trimmed = text.replace(/\u0000/g, "").trim()
     if (!trimmed) {
-      return NextResponse.json(
-        { error: "No readable text was found in this file. Try another format or paste the content." },
-        { status: 422 }
-      )
+      const fallback = `Document uploaded: ${file.name}`
+      return NextResponse.json({ text: fallback, fileName: file.name, warning: warning || "Fallback used" })
     }
 
     let out = trimmed
@@ -94,7 +81,7 @@ export async function POST(req: Request) {
       out = `${out.slice(0, MAX_CHARS)}\n\n[... truncated for processing ...]`
     }
 
-    return NextResponse.json({ text: out, fileName: file.name })
+    return NextResponse.json({ text: out, fileName: file.name, warning })
   } catch (error) {
     console.error("extract-text error:", error)
     return NextResponse.json({ error: "Failed to extract text from document" }, { status: 500 })

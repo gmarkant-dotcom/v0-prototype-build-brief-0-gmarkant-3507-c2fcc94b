@@ -641,15 +641,6 @@ function AgencyRFPContent() {
                           setRfpTemplateUploadError(null)
                           setIsUploadingRfpTemplate(true)
                           try {
-                            const formData = new FormData()
-                            formData.append("file", file)
-                            formData.append("folder", "templates")
-                            const uploadRes = await fetch("/api/upload", { method: "POST", body: formData })
-                            const uploadPayload = await uploadRes.json().catch(() => ({}))
-                            if (!uploadRes.ok) {
-                              throw new Error(uploadPayload?.error || "Template upload failed")
-                            }
-
                             const extractFd = new FormData()
                             extractFd.append("file", file)
                             const extractRes = await fetch("/api/documents/extract-text", {
@@ -661,11 +652,11 @@ function AgencyRFPContent() {
                               throw new Error(extractPayload?.error || "Could not read template text")
                             }
 
-                            setUploadedRfpTemplate({ name: file.name, url: uploadPayload.url })
+                            setUploadedRfpTemplate({ name: file.name, url: "" })
                             setTemplateSourceText((extractPayload.text || "").toString())
                             setSelectedRfpTemplate("uploaded")
                           } catch (err) {
-                            setRfpTemplateUploadError(err instanceof Error ? err.message : "Template upload failed")
+                            setRfpTemplateUploadError(err instanceof Error ? err.message : "Template processing failed")
                             setUploadedRfpTemplate(null)
                             setTemplateSourceText("")
                           } finally {
@@ -677,7 +668,7 @@ function AgencyRFPContent() {
                       {isUploadingRfpTemplate ? (
                         <>
                           <Loader2 className="w-5 h-5 text-accent animate-spin" />
-                          <span className="font-mono text-xs text-accent">Uploading and extracting…</span>
+                          <span className="font-mono text-xs text-accent">Reading template…</span>
                         </>
                       ) : (
                         <>
@@ -748,25 +739,22 @@ function AgencyRFPContent() {
                           if (!checkFeatureAccess("file uploads")) return
                           setIsUploadingSowTemplate(true)
                           try {
-                            const formData = new FormData()
-                            formData.append('file', file)
-                            formData.append('folder', 'templates')
-                            const response = await fetch('/api/upload', { method: 'POST', body: formData })
-                            if (response.ok) {
-                              const result = await response.json()
-                              setUploadedSowTemplate({ name: file.name, url: result.url })
-                              setSelectedSowTemplate('uploaded')
-                            }
+                            // Keep this page resilient by storing selected template locally.
+                            // Stage 01 only needs the chosen format metadata at this point.
+                            setUploadedSowTemplate({ name: file.name, url: "" })
+                            setSelectedSowTemplate('uploaded')
                           } catch (error) {
                             console.error('Upload error:', error)
+                          } finally {
+                            e.target.value = ""
+                            setIsUploadingSowTemplate(false)
                           }
-                          setIsUploadingSowTemplate(false)
                         }}
                       />
                       {isUploadingSowTemplate ? (
                         <>
                           <Loader2 className="w-5 h-5 text-accent animate-spin" />
-                          <span className="font-mono text-xs text-accent">Uploading...</span>
+                          <span className="font-mono text-xs text-accent">Reading...</span>
                         </>
                       ) : (
                         <>
