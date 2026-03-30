@@ -120,22 +120,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Project name required' }, { status: 400 })
     }
 
-    const { data: project, error } = await supabase
-      .from('projects')
-      .insert({
-        agency_id: user.id,
-        title: name.trim(),
-        client_name: clientName || null,
-        description: description || null,
-        budget_range: budgetRange || null,
-        start_date: startDate || null,
-        end_date: endDate || null,
-        status: 'draft',
-      })
-      .select()
-      .single()
+    const basePayload = {
+      agency_id: user.id,
+      client_name: clientName || null,
+      description: description || null,
+      budget_range: budgetRange || null,
+      status: 'draft',
+    }
 
-    if (error) throw error
+    // Support multiple production schema variants:
+    // - title vs name
+    // - start_date/end_date may not exist
+    const attempts: Record<string, unknown>[] = [
+      { ...basePayload, title: name.trim(), start_date: startDate || null, end_date: endDate || null },
+      { ...basePayload, name: name.trim(), start_date: startDate || null, end_date: endDate || null },
+      { ...basePayload, title: name.trim() },
+      { ...basePayload, name: name.trim() },
+    ]
+
+    let project: any = null
+    let lastError: any = null
+    for (const payload of attempts) {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert(payload)
+        .select()
+        .single()
+      if (!error && data) {
+        project = data
+        lastError = null
+        break
+      }
+      lastError = error
+    }
+
+    if (lastError || !project) throw lastError || new Error('Project creation failed')
 
     return NextResponse.json({ project })
   } catch (error) {

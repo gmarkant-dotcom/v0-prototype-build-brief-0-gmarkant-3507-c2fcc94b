@@ -21,6 +21,10 @@ interface Agency {
   partner_count?: number
   role?: "agency" | "partner"
   collaborated?: boolean
+  relationshipStatus?: string
+  invitedAt?: string
+  acceptedAt?: string
+  invitationMessage?: string
 }
 
 interface AccessRequest {
@@ -34,6 +38,8 @@ interface SharedProject {
   title: string
   status?: string
   updated_at?: string
+  assignmentStatus?: string
+  clientName?: string
 }
 
 // Demo agencies for demonstration
@@ -178,6 +184,10 @@ export default function DiscoverAgenciesPage() {
           website: p.agency?.website || "",
           bio: p.agency?.bio || "",
           collaborated: true,
+          relationshipStatus: p.status,
+          invitedAt: p.invited_at,
+          acceptedAt: p.accepted_at,
+          invitationMessage: p.invitation_message,
         })
       }
 
@@ -192,7 +202,9 @@ export default function DiscoverAgenciesPage() {
           console.error("Error loading collaborator profiles:", collaboratorsError)
         } else {
           for (const p of collaborators || []) {
+            const existing = collaboratorMap.get(p.id)
             collaboratorMap.set(p.id, {
+              ...(existing || {}),
               ...p,
               company_name: p.company_name || p.full_name || p.email || "Agency",
               full_name: p.full_name || p.company_name || p.email || "Agency",
@@ -327,6 +339,8 @@ export default function DiscoverAgenciesPage() {
           title: p.title || p.name || "Untitled Project",
           status: p.status,
           updated_at: p.updated_at || p.created_at,
+          assignmentStatus: p.assignment?.status,
+          clientName: p.client_name || "Client TBD",
         }))
 
       setAgencyProfileProjects(shared)
@@ -585,6 +599,31 @@ export default function DiscoverAgenciesPage() {
               </div>
 
               <div className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                    <div className="font-display text-xl font-bold text-[#0C3535]">{agencyProfileProjects.length}</div>
+                    <div className="font-mono text-[10px] uppercase text-gray-500">Shared Projects</div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                    <div className="font-display text-xl font-bold text-[#0C3535]">
+                      {agencyProfileProjects.filter((p) => p.assignmentStatus === "invited").length}
+                    </div>
+                    <div className="font-mono text-[10px] uppercase text-gray-500">Open RFPs</div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                    <div className="font-display text-xl font-bold text-[#0C3535]">
+                      {agencyProfileProjects.filter((p) => p.assignmentStatus === "accepted").length}
+                    </div>
+                    <div className="font-mono text-[10px] uppercase text-gray-500">Bids Accepted</div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
+                    <div className="font-display text-xl font-bold text-[#0C3535]">
+                      {agencyProfileProjects.filter((p) => p.assignmentStatus === "awarded").length}
+                    </div>
+                    <div className="font-mono text-[10px] uppercase text-gray-500">Awarded</div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="rounded-lg border border-gray-200 p-4">
                     <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Contact Person</div>
@@ -603,6 +642,34 @@ export default function DiscoverAgenciesPage() {
                 </div>
 
                 <div className="rounded-lg border border-gray-200 p-4">
+                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-3">Relationship Overview</div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <div className="text-gray-500">Status</div>
+                      <div className="text-gray-900 capitalize">{selectedAgency.relationshipStatus || "active"}</div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Invited</div>
+                      <div className="text-gray-900">
+                        {selectedAgency.invitedAt ? new Date(selectedAgency.invitedAt).toLocaleDateString() : "Unknown"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-gray-500">Connected Since</div>
+                      <div className="text-gray-900">
+                        {selectedAgency.acceptedAt ? new Date(selectedAgency.acceptedAt).toLocaleDateString() : "Pending"}
+                      </div>
+                    </div>
+                  </div>
+                  {selectedAgency.invitationMessage && (
+                    <div className="mt-3 rounded-md bg-gray-50 border border-gray-100 p-3">
+                      <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-1">Lead Agency Intro</div>
+                      <div className="text-sm text-gray-700">{selectedAgency.invitationMessage}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-gray-200 p-4">
                   <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-3">
                     Past Projects Worked Together
                   </div>
@@ -616,11 +683,17 @@ export default function DiscoverAgenciesPage() {
                         <div key={project.id} className="flex items-center justify-between rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
                           <div>
                             <div className="text-sm font-medium text-gray-900">{project.title}</div>
+                            <div className="text-xs text-gray-600">{project.clientName}</div>
                             {project.updated_at && (
                               <div className="text-xs text-gray-500">Updated {new Date(project.updated_at).toLocaleDateString()}</div>
                             )}
                           </div>
-                          <div className="text-xs text-gray-600 capitalize">{project.status || "active"}</div>
+                          <div className="text-right">
+                            <div className="text-xs text-gray-600 capitalize">{project.status || "active"}</div>
+                            {project.assignmentStatus && (
+                              <div className="text-[10px] text-gray-500 uppercase">{project.assignmentStatus}</div>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>

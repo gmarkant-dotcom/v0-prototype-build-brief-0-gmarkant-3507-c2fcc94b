@@ -116,6 +116,7 @@ function DashboardContent() {
     endDate: "",
     description: ""
   })
+  const [createProjectError, setCreateProjectError] = useState<string | null>(null)
   const [realProjects, setRealProjects] = useState<MasterProject[]>([])
   const [isLoading, setIsLoading] = useState(true)
   
@@ -206,6 +207,7 @@ function DashboardContent() {
 
   const handleCreateProject = async () => {
     if (!checkFeatureAccess("project creation")) return
+    setCreateProjectError(null)
 
     if (isDemo) {
       const createdProject = addProject({
@@ -241,6 +243,8 @@ function DashboardContent() {
         }),
       })
       if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        setCreateProjectError(payload?.error || "Project creation failed. Please try again.")
         return
       }
       const { project } = await res.json()
@@ -258,7 +262,7 @@ function DashboardContent() {
       router.push("/agency")
       await fetchProjects()
     } catch {
-      // ignore
+      setCreateProjectError("Project creation failed. Please try again.")
     }
   }
   
@@ -311,6 +315,11 @@ function DashboardContent() {
                   />
                 </div>
               </div>
+              {createProjectError && (
+                <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                  {createProjectError}
+                </div>
+              )}
               <DialogFooter>
                 <DialogClose asChild>
                   <Button variant="outline" className="border-border">Cancel</Button>
@@ -437,6 +446,11 @@ function DashboardContent() {
                 />
               </div>
             </div>
+            {createProjectError && (
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {createProjectError}
+              </div>
+            )}
             <DialogFooter className="flex gap-3">
               <DialogClose asChild>
                 <Button variant="outline" className="border-border text-foreground hover:bg-white/5">
