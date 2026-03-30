@@ -14,6 +14,7 @@ interface Agency {
   id: string
   company_name: string
   full_name: string
+  email?: string
   location?: string
   website?: string
   bio?: string
@@ -90,11 +91,32 @@ export default function DiscoverAgenciesPage() {
         return
       }
 
+      // Resolve canonical profile ID for this logged-in account.
+      // In some environments, relationship tables reference profile IDs that may not
+      // match auth.uid(), so we fall back to email-based profile lookup.
+      let currentProfileId = user.id
+      const { data: selfProfile } = await supabase
+        .from("profiles")
+        .select("id, email")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (!selfProfile && user.email) {
+        const { data: byEmailProfile } = await supabase
+          .from("profiles")
+          .select("id, email")
+          .ilike("email", user.email.trim())
+          .maybeSingle()
+        if (byEmailProfile?.id) {
+          currentProfileId = byEmailProfile.id
+        }
+      }
+
       // Tier 1: direct lead-agency relationships for this partner
       const { data: myPartnerships, error: partnershipsError } = await supabase
         .from("partnerships")
         .select("id, agency_id")
-        .eq("partner_id", user.id)
+        .eq("partner_id", currentProfileId)
 
       if (partnershipsError) {
         console.error("Error loading partnerships:", partnershipsError)
@@ -132,7 +154,7 @@ export default function DiscoverAgenciesPage() {
             .select("partner_id")
             .in("id", otherPartnershipIds)
 
-          otherPartnerIds = [...new Set((otherPartnerships || []).map((p) => p.partner_id).filter((id) => id && id !== user.id))]
+          otherPartnerIds = [...new Set((otherPartnerships || []).map((p) => p.partner_id).filter((id) => id && id !== currentProfileId))]
         }
       }
 
@@ -142,7 +164,7 @@ export default function DiscoverAgenciesPage() {
       if (collaboratorIds.length > 0) {
         const { data: collaborators, error: collaboratorsError } = await supabase
           .from("profiles")
-          .select("id, role, company_name, full_name, location, website, bio")
+          .select("id, role, company_name, full_name, email, location, website, bio")
           .in("id", collaboratorIds)
 
         if (collaboratorsError) {
@@ -161,9 +183,9 @@ export default function DiscoverAgenciesPage() {
       // Fallback directory if no historical collaborators exist yet.
       const { data: fallbackDirectory, error: fallbackError } = await supabase
         .from("profiles")
-        .select("id, role, company_name, full_name, location, website, bio")
+        .select("id, role, company_name, full_name, email, location, website, bio")
         .in("role", ["agency", "partner"])
-        .neq("id", user.id)
+        .neq("id", currentProfileId)
 
       if (fallbackError) {
         console.error("Error loading fallback directory:", fallbackError)
@@ -250,9 +272,10 @@ export default function DiscoverAgenciesPage() {
 
   const filteredAgencies = agencies.filter(agency => {
     const query = searchQuery.toLowerCase()
+    const displayName = agency.company_name || agency.full_name || agency.email || ""
     return (
-      agency.company_name?.toLowerCase().includes(query) ||
-      agency.full_name?.toLowerCase().includes(query) ||
+      displayName.toLowerCase().includes(query) ||
+      agency.email?.toLowerCase().includes(query) ||
       agency.location?.toLowerCase().includes(query)
     )
   })
@@ -304,7 +327,7 @@ export default function DiscoverAgenciesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-display font-bold text-lg text-gray-900">
-                        {agency.company_name || agency.full_name}
+                        {agency.company_name || agency.full_name || agency.email || "Agency"}
                       </h3>
                       
                       <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-500">
