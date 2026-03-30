@@ -1,6 +1,25 @@
 import { NextResponse } from "next/server"
-import { generateText } from "ai"
+import { generateText, Output } from "ai"
+import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+
+const scopeItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  estimatedBudget: z.string().optional().default(""),
+  timeline: z.string().optional().default(""),
+})
+
+const masterBriefSchema = z.object({
+  projectName: z.string(),
+  client: z.string(),
+  overview: z.string(),
+  objectives: z.array(z.string()),
+  totalBudget: z.string(),
+  timeline: z.string(),
+  scopeItems: z.array(scopeItemSchema).min(1).max(15),
+})
 
 /** Allow long Claude calls on Vercel (raise in dashboard if plan caps lower). */
 export const maxDuration = 120
@@ -56,27 +75,6 @@ export async function POST(req: Request) {
 
     const hasTemplateBody = templateText.length > 0
 
-    const jsonSchemaBlock = `Return ONLY valid JSON. No markdown.
-
-Schema:
-{
-  "projectName": string,
-  "client": string,
-  "overview": string,
-  "objectives": string[],
-  "totalBudget": string,
-  "timeline": string,
-  "scopeItems": [
-    {
-      "id": string,
-      "name": string,
-      "description": string,
-      "estimatedBudget": string,
-      "timeline": string
-    }
-  ]
-}`
-
     const groundingRules = `CRITICAL GROUNDING (must follow):
 1) The CLIENT BRIEF text below is the ONLY source of truth for requirements, audiences, deliverables, constraints, names, budgets, dates, and success metrics.
 2) Do NOT invent campaigns, brands, products, KPIs, or scope that are not clearly stated or strongly implied in the CLIENT BRIEF.
@@ -93,7 +91,7 @@ ${groundingRules}
 
 The OUTPUT FORMAT TEMPLATE defines STRUCTURE ONLY: section order, headings, implied fields, and tone. It is NOT a second source of facts. Ignore any lorem ipsum, sample company names, or example metrics in the template unless the same facts appear in the CLIENT BRIEF.
 
-${jsonSchemaBlock}
+Produce the structured master brief (projectName, client, overview, objectives, totalBudget, timeline, scopeItems with id/name/description/estimatedBudget/timeline per item). Prefer 5–10 scope items.
 
 Project context (use when the brief does not name these):
 Project Name: ${projectName}
@@ -113,7 +111,7 @@ ${templateText}`
 
 ${groundingRules}
 
-${jsonSchemaBlock}
+Produce the structured master brief fields as specified. Prefer 5–10 scope items.
 
 Project context (use when the brief does not name these):
 Project Name: ${projectName}
@@ -127,17 +125,27 @@ ${briefText}`
 
     const result = await generateText({
       model: "anthropic/claude-sonnet-4-20250514" as any,
+      output: Output.object({
+        schema: masterBriefSchema,
+        schemaName: "MasterBrief",
+        schemaDescription:
+          "Agency master RFP brief: project summary, objectives, budget/timeline strings, and scope line items",
+      }),
       prompt,
       temperature: 0.25,
       maxOutputTokens: 8192,
     })
 
-    const parsed = tryParseJsonObject(result.text)
+    const parsed = result.output
     if (!parsed) {
+      const fallback = tryParseJsonObject(result.text)
+      if (fallback) {
+        return NextResponse.json({ masterBrief: fallback })
+      }
       return NextResponse.json(
         {
           error: "AI response parse failed",
-          hint: "Try again, or shorten the brief/template. If this persists, check ANTHROPIC_API_KEY on the server.",
+          hint: "Try again or shorten inputs. If this persists, confirm the model supports structured output with your AI SDK version.",
         },
         { status: 500 }
       )
@@ -162,15 +170,55 @@ ${briefText}`
   }
 }
 
+function stripMarkdownFence(raw: string): string {
+  let s = raw.trim().replace(/^\uFEFF/, "")
+  const fence = /^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/im.exec(s)
+  if (fence) s = fence[1].trim()
+  return s
+}
+
+/** Extract first top-level `{ ... }` with string-aware brace matching (fixes bad lastIndexOf slice). */
+function extractBalancedJsonObject(input: string): string | null {
+  const s = stripMarkdownFence(input)
+  const start = s.indexOf("{")
+  if (start < 0) return null
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = start; i < s.length; i++) {
+    const c = s[i]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (c === "\\" && inString) {
+      escape = true
+      continue
+    }
+    if (c === '"') {
+      inString = !inString
+      continue
+    }
+    if (!inString) {
+      if (c === "{") depth++
+      else if (c === "}") {
+        depth--
+        if (depth === 0) return s.slice(start, i + 1)
+      }
+    }
+  }
+  return null
+}
+
 function tryParseJsonObject(input: string): any | null {
+  const cleaned = stripMarkdownFence(input)
   try {
-    return JSON.parse(input)
+    return JSON.parse(cleaned)
   } catch {
-    const start = input.indexOf("{")
-    const end = input.lastIndexOf("}")
-    if (start >= 0 && end > start) {
+    const extracted = extractBalancedJsonObject(cleaned)
+    if (extracted) {
       try {
-        return JSON.parse(input.slice(start, end + 1))
+        return JSON.parse(extracted)
       } catch {
         return null
       }
