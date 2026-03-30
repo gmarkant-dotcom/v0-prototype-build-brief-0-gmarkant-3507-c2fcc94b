@@ -9,11 +9,14 @@ export async function extractPdfTextFromBuffer(buffer: Buffer, fileName: string)
 
   try {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+    // Serverless: no worker threads — avoid loading pdf.worker.mjs (missing on Vercel).
+    pdfjs.GlobalWorkerOptions.workerSrc = ""
     const loadingTask = pdfjs.getDocument({
       data: new Uint8Array(buffer),
       useSystemFonts: true,
       disableFontFace: true,
       verbosity: 0,
+      disableWorker: true,
     } as any)
 
     const pdf = await loadingTask.promise
