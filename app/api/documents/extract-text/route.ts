@@ -8,30 +8,6 @@ const MAX_CHARS = 120_000
 /** Treat near-empty PDF extraction as scanned/image-only. */
 const MIN_PDF_TEXT_CHARS = 80
 
-async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
-  const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(buffer),
-    useSystemFonts: true,
-    disableFontFace: true,
-  } as any)
-  const pdf = await loadingTask.promise
-  let out = ""
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const textContent = await page.getTextContent()
-    for (const item of textContent.items) {
-      if (item && typeof item === "object" && "str" in item) {
-        const s = (item as { str?: string }).str
-        if (s) out += `${s} `
-      }
-    }
-    out += "\n"
-  }
-  if (typeof (pdf as any).destroy === "function") await (pdf as any).destroy()
-  return out.replace(/\u0000/g, "").trim()
-}
-
 /** Next.js/pdf-parse can resolve differently across envs; try multiple loaders. */
 async function extractPdfText(buffer: Buffer, fileName: string): Promise<string> {
   const attempts: Array<{ name: string; run: () => Promise<string> }> = [
@@ -44,24 +20,6 @@ async function extractPdfText(buffer: Buffer, fileName: string): Promise<string>
         const res = await fn(buffer)
         return (res?.text || "").toString()
       },
-    },
-    {
-      name: "pdf-parse/PDFParse",
-      run: async () => {
-        const mod: any = await import("pdf-parse")
-        if (typeof mod.PDFParse !== "function") return ""
-        const parser = new mod.PDFParse({ data: buffer })
-        try {
-          const res = await parser.getText()
-          return (res?.text || "").toString()
-        } finally {
-          if (typeof parser.destroy === "function") await parser.destroy()
-        }
-      },
-    },
-    {
-      name: "pdfjs-dist",
-      run: async () => extractPdfTextWithPdfJs(buffer),
     },
   ]
 
