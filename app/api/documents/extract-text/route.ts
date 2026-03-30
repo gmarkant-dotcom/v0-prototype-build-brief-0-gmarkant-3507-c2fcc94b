@@ -60,16 +60,6 @@ async function extractPdfText(buffer: Buffer, fileName: string): Promise<string>
       },
     },
     {
-      name: "pdf-parse/lib/pdf-parse.js",
-      run: async () => {
-        const mod: any = await import("pdf-parse/lib/pdf-parse.js")
-        const fn = typeof mod.default === "function" ? mod.default : typeof mod === "function" ? mod : null
-        if (!fn) return ""
-        const res = await fn(buffer)
-        return (res?.text || "").toString()
-      },
-    },
-    {
       name: "pdfjs-dist",
       run: async () => extractPdfTextWithPdfJs(buffer),
     },
