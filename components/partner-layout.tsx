@@ -27,15 +27,15 @@ interface PartnerLayoutProps {
   children: React.ReactNode
 }
 
-export function PartnerLayout({ children }: PartnerLayoutProps) {
+/** Partner header + main + footer only — no PaidUserProvider. Use for flows that must not sit under agency subscription gating (e.g. RFP bid submit). */
+export function PartnerChrome({ children }: PartnerLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [userName, setUserName] = useState("Fieldhouse Films")
   const [userInitials, setUserInitials] = useState("FF")
   const [isDemo, setIsDemo] = useState(false)
-  
-  // Check demo mode on mount
+
   useEffect(() => {
     setIsDemo(isDemoMode())
   }, [])
@@ -79,10 +79,8 @@ export function PartnerLayout({ children }: PartnerLayoutProps) {
     router.push("/")
     router.refresh()
   }
-  
+
   return (
-    <PaidUserProvider>
-    <LeadAgencyFilterProvider>
     <div className="min-h-screen bg-[#FAFAFA]">
       {/* Header */}
       <header className="bg-[#0C3535] text-white sticky top-0 z-20">
@@ -206,7 +204,15 @@ export function PartnerLayout({ children }: PartnerLayoutProps) {
         </div>
       </footer>
     </div>
-    </LeadAgencyFilterProvider>
+  )
+}
+
+export function PartnerLayout({ children }: PartnerLayoutProps) {
+  return (
+    <PaidUserProvider>
+      <LeadAgencyFilterProvider>
+        <PartnerChrome>{children}</PartnerChrome>
+      </LeadAgencyFilterProvider>
     </PaidUserProvider>
   )
 }

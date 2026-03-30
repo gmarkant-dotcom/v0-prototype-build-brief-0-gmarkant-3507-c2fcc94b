@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
-import { PartnerLayout } from "@/components/partner-layout"
+import { PartnerChrome } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
@@ -348,7 +348,7 @@ export default function PartnerRfpDetailPage() {
     }
   }, [id, isDemoDetail])
 
-  /** Bid response + uploads are core partner actions — not gated by lead-agency paid features. */
+  /** Session + `profiles.role === partner` only — no subscription / plan checks. */
   const ensurePartnerAuth = useCallback(async (): Promise<boolean> => {
     if (isDemoDetail) return true
     const supabase = createClient()
@@ -526,25 +526,25 @@ export default function PartnerRfpDetailPage() {
 
   if (loading) {
     return (
-      <PartnerLayout>
+      <PartnerChrome>
         <div className="max-w-4xl mx-auto py-16 flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-[#0C3535]" />
           <p className="font-mono text-sm text-gray-600">Loading RFP…</p>
         </div>
-      </PartnerLayout>
+      </PartnerChrome>
     )
   }
 
   if (error || !inbox) {
     return (
-      <PartnerLayout>
+      <PartnerChrome>
         <div className="max-w-4xl mx-auto py-8">
           <Link href="/partner/rfps" className="font-mono text-xs text-gray-500 hover:text-[#0C3535] mb-6 inline-block">
             ← Back to Open RFPs
           </Link>
           <div className="bg-white rounded-xl border border-red-200 p-8 text-red-800">{error || "Not found"}</div>
         </div>
-      </PartnerLayout>
+      </PartnerChrome>
     )
   }
 
@@ -560,7 +560,7 @@ export default function PartnerRfpDetailPage() {
   const canEdit = !submitted || isDemoDetail
 
   return (
-    <PartnerLayout>
+    <PartnerChrome>
       <div className="max-w-4xl mx-auto space-y-6 pb-16">
         <Link href="/partner/rfps" className="font-mono text-xs text-gray-500 hover:text-[#0C3535] inline-flex items-center gap-1">
           ← Back to Open RFPs
@@ -982,6 +982,6 @@ export default function PartnerRfpDetailPage() {
           )}
         </div>
       </div>
-    </PartnerLayout>
+    </PartnerChrome>
   )
 }
