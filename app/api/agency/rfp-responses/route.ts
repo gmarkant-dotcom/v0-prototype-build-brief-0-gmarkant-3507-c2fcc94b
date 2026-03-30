@@ -32,6 +32,8 @@ export async function GET() {
     }
 
     const list = responses || []
+    console.log("[agency/rfp-responses] GET", { userId: user.id, responseCount: list.length })
+
     const inboxIds = [...new Set(list.map((r) => r.inbox_item_id))]
 
     let inboxById: Record<string, Record<string, unknown>> = {}

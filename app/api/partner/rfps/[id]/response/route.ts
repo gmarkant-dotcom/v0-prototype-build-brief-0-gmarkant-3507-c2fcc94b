@@ -66,6 +66,8 @@ function defaultLabelForType(type: string): string {
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: inboxId } = await params
+    console.log("[partner/rfps/response] POST start", { inboxId })
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -96,11 +98,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const body = (await req.json().catch(() => ({}))) as Body
+    console.log("[partner/rfps/response] body keys", {
+      status: body.status,
+      hasAttachments: Array.isArray(body.attachments),
+      attachmentCount: Array.isArray(body.attachments) ? body.attachments.length : 0,
+    })
+
     const status = body.status === "submitted" ? "submitted" : "draft"
     const proposal_text = (body.proposal_text ?? "").toString()
     const budget_proposal = (body.budget_proposal ?? "").toString()
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
     const attachments = normalizeAttachments(body.attachments)
+    console.log("[partner/rfps/response] normalized attachments", attachments.length)
 
     if (status === "submitted") {
       if (!proposal_text.trim()) {
@@ -154,14 +163,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .single()
       if (error) {
         console.error("[partner/rfps/response] update:", error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(
+          { error: error.message, detail: error.code ? `code=${error.code}` : undefined },
+          { status: 500 }
+        )
       }
       saved = data
     } else {
       const { data, error } = await supabase.from("partner_rfp_responses").insert(insertRow).select().single()
       if (error) {
         console.error("[partner/rfps/response] insert:", error)
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        return NextResponse.json(
+          { error: error.message, detail: error.code ? `code=${error.code}` : undefined },
+          { status: 500 }
+        )
       }
       saved = data
     }
@@ -173,6 +188,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq("id", inboxId)
     }
 
+    console.log("[partner/rfps/response] POST ok", { responseId: saved?.id, status: saved?.status })
     return NextResponse.json({ response: saved })
   } catch (e) {
     console.error("[partner/rfps] response POST:", e)

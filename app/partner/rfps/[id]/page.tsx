@@ -30,6 +30,12 @@ const fieldClass =
 const textareaClass = cn(fieldClass, "min-h-[140px]")
 const inputClass = fieldClass
 
+/** Shadcn outline uses bg-background (#0C3535); pairing with text-[#0C3535] made label text invisible on partner light pages. */
+const btnOutlineLight =
+  "border-gray-300 !bg-white text-[#0C3535] shadow-sm hover:!bg-gray-50 hover:text-[#0C3535]"
+const btnPrimaryDark =
+  "!bg-[#0C3535] !text-white hover:!bg-[#0C3535]/90 font-display font-bold border-transparent"
+
 type InboxRow = {
   id: string
   agency_id: string
@@ -242,7 +248,7 @@ export default function PartnerRfpDetailPage() {
   const demoIds = ["1", "2", "3"]
   const isDemoDetail = isDemo && demoIds.includes(id)
 
-  const { checkFeatureAccess } = usePaidUser()
+  const { checkFeatureAccess, isLoading: accessLoading } = usePaidUser()
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const [loading, setLoading] = useState(!isDemoDetail)
@@ -319,29 +325,59 @@ export default function PartnerRfpDetailPage() {
       setSuccessMsg(status === "submitted" ? "Demo mode — response not saved." : "Demo mode — draft not saved.")
       return
     }
-    if (status === "submitted" && !checkFeatureAccess()) return
-    if (status === "draft" && !checkFeatureAccess()) return
+    if (accessLoading) {
+      setSubmitError("Your account is still loading. Wait a moment and try again.")
+      return
+    }
+    const feature = status === "submitted" ? "submit bid response" : "save draft"
+    if (!checkFeatureAccess(feature)) {
+      setSubmitError(
+        "This action isn’t available on your current plan. If an upgrade dialog opened, use that — otherwise refresh the page or contact support."
+      )
+      return
+    }
     setSaving(true)
     try {
       const attachments = draftsToPayload(draftAttachments)
+      const payload = {
+        proposal_text: proposalText,
+        budget_proposal: budgetProposal,
+        timeline_proposal: timelineProposal,
+        attachments,
+        status,
+      }
       const res = await fetch(`/api/partner/rfps/${id}/response`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          proposal_text: proposalText,
-          budget_proposal: budgetProposal,
-          timeline_proposal: timelineProposal,
-          attachments,
-          status,
-        }),
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error((data?.error as string) || "Save failed")
-      if (data.response) setExisting(data.response as ResponseRow)
-      setSuccessMsg(status === "submitted" ? "Response submitted." : "Draft saved.")
-      if (status === "submitted" && inbox) setInbox({ ...inbox, status: "bid_submitted" })
+      if (!res.ok) {
+        const msg =
+          [data?.error, data?.detail].filter(Boolean).join(" — ") || `Request failed (HTTP ${res.status})`
+        throw new Error(msg)
+      }
+      if (data.response) {
+        setExisting(data.response as ResponseRow)
+        const att = Array.isArray((data.response as ResponseRow).attachments)
+          ? (data.response as ResponseRow).attachments!
+          : []
+        if (att.length > 0) {
+          setDraftAttachments(savedToDrafts(att as SavedAttachment[]))
+        }
+      }
+      setSuccessMsg(
+        status === "submitted"
+          ? "Your response was submitted successfully. The lead agency will see it in RFP Broadcast → Partner responses."
+          : "Draft saved. You can return anytime to finish and submit."
+      )
+      if (status === "submitted" && inbox) {
+        setInbox({ ...inbox, status: "bid_submitted" })
+      }
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : "Save failed")
+      console.error("[partner/rfps] save error:", e)
+      setSubmitError(e instanceof Error ? e.message : "Save failed. Check your connection and try again.")
     } finally {
       setSaving(false)
     }
@@ -350,7 +386,14 @@ export default function PartnerRfpDetailPage() {
   const onFileForDraft = async (draftId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!checkFeatureAccess("file uploads")) return
+    if (accessLoading) {
+      setSubmitError("Your account is still loading. Wait a moment, then try the upload again.")
+      return
+    }
+    if (!checkFeatureAccess("file uploads")) {
+      setSubmitError("File uploads aren’t available on your current plan. Check the upgrade dialog or contact support.")
+      return
+    }
     setUploadingId(draftId)
     setSubmitError(null)
     try {
@@ -530,8 +573,8 @@ export default function PartnerRfpDetailPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="border-gray-300 text-[#0C3535]"
-                    disabled={draftAttachments.length >= 6}
+                    className={btnOutlineLight}
+                    disabled={draftAttachments.length >= 6 || accessLoading}
                     onClick={addDraft}
                   >
                     <Plus className="w-4 h-4 mr-1" />
@@ -598,8 +641,10 @@ export default function PartnerRfpDetailPage() {
                         }
                         disabled={!canEdit}
                         className={cn(
-                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors",
-                          d.source === "url" ? "border-[#0C3535] bg-[#0C3535]/5 text-[#0C3535]" : "border-gray-200 text-gray-600"
+                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors bg-white",
+                          d.source === "url"
+                            ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535] font-medium"
+                            : "border-gray-300 text-[#0C3535]"
                         )}
                       >
                         <LinkIcon className="w-3.5 h-3.5 inline mr-1" />
@@ -610,8 +655,10 @@ export default function PartnerRfpDetailPage() {
                         onClick={() => updateDraft(d.id, { source: "file", urlInput: "", storedUrl: null })}
                         disabled={!canEdit}
                         className={cn(
-                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors",
-                          d.source === "file" ? "border-[#0C3535] bg-[#0C3535]/5 text-[#0C3535]" : "border-gray-200 text-gray-600"
+                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors bg-white",
+                          d.source === "file"
+                            ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535] font-medium"
+                            : "border-gray-300 text-[#0C3535]"
                         )}
                       >
                         <Upload className="w-3.5 h-3.5 inline mr-1" />
@@ -646,8 +693,8 @@ export default function PartnerRfpDetailPage() {
                         <Button
                           type="button"
                           variant="outline"
-                          className="border-gray-300 text-[#0C3535]"
-                          disabled={!canEdit || uploadingId === d.id}
+                          className={btnOutlineLight}
+                          disabled={!canEdit || uploadingId === d.id || accessLoading}
                           onClick={() => fileRefs.current[d.id]?.click()}
                         >
                           {uploadingId === d.id ? (
@@ -686,13 +733,20 @@ export default function PartnerRfpDetailPage() {
 
           {canEdit ? (
             <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
-              <Button type="button" variant="outline" className="border-gray-300 text-[#0C3535]" disabled={saving} onClick={() => void save("draft")}>
+              <Button
+                type="button"
+                variant="outline"
+                className={btnOutlineLight}
+                disabled={saving || accessLoading}
+                onClick={() => void save("draft")}
+              >
                 Save draft
               </Button>
               <Button
                 type="button"
-                className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white font-display font-bold"
-                disabled={saving}
+                variant="default"
+                className={btnPrimaryDark}
+                disabled={saving || accessLoading}
                 onClick={() => void save("submitted")}
               >
                 <Send className="w-4 h-4 mr-2" />
