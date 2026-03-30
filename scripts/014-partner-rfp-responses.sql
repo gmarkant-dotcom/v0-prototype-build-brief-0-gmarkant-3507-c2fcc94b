@@ -8,17 +8,16 @@ CREATE TABLE IF NOT EXISTS public.partner_rfp_responses (
   proposal_text TEXT NOT NULL DEFAULT '',
   budget_proposal TEXT NOT NULL DEFAULT '',
   timeline_proposal TEXT NOT NULL DEFAULT '',
-  work_example_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-  proposal_document_url TEXT,
-  proposal_deck_link TEXT,
+  -- Array of { type, label, url } — max 6 (enforced below)
+  attachments JSONB NOT NULL DEFAULT '[]'::jsonb,
   -- Denormalized for agency inbox (no cross-profile read required)
   partner_display_name TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'submitted')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT partner_rfp_responses_one_per_inbox_partner UNIQUE (inbox_item_id, partner_id),
-  CONSTRAINT partner_rfp_responses_max_three_urls CHECK (
-    array_length(work_example_urls, 1) IS NULL OR array_length(work_example_urls, 1) <= 3
+  CONSTRAINT partner_rfp_responses_max_six_attachments CHECK (
+    jsonb_array_length(COALESCE(attachments, '[]'::jsonb)) <= 6
   )
 );
 

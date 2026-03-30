@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { PartnerLayout } from "@/components/partner-layout"
@@ -18,9 +18,17 @@ import {
   DollarSign,
   Send,
   Upload,
-  Link2,
   CheckCircle,
+  Trash2,
+  Plus,
+  Link as LinkIcon,
 } from "lucide-react"
+
+/** Readable text on white cards (defaults are transparent / light in dark theme). */
+const fieldClass =
+  "border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 shadow-sm focus-visible:ring-[#0C3535]/30 focus-visible:border-[#0C3535]"
+const textareaClass = cn(fieldClass, "min-h-[140px]")
+const inputClass = fieldClass
 
 type InboxRow = {
   id: string
@@ -36,16 +44,90 @@ type InboxRow = {
   created_at: string
 }
 
+type AttachmentTag =
+  | "work_example"
+  | "capabilities_overview"
+  | "proposal"
+  | "timeline"
+  | "budget"
+  | "other"
+
+const TAG_OPTIONS: { value: AttachmentTag; label: string }[] = [
+  { value: "work_example", label: "Work Example" },
+  { value: "capabilities_overview", label: "Capabilities Overview" },
+  { value: "proposal", label: "Proposal" },
+  { value: "timeline", label: "Timeline" },
+  { value: "budget", label: "Budget" },
+  { value: "other", label: "Other" },
+]
+
+function labelForTag(tag: AttachmentTag, otherLabel: string): string {
+  if (tag === "other") return otherLabel.trim()
+  return TAG_OPTIONS.find((o) => o.value === tag)?.label || tag
+}
+
+type SavedAttachment = { type: string; label: string; url: string }
+
+type DraftAttachment = {
+  id: string
+  tag: AttachmentTag
+  otherLabel: string
+  source: "url" | "file"
+  urlInput: string
+  storedUrl: string | null
+  fileName: string | null
+}
+
+function newDraft(): DraftAttachment {
+  return {
+    id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `d-${Date.now()}-${Math.random()}`,
+    tag: "work_example",
+    otherLabel: "",
+    source: "url",
+    urlInput: "",
+    storedUrl: null,
+    fileName: null,
+  }
+}
+
+function savedToDrafts(saved: SavedAttachment[]): DraftAttachment[] {
+  return saved.map((a) => {
+    const tag = (ALLOWED.has(a.type as AttachmentTag) ? a.type : "proposal") as AttachmentTag
+    return {
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `d-${Date.now()}-${Math.random()}`,
+      tag,
+      otherLabel: tag === "other" ? a.label : "",
+      source: "url" as const,
+      urlInput: a.url,
+      storedUrl: a.url,
+      fileName: null,
+    }
+  })
+}
+
+const ALLOWED = new Set(TAG_OPTIONS.map((t) => t.value))
+
 type ResponseRow = {
   id: string
   proposal_text: string
   budget_proposal: string
   timeline_proposal: string
-  work_example_urls: string[] | null
-  proposal_document_url: string | null
-  proposal_deck_link: string | null
+  attachments: SavedAttachment[] | null
   status: string
   updated_at: string
+}
+
+function draftsToPayload(drafts: DraftAttachment[]): SavedAttachment[] {
+  const out: SavedAttachment[] = []
+  for (const d of drafts) {
+    const url = (d.storedUrl || d.urlInput).trim()
+    if (!url) continue
+    const tag = d.tag
+    const label = labelForTag(tag, d.otherLabel)
+    if (tag === "other" && !d.otherLabel.trim()) continue
+    out.push({ type: tag, label, url })
+  }
+  return out.slice(0, 6)
 }
 
 function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
@@ -161,7 +243,7 @@ export default function PartnerRfpDetailPage() {
   const isDemoDetail = isDemo && demoIds.includes(id)
 
   const { checkFeatureAccess } = usePaidUser()
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const [loading, setLoading] = useState(!isDemoDetail)
   const [error, setError] = useState<string | null>(null)
@@ -173,15 +255,23 @@ export default function PartnerRfpDetailPage() {
   const [proposalText, setProposalText] = useState("")
   const [budgetProposal, setBudgetProposal] = useState("")
   const [timelineProposal, setTimelineProposal] = useState("")
-  const [url1, setUrl1] = useState("")
-  const [url2, setUrl2] = useState("")
-  const [url3, setUrl3] = useState("")
-  const [deckLink, setDeckLink] = useState("")
-  const [docUrl, setDocUrl] = useState<string | null>(null)
-  const [uploading, setUploading] = useState(false)
+  const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([])
+  const [uploadingId, setUploadingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  const updateDraft = useCallback((draftId: string, patch: Partial<DraftAttachment>) => {
+    setDraftAttachments((prev) => prev.map((d) => (d.id === draftId ? { ...d, ...patch } : d)))
+  }, [])
+
+  const removeDraft = useCallback((draftId: string) => {
+    setDraftAttachments((prev) => prev.filter((d) => d.id !== draftId))
+  }, [])
+
+  const addDraft = useCallback(() => {
+    setDraftAttachments((prev) => (prev.length >= 6 ? prev : [...prev, newDraft()]))
+  }, [])
 
   useEffect(() => {
     if (isDemoDetail) {
@@ -204,12 +294,11 @@ export default function PartnerRfpDetailPage() {
             setProposalText(r.proposal_text || "")
             setBudgetProposal(r.budget_proposal || "")
             setTimelineProposal(r.timeline_proposal || "")
-            const urls = r.work_example_urls || []
-            setUrl1(urls[0] || "")
-            setUrl2(urls[1] || "")
-            setUrl3(urls[2] || "")
-            setDeckLink(r.proposal_deck_link || "")
-            setDocUrl(r.proposal_document_url || null)
+            const att = Array.isArray(r.attachments) ? r.attachments : []
+            setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
+          } else {
+            setExisting(null)
+            setDraftAttachments([])
           }
         }
       } catch (e) {
@@ -223,8 +312,6 @@ export default function PartnerRfpDetailPage() {
     }
   }, [id, isDemoDetail])
 
-  const workUrls = () => [url1, url2, url3].map((u) => u.trim()).filter(Boolean)
-
   const save = async (status: "draft" | "submitted") => {
     setSubmitError(null)
     setSuccessMsg(null)
@@ -236,6 +323,7 @@ export default function PartnerRfpDetailPage() {
     if (status === "draft" && !checkFeatureAccess()) return
     setSaving(true)
     try {
+      const attachments = draftsToPayload(draftAttachments)
       const res = await fetch(`/api/partner/rfps/${id}/response`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -243,9 +331,7 @@ export default function PartnerRfpDetailPage() {
           proposal_text: proposalText,
           budget_proposal: budgetProposal,
           timeline_proposal: timelineProposal,
-          work_example_urls: workUrls(),
-          proposal_document_url: docUrl,
-          proposal_deck_link: deckLink.trim() || null,
+          attachments,
           status,
         }),
       })
@@ -261,25 +347,31 @@ export default function PartnerRfpDetailPage() {
     }
   }
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileForDraft = async (draftId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (!checkFeatureAccess("file uploads")) return
-    setUploading(true)
+    setUploadingId(draftId)
     setSubmitError(null)
     try {
       const fd = new FormData()
       fd.append("file", file)
-      fd.append("folder", "partner-rfp-submissions")
-      const res = await fetch("/api/upload", { method: "POST", body: fd })
-      if (!res.ok) throw new Error("Upload failed")
-      const result = await res.json()
-      setDocUrl(result.url as string)
-    } catch {
-      setSubmitError("Upload failed")
+      fd.append("inboxId", id)
+      const res = await fetch("/api/partner/rfp-bid/upload", { method: "POST", body: fd })
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((result?.error as string) || "Upload failed")
+      updateDraft(draftId, {
+        storedUrl: result.url as string,
+        fileName: (result.filename as string) || file.name,
+        urlInput: "",
+        source: "file",
+      })
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Upload failed")
     } finally {
-      setUploading(false)
-      if (fileRef.current) fileRef.current.value = ""
+      setUploadingId(null)
+      const ref = fileRefs.current[draftId]
+      if (ref) ref.value = ""
     }
   }
 
@@ -316,6 +408,7 @@ export default function PartnerRfpDetailPage() {
   })
 
   const submitted = existing?.status === "submitted" || inbox.status === "bid_submitted"
+  const canEdit = !submitted || isDemoDetail
 
   return (
     <PartnerLayout>
@@ -399,8 +492,8 @@ export default function PartnerRfpDetailPage() {
                 value={proposalText}
                 onChange={(e) => setProposalText(e.target.value)}
                 placeholder="Your pitch, approach, and how you’ll deliver this scope…"
-                className="min-h-[140px] border-gray-200"
-                disabled={submitted && !isDemoDetail}
+                className={textareaClass}
+                disabled={!canEdit}
               />
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
@@ -410,8 +503,8 @@ export default function PartnerRfpDetailPage() {
                   value={budgetProposal}
                   onChange={(e) => setBudgetProposal(e.target.value)}
                   placeholder="e.g. 95000 or $85k–$100k"
-                  className="border-gray-200"
-                  disabled={submitted && !isDemoDetail}
+                  className={inputClass}
+                  disabled={!canEdit}
                 />
               </div>
               <div>
@@ -420,56 +513,178 @@ export default function PartnerRfpDetailPage() {
                   value={timelineProposal}
                   onChange={(e) => setTimelineProposal(e.target.value)}
                   placeholder="e.g. 6 weeks from kickoff"
-                  className="border-gray-200"
-                  disabled={submitted && !isDemoDetail}
+                  className={inputClass}
+                  disabled={!canEdit}
                 />
               </div>
             </div>
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Work examples (up to 3 URLs)</label>
-              <div className="space-y-2">
-                <Input value={url1} onChange={(e) => setUrl1(e.target.value)} placeholder="https://…" className="border-gray-200" disabled={submitted && !isDemoDetail} />
-                <Input value={url2} onChange={(e) => setUrl2(e.target.value)} placeholder="https://…" className="border-gray-200" disabled={submitted && !isDemoDetail} />
-                <Input value={url3} onChange={(e) => setUrl3(e.target.value)} placeholder="https://…" className="border-gray-200" disabled={submitted && !isDemoDetail} />
-              </div>
-            </div>
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Proposal PDF</label>
-              <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="sr-only" onChange={onFile} />
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-gray-300"
-                  disabled={uploading || (submitted && !isDemoDetail)}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                  Upload file
-                </Button>
-                {docUrl && (
-                  <a href={docUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-blue-700 underline truncate max-w-[200px]">
-                    View uploaded
-                  </a>
+
+            <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/80">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div>
+                  <h3 className="font-display font-bold text-sm text-[#0C3535]">Attachments</h3>
+                  <p className="text-xs text-gray-600 mt-0.5">Up to 6 — link or file (PDF, PPTX, DOCX) per row.</p>
+                </div>
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="border-gray-300 text-[#0C3535]"
+                    disabled={draftAttachments.length >= 6}
+                    onClick={addDraft}
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add attachment
+                  </Button>
                 )}
               </div>
-            </div>
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <Link2 className="w-3 h-3" />
-                Deck / doc link (optional)
-              </label>
-              <Input
-                value={deckLink}
-                onChange={(e) => setDeckLink(e.target.value)}
-                placeholder="Google Slides, Dropbox, Frame.io…"
-                className="border-gray-200"
-                disabled={submitted && !isDemoDetail}
-              />
+
+              {draftAttachments.length === 0 && (
+                <p className="text-sm text-gray-500 mb-2">No attachments yet. Add one to include portfolio links or documents.</p>
+              )}
+
+              <div className="space-y-4">
+                {draftAttachments.map((d) => (
+                  <div key={d.id} className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+                    <div className="flex flex-wrap gap-3 items-start justify-between">
+                      <div className="flex flex-wrap gap-2 items-center flex-1 min-w-[200px]">
+                        <label className="font-mono text-[10px] text-gray-500 uppercase shrink-0">Label</label>
+                        <select
+                          value={d.tag}
+                          onChange={(e) =>
+                            updateDraft(d.id, { tag: e.target.value as AttachmentTag, otherLabel: e.target.value === "other" ? d.otherLabel : "" })
+                          }
+                          disabled={!canEdit}
+                          className={cn(inputClass, "h-9 rounded-md text-sm max-w-[220px]")}
+                        >
+                          {TAG_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        {d.tag === "other" && (
+                          <Input
+                            value={d.otherLabel}
+                            onChange={(e) => updateDraft(d.id, { otherLabel: e.target.value })}
+                            placeholder="Describe this attachment"
+                            className={cn(inputClass, "flex-1 min-w-[160px]")}
+                            disabled={!canEdit}
+                          />
+                        )}
+                      </div>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => removeDraft(d.id)}
+                          className="text-gray-500 hover:text-red-600 p-1"
+                          aria-label="Remove attachment"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateDraft(d.id, {
+                            source: "url",
+                            fileName: null,
+                            storedUrl: d.source === "file" ? null : d.storedUrl,
+                          })
+                        }
+                        disabled={!canEdit}
+                        className={cn(
+                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors",
+                          d.source === "url" ? "border-[#0C3535] bg-[#0C3535]/5 text-[#0C3535]" : "border-gray-200 text-gray-600"
+                        )}
+                      >
+                        <LinkIcon className="w-3.5 h-3.5 inline mr-1" />
+                        Paste URL
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateDraft(d.id, { source: "file", urlInput: "", storedUrl: null })}
+                        disabled={!canEdit}
+                        className={cn(
+                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors",
+                          d.source === "file" ? "border-[#0C3535] bg-[#0C3535]/5 text-[#0C3535]" : "border-gray-200 text-gray-600"
+                        )}
+                      >
+                        <Upload className="w-3.5 h-3.5 inline mr-1" />
+                        Upload file
+                      </button>
+                    </div>
+
+                    {d.source === "url" && (
+                      <div>
+                        <label className="block font-mono text-[10px] text-gray-500 uppercase mb-1">URL</label>
+                        <Input
+                          value={d.urlInput}
+                          onChange={(e) => updateDraft(d.id, { urlInput: e.target.value, storedUrl: null })}
+                          placeholder="https://…"
+                          className={inputClass}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                    )}
+
+                    {d.source === "file" && (
+                      <div>
+                        <input
+                          ref={(el) => {
+                            fileRefs.current[d.id] = el
+                          }}
+                          type="file"
+                          accept=".pdf,.pptx,.ppt,.docx,.doc"
+                          className="sr-only"
+                          onChange={(e) => void onFileForDraft(d.id, e)}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-gray-300 text-[#0C3535]"
+                          disabled={!canEdit || uploadingId === d.id}
+                          onClick={() => fileRefs.current[d.id]?.click()}
+                        >
+                          {uploadingId === d.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Upload className="w-4 h-4 mr-2" />
+                              Choose file
+                            </>
+                          )}
+                        </Button>
+                        {d.storedUrl && d.source === "file" && (
+                          <span className="ml-3 font-mono text-xs text-gray-700">
+                            {d.fileName || "Uploaded"} —{" "}
+                            <a href={d.storedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">
+                              Open link
+                            </a>
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {d.storedUrl && d.source === "url" && (
+                      <p className="font-mono text-[10px] text-gray-600">
+                        Saved URL:{" "}
+                        <a href={d.storedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 break-all">
+                          {d.storedUrl}
+                        </a>
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {!submitted || isDemoDetail ? (
+          {canEdit ? (
             <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
               <Button type="button" variant="outline" className="border-gray-300 text-[#0C3535]" disabled={saving} onClick={() => void save("draft")}>
                 Save draft

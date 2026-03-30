@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
-import { Loader2, ChevronDown, ChevronRight, FileText, ExternalLink } from "lucide-react"
+import { Loader2, ChevronDown, ChevronRight, ExternalLink } from "lucide-react"
 
 type InboxSnippet = {
   id: string
@@ -15,6 +15,8 @@ type InboxSnippet = {
   status?: string
 } | null
 
+type AttachmentItem = { type: string; label: string; url: string }
+
 type AgencyResponseRow = {
   id: string
   inbox_item_id: string
@@ -22,9 +24,7 @@ type AgencyResponseRow = {
   proposal_text: string
   budget_proposal: string
   timeline_proposal: string
-  work_example_urls: string[] | null
-  proposal_document_url: string | null
-  proposal_deck_link: string | null
+  attachments: AttachmentItem[] | null
   status: string
   created_at: string
   updated_at: string
@@ -49,9 +49,10 @@ export function AgencyBroadcastResponsesPanel() {
             "We’d approach this as a modular production with a dedicated showrunner and a nimble B-cam unit for creator days…",
           budget_proposal: "$92,000 – $105,000",
           timeline_proposal: "10 weeks from kickoff to delivery of first wave",
-          work_example_urls: ["https://example.com/work/1"],
-          proposal_document_url: null,
-          proposal_deck_link: "https://docs.google.com/presentation/demo",
+          attachments: [
+            { type: "work_example", label: "Work Example", url: "https://example.com/work/1" },
+            { type: "proposal", label: "Proposal", url: "https://docs.google.com/presentation/demo" },
+          ],
           status: "submitted",
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -182,50 +183,32 @@ export function AgencyBroadcastResponsesPanel() {
                     <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
                     <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">{r.proposal_text}</p>
                   </div>
-                  {r.work_example_urls && r.work_example_urls.length > 0 && (
+                  {r.attachments && r.attachments.length > 0 && (
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Work examples</div>
-                      <ul className="space-y-1">
-                        {r.work_example_urls.map((u) => (
-                          <li key={u}>
+                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
+                      <ul className="space-y-2">
+                        {r.attachments.map((att, i) => (
+                          <li
+                            key={`${att.url}-${i}`}
+                            className="flex flex-wrap items-start gap-2 text-sm border border-border/60 rounded-lg p-2 bg-white/5"
+                          >
+                            <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/10 text-foreground-muted shrink-0">
+                              {att.label}
+                            </span>
                             <a
-                              href={u}
+                              href={att.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm text-accent inline-flex items-center gap-1 hover:underline"
+                              className="text-accent inline-flex items-center gap-1 hover:underline break-all"
                             >
-                              {u}
-                              <ExternalLink className="w-3 h-3" />
+                              {att.url}
+                              <ExternalLink className="w-3 h-3 shrink-0" />
                             </a>
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
-                  <div className="flex flex-wrap gap-3">
-                    {r.proposal_document_url && (
-                      <a
-                        href={r.proposal_document_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 font-mono text-xs px-3 py-2 rounded-lg border border-border bg-white/5 text-accent hover:bg-white/10"
-                      >
-                        <FileText className="w-4 h-4" />
-                        Proposal PDF
-                      </a>
-                    )}
-                    {r.proposal_deck_link && (
-                      <a
-                        href={r.proposal_deck_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 font-mono text-xs px-3 py-2 rounded-lg border border-border bg-white/5 text-accent hover:bg-white/10"
-                      >
-                        Deck / link
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    )}
-                  </div>
                   <p className="font-mono text-[10px] text-foreground-muted">
                     Updated {new Date(r.updated_at).toLocaleString()}
                   </p>

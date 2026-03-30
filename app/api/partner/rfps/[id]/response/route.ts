@@ -7,16 +7,60 @@ type Body = {
   proposal_text?: string
   budget_proposal?: string
   timeline_proposal?: string
-  work_example_urls?: string[]
-  proposal_document_url?: string | null
-  proposal_deck_link?: string | null
+  attachments?: unknown
   status?: "draft" | "submitted"
 }
 
-function normalizeUrls(urls: unknown): string[] {
-  if (!Array.isArray(urls)) return []
-  const out = urls.map((u) => String(u).trim()).filter(Boolean)
-  return out.slice(0, 3)
+const ALLOWED_TYPES = new Set([
+  "work_example",
+  "capabilities_overview",
+  "proposal",
+  "timeline",
+  "budget",
+  "other",
+])
+
+export type SavedAttachment = {
+  type: string
+  label: string
+  url: string
+}
+
+function normalizeAttachments(raw: unknown): SavedAttachment[] {
+  if (!Array.isArray(raw)) return []
+  const out: SavedAttachment[] = []
+  for (const item of raw.slice(0, 6)) {
+    if (!item || typeof item !== "object") continue
+    const o = item as Record<string, unknown>
+    const type = String(o.type ?? "").trim()
+    const url = String(o.url ?? "").trim()
+    let label = String(o.label ?? "").trim()
+    if (!ALLOWED_TYPES.has(type) || !url) continue
+    if (type === "other") {
+      if (!label) continue
+    } else if (!label) {
+      label = defaultLabelForType(type)
+    }
+    out.push({ type, label, url })
+  }
+  return out
+}
+
+function defaultLabelForType(type: string): string {
+  switch (type) {
+    case "work_example":
+      return "Work Example"
+    case "capabilities_overview":
+      return "Capabilities Overview"
+    case "proposal":
+      return "Proposal"
+    case "timeline":
+      return "Timeline"
+    case "budget":
+      return "Budget"
+    default:
+      return type
+  }
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -56,15 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const proposal_text = (body.proposal_text ?? "").toString()
     const budget_proposal = (body.budget_proposal ?? "").toString()
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
-    const work_example_urls = normalizeUrls(body.work_example_urls)
-    const proposal_document_url =
-      body.proposal_document_url === null || body.proposal_document_url === undefined
-        ? null
-        : String(body.proposal_document_url).trim() || null
-    const proposal_deck_link =
-      body.proposal_deck_link === null || body.proposal_deck_link === undefined
-        ? null
-        : String(body.proposal_deck_link).trim() || null
+    const attachments = normalizeAttachments(body.attachments)
 
     if (status === "submitted") {
       if (!proposal_text.trim()) {
@@ -88,9 +124,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       proposal_text,
       budget_proposal,
       timeline_proposal,
-      work_example_urls,
-      proposal_document_url,
-      proposal_deck_link,
+      attachments,
       partner_display_name,
       status,
       updated_at: new Date().toISOString(),
