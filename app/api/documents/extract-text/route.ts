@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server"
 export const runtime = "nodejs"
 
 const MAX_CHARS = 120_000
+/** Below this, extracted text is unlikely to be a real brief (headers only, etc.) */
+const THIN_EXTRACTION_THRESHOLD = 120
 
 /** When pdf-parse returns empty (some PDFs / encodings), try raw pdf.js text content. */
 async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
@@ -108,7 +110,13 @@ export async function POST(req: Request) {
     const trimmed = text.replace(/\u0000/g, "").trim()
     if (!trimmed) {
       const fallback = `Document uploaded: ${file.name}`
-      return NextResponse.json({ text: fallback, fileName: file.name, warning: warning || "Fallback used" })
+      return NextResponse.json({
+        text: fallback,
+        fileName: file.name,
+        warning: warning || "Fallback used",
+        usedFallback: true,
+        thinExtraction: false,
+      })
     }
 
     let out = trimmed
@@ -116,7 +124,18 @@ export async function POST(req: Request) {
       out = `${out.slice(0, MAX_CHARS)}\n\n[... truncated for processing ...]`
     }
 
-    return NextResponse.json({ text: out, fileName: file.name, warning })
+    const thinExtraction = out.length > 0 && out.length < THIN_EXTRACTION_THRESHOLD
+    const thinWarning = thinExtraction
+      ? "Very little text was extracted (image-based PDF, complex layout, or short doc). Paste the full brief below for accurate Master RFP output."
+      : null
+
+    return NextResponse.json({
+      text: out,
+      fileName: file.name,
+      warning: thinWarning || warning,
+      usedFallback: false,
+      thinExtraction,
+    })
   } catch (error) {
     console.error("extract-text error:", error)
     return NextResponse.json({ error: "Failed to extract text from document" }, { status: 500 })

@@ -73,6 +73,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Brief content is required" }, { status: 400 })
     }
 
+    const augmentDelimiter = "\n\n---\nAdditional brief details (user-provided):\n"
+    const augmentIdx = briefText.indexOf(augmentDelimiter)
+    const primaryPart = augmentIdx >= 0 ? briefText.slice(0, augmentIdx).trim() : briefText.trim()
+    const augmentPart = augmentIdx >= 0 ? briefText.slice(augmentIdx + augmentDelimiter.length).trim() : ""
+    const pTrim = primaryPart.trim()
+    const primaryIsFilePlaceholder =
+      pTrim.startsWith("Document uploaded:") &&
+      pTrim.split(/\r?\n/).length === 1 &&
+      pTrim.length < 600
+
+    if (primaryIsFilePlaceholder && augmentPart.length < 80) {
+      return NextResponse.json(
+        {
+          error: "No selectable text was found in your uploaded brief file.",
+          hint: "Paste the full client RFP in the required text area (80+ characters) or use Paste Text. Image-only PDFs are not readable until you add text.",
+        },
+        { status: 400 }
+      )
+    }
+
+    if (briefText.trim().length < 150) {
+      return NextResponse.json(
+        {
+          error: "Brief content is too short for a client-specific Master RFP.",
+          hint: "Add more detail from the client document: objectives, deliverables, audience, timeline, budget, or constraints.",
+        },
+        { status: 400 }
+      )
+    }
+
     const hasTemplateBody = templateText.length > 0
 
     const groundingRules = `CRITICAL GROUNDING (must follow):

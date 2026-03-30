@@ -119,6 +119,28 @@ function AgencyRFPContent() {
   const [isExtractingBrief, setIsExtractingBrief] = useState(false)
   /** Optional extra copy pasted by user; always appended to the primary brief for AI */
   const [briefAugmentText, setBriefAugmentText] = useState("")
+  /** True when extract API had no text (e.g. scanned PDF) — real brief must be pasted */
+  const [briefExtractUsedFallback, setBriefExtractUsedFallback] = useState(false)
+  /** True when extracted text is very short — paste more for a faithful Master RFP */
+  const [briefExtractThin, setBriefExtractThin] = useState(false)
+
+  const MIN_BRIEF_AUGMENT_CHARS = 80
+  const MIN_COMBINED_BRIEF_CHARS = 200
+  const combinedBriefForGate = buildMasterBriefSourceText({
+    briefSourceText,
+    pastedContent,
+    googleLink,
+    briefFileName,
+    briefAugmentText,
+  }).trim()
+  /** No real PDF text: must paste real brief. Thin extract: need enough total characters for AI to work with */
+  const briefBlockedByQuality =
+    briefExtractUsedFallback
+      ? briefAugmentText.trim().length < MIN_BRIEF_AUGMENT_CHARS
+      : briefExtractThin && combinedBriefForGate.length < MIN_COMBINED_BRIEF_CHARS
+  const briefPasteProminent =
+    briefExtractUsedFallback ||
+    (briefExtractThin && combinedBriefForGate.length < MIN_COMBINED_BRIEF_CHARS)
   
   // Step 2: Master RFP (AI generated)
   const [masterRfp, setMasterRfp] = useState<{
@@ -172,9 +194,13 @@ function AgencyRFPContent() {
         throw new Error(payload?.error || "Could not read this file")
       }
       setBriefSourceText((payload.text || "").toString())
+      setBriefExtractUsedFallback(Boolean(payload.usedFallback))
+      setBriefExtractThin(Boolean(payload.thinExtraction) && !payload.usedFallback)
     } catch (err) {
       setBriefUploaded(false)
       setBriefFileName("")
+      setBriefExtractUsedFallback(false)
+      setBriefExtractThin(false)
       setBriefUploadError(err instanceof Error ? err.message : "Brief extraction failed")
     } finally {
       setIsExtractingBrief(false)
@@ -512,6 +538,8 @@ function AgencyRFPContent() {
                           setBriefUploaded(true)
                           setBriefFileName("Google Doc imported")
                           setBriefSourceText(`Imported Google document: ${googleLink}`)
+                          setBriefExtractUsedFallback(false)
+                          setBriefExtractThin(false)
                         }}
                       >
                         Import from Google
@@ -538,6 +566,8 @@ function AgencyRFPContent() {
                           setBriefUploaded(true)
                           setBriefFileName("Pasted content")
                           setBriefSourceText(pastedContent)
+                          setBriefExtractUsedFallback(false)
+                          setBriefExtractThin(false)
                         }}
                       >
                         Use Pasted Content
@@ -566,14 +596,23 @@ function AgencyRFPContent() {
                     <div>
                       <div className="font-display font-bold text-sm text-foreground">{briefFileName}</div>
                       <div className="font-mono text-[10px] text-success">
-                        {isExtractingBrief ? "Extracting text from document…" : "Ready for AI — text extracted from your file"}
+                        {isExtractingBrief
+                          ? "Extracting text from document…"
+                          : briefExtractUsedFallback
+                            ? "File attached — no selectable text found"
+                            : "Ready for AI — text extracted from your file"}
                       </div>
                       {!isExtractingBrief && briefSourceText.trim() && (
                         <div className="font-mono text-[10px] text-foreground-muted mt-1">
-                          {briefSourceText.length.toLocaleString()} characters will be sent to the model
-                          {briefSourceText.trim().startsWith("Document uploaded:") && (
-                            <span className="text-amber-400 block mt-1">
-                              Limited text was read from this file. Use Paste Text or export to Word/PDF with selectable text for full fidelity.
+                          {briefSourceText.length.toLocaleString()} characters from the file will be sent (before any pasted add-on)
+                          {briefExtractUsedFallback && (
+                            <span className="text-amber-300 block mt-1 max-w-md">
+                              This PDF looks like a scan or image export — we only see the file name, not the brief. Paste the full client brief in the box below (at least {MIN_BRIEF_AUGMENT_CHARS} characters) or use Paste Text, or export from Word as .docx with real text.
+                            </span>
+                          )}
+                          {briefExtractThin && !briefExtractUsedFallback && (
+                            <span className="text-amber-300 block mt-1 max-w-md">
+                              Very little text came out of this file. Paste missing sections below until the combined brief reaches at least {MIN_COMBINED_BRIEF_CHARS} characters so the Master RFP matches your client brief.
                             </span>
                           )}
                         </div>
@@ -589,6 +628,8 @@ function AgencyRFPContent() {
                       setBriefSourceText("")
                       setBriefUploadError(null)
                       setIsExtractingBrief(false)
+                      setBriefExtractUsedFallback(false)
+                      setBriefExtractThin(false)
                     }}
                     className="border-border text-foreground-muted hover:bg-white/5"
                   >
@@ -599,14 +640,30 @@ function AgencyRFPContent() {
 
               <div className="mt-6 space-y-2">
                 <label className="font-mono text-[10px] text-foreground-muted uppercase block">
-                  Optional: Additional brief details
+                  {briefPasteProminent ? "Required: Client brief text (paste)" : "Optional: Additional brief details"}
                 </label>
                 <Textarea
-                  placeholder="Paste extra requirements or missing text if extraction was incomplete (e.g. scanned PDF). Appended to the primary brief when you generate."
+                  placeholder={
+                    briefPasteProminent
+                      ? briefExtractUsedFallback
+                        ? `Paste the full client RFP/brief here (${MIN_BRIEF_AUGMENT_CHARS}+ characters). The upload had no selectable text — the AI would only see the file name otherwise.`
+                        : `Paste missing sections so the combined brief is at least ${MIN_COMBINED_BRIEF_CHARS} characters (${combinedBriefForGate.length}/${MIN_COMBINED_BRIEF_CHARS} now).`
+                      : "Paste extra requirements or missing text if extraction was incomplete. Appended when you generate."
+                  }
                   value={briefAugmentText}
                   onChange={(e) => setBriefAugmentText(e.target.value)}
-                  className="min-h-[100px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                  className={cn(
+                    "min-h-[120px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50",
+                    briefBlockedByQuality && "border-amber-500/40 ring-1 ring-amber-500/20"
+                  )}
                 />
+                {briefBlockedByQuality && (
+                  <p className="font-mono text-[10px] text-amber-300">
+                    {briefExtractUsedFallback
+                      ? `Paste at least ${MIN_BRIEF_AUGMENT_CHARS} characters of real brief content to enable Generate (${briefAugmentText.trim().length}/${MIN_BRIEF_AUGMENT_CHARS} in the box above).`
+                      : `Combined brief is too short for reliable output (${combinedBriefForGate.length}/${MIN_COMBINED_BRIEF_CHARS} characters). Paste more detail above.`}
+                  </p>
+                )}
                 {briefAugmentText.trim() && (
                   <p className="font-mono text-[10px] text-foreground-muted">
                     +{briefAugmentText.trim().length.toLocaleString()} characters appended when generating
@@ -851,6 +908,7 @@ function AgencyRFPContent() {
                   isGenerating ||
                   !selectedProject ||
                   isExtractingBrief ||
+                  briefBlockedByQuality ||
                   !buildMasterBriefSourceText({
                     briefSourceText,
                     pastedContent,
