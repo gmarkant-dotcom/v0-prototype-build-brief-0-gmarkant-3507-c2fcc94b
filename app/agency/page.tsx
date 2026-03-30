@@ -14,6 +14,7 @@ import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2 } from "lucide-react"
 import { FileUpload } from "@/components/file-upload"
+import { BriefDocumentReview, BriefDocumentReviewUnavailable } from "@/components/brief-document-review"
 
 // Types
 type UploadMethod = "pdf" | "docx" | "pptx" | "google" | "paste" | null
@@ -123,6 +124,10 @@ function AgencyRFPContent() {
   const [briefExtractUsedFallback, setBriefExtractUsedFallback] = useState(false)
   /** True when extracted text is very short — paste more for a faithful Master RFP */
   const [briefExtractThin, setBriefExtractThin] = useState(false)
+  /** Stored copy on blob for full-document review (parallel to extract-text) */
+  const [briefDocumentUrl, setBriefDocumentUrl] = useState<string | null>(null)
+  const [briefDocumentContentType, setBriefDocumentContentType] = useState<string | null>(null)
+  const [briefDocumentUploadError, setBriefDocumentUploadError] = useState<string | null>(null)
 
   const MIN_BRIEF_AUGMENT_CHARS = 80
   const MIN_COMBINED_BRIEF_CHARS = 200
@@ -175,30 +180,57 @@ function AgencyRFPContent() {
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   const [broadcastComplete, setBroadcastComplete] = useState(false)
   
-  // Handle client brief file: extract text for AI (same pipeline as template)
+  // Handle client brief file: extract text + upload to blob in parallel (full-document review)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (!checkFeatureAccess("file uploads")) return
     setBriefUploadError(null)
+    setBriefDocumentUploadError(null)
+    setBriefDocumentUrl(null)
+    setBriefDocumentContentType(null)
     setBriefUploaded(true)
     setBriefFileName(file.name)
     setBriefSourceText("")
     setIsExtractingBrief(true)
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      const res = await fetch("/api/documents/extract-text", { method: "POST", body: formData })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) {
+      const extractForm = new FormData()
+      extractForm.append("file", file)
+      const uploadForm = new FormData()
+      uploadForm.append("file", file)
+      uploadForm.append("folder", "rfp-briefs")
+
+      const [extractRes, uploadRes] = await Promise.all([
+        fetch("/api/documents/extract-text", { method: "POST", body: extractForm }),
+        fetch("/api/upload", { method: "POST", body: uploadForm }),
+      ])
+
+      const payload = await extractRes.json().catch(() => ({}))
+      if (!extractRes.ok) {
         throw new Error(payload?.error || "Could not read this file")
       }
       setBriefSourceText((payload.text || "").toString())
       setBriefExtractUsedFallback(Boolean(payload.usedFallback))
       setBriefExtractThin(Boolean(payload.thinExtraction) && !payload.usedFallback)
+
+      if (uploadRes.ok) {
+        const up = await uploadRes.json().catch(() => ({}))
+        if (up?.url) {
+          setBriefDocumentUrl(up.url as string)
+          setBriefDocumentContentType((up.contentType as string) || null)
+        }
+      } else {
+        const upErr = await uploadRes.json().catch(() => ({}))
+        setBriefDocumentUploadError(
+          typeof upErr?.error === "string" ? upErr.error : "Could not store file for preview"
+        )
+      }
     } catch (err) {
       setBriefUploaded(false)
       setBriefFileName("")
+      setBriefDocumentUrl(null)
+      setBriefDocumentContentType(null)
+      setBriefDocumentUploadError(null)
       setBriefExtractUsedFallback(false)
       setBriefExtractThin(false)
       setBriefUploadError(err instanceof Error ? err.message : "Brief extraction failed")
@@ -540,6 +572,9 @@ function AgencyRFPContent() {
                           setBriefSourceText(`Imported Google document: ${googleLink}`)
                           setBriefExtractUsedFallback(false)
                           setBriefExtractThin(false)
+                          setBriefDocumentUrl(null)
+                          setBriefDocumentContentType(null)
+                          setBriefDocumentUploadError(null)
                         }}
                       >
                         Import from Google
@@ -568,6 +603,9 @@ function AgencyRFPContent() {
                           setBriefSourceText(pastedContent)
                           setBriefExtractUsedFallback(false)
                           setBriefExtractThin(false)
+                          setBriefDocumentUrl(null)
+                          setBriefDocumentContentType(null)
+                          setBriefDocumentUploadError(null)
                         }}
                       >
                         Use Pasted Content
@@ -630,12 +668,28 @@ function AgencyRFPContent() {
                       setIsExtractingBrief(false)
                       setBriefExtractUsedFallback(false)
                       setBriefExtractThin(false)
+                      setBriefDocumentUrl(null)
+                      setBriefDocumentContentType(null)
+                      setBriefDocumentUploadError(null)
                     }}
                     className="border-border text-foreground-muted hover:bg-white/5"
                   >
                     Replace
                   </Button>
                 </div>
+              )}
+
+              {briefUploaded && !isExtractingBrief && briefDocumentUrl && (
+                <BriefDocumentReview
+                  url={briefDocumentUrl}
+                  fileName={briefFileName}
+                  contentType={briefDocumentContentType}
+                />
+              )}
+              {briefUploaded && !isExtractingBrief && briefDocumentUploadError && !briefDocumentUrl && (
+                <BriefDocumentReviewUnavailable
+                  message={`${briefDocumentUploadError} Text extraction still ran — you can continue with the extracted text below. Re-upload the file to try preview again.`}
+                />
               )}
 
               <div className="mt-6 space-y-2">
