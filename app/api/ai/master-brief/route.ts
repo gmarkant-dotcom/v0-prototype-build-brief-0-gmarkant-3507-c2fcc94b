@@ -35,12 +35,60 @@ export async function POST(req: Request) {
     const clientName = (body.clientName || "Client TBD").toString()
     const briefText = (body.briefText || "").toString()
     const templateHint = (body.templateHint || "Default template").toString()
+    const templateText = (body.templateText || "").toString().trim()
 
     if (!briefText.trim()) {
       return NextResponse.json({ error: "Brief content is required" }, { status: 400 })
     }
 
-    const prompt = `You are generating a structured master brief for an agency RFP workflow.
+    const hasTemplateBody = templateText.length > 0
+
+    const prompt = hasTemplateBody
+      ? `You are producing a structured master brief for an agency RFP workflow by integrating SOURCE CLIENT BRIEF material into the OUTPUT FORMAT TEMPLATE below.
+
+The OUTPUT FORMAT TEMPLATE is the canonical structure: follow its section order, headings, implied fields, tone, and level of detail. Map and synthesize content from the CLIENT BRIEF into that structure. Do not invent facts; you may use neutral placeholders only where the brief is silent and the template expects a field.
+
+Return ONLY valid JSON. No markdown.
+
+Schema:
+{
+  "projectName": string,
+  "client": string,
+  "overview": string,
+  "objectives": string[],
+  "totalBudget": string,
+  "timeline": string,
+  "scopeItems": [
+    {
+      "id": string,
+      "name": string,
+      "description": string,
+      "estimatedBudget": string,
+      "timeline": string
+    }
+  ]
+}
+
+Rules:
+- Keep scopeItems between 5 and 10 unless the template clearly implies fewer or more; prefer 5–10.
+- Name scope items and descriptions so they mirror the template’s deliverable groupings where possible.
+- If budget/timeline missing in the brief, use practical placeholders (e.g. "TBD").
+
+Project context:
+Project Name: ${projectName}
+Client Name: ${clientName}
+Template label (reference): ${templateHint}
+
+---
+
+OUTPUT FORMAT TEMPLATE (structure and style to follow):
+${templateText}
+
+---
+
+CLIENT BRIEF (source material to integrate):
+${briefText}`
+      : `You are generating a structured master brief for an agency RFP workflow.
 Return ONLY valid JSON. No markdown.
 
 Schema:

@@ -92,6 +92,11 @@ function AgencyRFPContent() {
   const [uploadedSowTemplate, setUploadedSowTemplate] = useState<{ name: string; url: string } | null>(null)
   const [isUploadingRfpTemplate, setIsUploadingRfpTemplate] = useState(false)
   const [isUploadingSowTemplate, setIsUploadingSowTemplate] = useState(false)
+  /** Extracted text from uploaded RFP output template (drives AI structure) */
+  const [templateSourceText, setTemplateSourceText] = useState("")
+  const [briefUploadError, setBriefUploadError] = useState<string | null>(null)
+  const [rfpTemplateUploadError, setRfpTemplateUploadError] = useState<string | null>(null)
+  const [isExtractingBrief, setIsExtractingBrief] = useState(false)
   
   // Step 2: Master RFP (AI generated)
   const [masterRfp, setMasterRfp] = useState<{
@@ -125,14 +130,32 @@ function AgencyRFPContent() {
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   const [broadcastComplete, setBroadcastComplete] = useState(false)
   
-  // Handle file upload
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle client brief file: extract text for AI (same pipeline as template)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      if (!checkFeatureAccess("file uploads")) return
-      setBriefUploaded(true)
-      setBriefFileName(file.name)
-      setBriefSourceText(`Uploaded file: ${file.name}`)
+    if (!file) return
+    if (!checkFeatureAccess("file uploads")) return
+    setBriefUploadError(null)
+    setBriefUploaded(true)
+    setBriefFileName(file.name)
+    setBriefSourceText("")
+    setIsExtractingBrief(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await fetch("/api/documents/extract-text", { method: "POST", body: formData })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(payload?.error || "Could not read this file")
+      }
+      setBriefSourceText((payload.text || "").toString())
+    } catch (err) {
+      setBriefUploaded(false)
+      setBriefFileName("")
+      setBriefUploadError(err instanceof Error ? err.message : "Brief extraction failed")
+    } finally {
+      setIsExtractingBrief(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
     }
   }
   
@@ -153,10 +176,12 @@ function AgencyRFPContent() {
         "Default RFP template"
 
       const sourceText =
+        briefSourceText.trim() ||
         pastedContent.trim() ||
         googleLink.trim() ||
-        briefSourceText ||
         briefFileName
+
+      const templateBody = templateSourceText.trim()
 
       const response = await fetch("/api/ai/master-brief", {
         method: "POST",
@@ -166,6 +191,7 @@ function AgencyRFPContent() {
           clientName: selectedProject?.client || "Client TBD",
           briefText: sourceText,
           templateHint,
+          ...(templateBody ? { templateText: templateBody } : {}),
         }),
       })
 
@@ -372,9 +398,9 @@ function AgencyRFPContent() {
           <div className="space-y-6">
             <GlassCard>
               <GlassCardHeader
-                label="Step 1"
-                title="Upload Client Brief"
-                description="Upload your client brief document or paste content. The AI will extract key information to generate a comprehensive Master RFP."
+                label="Step 1a"
+                title="Client brief (source)"
+                description="Upload the client’s brief or paste text. We extract the text so the model can use your real requirements—not just the file name."
               />
               
               {/* Upload Options */}
@@ -439,6 +465,7 @@ function AgencyRFPContent() {
                         className="bg-accent text-accent-foreground hover:bg-accent/90"
                         disabled={!googleLink}
                         onClick={() => {
+                          setBriefUploadError(null)
                           setBriefUploaded(true)
                           setBriefFileName("Google Doc imported")
                           setBriefSourceText(`Imported Google document: ${googleLink}`)
@@ -464,6 +491,7 @@ function AgencyRFPContent() {
                         className="bg-accent text-accent-foreground hover:bg-accent/90"
                         disabled={!pastedContent}
                         onClick={() => {
+                          setBriefUploadError(null)
                           setBriefUploaded(true)
                           setBriefFileName("Pasted content")
                           setBriefSourceText(pastedContent)
@@ -476,15 +504,27 @@ function AgencyRFPContent() {
                 </div>
               )}
               
+              {briefUploadError && (
+                <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+                  {briefUploadError}
+                </div>
+              )}
+
               {briefUploaded && (
                 <div className="mt-6 p-4 rounded-lg bg-success/10 border border-success/30 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
-                      <FileCheck className="w-5 h-5 text-success" />
+                      {isExtractingBrief ? (
+                        <Loader2 className="w-5 h-5 text-accent animate-spin" />
+                      ) : (
+                        <FileCheck className="w-5 h-5 text-success" />
+                      )}
                     </div>
                     <div>
                       <div className="font-display font-bold text-sm text-foreground">{briefFileName}</div>
-                      <div className="font-mono text-[10px] text-success">Brief uploaded successfully</div>
+                      <div className="font-mono text-[10px] text-success">
+                        {isExtractingBrief ? "Extracting text from document…" : "Ready for AI — text extracted from your file"}
+                      </div>
                     </div>
                   </div>
                   <Button
@@ -494,6 +534,8 @@ function AgencyRFPContent() {
                       setBriefUploaded(false)
                       setBriefFileName("")
                       setBriefSourceText("")
+                      setBriefUploadError(null)
+                      setIsExtractingBrief(false)
                     }}
                     className="border-border text-foreground-muted hover:bg-white/5"
                   >
@@ -503,24 +545,32 @@ function AgencyRFPContent() {
               )}
             </GlassCard>
             
-            {/* Template Selection */}
+            {/* Output format template + SOW (RFP format drives Generate Master RFP) */}
             <GlassCard>
               <GlassCardHeader
-                label="Optional"
-                title="Select Output Templates"
-                description="Choose your preferred RFP and SOW templates. Generated documents will match these formats."
+                label="Step 1b"
+                title="Output template (your format)"
+                description="Upload the Word/PDF structure you want the Master RFP to follow. The AI maps the client brief into this layout (sections, headings, and tone)."
               />
               
               <div className="grid grid-cols-2 gap-6 mt-4">
                 <div>
                   <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
-                    RFP Template
+                    RFP output template
                   </label>
                   <div className="space-y-2">
                     {(isDemoMode() ? demoTemplates : []).filter(t => t.type === "rfp").map((template) => (
                       <button
                         key={template.id}
-                        onClick={() => setSelectedRfpTemplate(template.id === selectedRfpTemplate ? null : template.id)}
+                        onClick={() => {
+                          const next = template.id === selectedRfpTemplate ? null : template.id
+                          setSelectedRfpTemplate(next)
+                          if (next) {
+                            setUploadedRfpTemplate(null)
+                            setTemplateSourceText("")
+                            setRfpTemplateUploadError(null)
+                          }
+                        }}
                         className={cn(
                           "w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-3",
                           selectedRfpTemplate === template.id
@@ -538,64 +588,107 @@ function AgencyRFPContent() {
                     ))}
                     {/* Uploaded RFP Template */}
                     {uploadedRfpTemplate && (
-                      <button
-                        onClick={() => {
-                          setSelectedRfpTemplate('uploaded')
-                          setSelectedSowTemplate(null)
-                        }}
-                        className={cn(
-                          "w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-3",
-                          selectedRfpTemplate === 'uploaded'
-                            ? "border-accent bg-accent/10"
-                            : "border-border hover:border-white/30"
-                        )}
-                      >
-                        <FileText className="w-5 h-5 text-green-400" />
-                        <div className="flex-1">
-                          <div className="font-display font-bold text-sm text-foreground">{uploadedRfpTemplate.name}</div>
-                          <div className="font-mono text-[10px] text-foreground-muted">Uploaded Template</div>
-                        </div>
-                        {selectedRfpTemplate === 'uploaded' && <Check className="w-4 h-4 text-accent" />}
-                      </button>
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedRfpTemplate("uploaded")
+                            setSelectedSowTemplate(null)
+                          }}
+                          className={cn(
+                            "w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-3",
+                            selectedRfpTemplate === "uploaded"
+                              ? "border-accent bg-accent/10"
+                              : "border-border hover:border-white/30"
+                          )}
+                        >
+                          <FileText className="w-5 h-5 text-green-400" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-display font-bold text-sm text-foreground truncate">{uploadedRfpTemplate.name}</div>
+                            <div className="font-mono text-[10px] text-foreground-muted">
+                              {templateSourceText
+                                ? `Format loaded — ${templateSourceText.length.toLocaleString()} characters`
+                                : "No readable format text"}
+                            </div>
+                          </div>
+                          {selectedRfpTemplate === "uploaded" && <Check className="w-4 h-4 text-accent shrink-0" />}
+                        </button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-foreground-muted hover:text-foreground h-8"
+                          onClick={() => {
+                            setUploadedRfpTemplate(null)
+                            setTemplateSourceText("")
+                            setSelectedRfpTemplate(null)
+                            setRfpTemplateUploadError(null)
+                          }}
+                        >
+                          Remove template
+                        </Button>
+                      </div>
                     )}
                     <label className="w-full text-left p-3 rounded-lg border border-dashed border-border hover:border-accent/50 transition-colors flex items-center gap-3 cursor-pointer">
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,.pptx"
+                        accept=".pdf,.docx,.txt,.md"
                         className="sr-only"
                         onChange={async (e) => {
                           const file = e.target.files?.[0]
                           if (!file) return
-                          if (!checkFeatureAccess("template uploads")) return
+                          if (!checkFeatureAccess("file uploads")) return
+                          setRfpTemplateUploadError(null)
                           setIsUploadingRfpTemplate(true)
                           try {
                             const formData = new FormData()
-                            formData.append('file', file)
-                            formData.append('folder', 'templates')
-                            const response = await fetch('/api/upload', { method: 'POST', body: formData })
-                            if (response.ok) {
-                              const result = await response.json()
-                              setUploadedRfpTemplate({ name: file.name, url: result.url })
-                              setSelectedRfpTemplate('uploaded')
+                            formData.append("file", file)
+                            formData.append("folder", "templates")
+                            const uploadRes = await fetch("/api/upload", { method: "POST", body: formData })
+                            const uploadPayload = await uploadRes.json().catch(() => ({}))
+                            if (!uploadRes.ok) {
+                              throw new Error(uploadPayload?.error || "Template upload failed")
                             }
-                          } catch (error) {
-                            console.error('Upload error:', error)
+
+                            const extractFd = new FormData()
+                            extractFd.append("file", file)
+                            const extractRes = await fetch("/api/documents/extract-text", {
+                              method: "POST",
+                              body: extractFd,
+                            })
+                            const extractPayload = await extractRes.json().catch(() => ({}))
+                            if (!extractRes.ok) {
+                              throw new Error(extractPayload?.error || "Could not read template text")
+                            }
+
+                            setUploadedRfpTemplate({ name: file.name, url: uploadPayload.url })
+                            setTemplateSourceText((extractPayload.text || "").toString())
+                            setSelectedRfpTemplate("uploaded")
+                          } catch (err) {
+                            setRfpTemplateUploadError(err instanceof Error ? err.message : "Template upload failed")
+                            setUploadedRfpTemplate(null)
+                            setTemplateSourceText("")
+                          } finally {
+                            setIsUploadingRfpTemplate(false)
+                            e.target.value = ""
                           }
-                          setIsUploadingRfpTemplate(false)
                         }}
                       />
                       {isUploadingRfpTemplate ? (
                         <>
                           <Loader2 className="w-5 h-5 text-accent animate-spin" />
-                          <span className="font-mono text-xs text-accent">Uploading...</span>
+                          <span className="font-mono text-xs text-accent">Uploading and extracting…</span>
                         </>
                       ) : (
                         <>
                           <Plus className="w-5 h-5 text-foreground-muted" />
-                          <span className="font-mono text-xs text-foreground-muted">Upload New Template</span>
+                          <span className="font-mono text-xs text-foreground-muted">Upload output template</span>
                         </>
                       )}
                     </label>
+                    {rfpTemplateUploadError && (
+                      <p className="text-xs text-red-300 px-1">{rfpTemplateUploadError}</p>
+                    )}
                   </div>
                 </div>
                 
@@ -652,7 +745,7 @@ function AgencyRFPContent() {
                         onChange={async (e) => {
                           const file = e.target.files?.[0]
                           if (!file) return
-                          if (!checkFeatureAccess("template uploads")) return
+                          if (!checkFeatureAccess("file uploads")) return
                           setIsUploadingSowTemplate(true)
                           try {
                             const formData = new FormData()
@@ -688,9 +781,20 @@ function AgencyRFPContent() {
             </GlassCard>
             
             {/* Generate Button */}
-            <div className="flex justify-end">
+            <div className="flex flex-col items-end gap-2">
+              <p className="font-mono text-[10px] text-foreground-muted text-right max-w-md">
+                {templateSourceText.trim()
+                  ? "Using your uploaded output template to structure the Master RFP."
+                  : "Upload an RFP output template in Step 1b for best results, or continue with a default structure."}
+              </p>
               <Button
-                disabled={!briefUploaded || isGenerating || !selectedProject}
+                disabled={
+                  !briefUploaded ||
+                  isGenerating ||
+                  !selectedProject ||
+                  isExtractingBrief ||
+                  !briefSourceText.trim()
+                }
                 onClick={generateMasterRfp}
                 className="bg-accent text-accent-foreground hover:bg-accent/90 px-8"
               >
