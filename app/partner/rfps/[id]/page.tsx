@@ -348,19 +348,39 @@ export default function PartnerRfpDetailPage() {
     }
   }, [id, isDemoDetail])
 
+  useEffect(() => {
+    const submittedNow = existing?.status === "submitted" || inbox?.status === "bid_submitted"
+    const canEditNow = !submittedNow || isDemoDetail
+    console.log("[partner/rfps/detail] trace state", {
+      accessLoading,
+      savingKind,
+      canEdit: canEditNow,
+      submitted: submittedNow,
+      inboxStatus: inbox?.status,
+      responseStatus: existing?.status,
+      isDemoDetail,
+      id,
+    })
+  }, [accessLoading, savingKind, existing, inbox, isDemoDetail, id])
+
   const save = async (status: "draft" | "submitted") => {
+    console.log("[partner/rfps/detail] save() entered", {
+      status,
+      accessLoading,
+      isDemoDetail,
+      savingKindBefore: savingKind,
+    })
     setSubmitError(null)
     setSuccessMsg(null)
     if (isDemoDetail) {
+      console.log("[partner/rfps/detail] save() exit: demo detail (no network)")
       setSuccessMsg(status === "submitted" ? "Demo mode — response not saved." : "Demo mode — draft not saved.")
       return
     }
-    if (accessLoading) {
-      setSubmitError("Your account is still loading. Wait a moment and try again.")
-      return
-    }
+    // Do not block on accessLoading — PaidUserContext already allows actions while loading; server enforces auth.
     const feature = status === "submitted" ? "submit bid response" : "save draft"
     const allowed = checkFeatureAccess(feature)
+    console.log("[partner/rfps/detail] save() after checkFeatureAccess", { allowed, feature, accessLoading })
     if (!allowed) {
       setSubmitError(
         "This action isn’t available on your current plan. If an upgrade dialog opened, use that — otherwise refresh the page or contact support."
@@ -382,21 +402,25 @@ export default function PartnerRfpDetailPage() {
 
     if (status === "submitted") {
       if (!proposalText.trim()) {
+        console.log("[partner/rfps/detail] save() exit: validation proposal")
         setSubmitError("Proposal text is required to submit.")
         return
       }
       if (!isBudgetValidForSubmit(budget_proposal)) {
+        console.log("[partner/rfps/detail] save() exit: validation budget", { budget_proposal })
         setSubmitError(
           "Budget: enter a positive amount, choose a currency, and if you pick Other, specify the currency or region."
         )
         return
       }
       if (!isTimelineValidForSubmit(timeline_proposal)) {
+        console.log("[partner/rfps/detail] save() exit: validation timeline", { timeline_proposal })
         setSubmitError("Timeline: enter a positive duration and choose Days, Weeks, or Months.")
         return
       }
     }
 
+    console.log("[partner/rfps/detail] save() calling fetch…", { id, status })
     setSavingKind(status)
     try {
       const attachments = draftsToPayload(draftAttachments)
@@ -453,19 +477,26 @@ export default function PartnerRfpDetailPage() {
   }
 
   const onFileForDraft = async (draftId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("[partner/rfps/detail] onFileForDraft() entered", {
+      draftId,
+      fileCount: e.target.files?.length ?? 0,
+      accessLoading,
+    })
     const file = e.target.files?.[0]
-    if (!file) return
-    if (accessLoading) {
-      setSubmitError("Your account is still loading. Wait a moment, then try the upload again.")
+    if (!file) {
+      console.log("[partner/rfps/detail] onFileForDraft() exit: no file")
       return
     }
-    if (!checkFeatureAccess("file uploads")) {
+    const uploadAllowed = checkFeatureAccess("file uploads")
+    console.log("[partner/rfps/detail] onFileForDraft after checkFeatureAccess", { uploadAllowed, accessLoading })
+    if (!uploadAllowed) {
       setSubmitError("File uploads aren’t available on your current plan. Check the upgrade dialog or contact support.")
       return
     }
     setUploadingId(draftId)
     setSubmitError(null)
     try {
+      console.log("[partner/rfps/detail] onFileForDraft fetch POST /api/partner/rfp-bid/upload", { draftId, inboxId: id })
       const fd = new FormData()
       fd.append("file", file)
       fd.append("inboxId", id)
@@ -714,7 +745,10 @@ export default function PartnerRfpDetailPage() {
                     size="sm"
                     className={btnOutlineLight}
                     disabled={draftAttachments.length >= 6}
-                    onClick={addDraft}
+                    onClick={() => {
+                      console.log("[partner/rfps/detail] click: Add attachment button")
+                      addDraft()
+                    }}
                   >
                     <Plus className="w-4 h-4 mr-1" />
                     Add attachment
@@ -759,7 +793,10 @@ export default function PartnerRfpDetailPage() {
                       {canEdit && (
                         <button
                           type="button"
-                          onClick={() => removeDraft(d.id)}
+                          onClick={() => {
+                            console.log("[partner/rfps/detail] click: Remove row", d.id)
+                            removeDraft(d.id)
+                          }}
                           className="text-gray-500 hover:text-red-600 p-1"
                           aria-label="Remove attachment"
                         >
@@ -771,13 +808,14 @@ export default function PartnerRfpDetailPage() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          console.log("[partner/rfps/detail] click: Paste URL mode", d.id)
                           updateDraft(d.id, {
                             source: "url",
                             fileName: null,
                             storedUrl: d.source === "file" ? null : d.storedUrl,
                           })
-                        }
+                        }}
                         disabled={!canEdit}
                         className={cn(
                           "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors bg-white",
@@ -791,7 +829,10 @@ export default function PartnerRfpDetailPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => updateDraft(d.id, { source: "file", urlInput: "", storedUrl: null })}
+                        onClick={() => {
+                          console.log("[partner/rfps/detail] click: Upload file mode toggle", d.id)
+                          updateDraft(d.id, { source: "file", urlInput: "", storedUrl: null })
+                        }}
                         disabled={!canEdit}
                         className={cn(
                           "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors bg-white",
@@ -821,6 +862,7 @@ export default function PartnerRfpDetailPage() {
                     {d.source === "file" && (
                       <div>
                         <input
+                          id={`partner-rfp-file-${d.id}`}
                           ref={(el) => {
                             fileRefs.current[d.id] = el
                           }}
@@ -834,7 +876,19 @@ export default function PartnerRfpDetailPage() {
                           variant="outline"
                           className={btnOutlineLight}
                           disabled={!canEdit || uploadingId === d.id}
-                          onClick={() => fileRefs.current[d.id]?.click()}
+                          onClick={() => {
+                            const refEl = fileRefs.current[d.id]
+                            const byId =
+                              typeof document !== "undefined"
+                                ? (document.getElementById(`partner-rfp-file-${d.id}`) as HTMLInputElement | null)
+                                : null
+                            console.log("[partner/rfps/detail] click: Choose file", {
+                              draftId: d.id,
+                              hasRef: !!refEl,
+                              hasById: !!byId,
+                            })
+                            ;(refEl ?? byId)?.click()
+                          }}
                         >
                           {uploadingId === d.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -872,12 +926,16 @@ export default function PartnerRfpDetailPage() {
 
           {canEdit ? (
             <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+              {/* No wrapping <form> on this page; type=&quot;button&quot; avoids accidental document submit if a parent ever adds a form. */}
               <Button
                 type="button"
                 variant="outline"
                 className={btnOutlineLight}
                 disabled={savingKind !== null}
-                onClick={() => void save("draft")}
+                onClick={() => {
+                  console.log("[partner/rfps/detail] click: Save draft", { disabled: savingKind !== null })
+                  void save("draft")
+                }}
               >
                 {savingKind === "draft" ? (
                   <>
@@ -893,7 +951,10 @@ export default function PartnerRfpDetailPage() {
                 variant="default"
                 className={btnPrimaryDark}
                 disabled={savingKind !== null}
-                onClick={() => void save("submitted")}
+                onClick={() => {
+                  console.log("[partner/rfps/detail] click: Submit response", { disabled: savingKind !== null })
+                  void save("submitted")
+                }}
               >
                 {savingKind === "submitted" ? (
                   <>
