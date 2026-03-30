@@ -8,29 +8,95 @@ const MAX_CHARS = 120_000
 /** Treat near-empty PDF extraction as scanned/image-only. */
 const MIN_PDF_TEXT_CHARS = 80
 
-/** Supports both pdf-parse v1 (function export) and v2 (PDFParse class). */
-async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string> {
-  const mod: any = await import("pdf-parse")
+async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<string> {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs")
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+    useSystemFonts: true,
+    disableFontFace: true,
+  } as any)
+  const pdf = await loadingTask.promise
+  let out = ""
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const textContent = await page.getTextContent()
+    for (const item of textContent.items) {
+      if (item && typeof item === "object" && "str" in item) {
+        const s = (item as { str?: string }).str
+        if (s) out += `${s} `
+      }
+    }
+    out += "\n"
+  }
+  if (typeof (pdf as any).destroy === "function") await (pdf as any).destroy()
+  return out.replace(/\u0000/g, "").trim()
+}
 
-  // pdf-parse v2 style
-  if (typeof mod.PDFParse === "function") {
-    const parser = new mod.PDFParse({ data: buffer })
+/** Next.js/pdf-parse can resolve differently across envs; try multiple loaders. */
+async function extractPdfText(buffer: Buffer, fileName: string): Promise<string> {
+  const attempts: Array<{ name: string; run: () => Promise<string> }> = [
+    {
+      name: "pdf-parse/default",
+      run: async () => {
+        const mod: any = await import("pdf-parse")
+        const fn = typeof mod.default === "function" ? mod.default : typeof mod === "function" ? mod : null
+        if (!fn) return ""
+        const res = await fn(buffer)
+        return (res?.text || "").toString()
+      },
+    },
+    {
+      name: "pdf-parse/PDFParse",
+      run: async () => {
+        const mod: any = await import("pdf-parse")
+        if (typeof mod.PDFParse !== "function") return ""
+        const parser = new mod.PDFParse({ data: buffer })
+        try {
+          const res = await parser.getText()
+          return (res?.text || "").toString()
+        } finally {
+          if (typeof parser.destroy === "function") await parser.destroy()
+        }
+      },
+    },
+    {
+      name: "pdf-parse/lib/pdf-parse.js",
+      run: async () => {
+        const mod: any = await import("pdf-parse/lib/pdf-parse.js")
+        const fn = typeof mod.default === "function" ? mod.default : typeof mod === "function" ? mod : null
+        if (!fn) return ""
+        const res = await fn(buffer)
+        return (res?.text || "").toString()
+      },
+    },
+    {
+      name: "pdfjs-dist",
+      run: async () => extractPdfTextWithPdfJs(buffer),
+    },
+  ]
+
+  let best = ""
+  for (const attempt of attempts) {
     try {
-      const result = await parser.getText()
-      return (result?.text || "").toString()
-    } finally {
-      if (typeof parser.destroy === "function") await parser.destroy()
+      const raw = await attempt.run()
+      const normalized = raw.replace(/\u0000/g, "").replace(/\s+/g, " ").trim()
+      console.log("[extract-text][pdf-attempt]", {
+        fileName,
+        parser: attempt.name,
+        extractedChars: normalized.length,
+        preview: normalized.slice(0, 200),
+      })
+      if (normalized.length > best.length) best = normalized
+      if (normalized.length >= MIN_PDF_TEXT_CHARS) return normalized
+    } catch (error) {
+      console.error("[extract-text][pdf-attempt-error]", {
+        fileName,
+        parser: attempt.name,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
-
-  // pdf-parse v1 style
-  const fn = typeof mod.default === "function" ? mod.default : typeof mod === "function" ? mod : null
-  if (fn) {
-    const result = await fn(buffer)
-    return (result?.text || "").toString()
-  }
-
-  return ""
+  return best
 }
 
 export async function POST(req: Request) {
@@ -72,6 +138,11 @@ export async function POST(req: Request) {
     const lower = file.name.toLowerCase()
     let text = ""
     let warning: string | null = null
+    console.log("[extract-text][upload]", {
+      fileName: file.name,
+      contentType: file.type || "unknown",
+      sizeBytes: buffer.length,
+    })
 
     try {
       if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv")) {
@@ -82,18 +153,7 @@ export async function POST(req: Request) {
       } else if (lower.endsWith(".doc")) {
         warning = "Legacy .doc is not directly readable. Please upload .docx or paste text."
       } else if (lower.endsWith(".pdf")) {
-        text = await extractPdfTextWithPdfParse(buffer)
-        const normalizedPreview = text
-          .replace(/\u0000/g, "")
-          .replace(/\s+/g, " ")
-          .trim()
-        const preview = normalizedPreview.slice(0, 200)
-        // Diagnostic log for production debugging (Vercel function logs).
-        console.log("[extract-text][pdf-parse]", {
-          fileName: file.name,
-          extractedChars: normalizedPreview.length,
-          preview,
-        })
+        text = await extractPdfText(buffer, file.name)
       } else if (lower.endsWith(".pptx") || lower.endsWith(".ppt")) {
         warning = "PowerPoint text extraction is limited. Please paste relevant text manually."
       } else {
