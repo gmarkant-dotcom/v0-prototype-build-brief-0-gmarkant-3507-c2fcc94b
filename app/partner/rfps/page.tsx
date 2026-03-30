@@ -240,7 +240,10 @@ export default function PartnerRFPsPage() {
       setInboxLoading(true)
       setInboxError(null)
       try {
-        const res = await fetch("/api/partner/rfps")
+        const res = await fetch("/api/partner/rfps", {
+          cache: "no-store",
+          credentials: "same-origin",
+        })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error((data?.error as string) || "Could not load RFPs")
         const rows = (data.rfps || []) as PartnerInboxRow[]
