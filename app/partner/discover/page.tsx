@@ -29,6 +29,13 @@ interface AccessRequest {
   status: "pending" | "approved" | "declined"
 }
 
+interface SharedProject {
+  id: string
+  title: string
+  status?: string
+  updated_at?: string
+}
+
 // Demo agencies for demonstration
 const demoAgencies: Agency[] = [
   {
@@ -71,6 +78,9 @@ export default function DiscoverAgenciesPage() {
   const [requestMessage, setRequestMessage] = useState("")
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [selectedAgency, setSelectedAgency] = useState<Agency | null>(null)
+  const [showAgencyProfileModal, setShowAgencyProfileModal] = useState(false)
+  const [agencyProfileProjects, setAgencyProfileProjects] = useState<SharedProject[]>([])
+  const [isLoadingAgencyProfile, setIsLoadingAgencyProfile] = useState(false)
 
   useEffect(() => {
     loadAgencies()
@@ -288,6 +298,45 @@ export default function DiscoverAgenciesPage() {
     return myRequests.find(req => req.agency_id === agencyId)
   }
 
+  const openAgencyProfile = async (agency: Agency) => {
+    setSelectedAgency(agency)
+    setShowAgencyProfileModal(true)
+    setIsLoadingAgencyProfile(true)
+
+    if (isDemo) {
+      setAgencyProfileProjects([
+        { id: "demo-project-1", title: "NWSL Creator Content Series", status: "active", updated_at: "2026-03-01" },
+      ])
+      setIsLoadingAgencyProfile(false)
+      return
+    }
+
+    try {
+      const response = await fetch("/api/projects")
+      if (!response.ok) {
+        setAgencyProfileProjects([])
+        setIsLoadingAgencyProfile(false)
+        return
+      }
+      const payload = await response.json()
+      const rows = payload.projects || []
+      const shared = rows
+        .filter((p: any) => p?.agency?.id === agency.id)
+        .map((p: any) => ({
+          id: p.id,
+          title: p.title || p.name || "Untitled Project",
+          status: p.status,
+          updated_at: p.updated_at || p.created_at,
+        }))
+
+      setAgencyProfileProjects(shared)
+    } catch (error) {
+      console.error("Error loading agency profile projects:", error)
+      setAgencyProfileProjects([])
+    }
+    setIsLoadingAgencyProfile(false)
+  }
+
   const filteredAgencies = agencies.filter(agency => {
     const query = searchQuery.toLowerCase()
     const displayName = agency.company_name || agency.full_name || agency.email || ""
@@ -404,10 +453,24 @@ export default function DiscoverAgenciesPage() {
                       
                       <div className="mt-4">
                         {agency.collaborated ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0C3535]/10 text-[#0C3535] text-xs font-medium">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Worked Together
-                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => openAgencyProfile(agency)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0C3535]/10 text-[#0C3535] text-xs font-medium hover:bg-[#0C3535]/20"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Worked Together
+                            </button>
+                            <Button
+                              type="button"
+                              onClick={() => openAgencyProfile(agency)}
+                              variant="outline"
+                              className="h-8 px-3 border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10 text-xs"
+                            >
+                              View Profile
+                            </Button>
+                          </div>
                         ) : request?.status === "approved" ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-medium">
                             <CheckCircle className="w-3.5 h-3.5" />
@@ -494,6 +557,74 @@ export default function DiscoverAgenciesPage() {
                   >
                     {requestingAgency === selectedAgency.id ? "Sending..." : "Send Request"}
                   </Button>
+                </div>
+              </div>
+            </GlassCard>
+          </div>
+        )}
+
+        {/* Agency Profile Modal */}
+        {showAgencyProfileModal && selectedAgency && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAgencyProfileModal(false)}>
+            <GlassCard className="w-full max-w-2xl bg-white" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center">
+                    <Building2 className="w-5 h-5 text-[#0C3535]" />
+                  </div>
+                  <div>
+                    <h2 className="font-display font-bold text-xl text-gray-900">
+                      {selectedAgency.company_name || selectedAgency.full_name || selectedAgency.email || "Agency"}
+                    </h2>
+                    <p className="font-mono text-xs text-gray-500">Agency profile + collaboration history</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAgencyProfileModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-lg border border-gray-200 p-4">
+                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Contact Person</div>
+                    <div className="text-sm text-gray-900 font-medium">
+                      {selectedAgency.full_name || selectedAgency.company_name || "Not provided"}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {selectedAgency.email || "No contact email available"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 p-4">
+                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Agency Details</div>
+                    <div className="text-sm text-gray-700">{selectedAgency.location || "Location not provided"}</div>
+                    <div className="text-sm text-gray-700 mt-1">{selectedAgency.website || "Website not provided"}</div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 p-4">
+                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-3">
+                    Past Projects Worked Together
+                  </div>
+                  {isLoadingAgencyProfile ? (
+                    <div className="text-sm text-gray-500">Loading shared projects...</div>
+                  ) : agencyProfileProjects.length === 0 ? (
+                    <div className="text-sm text-gray-500">No shared projects found yet.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {agencyProfileProjects.map((project) => (
+                        <div key={project.id} className="flex items-center justify-between rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{project.title}</div>
+                            {project.updated_at && (
+                              <div className="text-xs text-gray-500">Updated {new Date(project.updated_at).toLocaleDateString()}</div>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-600 capitalize">{project.status || "active"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </GlassCard>
