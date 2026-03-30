@@ -131,6 +131,7 @@ function AgencyRFPContent() {
     timeline: string
   } | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [generateMasterBriefError, setGenerateMasterBriefError] = useState<string | null>(null)
   
   // Step 3: Allocate Scope
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>([])
@@ -188,7 +189,10 @@ function AgencyRFPContent() {
 
   // Generate Master RFP (AI-backed)
   const generateMasterRfp = async () => {
+    setGenerateMasterBriefError(null)
     setIsGenerating(true)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 125_000)
     try {
       const templateHint =
         uploadedRfpTemplate?.name ||
@@ -210,6 +214,7 @@ function AgencyRFPContent() {
       const response = await fetch("/api/ai/master-brief", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           projectName: selectedProject?.name || "New Project",
           clientName: selectedProject?.client || "Client TBD",
@@ -219,11 +224,15 @@ function AgencyRFPContent() {
         }),
       })
 
+      const payload = await response.json().catch(() => ({}))
+
       if (!response.ok) {
-        throw new Error("Failed to generate master brief")
+        const base = (payload?.error || "Failed to generate master brief").toString()
+        const hint = payload?.hint ? ` ${payload.hint}` : ""
+        const status = response.status ? ` (HTTP ${response.status})` : ""
+        throw new Error(base + hint + status)
       }
 
-      const payload = await response.json()
       const generated = payload.masterBrief || {}
       const normalizedScope = (generated.scopeItems || []).map((item: any, index: number) => ({
         id: item.id || `${index + 1}`,
@@ -249,7 +258,17 @@ function AgencyRFPContent() {
       setCurrentStep(2)
     } catch (error) {
       console.error("Master brief generation failed:", error)
+      if (error instanceof Error && error.name === "AbortError") {
+        setGenerateMasterBriefError(
+          "Request timed out or was cancelled. Claude can take 30–90s. On Vercel Hobby, serverless functions are limited to ~10s—increase max duration (Pro) or set export const maxDuration on this route."
+        )
+      } else {
+        setGenerateMasterBriefError(
+          error instanceof Error ? error.message : "Something went wrong. Check the browser Network tab for /api/ai/master-brief."
+        )
+      }
     } finally {
+      clearTimeout(timeoutId)
       setIsGenerating(false)
     }
   }
@@ -853,6 +872,11 @@ function AgencyRFPContent() {
                   </span>
                 )}
               </Button>
+              {generateMasterBriefError && (
+                <div className="w-full max-w-lg ml-auto p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 text-right">
+                  {generateMasterBriefError}
+                </div>
+              )}
             </div>
             {!selectedProject && (
               <p className="mt-3 font-mono text-xs text-warning text-right">

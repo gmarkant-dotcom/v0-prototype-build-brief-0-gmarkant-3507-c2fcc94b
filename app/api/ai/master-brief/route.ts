@@ -2,6 +2,12 @@ import { NextResponse } from "next/server"
 import { generateText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 
+/** Allow long Claude calls on Vercel (raise in dashboard if plan caps lower). */
+export const maxDuration = 120
+
+const MAX_BRIEF_CHARS = 100_000
+const MAX_TEMPLATE_CHARS = 80_000
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient()
@@ -33,9 +39,16 @@ export async function POST(req: Request) {
     const body = await req.json()
     const projectName = (body.projectName || "New Project").toString()
     const clientName = (body.clientName || "Client TBD").toString()
-    const briefText = (body.briefText || "").toString()
+    let briefText = (body.briefText || "").toString()
     const templateHint = (body.templateHint || "Default template").toString()
-    const templateText = (body.templateText || "").toString().trim()
+    let templateText = (body.templateText || "").toString().trim()
+
+    if (briefText.length > MAX_BRIEF_CHARS) {
+      briefText = `${briefText.slice(0, MAX_BRIEF_CHARS)}\n\n[... brief truncated for processing ...]`
+    }
+    if (templateText.length > MAX_TEMPLATE_CHARS) {
+      templateText = `${templateText.slice(0, MAX_TEMPLATE_CHARS)}\n\n[... template truncated ...]`
+    }
 
     if (!briefText.trim()) {
       return NextResponse.json({ error: "Brief content is required" }, { status: 400 })
@@ -121,13 +134,31 @@ ${briefText}`
 
     const parsed = tryParseJsonObject(result.text)
     if (!parsed) {
-      return NextResponse.json({ error: "AI response parse failed" }, { status: 500 })
+      return NextResponse.json(
+        {
+          error: "AI response parse failed",
+          hint: "Try again, or shorten the brief/template. If this persists, check ANTHROPIC_API_KEY on the server.",
+        },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ masterBrief: parsed })
   } catch (error) {
     console.error("master-brief error:", error)
-    return NextResponse.json({ error: "Failed to generate master brief" }, { status: 500 })
+    const msg = error instanceof Error ? error.message : String(error)
+    const missingKey =
+      /API key|api key|ANTHROPIC|authentication|401|unauthorized/i.test(msg) &&
+      !/Subscription required/i.test(msg)
+    return NextResponse.json(
+      {
+        error: missingKey
+          ? "AI is not configured (missing or invalid API key)."
+          : "Failed to generate master brief",
+        detail: process.env.NODE_ENV === "development" ? msg : undefined,
+      },
+      { status: 500 }
+    )
   }
 }
 
