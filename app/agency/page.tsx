@@ -134,7 +134,6 @@ function AgencyRFPContent() {
   /** User accepts TBD skeleton when extraction is missing/thin (no 80-char paste required) */
   const [acceptLimitedBrief, setAcceptLimitedBrief] = useState(false)
 
-  const MIN_BRIEF_AUGMENT_CHARS = 80
   const MIN_COMBINED_BRIEF_CHARS = 200
   const combinedBriefForGate = buildMasterBriefSourceText({
     briefSourceText,
@@ -143,18 +142,15 @@ function AgencyRFPContent() {
     briefFileName,
     briefAugmentText,
   }).trim()
-  /** No real PDF text: must paste real brief. Thin extract: need enough total characters for AI to work with */
-  const baseQualityBlock =
-    briefExtractUsedFallback
-      ? briefAugmentText.trim().length < MIN_BRIEF_AUGMENT_CHARS
-      : briefExtractThin && combinedBriefForGate.length < MIN_COMBINED_BRIEF_CHARS
+  /** Thin extract: need enough total characters for AI to work with. Fallback PDFs can proceed in limited mode. */
+  const baseQualityBlock = briefExtractThin && combinedBriefForGate.length < MIN_COMBINED_BRIEF_CHARS
   const briefBlockedByQuality = acceptLimitedBrief ? false : baseQualityBlock
   const briefPasteProminent =
     !acceptLimitedBrief &&
     (briefExtractUsedFallback ||
       (briefExtractThin && combinedBriefForGate.length < MIN_COMBINED_BRIEF_CHARS))
   const showLimitedBriefOptIn =
-    baseQualityBlock || (acceptLimitedBrief && (briefExtractUsedFallback || briefExtractThin))
+    briefExtractUsedFallback || baseQualityBlock || (acceptLimitedBrief && briefExtractThin)
 
   useEffect(() => {
     if (!baseQualityBlock) setAcceptLimitedBrief(false)
@@ -230,8 +226,11 @@ function AgencyRFPContent() {
       }
       setBriefExtractWarning(typeof payload?.warning === "string" ? payload.warning : null)
       setBriefSourceText((payload.text || "").toString())
-      setBriefExtractUsedFallback(Boolean(payload.usedFallback))
-      setBriefExtractThin(Boolean(payload.thinExtraction) && !payload.usedFallback)
+      const usedFallback = Boolean(payload.usedFallback)
+      setBriefExtractUsedFallback(usedFallback)
+      setBriefExtractThin(Boolean(payload.thinExtraction) && !usedFallback)
+      // Default to limited-brief mode for scanned/image PDFs so Generate is not blocked.
+      setAcceptLimitedBrief(usedFallback)
 
       if (uploadRes.ok) {
         const up = await uploadRes.json().catch(() => ({}))
@@ -678,7 +677,7 @@ function AgencyRFPContent() {
                           {briefSourceText.length.toLocaleString()} characters from the file will be sent (before any pasted add-on)
                           {briefExtractUsedFallback && (
                             <span className="text-amber-300 block mt-1 max-w-md">
-                              This PDF looks like a scan or image export — we only see the file name, not the brief. Paste the full client brief in the box below (at least {MIN_BRIEF_AUGMENT_CHARS} characters) or use Paste Text, or export from Word as .docx with real text.
+                              This PDF looks like a scan or image export, so no selectable text was found. Generate is available in limited mode (TBD skeleton), or switch to Paste Text / a text-based PDF for a client-specific result.
                             </span>
                           )}
                           {briefExtractThin && !briefExtractUsedFallback && (
@@ -739,7 +738,7 @@ function AgencyRFPContent() {
                   placeholder={
                     briefPasteProminent
                       ? briefExtractUsedFallback
-                        ? `Paste the full client RFP/brief here (${MIN_BRIEF_AUGMENT_CHARS}+ characters). The upload had no selectable text — the AI would only see the file name otherwise.`
+                        ? "Optional: paste the real client brief here for a client-specific output. Without pasted text, generation uses limited mode."
                         : `Paste missing sections so the combined brief is at least ${MIN_COMBINED_BRIEF_CHARS} characters (${combinedBriefForGate.length}/${MIN_COMBINED_BRIEF_CHARS} now).`
                       : acceptLimitedBrief
                         ? "Optional: paste real brief text for a client-specific Master RFP. Without it, output stays generic (TBD)."
@@ -770,9 +769,7 @@ function AgencyRFPContent() {
                 )}
                 {briefBlockedByQuality && (
                   <p className="font-mono text-[10px] text-amber-300">
-                    {briefExtractUsedFallback
-                      ? `Paste at least ${MIN_BRIEF_AUGMENT_CHARS} characters of real brief content to enable Generate (${briefAugmentText.trim().length}/${MIN_BRIEF_AUGMENT_CHARS} in the box above), or enable “Generate with limited brief” below.`
-                      : `Combined brief is too short for reliable output (${combinedBriefForGate.length}/${MIN_COMBINED_BRIEF_CHARS} characters). Paste more detail above, or enable “Generate with limited brief” below.`}
+                    Combined brief is too short for reliable output (${combinedBriefForGate.length}/${MIN_COMBINED_BRIEF_CHARS} characters). Paste more detail above, or enable “Generate with limited brief” below.
                   </p>
                 )}
                 {briefAugmentText.trim() && (
