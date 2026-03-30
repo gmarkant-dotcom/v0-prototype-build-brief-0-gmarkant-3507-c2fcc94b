@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { AgencyLayout } from "@/components/agency-layout"
 import { StageHeader } from "@/components/stage-header"
 import { SelectedProjectHeader } from "@/components/selected-project-header"
@@ -45,6 +45,22 @@ type NewRecipient = {
   email: string
   name: string
   requireNda: boolean
+}
+
+/** Row from GET /api/partnerships (agency view) */
+type PartnershipApiRow = {
+  id: string
+  status: string
+  partner_id: string | null
+  partner_email: string | null
+  invited_at: string | null
+  accepted_at: string | null
+  partner: {
+    id: string
+    email: string
+    full_name: string | null
+    company_name: string | null
+  } | null
 }
 
 /** Primary brief + optional user augment, sent to /api/ai/master-brief */
@@ -92,10 +108,77 @@ function AgencyRFPContent() {
   const { selectedProject } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
-  // Use demo partners only in demo mode - production shows empty (partners come from DB)
   const isDemo = isDemoMode()
-  const existingPartners = isDemo ? demoPartners : []
-  
+  const [poolPartners, setPoolPartners] = useState<Partner[]>([])
+  const [poolPartnersLoading, setPoolPartnersLoading] = useState(false)
+  const [poolPartnersError, setPoolPartnersError] = useState<string | null>(null)
+  /** Invited but not yet active — shown read-only under the pool */
+  const [pendingPartnerInvites, setPendingPartnerInvites] = useState<{ id: string; email: string }[]>([])
+
+  const existingPartners = isDemo ? demoPartners : poolPartners
+
+  useEffect(() => {
+    if (isDemo) return
+    let cancelled = false
+    ;(async () => {
+      setPoolPartnersLoading(true)
+      setPoolPartnersError(null)
+      try {
+        const res = await fetch("/api/partnerships")
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error((data?.error as string) || "Failed to load partners")
+        const rows = (data.partnerships || []) as PartnershipApiRow[]
+
+        const active = rows
+          .filter((p) => p.status === "active" && p.partner?.id)
+          .sort((a, b) => {
+            const ta = a.accepted_at ? new Date(a.accepted_at).getTime() : 0
+            const tb = b.accepted_at ? new Date(b.accepted_at).getTime() : 0
+            return tb - ta
+          })
+
+        const mapped: Partner[] = active.map((p) => {
+          const pr = p.partner!
+          const label = pr.full_name?.trim() || pr.company_name?.trim() || pr.email || "Partner"
+          const sub = pr.company_name?.trim() || pr.email || "Partner"
+          return {
+            id: pr.id,
+            name: label,
+            type: "agency",
+            discipline: sub,
+            bookmarked: true,
+            ndaSigned: false,
+            msaApproved: false,
+          }
+        })
+
+        const pending = rows
+          .filter((p) => p.status === "pending")
+          .map((p) => ({
+            id: p.id,
+            email: (p.partner_email || p.partner?.email || "").trim(),
+          }))
+          .filter((x) => x.email.length > 0)
+
+        if (!cancelled) {
+          setPoolPartners(mapped)
+          setPendingPartnerInvites(pending)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setPoolPartnersError(e instanceof Error ? e.message : "Failed to load partners")
+          setPoolPartners([])
+          setPendingPartnerInvites([])
+        }
+      } finally {
+        if (!cancelled) setPoolPartnersLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo])
+
   // Step state (1-6)
   const [currentStep, setCurrentStep] = useState(1)
   
@@ -1223,7 +1306,7 @@ function AgencyRFPContent() {
               <GlassCardHeader
                 label="Step 5"
                 title="Select Recipients"
-                description="For each outsourced deliverable, choose partners from your pool or invite new contacts. Partners without a signed NDA will receive an NDA request with the RFP."
+                description="Confirmed partners from your account load automatically below. For each outsourced deliverable, pick recipients or invite a new contact by email."
               />
             </GlassCard>
             
@@ -1295,6 +1378,32 @@ function AgencyRFPContent() {
                     <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
                       From Your Partner Pool
                     </label>
+                    {!isDemo && poolPartnersLoading && (
+                      <div className="flex items-center gap-2 py-4 font-mono text-xs text-foreground-muted">
+                        <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                        Loading partners…
+                      </div>
+                    )}
+                    {!isDemo && poolPartnersError && (
+                      <p className="text-xs text-red-300 py-2">{poolPartnersError}</p>
+                    )}
+                    {!isDemo && !poolPartnersLoading && !poolPartnersError && poolPartners.length === 0 && (
+                      <p className="text-xs text-foreground-muted py-2">
+                        No active partners yet. Invite a partner from your network; they appear here after they accept the partnership.
+                      </p>
+                    )}
+                    {!isDemo && pendingPartnerInvites.length > 0 && (
+                      <div className="mb-3 p-2 rounded-md border border-border/60 bg-white/[0.02]">
+                        <div className="font-mono text-[9px] text-foreground-muted uppercase mb-1">Pending invitations</div>
+                        <ul className="space-y-1">
+                          {pendingPartnerInvites.map((inv) => (
+                            <li key={inv.id} className="font-mono text-[10px] text-foreground-muted">
+                              {inv.email} <span className="text-foreground-muted/60">(awaiting acceptance)</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <div className="space-y-2 max-h-[280px] overflow-y-auto pr-2">
                       {existingPartners.map((partner) => {
                         const isSelected = (selectedPartners[item.id] || []).includes(partner.id)
