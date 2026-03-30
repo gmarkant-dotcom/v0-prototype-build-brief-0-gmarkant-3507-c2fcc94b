@@ -6,13 +6,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Avoid bundling issues for PDF/Office text extraction on Vercel
-  serverExternalPackages: [
-    "pdfjs-dist",
-    "pdf-parse",
-    "mammoth",
-    "@napi-rs/canvas",
-  ],
+  // Run pdf tooling as native Node modules (Turbopack must not bundle them).
+  serverExternalPackages: ["pdfjs-dist", "pdf-parse"],
 }
 
 export default nextConfig

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import mammoth from "mammoth"
 import { createClient } from "@/lib/supabase/server"
+import { installPdfNodePolyfills } from "@/lib/pdf-node-polyfills"
 
 export const runtime = "nodejs"
 
@@ -8,43 +9,35 @@ const MAX_CHARS = 120_000
 /** Treat near-empty PDF extraction as scanned/image-only. */
 const MIN_PDF_TEXT_CHARS = 80
 
-/** Next.js/pdf-parse can resolve differently across envs; try multiple loaders. */
+/** pdf-parse v2: `PDFParse` + buffer; must not be bundled with Turbopack (see next.config.mjs). */
 async function extractPdfText(buffer: Buffer, fileName: string): Promise<string> {
-  const attempts: Array<{ name: string; run: () => Promise<string> }> = [
-    {
-      name: "pdf-parse/default",
-      run: async () => {
-        const mod: any = await import("pdf-parse")
-        const fn = typeof mod.default === "function" ? mod.default : typeof mod === "function" ? mod : null
-        if (!fn) return ""
-        const res = await fn(buffer)
-        return (res?.text || "").toString()
-      },
-    },
-  ]
-
-  let best = ""
-  for (const attempt of attempts) {
-    try {
-      const raw = await attempt.run()
-      const normalized = raw.replace(/\u0000/g, "").replace(/\s+/g, " ").trim()
-      console.log("[extract-text][pdf-attempt]", {
-        fileName,
-        parser: attempt.name,
-        extractedChars: normalized.length,
-        preview: normalized.slice(0, 200),
-      })
-      if (normalized.length > best.length) best = normalized
-      if (normalized.length >= MIN_PDF_TEXT_CHARS) return normalized
-    } catch (error) {
-      console.error("[extract-text][pdf-attempt-error]", {
-        fileName,
-        parser: attempt.name,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
+  installPdfNodePolyfills()
+  const mod: any = await import("pdf-parse")
+  const PDFParse = mod.PDFParse as typeof import("pdf-parse").PDFParse
+  if (typeof PDFParse !== "function") {
+    console.error("[extract-text][pdf-parse] PDFParse export missing", { fileName })
+    return ""
   }
-  return best
+  const parser = new PDFParse({ data: buffer })
+  try {
+    const result = await parser.getText()
+    const raw = (result?.text ?? "").toString()
+    const normalized = raw.replace(/\u0000/g, "").replace(/\s+/g, " ").trim()
+    console.log("[extract-text][pdf-parse]", {
+      fileName,
+      extractedChars: normalized.length,
+      preview: normalized.slice(0, 200),
+    })
+    return normalized
+  } catch (error) {
+    console.error("[extract-text][pdf-parse-error]", {
+      fileName,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return ""
+  } finally {
+    if (typeof parser.destroy === "function") await parser.destroy()
+  }
 }
 
 export async function POST(req: Request) {
