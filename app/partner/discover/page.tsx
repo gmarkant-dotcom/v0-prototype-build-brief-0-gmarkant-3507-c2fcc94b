@@ -65,6 +65,7 @@ export default function DiscoverAgenciesPage() {
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [myRequests, setMyRequests] = useState<AccessRequest[]>([])
   const [searchQuery, setSearchQuery] = useState("")
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [requestingAgency, setRequestingAgency] = useState<string | null>(null)
   const [requestMessage, setRequestMessage] = useState("")
@@ -297,6 +298,8 @@ export default function DiscoverAgenciesPage() {
     )
   })
 
+  const searchSuggestions = filteredAgencies.slice(0, 8)
+
   return (
     <PartnerLayout 
       title="Discover Agencies" 
@@ -309,9 +312,34 @@ export default function DiscoverAgenciesPage() {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setTimeout(() => setIsSearchFocused(false), 120)}
             placeholder="Search agencies by name or location..."
             className="pl-10 bg-white border-gray-200 text-gray-900"
           />
+          {isSearchFocused && searchSuggestions.length > 0 && (
+            <div className="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-72 overflow-auto">
+              {searchSuggestions.map((agency) => {
+                const name = agency.company_name || agency.full_name || agency.email || "Agency"
+                return (
+                  <button
+                    key={agency.id}
+                    type="button"
+                    onMouseDown={() => {
+                      setSearchQuery(name)
+                      setIsSearchFocused(false)
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0 border-gray-100"
+                  >
+                    <div className="text-sm text-gray-900 font-medium">{name}</div>
+                    <div className="text-xs text-gray-500">
+                      {agency.location || agency.email || "Collaborator"}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Agency Directory */}
