@@ -106,16 +106,48 @@ function newDraft(): DraftAttachment {
   }
 }
 
+/** Partner uploads use Vercel Blob — treat as file rows, never show raw URL in UI. */
+function isLikelyPrivateBlobUrl(url: string): boolean {
+  try {
+    const h = new URL(url.trim()).hostname.toLowerCase()
+    return h.includes("blob.vercel-storage.com") || h.includes("vercel-storage.com")
+  } catch {
+    return false
+  }
+}
+
+function displayNameFromBlobPath(url: string): string {
+  try {
+    const seg = decodeURIComponent(new URL(url).pathname.split("/").pop() || "")
+    const withoutTs = seg.replace(/^\d+-/, "")
+    return withoutTs || "Uploaded file"
+  } catch {
+    return "Uploaded file"
+  }
+}
+
 function savedToDrafts(saved: SavedAttachment[]): DraftAttachment[] {
   return saved.map((a) => {
     const tag = (ALLOWED.has(a.type as AttachmentTag) ? a.type : "proposal") as AttachmentTag
+    const url = a.url.trim()
+    if (isLikelyPrivateBlobUrl(url)) {
+      return {
+        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `d-${Date.now()}-${Math.random()}`,
+        tag,
+        otherLabel: tag === "other" ? a.label : "",
+        source: "file" as const,
+        urlInput: "",
+        storedUrl: url,
+        fileName: displayNameFromBlobPath(url),
+      }
+    }
     return {
       id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `d-${Date.now()}-${Math.random()}`,
       tag,
       otherLabel: tag === "other" ? a.label : "",
       source: "url" as const,
-      urlInput: a.url,
-      storedUrl: a.url,
+      urlInput: url,
+      storedUrl: url,
       fileName: null,
     }
   })
@@ -906,23 +938,35 @@ export default function PartnerRfpDetailPage() {
                           )}
                         </Button>
                         {d.storedUrl && d.source === "file" && (
-                          <span className="ml-3 font-mono text-xs text-gray-700">
-                            {d.fileName || "Uploaded"} —{" "}
-                            <a href={d.storedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 underline">
-                              Open link
-                            </a>
+                          <span className="ml-3 inline-flex items-center gap-2 text-sm text-green-900">
+                            <CheckCircle className="w-4 h-4 shrink-0 text-green-700" aria-hidden />
+                            <span>
+                              <span className="font-medium text-gray-900">{d.fileName || "Uploaded file"}</span>
+                              <span className="text-gray-600 ml-1.5">Uploaded</span>
+                            </span>
                           </span>
                         )}
                       </div>
                     )}
 
-                    {d.storedUrl && d.source === "url" && (
+                    {d.storedUrl && d.source === "url" && !isLikelyPrivateBlobUrl(d.storedUrl) && (
                       <p className="font-mono text-[10px] text-gray-600">
-                        Saved URL:{" "}
+                        Saved link:{" "}
                         <a href={d.storedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 break-all">
                           {d.storedUrl}
                         </a>
                       </p>
+                    )}
+                    {d.storedUrl && d.source === "url" && isLikelyPrivateBlobUrl(d.storedUrl) && (
+                      <div className="flex items-center gap-2 text-sm text-green-900 mt-1">
+                        <CheckCircle className="w-4 h-4 shrink-0 text-green-700" aria-hidden />
+                        <span>
+                          <span className="font-medium text-gray-900">
+                            {d.fileName || displayNameFromBlobPath(d.storedUrl)}
+                          </span>
+                          <span className="text-gray-600 ml-1.5">Uploaded</span>
+                        </span>
+                      </div>
                     )}
                   </div>
                 ))}
