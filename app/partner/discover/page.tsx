@@ -112,20 +112,13 @@ export default function DiscoverAgenciesPage() {
         }
       }
 
-      // Tier 1: direct lead-agency relationships for this partner
-      const { data: myPartnerships, error: partnershipsError } = await supabase
-        .from("partnerships")
-        .select("id, agency_id")
-        .eq("partner_id", currentProfileId)
-
-      if (partnershipsError) {
-        console.error("Error loading partnerships:", partnershipsError)
-        setIsLoading(false)
-        return
-      }
-
-      const myPartnershipIds = [...new Set((myPartnerships || []).map((p) => p.id))]
-      const leadAgencyIds = [...new Set((myPartnerships || []).map((p) => p.agency_id))]
+      // Tier 1: direct lead-agency relationships for this partner.
+      // Use server API as source-of-truth because it already handles id/email claim logic.
+      const partnershipResponse = await fetch("/api/partnerships")
+      const partnershipPayload = partnershipResponse.ok ? await partnershipResponse.json() : { partnerships: [] }
+      const activePartnerships = (partnershipPayload.partnerships || []).filter((p: any) => p.status === "active")
+      const myPartnershipIds = [...new Set(activePartnerships.map((p: any) => p.id).filter(Boolean))]
+      const leadAgencyIds = [...new Set(activePartnerships.map((p: any) => p.agency?.id || p.agency_id).filter(Boolean))]
 
       // Tier 2: project-level collaborators (other partner agencies on shared projects)
       let projectIds: string[] = []
