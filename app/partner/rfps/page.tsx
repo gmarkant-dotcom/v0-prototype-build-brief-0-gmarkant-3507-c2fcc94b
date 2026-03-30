@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -58,7 +58,15 @@ type RFP = {
   timeline: string
   deadline: string
   issuedBy: string
-  status: "new" | "viewed" | "bid_submitted" | "feedback_received" | "revision_submitted" | "shortlisted" | "awarded"
+  status:
+    | "new"
+    | "viewed"
+    | "bid_submitted"
+    | "feedback_received"
+    | "revision_submitted"
+    | "shortlisted"
+    | "awarded"
+    | "declined"
   feedback: FeedbackItem[]
   bidVersions: BidVersion[]
   currentBidVersion?: number
@@ -147,12 +155,68 @@ const demoRFPs: RFP[] = [
   },
 ]
 
+type PartnerInboxRow = {
+  id: string
+  status: string
+  scope_item_id: string
+  scope_item_name: string
+  scope_item_description: string | null
+  master_rfp_json: Record<string, unknown> | null
+  agency_company_name: string | null
+  timeline: string | null
+}
+
+function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
+  const mj = (row.master_rfp_json || {}) as {
+    projectName?: string
+    overview?: string
+    timeline?: string
+    scopeItems?: { id?: string; name?: string; description?: string }[]
+  }
+  const projectName = mj.projectName?.trim() || "RFP"
+  const match = (mj.scopeItems || []).find((s) => s.id === row.scope_item_id)
+  const overview = mj.overview?.trim() || row.scope_item_description?.trim() || ""
+  const scope: string[] = [row.scope_item_name]
+  if (row.scope_item_description?.trim()) scope.push(row.scope_item_description.trim())
+  else if (match?.description?.trim()) scope.push(match.description.trim())
+
+  const requirements =
+    match?.description?.trim() || row.scope_item_description?.trim() || ""
+
+  const allowed: RFP["status"][] = [
+    "new",
+    "viewed",
+    "bid_submitted",
+    "feedback_received",
+    "shortlisted",
+    "awarded",
+    "declined",
+  ]
+  const st = allowed.includes(row.status as RFP["status"]) ? (row.status as RFP["status"]) : "new"
+
+  return {
+    id: row.id,
+    title: `${row.scope_item_name} — ${projectName}`,
+    overview,
+    scope,
+    requirements,
+    timeline: row.timeline?.trim() || mj.timeline?.trim() || "TBD",
+    deadline: "TBD",
+    issuedBy: row.agency_company_name?.trim() || "Lead agency",
+    status: st,
+    feedback: [],
+    bidVersions: [],
+  }
+}
+
 export default function PartnerRFPsPage() {
   const isDemo = isDemoMode()
   const initialRFPs = isDemo ? demoRFPs : []
   const { checkFeatureAccess } = usePaidUser()
   
   const [rfps, setRfps] = useState(initialRFPs)
+  const [inboxLoading, setInboxLoading] = useState(false)
+  const [inboxError, setInboxError] = useState<string | null>(null)
   const [selectedRFP, setSelectedRFP] = useState<RFP | null>(null)
   const [activeView, setActiveView] = useState<"details" | "bid" | "feedback">("details")
   const [formData, setFormData] = useState({
@@ -168,6 +232,34 @@ export default function PartnerRFPsPage() {
   const [isUploadingFile, setIsUploadingFile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const docInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
+
+  useEffect(() => {
+    if (isDemo) return
+    let cancelled = false
+    ;(async () => {
+      setInboxLoading(true)
+      setInboxError(null)
+      try {
+        const res = await fetch("/api/partner/rfps")
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error((data?.error as string) || "Could not load RFPs")
+        const rows = (data.rfps || []) as PartnerInboxRow[]
+        if (!cancelled) {
+          setRfps(rows.map(mapInboxRowToRfp))
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setInboxError(e instanceof Error ? e.message : "Could not load RFPs")
+          setRfps([])
+        }
+      } finally {
+        if (!cancelled) setInboxLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo])
 
   const handleFileUpload = async (file: File, docType?: string) => {
     setIsUploadingFile(true)
@@ -294,6 +386,7 @@ export default function PartnerRFPsPage() {
       case "revision_submitted": return "bg-purple-100 text-purple-700"
       case "shortlisted": return "bg-green-100 text-green-700"
       case "awarded": return "bg-green-500 text-white"
+      case "declined": return "bg-gray-200 text-gray-700"
       default: return "bg-gray-100 text-gray-600"
     }
   }
@@ -801,9 +894,22 @@ export default function PartnerRFPsPage() {
         </div>
         
         <div className="grid gap-4">
-          {filteredRfps.length === 0 ? (
+          {inboxLoading ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 flex flex-col items-center justify-center gap-3 text-gray-600">
+              <Loader2 className="w-8 h-8 animate-spin text-[#0C3535]" />
+              <p className="font-mono text-sm">Loading RFPs…</p>
+            </div>
+          ) : inboxError ? (
+            <div className="bg-white rounded-xl border border-red-200 p-8 text-center">
+              <p className="text-red-700">{inboxError}</p>
+            </div>
+          ) : filteredRfps.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-              <p className="text-gray-500">No RFPs match the selected filter.</p>
+              <p className="text-gray-500">
+                {rfps.length === 0
+                  ? "No RFP invitations yet. When a lead agency broadcasts a scoped RFP to you, it will appear here."
+                  : "No RFPs match the selected filter."}
+              </p>
             </div>
           ) : filteredRfps.map((rfp) => (
             <div 

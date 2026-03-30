@@ -12,7 +12,8 @@ import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
-import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2 } from "lucide-react"
+import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2, Sparkles } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
 
 // Types
@@ -204,6 +205,16 @@ function AgencyRFPContent() {
   const [isExtractingBrief, setIsExtractingBrief] = useState(false)
   /** Optional extra copy pasted by user; always appended to the primary brief for AI */
   const [briefAugmentText, setBriefAugmentText] = useState("")
+  /** Step 1b: upload file vs AI-generated output template */
+  const [rfpTemplateMode, setRfpTemplateMode] = useState<"upload" | "ai">("upload")
+  const [aiTemplateStyle, setAiTemplateStyle] = useState<"formal" | "lean" | "creative">("formal")
+  const [aiScrubBrand, setAiScrubBrand] = useState(false)
+  const [aiScrubBudget, setAiScrubBudget] = useState(false)
+  const [aiScrubStrategy, setAiScrubStrategy] = useState(false)
+  const [aiScrubTimeline, setAiScrubTimeline] = useState(false)
+  const [aiOutputFormat, setAiOutputFormat] = useState<"section" | "modular">("section")
+  const [isGeneratingAiTemplate, setIsGeneratingAiTemplate] = useState(false)
+  const [aiTemplateError, setAiTemplateError] = useState<string | null>(null)
   
   // Step 2: Master RFP (AI generated)
   const [masterRfp, setMasterRfp] = useState<{
@@ -237,6 +248,7 @@ function AgencyRFPContent() {
   // Step 6: Broadcast
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   const [broadcastComplete, setBroadcastComplete] = useState(false)
+  const [broadcastError, setBroadcastError] = useState<string | null>(null)
   
   // Handle client brief file: server-side text extraction only (no blob preview — private store URLs are not iframe-safe)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -285,11 +297,13 @@ function AgencyRFPContent() {
     const timeoutId = setTimeout(() => controller.abort(), 125_000)
     try {
       const templateHint =
-        uploadedRfpTemplate?.name ||
-        (selectedRfpTemplate && isDemoMode()
-          ? demoTemplates.find((t) => t.id === selectedRfpTemplate)?.name
-          : "") ||
-        "Default RFP template"
+        selectedRfpTemplate === "ai"
+          ? "AI-generated output template"
+          : uploadedRfpTemplate?.name ||
+            (selectedRfpTemplate && isDemoMode()
+              ? demoTemplates.find((t) => t.id === selectedRfpTemplate)?.name
+              : "") ||
+            "Default RFP template"
 
       const sourceText = buildMasterBriefSourceText({
         briefSourceText,
@@ -362,6 +376,55 @@ function AgencyRFPContent() {
       setIsGenerating(false)
     }
   }
+
+  const generateAiOutputTemplate = async () => {
+    setAiTemplateError(null)
+    const sourceText = buildMasterBriefSourceText({
+      briefSourceText,
+      pastedContent,
+      googleLink,
+      briefFileName,
+      briefAugmentText,
+    })
+    if (!sourceText.trim()) {
+      setAiTemplateError("Add a client brief in Step 1a first.")
+      return
+    }
+    if (!checkFeatureAccess()) return
+    setIsGeneratingAiTemplate(true)
+    try {
+      const res = await fetch("/api/ai/rfp-output-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          briefText: sourceText,
+          templateStyle: aiTemplateStyle,
+          outputFormat: aiOutputFormat,
+          sensitivity: {
+            scrubBrand: aiScrubBrand,
+            scrubBudget: aiScrubBudget,
+            scrubStrategy: aiScrubStrategy,
+            scrubTimeline: aiScrubTimeline,
+          },
+        }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(
+          [payload?.error, payload?.detail].filter(Boolean).join(" ") || "Generation failed"
+        )
+      }
+      setTemplateSourceText((payload.templateText || "").toString())
+      setSelectedRfpTemplate("ai")
+      setUploadedRfpTemplate(null)
+      setRfpTemplateExtractWarning(null)
+      setRfpTemplateUploadError(null)
+    } catch (e) {
+      setAiTemplateError(e instanceof Error ? e.message : "Failed to generate template")
+    } finally {
+      setIsGeneratingAiTemplate(false)
+    }
+  }
   
   // Allocate scope item
   const allocateScope = (itemId: string, allocation: "internal" | "outsource") => {
@@ -432,19 +495,59 @@ function AgencyRFPContent() {
     return outsourcedItems.every(item => getRecipientCount(item.id) > 0)
   }
   
-  // Broadcast RFPs
-  const broadcastRfps = () => {
+  // Broadcast RFPs (persist per-recipient rows for partner inbox when not demo)
+  const broadcastRfps = async () => {
+    setBroadcastError(null)
+    if (!masterRfp) {
+      setBroadcastError("Generate a Master RFP before broadcasting.")
+      return
+    }
+    if (isDemo) {
+      setIsBroadcasting(true)
+      setTimeout(() => {
+        setIsBroadcasting(false)
+        setBroadcastComplete(true)
+      }, 2500)
+      return
+    }
     setIsBroadcasting(true)
-    setTimeout(() => {
-      setIsBroadcasting(false)
+    try {
+      const items = outsourcedItems.map((item) => ({
+        scopeItemId: item.id,
+        scopeItem: item,
+        partnerIds: selectedPartners[item.id] || [],
+        newRecipients: newRecipients[item.id] || [],
+      }))
+      const res = await fetch("/api/agency/broadcast-rfp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: selectedProject?.id ?? null,
+          masterRfp,
+          items,
+        }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(
+          [payload?.error, payload?.detail].filter(Boolean).join(" ") || "Broadcast failed"
+        )
+      }
       setBroadcastComplete(true)
-    }, 2500)
+    } catch (e) {
+      setBroadcastError(e instanceof Error ? e.message : "Broadcast failed")
+    } finally {
+      setIsBroadcasting(false)
+    }
   }
   
   // Reset flow
   const resetFlow = () => {
     setCurrentStep(1)
     setBroadcastComplete(false)
+    setBroadcastError(null)
+    setRfpTemplateMode("upload")
+    setAiTemplateError(null)
     setBriefUploaded(false)
     setBriefFileName("")
     setUploadMethod(null)
@@ -717,14 +820,44 @@ function AgencyRFPContent() {
               <GlassCardHeader
                 label="Step 1b"
                 title="Output template (your format)"
-                description="Upload the Word/PDF structure you want the Master RFP to follow. The AI maps the client brief into this layout (sections, headings, and tone)."
+                description="Upload a Word/PDF structure, or generate a layout with AI. The Master RFP step maps your client brief into this format (sections, headings, tone)."
               />
+
+              <div className="flex flex-wrap gap-2 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setRfpTemplateMode("upload")}
+                  className={cn(
+                    "font-mono text-xs px-3 py-2 rounded-lg border transition-colors flex items-center gap-2",
+                    rfpTemplateMode === "upload"
+                      ? "border-accent bg-accent/10 text-foreground"
+                      : "border-border text-foreground-muted hover:border-white/30"
+                  )}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload file
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRfpTemplateMode("ai")}
+                  className={cn(
+                    "font-mono text-xs px-3 py-2 rounded-lg border transition-colors flex items-center gap-2",
+                    rfpTemplateMode === "ai"
+                      ? "border-accent bg-accent/10 text-foreground"
+                      : "border-border text-foreground-muted hover:border-white/30"
+                  )}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Generate with AI
+                </button>
+              </div>
               
               <div className="grid grid-cols-2 gap-6 mt-4">
                 <div>
                   <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
                     RFP output template
                   </label>
+                  {rfpTemplateMode === "upload" ? (
                   <div className="space-y-2">
                     {(isDemoMode() ? demoTemplates : []).filter(t => t.type === "rfp").map((template) => (
                       <button
@@ -732,6 +865,7 @@ function AgencyRFPContent() {
                         onClick={() => {
                           const next = template.id === selectedRfpTemplate ? null : template.id
                           setSelectedRfpTemplate(next)
+                          setRfpTemplateMode("upload")
                           if (next) {
                             setUploadedRfpTemplate(null)
                             setTemplateSourceText("")
@@ -760,6 +894,7 @@ function AgencyRFPContent() {
                         <button
                           type="button"
                           onClick={() => {
+                            setRfpTemplateMode("upload")
                             setSelectedRfpTemplate("uploaded")
                             setSelectedSowTemplate(null)
                           }}
@@ -829,6 +964,7 @@ function AgencyRFPContent() {
                                 : null
                             setRfpTemplateExtractWarning(warning)
                             setTemplateSourceText((extractPayload.text || "").toString())
+                            setRfpTemplateMode("upload")
                             setSelectedRfpTemplate("uploaded")
                           } catch (err) {
                             setRfpTemplateUploadError(err instanceof Error ? err.message : "Template processing failed")
@@ -860,6 +996,122 @@ function AgencyRFPContent() {
                       <p className="text-xs text-amber-300 px-1">{rfpTemplateExtractWarning}</p>
                     )}
                   </div>
+                  ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <span className="font-mono text-[10px] text-foreground-muted uppercase block">
+                        Template style
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {(
+                          [
+                            { id: "formal" as const, label: "Formal / structured" },
+                            { id: "lean" as const, label: "Lean / conversational" },
+                            { id: "creative" as const, label: "Creative agency style" },
+                          ] as const
+                        ).map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setAiTemplateStyle(opt.id)}
+                            className={cn(
+                              "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
+                              aiTemplateStyle === opt.id
+                                ? "border-accent bg-accent/10 text-foreground"
+                                : "border-border text-foreground-muted hover:border-white/30"
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <span className="font-mono text-[10px] text-foreground-muted uppercase block">
+                        Sensitivity (optional)
+                      </span>
+                      <div className="space-y-2">
+                        {(
+                          [
+                            { checked: aiScrubBrand, set: setAiScrubBrand, label: "Scrub client brand name → industry category" },
+                            { checked: aiScrubBudget, set: setAiScrubBudget, label: "Scrub budget figures → tier description" },
+                            { checked: aiScrubStrategy, set: setAiScrubStrategy, label: "Scrub campaign-specific strategy → generic workstreams" },
+                            { checked: aiScrubTimeline, set: setAiScrubTimeline, label: "Scrub timeline dates → relative phases" },
+                          ] as const
+                        ).map((row) => (
+                          <label
+                            key={row.label}
+                            className="flex items-start gap-2 cursor-pointer font-mono text-[11px] text-foreground-muted leading-snug"
+                          >
+                            <Checkbox
+                              checked={row.checked}
+                              onCheckedChange={(v) => row.set(v === true)}
+                              className="mt-0.5 border-border"
+                            />
+                            <span>{row.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <span className="font-mono text-[10px] text-foreground-muted uppercase block">
+                        Output format
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAiOutputFormat("section")}
+                          className={cn(
+                            "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
+                            aiOutputFormat === "section"
+                              ? "border-accent bg-accent/10 text-foreground"
+                              : "border-border text-foreground-muted hover:border-white/30"
+                          )}
+                        >
+                          Section-based RFP
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAiOutputFormat("modular")}
+                          className={cn(
+                            "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
+                            aiOutputFormat === "modular"
+                              ? "border-accent bg-accent/10 text-foreground"
+                              : "border-border text-foreground-muted hover:border-white/30"
+                          )}
+                        >
+                          Modular workstreams
+                        </button>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={() => void generateAiOutputTemplate()}
+                      disabled={isGeneratingAiTemplate}
+                      className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto"
+                    >
+                      {isGeneratingAiTemplate ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Generating…
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4" />
+                          Generate template
+                        </span>
+                      )}
+                    </Button>
+                    {aiTemplateError && (
+                      <p className="text-xs text-red-300">{aiTemplateError}</p>
+                    )}
+                    {selectedRfpTemplate === "ai" && templateSourceText.trim() && (
+                      <p className="font-mono text-[10px] text-foreground-muted">
+                        AI format loaded — {templateSourceText.length.toLocaleString()} characters (used as Master RFP structure guide)
+                      </p>
+                    )}
+                  </div>
+                  )}
                 </div>
                 
                 <div>
@@ -1606,12 +1858,18 @@ function AgencyRFPContent() {
               </GlassCard>
             )}
             
+            {broadcastError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200">
+                {broadcastError}
+              </div>
+            )}
+
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setCurrentStep(5)} className="border-border text-foreground hover:bg-white/5">
                 Back
               </Button>
               <Button 
-                onClick={broadcastRfps}
+                onClick={() => void broadcastRfps()}
                 disabled={isBroadcasting}
                 className="bg-accent text-accent-foreground hover:bg-accent/90 px-8"
               >
