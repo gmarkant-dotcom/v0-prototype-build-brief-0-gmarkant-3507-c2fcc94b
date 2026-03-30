@@ -75,7 +75,7 @@ Brief Content:
 ${briefText}`
 
     const result = await generateText({
-      model: "anthropic/claude-sonnet-4-20250514",
+      model: "anthropic/claude-sonnet-4-20250514" as any,
       prompt,
     })
 

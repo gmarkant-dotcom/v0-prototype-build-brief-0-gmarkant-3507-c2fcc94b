@@ -67,7 +67,7 @@ const demoTemplates = [
   { id: "2", name: "Electric Animal SOW Template v2", type: "sow", format: "docx" },
 ]
 
-export default function AgencyRFPPage() {
+function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
   const { selectedProject } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -322,7 +322,6 @@ export default function AgencyRFPPage() {
   ]
   
   return (
-    <AgencyLayout>
       <div className="p-8 max-w-5xl">
         <SelectedProjectHeader />
         <StageHeader
@@ -1352,6 +1351,13 @@ export default function AgencyRFPPage() {
           </GlassCard>
         )}
       </div>
+  )
+}
+
+export default function AgencyRFPPage() {
+  return (
+    <AgencyLayout>
+      <AgencyRFPContent />
     </AgencyLayout>
   )
 }
