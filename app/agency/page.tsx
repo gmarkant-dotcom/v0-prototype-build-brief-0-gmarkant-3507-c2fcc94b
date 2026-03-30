@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useRef } from "react"
 import { AgencyLayout } from "@/components/agency-layout"
 import { StageHeader } from "@/components/stage-header"
 import { SelectedProjectHeader } from "@/components/selected-project-header"
@@ -14,7 +14,6 @@ import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2 } from "lucide-react"
 import { FileUpload } from "@/components/file-upload"
-import { BriefDocumentReview, BriefDocumentReviewUnavailable } from "@/components/brief-document-review"
 
 // Types
 type UploadMethod = "pdf" | "docx" | "pptx" | "google" | "paste" | null
@@ -122,10 +121,6 @@ function AgencyRFPContent() {
   const [isExtractingBrief, setIsExtractingBrief] = useState(false)
   /** Optional extra copy pasted by user; always appended to the primary brief for AI */
   const [briefAugmentText, setBriefAugmentText] = useState("")
-  /** Stored copy on blob for full-document review (parallel to extract-text) */
-  const [briefDocumentUrl, setBriefDocumentUrl] = useState<string | null>(null)
-  const [briefDocumentContentType, setBriefDocumentContentType] = useState<string | null>(null)
-  const [briefDocumentUploadError, setBriefDocumentUploadError] = useState<string | null>(null)
   
   // Step 2: Master RFP (AI generated)
   const [masterRfp, setMasterRfp] = useState<{
@@ -160,16 +155,13 @@ function AgencyRFPContent() {
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   const [broadcastComplete, setBroadcastComplete] = useState(false)
   
-  // Handle client brief file: extract text + upload to blob in parallel (full-document review)
+  // Handle client brief file: server-side text extraction only (no blob preview — private store URLs are not iframe-safe)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     if (!checkFeatureAccess("file uploads")) return
     setBriefUploadError(null)
     setBriefExtractWarning(null)
-    setBriefDocumentUploadError(null)
-    setBriefDocumentUrl(null)
-    setBriefDocumentContentType(null)
     setBriefUploaded(true)
     setBriefFileName(file.name)
     setBriefSourceText("")
@@ -177,14 +169,8 @@ function AgencyRFPContent() {
     try {
       const extractForm = new FormData()
       extractForm.append("file", file)
-      const uploadForm = new FormData()
-      uploadForm.append("file", file)
-      uploadForm.append("folder", "rfp-briefs")
 
-      const [extractRes, uploadRes] = await Promise.all([
-        fetch("/api/documents/extract-text", { method: "POST", body: extractForm }),
-        fetch("/api/upload", { method: "POST", body: uploadForm }),
-      ])
+      const extractRes = await fetch("/api/documents/extract-text", { method: "POST", body: extractForm })
 
       const payload = await extractRes.json().catch(() => ({}))
       if (!extractRes.ok) {
@@ -192,25 +178,9 @@ function AgencyRFPContent() {
       }
       setBriefExtractWarning(typeof payload?.warning === "string" ? payload.warning : null)
       setBriefSourceText((payload.text || "").toString())
-
-      if (uploadRes.ok) {
-        const up = await uploadRes.json().catch(() => ({}))
-        if (up?.url) {
-          setBriefDocumentUrl(up.url as string)
-          setBriefDocumentContentType((up.contentType as string) || null)
-        }
-      } else {
-        const upErr = await uploadRes.json().catch(() => ({}))
-        setBriefDocumentUploadError(
-          typeof upErr?.error === "string" ? upErr.error : "Could not store file for preview"
-        )
-      }
     } catch (err) {
       setBriefUploaded(false)
       setBriefFileName("")
-      setBriefDocumentUrl(null)
-      setBriefDocumentContentType(null)
-      setBriefDocumentUploadError(null)
       setBriefExtractWarning(null)
       setBriefUploadError(err instanceof Error ? err.message : "Brief extraction failed")
     } finally {
@@ -552,9 +522,6 @@ function AgencyRFPContent() {
                           setBriefUploaded(true)
                           setBriefFileName("Google Doc imported")
                           setBriefSourceText(`Imported Google document: ${googleLink}`)
-                          setBriefDocumentUrl(null)
-                          setBriefDocumentContentType(null)
-                          setBriefDocumentUploadError(null)
                         }}
                       >
                         Import from Google
@@ -582,9 +549,6 @@ function AgencyRFPContent() {
                           setBriefUploaded(true)
                           setBriefFileName("Pasted content")
                           setBriefSourceText(pastedContent)
-                          setBriefDocumentUrl(null)
-                          setBriefDocumentContentType(null)
-                          setBriefDocumentUploadError(null)
                         }}
                       >
                         Use Pasted Content
@@ -639,28 +603,12 @@ function AgencyRFPContent() {
                       setBriefUploadError(null)
                       setIsExtractingBrief(false)
                       setBriefExtractWarning(null)
-                      setBriefDocumentUrl(null)
-                      setBriefDocumentContentType(null)
-                      setBriefDocumentUploadError(null)
                     }}
                     className="border-border text-foreground-muted hover:bg-white/5"
                   >
                     Replace
                   </Button>
                 </div>
-              )}
-
-              {briefUploaded && !isExtractingBrief && briefDocumentUrl && (
-                <BriefDocumentReview
-                  url={briefDocumentUrl}
-                  fileName={briefFileName}
-                  contentType={briefDocumentContentType}
-                />
-              )}
-              {briefUploaded && !isExtractingBrief && briefDocumentUploadError && !briefDocumentUrl && (
-                <BriefDocumentReviewUnavailable
-                  message={`${briefDocumentUploadError} Text extraction still ran — you can continue with the extracted text below. Re-upload the file to try preview again.`}
-                />
               )}
 
               <div className="mt-6 space-y-2">
