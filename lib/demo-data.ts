@@ -76,6 +76,7 @@ export type Partner = {
   availability?: PartnerAvailability
 }
 
+/** Minimal project shape for selected-project context & demo project picker */
 export type MasterProject = {
   id: string
   name: string
@@ -389,7 +390,8 @@ export type ProjectAlert = {
   createdAt: string
 }
 
-export type MasterProject = {
+/** Rich demo row for agency dashboard cards (demo mode only) */
+export type DashboardDemoProject = {
   id: string
   name: string
   client: string
@@ -408,7 +410,7 @@ export type MasterProject = {
   stage: string
 }
 
-export const demoMasterProjects: MasterProject[] = [
+export const demoMasterProjects: DashboardDemoProject[] = [
   {
     id: "1",
     name: "NWSL Creator Content Series",
