@@ -51,6 +51,27 @@ export async function GET() {
     }
 
     const rows = data || []
+    const inboxIds = rows.map((r) => r.id).filter(Boolean)
+    let responseByInboxId: Record<string, { status?: string; agency_feedback?: string | null; feedback_updated_at?: string | null }> = {}
+    if (inboxIds.length > 0) {
+      const { data: responses } = await supabase
+        .from("partner_rfp_responses")
+        .select("inbox_item_id, status, agency_feedback, feedback_updated_at")
+        .in("inbox_item_id", inboxIds)
+        .eq("partner_id", user.id)
+      responseByInboxId = Object.fromEntries(
+        (responses || []).map((r) => [r.inbox_item_id as string, r as { status?: string; agency_feedback?: string | null; feedback_updated_at?: string | null }])
+      )
+    }
+    const mergedRows = rows.map((row) => {
+      const resp = responseByInboxId[row.id as string]
+      return {
+        ...row,
+        response_status: resp?.status || null,
+        agency_feedback: resp?.agency_feedback || null,
+        feedback_updated_at: resp?.feedback_updated_at || null,
+      }
+    })
     const samplePartnerId = rows[0]?.partner_id ?? null
     const sampleRecipientEmail = rows[0]?.recipient_email ?? null
 
@@ -61,13 +82,13 @@ export async function GET() {
       .eq("partner_id", user.id)
 
     console.log(
-      `[partner/rfps] GET ok userId=${user.id} profileEmail=${profile?.email ?? "n/a"} rowsReturned=${rows.length} countWherePartnerIdEqUser=${countByPartnerId ?? "?"}` +
-        (rows.length > 0
+      `[partner/rfps] GET ok userId=${user.id} profileEmail=${profile?.email ?? "n/a"} rowsReturned=${mergedRows.length} countWherePartnerIdEqUser=${countByPartnerId ?? "?"}` +
+        (mergedRows.length > 0
           ? ` sampleRowPartnerId=${samplePartnerId} sampleRecipientEmail=${sampleRecipientEmail}`
           : "")
     )
 
-    return NextResponse.json({ rfps: rows }, { headers: noStoreHeaders })
+    return NextResponse.json({ rfps: mergedRows }, { headers: noStoreHeaders })
   } catch (e) {
     console.error("[partner/rfps] GET exception:", e)
     return NextResponse.json({ error: "Failed to load RFPs" }, { status: 500, headers: noStoreHeaders })

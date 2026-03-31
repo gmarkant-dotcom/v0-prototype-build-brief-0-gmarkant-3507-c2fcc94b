@@ -48,6 +48,9 @@ export function AgencyBroadcastResponsesPanel() {
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<AgencyResponseRow[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, string>>({})
+  const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (isDemo) {
@@ -139,6 +142,36 @@ export function AgencyBroadcastResponsesPanel() {
     )
   }
 
+  const statusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      submitted: "bg-blue-100 text-blue-800",
+      under_review: "bg-amber-100 text-amber-800",
+      shortlisted: "bg-purple-100 text-purple-800",
+      awarded: "bg-green-100 text-green-800",
+      declined: "bg-gray-200 text-gray-800",
+    }
+    return styles[status] || "bg-white/10 text-foreground-muted"
+  }
+
+  const patchResponse = async (id: string, payload: Record<string, unknown>) => {
+    setBusyId(id)
+    setError(null)
+    try {
+      const res = await fetch(`/api/agency/rfp-responses/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || "Failed to update response")
+      setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...(data.response || row) } : row)))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <GlassCard className="mb-8">
       <GlassCardHeader
@@ -176,10 +209,10 @@ export function AgencyBroadcastResponsesPanel() {
                 <span
                   className={cn(
                     "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase shrink-0",
-                    r.status === "submitted" ? "bg-accent/20 text-accent" : "bg-white/10 text-foreground-muted"
+                    statusBadge(r.status)
                   )}
                 >
-                  {r.status}
+                  {r.status.replace(/_/g, " ")}
                 </span>
               </button>
               {expanded && (
@@ -248,6 +281,71 @@ export function AgencyBroadcastResponsesPanel() {
                   <p className="font-mono text-[10px] text-foreground-muted">
                     Updated {new Date(r.updated_at).toLocaleString()}
                   </p>
+
+                  <div className="border-t border-border/50 pt-4 space-y-3">
+                    <div>
+                      <label className="block font-mono text-[10px] uppercase text-foreground-muted mb-1">Agency feedback</label>
+                      <textarea
+                        value={feedbackDrafts[r.id] ?? ((r as unknown as { agency_feedback?: string }).agency_feedback || "")}
+                        onChange={(e) => setFeedbackDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                        className="w-full min-h-[90px] rounded-md border border-border/60 bg-white/5 p-2 text-sm text-foreground"
+                        placeholder="Share notes or next steps for the partner…"
+                      />
+                      <div className="mt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-border/60"
+                          onClick={() =>
+                            patchResponse(r.id, {
+                              agency_feedback: feedbackDrafts[r.id] ?? "",
+                              status: r.status === "submitted" ? "under_review" : r.status,
+                            })
+                          }
+                          disabled={busyId === r.id}
+                        >
+                          {busyId === r.id ? "Saving..." : "Leave Feedback"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-purple-400/40 text-purple-300"
+                        onClick={() => patchResponse(r.id, { status: r.status === "shortlisted" ? "under_review" : "shortlisted" })}
+                        disabled={busyId === r.id || r.status === "awarded"}
+                      >
+                        {r.status === "shortlisted" ? "Un-shortlist" : "Shortlist"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-600/90 text-white"
+                        onClick={() => patchResponse(r.id, { status: "awarded" })}
+                        disabled={busyId === r.id || r.status === "awarded"}
+                      >
+                        Award
+                      </Button>
+                      <Input
+                        value={declineReasons[r.id] || ""}
+                        onChange={(e) => setDeclineReasons((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                        placeholder="Optional decline reason"
+                        className="h-8 max-w-xs text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-400/40 text-red-300"
+                        onClick={() =>
+                          patchResponse(r.id, { status: "declined", decline_reason: declineReasons[r.id] || "" })
+                        }
+                        disabled={busyId === r.id || r.status === "awarded"}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

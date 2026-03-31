@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
 
@@ -165,7 +166,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .maybeSingle()
 
     let saved
+    let wasUpdate = false
     if (existing?.id) {
+      wasUpdate = true
       const { data, error } = await supabase
         .from("partner_rfp_responses")
         .update(row)
@@ -197,6 +200,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .from("partner_rfp_inbox")
         .update({ status: "bid_submitted", updated_at: new Date().toISOString() })
         .eq("id", inboxId)
+
+      if (wasUpdate) {
+        const [{ data: agencyProfile }, { data: inboxDetail }] = await Promise.all([
+          supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.agency_id).maybeSingle(),
+          supabase.from("partner_rfp_inbox").select("scope_item_name, master_rfp_json").eq("id", inboxId).maybeSingle(),
+        ])
+        const resendApiKey = process.env.RESEND_API_KEY
+        if (resendApiKey && agencyProfile?.email) {
+          const projectName =
+            (inboxDetail?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
+          const scopeItemName = inboxDetail?.scope_item_name || "Scope item"
+          const leadAgencyName = agencyProfile.company_name || agencyProfile.full_name || "Lead agency"
+          const resend = new Resend(resendApiKey)
+          await resend.emails.send({
+            from: "Ligament <notifications@withligament.com>",
+            to: "hello@withligament.com",
+            cc: agencyProfile.email,
+            subject: "A partner updated their bid submission",
+            html: `
+              <p>A partner has updated and re-submitted a bid.</p>
+              <p><strong>Project:</strong> ${projectName}</p>
+              <p><strong>Scope Item:</strong> ${scopeItemName}</p>
+              <p><strong>Lead Agency:</strong> ${leadAgencyName}</p>
+            `,
+          })
+        }
+      }
     }
 
     console.log("[api] success", {

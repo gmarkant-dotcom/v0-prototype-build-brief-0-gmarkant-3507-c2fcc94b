@@ -162,6 +162,8 @@ type ResponseRow = {
   timeline_proposal: string
   attachments: SavedAttachment[] | null
   status: string
+  agency_feedback?: string | null
+  feedback_updated_at?: string | null
   updated_at: string
 }
 
@@ -510,6 +512,7 @@ export default function PartnerRfpDetailPage() {
       )
       if (status === "submitted" && inbox) {
         setInbox({ ...inbox, status: "bid_submitted" })
+        setExisting((prev) => (prev ? { ...prev, status: "submitted" } : prev))
       }
     } catch (e) {
       console.error("[partner/rfps] save error:", e)
@@ -588,8 +591,13 @@ export default function PartnerRfpDetailPage() {
     minute: "2-digit",
   })
 
-  const submitted = existing?.status === "submitted" || inbox.status === "bid_submitted"
-  const canEdit = !submitted || isDemoDetail
+  const currentStatus = existing?.status || (inbox.status === "bid_submitted" ? "submitted" : inbox.status)
+  const canEdit =
+    isDemoDetail ||
+    ["submitted", "under_review", "shortlisted", "draft", "new", "viewed", "bid_submitted", "feedback_received"].includes(
+      currentStatus
+    )
+  const feedbackUpdatedAt = existing?.feedback_updated_at ? new Date(existing.feedback_updated_at).toLocaleString() : null
 
   return (
     <PartnerChrome>
@@ -615,10 +623,15 @@ export default function PartnerRfpDetailPage() {
             <span
               className={cn(
                 "font-mono text-[10px] px-2 py-1 rounded-full uppercase",
-                submitted ? "bg-blue-100 text-blue-800" : "bg-[#C8F53C] text-[#0C3535]"
+                currentStatus === "awarded" && "bg-green-100 text-green-800",
+                currentStatus === "declined" && "bg-gray-200 text-gray-800",
+                currentStatus === "shortlisted" && "bg-purple-100 text-purple-800",
+                (currentStatus === "submitted" || currentStatus === "under_review") && "bg-blue-100 text-blue-800",
+                !(["awarded", "declined", "shortlisted", "submitted", "under_review"].includes(currentStatus)) &&
+                  "bg-[#C8F53C] text-[#0C3535]"
               )}
             >
-              {submitted ? "Bid submitted" : inbox.status.replace(/_/g, " ")}
+              {currentStatus.replace(/_/g, " ")}
             </span>
           </div>
           {inbox.scope_item_description && (
@@ -642,6 +655,22 @@ export default function PartnerRfpDetailPage() {
           )}
         </div>
 
+        {existing?.agency_feedback && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+            <h3 className="font-display font-bold text-[#0C3535]">Feedback from Agency</h3>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{existing.agency_feedback}</p>
+            {feedbackUpdatedAt && <p className="font-mono text-[10px] text-gray-500 mt-2">Updated {feedbackUpdatedAt}</p>}
+          </div>
+        )}
+        {currentStatus === "awarded" && (
+          <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-900 font-medium">
+            Congratulations! Your bid has been awarded.
+          </div>
+        )}
+        {currentStatus === "declined" && (
+          <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 text-gray-800">This bid was declined.</div>
+        )}
+
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-4">
             <FileText className="w-5 h-5 text-[#0C3535]" />
@@ -653,7 +682,7 @@ export default function PartnerRfpDetailPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Your bid response</h2>
           <p className="text-sm text-gray-600 mb-6">
-            Submit your proposal below. You can save a draft and return later. Submitting locks in your response for the lead agency.
+              Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, or shortlisted.
           </p>
 
           {successMsg && (
@@ -1021,7 +1050,7 @@ export default function PartnerRfpDetailPage() {
             </div>
           ) : (
             <p className="mt-8 pt-6 border-t border-gray-200 text-sm text-gray-600">
-              You’ve submitted a response for this RFP. The lead agency has been notified.
+              This bid is no longer editable in its current state.
             </p>
           )}
         </div>

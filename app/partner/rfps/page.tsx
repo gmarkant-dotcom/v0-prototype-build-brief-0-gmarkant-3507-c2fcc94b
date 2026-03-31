@@ -18,14 +18,16 @@ type RFP = {
   deadline: string
   issuedBy: string
   status:
+    | "submitted"
+    | "under_review"
+    | "shortlisted"
+    | "awarded"
+    | "declined"
     | "new"
     | "viewed"
     | "bid_submitted"
     | "feedback_received"
     | "revision_submitted"
-    | "shortlisted"
-    | "awarded"
-    | "declined"
 }
 
 // Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
@@ -85,12 +87,15 @@ const demoRFPs: RFP[] = [
 type PartnerInboxRow = {
   id: string
   status: string
+  response_status?: string | null
   scope_item_id: string
   scope_item_name: string
   scope_item_description: string | null
   master_rfp_json: Record<string, unknown> | null
   agency_company_name: string | null
   timeline: string | null
+  agency_feedback?: string | null
+  feedback_updated_at?: string | null
 }
 
 function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
@@ -110,16 +115,9 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
   const requirements =
     match?.description?.trim() || row.scope_item_description?.trim() || ""
 
-  const allowed: RFP["status"][] = [
-    "new",
-    "viewed",
-    "bid_submitted",
-    "feedback_received",
-    "shortlisted",
-    "awarded",
-    "declined",
-  ]
-  const st = allowed.includes(row.status as RFP["status"]) ? (row.status as RFP["status"]) : "new"
+  const preferred = row.response_status || row.status
+  const allowed: RFP["status"][] = ["submitted", "under_review", "shortlisted", "awarded", "declined", "new", "viewed", "bid_submitted", "feedback_received", "revision_submitted"]
+  const st = allowed.includes(preferred as RFP["status"]) ? (preferred as RFP["status"]) : "new"
 
   return {
     id: row.id,
@@ -142,7 +140,7 @@ export default function PartnerRFPsPage() {
   const [inboxLoading, setInboxLoading] = useState(false)
   const [inboxError, setInboxError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<
-    "all" | "new" | "bid_submitted" | "feedback_received" | "shortlisted"
+    "all" | "submitted" | "under_review" | "shortlisted" | "awarded" | "declined"
   >("all")
 
   useEffect(() => {
@@ -183,6 +181,8 @@ export default function PartnerRFPsPage() {
 
   const getStatusColor = (status: RFP["status"]) => {
     switch (status) {
+      case "submitted": return "bg-blue-100 text-blue-700"
+      case "under_review": return "bg-amber-100 text-amber-700"
       case "new": return "bg-[#C8F53C] text-[#0C3535]"
       case "viewed": return "bg-gray-100 text-gray-600"
       case "bid_submitted": return "bg-blue-100 text-blue-700"
@@ -211,7 +211,7 @@ export default function PartnerRFPsPage() {
         
         {/* Status Filter */}
         <div className="flex gap-2">
-          {(["all", "new", "bid_submitted", "feedback_received", "shortlisted"] as const).map((filter) => (
+          {(["all", "submitted", "under_review", "shortlisted", "awarded", "declined"] as const).map((filter) => (
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
@@ -251,7 +251,9 @@ export default function PartnerRFPsPage() {
               href={`/partner/rfps/${encodeURIComponent(rfp.id)}`}
               className={cn(
                 "block bg-white rounded-xl border p-6 hover:border-[#0C3535]/40 transition-colors cursor-pointer group",
-                rfp.status === "feedback_received" ? "border-orange-200" : "border-gray-200"
+                rfp.status === "feedback_received" ? "border-orange-200" : "border-gray-200",
+                rfp.status === "shortlisted" && "border-purple-300 bg-purple-50/30",
+                rfp.status === "awarded" && "border-green-300 bg-green-50/40"
               )}
             >
               <div className="flex items-start justify-between mb-4">
