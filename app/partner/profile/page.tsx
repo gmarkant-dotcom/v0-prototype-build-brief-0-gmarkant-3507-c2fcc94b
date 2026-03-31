@@ -118,7 +118,7 @@ export default function PartnerProfilePage() {
       }
       const { data } = await supabase
         .from("profiles")
-        .select("id, company_name, full_name, agency_type, bio, location, website, is_discoverable")
+        .select("*")
         .eq("id", user.id)
         .maybeSingle()
       setAccountEmail(user.email || "")

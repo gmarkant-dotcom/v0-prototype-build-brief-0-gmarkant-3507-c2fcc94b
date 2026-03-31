@@ -92,7 +92,7 @@ export default function AgencyProfileSettingsPage() {
       }
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, role, full_name, company_name, bio, location, website, agency_type, avatar_url, is_discoverable")
+        .select("*")
         .eq("id", user.id)
         .maybeSingle()
       if (profile?.role !== "agency") {
