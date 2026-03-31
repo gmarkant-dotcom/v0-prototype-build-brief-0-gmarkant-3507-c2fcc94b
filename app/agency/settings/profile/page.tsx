@@ -51,6 +51,7 @@ type ProfileState = {
   website: string
   agency_type: string
   avatar_url: string
+  meeting_url: string
   is_discoverable: boolean
 }
 
@@ -77,6 +78,7 @@ export default function AgencyProfileSettingsPage() {
     website: "",
     agency_type: "",
     avatar_url: "",
+    meeting_url: "",
     is_discoverable: false,
   })
 
@@ -93,7 +95,7 @@ export default function AgencyProfileSettingsPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, is_discoverable, bio, location, website, agency_type, avatar_url"
+          "id, role, email, full_name, company_name, is_discoverable, bio, location, website, agency_type, avatar_url, meeting_url"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -111,6 +113,7 @@ export default function AgencyProfileSettingsPage() {
         website: profile.website || "",
         agency_type: profile.agency_type || "",
         avatar_url: profile.avatar_url || "",
+        meeting_url: profile.meeting_url || "",
         is_discoverable: !!profile.is_discoverable,
       })
       if (typeof window !== "undefined") {
@@ -144,6 +147,7 @@ export default function AgencyProfileSettingsPage() {
         website: form.website,
         agency_type: form.agency_type,
         avatar_url: form.avatar_url || null,
+        meeting_url: form.meeting_url || null,
         is_discoverable: form.is_discoverable,
         updated_at: new Date().toISOString(),
       })
@@ -372,6 +376,18 @@ export default function AgencyProfileSettingsPage() {
                 className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
+          </div>
+          <div>
+            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Scheduling Link</label>
+            <Input
+              value={form.meeting_url}
+              onChange={(e) => setForm((p) => ({ ...p, meeting_url: e.target.value }))}
+              placeholder="https://calendly.com/your-team/intro"
+              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+            />
+            <p className="text-xs text-foreground-muted mt-1">
+              Paste your Calendly or scheduling link here — partners will see this when you request a meeting.
+            </p>
           </div>
           <label className="flex items-start justify-between gap-4 cursor-pointer">
             <div>

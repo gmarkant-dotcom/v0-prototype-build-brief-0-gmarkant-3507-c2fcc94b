@@ -58,6 +58,7 @@ type InboxRow = {
   timeline: string | null
   master_rfp_json: Record<string, unknown> | null
   agency_company_name: string
+  agency_meeting_url?: string | null
   status: string
   created_at: string
 }
@@ -509,7 +510,9 @@ export default function PartnerRfpDetailPage() {
       }
       setSuccessMsg(
         status === "submitted"
-          ? "Your response was submitted successfully. The lead agency will see it under RFP Broadcast → Partner responses."
+          ? ["under_review", "shortlisted", "meeting_requested"].includes(currentStatus)
+            ? "Your updated bid has been submitted."
+            : "Your response was submitted successfully. The lead agency will see it under RFP Broadcast → Partner responses."
           : "Draft saved. You can return anytime to finish and submit."
       )
       if (status === "submitted" && inbox) {
@@ -596,7 +599,7 @@ export default function PartnerRfpDetailPage() {
   const currentStatus = existing?.status || (inbox.status === "bid_submitted" ? "submitted" : inbox.status)
   const canEdit =
     isDemoDetail ||
-    ["submitted", "under_review", "shortlisted", "draft", "new", "viewed", "bid_submitted", "feedback_received"].includes(
+    ["submitted", "under_review", "shortlisted", "meeting_requested", "draft", "new", "viewed", "bid_submitted", "feedback_received"].includes(
       currentStatus
     )
   const feedbackUpdatedAt = existing?.feedback_updated_at ? new Date(existing.feedback_updated_at).toLocaleString() : null
@@ -660,6 +663,28 @@ export default function PartnerRfpDetailPage() {
             {feedbackUpdatedAt && <p className="font-mono text-[10px] text-gray-500 mt-2">Updated {feedbackUpdatedAt}</p>}
           </div>
         )}
+        {currentStatus === "under_review" && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900">
+            The agency has requested changes to your bid. Review their feedback below and resubmit when ready.
+          </div>
+        )}
+        {currentStatus === "meeting_requested" && (
+          <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-4">
+            <h3 className="font-display font-bold text-cyan-900">Your lead agency has requested a meeting</h3>
+            {inbox.agency_meeting_url ? (
+              <div className="mt-3">
+                <Button className="bg-cyan-600 hover:bg-cyan-600/90 text-white" asChild>
+                  <a href={inbox.agency_meeting_url} target="_blank" rel="noopener noreferrer">
+                    <CalendarDays className="w-4 h-4 mr-2" />
+                    Schedule Meeting
+                  </a>
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-cyan-900 mt-2">The agency will be in touch to schedule a meeting.</p>
+            )}
+          </div>
+        )}
         {currentStatus === "awarded" && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-900 font-medium">
             Congratulations! Your bid has been awarded.
@@ -680,7 +705,7 @@ export default function PartnerRfpDetailPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Your bid response</h2>
           <p className="text-sm text-gray-600 mb-6">
-              Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, or shortlisted.
+              Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, shortlisted, or meeting requested.
           </p>
 
           {successMsg && (
@@ -1041,7 +1066,9 @@ export default function PartnerRfpDetailPage() {
                 ) : (
                   <>
                     <Send className="w-4 h-4 mr-2" />
-                    Submit response
+                    {["under_review", "shortlisted", "meeting_requested"].includes(currentStatus)
+                      ? "Resubmit with Changes"
+                      : "Submit response"}
                   </>
                 )}
               </Button>

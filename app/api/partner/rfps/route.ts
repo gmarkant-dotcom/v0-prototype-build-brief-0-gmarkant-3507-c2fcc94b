@@ -51,6 +51,14 @@ export async function GET() {
     }
 
     const rows = data || []
+    const agencyIds = Array.from(new Set(rows.map((r) => r.agency_id).filter(Boolean)))
+    let agencyMeetingUrlById: Record<string, string | null> = {}
+    if (agencyIds.length > 0) {
+      const { data: agencies } = await supabase.from("profiles").select("id, meeting_url").in("id", agencyIds)
+      agencyMeetingUrlById = Object.fromEntries(
+        (agencies || []).map((a) => [a.id as string, (a.meeting_url as string | null) || null])
+      )
+    }
     const inboxIds = rows.map((r) => r.id).filter(Boolean)
     let responseByInboxId: Record<string, { status?: string; agency_feedback?: string | null; feedback_updated_at?: string | null }> = {}
     if (inboxIds.length > 0) {
@@ -70,6 +78,7 @@ export async function GET() {
         response_status: resp?.status || null,
         agency_feedback: resp?.agency_feedback || null,
         feedback_updated_at: resp?.feedback_updated_at || null,
+        agency_meeting_url: agencyMeetingUrlById[row.agency_id as string] || null,
       }
     })
     const samplePartnerId = rows[0]?.partner_id ?? null

@@ -217,11 +217,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             from: "Ligament <notifications@withligament.com>",
             to: "hello@withligament.com",
             cc: agencyProfile.email,
-            subject: "A partner updated their bid submission",
+            subject: "Partner has resubmitted their bid",
             html: `
               <p>A partner has updated and re-submitted a bid.</p>
               <p><strong>Project:</strong> ${projectName}</p>
               <p><strong>Scope Item:</strong> ${scopeItemName}</p>
+              <p><strong>Partner:</strong> ${partner_display_name}</p>
               <p><strong>Lead Agency:</strong> ${leadAgencyName}</p>
             `,
           })

@@ -36,6 +36,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
+    let agencyMeetingUrl: string | null = null
+    if (inbox.agency_id) {
+      const { data: agencyProfile, error: agencyErr } = await supabase
+        .from("profiles")
+        .select("meeting_url")
+        .eq("id", inbox.agency_id)
+        .maybeSingle()
+      if (!agencyErr) {
+        agencyMeetingUrl = (agencyProfile?.meeting_url as string | null) || null
+      }
+    }
+
     let response: unknown = null
     const respQ = await supabase
       .from("partner_rfp_responses")
@@ -53,7 +65,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 
     return NextResponse.json(
-      { inbox, response: response ?? null },
+      { inbox: { ...inbox, agency_meeting_url: agencyMeetingUrl }, response: response ?? null },
       {
         headers: {
           "Cache-Control": "private, no-store, no-cache, must-revalidate",

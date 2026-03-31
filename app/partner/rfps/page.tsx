@@ -18,6 +18,7 @@ type RFP = {
   timeline: string
   deadline: string
   issuedBy: string
+  meetingUrl?: string | null
   status:
     | "submitted"
     | "under_review"
@@ -98,6 +99,7 @@ type PartnerInboxRow = {
   timeline: string | null
   agency_feedback?: string | null
   feedback_updated_at?: string | null
+  agency_meeting_url?: string | null
 }
 
 function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
@@ -142,6 +144,7 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
     timeline: row.timeline?.trim() || mj.timeline?.trim() || "TBD",
     deadline: "TBD",
     issuedBy: row.agency_company_name?.trim() || "Lead agency",
+    meetingUrl: row.agency_meeting_url || null,
     status: st,
   }
 }
@@ -258,15 +261,34 @@ export default function PartnerRFPsPage() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span
-                      className={cn(
-                        "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase inline-flex items-center gap-1",
-                        getBidStatusColor(rfp.status)
-                      )}
-                    >
-                      {rfp.status === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
-                      {getBidStatusLabel(rfp.status, "partner")}
-                    </span>
+                    {rfp.status === "meeting_requested" && rfp.meetingUrl ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          window.open(rfp.meetingUrl || "", "_blank", "noopener,noreferrer")
+                        }}
+                        className={cn(
+                          "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase inline-flex items-center gap-1 hover:opacity-90",
+                          getBidStatusColor(rfp.status)
+                        )}
+                        title="Open scheduling link"
+                      >
+                        <CalendarDays className="w-3 h-3" />
+                        {getBidStatusLabel(rfp.status, "partner")}
+                      </button>
+                    ) : (
+                      <span
+                        className={cn(
+                          "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase inline-flex items-center gap-1",
+                          getBidStatusColor(rfp.status)
+                        )}
+                      >
+                        {rfp.status === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
+                        {getBidStatusLabel(rfp.status, "partner")}
+                      </span>
+                    )}
                     <span className="font-mono text-[10px] text-gray-500">Deadline: {rfp.deadline}</span>
                   </div>
                   <h3 className="font-display font-bold text-xl text-[#0C3535] group-hover:underline">
