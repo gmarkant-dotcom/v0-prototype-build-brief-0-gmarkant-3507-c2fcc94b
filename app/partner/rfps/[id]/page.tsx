@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { createClient } from "@/lib/supabase/client"
+import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import {
   BUDGET_CURRENCY_OPTIONS,
   TIMELINE_UNIT_OPTIONS,
@@ -32,6 +33,7 @@ import {
   Trash2,
   Plus,
   Link as LinkIcon,
+  CalendarDays,
 } from "lucide-react"
 
 /** Readable text on white cards (defaults are transparent / light in dark theme). */
@@ -622,16 +624,12 @@ export default function PartnerRfpDetailPage() {
             </div>
             <span
               className={cn(
-                "font-mono text-[10px] px-2 py-1 rounded-full uppercase",
-                currentStatus === "awarded" && "bg-green-100 text-green-800",
-                currentStatus === "declined" && "bg-gray-200 text-gray-800",
-                currentStatus === "shortlisted" && "bg-purple-100 text-purple-800",
-                (currentStatus === "submitted" || currentStatus === "under_review") && "bg-blue-100 text-blue-800",
-                !(["awarded", "declined", "shortlisted", "submitted", "under_review"].includes(currentStatus)) &&
-                  "bg-[#C8F53C] text-[#0C3535]"
+                "font-mono text-[10px] px-2 py-1 rounded-full uppercase inline-flex items-center gap-1",
+                getBidStatusColor(currentStatus)
               )}
             >
-              {currentStatus.replace(/_/g, " ")}
+              {currentStatus === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
+              {getBidStatusLabel(currentStatus, "partner")}
             </span>
           </div>
           {inbox.scope_item_description && (

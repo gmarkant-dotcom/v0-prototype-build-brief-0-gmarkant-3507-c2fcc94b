@@ -5,8 +5,9 @@ import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
+import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import { LeadAgencyFilter } from "@/components/lead-agency-filter"
-import { ChevronRight, Loader2 } from "lucide-react"
+import { ChevronRight, Loader2, CalendarDays } from "lucide-react"
 
 type RFP = {
   id: string
@@ -21,6 +22,7 @@ type RFP = {
     | "submitted"
     | "under_review"
     | "shortlisted"
+    | "meeting_requested"
     | "awarded"
     | "declined"
     | "new"
@@ -116,7 +118,19 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
     match?.description?.trim() || row.scope_item_description?.trim() || ""
 
   const preferred = row.response_status || row.status
-  const allowed: RFP["status"][] = ["submitted", "under_review", "shortlisted", "awarded", "declined", "new", "viewed", "bid_submitted", "feedback_received", "revision_submitted"]
+  const allowed: RFP["status"][] = [
+    "submitted",
+    "under_review",
+    "shortlisted",
+    "meeting_requested",
+    "awarded",
+    "declined",
+    "new",
+    "viewed",
+    "bid_submitted",
+    "feedback_received",
+    "revision_submitted",
+  ]
   const st = allowed.includes(preferred as RFP["status"]) ? (preferred as RFP["status"]) : "new"
 
   return {
@@ -140,7 +154,7 @@ export default function PartnerRFPsPage() {
   const [inboxLoading, setInboxLoading] = useState(false)
   const [inboxError, setInboxError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState<
-    "all" | "submitted" | "under_review" | "shortlisted" | "awarded" | "declined"
+    "all" | "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
   >("all")
 
   useEffect(() => {
@@ -179,23 +193,6 @@ export default function PartnerRFPsPage() {
     return rfp.status === activeFilter
   })
 
-  const getStatusColor = (status: RFP["status"]) => {
-    switch (status) {
-      case "submitted": return "bg-blue-100 text-blue-700"
-      case "under_review": return "bg-amber-100 text-amber-700"
-      case "new": return "bg-[#C8F53C] text-[#0C3535]"
-      case "viewed": return "bg-gray-100 text-gray-600"
-      case "bid_submitted": return "bg-blue-100 text-blue-700"
-      case "feedback_received": return "bg-orange-100 text-orange-700"
-      case "revision_submitted": return "bg-purple-100 text-purple-700"
-      case "shortlisted": return "bg-green-100 text-green-700"
-      case "awarded": return "bg-green-500 text-white"
-      case "declined": return "bg-gray-200 text-gray-700"
-      default: return "bg-gray-100 text-gray-600"
-    }
-  }
-  
-  
   return (
     <PartnerLayout>
       <div className="space-y-6">
@@ -211,7 +208,7 @@ export default function PartnerRFPsPage() {
         
         {/* Status Filter */}
         <div className="flex gap-2">
-          {(["all", "submitted", "under_review", "shortlisted", "awarded", "declined"] as const).map((filter) => (
+          {(["all", "submitted", "under_review", "shortlisted", "meeting_requested", "awarded", "declined"] as const).map((filter) => (
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
@@ -222,7 +219,9 @@ export default function PartnerRFPsPage() {
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               )}
             >
-              {filter === "all" ? `All RFPs (${rfps.length})` : `${filter.replace(/_/g, " ")} (${rfps.filter(r => r.status === filter).length})`}
+              {filter === "all"
+                ? `All RFPs (${rfps.length})`
+                : `${getBidStatusLabel(filter, "partner")} (${rfps.filter((r) => r.status === filter).length})`}
             </button>
           ))}
         </div>
@@ -259,8 +258,14 @@ export default function PartnerRFPsPage() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className={cn("font-mono text-[10px] px-2 py-0.5 rounded-full uppercase", getStatusColor(rfp.status))}>
-                      {rfp.status.replace(/_/g, " ")}
+                    <span
+                      className={cn(
+                        "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase inline-flex items-center gap-1",
+                        getBidStatusColor(rfp.status)
+                      )}
+                    >
+                      {rfp.status === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
+                      {getBidStatusLabel(rfp.status, "partner")}
                     </span>
                     <span className="font-mono text-[10px] text-gray-500">Deadline: {rfp.deadline}</span>
                   </div>

@@ -5,15 +5,16 @@ import { createClient } from "@/lib/supabase/server"
 export const dynamic = "force-dynamic"
 
 type PatchBody = {
-  status?: "submitted" | "under_review" | "shortlisted" | "awarded" | "declined"
+  status?: "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
   agency_feedback?: string
   decline_reason?: string
 }
 
-const ALLOWED_STATUS = new Set(["submitted", "under_review", "shortlisted", "awarded", "declined"])
+const ALLOWED_STATUS = new Set(["submitted", "under_review", "shortlisted", "meeting_requested", "awarded", "declined"])
 
 function mapResponseStatusToInboxStatus(status: string): string {
   if (status === "shortlisted") return "shortlisted"
+  if (status === "meeting_requested") return "meeting_requested"
   if (status === "awarded") return "awarded"
   if (status === "declined") return "declined"
   return "bid_submitted"

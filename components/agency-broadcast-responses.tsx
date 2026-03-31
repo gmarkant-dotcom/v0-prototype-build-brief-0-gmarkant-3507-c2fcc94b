@@ -6,9 +6,10 @@ import { isDemoMode } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
 import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
+import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Loader2, ChevronDown, ChevronRight, Download, ExternalLink, CheckCircle, Star } from "lucide-react"
+import { Loader2, ChevronDown, ChevronRight, Download, ExternalLink, CheckCircle, Star, CalendarDays } from "lucide-react"
 
 function externalLinkLabel(url: string): string {
   try {
@@ -55,6 +56,7 @@ export function AgencyBroadcastResponsesPanel() {
   const [feedbackSavedIds, setFeedbackSavedIds] = useState<Record<string, boolean>>({})
   const [feedbackEditingIds, setFeedbackEditingIds] = useState<Record<string, boolean>>({})
   const [shortlistHoverIds, setShortlistHoverIds] = useState<Record<string, boolean>>({})
+  const [meetingHoverIds, setMeetingHoverIds] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (isDemo) {
@@ -146,17 +148,6 @@ export function AgencyBroadcastResponsesPanel() {
     )
   }
 
-  const statusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      submitted: "bg-blue-100 text-blue-800",
-      under_review: "bg-amber-100 text-amber-800",
-      shortlisted: "bg-purple-100 text-purple-800",
-      awarded: "bg-green-100 text-green-800",
-      declined: "bg-gray-200 text-gray-800",
-    }
-    return styles[status] || "bg-white/10 text-foreground-muted"
-  }
-
   const patchResponse = async (id: string, payload: Record<string, unknown>) => {
     setBusyId(id)
     setError(null)
@@ -220,10 +211,10 @@ export function AgencyBroadcastResponsesPanel() {
                 <span
                   className={cn(
                     "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase shrink-0",
-                    statusBadge(r.status)
+                    getBidStatusColor(r.status)
                   )}
                 >
-                  {r.status.replace(/_/g, " ")}
+                  {getBidStatusLabel(r.status, "agency")}
                 </span>
               </button>
               {expanded && (
@@ -368,6 +359,39 @@ export function AgencyBroadcastResponsesPanel() {
                     </div>
 
                     <div className="flex flex-wrap gap-2 items-center">
+                      <Button
+                        size="sm"
+                        variant={r.status === "meeting_requested" ? "default" : "outline"}
+                        className={cn(
+                          r.status === "meeting_requested"
+                            ? meetingHoverIds[r.id]
+                              ? "bg-slate-600 hover:bg-slate-600/90 text-white"
+                              : "bg-cyan-600 hover:bg-cyan-600/90 text-white"
+                            : "border-cyan-400/40 text-cyan-300"
+                        )}
+                        onMouseEnter={() =>
+                          r.status === "meeting_requested" && setMeetingHoverIds((prev) => ({ ...prev, [r.id]: true }))
+                        }
+                        onMouseLeave={() =>
+                          r.status === "meeting_requested" && setMeetingHoverIds((prev) => ({ ...prev, [r.id]: false }))
+                        }
+                        onClick={() =>
+                          patchResponse(r.id, { status: r.status === "meeting_requested" ? "under_review" : "meeting_requested" })
+                        }
+                        disabled={busyId === r.id || r.status === "awarded"}
+                      >
+                        <CalendarDays
+                          className={cn(
+                            "w-3.5 h-3.5 mr-1.5",
+                            r.status === "meeting_requested" && !meetingHoverIds[r.id] && "fill-current"
+                          )}
+                        />
+                        {r.status === "meeting_requested"
+                          ? meetingHoverIds[r.id]
+                            ? "Cancel Meeting Request"
+                            : "Meeting Requested"
+                          : "Request Meeting"}
+                      </Button>
                       <Button
                         size="sm"
                         variant={r.status === "shortlisted" ? "default" : "outline"}
