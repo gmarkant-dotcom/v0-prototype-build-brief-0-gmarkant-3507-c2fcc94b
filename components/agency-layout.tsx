@@ -8,7 +8,7 @@ import { HolographicBlobs } from "./holographic-blobs"
 import { LigamentLogo } from "./ligament-logo"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield } from "lucide-react"
+import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditCard } from "lucide-react"
 import { SelectedProjectProvider, useSelectedProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
@@ -395,6 +395,14 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                 >
                   <User className="w-4 h-4 text-foreground-muted" />
                   <span className="text-sm text-foreground">Profile</span>
+                </Link>
+                <Link
+                  href="/agency/settings/billing"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                >
+                  <CreditCard className="w-4 h-4 text-foreground-muted" />
+                  <span className="text-sm text-foreground">Billing & Plan</span>
                 </Link>
                 {isOwner && (
                   <Link
