@@ -1059,7 +1059,7 @@ export default function PartnerRfpDetailPage() {
 
           {canEdit ? (
             <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
-              {["under_review", "shortlisted", "meeting_requested"].includes(currentStatus) && (
+              {canEdit && (
                 <div className="w-full">
                   <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
                     Change notes (optional)
@@ -1142,7 +1142,7 @@ export default function PartnerRfpDetailPage() {
                 versions.map((v) => {
                   const isOriginal = v.version_number === 1
                   const preview =
-                    (v.proposal_text || "").length > 120 ? `${v.proposal_text.slice(0, 120)}…` : v.proposal_text || "—"
+                    (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "—"
                   const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
                   return (
                     <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">

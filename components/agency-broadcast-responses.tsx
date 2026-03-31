@@ -118,7 +118,14 @@ export function AgencyBroadcastResponsesPanel() {
           count: Array.isArray(data.responses) ? data.responses.length : 0,
         })
         if (!res.ok) throw new Error((data?.error as string) || "Could not load responses")
-        if (!cancelled) setRows((data.responses || []) as AgencyResponseRow[])
+        if (!cancelled) {
+          const nextRows = (data.responses || []) as AgencyResponseRow[]
+          console.log(
+            "[agency/bids] versions per bid",
+            nextRows.map((row) => ({ responseId: row.id, versionCount: (row.versions || []).length }))
+          )
+          setRows(nextRows)
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
       } finally {
@@ -291,6 +298,10 @@ export function AgencyBroadcastResponsesPanel() {
                         </div>
                         {selectedVersion && (
                           <div className="space-y-2">
+                            <div className="font-display font-bold text-sm text-foreground">
+                              V{selectedVersion.version_number}{" "}
+                              {selectedVersion.version_number === 1 ? "— Original" : "— Resubmission"}
+                            </div>
                             <div className="grid sm:grid-cols-2 gap-3 text-sm">
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
@@ -303,9 +314,15 @@ export function AgencyBroadcastResponsesPanel() {
                             </div>
                             <div>
                               <div className="font-mono text-[10px] uppercase text-foreground-muted">Proposal</div>
-                              <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                                {selectedVersion.proposal_text || "—"}
-                              </p>
+                              {(() => {
+                                const preview = (selectedVersion.proposal_text || "").trim()
+                                const clipped = preview.length > 100 ? `${preview.slice(0, 100)}…` : preview
+                                return (
+                                  <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                                    {clipped || "—"}
+                                  </p>
+                                )
+                              })()}
                             </div>
                             {selectedVersion.change_notes && (
                               <div className="rounded-md border border-amber-300/50 bg-amber-500/10 p-2">

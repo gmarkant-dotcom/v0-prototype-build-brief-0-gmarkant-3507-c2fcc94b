@@ -211,11 +211,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .limit(1)
         .maybeSingle()
       const nextVersion = Number(latestVersion?.version_number || 0) + 1
-      const { error: versionErr } = await supabase.from("partner_rfp_response_versions").insert({
+      const versionInsertPayload = {
         response_id: saved.id,
         partner_id: user.id,
         agency_id: inbox.agency_id,
         version_number: nextVersion,
+      }
+      console.log("[api] version insert payload", {
+        route,
+        method: "POST",
+        userId: user.id,
+        ...versionInsertPayload,
+      })
+      const { error: versionErr } = await supabase.from("partner_rfp_response_versions").insert({
+        ...versionInsertPayload,
         proposal_text,
         budget_proposal,
         timeline_proposal,
