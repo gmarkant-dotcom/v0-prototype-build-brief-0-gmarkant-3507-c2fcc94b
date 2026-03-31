@@ -41,7 +41,11 @@ export default function PartnerUserProfilePage() {
         router.push("/auth/login?redirect=%2Fpartner%2Fsettings%2Fuser")
         return
       }
-      const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, role, full_name, display_name, avatar_url, notification_preferences")
+        .eq("id", user.id)
+        .maybeSingle()
       if (profile?.role !== "partner") {
         router.push("/partner")
         return

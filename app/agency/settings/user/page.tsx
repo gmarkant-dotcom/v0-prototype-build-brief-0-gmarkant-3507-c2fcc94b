@@ -41,7 +41,11 @@ export default function AgencyUserProfilePage() {
         router.push("/auth/login?redirect=%2Fagency%2Fsettings%2Fuser")
         return
       }
-      const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, role, full_name, display_name, avatar_url, notification_preferences")
+        .eq("id", user.id)
+        .maybeSingle()
       if (profile?.role !== "agency") {
         router.push("/agency")
         return
