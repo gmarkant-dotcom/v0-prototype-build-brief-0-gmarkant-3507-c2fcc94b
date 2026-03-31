@@ -733,71 +733,125 @@ export default function PartnerRfpDetailPage() {
           </div>
         </div>
 
-        {activeTab === "status" && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <div className="font-mono text-[10px] uppercase text-gray-500 mb-2">Current status</div>
-            <span
-              className={cn(
-                "font-mono text-xs px-3 py-1 rounded-full uppercase inline-flex items-center gap-1",
-                getBidStatusColor(currentStatus)
-              )}
-            >
-              {currentStatus === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
-              {getBidStatusLabel(currentStatus, "partner")}
-            </span>
-          </div>
-        )}
-
-        {activeTab === "status" && existing?.agency_feedback && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-            <h3 className="font-display font-bold text-[#0C3535]">Feedback from Agency</h3>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{existing.agency_feedback}</p>
-            {feedbackUpdatedAt && <p className="font-mono text-[10px] text-gray-500 mt-2">Updated {feedbackUpdatedAt}</p>}
-          </div>
-        )}
-        {activeTab === "status" && currentStatus === "under_review" && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900">
-            The agency has requested changes to your bid. Review their feedback below and resubmit when ready.
-          </div>
-        )}
-        {activeTab === "status" && currentStatus === "meeting_requested" && (
-          <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-4">
-            <h3 className="font-display font-bold text-cyan-900">Your lead agency has requested a meeting</h3>
-            {inbox.agency_meeting_url ? (
-              <div className="mt-3">
-                <Button className="bg-cyan-600 hover:bg-cyan-600/90 text-white" asChild>
-                  <a href={ensureAbsoluteUrl(inbox.agency_meeting_url)} target="_blank" rel="noopener noreferrer">
-                    <CalendarDays className="w-4 h-4 mr-2" />
-                    Schedule Meeting
-                  </a>
-                </Button>
+        <div className="space-y-6">
+          {activeTab === "status" ? (
+            <>
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="font-mono text-[10px] uppercase text-gray-500 mb-2">Current status</div>
+                <span
+                  className={cn(
+                    "font-mono text-xs px-3 py-1 rounded-full uppercase inline-flex items-center gap-1",
+                    getBidStatusColor(currentStatus)
+                  )}
+                >
+                  {currentStatus === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
+                  {getBidStatusLabel(currentStatus, "partner")}
+                </span>
               </div>
-            ) : (
-              <p className="text-sm text-cyan-900 mt-2">The agency will be in touch to schedule a meeting.</p>
-            )}
-          </div>
-        )}
-        {activeTab === "status" && currentStatus === "awarded" && (
-          <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-900 font-medium">
-            Congratulations! Your bid has been awarded.
-          </div>
-        )}
-        {activeTab === "status" && currentStatus === "declined" && (
-          <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 text-gray-800">This bid was declined.</div>
-        )}
 
-        {activeTab === "rfp" && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-5 h-5 text-[#0C3535]" />
-            <h2 className="font-display font-bold text-lg text-[#0C3535]">Master RFP</h2>
-          </div>
-          <MasterRfpSections json={inbox.master_rfp_json} />
-        </div>
-        )}
+              {existing?.agency_feedback && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                  <h3 className="font-display font-bold text-[#0C3535]">Feedback from Agency</h3>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{existing.agency_feedback}</p>
+                  {feedbackUpdatedAt && <p className="font-mono text-[10px] text-gray-500 mt-2">Updated {feedbackUpdatedAt}</p>}
+                </div>
+              )}
+              {currentStatus === "under_review" && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900">
+                  The agency has requested changes to your bid. Review their feedback below and resubmit when ready.
+                </div>
+              )}
+              {currentStatus === "meeting_requested" && (
+                <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-4">
+                  <h3 className="font-display font-bold text-cyan-900">Your lead agency has requested a meeting</h3>
+                  {inbox.agency_meeting_url ? (
+                    <div className="mt-3">
+                      <Button className="bg-cyan-600 hover:bg-cyan-600/90 text-white" asChild>
+                        <a href={ensureAbsoluteUrl(inbox.agency_meeting_url)} target="_blank" rel="noopener noreferrer">
+                          <CalendarDays className="w-4 h-4 mr-2" />
+                          Schedule Meeting
+                        </a>
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-cyan-900 mt-2">The agency will be in touch to schedule a meeting.</p>
+                  )}
+                </div>
+              )}
+              {currentStatus === "awarded" && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-900 font-medium">
+                  Congratulations! Your bid has been awarded.
+                </div>
+              )}
+              {currentStatus === "declined" && (
+                <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 text-gray-800">This bid was declined.</div>
+              )}
 
-        {activeTab === "bid" && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between"
+                  onClick={() => setHistoryOpen((prev) => !prev)}
+                >
+                  <h3 className="font-display font-bold text-lg text-[#0C3535]">Submission History</h3>
+                  <span className="text-sm text-gray-600">{historyOpen ? "Hide" : "Show"}</span>
+                </button>
+                {historyOpen && (
+                  <div className="mt-4 space-y-3">
+                    {versions.length === 0 ? (
+                      <p className="text-sm text-gray-600">No previous submissions.</p>
+                    ) : (
+                      versions.map((v) => {
+                        const isOriginal = v.version_number === 1
+                        const preview =
+                          (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "—"
+                        const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
+                        return (
+                          <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="font-display font-bold text-[#0C3535] text-base">
+                                V{v.version_number} {isOriginal ? "— Original" : ""}
+                              </div>
+                              <div className="font-mono text-[10px] text-gray-500">
+                                {new Date(v.submitted_at).toLocaleString()}
+                              </div>
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
+                              <div>
+                                <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
+                                <div>{formatBudgetForDisplay(v.budget_proposal || "")}</div>
+                              </div>
+                              <div>
+                                <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
+                                <div>{formatTimelineForDisplay(v.timeline_proposal || "")}</div>
+                              </div>
+                            </div>
+                            <p className="text-sm text-gray-700 mt-3">{preview || "—"}</p>
+                            {v.change_notes && (
+                              <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
+                                <div className="font-mono text-[10px] uppercase text-amber-800">Change notes</div>
+                                <p className="text-sm text-amber-900 whitespace-pre-wrap">{v.change_notes}</p>
+                              </div>
+                            )}
+                            <p className="font-mono text-[10px] text-gray-500 mt-2">Attachments: {attachmentCount}</p>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : activeTab === "rfp" ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <FileText className="w-5 h-5 text-[#0C3535]" />
+                <h2 className="font-display font-bold text-lg text-[#0C3535]">Master RFP</h2>
+              </div>
+              <MasterRfpSections json={inbox.master_rfp_json} />
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Your bid response</h2>
           <p className="text-sm text-gray-600 mb-6">
               Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, shortlisted, or meeting requested.
@@ -1207,65 +1261,9 @@ export default function PartnerRfpDetailPage() {
               </Button>
             </div>
           ) : null}
-        </div>
-        )}
-
-        {activeTab === "status" && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between"
-            onClick={() => setHistoryOpen((prev) => !prev)}
-          >
-            <h3 className="font-display font-bold text-lg text-[#0C3535]">Submission History</h3>
-            <span className="text-sm text-gray-600">{historyOpen ? "Hide" : "Show"}</span>
-          </button>
-          {historyOpen && (
-            <div className="mt-4 space-y-3">
-              {versions.length === 0 ? (
-                <p className="text-sm text-gray-600">No previous submissions.</p>
-              ) : (
-                versions.map((v) => {
-                  const isOriginal = v.version_number === 1
-                  const preview =
-                    (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "—"
-                  const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
-                  return (
-                    <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="font-display font-bold text-[#0C3535] text-base">
-                          V{v.version_number} {isOriginal ? "— Original" : ""}
-                        </div>
-                        <div className="font-mono text-[10px] text-gray-500">
-                          {new Date(v.submitted_at).toLocaleString()}
-                        </div>
-                      </div>
-                      <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
-                        <div>
-                          <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
-                          <div>{formatBudgetForDisplay(v.budget_proposal || "")}</div>
-                        </div>
-                        <div>
-                          <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
-                          <div>{formatTimelineForDisplay(v.timeline_proposal || "")}</div>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-700 mt-3">{preview || "—"}</p>
-                      {v.change_notes && (
-                        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
-                          <div className="font-mono text-[10px] uppercase text-amber-800">Change notes</div>
-                          <p className="text-sm text-amber-900 whitespace-pre-wrap">{v.change_notes}</p>
-                        </div>
-                      )}
-                      <p className="font-mono text-[10px] text-gray-500 mt-2">Attachments: {attachmentCount}</p>
-                    </div>
-                  )
-                })
-              )}
             </div>
           )}
         </div>
-        )}
       </div>
     </PartnerChrome>
   )
