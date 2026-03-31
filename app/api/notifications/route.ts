@@ -1,15 +1,23 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
+export const dynamic = "force-dynamic"
+
+const noStoreHeaders = {
+  "Cache-Control": "private, no-store, no-cache, must-revalidate",
+} as const
+
 // GET /api/notifications - Get user's notifications
 export async function GET(request: Request) {
   try {
+    const route = "/api/notifications"
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+    console.log("[api] start", { route, method: "GET", userId: user.id, role: null })
 
     const { searchParams } = new URL(request.url)
     const unreadOnly = searchParams.get('unread') === 'true'
@@ -29,7 +37,8 @@ export async function GET(request: Request) {
     const { data: notifications, error } = await query
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error("[api] failure", { route, method: "GET", userId: user.id, role: null, code: 500, message: error.message })
+      return NextResponse.json({ error: error.message }, { status: 500, headers: noStoreHeaders })
     }
 
     // Get unread count
@@ -39,13 +48,19 @@ export async function GET(request: Request) {
       .eq('user_id', user.id)
       .eq('read', false)
 
+    console.log("[api] success", { route, method: "GET", userId: user.id, role: null, rowCount: notifications?.length ?? 0, unreadCount: count || 0 })
     return NextResponse.json({ 
       notifications: notifications || [],
       unreadCount: count || 0
-    })
+    }, { headers: noStoreHeaders })
   } catch (error) {
-    console.error('Error fetching notifications:', error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("[api] failure", {
+      route: "/api/notifications",
+      method: "GET",
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json({ error: "Internal server error" }, { status: 500, headers: noStoreHeaders })
   }
 }
 

@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { EmptyState } from "@/components/empty-state"
-import { usePaidUser } from "@/contexts/paid-user-context"
 import { TrendingUp, TrendingDown, ArrowRight, DollarSign, Calendar, AlertCircle } from "lucide-react"
 
 interface Payment {
@@ -95,7 +94,6 @@ const getStatusStyle = (status: string) => {
 
 export function Stage06Payments() {
   const isDemo = isDemoMode()
-  const { requirePaid } = usePaidUser()
   const payments = isDemo ? demoPayments : []
   const clientPayments = isDemo ? demoClientPayments : []
   const cashflowData = isDemo ? demoCashflowData : []

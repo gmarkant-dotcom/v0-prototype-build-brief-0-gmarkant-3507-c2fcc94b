@@ -1,13 +1,19 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
+const noStoreHeaders = {
+  'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+} as const
+
 // GET - List messages for a project/assignment
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log('[projects/messages] GET start')
+    const route = '/api/projects/[id]/messages'
     const { id: projectId } = await params
     const assignmentId = request.nextUrl.searchParams.get('assignmentId')
     
@@ -27,6 +33,7 @@ export async function GET(
     if (!profile?.role) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile.role })
 
     if (profile.role === 'agency') {
       const { data: project } = await supabase
@@ -72,11 +79,16 @@ export async function GET(
 
     if (error) throw error
 
-    console.log('[projects/messages] GET success', { projectId, count: messages?.length || 0 })
-    return NextResponse.json({ messages })
+    console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile.role, rowCount: messages?.length || 0 })
+    return NextResponse.json({ messages }, { headers: noStoreHeaders })
   } catch (error) {
-    console.error('Error fetching messages:', error)
-    return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 })
+    console.error('[api] failure', {
+      route: '/api/projects/[id]/messages',
+      method: 'GET',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500, headers: noStoreHeaders })
   }
 }
 
@@ -86,7 +98,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log('[projects/messages] POST start')
+    const route = '/api/projects/[id]/messages'
     const { id: projectId } = await params
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -107,6 +119,7 @@ export async function POST(
       .select('role')
       .eq('id', user.id)
       .single()
+    console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
 
     if (profile?.role === 'agency') {
       // Agency must own the project
@@ -154,10 +167,15 @@ export async function POST(
 
     if (error) throw error
 
-    console.log('[projects/messages] POST success', { projectId, messageId: message?.id })
+    console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: message?.id })
     return NextResponse.json({ message })
   } catch (error) {
-    console.error('Error sending message:', error)
+    console.error('[api] failure', {
+      route: '/api/projects/[id]/messages',
+      method: 'POST',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
   }
 }

@@ -66,8 +66,8 @@ function defaultLabelForType(type: string): string {
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const route = "/api/partner/rfps/[id]/response"
     const { id: inboxId } = await params
-    console.log("[partner/rfps/response] POST start", { inboxId })
 
     const supabase = await createClient()
     const {
@@ -83,6 +83,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .select("role, company_name, full_name, email")
       .eq("id", user.id)
       .single()
+    console.log("[api] start", { route, method: "POST", userId: user.id, role: profile?.role ?? null })
 
     if (profile?.role !== "partner") {
       return NextResponse.json({ error: "Partners only" }, { status: 403 })
@@ -99,22 +100,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
 
     const body = (await req.json().catch(() => ({}))) as Body
-    console.log("[partner/rfps/response] request body (full)", JSON.stringify(body))
 
     const status = body.status === "submitted" ? "submitted" : "draft"
     const proposal_text = (body.proposal_text ?? "").toString()
     const budget_proposal = (body.budget_proposal ?? "").toString()
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
     const attachments = normalizeAttachments(body.attachments)
-    console.log("[partner/rfps/response] normalized attachments", JSON.stringify(attachments))
 
     if (status === "submitted") {
       if (!proposal_text.trim()) {
-        console.error("[partner/rfps/response] submit rejected: empty proposal_text")
+        console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 400, message: "Proposal text is required to submit" })
         return NextResponse.json({ error: "Proposal text is required to submit" }, { status: 400 })
       }
       if (!isBudgetValidForSubmit(budget_proposal)) {
-        console.error("[partner/rfps/response] submit rejected: budget", { budget_proposal })
+        console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 400, message: "Budget proposal is required to submit" })
         return NextResponse.json(
           {
             error: "Budget proposal is required to submit",
@@ -124,7 +123,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         )
       }
       if (!isTimelineValidForSubmit(timeline_proposal)) {
-        console.error("[partner/rfps/response] submit rejected: timeline", { timeline_proposal })
+        console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 400, message: "Timeline proposal is required to submit" })
         return NextResponse.json(
           {
             error: "Timeline proposal is required to submit",
@@ -174,7 +173,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .select()
         .single()
       if (error) {
-        console.error("[partner/rfps/response] update:", error)
+        console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 500, message: error.message })
         return NextResponse.json(
           { error: error.message, detail: error.code ? `code=${error.code}` : undefined },
           { status: 500 }
@@ -184,7 +183,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     } else {
       const { data, error } = await supabase.from("partner_rfp_responses").insert(insertRow).select().single()
       if (error) {
-        console.error("[partner/rfps/response] insert:", error)
+        console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 500, message: error.message })
         return NextResponse.json(
           { error: error.message, detail: error.code ? `code=${error.code}` : undefined },
           { status: 500 }
@@ -200,10 +199,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .eq("id", inboxId)
     }
 
-    console.log("[partner/rfps/response] response saved (full)", JSON.stringify(saved))
+    console.log("[api] success", {
+      route,
+      method: "POST",
+      userId: user.id,
+      role: profile?.role ?? null,
+      recordId: saved?.id,
+      status,
+      attachmentCount: attachments.length,
+    })
     return NextResponse.json({ response: saved })
   } catch (e) {
-    console.error("[partner/rfps/response] POST exception:", e)
+    console.error("[api] failure", {
+      route: "/api/partner/rfps/[id]/response",
+      method: "POST",
+      code: 500,
+      message: e instanceof Error ? e.message : String(e),
+    })
     return NextResponse.json(
       { error: "Failed to save response", detail: e instanceof Error ? e.message : String(e) },
       { status: 500 }

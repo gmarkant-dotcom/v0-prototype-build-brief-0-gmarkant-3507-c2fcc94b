@@ -905,7 +905,7 @@ export default function PartnerRfpDetailPage() {
                             fileRefs.current[d.id] = el
                           }}
                           type="file"
-                          accept=".pdf,.pptx,.ppt,.docx,.doc"
+                          accept=".pdf,.pptx,.docx"
                           className="sr-only"
                           onChange={(e) => void onFileForDraft(d.id, e)}
                         />

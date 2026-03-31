@@ -1,10 +1,16 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
+const noStoreHeaders = {
+  'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+} as const
+
 // GET - List projects for current user
 export async function GET(request: NextRequest) {
   try {
-    console.log('[projects] GET start')
+    const route = '/api/projects'
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
@@ -17,6 +23,7 @@ export async function GET(request: NextRequest) {
       .select('role')
       .eq('id', user.id)
       .single()
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null })
 
     let projects
     
@@ -61,7 +68,8 @@ export async function GET(request: NextRequest) {
 
       const partnershipIds = (userPartnerships || []).map((r) => r.id)
       if (partnershipIds.length === 0) {
-        return NextResponse.json({ projects: [] })
+        console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, rowCount: 0 })
+        return NextResponse.json({ projects: [] }, { headers: noStoreHeaders })
       }
 
       const { data, error } = await supabase
@@ -95,17 +103,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    console.log('[projects] GET success', { role: profile?.role, count: Array.isArray(projects) ? projects.length : 0 })
-    return NextResponse.json({ projects })
+    console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, rowCount: Array.isArray(projects) ? projects.length : 0 })
+    return NextResponse.json({ projects }, { headers: noStoreHeaders })
   } catch (error) {
-    console.error('Error fetching projects:', error)
-    return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 })
+    console.error('[api] failure', {
+      route: '/api/projects',
+      method: 'GET',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500, headers: noStoreHeaders })
   }
 }
 
 // POST - Create a new project (agency only)
 export async function POST(request: NextRequest) {
   try {
+    const route = '/api/projects'
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
@@ -118,6 +132,7 @@ export async function POST(request: NextRequest) {
       .select('role, is_paid, is_admin')
       .eq('id', user.id)
       .single()
+    console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
 
     if (profile?.role !== 'agency') {
       return NextResponse.json({ error: 'Only agencies can create projects' }, { status: 403 })
@@ -189,9 +204,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: project.id })
     return NextResponse.json({ project })
   } catch (error) {
-    console.error('Error creating project:', error)
+    console.error('[api] failure', {
+      route: '/api/projects',
+      method: 'POST',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
     const message =
       (error as any)?.message ||
       (error as any)?.details ||

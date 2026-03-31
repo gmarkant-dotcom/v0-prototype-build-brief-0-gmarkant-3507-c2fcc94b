@@ -1,9 +1,11 @@
 import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { validateUploadFile } from '@/lib/upload-validation'
 
 export async function POST(request: NextRequest) {
   try {
+    const route = '/api/upload'
     // Verify user is authenticated
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -18,6 +20,7 @@ export async function POST(request: NextRequest) {
       .select('is_paid, is_admin, role')
       .eq('id', user.id)
       .single()
+    console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
     
     const isDemoMode = process.env.NEXT_PUBLIC_IS_DEMO === 'true'
     const canUpload =
@@ -38,12 +41,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
+    const validation = validateUploadFile(file)
+    if (!validation.ok) {
+      console.error('[api] failure', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, code: 400, message: validation.message })
+      return NextResponse.json({ error: validation.message }, { status: 400 })
+    }
+
     // Create a unique filename with timestamp and user ID for isolation
     const timestamp = Date.now()
     const filename = `${folder}/${user.id}/${timestamp}-${file.name}`
 
     const blob = await put(filename, file, {
       access: 'private',
+    })
+
+    console.log('[api] success', {
+      route,
+      method: 'POST',
+      userId: user.id,
+      role: profile?.role ?? null,
+      pathname: blob.pathname,
     })
 
     return NextResponse.json({ 
@@ -54,7 +71,12 @@ export async function POST(request: NextRequest) {
       contentType: blob.contentType,
     })
   } catch (error) {
-    console.error('Upload error:', error)
+    console.error('[api] failure', {
+      route: '/api/upload',
+      method: 'POST',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
 }

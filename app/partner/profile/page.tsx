@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,7 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { FileUpload } from "@/components/file-upload"
 import { Loader2, Upload } from "lucide-react"
-import { usePaidUser } from "@/contexts/paid-user-context"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 
 const disciplines = [
   "Video Production",
@@ -42,9 +43,10 @@ const capabilities = [
 ]
 
 export default function PartnerProfilePage() {
-  const { checkFeatureAccess } = usePaidUser()
+  const router = useRouter()
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [customCapability, setCustomCapability] = useState("")
   const [customCapabilities, setCustomCapabilities] = useState<string[]>([])
   const [showCustomDiscipline, setShowCustomDiscipline] = useState(false)
@@ -94,8 +96,27 @@ export default function PartnerProfilePage() {
   const [reelUrl, setReelUrl] = useState("")
   const reelInputRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    const ensurePartnerAuth = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/auth/login?redirect=%2Fpartner%2Fprofile")
+        return
+      }
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+      if (profile?.role !== "partner") {
+        router.push("/partner")
+      }
+    }
+    ensurePartnerAuth()
+  }, [router])
+
   const handleReelUpload = async (file: File) => {
     setIsUploadingReel(true)
+    setUploadError(null)
     try {
       const formData = new FormData()
       formData.append("file", file)
@@ -106,12 +127,15 @@ export default function PartnerProfilePage() {
         body: formData,
       })
 
-      if (!response.ok) throw new Error("Upload failed")
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || "Upload failed")
+      }
       const result = await response.json()
       setReelUrl(result.url)
     } catch (error) {
       console.error("Upload error:", error)
-      alert("Upload failed. Please try again.")
+      setUploadError(error instanceof Error ? error.message : "Upload failed. Please try again.")
     } finally {
       setIsUploadingReel(false)
     }
@@ -126,7 +150,6 @@ export default function PartnerProfilePage() {
   }
   
   const handleSave = async () => {
-    if (!checkFeatureAccess("profile updates")) return
     setSaving(true)
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000))
@@ -166,6 +189,11 @@ export default function PartnerProfilePage() {
   return (
     <PartnerLayout>
       <div className="max-w-4xl mx-auto space-y-8">
+        {uploadError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+            {uploadError}
+          </div>
+        )}
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display font-bold text-3xl text-[#0C3535]">Profile & Capabilities</h1>

@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { LeadAgencyFilter } from "@/components/lead-agency-filter"
 import { isDemoMode } from "@/lib/demo-data"
-import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import { 
   FileText, 
   Download, 
@@ -166,14 +167,34 @@ const demoOnboardingPackets: OnboardingPacket[] = [
 
 export default function PartnerOnboardingPage() {
   const isDemo = isDemoMode()
-  const { checkFeatureAccess } = usePaidUser()
+  const router = useRouter()
   const onboardingPackets = isDemo ? demoOnboardingPackets : []
   const [packets, setPackets] = useState(onboardingPackets)
   const [selectedPacket, setSelectedPacket] = useState<OnboardingPacket | null>(packets[0] || null)
   const [showSignModal, setShowSignModal] = useState(false)
   const [signingDoc, setSigningDoc] = useState<OnboardingDocument | null>(null)
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
+
+  useEffect(() => {
+    if (isDemo) return
+    const ensurePartnerAuth = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/auth/login?redirect=%2Fpartner%2Fonboarding")
+        return
+      }
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+      if (profile?.role !== "partner") {
+        router.push("/partner")
+      }
+    }
+    ensurePartnerAuth()
+  }, [isDemo, router])
   
   const getStatusColor = (status: DocumentStatus) => {
     switch (status) {
@@ -199,8 +220,8 @@ export default function PartnerOnboardingPage() {
   
   const handleFileUpload = async (docId: string, file: File) => {
     if (!selectedPacket) return
-    if (!checkFeatureAccess("document uploads")) return
     setUploadingDocId(docId)
+    setUploadError(null)
     
     try {
       const formData = new FormData()
@@ -212,7 +233,10 @@ export default function PartnerOnboardingPage() {
         body: formData,
       })
 
-      if (!response.ok) throw new Error("Upload failed")
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || "Upload failed")
+      }
 
       const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
       
@@ -226,7 +250,7 @@ export default function PartnerOnboardingPage() {
       setPackets(prev => prev.map(p => p.id === selectedPacket.id ? updatedPacket : p))
     } catch (error) {
       console.error("Upload error:", error)
-      alert("Upload failed. Please try again.")
+      setUploadError(error instanceof Error ? error.message : "Upload failed. Please try again.")
     } finally {
       setUploadingDocId(null)
     }
@@ -355,6 +379,11 @@ export default function PartnerOnboardingPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {uploadError && (
+              <div className="lg:col-span-3 bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+                {uploadError}
+              </div>
+            )}
             {/* Packet List */}
             <div className="space-y-3">
               {packets.map((packet) => {
@@ -562,7 +591,7 @@ export default function PartnerOnboardingPage() {
                                           type="file"
                                           ref={(el) => { fileInputRefs.current[doc.id] = el }}
                                           onChange={(e) => handleFileChange(doc.id, e)}
-                                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                                          accept=".pdf,.docx,.pptx"
                                           className="sr-only"
                                         />
                                       )}

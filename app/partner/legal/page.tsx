@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { LeadAgencyFilter } from "@/components/lead-agency-filter"
 import { Loader2 } from "lucide-react"
-import { usePaidUser } from "@/contexts/paid-user-context"
+import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 
 type Document = {
   id: string
@@ -69,6 +70,7 @@ const emptyDocuments: Document[] = [
 
 export default function PartnerLegalPage() {
   const isDemo = isDemoMode()
+  const router = useRouter()
   const requiredDocuments = isDemo ? demoRequiredDocuments : emptyDocuments
   
   const [documents, setDocuments] = useState(requiredDocuments)
@@ -88,14 +90,33 @@ export default function PartnerLegalPage() {
     stateOfIncorporation: "",
   })
   
-  const { checkFeatureAccess } = usePaidUser()
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  
+  useEffect(() => {
+    if (isDemo) return
+    const ensurePartnerAuth = async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/auth/login?redirect=%2Fpartner%2Flegal")
+        return
+      }
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+      if (profile?.role !== "partner") {
+        router.push("/partner")
+      }
+    }
+    ensurePartnerAuth()
+  }, [isDemo, router])
   const completedCount = documents.filter(d => d.status === "complete").length
   const totalCount = documents.length
   const completionPercentage = Math.round((completedCount / totalCount) * 100)
 
   const handleFileUpload = async (docId: string, file: File) => {
-    if (!checkFeatureAccess("document uploads")) return
     setUploadingDocId(docId)
+    setUploadError(null)
     
     try {
       const formData = new FormData()
@@ -107,9 +128,10 @@ export default function PartnerLegalPage() {
         body: formData,
       })
 
-      if (!response.ok) throw new Error("Upload failed")
-
-      const result = await response.json()
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || "Upload failed")
+      }
       
       // Update document status
       setDocuments(prev => prev.map(doc => 
@@ -123,7 +145,7 @@ export default function PartnerLegalPage() {
       ))
     } catch (error) {
       console.error("Upload error:", error)
-      alert("Upload failed. Please try again.")
+      setUploadError(error instanceof Error ? error.message : "Upload failed. Please try again.")
     } finally {
       setUploadingDocId(null)
     }
@@ -165,6 +187,12 @@ export default function PartnerLegalPage() {
         </div>
         
         {/* Progress Alert */}
+        {uploadError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+            {uploadError}
+          </div>
+        )}
+        
         {completionPercentage < 100 && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
             <div className="flex items-start gap-4">
@@ -309,7 +337,7 @@ export default function PartnerLegalPage() {
                           type="file"
                           ref={(el) => { fileInputRefs.current[doc.id] = el }}
                           onChange={(e) => handleFileChange(doc.id, e)}
-                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                          accept=".pdf,.docx,.pptx"
                           className="sr-only"
                         />
                         <Button 

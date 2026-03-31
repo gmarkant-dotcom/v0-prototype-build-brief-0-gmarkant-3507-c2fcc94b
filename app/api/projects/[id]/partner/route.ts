@@ -2,11 +2,18 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 /** Partner-only: single project + assignment + agency + agreements + deployments */
+export const dynamic = 'force-dynamic'
+
+const noStoreHeaders = {
+  'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+} as const
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const route = '/api/projects/[id]/partner'
     const { id: projectId } = await params
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -24,6 +31,7 @@ export async function GET(
     if (profile?.role !== 'partner') {
       return NextResponse.json({ error: 'Partner access only' }, { status: 403 })
     }
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile.role })
 
     const { data: partnerships } = await supabase
       .from('partnerships')
@@ -102,6 +110,7 @@ export async function GET(
 
     if (!depErr && depData) deployments = depData
 
+    console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile.role, recordId: project.id })
     return NextResponse.json({
       assignment: {
         id: assignment.id,
@@ -122,9 +131,14 @@ export async function GET(
       agency: agency || null,
       agreements,
       deployments,
-    })
+    }, { headers: noStoreHeaders })
   } catch (e) {
-    console.error('partner project GET:', e)
-    return NextResponse.json({ error: 'Failed to load project' }, { status: 500 })
+    console.error('[api] failure', {
+      route: '/api/projects/[id]/partner',
+      method: 'GET',
+      code: 500,
+      message: e instanceof Error ? e.message : String(e),
+    })
+    return NextResponse.json({ error: 'Failed to load project' }, { status: 500, headers: noStoreHeaders })
   }
 }

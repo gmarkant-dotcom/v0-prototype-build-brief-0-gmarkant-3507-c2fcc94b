@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
+    const route = "/api/agency/rfp-responses"
     const supabase = await createClient()
     const {
       data: { user },
@@ -19,6 +20,7 @@ export async function GET() {
     if (profile?.role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
+    console.log("[api] start", { route, method: "GET", userId: user.id, role: profile.role })
 
     // RLS: policy "Agencies select RFP responses they own" — USING (agency_id = auth.uid())
     const { data: responses, error } = await supabase
@@ -37,11 +39,7 @@ export async function GET() {
     }
 
     const list = responses || []
-    console.log("[agency/rfp-responses] GET ok", {
-      authUserId: user.id,
-      query: "partner_rfp_responses WHERE agency_id = auth.uid()",
-      rowCount: list.length,
-    })
+    console.log("[api] success", { route, method: "GET", userId: user.id, role: profile.role, rowCount: list.length })
 
     const inboxIds = [...new Set(list.map((r) => r.inbox_item_id))]
 
@@ -70,7 +68,12 @@ export async function GET() {
       }
     )
   } catch (e) {
-    console.error("[agency/rfp-responses] GET:", e)
+    console.error("[api] failure", {
+      route: "/api/agency/rfp-responses",
+      method: "GET",
+      code: 500,
+      message: e instanceof Error ? e.message : String(e),
+    })
     return NextResponse.json({ error: "Failed to load responses" }, { status: 500 })
   }
 }

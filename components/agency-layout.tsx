@@ -35,6 +35,7 @@ const navSections = [
     label: "Resources",
     items: [
       { icon: "◈", title: "Partner Pool", href: "/agency/pool" },
+      { icon: "✦", title: "Marketplace", href: "/agency/pool/marketplace" },
       { icon: "□", title: "Documents", href: "/agency/documents" },
     ]
   }

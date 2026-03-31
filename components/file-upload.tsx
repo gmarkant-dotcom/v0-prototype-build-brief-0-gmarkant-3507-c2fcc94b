@@ -29,7 +29,7 @@ export function FileUpload({
   onUploadComplete,
   onUploadError,
   folder = "documents",
-  accept = ".pdf,.doc,.docx,.pptx,.xls,.xlsx,.txt,.csv,.png,.jpg,.jpeg,.gif",
+  accept = ".pdf,.docx,.pptx",
   maxSize = 10,
   className,
   variant = "default",
@@ -94,7 +94,8 @@ export function FileUpload({
       })
 
       if (!response.ok) {
-        throw new Error("Upload failed")
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || "Upload failed")
       }
 
       const result = await response.json()
@@ -109,8 +110,9 @@ export function FileUpload({
     } catch (error) {
       console.error("Upload error:", error)
       setUploadProgress("error")
-      setErrorMessage("Upload failed. Please try again.")
-      onUploadError?.("Upload failed. Please try again.")
+      const msg = error instanceof Error ? error.message : "Upload failed. Please try again."
+      setErrorMessage(msg)
+      onUploadError?.(msg)
     } finally {
       setIsUploading(false)
       // Reset input
@@ -249,7 +251,7 @@ export function FileUpload({
 export function InlineFileUpload({
   onUploadComplete,
   folder = "documents",
-  accept = ".pdf,.doc,.docx,.pptx,.xls,.xlsx",
+  accept = ".pdf,.docx,.pptx",
   className,
 }: {
   onUploadComplete?: (file: UploadedFile) => void
@@ -277,7 +279,10 @@ export function InlineFileUpload({
         body: formData,
       })
 
-      if (!response.ok) throw new Error("Upload failed")
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}))
+        throw new Error(payload?.error || "Upload failed")
+      }
 
       const result = await response.json()
       onUploadComplete?.(result)

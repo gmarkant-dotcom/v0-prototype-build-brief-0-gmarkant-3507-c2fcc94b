@@ -2,11 +2,14 @@ import { get } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const route = '/api/documents/[id]'
     const { id } = await params
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -14,6 +17,7 @@ export async function GET(
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: null })
 
     // Get document record - RLS will enforce access control
     const { data: document, error } = await supabase
@@ -68,6 +72,7 @@ export async function GET(
       ? `attachment; filename="${document.name}"`
       : 'inline'
 
+    console.log('[api] success', { route, method: 'GET', userId: user.id, role: null, recordId: id })
     return new NextResponse(result.stream, {
       headers: {
         'Content-Type': result.blob.contentType || document.file_type || 'application/octet-stream',
@@ -77,7 +82,12 @@ export async function GET(
       },
     })
   } catch (error) {
-    console.error('Error serving file:', error)
+    console.error('[api] failure', {
+      route: '/api/documents/[id]',
+      method: 'GET',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Failed to serve file' }, { status: 500 })
   }
 }

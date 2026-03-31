@@ -3,9 +3,16 @@ import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { Resend } from 'resend'
 
+export const dynamic = 'force-dynamic'
+
+const noStoreHeaders = {
+  'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+} as const
+
 // GET - List partnerships for current user
 export async function GET(request: NextRequest) {
   try {
+    const route = '/api/partnerships'
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
@@ -19,6 +26,7 @@ export async function GET(request: NextRequest) {
       .select('role')
       .eq('id', user.id)
       .single()
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null })
 
     let partnerships
     
@@ -105,16 +113,29 @@ export async function GET(request: NextRequest) {
       }))
     }
 
-    return NextResponse.json({ partnerships })
+    console.log('[api] success', {
+      route,
+      method: 'GET',
+      userId: user.id,
+      role: profile?.role ?? null,
+      rowCount: Array.isArray(partnerships) ? partnerships.length : 0,
+    })
+    return NextResponse.json({ partnerships }, { headers: noStoreHeaders })
   } catch (error) {
-    console.error('Error fetching partnerships:', error)
-    return NextResponse.json({ error: 'Failed to fetch partnerships' }, { status: 500 })
+    console.error('[api] failure', {
+      route: '/api/partnerships',
+      method: 'GET',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json({ error: 'Failed to fetch partnerships' }, { status: 500, headers: noStoreHeaders })
   }
 }
 
 // POST - Create a new partnership (agency invites partner)
 export async function POST(request: NextRequest) {
   try {
+    const route = '/api/partnerships'
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
@@ -128,6 +149,7 @@ export async function POST(request: NextRequest) {
       .select('role')
       .eq('id', user.id)
       .single()
+    console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
 
     if (profile?.role !== 'agency') {
       return NextResponse.json({ error: 'Only agencies can invite partners' }, { status: 403 })
@@ -418,6 +440,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: partnership.id })
     return NextResponse.json({ 
       partnership,
       partnerExists: !!partner,
@@ -426,7 +449,12 @@ export async function POST(request: NextRequest) {
         : 'Invitation created. Partner will see it when they sign up with this email.'
     })
   } catch (error) {
-    console.error('Error creating partnership:', error)
+    console.error('[api] failure', {
+      route: '/api/partnerships',
+      method: 'POST',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Failed to create partnership' }, { status: 500 })
   }
 }
@@ -434,12 +462,14 @@ export async function POST(request: NextRequest) {
 // PATCH - Update partnership status (partner accepts/declines)
 export async function PATCH(request: NextRequest) {
   try {
+    const route = '/api/partnerships'
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    console.log('[api] start', { route, method: 'PATCH', userId: user.id, role: null })
 
     const { partnershipId, status } = await request.json()
 
@@ -551,12 +581,18 @@ export async function PATCH(request: NextRequest) {
         .single()
 
       if (error) throw error
+      console.log('[api] success', { route, method: 'PATCH', userId: user.id, role: null, recordId: updated.id, status: updated.status })
       return NextResponse.json({ partnership: updated })
     }
 
     return NextResponse.json({ error: 'Invalid operation' }, { status: 400 })
   } catch (error) {
-    console.error('Error updating partnership:', error)
+    console.error('[api] failure', {
+      route: '/api/partnerships',
+      method: 'PATCH',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Failed to update partnership' }, { status: 500 })
   }
 }
@@ -564,12 +600,14 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Remove a partnership (agency only)
 export async function DELETE(request: NextRequest) {
   try {
+    const route = '/api/partnerships'
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    console.log('[api] start', { route, method: 'DELETE', userId: user.id, role: null })
 
     const { searchParams } = new URL(request.url)
     const partnershipId = searchParams.get('id')
@@ -601,9 +639,15 @@ export async function DELETE(request: NextRequest) {
 
     if (deleteError) throw deleteError
 
+    console.log('[api] success', { route, method: 'DELETE', userId: user.id, role: null, recordId: partnershipId })
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Error deleting partnership:', error)
+    console.error('[api] failure', {
+      route: '/api/partnerships',
+      method: 'DELETE',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Failed to delete partnership' }, { status: 500 })
   }
 }

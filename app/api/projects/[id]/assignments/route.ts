@@ -7,12 +7,19 @@ import {
 } from '@/lib/notifications'
 import { sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 
+export const dynamic = 'force-dynamic'
+
+const noStoreHeaders = {
+  'Cache-Control': 'private, no-store, no-cache, must-revalidate',
+} as const
+
 // GET - List assignments for a project
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const route = '/api/projects/[id]/assignments'
     const { id: projectId } = await params
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -20,6 +27,7 @@ export async function GET(
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: 'agency' })
 
     const { data: project } = await supabase
       .from('projects')
@@ -47,10 +55,16 @@ export async function GET(
 
     if (error) throw error
 
-    return NextResponse.json({ assignments })
+    console.log('[api] success', { route, method: 'GET', userId: user.id, role: 'agency', rowCount: assignments?.length ?? 0 })
+    return NextResponse.json({ assignments }, { headers: noStoreHeaders })
   } catch (error) {
-    console.error('Error fetching assignments:', error)
-    return NextResponse.json({ error: 'Failed to fetch assignments' }, { status: 500 })
+    console.error('[api] failure', {
+      route: '/api/projects/[id]/assignments',
+      method: 'GET',
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json({ error: 'Failed to fetch assignments' }, { status: 500, headers: noStoreHeaders })
   }
 }
 
