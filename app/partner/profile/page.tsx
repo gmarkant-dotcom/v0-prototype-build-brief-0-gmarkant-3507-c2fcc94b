@@ -5,9 +5,8 @@ import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
-import { FileUpload } from "@/components/file-upload"
 import { Loader2, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -48,7 +47,10 @@ export default function PartnerProfilePage() {
   const isDemo = isDemoMode()
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [profileId, setProfileId] = useState("")
   const [discoverable, setDiscoverable] = useState(false)
   const [discoverabilitySaving, setDiscoverabilitySaving] = useState(false)
   const [discoverabilityMsg, setDiscoverabilityMsg] = useState<string | null>(null)
@@ -79,22 +81,18 @@ export default function PartnerProfilePage() {
     }
   }
   const [formData, setFormData] = useState({
-    companyName: "Fieldhouse Films",
-    type: "production",
-    primaryDiscipline: "Video Production",
-    bio: "Fieldhouse Films is a full-service video production company specializing in sports and documentary content. With over 5 years of experience, we've produced award-winning content for major brands and leagues.",
-    location: "Los Angeles, CA",
-    website: "https://fieldhousefilms.com",
-    selectedCapabilities: ["Documentary", "Sports Content", "Creator Content", "Short Form"],
-    teamSize: "5-10",
-    yearFounded: "2019",
+    companyName: "",
+    type: "",
+    primaryDiscipline: disciplines[0],
+    bio: "",
+    location: "",
+    website: "",
+    selectedCapabilities: [] as string[],
+    teamSize: "",
+    yearFounded: "",
   })
-  
-  const [credentials, setCredentials] = useState([
-    { id: "1", title: "NWSL Season Highlights", client: "National Women's Soccer League", year: "2025" },
-    { id: "2", title: "Athletes Unplugged Series", client: "ESPN+", year: "2024" },
-    { id: "3", title: "March Madness Social Content", client: "NCAA", year: "2024" },
-  ])
+
+  const [credentials, setCredentials] = useState<{ id: string; title: string; client: string; year: string }[]>([])
   const [showAddProject, setShowAddProject] = useState(false)
   const [newProject, setNewProject] = useState({ title: "", client: "", year: new Date().getFullYear().toString() })
   const [isUploadingReel, setIsUploadingReel] = useState(false)
@@ -116,10 +114,36 @@ export default function PartnerProfilePage() {
         router.push("/partner")
         return
       }
-      if (!isDemo) {
-        const { data } = await supabase.from("profiles").select("is_discoverable").eq("id", user.id).maybeSingle()
-        setDiscoverable(!!data?.is_discoverable)
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, company_name, agency_type, bio, location, website, is_discoverable")
+        .eq("id", user.id)
+        .maybeSingle()
+      setProfileId(data?.id || user.id)
+      setDiscoverable(!!data?.is_discoverable)
+      setFormData((prev) => ({
+        ...prev,
+        companyName: data?.company_name || "",
+        type: data?.agency_type || "",
+        bio: data?.bio || "",
+        location: data?.location || "",
+        website: data?.website || "",
+      }))
+      if (typeof window !== "undefined") {
+        const savedDiscipline = localStorage.getItem("partnerPrimaryDiscipline")
+        const savedCaps = localStorage.getItem("partnerSelectedCapabilities")
+        const savedCustomCaps = localStorage.getItem("partnerCustomCapabilities")
+        const savedCredentials = localStorage.getItem("partnerCredentials")
+        const savedTeamSize = localStorage.getItem("partnerTeamSize")
+        const savedYearFounded = localStorage.getItem("partnerYearFounded")
+        if (savedDiscipline) setFormData((prev) => ({ ...prev, primaryDiscipline: savedDiscipline }))
+        if (savedCaps) setFormData((prev) => ({ ...prev, selectedCapabilities: JSON.parse(savedCaps) }))
+        if (savedCustomCaps) setCustomCapabilities(JSON.parse(savedCustomCaps))
+        if (savedCredentials) setCredentials(JSON.parse(savedCredentials))
+        if (savedTeamSize) setFormData((prev) => ({ ...prev, teamSize: savedTeamSize }))
+        if (savedYearFounded) setFormData((prev) => ({ ...prev, yearFounded: savedYearFounded }))
       }
+      setLoading(false)
     }
     ensurePartnerAuth()
   }, [isDemo, router])
@@ -191,11 +215,40 @@ export default function PartnerProfilePage() {
   
   const handleSave = async () => {
     setSaving(true)
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    setMessage(null)
+    try {
+      if (!isDemo && profileId) {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from("profiles")
+          .update({
+            company_name: formData.companyName,
+            agency_type: formData.type,
+            bio: formData.bio,
+            location: formData.location,
+            website: formData.website,
+            is_discoverable: discoverable,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", profileId)
+        if (error) throw error
+      }
+      if (typeof window !== "undefined") {
+        localStorage.setItem("partnerPrimaryDiscipline", formData.primaryDiscipline)
+        localStorage.setItem("partnerSelectedCapabilities", JSON.stringify(formData.selectedCapabilities))
+        localStorage.setItem("partnerCustomCapabilities", JSON.stringify(customCapabilities))
+        localStorage.setItem("partnerCredentials", JSON.stringify(credentials))
+        localStorage.setItem("partnerTeamSize", formData.teamSize)
+        localStorage.setItem("partnerYearFounded", formData.yearFounded)
+      }
+      setSaved(true)
+      setMessage("Profile saved successfully.")
+      setTimeout(() => setSaved(false), 3000)
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to save profile.")
+    } finally {
+      setSaving(false)
+    }
   }
   
   const addCustomCapability = () => {
@@ -226,6 +279,14 @@ export default function PartnerProfilePage() {
     }))
   }
   
+  if (loading) {
+    return (
+      <PartnerLayout>
+        <div className="max-w-4xl mx-auto p-8 text-gray-600">Loading profile...</div>
+      </PartnerLayout>
+    )
+  }
+
   return (
     <PartnerLayout>
       <div className="max-w-4xl mx-auto space-y-8">
@@ -256,12 +317,7 @@ export default function PartnerProfilePage() {
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <label className="flex items-start gap-3 cursor-pointer">
-            <Checkbox
-              checked={discoverable}
-              onCheckedChange={(checked) => toggleDiscoverability(!!checked)}
-              disabled={discoverabilitySaving}
-            />
+          <label className="flex items-start justify-between gap-4 cursor-pointer">
             <div>
               <div className="font-display font-bold text-lg text-[#0C3535]">
                 Allow agencies to discover me on the Marketplace
@@ -271,12 +327,13 @@ export default function PartnerProfilePage() {
               </p>
               {discoverabilityMsg && <p className="text-xs text-gray-500 mt-2">{discoverabilityMsg}</p>}
             </div>
+            <Switch checked={discoverable} onCheckedChange={toggleDiscoverability} disabled={discoverabilitySaving} />
           </label>
         </div>
         
         {/* Basic Info */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Basic Information</h2>
+          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Company Profile & Basic Information</h2>
           
           <div className="grid grid-cols-2 gap-6">
             <div>
@@ -567,7 +624,12 @@ export default function PartnerProfilePage() {
           )}
           
           <div className="space-y-3">
-            {credentials.map((cred) => (
+            {credentials.length === 0 ? (
+              <div className="p-4 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500">
+                No credentials added yet.
+              </div>
+            ) : (
+              credentials.map((cred) => (
               <div 
                 key={cred.id}
                 className="flex items-center justify-between p-4 rounded-lg border border-gray-200 bg-gray-50"
@@ -587,7 +649,8 @@ export default function PartnerProfilePage() {
                   </Button>
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
         
@@ -652,6 +715,7 @@ export default function PartnerProfilePage() {
             </div>
           </div>
         </div>
+        {message && <p className="text-sm text-gray-600">{message}</p>}
       </div>
     </PartnerLayout>
   )

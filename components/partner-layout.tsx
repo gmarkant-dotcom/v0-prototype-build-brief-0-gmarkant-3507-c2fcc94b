@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Settings, LogOut, User, ChevronDown, Globe } from "lucide-react"
+import { Settings, LogOut, User, ChevronDown, Globe, ArrowUpRight } from "lucide-react"
 import { LigamentLogo } from "./ligament-logo"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { LeadAgencyFilterProvider } from "@/contexts/lead-agency-filter-context"
@@ -168,6 +168,18 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                     <Globe className="w-4 h-4 text-gray-500" />
                     <span className="text-sm">Marketplace</span>
                   </button>
+                  <div className="border-t border-gray-200">
+                    <button
+                      onClick={() => navigateFromMenu("/pricing")}
+                      className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                    >
+                      <ArrowUpRight className="w-4 h-4 mt-0.5 text-gray-500" />
+                      <span className="text-sm">
+                        <span className="block">Become a Lead Agency</span>
+                        <span className="block text-xs text-gray-500">Unlock full platform access.</span>
+                      </span>
+                    </button>
+                  </div>
                   <div className="border-t border-gray-200">
                     <button
                       onClick={handleSignOut}
