@@ -110,6 +110,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   }
 
   const navigateFromMenu = (path: string) => {
+    console.log("[agency-layout] navigateFromMenu", { path })
     setUserMenuOpen(false)
     router.push(path)
   }
@@ -393,13 +394,14 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                   <Settings className="w-4 h-4 text-foreground-muted" />
                   <span className="text-sm text-foreground">User Profile</span>
                 </button>
-                <button
-                  onClick={() => navigateFromMenu("/agency/settings/profile")}
+                <Link
+                  href="/agency/settings/profile"
+                  onClick={() => setUserMenuOpen(false)}
                   className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
                 >
                   <User className="w-4 h-4 text-foreground-muted" />
                   <span className="text-sm text-foreground">Company Profile & Capabilities</span>
-                </button>
+                </Link>
                 <button
                   onClick={() => navigateFromMenu("/agency/settings/billing")}
                   className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"

@@ -48,8 +48,8 @@ export default function AgencyUserProfilePage() {
       }
       setUserId(user.id)
       setEmail(user.email || "")
-      setFullName(profile?.full_name || "")
-      setDisplayName((profile as any)?.display_name || profile?.full_name || "")
+      setFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
+      setDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setAvatarUrl((profile as any)?.avatar_url || "")
       const storedPrefs = localStorage.getItem(`agency-notification-prefs-${user.id}`)
       const dbPrefs = (profile as any)?.notification_preferences

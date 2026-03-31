@@ -14,17 +14,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { name, title, email, phone, companyType, companySize, interestedProduct, message, plan } = body
+    const { fullName, workEmail, companyName, role } = body
+    const normalizedName = fullName || name
+    const normalizedEmail = workEmail || email
+    const normalizedCompanyType = companyType || role || "Not provided"
+    const normalizedCompanySize = companySize || "Not provided"
+    const normalizedTitle = title || role || "Not provided"
     const selectedProduct = interestedProduct || plan || "general"
 
     console.log("[api/contact] start", {
-      hasName: !!name,
-      hasEmail: !!email,
+      hasName: !!normalizedName,
+      hasEmail: !!normalizedEmail,
       selectedProduct,
       hasStructuredLeadFields: !!(title && companyType && companySize),
       hasMessage: !!message,
     })
 
-    if (!name || !email) {
+    if (!normalizedName || !normalizedEmail) {
       return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
     }
 
@@ -38,12 +44,12 @@ export async function POST(request: NextRequest) {
         const { error: dbError } = await supabase
           .from("contact_submissions")
           .insert({
-            name,
-            title: title || "Not provided",
-            email,
+            name: normalizedName,
+            title: normalizedTitle,
+            email: normalizedEmail,
             phone: phone || null,
-            company_type: companyType || "Not provided",
-            company_size: companySize || "Not provided",
+            company_type: normalizedCompanyType,
+            company_size: normalizedCompanySize,
             interested_product: selectedProduct,
           })
 
@@ -72,17 +78,18 @@ export async function POST(request: NextRequest) {
         const { error: emailError } = await resend.emails.send({
           from: fromAddress,
           to: "hello@withligament.com",
-          subject: `New Contact: ${name} - ${productLabels[selectedProduct] || selectedProduct}`,
+          subject: `New Contact: ${normalizedName} - ${productLabels[selectedProduct] || selectedProduct}`,
           html: `
             <h2>New Contact Form Submission</h2>
             <p><strong>Interested In:</strong> ${productLabels[selectedProduct] || selectedProduct}</p>
             <hr />
-            <p><strong>Name:</strong> ${name}</p>
-            <p><strong>Title:</strong> ${title || "Not provided"}</p>
-            <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
+            <p><strong>Name:</strong> ${normalizedName}</p>
+            <p><strong>Title/Role:</strong> ${normalizedTitle}</p>
+            <p><strong>Email:</strong> <a href="mailto:${normalizedEmail}">${normalizedEmail}</a></p>
             <p><strong>Phone:</strong> ${phone || "Not provided"}</p>
-            <p><strong>Company Type:</strong> ${companyType || "Not provided"}</p>
-            <p><strong>Company Size:</strong> ${companySize || "Not provided"}</p>
+            <p><strong>Company:</strong> ${companyName || "Not provided"}</p>
+            <p><strong>Company Type:</strong> ${normalizedCompanyType}</p>
+            <p><strong>Company Size:</strong> ${normalizedCompanySize}</p>
             <p><strong>Message:</strong> ${message || "Not provided"}</p>
             <hr />
             <p style="color: #666; font-size: 12px;">Submitted at ${new Date().toLocaleString()}</p>

@@ -6,7 +6,7 @@ import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
 import { createClient } from "@/lib/supabase/client"
 import { Camera, Loader2 } from "lucide-react"
 import { isDemoMode } from "@/lib/demo-data"
@@ -43,6 +43,8 @@ const capabilities = [
 
 type ProfileState = {
   id: string
+  full_name: string
+  email: string
   company_name: string
   bio: string
   location: string
@@ -67,6 +69,8 @@ export default function AgencyProfileSettingsPage() {
   const [customCapabilities, setCustomCapabilities] = useState<string[]>([])
   const [form, setForm] = useState<ProfileState>({
     id: "",
+    full_name: "",
+    email: "",
     company_name: "",
     bio: "",
     location: "",
@@ -88,7 +92,7 @@ export default function AgencyProfileSettingsPage() {
       }
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, role, company_name, bio, location, website, agency_type, avatar_url, is_discoverable")
+        .select("id, role, full_name, company_name, bio, location, website, agency_type, avatar_url, is_discoverable")
         .eq("id", user.id)
         .maybeSingle()
       if (profile?.role !== "agency") {
@@ -97,7 +101,9 @@ export default function AgencyProfileSettingsPage() {
       }
       setForm({
         id: profile.id,
-        company_name: profile.company_name || "",
+        full_name: profile.full_name || "",
+        email: user.email || "",
+        company_name: profile.company_name || profile.full_name || "",
         bio: profile.bio || "",
         location: profile.location || "",
         website: profile.website || "",
@@ -130,7 +136,7 @@ export default function AgencyProfileSettingsPage() {
     const { error } = await supabase
       .from("profiles")
       .update({
-        company_name: form.company_name,
+        company_name: form.company_name || form.full_name || null,
         bio: form.bio,
         location: form.location,
         website: form.website,
@@ -147,6 +153,23 @@ export default function AgencyProfileSettingsPage() {
     }
     setMessage(error ? error.message : "Agency profile updated.")
     setSaving(false)
+  }
+
+  const toggleDiscoverable = async (checked: boolean) => {
+    setForm((prev) => ({ ...prev, is_discoverable: checked }))
+    if (isDemo || !form.id) return
+    const supabase = createClient()
+    const { error } = await supabase
+      .from("profiles")
+      .update({ is_discoverable: checked, updated_at: new Date().toISOString() })
+      .eq("id", form.id)
+    if (error) {
+      setMessage(error.message)
+      setForm((prev) => ({ ...prev, is_discoverable: !checked }))
+      return
+    }
+    console.log("[agency/profile] discoverability saved", { is_discoverable: checked })
+    setMessage("Marketplace discoverability updated.")
   }
 
   const uploadLogo = async (file: File) => {
@@ -204,6 +227,16 @@ export default function AgencyProfileSettingsPage() {
         </div>
 
         <div className="bg-white/5 border border-border/40 rounded-xl p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Account Full Name</label>
+              <Input value={form.full_name} readOnly className="bg-gray-100 border-gray-200 text-gray-700" />
+            </div>
+            <div>
+              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Account Email</label>
+              <Input value={form.email} readOnly className="bg-gray-100 border-gray-200 text-gray-700" />
+            </div>
+          </div>
           <div className="flex items-center gap-5">
             <div className="w-20 h-20 rounded-full bg-accent/15 overflow-hidden flex items-center justify-center">
               {form.avatar_url ? (
@@ -338,17 +371,14 @@ export default function AgencyProfileSettingsPage() {
               />
             </div>
           </div>
-          <label className="flex items-start gap-3 cursor-pointer">
-            <Checkbox
-              checked={form.is_discoverable}
-              onCheckedChange={(checked) => setForm((p) => ({ ...p, is_discoverable: !!checked }))}
-            />
+          <label className="flex items-start justify-between gap-4 cursor-pointer">
             <div>
               <div className="text-foreground font-medium">Make my agency discoverable on the Ligament Marketplace</div>
               <p className="text-xs text-foreground-muted mt-1">
                 Discoverable agencies can be found by partner agencies and other lead agencies on the platform.
               </p>
             </div>
+            <Switch checked={form.is_discoverable} onCheckedChange={toggleDiscoverable} />
           </label>
           {message && <p className="text-sm text-foreground-muted">{message}</p>}
           <div className="flex justify-end">

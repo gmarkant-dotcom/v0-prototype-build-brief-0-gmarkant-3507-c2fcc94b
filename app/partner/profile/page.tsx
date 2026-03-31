@@ -51,6 +51,8 @@ export default function PartnerProfilePage() {
   const [message, setMessage] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [profileId, setProfileId] = useState("")
+  const [accountEmail, setAccountEmail] = useState("")
+  const [accountFullName, setAccountFullName] = useState("")
   const [discoverable, setDiscoverable] = useState(false)
   const [discoverabilitySaving, setDiscoverabilitySaving] = useState(false)
   const [discoverabilityMsg, setDiscoverabilityMsg] = useState<string | null>(null)
@@ -116,14 +118,16 @@ export default function PartnerProfilePage() {
       }
       const { data } = await supabase
         .from("profiles")
-        .select("id, company_name, agency_type, bio, location, website, is_discoverable")
+        .select("id, company_name, full_name, agency_type, bio, location, website, is_discoverable")
         .eq("id", user.id)
         .maybeSingle()
+      setAccountEmail(user.email || "")
+      setAccountFullName(data?.full_name || "")
       setProfileId(data?.id || user.id)
       setDiscoverable(!!data?.is_discoverable)
       setFormData((prev) => ({
         ...prev,
-        companyName: data?.company_name || "",
+        companyName: data?.company_name || data?.full_name || "",
         type: data?.agency_type || "",
         bio: data?.bio || "",
         location: data?.location || "",
@@ -318,21 +322,32 @@ export default function PartnerProfilePage() {
               Tell agencies about your company, expertise, and past work.
             </p>
           </div>
-          <Button
+          <button
+            type="button"
             onClick={handleSave}
             disabled={saving}
             className={cn(
-              "transition-all min-w-[140px] text-white",
+              "transition-all min-w-[140px] rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60",
               saved 
                 ? "bg-green-600 hover:bg-green-600" 
                 : "bg-[#0C3535] hover:bg-[#0C3535]/90"
             )}
           >
             {saving ? "Saving..." : saved ? "Saved Successfully" : "Save Changes"}
-          </Button>
+          </button>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Account Email</label>
+              <Input value={accountEmail} readOnly className="border-gray-200 bg-gray-100 text-gray-700" />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Account Full Name</label>
+              <Input value={accountFullName} readOnly className="border-gray-200 bg-gray-100 text-gray-700" />
+            </div>
+          </div>
           <label className="flex items-start justify-between gap-4 cursor-pointer">
             <div>
               <div className="font-display font-bold text-lg text-[#0C3535]">

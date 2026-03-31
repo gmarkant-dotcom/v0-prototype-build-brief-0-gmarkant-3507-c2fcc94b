@@ -11,17 +11,23 @@ import { Mail, ArrowLeft, CheckCircle2 } from "lucide-react"
 function ContactFormContent() {
   const params = useSearchParams()
   const selectedPlan = (params.get("plan") || "").trim().toLowerCase()
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
-  const [message, setMessage] = useState("")
+  const [fullName, setFullName] = useState("")
+  const [workEmail, setWorkEmail] = useState("")
+  const [companyName, setCompanyName] = useState("")
+  const [companySize, setCompanySize] = useState("")
+  const [role, setRole] = useState("")
+  const [plan, setPlan] = useState(
+    selectedPlan === "core" || selectedPlan === "studio" || selectedPlan === "network" ? selectedPlan : "not_sure"
+  )
+  const [notes, setNotes] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const planLabel = useMemo(() => {
-    if (!selectedPlan) return "General inquiry"
-    return `Plan interest: ${selectedPlan}`
-  }, [selectedPlan])
+    if (plan === "not_sure") return "Plan interest: Not sure yet"
+    return `Plan interest: ${plan}`
+  }, [plan])
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -32,18 +38,25 @@ function ContactFormContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name,
-          email,
-          message,
-          plan: selectedPlan || null,
+          fullName,
+          workEmail,
+          companyName,
+          companySize,
+          role,
+          plan,
+          message: notes || null,
         }),
       })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload?.error || "Failed to send message")
       setSubmitted(true)
-      setName("")
-      setEmail("")
-      setMessage("")
+      setFullName("")
+      setWorkEmail("")
+      setCompanyName("")
+      setCompanySize("")
+      setRole("")
+      setPlan("not_sure")
+      setNotes("")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message")
     } finally {
@@ -54,9 +67,9 @@ function ContactFormContent() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="w-full max-w-xl bg-card border border-border rounded-2xl p-8">
-        <h1 className="font-display font-black text-3xl text-foreground mb-2">Contact Support</h1>
+        <h1 className="font-display font-black text-3xl text-foreground mb-2">Talk to the Ligament Team</h1>
         <p className="text-foreground-muted mb-6">
-          Need help with your account, billing, or onboarding? Reach out and we will get back to you.
+          Tell us about your team and what plan you are considering. We will follow up with next steps.
         </p>
 
         <div className="rounded-xl border border-border p-4 bg-white/5 flex items-center justify-between gap-4">
@@ -77,39 +90,96 @@ function ContactFormContent() {
               <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
               <div>
                 <p className="text-foreground font-medium">Message sent successfully.</p>
-                <p className="text-sm text-foreground-muted mt-1">We will reach out to you shortly at the email provided.</p>
+                <p className="text-sm text-foreground-muted mt-1">Thanks! We&apos;ll be in touch within 1 business day.</p>
               </div>
             </div>
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">
-              <input type="hidden" name="plan" value={selectedPlan} />
               <div>
-                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Name</label>
+                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Full name</label>
                 <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
                   required
                   className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
                 />
               </div>
               <div>
-                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Email</label>
+                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Work email</label>
                 <Input
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={workEmail}
+                  onChange={(e) => setWorkEmail(e.target.value)}
                   required
                   className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
                 />
               </div>
               <div>
-                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Message</label>
-                <Textarea
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Company name</label>
+                <Input
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
                   required
+                  className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Company size</label>
+                  <select
+                    value={companySize}
+                    onChange={(e) => setCompanySize(e.target.value)}
+                    required
+                    className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                  >
+                    <option value="">Select...</option>
+                    <option value="1-5">1-5</option>
+                    <option value="6-15">6-15</option>
+                    <option value="16-30">16-30</option>
+                    <option value="30+">30+</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Role</label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    required
+                    className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                  >
+                    <option value="">Select...</option>
+                    <option value="Founder/Owner">Founder/Owner</option>
+                    <option value="Operations">Operations</option>
+                    <option value="Strategy">Strategy</option>
+                    <option value="Creative">Creative</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">
+                  Which plan are you interested in?
+                </label>
+                <select
+                  value={plan}
+                  onChange={(e) => setPlan(e.target.value)}
+                  className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                >
+                  <option value="core">Core</option>
+                  <option value="studio">Studio</option>
+                  <option value="network">Network</option>
+                  <option value="not_sure">Not sure yet</option>
+                </select>
+              </div>
+              <div>
+                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">
+                  Message / anything else you&apos;d like to share
+                </label>
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
                   className="min-h-[120px] bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
-                  placeholder="Tell us what you need and we will get right back to you."
+                  placeholder="Optional details..."
                 />
               </div>
               <div className="text-xs text-foreground-muted">{planLabel}</div>
