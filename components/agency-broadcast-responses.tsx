@@ -8,7 +8,7 @@ import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-resp
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Loader2, ChevronDown, ChevronRight, Download, ExternalLink } from "lucide-react"
+import { Loader2, ChevronDown, ChevronRight, Download, ExternalLink, CheckCircle, Star } from "lucide-react"
 
 function externalLinkLabel(url: string): string {
   try {
@@ -52,6 +52,9 @@ export function AgencyBroadcastResponsesPanel() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, string>>({})
   const [declineReasons, setDeclineReasons] = useState<Record<string, string>>({})
+  const [feedbackSavedIds, setFeedbackSavedIds] = useState<Record<string, boolean>>({})
+  const [feedbackEditingIds, setFeedbackEditingIds] = useState<Record<string, boolean>>({})
+  const [shortlistHoverIds, setShortlistHoverIds] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (isDemo) {
@@ -166,6 +169,13 @@ export function AgencyBroadcastResponsesPanel() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error || "Failed to update response")
       setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...(data.response || row) } : row)))
+      if ("agency_feedback" in payload) {
+        setFeedbackSavedIds((prev) => ({ ...prev, [id]: true }))
+        setFeedbackEditingIds((prev) => ({ ...prev, [id]: false }))
+        setTimeout(() => {
+          setFeedbackSavedIds((prev) => ({ ...prev, [id]: false }))
+        }, 3000)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to update")
     } finally {
@@ -286,39 +296,103 @@ export function AgencyBroadcastResponsesPanel() {
                   <div className="border-t border-border/50 pt-4 space-y-3">
                     <div>
                       <label className="block font-mono text-[10px] uppercase text-foreground-muted mb-1">Agency feedback</label>
-                      <textarea
-                        value={feedbackDrafts[r.id] ?? ((r as unknown as { agency_feedback?: string }).agency_feedback || "")}
-                        onChange={(e) => setFeedbackDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                        className="w-full min-h-[90px] rounded-md border border-border/60 bg-white/5 p-2 text-sm text-foreground"
-                        placeholder="Share notes or next steps for the partner…"
-                      />
-                      <div className="mt-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-border/60"
-                          onClick={() =>
-                            patchResponse(r.id, {
-                              agency_feedback: feedbackDrafts[r.id] ?? "",
-                              status: r.status === "submitted" ? "under_review" : r.status,
-                            })
-                          }
-                          disabled={busyId === r.id}
-                        >
-                          {busyId === r.id ? "Saving..." : "Leave Feedback"}
-                        </Button>
+                      {(() => {
+                        const currentFeedback = ((r as unknown as { agency_feedback?: string }).agency_feedback || "").trim()
+                        const draftFeedback = feedbackDrafts[r.id] ?? currentFeedback
+                        const isEditing = feedbackEditingIds[r.id] || !currentFeedback
+                        const preview = currentFeedback.length > 80 ? `${currentFeedback.slice(0, 80)}…` : currentFeedback
+                        return (
+                          <>
+                            {isEditing ? (
+                              <>
+                                <textarea
+                                  value={draftFeedback}
+                                  onChange={(e) => setFeedbackDrafts((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                                  className="w-full min-h-[90px] rounded-md border border-border/60 bg-white/5 p-2 text-sm text-foreground"
+                                  placeholder="Share notes or next steps for the partner…"
+                                />
+                                <div className="mt-2 flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-border/60"
+                                    onClick={() =>
+                                      patchResponse(r.id, {
+                                        agency_feedback: feedbackDrafts[r.id] ?? "",
+                                        status: r.status === "submitted" ? "under_review" : r.status,
+                                      })
+                                    }
+                                    disabled={busyId === r.id}
+                                  >
+                                    {busyId === r.id ? "Saving..." : "Leave Feedback"}
+                                  </Button>
+                                  {currentFeedback && (
+                                    <button
+                                      type="button"
+                                      className="text-xs text-foreground-muted hover:text-foreground"
+                                      onClick={() => {
+                                        setFeedbackEditingIds((prev) => ({ ...prev, [r.id]: false }))
+                                        setFeedbackDrafts((prev) => ({ ...prev, [r.id]: currentFeedback }))
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="rounded-md border border-border/60 bg-white/5 p-3">
+                                <div className="text-sm text-foreground truncate" title={currentFeedback}>
+                                  {preview || "Feedback saved"}
+                                </div>
+                                <button
+                                  type="button"
+                                  className="mt-1 text-xs text-accent hover:underline"
+                                  onClick={() => setFeedbackEditingIds((prev) => ({ ...prev, [r.id]: true }))}
+                                >
+                                  Edit feedback
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                      <div className="mt-2 min-h-[20px]">
+                        {feedbackSavedIds[r.id] && (
+                          <span className="inline-flex items-center gap-1 text-xs text-green-500">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Feedback submitted
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2 items-center">
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="border-purple-400/40 text-purple-300"
+                        variant={r.status === "shortlisted" ? "default" : "outline"}
+                        className={cn(
+                          r.status === "shortlisted"
+                            ? shortlistHoverIds[r.id]
+                              ? "bg-red-600 hover:bg-red-600/90 text-white"
+                              : "bg-purple-600 hover:bg-purple-600/90 text-white"
+                            : "border-purple-400/40 text-purple-300"
+                        )}
+                        onMouseEnter={() =>
+                          r.status === "shortlisted" && setShortlistHoverIds((prev) => ({ ...prev, [r.id]: true }))
+                        }
+                        onMouseLeave={() =>
+                          r.status === "shortlisted" && setShortlistHoverIds((prev) => ({ ...prev, [r.id]: false }))
+                        }
                         onClick={() => patchResponse(r.id, { status: r.status === "shortlisted" ? "under_review" : "shortlisted" })}
                         disabled={busyId === r.id || r.status === "awarded"}
                       >
-                        {r.status === "shortlisted" ? "Un-shortlist" : "Shortlist"}
+                        <Star className={cn("w-3.5 h-3.5 mr-1.5", r.status === "shortlisted" && !shortlistHoverIds[r.id] && "fill-current")} />
+                        {r.status === "shortlisted"
+                          ? shortlistHoverIds[r.id]
+                            ? "Remove from shortlist"
+                            : "Shortlisted"
+                          : "Shortlist"}
                       </Button>
                       <Button
                         size="sm"
