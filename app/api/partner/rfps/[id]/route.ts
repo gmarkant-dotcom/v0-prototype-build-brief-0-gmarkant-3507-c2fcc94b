@@ -77,32 +77,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     let versions: unknown[] = []
     if (response && (response as { id?: string }).id) {
       const responseId = (response as { id: string }).id
-      let { data: versionRows, error: versionErr } = await supabase
+      const { data: versionRows, error: versionErr } = await supabase
         .from("partner_rfp_response_versions")
-        .select(
-          "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at, change_notes"
-        )
+        .select("id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at")
         .eq("response_id", responseId)
         .order("version_number", { ascending: false })
-
-      // Backward compatibility: if migration 022 hasn't run yet, retry without change_notes column.
-      if (versionErr && (versionErr.code === "42703" || /change_notes|column .* does not exist/i.test(versionErr.message || ""))) {
-        console.warn("[api] partner version fetch retry without change_notes", {
-          route: "/api/partner/rfps/[id]",
-          method: "GET",
-          userId: user.id,
-          responseId,
-          code: versionErr.code,
-          message: versionErr.message,
-        })
-        const retry = await supabase
-          .from("partner_rfp_response_versions")
-          .select("id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at")
-          .eq("response_id", responseId)
-          .order("version_number", { ascending: false })
-        versionRows = retry.data
-        versionErr = retry.error
-      }
 
       if (!versionErr) {
         versions = versionRows || []

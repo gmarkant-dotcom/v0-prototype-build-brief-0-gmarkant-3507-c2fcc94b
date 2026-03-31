@@ -18,13 +18,14 @@ export function getBidStatusLabel(status: string, userType: "agency" | "partner"
   if (userType === "partner") {
     switch (normalized) {
       case "submitted":
+        return "Submitted"
       case "bid_submitted":
       case "revision_submitted":
       case "new":
       case "viewed":
       case "feedback_received":
       case "draft":
-        return "Submitted"
+        return "New"
       case "under_review":
         return "Changes Requested"
       case "shortlisted":
@@ -36,7 +37,7 @@ export function getBidStatusLabel(status: string, userType: "agency" | "partner"
       case "declined":
         return "Declined"
       default:
-        return "Submitted"
+        return "New"
     }
   }
 

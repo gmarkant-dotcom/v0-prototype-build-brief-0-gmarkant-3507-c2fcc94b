@@ -514,7 +514,7 @@ export function AgencyBroadcastResponsesPanel() {
                           r.status === "shortlisted" && setShortlistHoverIds((prev) => ({ ...prev, [r.id]: false }))
                         }
                         onClick={() => patchResponse(r.id, { status: r.status === "shortlisted" ? "under_review" : "shortlisted" })}
-                        disabled={busyId === r.id || r.status === "awarded" || r.status === "declined"}
+                        disabled={busyId === r.id || r.status === "awarded"}
                       >
                         <Star className={cn("w-3.5 h-3.5 mr-1.5", r.status === "shortlisted" && !shortlistHoverIds[r.id] && "fill-current")} />
                         {r.status === "shortlisted"
@@ -527,7 +527,7 @@ export function AgencyBroadcastResponsesPanel() {
                         size="sm"
                         className="bg-green-600 hover:bg-green-600/90 text-white"
                         onClick={() => patchResponse(r.id, { status: "awarded" })}
-                        disabled={busyId === r.id || r.status === "awarded" || r.status === "declined"}
+                        disabled={busyId === r.id || r.status === "awarded"}
                       >
                         Award
                       </Button>
@@ -544,10 +544,21 @@ export function AgencyBroadcastResponsesPanel() {
                         onClick={() =>
                           patchResponse(r.id, { status: "declined", decline_reason: declineReasons[r.id] || "" })
                         }
-                        disabled={busyId === r.id || r.status === "awarded" || r.status === "declined"}
+                        disabled={busyId === r.id || r.status === "awarded"}
                       >
                         {r.status === "declined" ? "Declined" : "Decline"}
                       </Button>
+                      {r.status === "declined" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-border/60 text-foreground"
+                          onClick={() => patchResponse(r.id, { status: "submitted" })}
+                          disabled={busyId === r.id}
+                        >
+                          Undo Decline
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
