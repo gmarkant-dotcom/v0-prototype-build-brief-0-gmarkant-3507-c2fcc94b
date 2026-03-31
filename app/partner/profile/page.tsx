@@ -286,7 +286,7 @@ export default function PartnerProfilePage() {
               <Input
                 value={formData.companyName}
                 onChange={(e) => setFormData(prev => ({ ...prev, companyName: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
             
@@ -297,7 +297,7 @@ export default function PartnerProfilePage() {
               <select
                 value={formData.type}
                 onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm"
+                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
               >
                 <option value="production">Production Company</option>
                 <option value="agency">Agency</option>
@@ -316,7 +316,7 @@ export default function PartnerProfilePage() {
                     value={customDisciplineInput}
                     onChange={(e) => setCustomDisciplineInput(e.target.value)}
                     placeholder="Enter custom discipline"
-                    className="border-gray-200 flex-1"
+                    className="border-gray-200 flex-1 text-gray-900 placeholder:text-gray-500"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
@@ -355,7 +355,7 @@ export default function PartnerProfilePage() {
                       setFormData(prev => ({ ...prev, primaryDiscipline: e.target.value }))
                     }
                   }}
-                  className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm"
+                  className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
                 >
                   {allDisciplines.map(d => (
                     <option key={d} value={d}>{d}</option>
@@ -372,7 +372,7 @@ export default function PartnerProfilePage() {
               <Input
                 value={formData.location}
                 onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
             
@@ -384,7 +384,7 @@ export default function PartnerProfilePage() {
                 type="url"
                 value={formData.website}
                 onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
             
@@ -396,7 +396,7 @@ export default function PartnerProfilePage() {
                 <select
                   value={formData.teamSize}
                   onChange={(e) => setFormData(prev => ({ ...prev, teamSize: e.target.value }))}
-                  className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm"
+                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
                 >
                   <option value="1">Solo</option>
                   <option value="2-4">2-4</option>
@@ -412,7 +412,7 @@ export default function PartnerProfilePage() {
                 <Input
                   value={formData.yearFounded}
                   onChange={(e) => setFormData(prev => ({ ...prev, yearFounded: e.target.value }))}
-                  className="border-gray-200"
+                  className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                 />
               </div>
             </div>
@@ -424,7 +424,7 @@ export default function PartnerProfilePage() {
               <Textarea
                 value={formData.bio}
                 onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-                className="min-h-[120px] border-gray-200"
+                className="min-h-[120px] border-gray-200 text-gray-900 placeholder:text-gray-500"
                 placeholder="Describe your company, expertise, and what makes you unique..."
               />
             </div>
@@ -476,7 +476,7 @@ export default function PartnerProfilePage() {
                 value={customCapability}
                 onChange={(e) => setCustomCapability(e.target.value)}
                 placeholder="e.g., Aerial Cinematography, VR/360 Video..."
-                className="flex-1 border-gray-200"
+                className="flex-1 border-gray-200 text-gray-900 placeholder:text-gray-500"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
@@ -529,7 +529,7 @@ export default function PartnerProfilePage() {
                     value={newProject.title}
                     onChange={(e) => setNewProject(prev => ({ ...prev, title: e.target.value }))}
                     placeholder="Project name"
-                    className="border-gray-200"
+                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                   />
                 </div>
                 <div>
@@ -540,7 +540,7 @@ export default function PartnerProfilePage() {
                     value={newProject.client}
                     onChange={(e) => setNewProject(prev => ({ ...prev, client: e.target.value }))}
                     placeholder="Client name"
-                    className="border-gray-200"
+                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                   />
                 </div>
                 <div>
@@ -551,7 +551,7 @@ export default function PartnerProfilePage() {
                     value={newProject.year}
                     onChange={(e) => setNewProject(prev => ({ ...prev, year: e.target.value }))}
                     placeholder="2024"
-                    className="border-gray-200"
+                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                   />
                 </div>
               </div>
@@ -606,7 +606,7 @@ export default function PartnerProfilePage() {
                   value={reelUrl}
                   onChange={(e) => setReelUrl(e.target.value)}
                   placeholder="https://vimeo.com/your-reel"
-                  className="border-gray-200 flex-1"
+                  className="border-gray-200 flex-1 text-gray-900 placeholder:text-gray-500"
                 />
                 <div className="relative">
                   <input
@@ -647,7 +647,7 @@ export default function PartnerProfilePage() {
               </label>
               <Textarea
                 placeholder="https://vimeo.com/project-1&#10;https://youtube.com/project-2"
-                className="min-h-[80px] border-gray-200"
+                className="min-h-[80px] border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
           </div>

@@ -11,10 +11,14 @@ import { Building2, Search, Send } from "lucide-react"
 
 type AgencyProfile = {
   id: string
+  role?: "agency" | "partner"
   company_name: string | null
   full_name: string | null
   bio: string | null
   location: string | null
+  website?: string | null
+  avatar_url?: string | null
+  agency_type?: string | null
 }
 
 type AccessRequest = {
@@ -65,18 +69,16 @@ export default function PartnerMarketplacePage() {
           return
         }
 
-        const [{ data: discoverableAgencies }, { data: myRequests }] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select("id, company_name, full_name, bio, location")
-            .eq("role", "agency")
-            .eq("is_discoverable", true)
-            .order("company_name", { ascending: true }),
+        const [discoverableRes, myReqRes] = await Promise.all([
+          fetch("/api/marketplace/discoverable?role=agency", { cache: "no-store" }),
           supabase.from("partner_access_requests").select("agency_id, status").eq("partner_id", user.id),
         ])
 
-        setAgencies(discoverableAgencies || [])
-        setRequests((myRequests || []) as AccessRequest[])
+        const discoverablePayload = await discoverableRes.json().catch(() => ({}))
+        if (!discoverableRes.ok) throw new Error(discoverablePayload?.error || "Failed to load discoverable agencies")
+
+        setAgencies(discoverablePayload?.profiles || [])
+        setRequests((myReqRes.data || []) as AccessRequest[])
       } finally {
         setLoading(false)
       }

@@ -382,7 +382,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             {userMenuOpen && (
               <div className="absolute bottom-full left-0 right-0 mb-2 bg-background border border-border rounded-lg shadow-xl overflow-hidden">
                 <Link
-                  href="/settings"
+                  href="/agency/settings/profile"
                   onClick={() => setUserMenuOpen(false)}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
                 >
@@ -390,7 +390,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                   <span className="text-sm text-foreground">Account Settings</span>
                 </Link>
                 <Link
-                  href="/settings/security"
+                  href="/agency/settings/profile"
                   onClick={() => setUserMenuOpen(false)}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
                 >

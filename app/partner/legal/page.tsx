@@ -222,7 +222,7 @@ export default function PartnerLegalPage() {
               <Input
                 value={entityInfo.legalName}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, legalName: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
             
@@ -233,7 +233,7 @@ export default function PartnerLegalPage() {
               <select
                 value={entityInfo.entityType}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, entityType: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm"
+                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
               >
                 <option value="llc">LLC</option>
                 <option value="corporation">Corporation (C-Corp)</option>
@@ -250,7 +250,7 @@ export default function PartnerLegalPage() {
               <Input
                 value={entityInfo.ein}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, ein: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                 placeholder="XX-XXXXXXX"
               />
             </div>
@@ -262,7 +262,7 @@ export default function PartnerLegalPage() {
               <Input
                 value={entityInfo.stateOfIncorporation}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, stateOfIncorporation: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
             
@@ -273,7 +273,7 @@ export default function PartnerLegalPage() {
               <Input
                 value={entityInfo.address}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, address: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
           </div>

@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { User, Save, Camera } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Checkbox } from "@/components/ui/checkbox"
 
 interface Profile {
   id: string
@@ -199,27 +198,6 @@ export default function ProfileSettingsPage() {
               </select>
             </div>
           </div>
-
-          {profile?.role === "agency" && (
-            <div className="rounded-lg border border-border/40 p-4 bg-white/5">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <Checkbox
-                  checked={!!profile.is_discoverable}
-                  onCheckedChange={(checked) =>
-                    setProfile((p) => (p ? { ...p, is_discoverable: !!checked } : null))
-                  }
-                />
-                <div>
-                  <div className="font-medium text-foreground">
-                    Make my agency discoverable on the Ligament Marketplace
-                  </div>
-                  <div className="text-xs text-foreground-muted mt-1">
-                    Discoverable agencies can be found by partner agencies and other lead agencies on the platform.
-                  </div>
-                </div>
-              </label>
-            </div>
-          )}
 
           {message && (
             <div className={cn(

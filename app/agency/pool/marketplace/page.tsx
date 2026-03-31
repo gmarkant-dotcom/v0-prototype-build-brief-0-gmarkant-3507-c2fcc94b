@@ -7,7 +7,6 @@ import { StageHeader } from "@/components/stage-header"
 import { GlassCard } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { ArrowLeft, ExternalLink, Search, UserPlus } from "lucide-react"
 
@@ -66,21 +65,10 @@ export default function AgencyMarketplacePage() {
         return
       }
       try {
-        const supabase = createClient()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) {
-          setLoading(false)
-          return
-        }
-        const { data } = await supabase
-          .from("profiles")
-          .select("id, company_name, full_name, bio, location, email")
-          .eq("role", "partner")
-          .eq("is_discoverable", true)
-          .order("company_name", { ascending: true })
-        setPartners(data || [])
+        const res = await fetch("/api/marketplace/discoverable?role=partner", { cache: "no-store" })
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(payload?.error || "Failed to load discoverable partners")
+        setPartners(payload?.profiles || [])
       } finally {
         setLoading(false)
       }

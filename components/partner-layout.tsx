@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Settings, LogOut, User, ChevronDown } from "lucide-react"
+import { Settings, LogOut, User, ChevronDown, Globe } from "lucide-react"
 import { LigamentLogo } from "./ligament-logo"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { LeadAgencyFilterProvider } from "@/contexts/lead-agency-filter-context"
@@ -18,12 +18,9 @@ const navItems = [
   { icon: "◈", title: "Open RFPs", href: "/partner/rfps" },
   { icon: "□", title: "Onboarding", href: "/partner/onboarding" },
   { icon: "▣", title: "Active Projects", href: "/partner/projects" },
-  { icon: "✦", title: "Profile & Capabilities", href: "/partner/profile" },
   { icon: "◎", title: "Legal & Compliance", href: "/partner/legal" },
   { icon: "$", title: "Payment Setup", href: "/partner/payments" },
 ]
-
-const resourceNavItems = [{ icon: "◍", title: "Marketplace", href: "/partner/marketplace" }]
 
 interface PartnerLayoutProps {
   children: React.ReactNode
@@ -113,24 +110,6 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                   </Link>
                 )
               })}
-              <span className="mx-2 text-white/20">|</span>
-              <span className="font-mono text-[10px] text-white/50 uppercase px-1">Resources</span>
-              {resourceNavItems.map((item) => {
-                const isActive = pathname === item.href || pathname?.startsWith(item.href)
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
-                      isActive ? "bg-white/10 text-[#C8F53C]" : "text-white/70 hover:text-white hover:bg-white/5"
-                    )}
-                  >
-                    <span>{item.icon}</span>
-                    <span>{item.title}</span>
-                  </Link>
-                )
-              })}
             </nav>
           </div>
           
@@ -177,7 +156,15 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                     className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
                   >
                     <User className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">Profile</span>
+                    <span className="text-sm">Profile & Capabilities</span>
+                  </Link>
+                  <Link
+                    href="/partner/marketplace"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                  >
+                    <Globe className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm">Marketplace</span>
                   </Link>
                   <div className="border-t border-gray-200">
                     <button
