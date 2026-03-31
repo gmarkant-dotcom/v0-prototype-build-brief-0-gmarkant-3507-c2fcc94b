@@ -118,6 +118,41 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
+    if (existing.status !== "declined" && nextStatus === "declined") {
+      const [{ data: partner }, { data: inbox }] = await Promise.all([
+        supabase.from("profiles").select("email, full_name, company_name").eq("id", existing.partner_id).maybeSingle(),
+        supabase
+          .from("partner_rfp_inbox")
+          .select("scope_item_name, master_rfp_json")
+          .eq("id", existing.inbox_item_id)
+          .maybeSingle(),
+      ])
+      const projectName =
+        (inbox?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
+      const scopeItemName = inbox?.scope_item_name || "Scope item"
+      const partnerName = partner?.company_name || partner?.full_name || partner?.email || "Partner"
+      const leadAgencyName = profile.company_name || profile.full_name || "Lead agency"
+      const resendApiKey = process.env.RESEND_API_KEY
+      if (resendApiKey && partner?.email) {
+        const resend = new Resend(resendApiKey)
+        await resend.emails.send({
+          from: "Ligament <notifications@withligament.com>",
+          to: partner.email,
+          cc: "hello@withligament.com",
+          subject: "Update on your bid submission",
+          html: `
+            <p>Hi ${partnerName},</p>
+            <p>There is an update on your bid submission.</p>
+            <p><strong>Project:</strong> ${projectName}</p>
+            <p><strong>Scope Item:</strong> ${scopeItemName}</p>
+            <p><strong>Lead Agency:</strong> ${leadAgencyName}</p>
+            ${declineReason ? `<p><strong>Reason:</strong> ${declineReason}</p>` : ""}
+            <p><a href="https://withligament.com/partner/rfps">View your RFP inbox</a></p>
+          `,
+        })
+      }
+    }
+
     console.log("[api] success", {
       route,
       method: "PATCH",

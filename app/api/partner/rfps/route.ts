@@ -64,18 +64,24 @@ export async function GET() {
     if (inboxIds.length > 0) {
       const { data: responses } = await supabase
         .from("partner_rfp_responses")
-        .select("inbox_item_id, status, agency_feedback, feedback_updated_at")
+        .select("inbox_item_id, status, agency_feedback, feedback_updated_at, updated_at")
         .in("inbox_item_id", inboxIds)
-        .eq("partner_id", user.id)
-      responseByInboxId = Object.fromEntries(
-        (responses || []).map((r) => [r.inbox_item_id as string, r as { status?: string; agency_feedback?: string | null; feedback_updated_at?: string | null }])
-      )
+      // In case of multiple rows per inbox (legacy data), keep the latest.
+      for (const resp of responses || []) {
+        const key = resp.inbox_item_id as string
+        const prev = responseByInboxId[key] as ({ updated_at?: string } & { status?: string; agency_feedback?: string | null; feedback_updated_at?: string | null }) | undefined
+        if (!prev || (resp.updated_at && (!prev.updated_at || resp.updated_at > prev.updated_at))) {
+          responseByInboxId[key] = resp as { status?: string; agency_feedback?: string | null; feedback_updated_at?: string | null }
+        }
+      }
     }
     const mergedRows = rows.map((row) => {
       const resp = responseByInboxId[row.id as string]
+      const effectiveStatus = (resp?.status || row.status || "new") as string
       return {
         ...row,
         response_status: resp?.status || null,
+        effective_status: effectiveStatus,
         agency_feedback: resp?.agency_feedback || null,
         feedback_updated_at: resp?.feedback_updated_at || null,
         agency_meeting_url: agencyMeetingUrlById[row.agency_id as string] || null,
@@ -96,6 +102,11 @@ export async function GET() {
           ? ` sampleRowPartnerId=${samplePartnerId} sampleRecipientEmail=${sampleRecipientEmail}`
           : "")
     )
+    console.log("[partner/rfps] status merge diagnostics", {
+      userId: user.id,
+      rowsWithResponseStatus: mergedRows.filter((r) => !!r.response_status).length,
+      rowsWithoutResponseStatus: mergedRows.filter((r) => !r.response_status).length,
+    })
 
     return NextResponse.json({ rfps: mergedRows }, { headers: noStoreHeaders })
   } catch (e) {

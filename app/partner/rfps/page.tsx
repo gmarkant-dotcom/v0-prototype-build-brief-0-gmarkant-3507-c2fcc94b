@@ -97,6 +97,7 @@ type PartnerInboxRow = {
   id: string
   status: string
   response_status?: string | null
+  effective_status?: string | null
   scope_item_id: string
   scope_item_name: string
   scope_item_description: string | null
@@ -125,7 +126,7 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
   const requirements =
     match?.description?.trim() || row.scope_item_description?.trim() || ""
 
-  const preferred = row.response_status || row.status
+  const preferred = row.response_status || row.effective_status || row.status
   const allowed: RFP["status"][] = [
     "submitted",
     "under_review",

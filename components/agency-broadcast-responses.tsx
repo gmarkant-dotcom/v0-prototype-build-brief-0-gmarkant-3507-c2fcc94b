@@ -383,6 +383,11 @@ export function AgencyBroadcastResponsesPanel() {
                   <p className="font-mono text-[10px] text-foreground-muted">
                     Updated {new Date(r.updated_at).toLocaleString()}
                   </p>
+                  {r.status === "declined" && (
+                    <div className="rounded-md border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-200">
+                      This bid is marked as declined.
+                    </div>
+                  )}
 
                   <div className="border-t border-border/50 pt-4 space-y-3">
                     <div>
@@ -509,7 +514,7 @@ export function AgencyBroadcastResponsesPanel() {
                           r.status === "shortlisted" && setShortlistHoverIds((prev) => ({ ...prev, [r.id]: false }))
                         }
                         onClick={() => patchResponse(r.id, { status: r.status === "shortlisted" ? "under_review" : "shortlisted" })}
-                        disabled={busyId === r.id || r.status === "awarded"}
+                        disabled={busyId === r.id || r.status === "awarded" || r.status === "declined"}
                       >
                         <Star className={cn("w-3.5 h-3.5 mr-1.5", r.status === "shortlisted" && !shortlistHoverIds[r.id] && "fill-current")} />
                         {r.status === "shortlisted"
@@ -522,7 +527,7 @@ export function AgencyBroadcastResponsesPanel() {
                         size="sm"
                         className="bg-green-600 hover:bg-green-600/90 text-white"
                         onClick={() => patchResponse(r.id, { status: "awarded" })}
-                        disabled={busyId === r.id || r.status === "awarded"}
+                        disabled={busyId === r.id || r.status === "awarded" || r.status === "declined"}
                       >
                         Award
                       </Button>
@@ -539,9 +544,9 @@ export function AgencyBroadcastResponsesPanel() {
                         onClick={() =>
                           patchResponse(r.id, { status: "declined", decline_reason: declineReasons[r.id] || "" })
                         }
-                        disabled={busyId === r.id || r.status === "awarded"}
+                        disabled={busyId === r.id || r.status === "awarded" || r.status === "declined"}
                       >
-                        Decline
+                        {r.status === "declined" ? "Declined" : "Decline"}
                       </Button>
                     </div>
                   </div>
