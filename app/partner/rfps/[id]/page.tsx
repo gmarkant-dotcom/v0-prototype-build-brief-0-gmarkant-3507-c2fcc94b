@@ -342,6 +342,7 @@ export default function PartnerRfpDetailPage() {
   const [versions, setVersions] = useState<ResponseVersion[]>([])
   const [historyOpen, setHistoryOpen] = useState(true)
   const [changeNotes, setChangeNotes] = useState("")
+  const [activeTab, setActiveTab] = useState<"status" | "rfp" | "bid">("bid")
 
   const updateDraft = useCallback((draftId: string, patch: Partial<DraftAttachment>) => {
     setDraftAttachments((prev) => prev.map((d) => (d.id === draftId ? { ...d, ...patch } : d)))
@@ -637,6 +638,12 @@ export default function PartnerRfpDetailPage() {
     )
   const feedbackUpdatedAt = existing?.feedback_updated_at ? new Date(existing.feedback_updated_at).toLocaleString() : null
 
+  useEffect(() => {
+    const shouldDefaultToStatus =
+      !!existing?.agency_feedback || (currentStatus && !["submitted", "bid_submitted"].includes(currentStatus))
+    setActiveTab(shouldDefaultToStatus ? "status" : "bid")
+  }, [existing?.agency_feedback, currentStatus])
+
   return (
     <PartnerChrome>
       <div className="max-w-4xl mx-auto space-y-6 pb-16">
@@ -687,21 +694,68 @@ export default function PartnerRfpDetailPage() {
               )}
             </div>
           )}
+          <div className="mt-5 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("status")}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-sm font-medium",
+                activeTab === "status" ? "bg-[#0C3535] text-white" : "bg-gray-100 text-gray-700"
+              )}
+            >
+              Status & Feedback
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("rfp")}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-sm font-medium",
+                activeTab === "rfp" ? "bg-[#0C3535] text-white" : "bg-gray-100 text-gray-700"
+              )}
+            >
+              RFP Details
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("bid")}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-sm font-medium",
+                activeTab === "bid" ? "bg-[#0C3535] text-white" : "bg-gray-100 text-gray-700"
+              )}
+            >
+              My Bid
+            </button>
+          </div>
         </div>
 
-        {existing?.agency_feedback && (
+        {activeTab === "status" && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="font-mono text-[10px] uppercase text-gray-500 mb-2">Current status</div>
+            <span
+              className={cn(
+                "font-mono text-xs px-3 py-1 rounded-full uppercase inline-flex items-center gap-1",
+                getBidStatusColor(currentStatus)
+              )}
+            >
+              {currentStatus === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
+              {getBidStatusLabel(currentStatus, "partner")}
+            </span>
+          </div>
+        )}
+
+        {activeTab === "status" && existing?.agency_feedback && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
             <h3 className="font-display font-bold text-[#0C3535]">Feedback from Agency</h3>
             <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{existing.agency_feedback}</p>
             {feedbackUpdatedAt && <p className="font-mono text-[10px] text-gray-500 mt-2">Updated {feedbackUpdatedAt}</p>}
           </div>
         )}
-        {currentStatus === "under_review" && (
+        {activeTab === "status" && currentStatus === "under_review" && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900">
             The agency has requested changes to your bid. Review their feedback below and resubmit when ready.
           </div>
         )}
-        {currentStatus === "meeting_requested" && (
+        {activeTab === "status" && currentStatus === "meeting_requested" && (
           <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-4">
             <h3 className="font-display font-bold text-cyan-900">Your lead agency has requested a meeting</h3>
             {inbox.agency_meeting_url ? (
@@ -718,15 +772,16 @@ export default function PartnerRfpDetailPage() {
             )}
           </div>
         )}
-        {currentStatus === "awarded" && (
+        {activeTab === "status" && currentStatus === "awarded" && (
           <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-900 font-medium">
             Congratulations! Your bid has been awarded.
           </div>
         )}
-        {currentStatus === "declined" && (
+        {activeTab === "status" && currentStatus === "declined" && (
           <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 text-gray-800">This bid was declined.</div>
         )}
 
+        {activeTab === "rfp" && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-4">
             <FileText className="w-5 h-5 text-[#0C3535]" />
@@ -734,7 +789,9 @@ export default function PartnerRfpDetailPage() {
           </div>
           <MasterRfpSections json={inbox.master_rfp_json} />
         </div>
+        )}
 
+        {activeTab === "bid" && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Your bid response</h2>
           <p className="text-sm text-gray-600 mb-6">
@@ -754,6 +811,7 @@ export default function PartnerRfpDetailPage() {
             <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{submitError}</div>
           )}
 
+          {canEdit ? (
           <div className="space-y-5">
             <div>
               <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Proposal *</label>
@@ -1058,6 +1116,29 @@ export default function PartnerRfpDetailPage() {
               </div>
             </div>
           </div>
+          ) : (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+              <div>
+                <div className="font-mono text-[10px] uppercase text-gray-500">Proposal</div>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{proposalText || "—"}</p>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
+                  <div>
+                    {formatBudgetForDisplay(
+                      buildBudgetProposalForSave(budgetAmount, budgetCurrency, budgetCurrencyOther, budgetLegacyHint)
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
+                  <div>{formatTimelineForDisplay(buildTimelineProposalForSave(timelineDuration, timelineUnit, timelineLegacyHint))}</div>
+                </div>
+              </div>
+              <p className="text-sm text-gray-600">This bid is read-only in its current state.</p>
+            </div>
+          )}
 
           {canEdit ? (
             <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
@@ -1120,13 +1201,11 @@ export default function PartnerRfpDetailPage() {
                 )}
               </Button>
             </div>
-          ) : (
-            <p className="mt-8 pt-6 border-t border-gray-200 text-sm text-gray-600">
-              This bid is no longer editable in its current state.
-            </p>
-          )}
+          ) : null}
         </div>
+        )}
 
+        {activeTab === "status" && (
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <button
             type="button"
@@ -1181,6 +1260,7 @@ export default function PartnerRfpDetailPage() {
             </div>
           )}
         </div>
+        )}
       </div>
     </PartnerChrome>
   )
