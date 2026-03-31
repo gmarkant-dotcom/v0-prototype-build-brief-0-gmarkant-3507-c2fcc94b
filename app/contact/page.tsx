@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useMemo, useState } from "react"
+import { FormEvent, Suspense, useMemo, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Mail, ArrowLeft, CheckCircle2 } from "lucide-react"
 
-export default function ContactPage() {
+function ContactFormContent() {
   const params = useSearchParams()
   const selectedPlan = (params.get("plan") || "").trim().toLowerCase()
   const [name, setName] = useState("")
@@ -131,5 +131,21 @@ export default function ContactPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function ContactFallback() {
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="w-full max-w-xl bg-card border border-border rounded-2xl p-8 text-foreground-muted">Loading contact form...</div>
+    </div>
+  )
+}
+
+export default function ContactPage() {
+  return (
+    <Suspense fallback={<ContactFallback />}>
+      <ContactFormContent />
+    </Suspense>
   )
 }
