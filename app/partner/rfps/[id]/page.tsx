@@ -699,37 +699,58 @@ export default function PartnerRfpDetailPage() {
               )}
             </div>
           )}
-          <div className="mt-5 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab("status")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium",
-                activeTab === "status" ? "bg-[#0C3535] text-white" : "bg-gray-100 text-gray-700"
-              )}
-            >
-              Status & Feedback
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("rfp")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium",
-                activeTab === "rfp" ? "bg-[#0C3535] text-white" : "bg-gray-100 text-gray-700"
-              )}
-            >
-              RFP Details
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("bid")}
-              className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium",
-                activeTab === "bid" ? "bg-[#0C3535] text-white" : "bg-gray-100 text-gray-700"
-              )}
-            >
-              My Bid
-            </button>
+          <div
+            className="mt-5 pt-4 border-t border-gray-100 -mx-6 px-6 pb-4 border-b border-gray-200"
+            role="tablist"
+            aria-label="RFP sections"
+          >
+            <div className="flex w-full gap-2 sm:gap-3">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "status"}
+                onClick={() => setActiveTab("status")}
+                className={cn(
+                  "flex-1 min-w-0 inline-flex items-center justify-center rounded-md py-2.5 px-2 sm:px-3 text-sm font-semibold transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0C3535] focus-visible:ring-offset-2",
+                  activeTab === "status"
+                    ? "bg-[#0C3535] text-white border border-[#0C3535]"
+                    : "bg-white text-[#0C3535] border border-gray-300 hover:bg-gray-100"
+                )}
+              >
+                Status & Feedback
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "rfp"}
+                onClick={() => setActiveTab("rfp")}
+                className={cn(
+                  "flex-1 min-w-0 inline-flex items-center justify-center rounded-md py-2.5 px-2 sm:px-3 text-sm font-semibold transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0C3535] focus-visible:ring-offset-2",
+                  activeTab === "rfp"
+                    ? "bg-[#0C3535] text-white border border-[#0C3535]"
+                    : "bg-white text-[#0C3535] border border-gray-300 hover:bg-gray-100"
+                )}
+              >
+                RFP Details
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "bid"}
+                onClick={() => setActiveTab("bid")}
+                className={cn(
+                  "flex-1 min-w-0 inline-flex items-center justify-center rounded-md py-2.5 px-2 sm:px-3 text-sm font-semibold transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0C3535] focus-visible:ring-offset-2",
+                  activeTab === "bid"
+                    ? "bg-[#0C3535] text-white border border-[#0C3535]"
+                    : "bg-white text-[#0C3535] border border-gray-300 hover:bg-gray-100"
+                )}
+              >
+                My Bid
+              </button>
+            </div>
           </div>
         </div>
 
