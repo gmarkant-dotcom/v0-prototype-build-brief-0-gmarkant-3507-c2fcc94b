@@ -5,7 +5,17 @@ import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
 import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
-import { Loader2, ChevronDown, ChevronRight, ExternalLink } from "lucide-react"
+import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
+import { Button } from "@/components/ui/button"
+import { Loader2, ChevronDown, ChevronRight, Download, ExternalLink } from "lucide-react"
+
+function externalLinkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "")
+  } catch {
+    return "Link"
+  }
+}
 
 type InboxSnippet = {
   id: string
@@ -197,25 +207,41 @@ export function AgencyBroadcastResponsesPanel() {
                     <div>
                       <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
                       <ul className="space-y-2">
-                        {r.attachments.map((att, i) => (
-                          <li
-                            key={`${att.url}-${i}`}
-                            className="flex flex-wrap items-start gap-2 text-sm border border-border/60 rounded-lg p-2 bg-white/5"
-                          >
-                            <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/10 text-foreground-muted shrink-0">
-                              {att.label}
-                            </span>
-                            <a
-                              href={att.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-accent inline-flex items-center gap-1 hover:underline break-all"
+                        {r.attachments.map((att, i) => {
+                          const isBlob = isVercelBlobStorageUrl(att.url)
+                          const displayName = isBlob ? displayFilenameFromBlobUrl(att.url) : externalLinkLabel(att.url)
+                          const downloadHref = isBlob
+                            ? `/api/agency/blob-download?url=${encodeURIComponent(att.url)}`
+                            : null
+                          return (
+                            <li
+                              key={`${att.url}-${i}`}
+                              className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm border border-border/60 rounded-lg p-3 bg-white/5"
                             >
-                              {att.url}
-                              <ExternalLink className="w-3 h-3 shrink-0" />
-                            </a>
-                          </li>
-                        ))}
+                              <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/10 text-foreground-muted shrink-0">
+                                {att.label}
+                              </span>
+                              <span className="text-foreground min-w-0 flex-1 truncate" title={displayName}>
+                                {displayName}
+                              </span>
+                              {isBlob && downloadHref ? (
+                                <Button variant="outline" size="sm" className="shrink-0 border-border/60" asChild>
+                                  <a href={downloadHref}>
+                                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                                    Download
+                                  </a>
+                                </Button>
+                              ) : (
+                                <Button variant="outline" size="sm" className="shrink-0 border-border/60" asChild>
+                                  <a href={att.url} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                                    Open
+                                  </a>
+                                </Button>
+                              )}
+                            </li>
+                          )
+                        })}
                       </ul>
                     </div>
                   )}
