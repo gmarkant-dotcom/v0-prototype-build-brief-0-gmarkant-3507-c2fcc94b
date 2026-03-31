@@ -98,7 +98,7 @@ export default function PartnerPaymentsPage() {
                 <Input
                   value={rateInfo.dayRate}
                   onChange={(e) => setRateInfo(prev => ({ ...prev, dayRate: e.target.value }))}
-                  className="border-gray-200 pl-7"
+                  className="border-gray-200 pl-7 text-gray-900 placeholder:text-gray-500"
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1">For reference only</p>
@@ -113,7 +113,7 @@ export default function PartnerPaymentsPage() {
                 <Input
                   value={rateInfo.projectMinimum}
                   onChange={(e) => setRateInfo(prev => ({ ...prev, projectMinimum: e.target.value }))}
-                  className="border-gray-200 pl-7"
+                  className="border-gray-200 pl-7 text-gray-900 placeholder:text-gray-500"
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1">Minimum project budget</p>
@@ -126,7 +126,7 @@ export default function PartnerPaymentsPage() {
               <select
                 value={rateInfo.paymentTerms}
                 onChange={(e) => setRateInfo(prev => ({ ...prev, paymentTerms: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm"
+                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
               >
                 <option value="net_15">Net 15</option>
                 <option value="net_30">Net 30</option>
@@ -163,7 +163,7 @@ export default function PartnerPaymentsPage() {
               <Input
                 value={bankInfo.bankName}
                 onChange={(e) => setBankInfo(prev => ({ ...prev, bankName: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
             
@@ -174,7 +174,7 @@ export default function PartnerPaymentsPage() {
               <select
                 value={bankInfo.accountType}
                 onChange={(e) => setBankInfo(prev => ({ ...prev, accountType: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm"
+                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
               >
                 <option value="checking">Checking</option>
                 <option value="savings">Savings</option>
@@ -188,7 +188,7 @@ export default function PartnerPaymentsPage() {
               <Input
                 value={bankInfo.routingNumber}
                 onChange={(e) => setBankInfo(prev => ({ ...prev, routingNumber: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                 type="password"
               />
             </div>
@@ -200,7 +200,7 @@ export default function PartnerPaymentsPage() {
               <Input
                 value={bankInfo.accountNumber}
                 onChange={(e) => setBankInfo(prev => ({ ...prev, accountNumber: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                 type="password"
               />
             </div>
@@ -212,7 +212,7 @@ export default function PartnerPaymentsPage() {
               <Input
                 value={bankInfo.accountName}
                 onChange={(e) => setBankInfo(prev => ({ ...prev, accountName: e.target.value }))}
-                className="border-gray-200"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
           </div>

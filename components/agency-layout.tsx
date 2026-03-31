@@ -108,6 +108,11 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
     router.push("/")
     router.refresh()
   }
+
+  const navigateFromMenu = (path: string) => {
+    setUserMenuOpen(false)
+    router.push(path)
+  }
   
   return (
     <div className="min-h-screen relative">
@@ -381,30 +386,27 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             
             {userMenuOpen && (
               <div className="absolute bottom-full left-0 right-0 mb-2 bg-background border border-border rounded-lg shadow-xl overflow-hidden">
-                <Link
-                  href="/agency/settings/profile"
-                  onClick={() => setUserMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                <button
+                  onClick={() => navigateFromMenu("/agency/settings/user")}
+                  className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
                 >
                   <Settings className="w-4 h-4 text-foreground-muted" />
-                  <span className="text-sm text-foreground">Account Settings</span>
-                </Link>
-                <Link
-                  href="/agency/settings/profile"
-                  onClick={() => setUserMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                  <span className="text-sm text-foreground">User Profile</span>
+                </button>
+                <button
+                  onClick={() => navigateFromMenu("/agency/settings/profile")}
+                  className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
                 >
                   <User className="w-4 h-4 text-foreground-muted" />
-                  <span className="text-sm text-foreground">Profile</span>
-                </Link>
-                <Link
-                  href="/agency/settings/billing"
-                  onClick={() => setUserMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                  <span className="text-sm text-foreground">Company Profile & Capabilities</span>
+                </button>
+                <button
+                  onClick={() => navigateFromMenu("/agency/settings/billing")}
+                  className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
                 >
                   <CreditCard className="w-4 h-4 text-foreground-muted" />
                   <span className="text-sm text-foreground">Billing & Plan</span>
-                </Link>
+                </button>
                 {isOwner && (
                   <Link
                     href="/admin/users"

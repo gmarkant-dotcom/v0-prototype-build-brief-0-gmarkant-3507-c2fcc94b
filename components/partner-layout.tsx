@@ -79,6 +79,11 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
     router.refresh()
   }
 
+  const navigateFromMenu = (path: string) => {
+    setUserMenuOpen(false)
+    router.push(path)
+  }
+
   return (
     <div className="min-h-screen bg-[#FAFAFA]">
       {/* Header */}
@@ -142,30 +147,27 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               
               {userMenuOpen && (
                 <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl overflow-hidden z-50">
-                  <Link
-                    href="/partner/profile"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                  <button
+                    onClick={() => navigateFromMenu("/partner/settings/user")}
+                    className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
                   >
                     <Settings className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">Account Settings</span>
-                  </Link>
-                  <Link
-                    href="/partner/profile"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                    <span className="text-sm">User Profile</span>
+                  </button>
+                  <button
+                    onClick={() => navigateFromMenu("/partner/profile")}
+                    className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
                   >
                     <User className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">Profile & Capabilities</span>
-                  </Link>
-                  <Link
-                    href="/partner/marketplace"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                    <span className="text-sm">Company Profile & Capabilities</span>
+                  </button>
+                  <button
+                    onClick={() => navigateFromMenu("/partner/marketplace")}
+                    className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
                   >
                     <Globe className="w-4 h-4 text-gray-500" />
                     <span className="text-sm">Marketplace</span>
-                  </Link>
+                  </button>
                   <div className="border-t border-gray-200">
                     <button
                       onClick={handleSignOut}

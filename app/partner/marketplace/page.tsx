@@ -166,6 +166,9 @@ export default function PartnerMarketplacePage() {
                       <h2 className="font-display font-bold text-lg text-gray-900">
                         {agency.company_name || agency.full_name || "Lead Agency"}
                       </h2>
+                      {agency.agency_type && (
+                        <p className="font-mono text-xs text-gray-600 mt-1">{agency.agency_type}</p>
+                      )}
                       {agency.location && <p className="font-mono text-xs text-gray-500 mt-1">{agency.location}</p>}
                       <p className="text-sm text-gray-600 mt-2 line-clamp-2">
                         {agency.bio || "Discoverable lead agency on Ligament Marketplace."}

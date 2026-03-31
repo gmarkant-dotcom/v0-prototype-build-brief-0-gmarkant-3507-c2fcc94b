@@ -11,6 +11,36 @@ import { createClient } from "@/lib/supabase/client"
 import { Camera, Loader2 } from "lucide-react"
 import { isDemoMode } from "@/lib/demo-data"
 
+const disciplines = [
+  "Video Production",
+  "Photography",
+  "Motion Design",
+  "Social Media",
+  "Copywriting",
+  "Public Relations",
+  "Event Production",
+  "Audio Production",
+  "Brand Design",
+  "Talent Relations",
+  "Media Planning",
+  "Strategy",
+]
+
+const capabilities = [
+  "Documentary",
+  "Commercial",
+  "Sports Content",
+  "Creator Content",
+  "Social First",
+  "Long Form",
+  "Short Form",
+  "Live Events",
+  "Podcasts",
+  "Editorial",
+  "Branded Content",
+  "UGC",
+]
+
 type ProfileState = {
   id: string
   company_name: string
@@ -31,6 +61,10 @@ export default function AgencyProfileSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [primaryDiscipline, setPrimaryDiscipline] = useState(disciplines[0])
+  const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([])
+  const [customCapability, setCustomCapability] = useState("")
+  const [customCapabilities, setCustomCapabilities] = useState<string[]>([])
   const [form, setForm] = useState<ProfileState>({
     id: "",
     company_name: "",
@@ -71,6 +105,14 @@ export default function AgencyProfileSettingsPage() {
         avatar_url: profile.avatar_url || "",
         is_discoverable: !!profile.is_discoverable,
       })
+      if (typeof window !== "undefined") {
+        const savedDiscipline = localStorage.getItem("agencyPrimaryDiscipline")
+        const savedCaps = localStorage.getItem("agencySelectedCapabilities")
+        const savedCustomCaps = localStorage.getItem("agencyCustomCapabilities")
+        if (savedDiscipline) setPrimaryDiscipline(savedDiscipline)
+        if (savedCaps) setSelectedCapabilities(JSON.parse(savedCaps))
+        if (savedCustomCaps) setCustomCapabilities(JSON.parse(savedCustomCaps))
+      }
       setLoading(false)
     }
     load()
@@ -98,6 +140,11 @@ export default function AgencyProfileSettingsPage() {
         updated_at: new Date().toISOString(),
       })
       .eq("id", form.id)
+    if (!error && typeof window !== "undefined") {
+      localStorage.setItem("agencyPrimaryDiscipline", primaryDiscipline)
+      localStorage.setItem("agencySelectedCapabilities", JSON.stringify(selectedCapabilities))
+      localStorage.setItem("agencyCustomCapabilities", JSON.stringify(customCapabilities))
+    }
     setMessage(error ? error.message : "Agency profile updated.")
     setSaving(false)
   }
@@ -127,6 +174,23 @@ export default function AgencyProfileSettingsPage() {
         <div className="p-8 flex items-center justify-center text-foreground-muted">Loading profile...</div>
       </AgencyLayout>
     )
+  }
+
+  const toggleCapability = (cap: string) => {
+    setSelectedCapabilities((prev) => (prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap]))
+  }
+
+  const addCustomCapability = () => {
+    const value = customCapability.trim()
+    if (!value || capabilities.includes(value) || customCapabilities.includes(value)) return
+    setCustomCapabilities((prev) => [...prev, value])
+    setSelectedCapabilities((prev) => [...prev, value])
+    setCustomCapability("")
+  }
+
+  const removeCustomCapability = (cap: string) => {
+    setCustomCapabilities((prev) => prev.filter((c) => c !== cap))
+    setSelectedCapabilities((prev) => prev.filter((c) => c !== cap))
   }
 
   return (
@@ -193,12 +257,67 @@ export default function AgencyProfileSettingsPage() {
             />
           </div>
           <div>
+            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Primary Discipline</label>
+            <select
+              value={primaryDiscipline}
+              onChange={(e) => setPrimaryDiscipline(e.target.value)}
+              className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+            >
+              {disciplines.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company Description / Bio</label>
             <Textarea
               value={form.bio}
               onChange={(e) => setForm((p) => ({ ...p, bio: e.target.value }))}
               className="min-h-[120px] bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
             />
+          </div>
+          <div>
+            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Capabilities</label>
+            <div className="flex flex-wrap gap-2">
+              {capabilities.map((cap) => (
+                <button
+                  key={cap}
+                  type="button"
+                  onClick={() => toggleCapability(cap)}
+                  className={
+                    selectedCapabilities.includes(cap)
+                      ? "px-3 py-1.5 rounded-full text-xs border bg-[#0C3535] text-white border-[#0C3535]"
+                      : "px-3 py-1.5 rounded-full text-xs border bg-white text-gray-700 border-gray-200 hover:border-[#0C3535]/40"
+                  }
+                >
+                  {selectedCapabilities.includes(cap) ? "✓ " : ""}
+                  {cap}
+                </button>
+              ))}
+              {customCapabilities.map((cap) => (
+                <button
+                  key={cap}
+                  type="button"
+                  onClick={() => removeCustomCapability(cap)}
+                  className="px-3 py-1.5 rounded-full text-xs border bg-purple-600 text-white border-purple-600"
+                >
+                  ✓ {cap} ×
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Input
+                value={customCapability}
+                onChange={(e) => setCustomCapability(e.target.value)}
+                placeholder="Add custom capability"
+                className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              />
+              <Button type="button" variant="outline" className="border-border text-foreground" onClick={addCustomCapability}>
+                Add
+              </Button>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
