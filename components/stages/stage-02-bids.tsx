@@ -7,7 +7,7 @@ import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
-import { EmptyState } from "@/components/empty-state"
+import { AgencyBroadcastResponsesPanel } from "@/components/agency-broadcast-responses"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { X, FileText, Play, Download, ExternalLink, ChevronRight, Clock, DollarSign, Users, Briefcase, MessageSquare, Send, History, CheckCircle, AlertCircle, Paperclip } from "lucide-react"
 
@@ -552,20 +552,18 @@ export function Stage02Bids() {
 
   const selectedBidData = bids.find(b => b.id === selectedBid)
   
+  // Production: real partner bids come from partner_rfp_responses (GET /api/agency/rfp-responses).
+  // Demo: rich AI-scored mock data below. Stage02Bids does not fetch — AgencyBroadcastResponsesPanel does.
   if (!isDemo) {
     return (
       <div className="p-8 max-w-6xl">
         <StageHeader
           stageNumber="02"
           title="Bid Management + Award"
-          subtitle="Review vendor responses, see AI-generated scores, and award contracts. Click any bid to review their full submission materials."
+          subtitle="Review partner proposals from broadcast RFPs. Submissions appear below from partner_rfp_responses. AI scoring and comparison cards are available in demo preview."
           aiPowered
         />
-        <EmptyState
-          title="No Bids to Review"
-          description="When partners respond to your RFPs, their bids will appear here for scoring and comparison."
-          icon="rfps"
-        />
+        <AgencyBroadcastResponsesPanel />
       </div>
     )
   }

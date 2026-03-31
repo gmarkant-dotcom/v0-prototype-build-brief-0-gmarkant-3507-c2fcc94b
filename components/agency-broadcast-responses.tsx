@@ -73,8 +73,17 @@ export function AgencyBroadcastResponsesPanel() {
       setLoading(true)
       setError(null)
       try {
+        console.log(
+          "[agency/bids] AgencyBroadcastResponsesPanel → GET /api/agency/rfp-responses",
+          typeof window !== "undefined" ? window.location.pathname : ""
+        )
         const res = await fetch("/api/agency/rfp-responses", { cache: "no-store", credentials: "same-origin" })
         const data = await res.json().catch(() => ({}))
+        console.log("[agency/bids] rfp-responses response", {
+          ok: res.ok,
+          status: res.status,
+          count: Array.isArray(data.responses) ? data.responses.length : 0,
+        })
         if (!res.ok) throw new Error((data?.error as string) || "Could not load responses")
         if (!cancelled) setRows((data.responses || []) as AgencyResponseRow[])
       } catch (e) {

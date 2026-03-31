@@ -20,6 +20,7 @@ export async function GET() {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
+    // RLS: policy "Agencies select RFP responses they own" — USING (agency_id = auth.uid())
     const { data: responses, error } = await supabase
       .from("partner_rfp_responses")
       .select("*")
@@ -27,12 +28,20 @@ export async function GET() {
       .order("updated_at", { ascending: false })
 
     if (error) {
-      console.error("[agency/rfp-responses]", error)
+      console.error("[agency/rfp-responses] partner_rfp_responses select error", {
+        userId: user.id,
+        message: error.message,
+        code: error.code,
+      })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     const list = responses || []
-    console.log("[agency/rfp-responses] GET", { userId: user.id, responseCount: list.length })
+    console.log("[agency/rfp-responses] GET ok", {
+      authUserId: user.id,
+      query: "partner_rfp_responses WHERE agency_id = auth.uid()",
+      rowCount: list.length,
+    })
 
     const inboxIds = [...new Set(list.map((r) => r.inbox_item_id))]
 
