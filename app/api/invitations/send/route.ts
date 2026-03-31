@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
   try {
+    console.log("[invitations/send] POST start")
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -17,12 +18,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 })
     }
 
-    // Get agency profile
+    // Get agency profile and enforce role
     const { data: agencyProfile } = await supabase
       .from("profiles")
-      .select("company_name, full_name")
+      .select("role, company_name, full_name")
       .eq("id", user.id)
       .single()
+
+    if (agencyProfile?.role !== "agency") {
+      return NextResponse.json({ error: "Agency only" }, { status: 403 })
+    }
 
     const agencyName = agencyProfile?.company_name || agencyProfile?.full_name || "A Lead Agency"
 
@@ -93,6 +98,7 @@ export async function POST(request: Request) {
       })
     }
 
+    console.log("[invitations/send] POST success", { invitationId: invitation.id })
     return NextResponse.json({ 
       success: true, 
       invitation,
@@ -100,7 +106,7 @@ export async function POST(request: Request) {
       message: "Invitation sent successfully"
     })
   } catch (error) {
-    console.error("Error in invitation API:", error)
+    console.error("[invitations/send] POST error:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

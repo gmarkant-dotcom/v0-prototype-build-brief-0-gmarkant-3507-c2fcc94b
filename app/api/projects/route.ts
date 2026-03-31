@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 // GET - List projects for current user
 export async function GET(request: NextRequest) {
   try {
+    console.log('[projects] GET start')
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
         if (simple.error) throw simple.error
         projects = simple.data
       }
-    } else {
+    } else if (profile?.role === 'partner') {
       const { data: userPartnerships, error: pErr } = await supabase
         .from('partnerships')
         .select('id')
@@ -90,8 +91,11 @@ export async function GET(request: NextRequest) {
           responded_at: null as string | null,
         },
       }))
+    } else {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    console.log('[projects] GET success', { role: profile?.role, count: Array.isArray(projects) ? projects.length : 0 })
     return NextResponse.json({ projects })
   } catch (error) {
     console.error('Error fetching projects:', error)

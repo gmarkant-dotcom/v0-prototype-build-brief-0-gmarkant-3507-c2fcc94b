@@ -45,6 +45,8 @@ export function Stage03OnboardingProduction() {
   const [customMessage, setCustomMessage] = useState("")
   const [createNda, setCreateNda] = useState(true)
   const [createSow, setCreateSow] = useState(true)
+  const [deployError, setDeployError] = useState<string | null>(null)
+  const [deploySuccess, setDeploySuccess] = useState<string | null>(null)
 
   useEffect(() => {
     if (!selectedProject?.id) return
@@ -88,6 +90,8 @@ export function Stage03OnboardingProduction() {
   }
 
   const handleDeploy = async () => {
+    setDeployError(null)
+    setDeploySuccess(null)
     if (!checkFeatureAccess("onboarding deploy")) return
     if (!assignmentId) return
     setSending(true)
@@ -103,9 +107,13 @@ export function Stage03OnboardingProduction() {
           createSow,
         }),
       })
-      if (res.ok) {
-        setCustomMessage("")
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setDeployError((data?.error as string) || `Deploy failed (HTTP ${res.status})`)
+        return
       }
+      setCustomMessage("")
+      setDeploySuccess("Onboarding packet deployed successfully.")
     } finally {
       setSending(false)
     }
@@ -207,6 +215,12 @@ export function Stage03OnboardingProduction() {
             )}
             Deploy onboarding packet
           </Button>
+          {deployError && (
+            <p className="text-sm text-red-500">{deployError}</p>
+          )}
+          {deploySuccess && (
+            <p className="text-sm text-green-500">{deploySuccess}</p>
+          )}
         </GlassCard>
       )}
     </div>

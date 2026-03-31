@@ -68,65 +68,54 @@ export async function middleware(request: NextRequest) {
     }
   }
   
-  // Check for role-based access on agency and partner routes (production only)
-  const isAgencyRoute = request.nextUrl.pathname.startsWith('/agency')
-  const isPartnerRoute = request.nextUrl.pathname.startsWith('/partner')
-  
-  if (isAgencyRoute || isPartnerRoute) {
-    try {
-      const { user, supabase, supabaseResponse } = await createMiddlewareClient(request)
-      
-      // If no user is logged in, redirect to login
-      if (!user) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/auth/login'
-        return NextResponse.redirect(url)
-      }
-      
-      // Get user's role from metadata
-      let userRole = user.user_metadata?.role as string | undefined
-      
-      // If role not in metadata, check the profiles table
-      if (!userRole) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
-        
-        userRole = profile?.role as string | undefined
-      }
-      
-      // If user still doesn't have a role set, they need to complete their profile
-      // For now, allow access but they should be prompted to set their role
-      if (!userRole) {
-        return supabaseResponse
-      }
-      
-      // Check if user is trying to access the wrong portal
-      if (isAgencyRoute && userRole === 'partner') {
-        // Partner trying to access agency routes - redirect to partner portal
-        const url = request.nextUrl.clone()
-        url.pathname = '/partner'
-        return NextResponse.redirect(url)
-      }
-      
-      if (isPartnerRoute && userRole === 'agency') {
-        // Agency trying to access partner routes - redirect to agency portal
-        const url = request.nextUrl.clone()
-        url.pathname = '/agency'
-        return NextResponse.redirect(url)
-      }
-      
-      return supabaseResponse
-    } catch (error) {
-      // If there's an error checking auth, allow access and let the page handle it
-      console.error('Middleware auth error:', error)
-      return NextResponse.next()
+  // Production: protect all non-public app routes.
+  const isAgencyRoute = pathname.startsWith('/agency')
+  const isPartnerRoute = pathname.startsWith('/partner')
+  const isAdminRoute = pathname.startsWith('/admin')
+
+  try {
+    const { user, supabase, supabaseResponse } = await createMiddlewareClient(request)
+
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/login'
+      return NextResponse.redirect(url)
     }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, is_admin')
+      .eq('id', user.id)
+      .single()
+
+    const userRole = (user.user_metadata?.role as string | undefined) || (profile?.role as string | undefined)
+    const isAdmin = !!profile?.is_admin
+
+    if (isAdminRoute && !isAdmin) {
+      const url = request.nextUrl.clone()
+      url.pathname = userRole === 'partner' ? '/partner' : '/agency'
+      return NextResponse.redirect(url)
+    }
+
+    if (isAgencyRoute && userRole === 'partner') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/partner'
+      return NextResponse.redirect(url)
+    }
+
+    if (isPartnerRoute && userRole === 'agency') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/agency'
+      return NextResponse.redirect(url)
+    }
+
+    return supabaseResponse
+  } catch (error) {
+    console.error('Middleware auth error:', error)
+    const url = request.nextUrl.clone()
+    url.pathname = '/auth/login'
+    return NextResponse.redirect(url)
   }
-  
-  return NextResponse.next()
 }
 
 export const config = {

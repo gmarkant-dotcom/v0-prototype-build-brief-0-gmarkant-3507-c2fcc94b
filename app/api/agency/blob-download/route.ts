@@ -1,7 +1,12 @@
 import { get } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { isVercelBlobStorageUrl, parsePartnerRfpBlobPathFromUrl, displayFilenameFromBlobUrl } from "@/lib/vercel-blob-url"
+import {
+  isVercelBlobStorageUrl,
+  parsePartnerRfpBlobPathFromUrl,
+  parseProjectBlobPathFromUrl,
+  displayFilenameFromBlobUrl,
+} from "@/lib/vercel-blob-url"
 
 export const dynamic = "force-dynamic"
 
@@ -34,8 +39,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Only Vercel Blob URLs are supported" }, { status: 400 })
     }
 
-    const parsed = parsePartnerRfpBlobPathFromUrl(blobUrl)
-    if (!parsed) {
+    const parsedRfp = parsePartnerRfpBlobPathFromUrl(blobUrl)
+    const parsedProject = parseProjectBlobPathFromUrl(blobUrl)
+    if (!parsedRfp && !parsedProject) {
       return NextResponse.json({ error: "Unrecognized blob path" }, { status: 400 })
     }
 
@@ -54,26 +60,40 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
-    const { data: inbox, error: inboxErr } = await supabase
-      .from("partner_rfp_inbox")
-      .select("id, agency_id")
-      .eq("id", parsed.inboxId)
-      .maybeSingle()
+    if (parsedRfp) {
+      const { data: inbox, error: inboxErr } = await supabase
+        .from("partner_rfp_inbox")
+        .select("id, agency_id")
+        .eq("id", parsedRfp.inboxId)
+        .maybeSingle()
 
-    if (inboxErr || !inbox || inbox.agency_id !== user.id) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+      if (inboxErr || !inbox || inbox.agency_id !== user.id) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 })
+      }
+
+      const { data: responseRow } = await supabase
+        .from("partner_rfp_responses")
+        .select("id")
+        .eq("agency_id", user.id)
+        .eq("inbox_item_id", parsedRfp.inboxId)
+        .eq("partner_id", parsedRfp.partnerId)
+        .maybeSingle()
+
+      if (!responseRow) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 })
+      }
     }
 
-    const { data: responseRow } = await supabase
-      .from("partner_rfp_responses")
-      .select("id")
-      .eq("agency_id", user.id)
-      .eq("inbox_item_id", parsed.inboxId)
-      .eq("partner_id", parsed.partnerId)
-      .maybeSingle()
+    if (parsedProject) {
+      const { data: project, error: projectErr } = await supabase
+        .from("projects")
+        .select("id, agency_id")
+        .eq("id", parsedProject.projectId)
+        .maybeSingle()
 
-    if (!responseRow) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+      if (projectErr || !project || project.agency_id !== user.id) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 })
+      }
     }
 
     const result = await get(blobUrl, {

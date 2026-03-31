@@ -39,3 +39,21 @@ export function parsePartnerRfpBlobPathFromUrl(blobUrl: string): {
     return null
   }
 }
+
+/** Path shape from project docs upload: `projects/{projectId}/.../{timestamp}_{safeName}` */
+export function parseProjectBlobPathFromUrl(blobUrl: string): {
+  projectId: string
+  tail: string
+} | null {
+  try {
+    const pathname = new URL(blobUrl).pathname.replace(/^\//, "")
+    const parts = pathname.split("/").filter(Boolean)
+    if (parts.length < 3 || parts[0] !== "projects") return null
+    return {
+      projectId: parts[1],
+      tail: parts.slice(2).join("/"),
+    }
+  } catch {
+    return null
+  }
+}

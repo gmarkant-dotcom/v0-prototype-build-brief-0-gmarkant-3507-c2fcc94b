@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { EmptyState } from "@/components/empty-state"
 import { LeadAgencyFilter } from "@/components/lead-agency-filter"
+import { isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { 
   Calendar, 
   Mail, 
@@ -578,11 +579,14 @@ export default function PartnerProjectsPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {selectedProject.documents.map((doc) => {
+                          const docHref = isVercelBlobStorageUrl(doc.url)
+                            ? `/api/partner/blob-download?url=${encodeURIComponent(doc.url)}`
+                            : doc.url
                           const Icon = documentIcons[doc.category] || FileText
                           return (
                             <a
                               key={doc.id}
-                              href={doc.url}
+                              href={docHref}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-100 hover:border-gray-200 transition-colors group"

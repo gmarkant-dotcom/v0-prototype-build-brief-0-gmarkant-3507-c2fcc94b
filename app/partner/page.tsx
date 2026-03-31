@@ -75,7 +75,7 @@ const demoProjectAlerts = [
     date: "Mar 20, 2026",
     priority: "medium",
     project: "NWSL Creator Content Series",
-    actionUrl: "/partner/documents",
+    actionUrl: "/partner/projects",
     actionLabel: "Review Document",
   },
   {

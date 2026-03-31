@@ -7,6 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    console.log('[projects/messages] GET start')
     const { id: projectId } = await params
     const assignmentId = request.nextUrl.searchParams.get('assignmentId')
     
@@ -15,6 +16,40 @@ export async function GET(
     
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile?.role) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    if (profile.role === 'agency') {
+      const { data: project } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', projectId)
+        .eq('agency_id', user.id)
+        .single()
+      if (!project) {
+        return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+      }
+    } else if (profile.role === 'partner') {
+      const { data: assignment } = await supabase
+        .from('project_assignments')
+        .select('id, partnerships!inner(partner_id)')
+        .eq('project_id', projectId)
+        .eq('partnerships.partner_id', user.id)
+        .single()
+      if (!assignment) {
+        return NextResponse.json({ error: 'Not assigned to this project' }, { status: 403 })
+      }
+    } else {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Build query based on whether we're filtering by assignment
@@ -37,6 +72,7 @@ export async function GET(
 
     if (error) throw error
 
+    console.log('[projects/messages] GET success', { projectId, count: messages?.length || 0 })
     return NextResponse.json({ messages })
   } catch (error) {
     console.error('Error fetching messages:', error)
@@ -50,6 +86,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    console.log('[projects/messages] POST start')
     const { id: projectId } = await params
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -117,6 +154,7 @@ export async function POST(
 
     if (error) throw error
 
+    console.log('[projects/messages] POST success', { projectId, messageId: message?.id })
     return NextResponse.json({ message })
   } catch (error) {
     console.error('Error sending message:', error)

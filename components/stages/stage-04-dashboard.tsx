@@ -9,6 +9,7 @@ import { Calendar, FileText, Link2, User, Mail, Phone, ExternalLink, FolderOpen,
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { isDemoMode } from "@/lib/demo-data"
 import { EmptyState } from "@/components/empty-state"
+import { isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 
 interface VendorStatus {
   id: string
@@ -319,11 +320,14 @@ export function Stage04Dashboard() {
 
             <div className="space-y-2 max-h-[200px] overflow-y-auto pr-2">
               {projectDocuments.map((doc) => {
+                const docHref = isVercelBlobStorageUrl(doc.url)
+                  ? `/api/agency/blob-download?url=${encodeURIComponent(doc.url)}`
+                  : doc.url
                 const Icon = doc.icon
                 return (
                   <a
                     key={doc.id}
-                    href={doc.url}
+                    href={docHref}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-transparent hover:border-border/30 transition-colors group"
