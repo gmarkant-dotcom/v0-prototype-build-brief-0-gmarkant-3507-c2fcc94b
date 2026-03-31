@@ -39,6 +39,7 @@ type ResponseVersion = {
   attachments: AttachmentItem[] | null
   status_at_submission: string
   submitted_at: string
+  change_notes?: string | null
 }
 
 type AgencyResponseRow = {
@@ -254,62 +255,72 @@ export function AgencyBroadcastResponsesPanel() {
                     <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
                     <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">{r.proposal_text}</p>
                   </div>
-                  {versions.length > 0 && (
-                    <div className="border border-border/60 rounded-lg p-3 bg-white/5">
-                      <div className="flex items-center justify-between gap-3 mb-2">
-                        <div className="font-mono text-[10px] uppercase text-foreground-muted">Version history</div>
-                        {selectedVersion && (
-                          <div className="font-mono text-[10px] text-foreground-muted">
-                            {new Date(selectedVersion.submitted_at).toLocaleString()}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {versions.map((v, idx) => {
-                          const isCurrent = idx === 0
-                          const isSelected = selectedVersion?.id === v.id
-                          return (
-                            <button
-                              key={v.id}
-                              type="button"
-                              onClick={() => setSelectedVersionByResponseId((prev) => ({ ...prev, [r.id]: v.id }))}
-                              className={cn(
-                                "px-2 py-1 rounded-md border font-mono text-[10px]",
-                                isSelected
-                                  ? "bg-accent/20 border-accent text-foreground"
-                                  : "bg-white/5 border-border/60 text-foreground-muted hover:text-foreground"
-                              )}
-                            >
-                              V{v.version_number} {isCurrent ? "Current" : new Date(v.submitted_at).toLocaleDateString()}
-                            </button>
-                          )
-                        })}
-                      </div>
+                  <div className="border border-border/60 rounded-lg p-3 bg-white/5">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="font-mono text-[10px] uppercase text-foreground-muted">Version history</div>
                       {selectedVersion && (
-                        <div className="space-y-2">
-                          <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
-                              <div className="text-foreground">{formatBudgetForDisplay(selectedVersion.budget_proposal || "")}</div>
-                            </div>
-                            <div>
-                              <div className="font-mono text-[10px] uppercase text-foreground-muted">Timeline</div>
-                              <div className="text-foreground">{formatTimelineForDisplay(selectedVersion.timeline_proposal || "")}</div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="font-mono text-[10px] uppercase text-foreground-muted">Proposal</div>
-                            <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                              {selectedVersion.proposal_text || "—"}
-                            </p>
-                          </div>
-                          <p className="font-mono text-[10px] text-foreground-muted">
-                            Attachments: {Array.isArray(selectedVersion.attachments) ? selectedVersion.attachments.length : 0}
-                          </p>
+                        <div className="font-mono text-[10px] text-foreground-muted">
+                          {new Date(selectedVersion.submitted_at).toLocaleString()}
                         </div>
                       )}
                     </div>
-                  )}
+                    {versions.length === 0 ? (
+                      <p className="text-sm text-foreground-muted">No version history yet.</p>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {versions.map((v, idx) => {
+                            const isCurrent = idx === 0
+                            const isSelected = selectedVersion?.id === v.id
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => setSelectedVersionByResponseId((prev) => ({ ...prev, [r.id]: v.id }))}
+                                className={cn(
+                                  "px-2 py-1 rounded-md border font-display text-xs",
+                                  isSelected
+                                    ? "bg-accent/20 border-accent text-foreground"
+                                    : "bg-white/5 border-border/60 text-foreground-muted hover:text-foreground"
+                                )}
+                              >
+                                V{v.version_number} {isCurrent ? "— Current" : `— ${new Date(v.submitted_at).toLocaleDateString()}`}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        {selectedVersion && (
+                          <div className="space-y-2">
+                            <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                              <div>
+                                <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
+                                <div className="text-foreground">{formatBudgetForDisplay(selectedVersion.budget_proposal || "")}</div>
+                              </div>
+                              <div>
+                                <div className="font-mono text-[10px] uppercase text-foreground-muted">Timeline</div>
+                                <div className="text-foreground">{formatTimelineForDisplay(selectedVersion.timeline_proposal || "")}</div>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="font-mono text-[10px] uppercase text-foreground-muted">Proposal</div>
+                              <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                                {selectedVersion.proposal_text || "—"}
+                              </p>
+                            </div>
+                            {selectedVersion.change_notes && (
+                              <div className="rounded-md border border-amber-300/50 bg-amber-500/10 p-2">
+                                <div className="font-mono text-[10px] uppercase text-amber-200">Change notes</div>
+                                <p className="text-sm text-amber-100 whitespace-pre-wrap">{selectedVersion.change_notes}</p>
+                              </div>
+                            )}
+                            <p className="font-mono text-[10px] text-foreground-muted">
+                              Attachments: {Array.isArray(selectedVersion.attachments) ? selectedVersion.attachments.length : 0}
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                   {r.attachments && r.attachments.length > 0 && (
                     <div>
                       <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>

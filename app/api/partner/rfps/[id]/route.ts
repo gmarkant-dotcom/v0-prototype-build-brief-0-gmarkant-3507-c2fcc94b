@@ -69,11 +69,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       const { data: versionRows, error: versionErr } = await supabase
         .from("partner_rfp_response_versions")
         .select(
-          "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at"
+          "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at, change_notes"
         )
         .eq("response_id", (response as { id: string }).id)
         .order("version_number", { ascending: false })
       if (!versionErr) versions = versionRows || []
+      console.log("[api] partner version fetch", {
+        route: "/api/partner/rfps/[id]",
+        method: "GET",
+        userId: user.id,
+        responseId: (response as { id: string }).id,
+        versionCount: versions.length,
+      })
     }
 
     return NextResponse.json(

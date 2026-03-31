@@ -65,7 +65,7 @@ export async function GET() {
       const { data: versions } = await supabase
         .from("partner_rfp_response_versions")
         .select(
-          "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at"
+          "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at, change_notes"
         )
         .in("response_id", responseIds)
         .order("version_number", { ascending: false })
@@ -75,6 +75,16 @@ export async function GET() {
         versionsByResponseId[responseId].push(v)
       }
     }
+
+    console.log("[api] agency versions mapped", {
+      route,
+      method: "GET",
+      userId: user.id,
+      perResponseVersionCounts: merged.map((r) => ({
+        responseId: r.id,
+        versionCount: (versionsByResponseId[r.id as string] || []).length,
+      })),
+    })
 
     const mergedWithVersions = merged.map((r) => ({
       ...r,

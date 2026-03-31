@@ -186,6 +186,7 @@ type ResponseVersion = {
   attachments: SavedAttachment[] | null
   status_at_submission: string
   submitted_at: string
+  change_notes?: string | null
 }
 
 function draftsToPayload(drafts: DraftAttachment[]): SavedAttachment[] {
@@ -337,7 +338,8 @@ export default function PartnerRfpDetailPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [versions, setVersions] = useState<ResponseVersion[]>([])
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(true)
+  const [changeNotes, setChangeNotes] = useState("")
 
   const updateDraft = useCallback((draftId: string, patch: Partial<DraftAttachment>) => {
     setDraftAttachments((prev) => prev.map((d) => (d.id === draftId ? { ...d, ...patch } : d)))
@@ -368,6 +370,7 @@ export default function PartnerRfpDetailPage() {
           setInbox(data.inbox as InboxRow)
           const r = data.response as ResponseRow | null
           const versionRows = (data.versions || []) as ResponseVersion[]
+          console.log("[partner/rfps/detail] versions from API", { count: versionRows.length, versions: versionRows })
           setVersions(versionRows)
           if (r) {
             setExisting(r)
@@ -501,6 +504,7 @@ export default function PartnerRfpDetailPage() {
         timeline_proposal,
         attachments,
         status,
+        change_notes: changeNotes,
       }
       console.log("[partner/rfps] POST /response", { inboxId: id, status, attachmentCount: attachments.length })
       const res = await fetch(`/api/partner/rfps/${id}/response`, {
@@ -521,6 +525,7 @@ export default function PartnerRfpDetailPage() {
         const vRes = await fetch(`/api/partner/rfps/${id}`, { cache: "no-store", credentials: "same-origin" })
         const vData = await vRes.json().catch(() => ({}))
         if (vRes.ok) setVersions((vData.versions || []) as ResponseVersion[])
+        if (status === "submitted") setChangeNotes("")
         setExisting(row)
         const bp = parseBudgetProposal(row.budget_proposal || "")
         setBudgetAmount(bp.amount)
@@ -1054,6 +1059,20 @@ export default function PartnerRfpDetailPage() {
 
           {canEdit ? (
             <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+              {["under_review", "shortlisted", "meeting_requested"].includes(currentStatus) && (
+                <div className="w-full">
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Change notes (optional)
+                  </label>
+                  <Textarea
+                    value={changeNotes}
+                    onChange={(e) => setChangeNotes(e.target.value)}
+                    placeholder="Briefly describe what you updated in this version..."
+                    className={cn(fieldClass, "min-h-[90px]")}
+                    disabled={savingKind !== null}
+                  />
+                </div>
+              )}
               {/* No wrapping <form> on this page; type=&quot;button&quot; avoids accidental document submit if a parent ever adds a form. */}
               <Button
                 type="button"
@@ -1118,7 +1137,7 @@ export default function PartnerRfpDetailPage() {
           {historyOpen && (
             <div className="mt-4 space-y-3">
               {versions.length === 0 ? (
-                <p className="text-sm text-gray-600">No submitted versions yet.</p>
+                <p className="text-sm text-gray-600">No previous submissions.</p>
               ) : (
                 versions.map((v) => {
                   const isOriginal = v.version_number === 1
@@ -1128,7 +1147,7 @@ export default function PartnerRfpDetailPage() {
                   return (
                     <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="font-display font-bold text-[#0C3535]">
+                        <div className="font-display font-bold text-[#0C3535] text-base">
                           V{v.version_number} {isOriginal ? "— Original" : ""}
                         </div>
                         <div className="font-mono text-[10px] text-gray-500">
@@ -1146,6 +1165,12 @@ export default function PartnerRfpDetailPage() {
                         </div>
                       </div>
                       <p className="text-sm text-gray-700 mt-3">{preview || "—"}</p>
+                      {v.change_notes && (
+                        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
+                          <div className="font-mono text-[10px] uppercase text-amber-800">Change notes</div>
+                          <p className="text-sm text-amber-900 whitespace-pre-wrap">{v.change_notes}</p>
+                        </div>
+                      )}
                       <p className="font-mono text-[10px] text-gray-500 mt-2">Attachments: {attachmentCount}</p>
                     </div>
                   )

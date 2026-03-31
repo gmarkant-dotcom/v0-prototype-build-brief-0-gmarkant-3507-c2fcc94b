@@ -11,6 +11,7 @@ type Body = {
   timeline_proposal?: string
   attachments?: unknown
   status?: "draft" | "submitted"
+  change_notes?: string
 }
 
 const ALLOWED_TYPES = new Set([
@@ -107,6 +108,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const budget_proposal = (body.budget_proposal ?? "").toString()
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
     const attachments = normalizeAttachments(body.attachments)
+    const changeNotes = (body.change_notes ?? "").toString().trim()
 
     if (status === "submitted") {
       if (!proposal_text.trim()) {
@@ -219,14 +221,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         timeline_proposal,
         attachments,
         status_at_submission: status,
+        change_notes: changeNotes || null,
       })
       if (versionErr) {
         console.warn("[api] version insert failed", {
           route,
           method: "POST",
           userId: user.id,
+          responseId: saved.id,
+          versionNumber: nextVersion,
           code: versionErr.code,
           message: versionErr.message,
+        })
+      } else {
+        console.log("[api] version insert success", {
+          route,
+          method: "POST",
+          userId: user.id,
+          responseId: saved.id,
+          versionNumber: nextVersion,
         })
       }
 
