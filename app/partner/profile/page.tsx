@@ -11,7 +11,6 @@ import { FileUpload } from "@/components/file-upload"
 import { Loader2, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Checkbox } from "@/components/ui/checkbox"
 import { isDemoMode } from "@/lib/demo-data"
 
 const disciplines = [
