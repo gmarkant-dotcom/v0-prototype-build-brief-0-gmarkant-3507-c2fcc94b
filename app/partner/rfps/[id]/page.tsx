@@ -14,6 +14,8 @@ import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import {
   BUDGET_CURRENCY_OPTIONS,
   TIMELINE_UNIT_OPTIONS,
+  formatBudgetForDisplay,
+  formatTimelineForDisplay,
   parseBudgetProposal,
   parseTimelineProposal,
   buildBudgetProposalForSave,
