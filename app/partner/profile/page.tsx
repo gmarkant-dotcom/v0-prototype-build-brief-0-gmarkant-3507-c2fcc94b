@@ -11,6 +11,8 @@ import { FileUpload } from "@/components/file-upload"
 import { Loader2, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { Checkbox } from "@/components/ui/checkbox"
+import { isDemoMode } from "@/lib/demo-data"
 
 const disciplines = [
   "Video Production",
@@ -44,9 +46,13 @@ const capabilities = [
 
 export default function PartnerProfilePage() {
   const router = useRouter()
+  const isDemo = isDemoMode()
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [discoverable, setDiscoverable] = useState(false)
+  const [discoverabilitySaving, setDiscoverabilitySaving] = useState(false)
+  const [discoverabilityMsg, setDiscoverabilityMsg] = useState<string | null>(null)
   const [customCapability, setCustomCapability] = useState("")
   const [customCapabilities, setCustomCapabilities] = useState<string[]>([])
   const [showCustomDiscipline, setShowCustomDiscipline] = useState(false)
@@ -109,10 +115,45 @@ export default function PartnerProfilePage() {
       const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
       if (profile?.role !== "partner") {
         router.push("/partner")
+        return
+      }
+      if (!isDemo) {
+        const { data } = await supabase.from("profiles").select("is_discoverable").eq("id", user.id).maybeSingle()
+        setDiscoverable(!!data?.is_discoverable)
       }
     }
     ensurePartnerAuth()
-  }, [router])
+  }, [isDemo, router])
+
+  const toggleDiscoverability = async (checked: boolean) => {
+    setDiscoverabilityMsg(null)
+    setDiscoverable(checked)
+    if (isDemo) {
+      setDiscoverabilityMsg("Demo mode - discoverability preference is not persisted.")
+      return
+    }
+    setDiscoverabilitySaving(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/auth/login?redirect=%2Fpartner%2Fprofile")
+        return
+      }
+      const { error } = await supabase
+        .from("profiles")
+        .update({ is_discoverable: checked, updated_at: new Date().toISOString() })
+        .eq("id", user.id)
+      if (error) throw error
+      setDiscoverabilityMsg("Marketplace discoverability updated.")
+    } catch (error) {
+      setDiscoverabilityMsg(error instanceof Error ? error.message : "Failed to update discoverability.")
+    } finally {
+      setDiscoverabilitySaving(false)
+    }
+  }
 
   const handleReelUpload = async (file: File) => {
     setIsUploadingReel(true)
@@ -213,6 +254,25 @@ export default function PartnerProfilePage() {
           >
             {saving ? "Saving..." : saved ? "Saved Successfully" : "Save Changes"}
           </Button>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <Checkbox
+              checked={discoverable}
+              onCheckedChange={(checked) => toggleDiscoverability(!!checked)}
+              disabled={discoverabilitySaving}
+            />
+            <div>
+              <div className="font-display font-bold text-lg text-[#0C3535]">
+                Allow agencies to discover me on the Marketplace
+              </div>
+              <p className="text-sm text-gray-600 mt-1">
+                When enabled, your agency profile can appear in Marketplace discovery for lead agencies.
+              </p>
+              {discoverabilityMsg && <p className="text-xs text-gray-500 mt-2">{discoverabilityMsg}</p>}
+            </div>
+          </label>
         </div>
         
         {/* Basic Info */}

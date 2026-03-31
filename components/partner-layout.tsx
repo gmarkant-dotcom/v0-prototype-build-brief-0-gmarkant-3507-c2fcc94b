@@ -23,6 +23,8 @@ const navItems = [
   { icon: "$", title: "Payment Setup", href: "/partner/payments" },
 ]
 
+const resourceNavItems = [{ icon: "◍", title: "Marketplace", href: "/partner/marketplace" }]
+
 interface PartnerLayoutProps {
   children: React.ReactNode
 }
@@ -104,6 +106,24 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                       isActive
                         ? "bg-white/10 text-[#C8F53C]"
                         : "text-white/70 hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    <span>{item.icon}</span>
+                    <span>{item.title}</span>
+                  </Link>
+                )
+              })}
+              <span className="mx-2 text-white/20">|</span>
+              <span className="font-mono text-[10px] text-white/50 uppercase px-1">Resources</span>
+              {resourceNavItems.map((item) => {
+                const isActive = pathname === item.href || pathname?.startsWith(item.href)
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
+                      isActive ? "bg-white/10 text-[#C8F53C]" : "text-white/70 hover:text-white hover:bg-white/5"
                     )}
                   >
                     <span>{item.icon}</span>
