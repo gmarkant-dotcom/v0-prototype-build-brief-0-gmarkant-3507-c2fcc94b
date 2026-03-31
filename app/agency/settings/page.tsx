@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
 
 export default function AgencySettingsRedirectPage() {
-  redirect("/settings")
+  redirect("/agency/settings/profile")
 }

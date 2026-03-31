@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    console.log("[api/marketplace/discoverable] start", { roleFilter: role, userId: user.id })
 
     const { data, error } = await supabase
       .from("profiles")
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Failed to load discoverable profiles" }, { status: 500 })
     }
 
-    console.log("[marketplace/discoverable] fetch", {
+    console.log("[api/marketplace/discoverable] success", {
       roleFilter: role,
       discoverableCount: data?.length ?? 0,
     })
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
       { headers: { "Cache-Control": "private, no-store, no-cache, must-revalidate" } }
     )
   } catch (error) {
-    console.error("[marketplace/discoverable] exception", {
+    console.error("[api/marketplace/discoverable] failure", {
       message: error instanceof Error ? error.message : String(error),
     })
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })

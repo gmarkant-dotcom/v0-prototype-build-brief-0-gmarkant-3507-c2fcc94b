@@ -4,22 +4,28 @@ import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
   const productLabels: Record<string, string> = {
-    core: "Core ($199/month)",
+    core: "Core ($299/month)",
     studio: "Studio ($699/month)",
+    network: "Network (Custom)",
     enterprise: "Enterprise (Custom)",
     demo: "Demo Request",
   }
 
   try {
     const body = await request.json()
-    const { name, title, email, phone, companyType, companySize, interestedProduct } = body
+    const { name, title, email, phone, companyType, companySize, interestedProduct, message, plan } = body
+    const selectedProduct = interestedProduct || plan || "general"
 
-    console.log("[v0] Contact form submission received:", { name, email, interestedProduct })
+    console.log("[api/contact] start", {
+      hasName: !!name,
+      hasEmail: !!email,
+      selectedProduct,
+      hasStructuredLeadFields: !!(title && companyType && companySize),
+      hasMessage: !!message,
+    })
 
-    // Validate required fields
-    if (!name || !title || !email || !companyType || !companySize) {
-      console.log("[v0] Missing required fields")
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    if (!name || !email) {
+      return NextResponse.json({ error: "Name and email are required" }, { status: 400 })
     }
 
     // Store in Supabase
@@ -33,24 +39,26 @@ export async function POST(request: NextRequest) {
           .from("contact_submissions")
           .insert({
             name,
-            title,
+            title: title || "Not provided",
             email,
             phone: phone || null,
-            company_type: companyType,
-            company_size: companySize,
-            interested_product: interestedProduct,
+            company_type: companyType || "Not provided",
+            company_size: companySize || "Not provided",
+            interested_product: selectedProduct,
           })
 
         if (dbError) {
-          console.log("[v0] Database error:", dbError.message)
+          console.log("[api/contact] database save failed", { message: dbError.message })
         } else {
-          console.log("[v0] Successfully saved to database")
+          console.log("[api/contact] database save success")
         }
       } catch (dbErr) {
-        console.log("[v0] Database connection error:", dbErr)
+        console.log("[api/contact] database connection error", {
+          message: dbErr instanceof Error ? dbErr.message : String(dbErr),
+        })
       }
     } else {
-      console.log("[v0] Supabase not configured, skipping database save")
+      console.log("[api/contact] supabase not configured, skipping database save")
     }
 
     // Send email notification via Resend (non-blocking)
@@ -64,39 +72,43 @@ export async function POST(request: NextRequest) {
         const { error: emailError } = await resend.emails.send({
           from: fromAddress,
           to: "hello@withligament.com",
-          subject: `New Lead: ${name} - ${productLabels[interestedProduct] || interestedProduct}`,
+          subject: `New Contact: ${name} - ${productLabels[selectedProduct] || selectedProduct}`,
           html: `
             <h2>New Contact Form Submission</h2>
-            <p><strong>Interested In:</strong> ${productLabels[interestedProduct] || interestedProduct}</p>
+            <p><strong>Interested In:</strong> ${productLabels[selectedProduct] || selectedProduct}</p>
             <hr />
             <p><strong>Name:</strong> ${name}</p>
-            <p><strong>Title:</strong> ${title}</p>
+            <p><strong>Title:</strong> ${title || "Not provided"}</p>
             <p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p>
             <p><strong>Phone:</strong> ${phone || "Not provided"}</p>
-            <p><strong>Company Type:</strong> ${companyType}</p>
-            <p><strong>Company Size:</strong> ${companySize}</p>
+            <p><strong>Company Type:</strong> ${companyType || "Not provided"}</p>
+            <p><strong>Company Size:</strong> ${companySize || "Not provided"}</p>
+            <p><strong>Message:</strong> ${message || "Not provided"}</p>
             <hr />
             <p style="color: #666; font-size: 12px;">Submitted at ${new Date().toLocaleString()}</p>
           `,
         })
 
         if (emailError) {
-          console.log("[v0] Resend error:", emailError)
+          console.log("[api/contact] resend failed", { message: emailError.message })
         } else {
-          console.log("[v0] Email sent successfully")
+          console.log("[api/contact] email sent")
         }
       } catch (emailErr) {
-        console.log("[v0] Email sending error:", emailErr)
+        console.log("[api/contact] email sending exception", {
+          message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+        })
       }
     } else {
-      console.log("[v0] Resend not configured, skipping email")
+      console.log("[api/contact] resend not configured, skipping email")
     }
 
-    // Always return success if we got this far - the form data was received
-    console.log("[v0] Returning success response")
+    console.log("[api/contact] success", { selectedProduct })
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("[v0] Contact form error:", error)
+    console.error("[api/contact] failure", {
+      message: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: "Failed to submit form" }, { status: 500 })
   }
 }

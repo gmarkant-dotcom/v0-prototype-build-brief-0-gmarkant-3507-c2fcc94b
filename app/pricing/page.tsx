@@ -6,6 +6,7 @@ import { Check } from "lucide-react"
 
 const tiers = [
   {
+    id: "core",
     name: "Core",
     price: "$299/month",
     description: "For smaller teams getting started with vendor orchestration.",
@@ -17,6 +18,7 @@ const tiers = [
     ],
   },
   {
+    id: "studio",
     name: "Studio",
     price: "$699/month",
     description: "For growing agencies running multiple active projects.",
@@ -30,6 +32,7 @@ const tiers = [
     highlighted: true,
   },
   {
+    id: "network",
     name: "Network",
     price: "Custom",
     description: "For enterprise teams needing white-label and API access.",
@@ -76,11 +79,11 @@ export default function PricingPage() {
               <div className="mt-8">
                 {tier.name === "Network" ? (
                   <Button asChild variant="outline" className="w-full border-white/30 text-white hover:bg-white/10">
-                    <Link href="/contact">Contact Sales</Link>
+                    <Link href={`/contact?plan=${tier.id}`}>Contact Sales</Link>
                   </Button>
                 ) : (
                   <Button asChild className="w-full bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90">
-                    <Link href="/auth/sign-up">Get Started</Link>
+                    <Link href={`/contact?plan=${tier.id}`}>Get Started</Link>
                   </Button>
                 )}
               </div>

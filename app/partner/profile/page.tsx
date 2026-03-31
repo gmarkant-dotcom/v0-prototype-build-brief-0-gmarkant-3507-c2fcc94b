@@ -214,11 +214,25 @@ export default function PartnerProfilePage() {
   }
   
   const handleSave = async () => {
+    console.log("[partner/profile] save clicked", { isDemo, hasProfileId: !!profileId })
     setSaving(true)
     setMessage(null)
     try {
-      if (!isDemo && profileId) {
+      if (!isDemo) {
         const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) {
+          router.push("/auth/login?redirect=%2Fpartner%2Fprofile")
+          return
+        }
+        const { data: roleProfile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+        if (roleProfile?.role !== "partner") {
+          setMessage("Only partner users can save this profile.")
+          return
+        }
+        const targetProfileId = profileId || user.id
         const { error } = await supabase
           .from("profiles")
           .update({
@@ -230,8 +244,9 @@ export default function PartnerProfilePage() {
             is_discoverable: discoverable,
             updated_at: new Date().toISOString(),
           })
-          .eq("id", profileId)
+          .eq("id", targetProfileId)
         if (error) throw error
+        console.log("[partner/profile] save success", { targetProfileId })
       }
       if (typeof window !== "undefined") {
         localStorage.setItem("partnerPrimaryDiscipline", formData.primaryDiscipline)
@@ -245,6 +260,7 @@ export default function PartnerProfilePage() {
       setMessage("Profile saved successfully.")
       setTimeout(() => setSaved(false), 3000)
     } catch (error) {
+      console.error("[partner/profile] save failure", error)
       setMessage(error instanceof Error ? error.message : "Failed to save profile.")
     } finally {
       setSaving(false)
