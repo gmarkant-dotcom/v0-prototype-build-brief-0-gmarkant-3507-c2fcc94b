@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Loader2, ChevronDown, ChevronRight, Download, ExternalLink } from "lucide-react"
 
 function externalLinkLabel(url: string): string {
