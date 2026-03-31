@@ -64,22 +64,71 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       response = respQ.data
     }
 
+    console.log("[api] partner response row context", {
+      route: "/api/partner/rfps/[id]",
+      method: "GET",
+      userId: user.id,
+      inboxId: id,
+      hasResponse: !!response,
+      responseId: (response as { id?: string } | null)?.id ?? null,
+      responsePartnerId: (response as { partner_id?: string } | null)?.partner_id ?? null,
+    })
+
     let versions: unknown[] = []
     if (response && (response as { id?: string }).id) {
-      const { data: versionRows, error: versionErr } = await supabase
+      const responseId = (response as { id: string }).id
+      let { data: versionRows, error: versionErr } = await supabase
         .from("partner_rfp_response_versions")
         .select(
           "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at, change_notes"
         )
-        .eq("response_id", (response as { id: string }).id)
+        .eq("response_id", responseId)
         .order("version_number", { ascending: false })
-      if (!versionErr) versions = versionRows || []
+
+      // Backward compatibility: if migration 022 hasn't run yet, retry without change_notes column.
+      if (versionErr && (versionErr.code === "42703" || /change_notes|column .* does not exist/i.test(versionErr.message || ""))) {
+        console.warn("[api] partner version fetch retry without change_notes", {
+          route: "/api/partner/rfps/[id]",
+          method: "GET",
+          userId: user.id,
+          responseId,
+          code: versionErr.code,
+          message: versionErr.message,
+        })
+        const retry = await supabase
+          .from("partner_rfp_response_versions")
+          .select("id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at")
+          .eq("response_id", responseId)
+          .order("version_number", { ascending: false })
+        versionRows = retry.data
+        versionErr = retry.error
+      }
+
+      if (!versionErr) {
+        versions = versionRows || []
+      } else {
+        console.warn("[api] partner version fetch failed", {
+          route: "/api/partner/rfps/[id]",
+          method: "GET",
+          userId: user.id,
+          responseId,
+          code: versionErr.code,
+          message: versionErr.message,
+        })
+      }
       console.log("[api] partner version fetch", {
         route: "/api/partner/rfps/[id]",
         method: "GET",
         userId: user.id,
-        responseId: (response as { id: string }).id,
+        responseId,
         versionCount: versions.length,
+      })
+    } else {
+      console.warn("[api] partner version fetch skipped (no response row)", {
+        route: "/api/partner/rfps/[id]",
+        method: "GET",
+        userId: user.id,
+        inboxId: id,
       })
     }
 
