@@ -29,6 +29,17 @@ type InboxSnippet = {
 } | null
 
 type AttachmentItem = { type: string; label: string; url: string }
+type ResponseVersion = {
+  id: string
+  response_id: string
+  version_number: number
+  proposal_text: string
+  budget_proposal: string
+  timeline_proposal: string
+  attachments: AttachmentItem[] | null
+  status_at_submission: string
+  submitted_at: string
+}
 
 type AgencyResponseRow = {
   id: string
@@ -42,6 +53,7 @@ type AgencyResponseRow = {
   created_at: string
   updated_at: string
   inbox: InboxSnippet
+  versions?: ResponseVersion[]
 }
 
 export function AgencyBroadcastResponsesPanel() {
@@ -57,6 +69,7 @@ export function AgencyBroadcastResponsesPanel() {
   const [feedbackEditingIds, setFeedbackEditingIds] = useState<Record<string, boolean>>({})
   const [shortlistHoverIds, setShortlistHoverIds] = useState<Record<string, boolean>>({})
   const [meetingHoverIds, setMeetingHoverIds] = useState<Record<string, boolean>>({})
+  const [selectedVersionByResponseId, setSelectedVersionByResponseId] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (isDemo) {
@@ -184,6 +197,9 @@ export function AgencyBroadcastResponsesPanel() {
       <div className="space-y-2 mt-4">
         {rows.map((r) => {
           const expanded = openId === r.id
+          const versions = r.versions || []
+          const selectedVersionId = selectedVersionByResponseId[r.id] || versions[0]?.id || ""
+          const selectedVersion = versions.find((v) => v.id === selectedVersionId) || versions[0] || null
           const scopeName = r.inbox?.scope_item_name || "Scoped line"
           const sent = r.inbox?.created_at
             ? new Date(r.inbox.created_at).toLocaleString("en-US", {
@@ -238,6 +254,62 @@ export function AgencyBroadcastResponsesPanel() {
                     <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
                     <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">{r.proposal_text}</p>
                   </div>
+                  {versions.length > 0 && (
+                    <div className="border border-border/60 rounded-lg p-3 bg-white/5">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <div className="font-mono text-[10px] uppercase text-foreground-muted">Version history</div>
+                        {selectedVersion && (
+                          <div className="font-mono text-[10px] text-foreground-muted">
+                            {new Date(selectedVersion.submitted_at).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {versions.map((v, idx) => {
+                          const isCurrent = idx === 0
+                          const isSelected = selectedVersion?.id === v.id
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => setSelectedVersionByResponseId((prev) => ({ ...prev, [r.id]: v.id }))}
+                              className={cn(
+                                "px-2 py-1 rounded-md border font-mono text-[10px]",
+                                isSelected
+                                  ? "bg-accent/20 border-accent text-foreground"
+                                  : "bg-white/5 border-border/60 text-foreground-muted hover:text-foreground"
+                              )}
+                            >
+                              V{v.version_number} {isCurrent ? "Current" : new Date(v.submitted_at).toLocaleDateString()}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {selectedVersion && (
+                        <div className="space-y-2">
+                          <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
+                              <div className="text-foreground">{formatBudgetForDisplay(selectedVersion.budget_proposal || "")}</div>
+                            </div>
+                            <div>
+                              <div className="font-mono text-[10px] uppercase text-foreground-muted">Timeline</div>
+                              <div className="text-foreground">{formatTimelineForDisplay(selectedVersion.timeline_proposal || "")}</div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="font-mono text-[10px] uppercase text-foreground-muted">Proposal</div>
+                            <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                              {selectedVersion.proposal_text || "—"}
+                            </p>
+                          </div>
+                          <p className="font-mono text-[10px] text-foreground-muted">
+                            Attachments: {Array.isArray(selectedVersion.attachments) ? selectedVersion.attachments.length : 0}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {r.attachments && r.attachments.length > 0 && (
                     <div>
                       <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>

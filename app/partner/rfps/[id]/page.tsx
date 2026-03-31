@@ -129,6 +129,12 @@ function displayNameFromBlobPath(url: string): string {
   }
 }
 
+function ensureAbsoluteUrl(url: string) {
+  if (!url) return url
+  if (url.startsWith("http://") || url.startsWith("https://")) return url
+  return `https://${url}`
+}
+
 function savedToDrafts(saved: SavedAttachment[]): DraftAttachment[] {
   return saved.map((a) => {
     const tag = (ALLOWED.has(a.type as AttachmentTag) ? a.type : "proposal") as AttachmentTag
@@ -168,6 +174,18 @@ type ResponseRow = {
   agency_feedback?: string | null
   feedback_updated_at?: string | null
   updated_at: string
+}
+
+type ResponseVersion = {
+  id: string
+  response_id: string
+  version_number: number
+  proposal_text: string
+  budget_proposal: string
+  timeline_proposal: string
+  attachments: SavedAttachment[] | null
+  status_at_submission: string
+  submitted_at: string
 }
 
 function draftsToPayload(drafts: DraftAttachment[]): SavedAttachment[] {
@@ -318,6 +336,8 @@ export default function PartnerRfpDetailPage() {
   const [savingKind, setSavingKind] = useState<null | "draft" | "submitted">(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [versions, setVersions] = useState<ResponseVersion[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const updateDraft = useCallback((draftId: string, patch: Partial<DraftAttachment>) => {
     setDraftAttachments((prev) => prev.map((d) => (d.id === draftId ? { ...d, ...patch } : d)))
@@ -347,6 +367,8 @@ export default function PartnerRfpDetailPage() {
         if (!cancelled) {
           setInbox(data.inbox as InboxRow)
           const r = data.response as ResponseRow | null
+          const versionRows = (data.versions || []) as ResponseVersion[]
+          setVersions(versionRows)
           if (r) {
             setExisting(r)
             setProposalText(r.proposal_text || "")
@@ -372,6 +394,7 @@ export default function PartnerRfpDetailPage() {
             setTimelineUnit("Weeks")
             setTimelineLegacyHint(null)
             setDraftAttachments([])
+            setVersions([])
           }
         }
       } catch (e) {
@@ -495,6 +518,9 @@ export default function PartnerRfpDetailPage() {
       }
       if (data.response) {
         const row = data.response as ResponseRow
+        const vRes = await fetch(`/api/partner/rfps/${id}`, { cache: "no-store", credentials: "same-origin" })
+        const vData = await vRes.json().catch(() => ({}))
+        if (vRes.ok) setVersions((vData.versions || []) as ResponseVersion[])
         setExisting(row)
         const bp = parseBudgetProposal(row.budget_proposal || "")
         setBudgetAmount(bp.amount)
@@ -674,7 +700,7 @@ export default function PartnerRfpDetailPage() {
             {inbox.agency_meeting_url ? (
               <div className="mt-3">
                 <Button className="bg-cyan-600 hover:bg-cyan-600/90 text-white" asChild>
-                  <a href={inbox.agency_meeting_url} target="_blank" rel="noopener noreferrer">
+                  <a href={ensureAbsoluteUrl(inbox.agency_meeting_url)} target="_blank" rel="noopener noreferrer">
                     <CalendarDays className="w-4 h-4 mr-2" />
                     Schedule Meeting
                   </a>
@@ -1077,6 +1103,55 @@ export default function PartnerRfpDetailPage() {
             <p className="mt-8 pt-6 border-t border-gray-200 text-sm text-gray-600">
               This bid is no longer editable in its current state.
             </p>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <button
+            type="button"
+            className="w-full flex items-center justify-between"
+            onClick={() => setHistoryOpen((prev) => !prev)}
+          >
+            <h3 className="font-display font-bold text-lg text-[#0C3535]">Submission History</h3>
+            <span className="text-sm text-gray-600">{historyOpen ? "Hide" : "Show"}</span>
+          </button>
+          {historyOpen && (
+            <div className="mt-4 space-y-3">
+              {versions.length === 0 ? (
+                <p className="text-sm text-gray-600">No submitted versions yet.</p>
+              ) : (
+                versions.map((v) => {
+                  const isOriginal = v.version_number === 1
+                  const preview =
+                    (v.proposal_text || "").length > 120 ? `${v.proposal_text.slice(0, 120)}…` : v.proposal_text || "—"
+                  const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
+                  return (
+                    <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-display font-bold text-[#0C3535]">
+                          V{v.version_number} {isOriginal ? "— Original" : ""}
+                        </div>
+                        <div className="font-mono text-[10px] text-gray-500">
+                          {new Date(v.submitted_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
+                        <div>
+                          <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
+                          <div>{formatBudgetForDisplay(v.budget_proposal || "")}</div>
+                        </div>
+                        <div>
+                          <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
+                          <div>{formatTimelineForDisplay(v.timeline_proposal || "")}</div>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-700 mt-3">{preview || "—"}</p>
+                      <p className="font-mono text-[10px] text-gray-500 mt-2">Attachments: {attachmentCount}</p>
+                    </div>
+                  )
+                })
+              )}
+            </div>
           )}
         </div>
       </div>

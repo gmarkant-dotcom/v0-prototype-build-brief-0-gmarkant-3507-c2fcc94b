@@ -9,6 +9,12 @@ import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import { LeadAgencyFilter } from "@/components/lead-agency-filter"
 import { ChevronRight, Loader2, CalendarDays } from "lucide-react"
 
+function ensureAbsoluteUrl(url: string) {
+  if (!url) return url
+  if (url.startsWith("http://") || url.startsWith("https://")) return url
+  return `https://${url}`
+}
+
 type RFP = {
   id: string
   title: string
@@ -267,7 +273,7 @@ export default function PartnerRFPsPage() {
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
-                          window.open(rfp.meetingUrl || "", "_blank", "noopener,noreferrer")
+                          window.open(ensureAbsoluteUrl(rfp.meetingUrl || ""), "_blank", "noopener,noreferrer")
                         }}
                         className={cn(
                           "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase inline-flex items-center gap-1 hover:opacity-90",

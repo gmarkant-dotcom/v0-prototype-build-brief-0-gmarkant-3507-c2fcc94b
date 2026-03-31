@@ -64,8 +64,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       response = respQ.data
     }
 
+    let versions: unknown[] = []
+    if (response && (response as { id?: string }).id) {
+      const { data: versionRows, error: versionErr } = await supabase
+        .from("partner_rfp_response_versions")
+        .select(
+          "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at"
+        )
+        .eq("response_id", (response as { id: string }).id)
+        .order("version_number", { ascending: false })
+      if (!versionErr) versions = versionRows || []
+    }
+
     return NextResponse.json(
-      { inbox: { ...inbox, agency_meeting_url: agencyMeetingUrl }, response: response ?? null },
+      { inbox: { ...inbox, agency_meeting_url: agencyMeetingUrl }, response: response ?? null, versions },
       {
         headers: {
           "Cache-Control": "private, no-store, no-cache, must-revalidate",

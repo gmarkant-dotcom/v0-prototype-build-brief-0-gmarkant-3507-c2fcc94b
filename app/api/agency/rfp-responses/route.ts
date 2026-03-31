@@ -59,8 +59,30 @@ export async function GET() {
       inbox: inboxById[r.inbox_item_id as string] ?? null,
     }))
 
+    const responseIds = merged.map((r) => r.id).filter(Boolean)
+    let versionsByResponseId: Record<string, unknown[]> = {}
+    if (responseIds.length > 0) {
+      const { data: versions } = await supabase
+        .from("partner_rfp_response_versions")
+        .select(
+          "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at"
+        )
+        .in("response_id", responseIds)
+        .order("version_number", { ascending: false })
+      for (const v of versions || []) {
+        const responseId = v.response_id as string
+        if (!versionsByResponseId[responseId]) versionsByResponseId[responseId] = []
+        versionsByResponseId[responseId].push(v)
+      }
+    }
+
+    const mergedWithVersions = merged.map((r) => ({
+      ...r,
+      versions: versionsByResponseId[r.id as string] || [],
+    }))
+
     return NextResponse.json(
-      { responses: merged },
+      { responses: mergedWithVersions },
       {
         headers: {
           "Cache-Control": "private, no-store, no-cache, must-revalidate",

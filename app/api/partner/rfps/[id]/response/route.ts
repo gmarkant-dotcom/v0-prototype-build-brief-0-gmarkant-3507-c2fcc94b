@@ -201,6 +201,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         .update({ status: "bid_submitted", updated_at: new Date().toISOString() })
         .eq("id", inboxId)
 
+      const { data: latestVersion } = await supabase
+        .from("partner_rfp_response_versions")
+        .select("version_number")
+        .eq("response_id", saved.id)
+        .order("version_number", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const nextVersion = Number(latestVersion?.version_number || 0) + 1
+      const { error: versionErr } = await supabase.from("partner_rfp_response_versions").insert({
+        response_id: saved.id,
+        partner_id: user.id,
+        agency_id: inbox.agency_id,
+        version_number: nextVersion,
+        proposal_text,
+        budget_proposal,
+        timeline_proposal,
+        attachments,
+        status_at_submission: status,
+      })
+      if (versionErr) {
+        console.warn("[api] version insert failed", {
+          route,
+          method: "POST",
+          userId: user.id,
+          code: versionErr.code,
+          message: versionErr.message,
+        })
+      }
+
       if (wasUpdate) {
         const [{ data: agencyProfile }, { data: inboxDetail }] = await Promise.all([
           supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.agency_id).maybeSingle(),
