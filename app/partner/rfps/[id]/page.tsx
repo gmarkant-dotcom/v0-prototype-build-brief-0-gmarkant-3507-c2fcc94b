@@ -449,6 +449,17 @@ export default function PartnerRfpDetailPage() {
     })
   }, [savingKind, existing, inbox, isDemoDetail, id])
 
+  /** Must run before any early return — same hook order on loading vs loaded. */
+  useEffect(() => {
+    if (loading || !inbox) return
+    const currentStatus =
+      existing?.status || (inbox.status === "bid_submitted" ? "submitted" : inbox.status)
+    const shouldDefaultToStatus =
+      !!existing?.agency_feedback ||
+      (Boolean(currentStatus) && !["submitted", "bid_submitted"].includes(currentStatus))
+    setActiveTab(shouldDefaultToStatus ? "status" : "bid")
+  }, [loading, inbox, existing?.agency_feedback, existing?.status, inbox?.status])
+
   const save = async (status: "draft" | "submitted") => {
     console.log("[partner/rfps/detail] save() entered", {
       status,
@@ -637,12 +648,6 @@ export default function PartnerRfpDetailPage() {
       currentStatus
     )
   const feedbackUpdatedAt = existing?.feedback_updated_at ? new Date(existing.feedback_updated_at).toLocaleString() : null
-
-  useEffect(() => {
-    const shouldDefaultToStatus =
-      !!existing?.agency_feedback || (currentStatus && !["submitted", "bid_submitted"].includes(currentStatus))
-    setActiveTab(shouldDefaultToStatus ? "status" : "bid")
-  }, [existing?.agency_feedback, currentStatus])
 
   return (
     <PartnerChrome>
