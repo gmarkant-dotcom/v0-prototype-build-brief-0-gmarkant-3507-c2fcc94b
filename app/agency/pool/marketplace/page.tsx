@@ -17,6 +17,8 @@ type PartnerProfile = {
   bio: string | null
   location: string | null
   email: string | null
+  website?: string | null
+  agency_type?: string | null
 }
 
 const demoPartners: PartnerProfile[] = [
@@ -27,6 +29,8 @@ const demoPartners: PartnerProfile[] = [
     bio: "Sports and documentary storytelling with nimble production teams.",
     location: "Los Angeles, CA",
     email: "hello@fieldhousefilms.com",
+    website: "fieldhousefilms.com",
+    agency_type: "Production",
   },
   {
     id: "demo-partner-2",
@@ -35,6 +39,8 @@ const demoPartners: PartnerProfile[] = [
     bio: "Social-first creative and creator-led campaign production.",
     location: "Austin, TX",
     email: "contact@tandemsocial.com",
+    website: "tandemsocial.com",
+    agency_type: "Social",
   },
 ]
 
@@ -161,7 +167,11 @@ export default function AgencyMarketplacePage() {
                   <p className="text-sm text-foreground-muted mt-1 line-clamp-2">
                     {partner.bio || "Discoverable partner agency on Ligament Marketplace."}
                   </p>
-                  {partner.location && <p className="font-mono text-xs text-foreground-muted mt-3">{partner.location}</p>}
+                  <div className="mt-3 space-y-1">
+                    <p className="font-mono text-xs text-foreground-muted">{partner.location || "—"}</p>
+                    <p className="font-mono text-xs text-foreground-muted">{partner.website || "—"}</p>
+                    <p className="font-mono text-xs text-foreground-muted">{partner.agency_type || "—"}</p>
+                  </div>
                   <Button
                     className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90"
                     onClick={() => setInviteEmail(partner.email || null)}

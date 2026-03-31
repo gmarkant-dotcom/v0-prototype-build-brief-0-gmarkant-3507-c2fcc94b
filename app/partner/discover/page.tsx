@@ -18,6 +18,7 @@ interface Agency {
   location?: string
   website?: string
   bio?: string
+  agency_type?: string
   partner_count?: number
   role?: "agency" | "partner"
   collaborated?: boolean
@@ -50,6 +51,7 @@ const demoAgencies: Agency[] = [
     full_name: "Electric Animal Agency",
     location: "Los Angeles, CA",
     website: "electricanimal.com",
+    agency_type: "Sports Marketing",
     bio: "Award-winning creative agency specializing in sports and entertainment marketing.",
     partner_count: 24
   },
@@ -59,6 +61,7 @@ const demoAgencies: Agency[] = [
     full_name: "Momentum Agency",
     location: "New York, NY",
     website: "momentumww.com",
+    agency_type: "Experiential",
     bio: "Global experiential marketing agency creating memorable brand experiences.",
     partner_count: 56
   },
@@ -68,6 +71,7 @@ const demoAgencies: Agency[] = [
     full_name: "Wasserman",
     location: "Los Angeles, CA",
     website: "teamwass.com",
+    agency_type: "Integrated Agency",
     bio: "Sports, entertainment, and lifestyle marketing powerhouse.",
     partner_count: 42
   }
@@ -101,137 +105,11 @@ export default function DiscoverAgenciesPage() {
     }
 
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setIsLoading(false)
-        return
-      }
-
-      // Resolve canonical profile ID for this logged-in account.
-      // In some environments, relationship tables reference profile IDs that may not
-      // match auth.uid(), so we fall back to email-based profile lookup.
-      let currentProfileId = user.id
-      const { data: selfProfile } = await supabase
-        .from("profiles")
-        .select("id, email")
-        .eq("id", user.id)
-        .maybeSingle()
-
-      if (!selfProfile && user.email) {
-        const { data: byEmailProfile } = await supabase
-          .from("profiles")
-          .select("id, email")
-          .ilike("email", user.email.trim())
-          .maybeSingle()
-        if (byEmailProfile?.id) {
-          currentProfileId = byEmailProfile.id
-        }
-      }
-
-      // Tier 1: direct lead-agency relationships for this partner.
-      // Use server API as source-of-truth because it already handles id/email claim logic.
-      const partnershipResponse = await fetch("/api/partnerships")
-      const partnershipPayload = partnershipResponse.ok ? await partnershipResponse.json() : { partnerships: [] }
-      const activePartnerships = (partnershipPayload.partnerships || []).filter((p: any) => p.status === "active")
-      const myPartnershipIds = [...new Set(activePartnerships.map((p: any) => p.id).filter(Boolean))]
-      const leadAgencyIds = [...new Set(activePartnerships.map((p: any) => p.agency?.id || p.agency_id).filter(Boolean))]
-
-      // Tier 2: project-level collaborators (other partner agencies on shared projects)
-      let projectIds: string[] = []
-      if (myPartnershipIds.length > 0) {
-        const { data: myAssignments } = await supabase
-          .from("project_assignments")
-          .select("project_id")
-          .in("partnership_id", myPartnershipIds)
-
-        projectIds = [...new Set((myAssignments || []).map((a) => a.project_id))]
-      }
-
-      let otherPartnerIds: string[] = []
-      if (projectIds.length > 0) {
-        const { data: allAssignments } = await supabase
-          .from("project_assignments")
-          .select("partnership_id")
-          .in("project_id", projectIds)
-
-        const allPartnershipIds = [...new Set((allAssignments || []).map((a) => a.partnership_id))]
-        const otherPartnershipIds = allPartnershipIds.filter((id) => !myPartnershipIds.includes(id))
-
-        if (otherPartnershipIds.length > 0) {
-          const { data: otherPartnerships } = await supabase
-            .from("partnerships")
-            .select("partner_id")
-            .in("id", otherPartnershipIds)
-
-          otherPartnerIds = [...new Set((otherPartnerships || []).map((p) => p.partner_id).filter((id) => id && id !== currentProfileId))]
-        }
-      }
-
-      // Build collaborator list from API relationships first (most reliable source)
-      // so lead agencies always appear even if profile table read policies are strict.
-      const collaboratorMap = new Map<string, Agency>()
-      for (const p of activePartnerships) {
-        const agencyId = p.agency?.id || p.agency_id
-        if (!agencyId) continue
-        collaboratorMap.set(agencyId, {
-          id: agencyId,
-          role: "agency",
-          company_name: p.agency?.company_name || p.agency?.full_name || p.agency?.email || "Lead Agency",
-          full_name: p.agency?.full_name || p.agency?.company_name || p.agency?.email || "Lead Agency",
-          email: p.agency?.email,
-          location: p.agency?.location || "",
-          website: p.agency?.website || "",
-          bio: p.agency?.bio || "",
-          collaborated: true,
-          relationshipStatus: p.status,
-          invitedAt: p.invited_at,
-          acceptedAt: p.accepted_at,
-          invitationMessage: p.invitation_message,
-        })
-      }
-
-      const collaboratorIds = [...new Set([...leadAgencyIds, ...otherPartnerIds])]
-      if (collaboratorIds.length > 0) {
-        const { data: collaborators, error: collaboratorsError } = await supabase
-          .from("profiles")
-          .select("id, role, company_name, full_name, email, location, website, bio")
-          .in("id", collaboratorIds)
-
-        if (collaboratorsError) {
-          console.error("Error loading collaborator profiles:", collaboratorsError)
-        } else {
-          for (const p of collaborators || []) {
-            const existing = collaboratorMap.get(p.id)
-            collaboratorMap.set(p.id, {
-              ...(existing || {}),
-              ...p,
-              company_name: p.company_name || p.full_name || p.email || "Agency",
-              full_name: p.full_name || p.company_name || p.email || "Agency",
-              collaborated: true,
-            })
-          }
-        }
-      }
-
-      if (collaboratorMap.size > 0) {
-        setAgencies(Array.from(collaboratorMap.values()))
-        setIsLoading(false)
-        return
-      }
-
-      // Fallback directory if no historical collaborators exist yet.
-      const { data: fallbackDirectory, error: fallbackError } = await supabase
-        .from("profiles")
-        .select("id, role, company_name, full_name, email, location, website, bio")
-        .in("role", ["agency", "partner"])
-        .neq("id", currentProfileId)
-
-      if (fallbackError) {
-        console.error("Error loading fallback directory:", fallbackError)
-      } else {
-        setAgencies(fallbackDirectory || [])
-      }
+      const res = await fetch("/api/marketplace/discoverable?role=agency", { cache: "no-store" })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload?.error || "Failed to load discoverable agencies")
+      const rows = (payload?.profiles || []) as Agency[]
+      setAgencies(rows.map((row) => ({ ...row, collaborated: false })))
     } catch (error) {
       console.error("Error:", error)
     }
@@ -366,7 +244,7 @@ export default function DiscoverAgenciesPage() {
   return (
     <PartnerLayout 
       title="Discover Agencies" 
-      subtitle="Historic collaborators from your lead and project-level relationships"
+      subtitle="Browse discoverable lead agencies and request access."
     >
       <div className="space-y-6">
         {/* Search */}
@@ -439,17 +317,20 @@ export default function DiscoverAgenciesPage() {
                       </h3>
                       
                       <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">{agency.agency_type || "—"}</span>
                         {agency.location && (
                           <span className="flex items-center gap-1">
                             <MapPin className="w-3 h-3" />
                             {agency.location}
                           </span>
                         )}
-                        {agency.website && (
+                        {agency.website ? (
                           <span className="flex items-center gap-1">
                             <Globe className="w-3 h-3" />
                             {agency.website}
                           </span>
+                        ) : (
+                          <span className="flex items-center gap-1">—</span>
                         )}
                         {agency.partner_count && (
                           <span className="flex items-center gap-1">
