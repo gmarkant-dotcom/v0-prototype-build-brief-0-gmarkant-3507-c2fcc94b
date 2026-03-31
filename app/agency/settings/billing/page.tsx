@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { AgencyLayout } from "@/components/agency-layout"
+import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { CreditCard, Check, ArrowRight, Download } from "lucide-react"
@@ -77,18 +77,18 @@ export default function AgencyBillingSettingsPage() {
 
   if (loading) {
     return (
-      <AgencyLayout>
+      <AgencyShell>
         <div className="p-8">
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
           </div>
         </div>
-      </AgencyLayout>
+      </AgencyShell>
     )
   }
 
   return (
-    <AgencyLayout>
+    <AgencyShell>
       <div className="p-8 max-w-6xl space-y-8">
         <div>
           <h1 className="font-display font-black text-3xl text-foreground mb-2">Billing & Plan Settings</h1>
@@ -151,12 +151,14 @@ export default function AgencyBillingSettingsPage() {
                   </Button>
                 ) : plan.id === "network" ? (
                   <Button asChild variant="outline" className="w-full border-border/50">
-                    <Link href="/contact">Contact Sales</Link>
+                    <Link href={`/contact?plan=${plan.id}`}>Contact Sales</Link>
                   </Button>
                 ) : (
-                  <Button className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-                    Upgrade
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                  <Button asChild className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+                    <Link href={`/contact?plan=${plan.id}`}>
+                      Upgrade
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Link>
                   </Button>
                 )}
               </div>
@@ -187,7 +189,7 @@ export default function AgencyBillingSettingsPage() {
               To cancel your current subscription, contact support and we will assist you.
             </p>
             <Button asChild variant="outline" className="border-border/50 text-foreground">
-              <Link href="/contact">Contact Support</Link>
+              <Link href="/contact?plan=cancel">Contact Support</Link>
             </Button>
           </div>
         </div>
@@ -229,6 +231,6 @@ export default function AgencyBillingSettingsPage() {
           </div>
         </div>
       </div>
-    </AgencyLayout>
+    </AgencyShell>
   )
 }

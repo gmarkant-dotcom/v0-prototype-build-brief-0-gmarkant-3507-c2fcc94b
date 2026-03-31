@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { PartnerLayout } from "@/components/partner-layout"
+import { PartnerChrome } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -281,14 +281,14 @@ export default function PartnerProfilePage() {
   
   if (loading) {
     return (
-      <PartnerLayout>
+      <PartnerChrome>
         <div className="max-w-4xl mx-auto p-8 text-gray-600">Loading profile...</div>
-      </PartnerLayout>
+      </PartnerChrome>
     )
   }
 
   return (
-    <PartnerLayout>
+    <PartnerChrome>
       <div className="max-w-4xl mx-auto space-y-8">
         {uploadError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
@@ -717,6 +717,6 @@ export default function PartnerProfilePage() {
         </div>
         {message && <p className="text-sm text-gray-600">{message}</p>}
       </div>
-    </PartnerLayout>
+    </PartnerChrome>
   )
 }

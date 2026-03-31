@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AgencyLayout } from "@/components/agency-layout"
+import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -170,9 +170,9 @@ export default function AgencyProfileSettingsPage() {
 
   if (loading) {
     return (
-      <AgencyLayout>
+      <AgencyShell>
         <div className="p-8 flex items-center justify-center text-foreground-muted">Loading profile...</div>
-      </AgencyLayout>
+      </AgencyShell>
     )
   }
 
@@ -194,7 +194,7 @@ export default function AgencyProfileSettingsPage() {
   }
 
   return (
-    <AgencyLayout>
+    <AgencyShell>
       <div className="p-8 max-w-4xl space-y-6">
         <div>
           <h1 className="font-display font-bold text-3xl text-foreground">Agency Profile</h1>
@@ -358,6 +358,6 @@ export default function AgencyProfileSettingsPage() {
           </div>
         </div>
       </div>
-    </AgencyLayout>
+    </AgencyShell>
   )
 }

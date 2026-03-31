@@ -80,7 +80,7 @@ export default function PricingPage() {
                   </Button>
                 ) : (
                   <Button asChild className="w-full bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90">
-                    <Link href="/auth/signup">Get Started</Link>
+                    <Link href="/auth/sign-up">Get Started</Link>
                   </Button>
                 )}
               </div>

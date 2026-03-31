@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AgencyLayout } from "@/components/agency-layout"
+import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -133,14 +133,14 @@ export default function AgencyUserProfilePage() {
 
   if (loading) {
     return (
-      <AgencyLayout>
+      <AgencyShell>
         <div className="p-8 text-foreground-muted">Loading user profile...</div>
-      </AgencyLayout>
+      </AgencyShell>
     )
   }
 
   return (
-    <AgencyLayout>
+    <AgencyShell>
       <div className="p-8 max-w-3xl space-y-6">
         <div>
           <h1 className="font-display font-bold text-3xl text-foreground">User Profile</h1>
@@ -267,6 +267,6 @@ export default function AgencyUserProfilePage() {
         {message && <p className="text-sm text-green-600">{message}</p>}
         {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
       </div>
-    </AgencyLayout>
+    </AgencyShell>
   )
 }

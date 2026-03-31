@@ -464,16 +464,20 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   )
 }
 
+export function AgencyShell({ children }: AgencyLayoutProps) {
+  return (
+    <SelectedProjectProvider>
+      <AgencyLayoutInner>{children}</AgencyLayoutInner>
+    </SelectedProjectProvider>
+  )
+}
+
 export function AgencyLayout({ children }: AgencyLayoutProps) {
   return (
     <PaidUserProvider>
-      <SelectedProjectProvider>
-        <AgencySubscriptionGate>
-          <AgencyLayoutInner>
-            {children}
-          </AgencyLayoutInner>
-        </AgencySubscriptionGate>
-      </SelectedProjectProvider>
+      <AgencySubscriptionGate>
+        <AgencyShell>{children}</AgencyShell>
+      </AgencySubscriptionGate>
     </PaidUserProvider>
   )
 }
