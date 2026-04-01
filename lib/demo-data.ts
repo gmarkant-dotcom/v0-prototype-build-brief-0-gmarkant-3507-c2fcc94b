@@ -408,7 +408,10 @@ export type DashboardDemoProject = {
   progress: number
   lastActivity: string
   stage: string
-  /** Unresolved partner status rows (at_risk / delayed / blocked) for dashboard demo */
+  /** Workflow pill on dashboard cards (matches /api/projects dashboard_workflow_*) */
+  workflowStageKey: "active_engagements" | "bid_management" | "rfp_broadcast" | "setup"
+  workflowStageLabel: string
+  /** Unresolved partner status updates (excl. on_track / complete) for dashboard demo */
   partnerStatusAlertCount?: number
   partnerStatusAlertPreview?: {
     status: string
@@ -457,6 +460,8 @@ export const demoMasterProjects: DashboardDemoProject[] = [
     progress: 45,
     lastActivity: "2 hours ago",
     stage: "Production",
+    workflowStageKey: "active_engagements",
+    workflowStageLabel: "Active Engagements",
     partnerStatusAlertCount: 2,
     partnerStatusAlertPreview: {
       status: "at_risk",
@@ -482,6 +487,8 @@ export const demoMasterProjects: DashboardDemoProject[] = [
     progress: 5,
     lastActivity: "Yesterday",
     stage: "RFP",
+    workflowStageKey: "rfp_broadcast",
+    workflowStageLabel: "RFP Broadcast",
     partnerStatusAlertCount: 1,
     partnerStatusAlertPreview: {
       status: "delayed",
@@ -517,7 +524,9 @@ export const demoMasterProjects: DashboardDemoProject[] = [
     ],
     progress: 73,
     lastActivity: "5 hours ago",
-    stage: "Post-Production"
+    stage: "Post-Production",
+    workflowStageKey: "bid_management",
+    workflowStageLabel: "Bid Management",
   }
 ]
 

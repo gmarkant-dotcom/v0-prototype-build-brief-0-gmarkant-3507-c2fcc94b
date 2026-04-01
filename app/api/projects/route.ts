@@ -7,6 +7,26 @@ const noStoreHeaders = {
   'Cache-Control': 'private, no-store, no-cache, must-revalidate',
 } as const
 
+const PARTNER_ALERT_EXCLUDED_STATUSES = new Set(['on_track', 'complete'])
+
+function unwrapAssignmentRows(raw: unknown): { status?: string }[] {
+  if (!raw) return []
+  const arr = Array.isArray(raw) ? raw : [raw]
+  return arr.filter((a) => a && typeof a === 'object') as { status?: string }[]
+}
+
+function dashboardWorkflowForProject(
+  projectId: string,
+  hasAwarded: boolean,
+  bidProjectIds: Set<string>,
+  inboxProjectIds: Set<string>
+): { key: string; label: string } {
+  if (hasAwarded) return { key: 'active_engagements', label: 'Active Engagements' }
+  if (bidProjectIds.has(projectId)) return { key: 'bid_management', label: 'Bid Management' }
+  if (inboxProjectIds.has(projectId)) return { key: 'rfp_broadcast', label: 'RFP Broadcast' }
+  return { key: 'setup', label: 'Setup' }
+}
+
 // GET - List projects for current user
 export async function GET(request: NextRequest) {
   try {
@@ -61,19 +81,74 @@ export async function GET(request: NextRequest) {
       }
 
       const agencyProjectIds = (projects || []).map((p: { id: string }) => p.id).filter(Boolean)
+
+      const projectIdsWithAwarded = new Set<string>()
+      for (const p of projects || []) {
+        const row = p as { id?: string; project_assignments?: unknown }
+        const pid = String(row.id || '')
+        if (!pid) continue
+        const assigns = unwrapAssignmentRows(row.project_assignments)
+        if (assigns.some((a) => a.status === 'awarded')) projectIdsWithAwarded.add(pid)
+      }
+
+      const inboxProjectIds = new Set<string>()
+      const bidProjectIds = new Set<string>()
+      if (agencyProjectIds.length > 0) {
+        const { data: inboxRows } = await supabase
+          .from('partner_rfp_inbox')
+          .select('project_id')
+          .eq('agency_id', user.id)
+          .in('project_id', agencyProjectIds)
+
+        for (const r of inboxRows || []) {
+          const pid = r.project_id as string | null
+          if (pid) inboxProjectIds.add(pid)
+        }
+
+        const { data: responseRows } = await supabase
+          .from('partner_rfp_responses')
+          .select('status, partner_rfp_inbox(project_id)')
+          .eq('agency_id', user.id)
+          .neq('status', 'draft')
+
+        const idSet = new Set(agencyProjectIds)
+        for (const resp of responseRows || []) {
+          const inbox = resp.partner_rfp_inbox as
+            | { project_id?: string | null }
+            | { project_id?: string | null }[]
+            | null
+          const ib = Array.isArray(inbox) ? inbox[0] : inbox
+          const projId = ib?.project_id
+          if (projId && idSet.has(projId)) bidProjectIds.add(projId)
+        }
+      }
+
       const countByProject = new Map<string, number>()
-      const firstByProject = new Map<string, { project_id: string; status: string; budget_status: string; completion_pct: number; notes: string | null; created_at: string }>()
+      const firstByProject = new Map<
+        string,
+        {
+          project_id: string
+          status: string
+          budget_status: string
+          completion_pct: number
+          notes: string | null
+          created_at: string
+        }
+      >()
       if (agencyProjectIds.length > 0) {
         const { data: psuRows, error: psuErr } = await supabase
           .from('partner_status_updates')
           .select('project_id, status, budget_status, completion_pct, notes, created_at')
           .in('project_id', agencyProjectIds)
           .eq('is_resolved', false)
-          .in('status', ['at_risk', 'delayed', 'blocked'])
           .order('created_at', { ascending: false })
 
-        if (!psuErr && psuRows?.length) {
-          for (const row of psuRows) {
+        const alertRows = (psuRows || []).filter(
+          (r) => !PARTNER_ALERT_EXCLUDED_STATUSES.has(String(r.status || ''))
+        )
+
+        if (!psuErr && alertRows.length) {
+          for (const row of alertRows) {
             const pid = row.project_id as string
             countByProject.set(pid, (countByProject.get(pid) || 0) + 1)
             if (!firstByProject.has(pid)) firstByProject.set(pid, row)
@@ -85,8 +160,16 @@ export async function GET(request: NextRequest) {
         const pid = p.id as string
         const first = firstByProject.get(pid)
         const notes = (first?.notes as string | null) || ''
+        const wf = dashboardWorkflowForProject(
+          pid,
+          projectIdsWithAwarded.has(pid),
+          bidProjectIds,
+          inboxProjectIds
+        )
         return {
           ...p,
+          dashboard_workflow_stage: wf.key,
+          dashboard_workflow_label: wf.label,
           partner_status_alert_count: countByProject.get(pid) || 0,
           partner_status_alert_preview: first
             ? {

@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState, useCallback } from "react"
+import { Suspense, useEffect, useState, useCallback, useRef } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
@@ -143,6 +143,15 @@ function ActiveEngagementsInner() {
   const [panelAlerts, setPanelAlerts] = useState<PanelStatusUpdate[]>([])
   const [panelLoading, setPanelLoading] = useState(false)
   const [resolvingPanelId, setResolvingPanelId] = useState<string | null>(null)
+  const alertSheetCtxRef = useRef<{
+    projectId: string
+    partnershipId: string
+    partnerName: string
+  } | null>(null)
+
+  useEffect(() => {
+    alertSheetCtxRef.current = alertSheetCtx
+  }, [alertSheetCtx])
 
   const qProjectId = searchParams.get("projectId")
   const highlightId = searchParams.get("highlight")
@@ -325,8 +334,9 @@ function ActiveEngagementsInner() {
 
   const resolveFromPanel = useCallback(
     async (updateId: string) => {
-      if (!alertSheetCtx) return
-      const { projectId, partnershipId } = alertSheetCtx
+      const ctx = alertSheetCtxRef.current
+      if (!ctx) return
+      const { projectId, partnershipId } = ctx
 
       const syncDemoTable = (next: PanelStatusUpdate[]) => {
         setProjectsData((projectsPrev) =>
@@ -381,12 +391,24 @@ function ActiveEngagementsInner() {
 
       setResolvingPanelId(updateId)
       try {
-        const res = await fetch(`/api/agency/projects/${encodeURIComponent(projectId)}/status-updates`, {
+        const patchUrl = `/api/agency/projects/${encodeURIComponent(projectId)}/status-updates`
+        const patchBody = { updateId }
+        console.log("[active-engagements] PATCH partner status resolve", {
+          url: patchUrl,
+          body: patchBody,
+          panelProjectId: projectId,
+          panelPartnershipId: partnershipId,
+        })
+        const res = await fetch(patchUrl, {
           method: "PATCH",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ updateId }),
+          body: JSON.stringify(patchBody),
         })
+        if (!res.ok) {
+          const errText = await res.text().catch(() => "")
+          console.warn("[active-engagements] PATCH failed", res.status, errText)
+        }
         if (res.ok) {
           setPanelAlerts((prev) => {
             const next = prev.filter((a) => a.id !== updateId)
@@ -402,7 +424,7 @@ function ActiveEngagementsInner() {
         setResolvingPanelId(null)
       }
     },
-    [alertSheetCtx, isDemo, reloadEngagements]
+    [isDemo, reloadEngagements]
   )
 
   const resolveAlert = useCallback(

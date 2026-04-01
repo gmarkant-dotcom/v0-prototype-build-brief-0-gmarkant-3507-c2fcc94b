@@ -166,32 +166,32 @@ export default function PartnerDashboardPage() {
 
   const executiveSummaryCards = (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div className="rounded-xl p-5 text-center border border-white/10 bg-[#0C3535] shadow-sm">
+      <div className="rounded-xl p-5 text-center border border-white/10 !bg-[#0C3535] shadow-sm text-white">
         <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mx-auto mb-3">
-          <Users className="w-5 h-5 text-white" />
+          <Users className="w-5 h-5 !text-white" />
         </div>
-        <div className="text-white text-4xl font-bold font-display">
+        <div className="!text-white text-4xl font-bold font-display tabular-nums">
           {summaryLoading ? "—" : summary.agency_relationships}
         </div>
-        <div className="text-gray-400 text-xs uppercase tracking-wider mt-1">Agency Relationships</div>
+        <div className="text-white/80 text-xs uppercase tracking-wider mt-1">Agency Relationships</div>
       </div>
-      <div className="rounded-xl p-5 text-center border border-white/10 bg-[#0C3535] shadow-sm">
+      <div className="rounded-xl p-5 text-center border border-white/10 !bg-[#0C3535] shadow-sm text-white">
         <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mx-auto mb-3">
-          <FileText className="w-5 h-5 text-white" />
+          <FileText className="w-5 h-5 !text-white" />
         </div>
-        <div className="text-white text-4xl font-bold font-display">
+        <div className="!text-white text-4xl font-bold font-display tabular-nums">
           {summaryLoading ? "—" : summary.bids_submitted}
         </div>
-        <div className="text-gray-400 text-xs uppercase tracking-wider mt-1">Bids Submitted</div>
+        <div className="text-white/80 text-xs uppercase tracking-wider mt-1">Bids Submitted</div>
       </div>
-      <div className="rounded-xl p-5 text-center border border-white/10 bg-[#0C3535] shadow-sm">
+      <div className="rounded-xl p-5 text-center border border-white/10 !bg-[#0C3535] shadow-sm text-white">
         <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mx-auto mb-3">
-          <FolderOpen className="w-5 h-5 text-white" />
+          <FolderOpen className="w-5 h-5 !text-white" />
         </div>
-        <div className="text-white text-4xl font-bold font-display">
+        <div className="!text-white text-4xl font-bold font-display tabular-nums">
           {summaryLoading ? "—" : summary.active_engagements}
         </div>
-        <div className="text-gray-400 text-xs uppercase tracking-wider mt-1">Active Engagements</div>
+        <div className="text-white/80 text-xs uppercase tracking-wider mt-1">Active Engagements</div>
       </div>
     </div>
   )

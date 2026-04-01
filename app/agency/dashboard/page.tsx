@@ -62,6 +62,12 @@ type ProjectAlert = {
   createdAt: string
 }
 
+type DashboardWorkflowStageKey =
+  | "active_engagements"
+  | "bid_management"
+  | "rfp_broadcast"
+  | "setup"
+
 type MasterProject = {
   id: string
   name: string
@@ -79,6 +85,8 @@ type MasterProject = {
   progress: number
   lastActivity: string
   stage: string
+  workflowStageKey: DashboardWorkflowStageKey
+  workflowStageLabel: string
   partnerStatusAlertCount?: number
   partnerStatusAlertPreview?: {
     status: string
@@ -92,11 +100,30 @@ type MasterProject = {
 // Demo projects are now only loaded from demo-data.ts when in demo mode
 // Production uses real projects from the database
 
-const statusConfig: Record<ProjectStatus, { label: string; color: string; bg: string }> = {
-  active: { label: "Active", color: "text-green-400", bg: "bg-green-500/10 border-green-500/30" },
-  onboarding: { label: "Onboarding", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/30" },
-  completed: { label: "Completed", color: "text-gray-400", bg: "bg-gray-500/10 border-gray-500/30" },
-  on_hold: { label: "On Hold", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/30" },
+const workflowStageConfig: Record<
+  DashboardWorkflowStageKey,
+  { label: string; color: string; bg: string }
+> = {
+  active_engagements: {
+    label: "Active Engagements",
+    color: "text-emerald-300",
+    bg: "bg-emerald-500/15 border-emerald-500/35",
+  },
+  bid_management: {
+    label: "Bid Management",
+    color: "text-violet-300",
+    bg: "bg-violet-500/15 border-violet-500/35",
+  },
+  rfp_broadcast: {
+    label: "RFP Broadcast",
+    color: "text-sky-300",
+    bg: "bg-sky-500/15 border-sky-500/35",
+  },
+  setup: {
+    label: "Setup",
+    color: "text-slate-300",
+    bg: "bg-slate-500/15 border-slate-500/35",
+  },
 }
 
 function formatBudget(amount: number): string {
@@ -163,6 +190,8 @@ function DashboardContent() {
             start_date?: string | null
             end_date?: string | null
             project_assignments?: { status: string }[]
+            dashboard_workflow_stage?: string
+            dashboard_workflow_label?: string
             partner_status_alert_count?: number
             partner_status_alert_preview?: MasterProject["partnerStatusAlertPreview"]
           }) => {
@@ -171,6 +200,8 @@ function DashboardContent() {
             const pendingBids = bids.filter(
               (a) => a.status === 'invited' || a.status === 'accepted'
             ).length
+            const wfKey = (p.dashboard_workflow_stage || 'setup') as DashboardWorkflowStageKey
+            const wfLabel = p.dashboard_workflow_label || workflowStageConfig[wfKey]?.label || 'Setup'
             return {
               id: m.id,
               name: m.name,
@@ -196,13 +227,18 @@ function DashboardContent() {
                   : m.status === 'completed'
                     ? 'Closed'
                     : 'Setup',
+              workflowStageKey: wfKey in workflowStageConfig ? wfKey : 'setup',
+              workflowStageLabel: wfLabel,
               partnerStatusAlertCount: Number(p.partner_status_alert_count) || 0,
               partnerStatusAlertPreview: p.partner_status_alert_preview ?? null,
             }
           }
         )
         setRealProjects(mapped)
-        const summed = mapped.reduce((acc, pr) => acc + (pr.partnerStatusAlertCount ?? 0), 0)
+        const summed = mapped.reduce(
+          (acc: number, pr: MasterProject) => acc + (pr.partnerStatusAlertCount ?? 0),
+          0
+        )
         const fromApi = Number((data as { partner_status_alert_total?: unknown }).partner_status_alert_total)
         setPartnerAlertAggregate(Number.isFinite(fromApi) ? fromApi : summed)
       }
@@ -571,7 +607,7 @@ function DashboardContent() {
       
       <div className="space-y-4">
         {filteredProjects.map((project) => {
-          const config = statusConfig[project.status]
+          const workflowCfg = workflowStageConfig[project.workflowStageKey] ?? workflowStageConfig.setup
           const budgetDisplay = formatBudget(project.budget)
           const spentDisplay = formatBudget(project.spent)
           const hasCriticalAlert = project.alerts.some(a => a.severity === "critical")
@@ -590,9 +626,9 @@ function DashboardContent() {
                     </h3>
                     <span className={cn(
                       "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
-                      config.bg, config.color
+                      workflowCfg.bg, workflowCfg.color
                     )}>
-                      {config.label}
+                      {project.workflowStageLabel}
                     </span>
                     {(project.partnerStatusAlertCount ?? 0) > 0 && (
                       <TooltipProvider delayDuration={200}>

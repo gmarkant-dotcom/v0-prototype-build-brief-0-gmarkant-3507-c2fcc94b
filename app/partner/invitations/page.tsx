@@ -156,16 +156,48 @@ export default function PartnerInvitationsPage() {
   const pendingPartnerships = partnerships.filter(p => p.status === "pending")
   const activePartnerships = partnerships.filter(p => p.status === "active")
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, surface: "dark" | "light") => {
     switch (status) {
       case "pending":
-        return <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">Pending Your Response</span>
+        return surface === "dark" ? (
+          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40">
+            Pending Your Response
+          </span>
+        ) : (
+          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+            Pending Your Response
+          </span>
+        )
       case "active":
-        return <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-green-500/10 text-green-400">Active Partnership</span>
+        return surface === "dark" ? (
+          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50">
+            Active Partnership
+          </span>
+        ) : (
+          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 font-semibold">
+            Active Partnership
+          </span>
+        )
       case "suspended":
-        return <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-orange-500/10 text-orange-400">Suspended</span>
+        return surface === "dark" ? (
+          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-orange-500/20 text-orange-100 ring-1 ring-orange-400/40">
+            Suspended
+          </span>
+        ) : (
+          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-orange-100 text-orange-900 border border-orange-300">
+            Suspended
+          </span>
+        )
       case "terminated":
-        return <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-red-500/10 text-red-400">Terminated</span>
+        return surface === "dark" ? (
+          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-red-500/20 text-red-100 ring-1 ring-red-400/40">
+            Terminated
+          </span>
+        ) : (
+          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-red-100 text-red-900 border border-red-300">
+            Terminated
+          </span>
+        )
       default:
         return null
     }
@@ -206,7 +238,7 @@ export default function PartnerInvitationsPage() {
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          {getStatusBadge(partnership.status)}
+                          {getStatusBadge(partnership.status, "dark")}
                         </div>
                         <h3 className="font-display font-bold text-2xl text-[#FFFFFF]">
                           {partnership.agency?.company_name || partnership.agency?.full_name || "Unknown Agency"}
@@ -283,29 +315,29 @@ export default function PartnerInvitationsPage() {
               {activePartnerships.map((partnership) => (
                 <GlassCard key={partnership.id} className="p-6 hover:bg-white/[0.03] transition-colors">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center">
-                      <Building2 className="w-6 h-6 text-green-400" />
+                    <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
+                      <Building2 className="w-6 h-6 text-emerald-800" />
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1">
-                        <h3 className="font-display font-bold text-lg text-white">
+                      <div className="flex items-center gap-3 mb-1 flex-wrap">
+                        <h3 className="font-display font-semibold text-lg text-gray-900">
                           {partnership.agency?.company_name || partnership.agency?.full_name || "Lead Agency"}
                         </h3>
-                        {getStatusBadge(partnership.status)}
+                        {getStatusBadge(partnership.status, "light")}
                       </div>
                       {partnership.agency?.email && (
-                        <p className="text-sm text-white/60 mb-1">{partnership.agency.email}</p>
+                        <p className="text-sm text-gray-600 mb-1">{partnership.agency.email}</p>
                       )}
-                      <p className="text-sm text-white/70">
+                      <p className="text-sm text-gray-600">
                         You are part of this agency&apos;s partner network. You&apos;ll receive project assignments from them.
                       </p>
                       {partnership.accepted_at && (
-                        <p className="text-xs text-white/50 mt-2">
+                        <p className="text-xs text-gray-500 mt-2">
                           Partnered since {new Date(partnership.accepted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                         </p>
                       )}
                     </div>
-                    <ChevronRight className="w-5 h-5 text-white/40" />
+                    <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
                   </div>
                 </GlassCard>
               ))}
