@@ -321,10 +321,6 @@ export default function PartnerPoolPage() {
   const handleConfirmNdaSigned = async (partnershipId: string) => {
     console.log("[agency/pool] confirm NDA clicked", { partnershipId })
     console.log("about to fetch")
-    if (!checkFeatureAccess("nda confirm")) {
-      console.log("[agency/pool] confirm NDA blocked by feature gate")
-      return
-    }
     if (isDemo) {
       console.log("[agency/pool] confirm NDA skipped in demo mode")
       return
