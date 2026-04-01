@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
+
+const ROUTE = "/api/agency/active-engagements"
 
 const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate",
@@ -67,8 +69,7 @@ function pickResponseForAssignment(
   return candidates[0] ?? null
 }
 
-export async function GET() {
-  const route = "/api/agency/active-engagements"
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const {
@@ -87,11 +88,13 @@ export async function GET() {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
     }
 
-    console.log("[api] start", { route, method: "GET", userId: user.id, role: profile?.role })
+    console.log("[api] start", { route: ROUTE, method: "GET", userId: user.id })
+
+    const projectIdFilter = request.nextUrl.searchParams.get("projectId")?.trim() || null
 
     const { data: projectRows, error: projErr } = await supabase
       .from("projects")
-      .select("id, title")
+      .select("id, name")
       .eq("agency_id", user.id)
 
     if (projErr) {
@@ -99,15 +102,29 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to load projects" }, { status: 500, headers: noStoreHeaders })
     }
 
-    const agencyProjectIds = (projectRows || []).map((p) => p.id as string)
+    let agencyProjectIds = (projectRows || []).map((p) => p.id as string)
+    if (projectIdFilter) {
+      if (!agencyProjectIds.includes(projectIdFilter)) {
+        console.log("[api] active-engagements projectId filter not in agency projects", {
+          userId: user.id,
+          projectIdFilter,
+          agencyProjectCount: agencyProjectIds.length,
+        })
+        return NextResponse.json({ projects: [] }, { headers: noStoreHeaders })
+      }
+      agencyProjectIds = [projectIdFilter]
+    }
+
     if (agencyProjectIds.length === 0) {
-      console.log("[api] success", { route, method: "GET", userId: user.id, projectCount: 0 })
+      console.log("[api] success", { route: ROUTE, method: "GET", userId: user.id, projectCount: 0 })
       return NextResponse.json({ projects: [] }, { headers: noStoreHeaders })
     }
 
     const titleByProjectId = new Map<string, string>()
     for (const p of projectRows || []) {
-      titleByProjectId.set(p.id as string, (p.title as string) || "Untitled project")
+      const row = p as { id: string; name?: string | null }
+      if (projectIdFilter && row.id !== projectIdFilter) continue
+      titleByProjectId.set(row.id, (row.name || "").trim() || "Untitled project")
     }
 
     const { data: assignments, error: asgErr } = await supabase
@@ -140,7 +157,22 @@ export async function GET() {
     }
 
     const list = assignments || []
-    const partnerIds = [...new Set(list.map((a) => (a.partnership as { partner_id?: string })?.partner_id).filter(Boolean))] as string[]
+    const partnerIds = [
+      ...new Set(
+        list
+          .map((a) => {
+            const raw = a.partnership as unknown
+            const pship = unwrapRelation(
+              raw as
+                | { partner_id?: string }
+                | { partner_id?: string }[]
+                | null
+            )
+            return pship?.partner_id
+          })
+          .filter(Boolean),
+      ),
+    ] as string[]
 
     let awardedResponses: AwardedResponseRow[] = []
     if (partnerIds.length > 0) {
@@ -170,8 +202,8 @@ export async function GET() {
     }
 
     const pkgCache = new Map<string, OnboardingPkgRow | null>()
-    async function latestPackage(projectId: string, partnershipId: string): Promise<OnboardingPkgRow | null> {
-      const key = `${projectId}:${partnershipId}`
+    async function latestPackage(pid: string, partnershipId: string): Promise<OnboardingPkgRow | null> {
+      const key = `${pid}:${partnershipId}`
       if (pkgCache.has(key)) return pkgCache.get(key) ?? null
       const { data, error } = await supabase
         .from("onboarding_packages")
@@ -184,7 +216,7 @@ export async function GET() {
           onboarding_package_documents(id, label, url, sort_order)
         `
         )
-        .eq("project_id", projectId)
+        .eq("project_id", pid)
         .eq("partnership_id", partnershipId)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -192,7 +224,7 @@ export async function GET() {
 
       if (error) {
         console.error("[api] active-engagements onboarding package", {
-          projectId,
+          projectId: pid,
           partnershipId,
           message: error.message,
           code: error.code,
@@ -226,7 +258,7 @@ export async function GET() {
     const byProject = new Map<string, PartnerRow[]>()
 
     for (const a of list) {
-      const projectId = a.project_id as string
+      const projId = a.project_id as string
       const partnershipId = a.partnership_id as string
       const pship = unwrapRelation(
         a.partnership as unknown as
@@ -244,10 +276,10 @@ export async function GET() {
       const partnerId = pship?.partner_id
       if (!partnerId) continue
 
-      const resp = pickResponseForAssignment(awardedResponses, projectId, partnershipId, partnerId)
+      const resp = pickResponseForAssignment(awardedResponses, projId, partnershipId, partnerId)
       const inbox = resp ? inboxRow(resp.partner_rfp_inbox) : null
 
-      const pkg = await latestPackage(projectId, partnershipId)
+      const pkg = await latestPackage(projId, partnershipId)
       const docs = (pkg?.onboarding_package_documents || []).slice().sort((x, y) => (x.sort_order ?? 0) - (y.sort_order ?? 0))
       const onboardingDocuments = docs.map((d) => ({ label: d.label, url: d.url }))
 
@@ -269,33 +301,35 @@ export async function GET() {
         onboardingDocuments,
       }
 
-      const cur = byProject.get(projectId) || []
+      const cur = byProject.get(projId) || []
       cur.push(row)
-      byProject.set(projectId, cur)
+      byProject.set(projId, cur)
     }
 
-    const projects = Array.from(byProject.entries()).map(([projectId, partners]) => ({
-      id: projectId,
-      title: titleByProjectId.get(projectId) || "Untitled project",
+    const projects = Array.from(byProject.entries()).map(([pid, partners]) => ({
+      id: pid,
+      title: titleByProjectId.get(pid) || "Untitled project",
       partners,
     }))
 
     projects.sort((x, y) => x.title.localeCompare(y.title))
 
     console.log("[api] success", {
-      route,
+      route: ROUTE,
       method: "GET",
       userId: user.id,
       projectCount: projects.length,
       partnerRowCount: list.length,
+      projectIdFilter,
     })
 
     return NextResponse.json({ projects }, { headers: noStoreHeaders })
   } catch (e) {
-    console.error("[api] failure", {
-      route,
+    console.error("[api] active-engagements unhandled error", {
+      route: ROUTE,
       method: "GET",
-      message: e instanceof Error ? e.message : String(e),
+      error: e instanceof Error ? e.message : String(e),
+      stack: e instanceof Error ? e.stack : undefined,
     })
     return NextResponse.json({ error: "Failed" }, { status: 500, headers: noStoreHeaders })
   }

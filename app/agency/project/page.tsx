@@ -8,6 +8,7 @@ import { GlassCard } from "@/components/glass-card"
 import { isDemoMode } from "@/lib/demo-data"
 import { formatEngagementBudget, formatEngagementTimeline } from "@/lib/active-engagement-parse"
 import { normalizeMeetingUrlForHref } from "@/lib/utils"
+import { useSelectedProject } from "@/contexts/selected-project-context"
 import { Loader2, ExternalLink } from "lucide-react"
 
 type OnboardingDoc = { label: string; url: string }
@@ -37,17 +38,28 @@ type ProjectGroup = {
 }
 
 function ActiveEngagementsContent() {
+  const { selectedProject } = useSelectedProject()
   const isDemo = isDemoMode()
   const [projects, setProjects] = useState<ProjectGroup[]>([])
-  const [loading, setLoading] = useState(!isDemo)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isDemo) {
+      if (!selectedProject) {
+        setProjects([])
+        setLoading(false)
+        return
+      }
+      if (selectedProject.id !== "1") {
+        setProjects([])
+        setLoading(false)
+        return
+      }
       setProjects([
         {
-          id: "demo-p1",
-          title: "NWSL Creator Content Series",
+          id: "1",
+          title: selectedProject.name || "NWSL Creator Content Series",
           partners: [
             {
               assignmentId: "demo-a1",
@@ -76,12 +88,22 @@ function ActiveEngagementsContent() {
       return
     }
 
+    if (!selectedProject?.id) {
+      setProjects([])
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     let cancelled = false
     ;(async () => {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch("/api/agency/active-engagements", { credentials: "same-origin" })
+        const q = new URLSearchParams({ projectId: selectedProject.id })
+        const res = await fetch(`/api/agency/active-engagements?${q.toString()}`, {
+          credentials: "same-origin",
+        })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) {
           if (!cancelled) setError((data as { error?: string }).error || "Failed to load")
@@ -97,7 +119,7 @@ function ActiveEngagementsContent() {
     return () => {
       cancelled = true
     }
-  }, [isDemo])
+  }, [isDemo, selectedProject?.id, selectedProject?.name])
 
   const partnerDisplayName = (p: PartnerEngagementRow["partner"]) =>
     p.companyName?.trim() || p.fullName?.trim() || "Partner"
@@ -108,29 +130,36 @@ function ActiveEngagementsContent() {
       <div className="mb-8">
         <h1 className="font-display font-bold text-3xl text-foreground">Active Engagements</h1>
         <p className="text-sm text-foreground-muted font-mono mt-2 max-w-2xl">
-          Awarded partners per project: scope, proposed budget and timeline, contacts, kickoff link, and onboarding
-          documents.
+          {selectedProject
+            ? `Awarded partners for ${selectedProject.name}: scope, budget, timeline, contacts, kickoff, and onboarding documents.`
+            : "Select a project to see awarded partners and onboarding for that engagement."}
         </p>
       </div>
 
-      {loading && (
+      {!selectedProject && (
+        <GlassCard className="p-8 text-center text-foreground-muted text-sm">
+          Select a project to view its active engagements.
+        </GlassCard>
+      )}
+
+      {selectedProject && loading && !isDemo && (
         <div className="flex items-center gap-2 text-foreground-muted py-12">
           <Loader2 className="w-5 h-5 animate-spin" />
           Loading engagements…
         </div>
       )}
 
-      {error && !loading && (
+      {selectedProject && error && !loading && (
         <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
       )}
 
-      {!loading && !error && projects.length === 0 && (
+      {selectedProject && !loading && !error && projects.length === 0 && (
         <GlassCard className="p-8 text-center text-foreground-muted text-sm">
-          No awarded engagements yet. Award a bid in Bid Management to create a project assignment.
+          No awarded engagements for this project yet. Award a bid in Bid Management to create a project assignment.
         </GlassCard>
       )}
 
-      {!loading && !error && projects.length > 0 && (
+      {!loading && !error && selectedProject && projects.length > 0 && (
         <div className="space-y-8">
           {projects.map((proj) => (
             <GlassCard key={proj.id} className="p-6 overflow-hidden">

@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
+const ROUTE = "/api/partner/projects/[projectId]/active-engagement"
+
 const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate",
 } as const
@@ -48,7 +50,6 @@ function pickResponseForAssignment(
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ projectId: string }> }) {
-  const route = "/api/partner/projects/[projectId]/active-engagement"
   try {
     const { projectId } = await params
     const supabase = await createClient()
@@ -59,6 +60,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
+    console.log("[api] partner active-engagement after auth", { route: ROUTE, userId: user.id, projectId })
+
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("role")
@@ -68,15 +71,34 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
     }
 
-    console.log("[api] start", { route, method: "GET", userId: user.id, projectId })
+    const { data: partnerships, error: pErr } = await supabase
+      .from("partnerships")
+      .select("id")
+      .eq("partner_id", user.id)
 
-    const { data: partnerships } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)
+    if (pErr) {
+      console.error("[api] partner active-engagement partnerships lookup failed", {
+        userId: user.id,
+        message: pErr.message,
+        code: pErr.code,
+      })
+      return NextResponse.json({ error: "Failed to load partnerships" }, { status: 500, headers: noStoreHeaders })
+    }
+
     const partnershipIds = (partnerships || []).map((p) => p.id as string)
+    console.log("[api] partner active-engagement partnerships", {
+      userId: user.id,
+      projectId,
+      partnershipCount: partnershipIds.length,
+      partnershipIds,
+    })
+
     if (partnershipIds.length === 0) {
+      console.log("[api] partner active-engagement no partnerships — found false", { userId: user.id, projectId })
       return NextResponse.json({ found: false }, { headers: noStoreHeaders })
     }
 
-    const { data: assignment, error: asgErr } = await supabase
+    const { data: assignmentRows, error: asgErr } = await supabase
       .from("project_assignments")
       .select(
         `
@@ -90,15 +112,37 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       .eq("project_id", projectId)
       .eq("status", "awarded")
       .in("partnership_id", partnershipIds)
-      .maybeSingle()
+      .order("updated_at", { ascending: false })
+      .limit(5)
 
     if (asgErr) {
-      console.error("[api] partner active-engagement assignment", { message: asgErr.message, code: asgErr.code })
+      console.error("[api] partner active-engagement assignments lookup failed", {
+        userId: user.id,
+        projectId,
+        partnershipIds,
+        message: asgErr.message,
+        code: asgErr.code,
+      })
       return NextResponse.json({ error: "Failed to load assignment" }, { status: 500, headers: noStoreHeaders })
     }
 
+    const rows = assignmentRows || []
+    console.log("[api] partner active-engagement assignments", {
+      userId: user.id,
+      projectId,
+      rowCount: rows.length,
+      assignments: rows.map((r) => ({
+        id: r.id,
+        project_id: r.project_id,
+        partnership_id: r.partnership_id,
+        status: r.status,
+      })),
+    })
+
+    const assignment = rows[0] ?? null
+
     if (!assignment) {
-      console.log("[api] success", { route, method: "GET", userId: user.id, found: false })
+      console.log("[api] partner active-engagement no awarded assignment", { userId: user.id, projectId, partnershipIds })
       return NextResponse.json({ found: false }, { headers: noStoreHeaders })
     }
 
@@ -106,18 +150,45 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
 
     const { data: project, error: projectErr } = await supabase
       .from("projects")
-      .select("id, title, agency_id")
+      .select("id, name, agency_id")
       .eq("id", projectId)
-      .single()
+      .maybeSingle()
 
-    if (projectErr || !project) {
+    console.log("[api] partner active-engagement project lookup", {
+      userId: user.id,
+      projectId,
+      projectErr: projectErr
+        ? { message: projectErr.message, code: projectErr.code, details: projectErr.details }
+        : null,
+      hasProject: !!project,
+    })
+
+    if (projectErr) {
+      console.error("[api] partner active-engagement project query error", {
+        userId: user.id,
+        projectId,
+        message: projectErr.message,
+        code: projectErr.code,
+      })
+      return NextResponse.json({ error: "Failed to load project" }, { status: 500, headers: noStoreHeaders })
+    }
+
+    if (!project) {
+      console.log("[api] partner active-engagement project not found (RLS or missing row)", {
+        userId: user.id,
+        projectId,
+        assignmentId: assignment.id,
+      })
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
     }
+
+    const projectName = ((project as { name?: string | null }).name || "").trim() || "Untitled project"
+    const agencyId = (project as { agency_id: string }).agency_id
 
     const { data: leadAgency, error: agencyErr } = await supabase
       .from("profiles")
       .select("id, email, full_name, company_name")
-      .eq("id", project.agency_id as string)
+      .eq("id", agencyId)
       .single()
 
     if (agencyErr) {
@@ -143,7 +214,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       )
       .eq("partner_id", user.id)
       .eq("status", "awarded")
-      .eq("agency_id", project.agency_id as string)
+      .eq("agency_id", agencyId)
 
     if (respErr) {
       console.error("[api] partner active-engagement responses", { message: respErr.message, code: respErr.code })
@@ -180,7 +251,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     const docs = (rawDocs || []).slice().sort((x, y) => (x.sort_order ?? 0) - (y.sort_order ?? 0))
     const onboardingDocuments = docs.map((d) => ({ label: d.label, url: d.url }))
 
-    console.log("[api] success", { route, method: "GET", userId: user.id, found: true, projectId })
+    console.log("[api] success", { route: ROUTE, method: "GET", userId: user.id, found: true, projectId })
 
     return NextResponse.json(
       {
@@ -189,7 +260,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
         partnershipId,
         project: {
           id: project.id,
-          title: (project.title as string) || "Untitled project",
+          title: projectName,
         },
         leadAgency: leadAgency
           ? {
@@ -209,10 +280,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       { headers: noStoreHeaders }
     )
   } catch (e) {
-    console.error("[api] failure", {
-      route,
+    console.error("[api] partner active-engagement unhandled error", {
+      route: ROUTE,
       method: "GET",
-      message: e instanceof Error ? e.message : String(e),
+      error: e instanceof Error ? e.message : String(e),
+      stack: e instanceof Error ? e.stack : undefined,
     })
     return NextResponse.json({ error: "Failed" }, { status: 500, headers: noStoreHeaders })
   }
