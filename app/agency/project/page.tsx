@@ -59,6 +59,8 @@ type PanelStatusUpdate = {
 
 type PartnerEngagementRow = {
   assignmentId: string
+  /** Distinguishes multiple awarded bids per assignment (active-engagements API) */
+  awardedResponseId?: string | null
   partnershipId: string
   awardedAt: string | null
   partner: {
@@ -85,6 +87,11 @@ type ProjectGroup = {
   id: string
   title: string
   partners: PartnerEngagementRow[]
+}
+
+/** Stable DOM id / React key when one assignment has multiple awarded bid rows */
+function engagementRowDomId(row: PartnerEngagementRow): string {
+  return row.awardedResponseId ? `${row.assignmentId}-${row.awardedResponseId}` : row.assignmentId
 }
 
 const DEMO_ALERT_2: LatestAlert = {
@@ -555,8 +562,8 @@ function ActiveEngagementsInner() {
                     <tbody>
                       {proj.partners.map((row) => (
                         <tr
-                          key={row.assignmentId}
-                          id={`engagement-row-${row.assignmentId}`}
+                          key={engagementRowDomId(row)}
+                          id={`engagement-row-${engagementRowDomId(row)}`}
                           className="border-b border-border/30 align-top transition-shadow"
                         >
                           <td className="py-3 pr-3">

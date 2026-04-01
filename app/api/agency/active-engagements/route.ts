@@ -51,12 +51,13 @@ function unwrapRelation<T>(x: T | T[] | null | undefined): T | null {
   return Array.isArray(x) ? x[0] ?? null : x
 }
 
-function pickResponseForAssignment(
+/** All awarded responses for this project + partnership + partner (one row per scope/bid in UI). */
+function responsesForAssignment(
   rows: AwardedResponseRow[],
   projectId: string,
   partnershipId: string,
   partnerId: string
-): AwardedResponseRow | null {
+): AwardedResponseRow[] {
   const candidates = rows.filter((r) => {
     if (r.partner_id !== partnerId) return false
     const inbox = inboxRow(r.partner_rfp_inbox)
@@ -64,9 +65,8 @@ function pickResponseForAssignment(
     if (inbox.partnership_id && inbox.partnership_id !== partnershipId) return false
     return true
   })
-  if (candidates.length === 0) return null
   candidates.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""))
-  return candidates[0] ?? null
+  return candidates
 }
 
 export async function GET(request: NextRequest) {
@@ -329,6 +329,8 @@ export async function GET(request: NextRequest) {
 
     type PartnerRow = {
       assignmentId: string
+      /** partner_rfp_responses.id when this row is tied to a specific awarded bid; null for placeholder row */
+      awardedResponseId: string | null
       partnershipId: string
       awardedAt: string | null
       partner: {
@@ -378,8 +380,7 @@ export async function GET(request: NextRequest) {
       const partnerId = pship?.partner_id
       if (!partnerId) continue
 
-      const resp = pickResponseForAssignment(awardedResponses, projId, partnershipId, partnerId)
-      const inbox = resp ? inboxRow(resp.partner_rfp_inbox) : null
+      const responses = responsesForAssignment(awardedResponses, projId, partnershipId, partnerId)
 
       const pkg = await latestPackage(projId, partnershipId)
       const docs = (pkg?.onboarding_package_documents || []).slice().sort((x, y) => (x.sort_order ?? 0) - (y.sort_order ?? 0))
@@ -387,7 +388,7 @@ export async function GET(request: NextRequest) {
 
       const statusSummary = summarizeStatusUpdates(statusUpdatesForPartner(projId, partnershipId))
 
-      const row: PartnerRow = {
+      const baseRow = {
         assignmentId: a.id as string,
         partnershipId,
         awardedAt: (a.awarded_at as string | null) ?? null,
@@ -396,10 +397,6 @@ export async function GET(request: NextRequest) {
           fullName: partnerEmbed?.full_name ?? null,
           email: partnerEmbed?.email ?? null,
         },
-        scopeItemName: inbox?.scope_item_name ?? null,
-        proposalText: resp?.proposal_text ?? "",
-        budgetProposal: resp?.budget_proposal ?? "",
-        timelineProposal: resp?.timeline_proposal ?? "",
         kickoffUrl: pkg?.kickoff_url ?? null,
         kickoffType: pkg?.kickoff_type ?? null,
         onboardingDocuments,
@@ -411,7 +408,32 @@ export async function GET(request: NextRequest) {
       }
 
       const cur = byProject.get(projId) || []
-      cur.push(row)
+
+      if (responses.length === 0) {
+        const row: PartnerRow = {
+          ...baseRow,
+          awardedResponseId: null,
+          scopeItemName: null,
+          proposalText: "",
+          budgetProposal: "",
+          timelineProposal: "",
+        }
+        cur.push(row)
+      } else {
+        for (const resp of responses) {
+          const inbox = inboxRow(resp.partner_rfp_inbox)
+          const row: PartnerRow = {
+            ...baseRow,
+            awardedResponseId: resp.id,
+            scopeItemName: inbox?.scope_item_name ?? null,
+            proposalText: resp.proposal_text ?? "",
+            budgetProposal: resp.budget_proposal ?? "",
+            timelineProposal: resp.timeline_proposal ?? "",
+          }
+          cur.push(row)
+        }
+      }
+
       byProject.set(projId, cur)
     }
 
@@ -428,7 +450,8 @@ export async function GET(request: NextRequest) {
       method: "GET",
       userId: user.id,
       projectCount: projects.length,
-      partnerRowCount: list.length,
+      partnerRowCount: [...byProject.values()].reduce((n, rows) => n + rows.length, 0),
+      assignmentCount: list.length,
       projectIdFilter,
     })
 
