@@ -4,6 +4,25 @@ import { createClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
+type PartnershipRef = { partner_id?: string | null }
+type AssignmentRef = { partnerships?: PartnershipRef | PartnershipRef[] | null }
+
+function partnerHasAssignmentOnDocument(
+  document: { project_assignments?: AssignmentRef | AssignmentRef[] | null },
+  userId: string
+): boolean {
+  const raw = document.project_assignments
+  const assignments: AssignmentRef[] = Array.isArray(raw) ? raw : raw ? [raw] : []
+  for (const pa of assignments) {
+    const ps = pa.partnerships
+    const nests: PartnershipRef[] = Array.isArray(ps) ? ps : ps ? [ps] : []
+    for (const p of nests) {
+      if (p.partner_id === userId) return true
+    }
+  }
+  return false
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -37,10 +56,10 @@ export async function GET(
       return NextResponse.json({ error: 'Document not found' }, { status: 404 })
     }
 
-    // Additional access check beyond RLS
+    // Additional access check beyond RLS (project_assignments may be one row or an array from PostgREST)
     const isAgency = document.projects.agency_id === user.id
-    const isAssignedPartner = document.project_assignments?.partnerships?.partner_id === user.id
-    
+    const isAssignedPartner = partnerHasAssignmentOnDocument(document as { project_assignments?: AssignmentRef | AssignmentRef[] | null }, user.id)
+
     if (!isAgency && !isAssignedPartner) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }

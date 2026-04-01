@@ -45,6 +45,17 @@ export async function GET(
       if (!project) {
         return NextResponse.json({ error: 'Project not found' }, { status: 404 })
       }
+      if (assignmentId) {
+        const { data: assignOnProject } = await supabase
+          .from('project_assignments')
+          .select('id')
+          .eq('id', assignmentId)
+          .eq('project_id', projectId)
+          .maybeSingle()
+        if (!assignOnProject) {
+          return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
+        }
+      }
     } else if (profile.role === 'partner') {
       const { data: assignment } = await supabase
         .from('project_assignments')
@@ -54,6 +65,18 @@ export async function GET(
         .single()
       if (!assignment) {
         return NextResponse.json({ error: 'Not assigned to this project' }, { status: 403 })
+      }
+      if (assignmentId) {
+        const { data: scopedJoin } = await supabase
+          .from('project_assignments')
+          .select('id, partnerships!inner(partner_id)')
+          .eq('id', assignmentId)
+          .eq('project_id', projectId)
+          .eq('partnerships.partner_id', user.id)
+          .maybeSingle()
+        if (!scopedJoin) {
+          return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
+        }
       }
     } else {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -133,8 +156,18 @@ export async function POST(
       if (!project) {
         return NextResponse.json({ error: 'Project not found' }, { status: 404 })
       }
-    } else {
-      // Partner must be assigned to the project
+      if (assignmentId) {
+        const { data: assignOnProject } = await supabase
+          .from('project_assignments')
+          .select('id')
+          .eq('id', assignmentId)
+          .eq('project_id', projectId)
+          .maybeSingle()
+        if (!assignOnProject) {
+          return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
+        }
+      }
+    } else if (profile?.role === 'partner') {
       const { data: assignment } = await supabase
         .from('project_assignments')
         .select('id, partnership:partnerships!inner(partner_id)')
@@ -145,6 +178,20 @@ export async function POST(
       if (!assignment) {
         return NextResponse.json({ error: 'Not assigned to this project' }, { status: 403 })
       }
+      if (assignmentId) {
+        const { data: scopedJoin } = await supabase
+          .from('project_assignments')
+          .select('id, partnerships!inner(partner_id)')
+          .eq('id', assignmentId)
+          .eq('project_id', projectId)
+          .eq('partnerships.partner_id', user.id)
+          .maybeSingle()
+        if (!scopedJoin) {
+          return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
+        }
+      }
+    } else {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { data: message, error } = await supabase

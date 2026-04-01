@@ -2,6 +2,10 @@ import { createClient } from "@supabase/supabase-js"
 import { Resend } from "resend"
 import { type NextRequest, NextResponse } from "next/server"
 
+/**
+ * Public marketing lead capture. Uses service role only to insert into contact_submissions;
+ * no end-user session. Rate limiting should live at edge/WAF if abuse becomes an issue.
+ */
 export async function POST(request: NextRequest) {
   const productLabels: Record<string, string> = {
     core: "Core ($299/month)",

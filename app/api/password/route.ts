@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 
+/**
+ * Public site gate (SITE_PASSWORD). No Supabase session — intentional.
+ * Not a substitute for per-user auth on protected API routes.
+ */
 export async function POST(request: Request) {
   const { password } = await request.json()
   

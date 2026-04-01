@@ -15,6 +15,11 @@ export async function PATCH(
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    if (profile?.role !== "agency") {
+      return NextResponse.json({ error: "Agency only" }, { status: 403 })
+    }
+
     const body = await request.json()
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (typeof body.label === "string") patch.label = body.label.trim()
@@ -55,6 +60,11 @@ export async function DELETE(
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    if (profile?.role !== "agency") {
+      return NextResponse.json({ error: "Agency only" }, { status: 403 })
+    }
 
     const { error } = await supabase.from("agency_library_documents").delete().eq("id", id).eq("agency_id", user.id)
 

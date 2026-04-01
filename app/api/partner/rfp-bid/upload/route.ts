@@ -2,6 +2,7 @@ import { put } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { validateUploadFile } from "@/lib/upload-validation"
+import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 
 /**
  * Partner bid attachment upload — same pattern as /api/upload:
@@ -19,7 +20,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role, is_paid, is_admin").eq("id", user.id).single()
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, is_paid, is_admin, email")
+      .eq("id", user.id)
+      .single()
     console.log("[api] start", { route, method: "POST", userId: user.id, role: profile?.role ?? null })
 
     const isDemoMode = process.env.NEXT_PUBLIC_IS_DEMO === "true"
@@ -36,10 +41,37 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get("file") as File
-    const inboxId = (formData.get("inboxId") as string) || "general"
+    const inboxId = ((formData.get("inboxId") as string) || "").trim()
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
+    }
+
+    if (!inboxId || inboxId === "general") {
+      return NextResponse.json({ error: "inboxId required" }, { status: 400 })
+    }
+
+    const { data: inboxRow, error: inboxLookupErr } = await supabase
+      .from("partner_rfp_inbox")
+      .select("id, partner_id, recipient_email")
+      .eq("id", inboxId)
+      .maybeSingle()
+
+    if (inboxLookupErr || !inboxRow) {
+      return NextResponse.json({ error: "RFP not found or access denied" }, { status: 404 })
+    }
+
+    if (
+      !partnerCanAccessPartnerRfpInbox(
+        {
+          partner_id: (inboxRow.partner_id as string | null) ?? null,
+          recipient_email: (inboxRow.recipient_email as string | null) ?? null,
+        },
+        user.id,
+        profile?.email
+      )
+    ) {
+      return NextResponse.json({ error: "RFP not found or access denied" }, { status: 404 })
     }
 
     const validation = validateUploadFile(file)
@@ -57,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
     const timestamp = Date.now()
-    const pathname = `partner-rfp-bids/${user.id}/${inboxId}/${timestamp}-${safeName}`
+    const pathname = `partner-rfp-bids/${user.id}/${inboxRow.id}/${timestamp}-${safeName}`
 
     const blob = await put(pathname, file, {
       access: "private",

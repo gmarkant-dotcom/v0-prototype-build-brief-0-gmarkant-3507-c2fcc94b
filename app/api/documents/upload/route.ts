@@ -35,7 +35,32 @@ export async function POST(request: NextRequest) {
 
     // Check if user is the agency owner or an assigned partner
     const isAgency = project.agency_id === user.id
-    
+
+    if (assignmentId) {
+      if (isAgency) {
+        const { data: pa } = await supabase
+          .from('project_assignments')
+          .select('id')
+          .eq('id', assignmentId)
+          .eq('project_id', projectId)
+          .maybeSingle()
+        if (!pa) {
+          return NextResponse.json({ error: 'Assignment not found for this project' }, { status: 404 })
+        }
+      } else {
+        const { data: pa } = await supabase
+          .from('project_assignments')
+          .select('id, partnerships!inner(partner_id)')
+          .eq('id', assignmentId)
+          .eq('project_id', projectId)
+          .eq('partnerships.partner_id', user.id)
+          .maybeSingle()
+        if (!pa) {
+          return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+        }
+      }
+    }
+
     if (!isAgency) {
       // Check if user is an assigned partner
       const { data: assignment } = await supabase

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 
 export const dynamic = "force-dynamic"
 
@@ -15,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    const { data: profile } = await supabase.from("profiles").select("role, email").eq("id", user.id).single()
 
     if (profile?.role !== "partner") {
       return NextResponse.json({ error: "Partners only" }, { status: 403 })
@@ -33,6 +34,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 
     if (!inbox) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
+    if (
+      !partnerCanAccessPartnerRfpInbox(
+        {
+          partner_id: (inbox.partner_id as string | null) ?? null,
+          recipient_email: (inbox.recipient_email as string | null) ?? null,
+        },
+        user.id,
+        profile?.email
+      )
+    ) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 

@@ -38,8 +38,13 @@ export async function GET(req: NextRequest) {
       discoverableCount: data?.length ?? 0,
     })
 
+    // Do not expose other users' emails to logged-in viewers (directory is opt-in, email is not public).
+    const profiles = (data ?? []).map((row) =>
+      row.id === user.id ? row : { ...row, email: null as string | null }
+    )
+
     return NextResponse.json(
-      { profiles: data ?? [] },
+      { profiles },
       { headers: { "Cache-Control": "private, no-store, no-cache, must-revalidate" } }
     )
   } catch (error) {

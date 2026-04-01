@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
+import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
 
 export const dynamic = "force-dynamic"
@@ -98,6 +99,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .maybeSingle()
 
     if (inboxErr || !inbox) {
+      return NextResponse.json({ error: "RFP not found or access denied" }, { status: 404 })
+    }
+
+    if (
+      !partnerCanAccessPartnerRfpInbox(
+        {
+          partner_id: (inbox.partner_id as string | null) ?? null,
+          recipient_email: (inbox.recipient_email as string | null) ?? null,
+        },
+        user.id,
+        profile?.email
+      )
+    ) {
       return NextResponse.json({ error: "RFP not found or access denied" }, { status: 404 })
     }
 
