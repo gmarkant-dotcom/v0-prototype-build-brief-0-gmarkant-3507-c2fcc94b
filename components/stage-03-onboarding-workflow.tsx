@@ -1,7 +1,6 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import Link from "next/link"
 import { StageHeader } from "@/components/stage-header"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
@@ -31,19 +30,6 @@ type AssignmentRow = {
   partnership: {
     id: string
     partner: { id: string; email: string | null; full_name: string | null; company_name: string | null } | null
-  } | null
-}
-
-/** Active roster row from GET /api/partnerships (agency view) */
-type ActivePartnershipOption = {
-  id: string
-  status: string
-  partner_id: string | null
-  partner: {
-    id: string
-    email: string | null
-    full_name: string | null
-    company_name: string | null
   } | null
 }
 
@@ -95,10 +81,6 @@ export function Stage03OnboardingWorkflow() {
   const [success, setSuccess] = useState<string | null>(null)
   const [uploadingAttach, setUploadingAttach] = useState<string | null>(null)
   const [meetingUrlProfile, setMeetingUrlProfile] = useState<string | null>(null)
-  const [partnersForAssign, setPartnersForAssign] = useState<ActivePartnershipOption[]>([])
-  const [loadingPartners, setLoadingPartners] = useState(false)
-  const [selectedPartnershipToAssign, setSelectedPartnershipToAssign] = useState("")
-  const [assigning, setAssigning] = useState(false)
 
   const refreshAssignments = useCallback(async () => {
     if (!selectedProject?.id) return
@@ -132,33 +114,6 @@ export function Stage03OnboardingWorkflow() {
     if (!selectedProject?.id) return
     void refreshAssignments()
   }, [selectedProject?.id, refreshAssignments])
-
-  useEffect(() => {
-    setSelectedPartnershipToAssign("")
-  }, [selectedProject?.id])
-
-  useEffect(() => {
-    if (!selectedProject?.id || loading || assignments.length > 0) return
-    let cancelled = false
-    ;(async () => {
-      setLoadingPartners(true)
-      try {
-        const res = await fetch("/api/partnerships", { credentials: "same-origin" })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok || cancelled) return
-        const rows = (data.partnerships || []) as ActivePartnershipOption[]
-        const active = rows.filter((p) => p.status === "active" && p.partner_id && p.partner)
-        if (cancelled) return
-        setPartnersForAssign(active)
-        if (active.length === 1) setSelectedPartnershipToAssign(active[0].id)
-      } finally {
-        if (!cancelled) setLoadingPartners(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [selectedProject?.id, loading, assignments.length])
 
   useEffect(() => {
     refreshLibrary()
@@ -296,30 +251,6 @@ export function Stage03OnboardingWorkflow() {
     }
   }
 
-  const handleAssignPartner = async () => {
-    if (!selectedProject?.id || !selectedPartnershipToAssign) return
-    setAssigning(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/projects/${selectedProject.id}/assignments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ partnershipId: selectedPartnershipToAssign }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setError((data?.error as string) || `Could not assign (${res.status})`)
-        return
-      }
-      await refreshAssignments()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Assign failed")
-    } finally {
-      setAssigning(false)
-    }
-  }
-
   if (!selectedProject) {
     return (
       <div className="p-8 max-w-6xl">
@@ -353,67 +284,11 @@ export function Stage03OnboardingWorkflow() {
           Loading…
         </div>
       ) : assignments.length === 0 ? (
-        <div className="mt-6 space-y-6">
-          <EmptyState
-            title="No partner assigned to this project yet"
-            description="A partnership is your roster connection; a project assignment links that partner to this project. Assign an active partner below, or add them from Pool / Bid Management."
-            icon="onboarding"
-          />
-          <GlassCard className="p-6 space-y-4 max-w-xl">
-            <GlassCardHeader
-              title="Assign partner to project"
-              description="Uses the same project assignment as RFPs. The partner receives the standard RFP invitation email when you assign."
-            />
-            {loadingPartners ? (
-              <div className="flex items-center gap-2 text-foreground-muted text-sm">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Loading active partners…
-              </div>
-            ) : partnersForAssign.length === 0 ? (
-              <p className="text-sm text-foreground-muted leading-relaxed">
-                No active partners with a connected account on your roster. Invite or accept a partner under{" "}
-                <Link href="/agency/pool" className="font-mono text-accent underline-offset-2 hover:underline">
-                  Agency → Pool
-                </Link>{" "}
-                first; they must accept so the
-                partnership is <span className="font-mono">active</span> and linked to their profile.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label>Active partner</Label>
-                  <Select value={selectedPartnershipToAssign} onValueChange={setSelectedPartnershipToAssign}>
-                    <SelectTrigger className="bg-white/5 border-border">
-                      <SelectValue placeholder="Choose partner…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {partnersForAssign.map((p) => {
-                        const pr = p.partner!
-                        const label =
-                          pr.company_name?.trim() || pr.full_name?.trim() || pr.email || "Partner"
-                        return (
-                          <SelectItem key={p.id} value={p.id}>
-                            {label}
-                            {pr.email ? ` · ${pr.email}` : ""}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  className="bg-accent text-accent-foreground"
-                  disabled={!selectedPartnershipToAssign || assigning}
-                  onClick={() => void handleAssignPartner()}
-                >
-                  {assigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Assign to project
-                </Button>
-                {error && <p className="text-sm text-red-400 font-mono">{error}</p>}
-              </div>
-            )}
-          </GlassCard>
-        </div>
+        <EmptyState
+          title="No partner linked to this project yet"
+          description="When you award a bid in Bid Management, a project assignment is created automatically so you can send onboarding here. RFP broadcasts must include this project so the inbox row has a project_id."
+          icon="onboarding"
+        />
       ) : (
         <div className="space-y-6 mt-6">
           <GlassCard className="p-6 space-y-4">
