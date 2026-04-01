@@ -87,7 +87,15 @@ export function Stage03OnboardingWorkflow() {
     setLoading(true)
     try {
       const res = await fetch(`/api/projects/${selectedProject.id}/assignments`, { credentials: "same-origin" })
-      if (!res.ok) return
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => "")
+        console.error("[onboarding] assignments fetch failed", {
+          projectId: selectedProject.id,
+          status: res.status,
+          bodyPreview: bodyText.slice(0, 500),
+        })
+        return
+      }
       const data = await res.json().catch(() => ({}))
       const rows = (data.assignments || []) as AssignmentRow[]
       setAssignments(rows)
@@ -104,7 +112,14 @@ export function Stage03OnboardingWorkflow() {
     try {
       const res = await fetch("/api/agency/library-documents", { credentials: "same-origin" })
       const data = await res.json().catch(() => ({}))
-      if (res.ok) setLibrary((data.documents || []) as LibraryRow[])
+      if (res.ok) {
+        setLibrary((data.documents || []) as LibraryRow[])
+      } else {
+        console.error("[onboarding] library-documents fetch failed", {
+          status: res.status,
+          error: (data as { error?: string }).error,
+        })
+      }
     } finally {
       setLoadLib(false)
     }
@@ -122,7 +137,27 @@ export function Stage03OnboardingWorkflow() {
   useEffect(() => {
     ;(async () => {
       const supabase = createClient()
-      const { data } = await supabase.from("profiles").select("meeting_url").eq("id", (await supabase.auth.getUser()).data.user?.id || "").maybeSingle()
+      const {
+        data: { user },
+        error: authErr,
+      } = await supabase.auth.getUser()
+      if (authErr) {
+        console.error("[onboarding] profiles meeting_url: auth.getUser failed", {
+          message: authErr.message,
+        })
+        return
+      }
+      const uid = user?.id || ""
+      if (!uid) return
+      const { data, error } = await supabase.from("profiles").select("meeting_url").eq("id", uid).maybeSingle()
+      if (error) {
+        console.error("[onboarding] profiles meeting_url select failed", {
+          userId: uid,
+          message: error.message,
+          code: error.code,
+        })
+        return
+      }
       if (data?.meeting_url) {
         setMeetingUrlProfile(data.meeting_url)
         setKickoffUrl((u) => u || data.meeting_url || "")
@@ -177,6 +212,10 @@ export function Stage03OnboardingWorkflow() {
         )
       )
     } catch (e) {
+      console.error("[onboarding] /api/upload failed", {
+        localId,
+        message: e instanceof Error ? e.message : String(e),
+      })
       setError(e instanceof Error ? e.message : "Upload failed")
     } finally {
       setUploadingAttach(null)
@@ -254,13 +293,29 @@ export function Stage03OnboardingWorkflow() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setError((data?.error as string) || `Save failed (${res.status})`)
+        const msg = (data?.error as string) || `Save failed (${res.status})`
+        console.error("[onboarding] POST onboarding-packages failed", {
+          projectId: selectedProject.id,
+          partnershipId,
+          assignmentId,
+          status: res.status,
+          error: msg,
+        })
+        setError(msg)
         return
       }
       setSuccess("Onboarding package sent. Your partner was emailed and can open /partner/onboarding.")
       setSelectedLibIds([])
       setProjectItems([])
       setCustomMessage("")
+    } catch (e) {
+      console.error("[onboarding] POST onboarding-packages threw", {
+        projectId: selectedProject.id,
+        partnershipId,
+        assignmentId,
+        message: e instanceof Error ? e.message : String(e),
+      })
+      setError(e instanceof Error ? e.message : "Request failed")
     } finally {
       setSending(false)
     }

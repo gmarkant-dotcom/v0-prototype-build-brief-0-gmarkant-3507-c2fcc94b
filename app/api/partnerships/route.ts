@@ -21,11 +21,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's role
-    const { data: profile } = await supabase
+    const { data: profile, error: profileErr } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
+    if (profileErr) {
+      console.error('[api] GET /partnerships profile load failed', {
+        route,
+        userId: user.id,
+        message: profileErr.message,
+        code: profileErr.code,
+      })
+      return NextResponse.json({ error: 'Failed to load profile' }, { status: 500, headers: noStoreHeaders })
+    }
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null })
 
     let partnerships
@@ -48,12 +57,21 @@ export async function GET(request: NextRequest) {
     } else {
       // Partner sees agencies that invited them (by partner_id OR by email)
       // First get the partner's email from their profile
-      const { data: partnerProfile } = await supabase
+      const { data: partnerProfile, error: partnerProfileErr } = await supabase
         .from('profiles')
         .select('email')
         .eq('id', user.id)
         .single()
-      
+      if (partnerProfileErr) {
+        console.error('[api] GET /partnerships partner profile email load failed', {
+          route,
+          userId: user.id,
+          message: partnerProfileErr.message,
+          code: partnerProfileErr.code,
+        })
+        return NextResponse.json({ error: 'Failed to load partner profile' }, { status: 500, headers: noStoreHeaders })
+      }
+
       // Get partnerships by partner_id
       const { data: byId, error: byIdError } = await supabase
         .from('partnerships')
@@ -73,15 +91,32 @@ export async function GET(request: NextRequest) {
           .is('partner_id', null) // Only get unclaimed email invitations
           .order('created_at', { ascending: false })
 
-        if (!byEmailError && byEmail && byEmail.length > 0) {
+        if (byEmailError) {
+          console.error('[api] GET /partnerships partner branch ilike partner_email query failed', {
+            route,
+            userId: user.id,
+            emailPresent: Boolean(partnerProfile?.email),
+            message: byEmailError.message,
+            code: byEmailError.code,
+          })
+        } else if (byEmail && byEmail.length > 0) {
           byEmailData = byEmail
-          
+
           // Auto-claim these invitations by setting partner_id
           for (const invitation of byEmail) {
-            await supabase
+            const { error: claimErr } = await supabase
               .from('partnerships')
               .update({ partner_id: user.id })
               .eq('id', invitation.id)
+            if (claimErr) {
+              console.error('[api] GET /partnerships auto-claim invitation update failed', {
+                route,
+                userId: user.id,
+                partnershipId: invitation.id,
+                message: claimErr.message,
+                code: claimErr.code,
+              })
+            }
           }
         }
       }
@@ -93,11 +128,21 @@ export async function GET(request: NextRequest) {
       
       let agencyProfiles: Record<string, { id: string; email: string; full_name: string; company_name: string }> = {}
       if (agencyIds.length > 0) {
-        const { data: agencies } = await supabase
+        const { data: agencies, error: agenciesErr } = await supabase
           .from('profiles')
           .select('id, email, full_name, company_name')
           .in('id', agencyIds)
-        
+
+        if (agenciesErr) {
+          console.error('[api] GET /partnerships agency profiles batch load failed', {
+            route,
+            userId: user.id,
+            agencyIdCount: agencyIds.length,
+            message: agenciesErr.message,
+            code: agenciesErr.code,
+          })
+        }
+
         if (agencies) {
           agencyProfiles = agencies.reduce((acc, agency) => {
             acc[agency.id] = agency
@@ -144,11 +189,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is an agency
-    const { data: profile } = await supabase
+    const { data: profile, error: postProfileErr } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
+    if (postProfileErr) {
+      console.error('[api] POST /partnerships profile load failed', {
+        route,
+        userId: user.id,
+        message: postProfileErr.message,
+        code: postProfileErr.code,
+      })
+      return NextResponse.json({ error: 'Failed to load profile' }, { status: 500 })
+    }
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
 
     if (profile?.role !== 'agency') {
@@ -162,11 +216,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Find the partner by email (case-insensitive)
-    const { data: partner } = await supabase
+    const { data: partner, error: partnerLookupErr } = await supabase
       .from('profiles')
       .select('id, email, role')
       .ilike('email', partnerEmail.trim())
-      .single()
+      .maybeSingle()
+
+    if (partnerLookupErr) {
+      console.error('[api] POST /partnerships partner lookup by email failed', {
+        route,
+        userId: user.id,
+        partnerEmail: partnerEmail.trim(),
+        message: partnerLookupErr.message,
+        code: partnerLookupErr.code,
+      })
+      return NextResponse.json({ error: 'Failed to look up partner' }, { status: 500 })
+    }
 
     // Partner exists - verify they are a partner role
     if (partner && partner.role !== 'partner') {
@@ -176,7 +241,7 @@ export async function POST(request: NextRequest) {
     // Check if partnership already exists (by partner_id or partner_email)
     let existingQuery = supabase
       .from('partnerships')
-      .select('id, status')
+      .select('id, status, partner_id')
       .eq('agency_id', user.id)
     
     if (partner) {
@@ -185,7 +250,18 @@ export async function POST(request: NextRequest) {
       existingQuery = existingQuery.ilike('partner_email', partnerEmail.trim())
     }
     
-    const { data: existing } = await existingQuery.single()
+    const { data: existing, error: existingErr } = await existingQuery.maybeSingle()
+
+    if (existingErr) {
+      console.error('[api] POST /partnerships existing partnership lookup failed', {
+        route,
+        userId: user.id,
+        hasPartnerRow: !!partner,
+        message: existingErr.message,
+        code: existingErr.code,
+      })
+      return NextResponse.json({ error: 'Failed to check existing partnership' }, { status: 500 })
+    }
 
     if (existing) {
       // If partnership was terminated (declined), allow re-invitation by updating status back to pending
@@ -478,11 +554,22 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Get partnership to verify ownership
-    const { data: partnership } = await supabase
+    const { data: partnership, error: partnershipFetchErr } = await supabase
       .from('partnerships')
       .select('agency_id, partner_id, status')
       .eq('id', partnershipId)
-      .single()
+      .maybeSingle()
+
+    if (partnershipFetchErr) {
+      console.error('[api] PATCH /partnerships load partnership failed', {
+        route,
+        userId: user.id,
+        partnershipId,
+        message: partnershipFetchErr.message,
+        code: partnershipFetchErr.code,
+      })
+      return NextResponse.json({ error: 'Failed to load partnership' }, { status: 500 })
+    }
 
     if (!partnership) {
       return NextResponse.json({ error: 'Partnership not found' }, { status: 404 })
@@ -646,7 +733,17 @@ export async function DELETE(request: NextRequest) {
       .eq('id', partnershipId)
       .single()
 
-    if (fetchError || !partnership) {
+    if (fetchError) {
+      console.error('[api] DELETE /partnerships load partnership failed', {
+        route,
+        userId: user.id,
+        partnershipId,
+        message: fetchError.message,
+        code: fetchError.code,
+      })
+      return NextResponse.json({ error: 'Partnership not found' }, { status: 404 })
+    }
+    if (!partnership) {
       return NextResponse.json({ error: 'Partnership not found' }, { status: 404 })
     }
 

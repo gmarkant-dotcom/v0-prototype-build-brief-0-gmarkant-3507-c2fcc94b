@@ -18,7 +18,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    const { data: profile, error: profileErr } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    if (profileErr) {
+      console.error("[agency/rfp-responses] GET profile load failed", {
+        route,
+        userId: user.id,
+        message: profileErr.message,
+        code: profileErr.code,
+      })
+      return NextResponse.json({ error: "Failed to load profile" }, { status: 500 })
+    }
 
     if (profile?.role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
@@ -35,6 +44,13 @@ export async function GET(request: Request) {
         .eq("agency_id", user.id)
         .eq("project_id", projectIdParam)
       if (inboxErr) {
+        console.error("[agency/rfp-responses] partner_rfp_inbox scoped select error", {
+          route,
+          userId: user.id,
+          projectId: projectIdParam,
+          message: inboxErr.message,
+          code: inboxErr.code,
+        })
         return NextResponse.json({ error: inboxErr.message }, { status: 500 })
       }
       inboxIdsForProject = (scopedInboxes || []).map((r) => r.id as string)
@@ -71,16 +87,34 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
     if (projectIdParam) inboxQuery = inboxQuery.eq("project_id", projectIdParam)
     const { data: allInboxes, error: allInboxErr } = await inboxQuery
-    if (allInboxErr) return NextResponse.json({ error: allInboxErr.message }, { status: 500 })
+    if (allInboxErr) {
+      console.error("[agency/rfp-responses] partner_rfp_inbox list select error", {
+        route,
+        userId: user.id,
+        projectId: projectIdParam || null,
+        message: allInboxErr.message,
+        code: allInboxErr.code,
+      })
+      return NextResponse.json({ error: allInboxErr.message }, { status: 500 })
+    }
 
     const inboxIds = [...new Set((allInboxes || []).map((r) => r.id as string))]
     const partnerIds = [...new Set((allInboxes || []).map((r) => r.partner_id).filter(Boolean) as string[])]
     let profileById: Record<string, { full_name: string | null; company_name: string | null; email: string | null }> = {}
     if (partnerIds.length > 0) {
-      const { data: partnerProfiles } = await supabase
+      const { data: partnerProfiles, error: partnerProfilesErr } = await supabase
         .from("profiles")
         .select("id, full_name, company_name, email")
         .in("id", partnerIds)
+      if (partnerProfilesErr) {
+        console.error("[agency/rfp-responses] profiles batch for partner display names failed", {
+          route,
+          userId: user.id,
+          partnerIdCount: partnerIds.length,
+          message: partnerProfilesErr.message,
+          code: partnerProfilesErr.code,
+        })
+      }
       profileById = Object.fromEntries(
         (partnerProfiles || []).map((p) => [p.id as string, { full_name: p.full_name, company_name: p.company_name, email: p.email }])
       )
@@ -99,13 +133,23 @@ export async function GET(request: Request) {
     const responseIds = merged.map((r) => r.id).filter(Boolean)
     let versionsByResponseId: Record<string, unknown[]> = {}
     if (responseIds.length > 0) {
-      const { data: versions } = await supabase
+      const { data: versions, error: versionsErr } = await supabase
         .from("partner_rfp_response_versions")
         .select(
           "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at, change_notes"
         )
         .in("response_id", responseIds)
         .order("version_number", { ascending: false })
+      if (versionsErr) {
+        console.error("[agency/rfp-responses] partner_rfp_response_versions select error", {
+          route,
+          userId: user.id,
+          responseIdCount: responseIds.length,
+          message: versionsErr.message,
+          code: versionsErr.code,
+        })
+        return NextResponse.json({ error: versionsErr.message }, { status: 500 })
+      }
       for (const rawVersion of versions || []) {
         const budgetParsed = parseBudgetProposal((rawVersion.budget_proposal as string) || "")
         const timelineParsed = parseTimelineProposal((rawVersion.timeline_proposal as string) || "")

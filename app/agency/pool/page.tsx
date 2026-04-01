@@ -172,7 +172,7 @@ export default function PartnerPoolPage() {
     try {
       const response = await fetch('/api/partnerships')
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json().catch(() => ({}))
         const loaded: Partnership[] = (data.partnerships || []).map((p: any) => ({
           id: p.id,
           partnerId: p.partner?.id || p.partner_id,
@@ -237,7 +237,11 @@ export default function PartnerPoolPage() {
   const loadAccessRequests = async () => {
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user }, error: authErr } = await supabase.auth.getUser()
+      if (authErr) {
+        console.error('[agency/pool] loadAccessRequests getUser failed', { message: authErr.message })
+        return
+      }
       if (!user) return
       
       const { data, error } = await supabase
@@ -250,7 +254,13 @@ export default function PartnerPoolPage() {
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
       
-      if (!error && data) {
+      if (error) {
+        console.error('[agency/pool] partner_access_requests select failed', {
+          agencyId: user.id,
+          message: error.message,
+          code: error.code,
+        })
+      } else if (data) {
         const loaded: AccessRequest[] = data.map((req: any) => ({
           id: req.id,
           partnerId: req.partner_id,
@@ -264,7 +274,9 @@ export default function PartnerPoolPage() {
         setAccessRequests(loaded)
       }
     } catch (error) {
-      console.error('Error loading access requests:', error)
+      console.error('[agency/pool] loadAccessRequests threw', {
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
@@ -284,11 +296,20 @@ export default function PartnerPoolPage() {
         .update({ status: 'approved', reviewed_at: new Date().toISOString() })
         .eq('id', requestId)
       
-      if (!error) {
+      if (error) {
+        console.error('[agency/pool] approve access request update failed', {
+          requestId,
+          message: error.message,
+          code: error.code,
+        })
+      } else {
         await loadAccessRequests()
       }
     } catch (error) {
-      console.error('Error approving request:', error)
+      console.error('[agency/pool] handleApproveRequest threw', {
+        requestId,
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
     setProcessingRequest(null)
   }
@@ -309,11 +330,20 @@ export default function PartnerPoolPage() {
         .update({ status: 'declined', reviewed_at: new Date().toISOString() })
         .eq('id', requestId)
       
-      if (!error) {
+      if (error) {
+        console.error('[agency/pool] decline access request update failed', {
+          requestId,
+          message: error.message,
+          code: error.code,
+        })
+      } else {
         await loadAccessRequests()
       }
     } catch (error) {
-      console.error('Error declining request:', error)
+      console.error('[agency/pool] handleDeclineRequest threw', {
+        requestId,
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
     setProcessingRequest(null)
   }
@@ -399,7 +429,7 @@ export default function PartnerPoolPage() {
         }),
       })
       
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
       if (response.ok) {
         await loadPartnerships()
         const savedEmail = inviteEmail
@@ -423,9 +453,11 @@ export default function PartnerPoolPage() {
         })
       }
     } catch (error) {
-      console.error('Error inviting partner:', error)
+      console.error('[agency/pool] POST /api/partnerships (invite) threw', {
+        message: error instanceof Error ? error.message : String(error),
+      })
     }
-    
+
     setIsInviting(false)
   }
   

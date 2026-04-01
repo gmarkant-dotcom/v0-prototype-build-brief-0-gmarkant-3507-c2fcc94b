@@ -31,7 +31,21 @@ export async function GET(
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { data: project } = await supabase.from("projects").select("agency_id").eq("id", projectId).single()
+    const { data: project, error: projectErr } = await supabase
+      .from("projects")
+      .select("agency_id")
+      .eq("id", projectId)
+      .single()
+    if (projectErr) {
+      console.error("[onboarding-packages] GET projects select failed", {
+        route: "GET /api/projects/[id]/onboarding-packages",
+        projectId,
+        userId: user.id,
+        message: projectErr.message,
+        code: projectErr.code,
+      })
+      return NextResponse.json({ error: "Failed to load project" }, { status: 500 })
+    }
     if (!project || project.agency_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
@@ -51,7 +65,13 @@ export async function GET(
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("[onboarding-packages] GET", error)
+      console.error("[onboarding-packages] GET onboarding_packages select failed", {
+        route: "GET /api/projects/[id]/onboarding-packages",
+        projectId,
+        userId: user.id,
+        message: error.message,
+        code: error.code,
+      })
       return NextResponse.json({ packages: [], error: error.message }, { status: 500 })
     }
 
@@ -226,6 +246,16 @@ export async function POST(
         : null,
     })
 
+    if (assignmentErr) {
+      console.error(`${logPrefix} project_assignments lookup failed`, {
+        projectId,
+        partnershipId,
+        userId: user.id,
+        message: assignmentErr.message,
+        code: assignmentErr.code,
+      })
+      return NextResponse.json({ error: "Could not verify project assignment" }, { status: 500 })
+    }
     if (!assignmentCheck) {
       console.log(`${logPrefix} step:400 no project_assignment for project+partnership`)
       return NextResponse.json(
@@ -305,11 +335,21 @@ export async function POST(
       return NextResponse.json({ error: "Could not save document list" }, { status: 500 })
     }
 
-    const { data: partnerProfile } = await supabase
+    const { data: partnerProfile, error: partnerProfileErr } = await supabase
       .from("profiles")
       .select("email, full_name, company_name")
       .eq("id", partnership.partner_id)
       .single()
+    if (partnerProfileErr) {
+      console.error(`${logPrefix} partner profile select failed (email may be skipped)`, {
+        projectId,
+        packageId: pkg.id,
+        partnershipId,
+        partnerId: partnership.partner_id,
+        message: partnerProfileErr.message,
+        code: partnerProfileErr.code,
+      })
+    }
 
     const partnerEmail = partnerProfile?.email
     const agencyName = profile.company_name || profile.full_name || "Your lead agency"

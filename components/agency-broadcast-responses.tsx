@@ -183,6 +183,11 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
           setRows(nextRows)
         }
       } catch (e) {
+        console.error("[agency/bids] GET /api/agency/rfp-responses failed", {
+          projectId: projectId ?? null,
+          url: projectId ? `/api/agency/rfp-responses?projectId=${encodeURIComponent(projectId)}` : "/api/agency/rfp-responses",
+          message: e instanceof Error ? e.message : String(e),
+        })
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
       } finally {
         if (!cancelled) setLoading(false)
@@ -252,6 +257,10 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
         }, 3000)
       }
     } catch (e) {
+      console.error("[agency/bids] PATCH /api/agency/rfp-responses/[id] failed", {
+        responseId: id,
+        message: e instanceof Error ? e.message : String(e),
+      })
       setError(e instanceof Error ? e.message : "Failed to update")
     } finally {
       setBusyId(null)

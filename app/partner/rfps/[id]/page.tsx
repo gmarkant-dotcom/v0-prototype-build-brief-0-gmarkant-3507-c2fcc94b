@@ -419,6 +419,10 @@ export default function PartnerRfpDetailPage() {
           }
         }
       } catch (e) {
+        console.error("[partner/rfps] initial GET /api/partner/rfps/[id] failed", {
+          inboxId: id,
+          message: e instanceof Error ? e.message : String(e),
+        })
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
       } finally {
         if (!cancelled) setLoading(false)
@@ -444,14 +448,29 @@ export default function PartnerRfpDetailPage() {
     const supabase = createClient()
     const {
       data: { user },
+      error: authErr,
     } = await supabase.auth.getUser()
+    if (authErr) {
+      console.error("[partner/rfps] ensurePartnerAuth getUser failed", { message: authErr.message })
+      setSubmitError("Could not verify session. Try signing in again.")
+      return false
+    }
     if (!user) {
       const returnPath =
         typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/partner/rfps"
       router.push(`/auth/login?redirect=${encodeURIComponent(returnPath)}`)
       return false
     }
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+    const { data: profile, error: profileErr } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+    if (profileErr) {
+      console.error("[partner/rfps] ensurePartnerAuth profile select failed", {
+        userId: user.id,
+        message: profileErr.message,
+        code: profileErr.code,
+      })
+      setSubmitError("Could not verify your account. Try again.")
+      return false
+    }
     if (profile?.role !== "partner") {
       setSubmitError("Only partner accounts can submit bid responses. Sign in with a partner profile.")
       return false
@@ -538,7 +557,15 @@ export default function PartnerRfpDetailPage() {
         const row = data.response as ResponseRow
         const vRes = await fetch(`/api/partner/rfps/${id}`, { cache: "no-store", credentials: "same-origin" })
         const vData = await vRes.json().catch(() => ({}))
-        if (vRes.ok) setVersions((vData.versions || []) as ResponseVersion[])
+        if (vRes.ok) {
+          setVersions((vData.versions || []) as ResponseVersion[])
+        } else {
+          console.error("[partner/rfps] refetch versions after save failed", {
+            inboxId: id,
+            status: vRes.status,
+            error: (vData as { error?: string }).error,
+          })
+        }
         if (status === "submitted") setChangeNotes("")
         setExisting(row)
         const bp = parseBudgetProposal(row.budget_proposal || "")
@@ -595,6 +622,11 @@ export default function PartnerRfpDetailPage() {
         source: "file",
       })
     } catch (err) {
+      console.error("[partner/rfps] rfp-bid upload failed", {
+        inboxId: id,
+        draftId,
+        message: err instanceof Error ? err.message : String(err),
+      })
       setSubmitError(err instanceof Error ? err.message : "Upload failed")
     } finally {
       setUploadingId(null)

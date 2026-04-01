@@ -31,7 +31,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { data: profile } = await supabase.from("profiles").select("role, company_name, full_name, email").eq("id", user.id).single()
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("role, company_name, full_name, email")
+      .eq("id", user.id)
+      .single()
+    if (profileErr) {
+      console.error("[api] PATCH agency profile load failed", {
+        route,
+        userId: user.id,
+        message: profileErr.message,
+        code: profileErr.code,
+      })
+      return NextResponse.json({ error: "Failed to load profile" }, { status: 500 })
+    }
     if (profile?.role !== "agency") return NextResponse.json({ error: "Agency only" }, { status: 403 })
     console.log("[api] start", { route, method: "PATCH", userId: user.id, role: profile.role, responseId: id })
 
@@ -41,7 +54,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .eq("id", id)
       .eq("agency_id", user.id)
       .maybeSingle()
-    if (existingErr || !existing) return NextResponse.json({ error: "Response not found" }, { status: 404 })
+    if (existingErr) {
+      console.error("[api] PATCH partner_rfp_responses load failed", {
+        route,
+        responseId: id,
+        userId: user.id,
+        message: existingErr.message,
+        code: existingErr.code,
+      })
+      return NextResponse.json({ error: "Failed to load bid response" }, { status: 500 })
+    }
+    if (!existing) return NextResponse.json({ error: "Response not found" }, { status: 404 })
 
     const nextStatus = body.status ?? existing.status
     if (!ALLOWED_STATUS.has(nextStatus)) {
@@ -193,11 +216,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Failed to update bid response" }, { status: 500 })
     }
 
-    await supabase
+    const { error: inboxStatusErr } = await supabase
       .from("partner_rfp_inbox")
       .update({ status: mapResponseStatusToInboxStatus(nextStatus), updated_at: new Date().toISOString() })
       .eq("id", existing.inbox_item_id)
       .eq("agency_id", user.id)
+    if (inboxStatusErr) {
+      console.error("[api] PATCH partner_rfp_inbox status sync failed", {
+        route,
+        responseId: id,
+        inbox_item_id: existing.inbox_item_id,
+        userId: user.id,
+        nextStatus,
+        message: inboxStatusErr.message,
+        code: inboxStatusErr.code,
+      })
+      return NextResponse.json({ error: "Bid updated but inbox status sync failed." }, { status: 500 })
+    }
 
     if (awardContext) {
       const now = new Date().toISOString()
@@ -238,11 +273,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         partnershipId: awardContext.partnershipId,
       })
 
-      const { data: partner } = await supabase
+      const { data: partner, error: partnerProfileErr } = await supabase
         .from("profiles")
         .select("email, full_name, company_name")
         .eq("id", existing.partner_id)
         .maybeSingle()
+      if (partnerProfileErr) {
+        console.error("[api] bid award: partner profile select failed (email send may be skipped)", {
+          route,
+          responseId: id,
+          partnerId: existing.partner_id,
+          message: partnerProfileErr.message,
+          code: partnerProfileErr.code,
+        })
+      }
 
       const projectName =
         (awardContext.inbox.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
@@ -251,25 +295,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const leadAgencyName = profile.company_name || profile.full_name || "Lead agency"
       const resendApiKey = process.env.RESEND_API_KEY
       if (resendApiKey && partner?.email) {
-        const resend = new Resend(resendApiKey)
-        await resend.emails.send({
-          from: "Ligament <notifications@withligament.com>",
-          to: "hello@withligament.com",
-          cc: partner.email,
-          subject: "You've been awarded the project",
-          html: `
+        try {
+          const resend = new Resend(resendApiKey)
+          await resend.emails.send({
+            from: "Ligament <notifications@withligament.com>",
+            to: "hello@withligament.com",
+            cc: partner.email,
+            subject: "You've been awarded the project",
+            html: `
             <p><strong>${partnerName}</strong> has been awarded.</p>
             <p><strong>Project:</strong> ${projectName}</p>
             <p><strong>Scope Item:</strong> ${scopeItemName}</p>
             <p><strong>Lead Agency:</strong> ${leadAgencyName}</p>
             <p><a href="https://withligament.com/partner/rfps">View your RFP inbox</a></p>
           `,
-        })
+          })
+        } catch (emailErr) {
+          console.error("[api] bid award: Resend send failed (award already recorded)", {
+            route,
+            responseId: id,
+            message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+          })
+        }
       }
     }
 
     if (existing.status !== "declined" && nextStatus === "declined") {
-      const [{ data: partner }, { data: inbox }] = await Promise.all([
+      const [partnerRes, inboxRes] = await Promise.all([
         supabase.from("profiles").select("email, full_name, company_name").eq("id", existing.partner_id).maybeSingle(),
         supabase
           .from("partner_rfp_inbox")
@@ -277,6 +329,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           .eq("id", existing.inbox_item_id)
           .maybeSingle(),
       ])
+      const partner = partnerRes.data
+      const inbox = inboxRes.data
+      if (partnerRes.error) {
+        console.error("[api] decline email: partner profile select failed", {
+          route,
+          responseId: id,
+          partnerId: existing.partner_id,
+          message: partnerRes.error.message,
+          code: partnerRes.error.code,
+        })
+      }
+      if (inboxRes.error) {
+        console.error("[api] decline email: partner_rfp_inbox select failed", {
+          route,
+          responseId: id,
+          inbox_item_id: existing.inbox_item_id,
+          message: inboxRes.error.message,
+          code: inboxRes.error.code,
+        })
+      }
       const projectName =
         (inbox?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
       const scopeItemName = inbox?.scope_item_name || "Scope item"
@@ -284,13 +356,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const leadAgencyName = profile.company_name || profile.full_name || "Lead agency"
       const resendApiKey = process.env.RESEND_API_KEY
       if (resendApiKey && partner?.email) {
-        const resend = new Resend(resendApiKey)
-        await resend.emails.send({
-          from: "Ligament <notifications@withligament.com>",
-          to: partner.email,
-          cc: "hello@withligament.com",
-          subject: "Update on your bid submission",
-          html: `
+        try {
+          const resend = new Resend(resendApiKey)
+          await resend.emails.send({
+            from: "Ligament <notifications@withligament.com>",
+            to: partner.email,
+            cc: "hello@withligament.com",
+            subject: "Update on your bid submission",
+            html: `
             <p>Hi ${partnerName},</p>
             <p>There is an update on your bid submission.</p>
             <p><strong>Project:</strong> ${projectName}</p>
@@ -299,7 +372,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             ${declineReason ? `<p><strong>Reason:</strong> ${declineReason}</p>` : ""}
             <p><a href="https://withligament.com/partner/rfps">View your RFP inbox</a></p>
           `,
-        })
+          })
+        } catch (emailErr) {
+          console.error("[api] decline: Resend send failed", {
+            route,
+            responseId: id,
+            message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+          })
+        }
       }
     }
 
