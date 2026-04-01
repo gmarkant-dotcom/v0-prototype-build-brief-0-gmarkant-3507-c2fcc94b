@@ -15,7 +15,6 @@ import { useSelectedProject } from "@/contexts/selected-project-context"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2, Sparkles } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
-import { AgencyBroadcastResponsesPanel } from "@/components/agency-broadcast-responses"
 
 // Types
 type UploadMethod = "pdf" | "docx" | "pptx" | "google" | "paste" | null
@@ -31,12 +30,14 @@ type ScopeItem = {
 
 type Partner = {
   id: string
+  partnershipId?: string
   name: string
   type: "agency" | "freelancer" | "production"
   discipline: string
   bookmarked: boolean
   ndaSigned: boolean
   ndaSignedDate?: string
+  ndaConfirmedAt?: string | null
   msaApproved: boolean
   msaApprovedDate?: string
   rating?: number
@@ -57,6 +58,7 @@ type PartnershipApiRow = {
   partner_email: string | null
   invited_at: string | null
   accepted_at: string | null
+  nda_confirmed_at?: string | null
   partner: {
     id: string
     email: string
@@ -147,11 +149,16 @@ function AgencyRFPContent() {
           const sub = pr.company_name?.trim() || pr.email || "Partner"
           return {
             id: pr.id,
+            partnershipId: p.id,
             name: label,
             type: "agency",
             discipline: sub,
             bookmarked: true,
-            ndaSigned: false,
+            ndaSigned: !!p.nda_confirmed_at,
+            ndaSignedDate: p.nda_confirmed_at
+              ? new Date(p.nda_confirmed_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+              : undefined,
+            ndaConfirmedAt: p.nda_confirmed_at || null,
             msaApproved: false,
           }
         })
@@ -252,6 +259,8 @@ function AgencyRFPContent() {
   const [isBroadcasting, setIsBroadcasting] = useState(false)
   const [broadcastComplete, setBroadcastComplete] = useState(false)
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
+  const [ndaSignatureRequired, setNdaSignatureRequired] = useState(false)
+  const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
   
   // Handle client brief file: server-side text extraction only (no blob preview — private store URLs are not iframe-safe)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -592,6 +601,10 @@ function AgencyRFPContent() {
       }, 2500)
       return
     }
+    if (ndaSignatureRequired && !ndaSigningLink.trim()) {
+      setBroadcastError("Add an NDA signing link before broadcasting with NDA Signature Required.")
+      return
+    }
     setIsBroadcasting(true)
     try {
       const items = outsourcedItems.map((item) => ({
@@ -606,6 +619,8 @@ function AgencyRFPContent() {
         body: JSON.stringify({
           projectId: selectedProject?.id ?? null,
           masterRfp,
+          ndaRequired: ndaSignatureRequired,
+          ndaLink: ndaSignatureRequired ? ndaSigningLink.trim() : "",
           items,
         }),
       })
@@ -642,7 +657,14 @@ function AgencyRFPContent() {
     setSelectedPartners({})
     setNewRecipients({})
     setAdditionalContext("")
+    setNdaSignatureRequired(false)
+    setNdaSigningLink("https://www.docusign.com/")
   }
+
+  useEffect(() => {
+    // Project switch should reset local RFP workflow state to avoid stale data.
+    resetFlow()
+  }, [selectedProject?.id])
   
   const outsourcedItems = scopeItems.filter(item => item.allocation === "outsource")
   const internalItems = scopeItems.filter(item => item.allocation === "internal")
@@ -677,8 +699,6 @@ function AgencyRFPContent() {
           aiPowered
         />
 
-        <AgencyBroadcastResponsesPanel />
-        
         {/* Progress Steps */}
         <div className="flex items-center gap-1 mb-8 overflow-x-auto pb-2">
           {steps.map((step, index) => (
@@ -1666,10 +1686,10 @@ function AgencyRFPContent() {
                           <span className="font-mono text-xs text-foreground">{partner.name}</span>
                           {partner.ndaSigned ? (
                             <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success flex items-center gap-1">
-                              <Shield className="w-2.5 h-2.5" /> NDA
+                              <Shield className="w-2.5 h-2.5" /> NDA Signed {partner.ndaSignedDate ? `(${partner.ndaSignedDate})` : ""}
                             </span>
                           ) : (
-                            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Required</span>
+                            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Pending</span>
                           )}
                           <button 
                             onClick={() => togglePartner(item.id, partnerId)}
@@ -1759,9 +1779,11 @@ function AgencyRFPContent() {
                               </div>
                               <div className="flex flex-col items-end gap-1 shrink-0">
                                 {partner.ndaSigned ? (
-                                  <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success">NDA ✓</span>
+                                  <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success">
+                                    NDA Signed {partner.ndaSignedDate ? partner.ndaSignedDate : "✓"}
+                                  </span>
                                 ) : (
-                                  <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">No NDA</span>
+                                  <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Pending</span>
                                 )}
                                 {partner.msaApproved ? (
                                   <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success">MSA ✓</span>
@@ -1889,6 +1911,33 @@ function AgencyRFPContent() {
                   </div>
                 ))}
               </div>
+
+              <div className="mt-6 p-4 rounded-lg border border-border bg-white/5 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    checked={ndaSignatureRequired}
+                    onCheckedChange={(v) => setNdaSignatureRequired(v === true)}
+                    className="border-border"
+                  />
+                  <span className="font-mono text-xs text-foreground">NDA Signature Required</span>
+                </label>
+                {ndaSignatureRequired && (
+                  <div className="space-y-2">
+                    <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                      NDA signing link
+                    </label>
+                    <Input
+                      value={ndaSigningLink}
+                      onChange={(e) => setNdaSigningLink(e.target.value)}
+                      placeholder="https://www.docusign.com/"
+                      className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                    />
+                    <p className="font-mono text-[10px] text-foreground-muted">
+                      Recipients without confirmed NDA will get this link in their broadcast email.
+                    </p>
+                  </div>
+                )}
+              </div>
               
               {/* Summary Stats */}
               <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-border">
@@ -1910,14 +1959,14 @@ function AgencyRFPContent() {
                 </div>
                 <div className="text-center">
                   <div className="font-display font-bold text-2xl text-warning">
-                    {getTotalNewWithNda() + getTotalExistingWithoutNda()}
+                    {ndaSignatureRequired ? getTotalNewWithNda() + getTotalExistingWithoutNda() : 0}
                   </div>
                   <div className="font-mono text-[10px] text-foreground-muted">NDAs Required</div>
                 </div>
               </div>
             </GlassCard>
             
-            {(getTotalNewWithNda() + getTotalExistingWithoutNda()) > 0 && (
+            {ndaSignatureRequired && (getTotalNewWithNda() + getTotalExistingWithoutNda()) > 0 && (
               <GlassCard className="border-warning/30 bg-warning/5">
                 <div className="flex items-start gap-3">
                   <Shield className="w-5 h-5 text-warning shrink-0 mt-0.5" />

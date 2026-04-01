@@ -471,10 +471,10 @@ export async function PATCH(request: NextRequest) {
     }
     console.log('[api] start', { route, method: 'PATCH', userId: user.id, role: null })
 
-    const { partnershipId, status } = await request.json()
+    const { partnershipId, status, action } = await request.json()
 
-    if (!partnershipId || !status) {
-      return NextResponse.json({ error: 'Partnership ID and status required' }, { status: 400 })
+    if (!partnershipId) {
+      return NextResponse.json({ error: 'Partnership ID required' }, { status: 400 })
     }
 
     if (!['active', 'suspended', 'terminated'].includes(status)) {
@@ -499,6 +499,29 @@ export async function PATCH(request: NextRequest) {
     
     if (!isAgency && !isPartner) {
       return NextResponse.json({ error: 'Access denied - you are not part of this partnership' }, { status: 403 })
+    }
+
+    if (action === 'confirm_nda') {
+      if (!isAgency) {
+        return NextResponse.json({ error: 'Only agencies can confirm NDA status' }, { status: 403 })
+      }
+      const { data: updated, error } = await supabase
+        .from('partnerships')
+        .update({
+          nda_confirmed_at: new Date().toISOString(),
+          nda_confirmed_by: user.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', partnershipId)
+        .eq('agency_id', user.id)
+        .select()
+        .single()
+      if (error) throw error
+      return NextResponse.json({ partnership: updated })
+    }
+
+    if (!status) {
+      return NextResponse.json({ error: 'Status required' }, { status: 400 })
     }
 
     // Partner responding to invitation (accept or decline)

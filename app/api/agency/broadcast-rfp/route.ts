@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { Resend } from "resend"
 
 type ScopeItemPayload = {
   id: string
@@ -41,6 +42,11 @@ export async function POST(request: NextRequest) {
     const projectId =
       typeof body.projectId === "string" && body.projectId.length > 0 ? body.projectId : null
     const masterRfp = body.masterRfp
+    const ndaRequired = body.ndaRequired === true
+    const ndaLink =
+      typeof body.ndaLink === "string" && body.ndaLink.trim().length > 0
+        ? body.ndaLink.trim()
+        : "https://www.docusign.com/"
     const items = (Array.isArray(body.items) ? body.items : []) as BroadcastItem[]
 
     if (!masterRfp || typeof masterRfp !== "object") {
@@ -70,7 +76,7 @@ export async function POST(request: NextRequest) {
 
         const { data: partnership, error: pErr } = await supabase
           .from("partnerships")
-          .select("id")
+          .select("id, nda_confirmed_at, partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)")
           .eq("agency_id", user.id)
           .eq("partner_id", partnerId)
           .eq("status", "active")
@@ -106,6 +112,39 @@ export async function POST(request: NextRequest) {
           agency_company_name: agencyDisplay,
           status: "new",
         })
+
+        if (ndaRequired) {
+          const partnerEmail = partnership?.partner?.email || ""
+          const partnerName =
+            partnership?.partner?.company_name || partnership?.partner?.full_name || partnerEmail || "Partner"
+          const needsNda = !partnership?.nda_confirmed_at
+          if (needsNda && partnerEmail) {
+            const resendApiKey = process.env.RESEND_API_KEY
+            if (resendApiKey) {
+              const resend = new Resend(resendApiKey)
+              await resend.emails.send({
+                from: "Ligament <notifications@withligament.com>",
+                to: partnerEmail,
+                subject: `${agencyDisplay} shared an RFP with NDA required`,
+                html: `
+                  <p style="font-family:system-ui,sans-serif">Hi ${partnerName},</p>
+                  <p style="font-family:system-ui,sans-serif">
+                    <strong>${agencyDisplay}</strong> shared an RFP item with you: <strong>${scopeItemName}</strong>.
+                  </p>
+                  <p style="font-family:system-ui,sans-serif">
+                    Please sign the NDA before reviewing the RFP details.
+                  </p>
+                  <p style="font-family:system-ui,sans-serif">
+                    <a href="${ndaLink}" style="font-weight:700;color:#0C3535">Sign NDA</a>
+                  </p>
+                  <p style="font-family:system-ui,sans-serif">
+                    After signing, open your inbox on Ligament.
+                  </p>
+                `,
+              })
+            }
+          }
+        }
       }
 
       for (const nr of item.newRecipients || []) {
@@ -126,6 +165,30 @@ export async function POST(request: NextRequest) {
           agency_company_name: agencyDisplay,
           status: "new",
         })
+
+        if (ndaRequired && nr?.requireNda) {
+          const resendApiKey = process.env.RESEND_API_KEY
+          if (resendApiKey) {
+            const resend = new Resend(resendApiKey)
+            await resend.emails.send({
+              from: "Ligament <notifications@withligament.com>",
+              to: email,
+              subject: `${agencyDisplay} shared an RFP with NDA required`,
+              html: `
+                <p style="font-family:system-ui,sans-serif">Hi ${nr?.name || "there"},</p>
+                <p style="font-family:system-ui,sans-serif">
+                  <strong>${agencyDisplay}</strong> shared an RFP item with you: <strong>${scopeItemName}</strong>.
+                </p>
+                <p style="font-family:system-ui,sans-serif">
+                  Please sign the NDA before reviewing the RFP details.
+                </p>
+                <p style="font-family:system-ui,sans-serif">
+                  <a href="${ndaLink}" style="font-weight:700;color:#0C3535">Sign NDA</a>
+                </p>
+              `,
+            })
+          }
+        }
       }
     }
 

@@ -27,6 +27,8 @@ type Partnership = {
   status: "pending" | "active" | "suspended" | "terminated"
   invitedAt: string
   acceptedAt?: string
+  ndaConfirmedAt?: string | null
+  ndaConfirmedBy?: string | null
   invitationMessage?: string
 }
 
@@ -110,6 +112,7 @@ export default function PartnerPoolPage() {
   // Access requests state (partners requesting to join)
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([])
   const [processingRequest, setProcessingRequest] = useState<string | null>(null)
+  const [confirmingNdaFor, setConfirmingNdaFor] = useState<string | null>(null)
   
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -179,6 +182,8 @@ export default function PartnerPoolPage() {
           status: p.status,
           invitedAt: p.invited_at || p.created_at,
           acceptedAt: p.accepted_at,
+          ndaConfirmedAt: p.nda_confirmed_at || null,
+          ndaConfirmedBy: p.nda_confirmed_by || null,
           invitationMessage: p.invitation_message,
         }))
         setPartnerships(loaded)
@@ -311,6 +316,29 @@ export default function PartnerPoolPage() {
       console.error('Error declining request:', error)
     }
     setProcessingRequest(null)
+  }
+
+  const handleConfirmNdaSigned = async (partnershipId: string) => {
+    if (!checkFeatureAccess("nda confirm")) return
+    if (isDemo) return
+    setConfirmingNdaFor(partnershipId)
+    try {
+      const response = await fetch('/api/partnerships', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnershipId, action: 'confirm_nda' }),
+      })
+      if (response.ok) {
+        await loadPartnerships()
+      } else {
+        const data = await response.json().catch(() => ({}))
+        alert((data?.error as string) || 'Failed to confirm NDA')
+      }
+    } catch (error) {
+      console.error('Error confirming NDA:', error)
+    } finally {
+      setConfirmingNdaFor(null)
+    }
   }
 
   const updatePartners = (newPartners: Partner[]) => {
@@ -650,9 +678,37 @@ export default function PartnerPoolPage() {
                       <div className="font-mono text-[10px] text-foreground-muted">
                         Active since {new Date(isDemo ? (item as PartnerInvitation).acceptedAt || '' : (item as Partnership).acceptedAt || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </div>
+                      {!isDemo && (
+                        <div className="font-mono text-[10px] mt-1">
+                          {(item as Partnership).ndaConfirmedAt ? (
+                            <span className="text-green-400">
+                              NDA Signed {new Date((item as Partnership).ndaConfirmedAt || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          ) : (
+                            <span className="text-amber-300">NDA Pending</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-green-500/10 text-green-400">Active</span>
+                  <div className="flex items-center gap-2">
+                    {!isDemo && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!!(item as Partnership).ndaConfirmedAt || confirmingNdaFor === item.id}
+                        onClick={() => handleConfirmNdaSigned(item.id)}
+                        className="h-7 border-green-500/40 text-green-300 hover:bg-green-500/10"
+                      >
+                        {confirmingNdaFor === item.id
+                          ? 'Saving...'
+                          : (item as Partnership).ndaConfirmedAt
+                          ? 'NDA Confirmed'
+                          : 'Confirm NDA Signed'}
+                      </Button>
+                    )}
+                    <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-green-500/10 text-green-400">Active</span>
+                  </div>
                 </div>
               ))}
             </div>
