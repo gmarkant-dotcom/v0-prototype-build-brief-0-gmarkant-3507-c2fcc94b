@@ -66,6 +66,121 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body.agency_feedback !== undefined || declineReason) patch.feedback_updated_at = new Date().toISOString()
     if (existing.status !== nextStatus) patch.feedback_updated_at = new Date().toISOString()
 
+    /**
+     * Award requires a project_assignment row keyed by (project_id, partnership_id) from partner_rfp_inbox.
+     * partner_rfp_responses links to inbox only via inbox_item_id → partner_rfp_inbox.id (there is no inbox_id on responses).
+     */
+    type AwardContext = {
+      inbox: {
+        id: string
+        scope_item_name: string | null
+        master_rfp_json: unknown
+      }
+      projectId: string
+      partnershipId: string
+    }
+    let awardContext: AwardContext | null = null
+
+    if (existing.status !== "awarded" && nextStatus === "awarded") {
+      const { data: inboxRow, error: inboxFetchErr } = await supabase
+        .from("partner_rfp_inbox")
+        .select("id, project_id, partner_id, partnership_id, scope_item_name, master_rfp_json")
+        .eq("id", existing.inbox_item_id)
+        .eq("agency_id", user.id)
+        .maybeSingle()
+
+      if (inboxFetchErr) {
+        console.error("[api] bid award: failed to load partner_rfp_inbox (join key: partner_rfp_responses.inbox_item_id)", {
+          route,
+          responseId: id,
+          inbox_item_id: existing.inbox_item_id,
+          message: inboxFetchErr.message,
+          code: inboxFetchErr.code,
+        })
+        return NextResponse.json({ error: "Failed to load broadcast inbox for award." }, { status: 500 })
+      }
+      if (!inboxRow) {
+        console.error("[api] bid award: partner_rfp_inbox row not found for inbox_item_id", {
+          route,
+          responseId: id,
+          inbox_item_id: existing.inbox_item_id,
+        })
+        return NextResponse.json({ error: "Broadcast inbox row not found for this response." }, { status: 500 })
+      }
+
+      const projectId = inboxRow.project_id as string | null
+      if (!projectId) {
+        console.error("[api] bid award: partner_rfp_inbox.project_id is null — refusing award (project_assignments requires project_id)", {
+          route,
+          responseId: id,
+          inbox_item_id: existing.inbox_item_id,
+          inboxId: inboxRow.id,
+        })
+        return NextResponse.json(
+          {
+            error:
+              "Cannot award this bid: the broadcast inbox is not linked to a project. Send this RFP from a project context so inbox.project_id is set.",
+          },
+          { status: 500 }
+        )
+      }
+
+      let partnershipId = inboxRow.partnership_id as string | null
+      const partnerIdForResolution = (inboxRow.partner_id as string | null) || existing.partner_id
+      if (!partnershipId && partnerIdForResolution) {
+        const { data: rel, error: relErr } = await supabase
+          .from("partnerships")
+          .select("id")
+          .eq("agency_id", user.id)
+          .eq("partner_id", partnerIdForResolution)
+          .eq("status", "active")
+          .maybeSingle()
+        if (relErr) {
+          console.error("[api] bid award: active partnership lookup failed", {
+            route,
+            responseId: id,
+            partnerId: partnerIdForResolution,
+            message: relErr.message,
+            code: relErr.code,
+          })
+          return NextResponse.json({ error: "Failed to resolve partnership for award." }, { status: 500 })
+        }
+        partnershipId = rel?.id ?? null
+      }
+
+      if (!partnershipId) {
+        console.error(
+          "[api] bid award: partnership_id unresolved — inbox.partnership_id null and no active partnerships row for partner (project_assignments requires partnership_id)",
+          {
+            route,
+            responseId: id,
+            inbox_item_id: existing.inbox_item_id,
+            inboxId: inboxRow.id,
+            projectId,
+            inboxPartnershipId: inboxRow.partnership_id,
+            partnerIdForResolution,
+          }
+        )
+        return NextResponse.json(
+          {
+            error:
+              "Cannot award this bid: no partnership is linked to this broadcast and no active agency–partner relationship was found.",
+          },
+          { status: 500 }
+        )
+      }
+
+      awardContext = {
+        inbox: {
+          id: inboxRow.id as string,
+          scope_item_name: inboxRow.scope_item_name as string | null,
+          master_rfp_json: inboxRow.master_rfp_json,
+        },
+        projectId,
+        partnershipId,
+      }
+    }
+
     const { data: updated, error: updateErr } = await supabase
       .from("partner_rfp_responses")
       .update(patch)
@@ -84,117 +199,44 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .eq("id", existing.inbox_item_id)
       .eq("agency_id", user.id)
 
-    if (existing.status !== "awarded" && nextStatus === "awarded") {
-      const { data: inbox } = await supabase
-        .from("partner_rfp_inbox")
-        .select("id, project_id, partner_id, partnership_id, scope_item_name, master_rfp_json")
-        .eq("id", existing.inbox_item_id)
-        .eq("agency_id", user.id)
-        .maybeSingle()
+    if (awardContext) {
+      const now = new Date().toISOString()
+      // UNIQUE(project_id, partnership_id) — upsert sets status to awarded (allowed by project_assignments_status_check).
+      const { error: paErr } = await supabase.from("project_assignments").upsert(
+        {
+          project_id: awardContext.projectId,
+          partnership_id: awardContext.partnershipId,
+          status: "awarded",
+          awarded_at: now,
+          updated_at: now,
+        },
+        { onConflict: "project_id,partnership_id" }
+      )
 
-      if (inbox?.project_id) {
-        let resolvedPartnershipId = inbox.partnership_id as string | null
-        const partnerIdForResolution = (inbox.partner_id as string | null) || (existing.partner_id as string | null)
-        if (!resolvedPartnershipId && partnerIdForResolution) {
-          const { data: rel } = await supabase
-            .from("partnerships")
-            .select("id")
-            .eq("agency_id", user.id)
-            .eq("partner_id", partnerIdForResolution)
-            .eq("status", "active")
-            .maybeSingle()
-          resolvedPartnershipId = rel?.id ?? null
-        }
-
-        if (resolvedPartnershipId) {
-          const { data: currentPa } = await supabase
-            .from("project_assignments")
-            .select("id, status")
-            .eq("project_id", inbox.project_id)
-            .eq("partnership_id", resolvedPartnershipId)
-            .maybeSingle()
-
-          const now = new Date().toISOString()
-
-          if (!currentPa) {
-            const { data: created, error: createErr } = await supabase
-              .from("project_assignments")
-              .insert({
-                project_id: inbox.project_id,
-                partnership_id: resolvedPartnershipId,
-                status: "awarded",
-                awarded_at: now,
-                updated_at: now,
-              })
-              .select("id")
-              .single()
-
-            if (createErr) {
-              console.error("[api] bid award project_assignment insert failed", {
-                route,
-                responseId: id,
-                inboxId: inbox.id,
-                projectId: inbox.project_id,
-                partnershipId: resolvedPartnershipId,
-                message: createErr.message,
-                code: createErr.code,
-              })
-            } else {
-              console.log("[api] bid award: created project_assignment", {
-                route,
-                responseId: id,
-                assignmentId: created?.id,
-                projectId: inbox.project_id,
-                partnershipId: resolvedPartnershipId,
-              })
-            }
-          } else if (currentPa.status !== "awarded") {
-            const { error: upErr } = await supabase
-              .from("project_assignments")
-              .update({ status: "awarded", awarded_at: now, updated_at: now })
-              .eq("id", currentPa.id)
-
-            if (upErr) {
-              console.error("[api] bid award project_assignment update failed", {
-                route,
-                responseId: id,
-                assignmentId: currentPa.id,
-                message: upErr.message,
-                code: upErr.code,
-              })
-            } else {
-              console.log("[api] bid award: updated project_assignment to awarded", {
-                route,
-                responseId: id,
-                assignmentId: currentPa.id,
-                projectId: inbox.project_id,
-                partnershipId: resolvedPartnershipId,
-                previousStatus: currentPa.status,
-              })
-            }
-          } else {
-            console.log("[api] bid award: project_assignment already awarded — skipping", {
-              route,
-              responseId: id,
-              assignmentId: currentPa.id,
-              projectId: inbox.project_id,
-            })
-          }
-        } else {
-          console.warn("[api] bid award: could not resolve partnership for project_assignment", {
-            route,
-            responseId: id,
-            inboxId: inbox.id,
-            partnerId: partnerIdForResolution,
-          })
-        }
-      } else {
-        console.warn("[api] bid award: inbox missing project_id — skip project_assignment", {
+      if (paErr) {
+        console.error("[api] bid award: project_assignments upsert failed (onConflict project_id,partnership_id)", {
           route,
           responseId: id,
-          inboxId: existing.inbox_item_id,
+          projectId: awardContext.projectId,
+          partnershipId: awardContext.partnershipId,
+          message: paErr.message,
+          code: paErr.code,
         })
+        return NextResponse.json(
+          {
+            error:
+              "Bid status was updated but recording the project assignment failed. Retry the award or fix the assignment row; check server logs.",
+          },
+          { status: 500 }
+        )
       }
+
+      console.log("[api] bid award: project_assignments upsert ok", {
+        route,
+        responseId: id,
+        projectId: awardContext.projectId,
+        partnershipId: awardContext.partnershipId,
+      })
 
       const { data: partner } = await supabase
         .from("profiles")
@@ -203,8 +245,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         .maybeSingle()
 
       const projectName =
-        (inbox?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
-      const scopeItemName = inbox?.scope_item_name || "Scope item"
+        (awardContext.inbox.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
+      const scopeItemName = awardContext.inbox.scope_item_name || "Scope item"
       const partnerName = partner?.company_name || partner?.full_name || partner?.email || "Partner"
       const leadAgencyName = profile.company_name || profile.full_name || "Lead agency"
       const resendApiKey = process.env.RESEND_API_KEY

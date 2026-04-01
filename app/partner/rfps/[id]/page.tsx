@@ -459,20 +459,6 @@ export default function PartnerRfpDetailPage() {
     return true
   }, [isDemoDetail, router])
 
-  useEffect(() => {
-    const submittedNow = existing?.status === "submitted" || inbox?.status === "bid_submitted"
-    const canEditNow = !submittedNow || isDemoDetail
-    console.log("[partner/rfps/detail] trace state", {
-      savingKind,
-      canEdit: canEditNow,
-      submitted: submittedNow,
-      inboxStatus: inbox?.status,
-      responseStatus: existing?.status,
-      isDemoDetail,
-      id,
-    })
-  }, [savingKind, existing, inbox, isDemoDetail, id])
-
   /** Must run before any early return — same hook order on loading vs loaded. */
   useEffect(() => {
     if (loading || !inbox) return
@@ -485,15 +471,9 @@ export default function PartnerRfpDetailPage() {
   }, [loading, inbox, existing?.agency_feedback, existing?.status, inbox?.status])
 
   const save = async (status: "draft" | "submitted") => {
-    console.log("[partner/rfps/detail] save() entered", {
-      status,
-      isDemoDetail,
-      savingKindBefore: savingKind,
-    })
     setSubmitError(null)
     setSuccessMsg(null)
     if (isDemoDetail) {
-      console.log("[partner/rfps/detail] save() exit: demo detail (no network)")
       setSuccessMsg(status === "submitted" ? "Demo mode — response not saved." : "Demo mode — draft not saved.")
       return
     }
@@ -514,25 +494,21 @@ export default function PartnerRfpDetailPage() {
 
     if (status === "submitted") {
       if (!proposalText.trim()) {
-        console.log("[partner/rfps/detail] save() exit: validation proposal")
         setSubmitError("Proposal text is required to submit.")
         return
       }
       if (!isBudgetValidForSubmit(budget_proposal)) {
-        console.log("[partner/rfps/detail] save() exit: validation budget", { budget_proposal })
         setSubmitError(
           "Budget: enter a positive amount, choose a currency, and if you pick Other, specify the currency or region."
         )
         return
       }
       if (!isTimelineValidForSubmit(timeline_proposal)) {
-        console.log("[partner/rfps/detail] save() exit: validation timeline", { timeline_proposal })
         setSubmitError("Timeline: enter a positive duration and choose Days, Weeks, or Months.")
         return
       }
     }
 
-    console.log("[partner/rfps/detail] save() calling fetch…", { id, status })
     setSavingKind(status)
     try {
       const attachments = draftsToPayload(draftAttachments)
@@ -597,13 +573,8 @@ export default function PartnerRfpDetailPage() {
   }
 
   const onFileForDraft = async (draftId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("[partner/rfps/detail] onFileForDraft() entered", {
-      draftId,
-      fileCount: e.target.files?.length ?? 0,
-    })
     const file = e.target.files?.[0]
     if (!file) {
-      console.log("[partner/rfps/detail] onFileForDraft() exit: no file")
       return
     }
     const authOk = await ensurePartnerAuth()
@@ -611,7 +582,6 @@ export default function PartnerRfpDetailPage() {
     setUploadingId(draftId)
     setSubmitError(null)
     try {
-      console.log("[partner/rfps/detail] onFileForDraft fetch POST /api/partner/rfp-bid/upload", { draftId, inboxId: id })
       const fd = new FormData()
       fd.append("file", file)
       fd.append("inboxId", id)
@@ -853,7 +823,6 @@ export default function PartnerRfpDetailPage() {
                         const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
                         const budgetObj = parseVersionBudgetFields(v.budget_proposal)
                         const timelineObj = parseVersionTimelineFields(v.timeline_proposal)
-                        console.log("[partner/rfps/detail] version card render", { id: v.id, budget_proposal: v.budget_proposal, budgetObj, timelineObj })
                         return (
                           <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                             <div className="flex items-center justify-between gap-3">
@@ -1041,10 +1010,7 @@ export default function PartnerRfpDetailPage() {
                     size="sm"
                     className={btnOutlineLight}
                     disabled={draftAttachments.length >= 6}
-                    onClick={() => {
-                      console.log("[partner/rfps/detail] click: Add attachment button")
-                      addDraft()
-                    }}
+                    onClick={() => addDraft()}
                   >
                     <Plus className="w-4 h-4 mr-1" />
                     Add attachment
@@ -1089,10 +1055,7 @@ export default function PartnerRfpDetailPage() {
                       {canEdit && (
                         <button
                           type="button"
-                          onClick={() => {
-                            console.log("[partner/rfps/detail] click: Remove row", d.id)
-                            removeDraft(d.id)
-                          }}
+                          onClick={() => removeDraft(d.id)}
                           className="text-gray-500 hover:text-red-600 p-1"
                           aria-label="Remove attachment"
                         >
@@ -1105,7 +1068,6 @@ export default function PartnerRfpDetailPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          console.log("[partner/rfps/detail] click: Paste URL mode", d.id)
                           updateDraft(d.id, {
                             source: "url",
                             fileName: null,
@@ -1126,7 +1088,6 @@ export default function PartnerRfpDetailPage() {
                       <button
                         type="button"
                         onClick={() => {
-                          console.log("[partner/rfps/detail] click: Upload file mode toggle", d.id)
                           updateDraft(d.id, { source: "file", urlInput: "", storedUrl: null })
                         }}
                         disabled={!canEdit}
@@ -1178,11 +1139,6 @@ export default function PartnerRfpDetailPage() {
                               typeof document !== "undefined"
                                 ? (document.getElementById(`partner-rfp-file-${d.id}`) as HTMLInputElement | null)
                                 : null
-                            console.log("[partner/rfps/detail] click: Choose file", {
-                              draftId: d.id,
-                              hasRef: !!refEl,
-                              hasById: !!byId,
-                            })
                             ;(refEl ?? byId)?.click()
                           }}
                         >
@@ -1292,7 +1248,6 @@ export default function PartnerRfpDetailPage() {
                 className={btnOutlineLight}
                 disabled={savingKind !== null}
                 onClick={() => {
-                  console.log("[partner/rfps/detail] click: Save draft", { disabled: savingKind !== null })
                   void save("draft")
                 }}
               >
@@ -1311,7 +1266,6 @@ export default function PartnerRfpDetailPage() {
                 className={btnPrimaryDark}
                 disabled={savingKind !== null}
                 onClick={() => {
-                  console.log("[partner/rfps/detail] click: Submit response", { disabled: savingKind !== null })
                   void save("submitted")
                 }}
               >
