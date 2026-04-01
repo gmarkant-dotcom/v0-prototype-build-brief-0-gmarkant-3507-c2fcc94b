@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useCallback, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
@@ -70,17 +70,43 @@ function PartnerActiveEngagementInner() {
   const [formBudget, setFormBudget] = useState<string>("on_budget")
   const [formPct, setFormPct] = useState<number>(50)
   const [formNotes, setFormNotes] = useState("")
+  const [statusUpdatesAll, setStatusUpdatesAll] = useState<StatusUpdateRow[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyCardOpen, setHistoryCardOpen] = useState<Record<string, boolean>>({})
+
+  const previousStatusUpdates = useMemo(() => statusUpdatesAll.slice(1), [statusUpdatesAll])
 
   const refreshStatus = useCallback(async () => {
     if (isDemo) {
-      setLatestStatus({
-        id: "demo-su",
-        status: "on_track",
-        budget_status: "on_budget",
-        completion_pct: 62,
-        notes: "All deliverables on schedule for this week.",
-        created_at: new Date().toISOString(),
-      })
+      const t = Date.now()
+      const list: StatusUpdateRow[] = [
+        {
+          id: "demo-su",
+          status: "on_track",
+          budget_status: "on_budget",
+          completion_pct: 62,
+          notes: "All deliverables on schedule for this week.",
+          created_at: new Date(t).toISOString(),
+        },
+        {
+          id: "demo-su-prev-1",
+          status: "at_risk",
+          budget_status: "incremental_needed",
+          completion_pct: 48,
+          notes: "Waiting on client feedback before locking the cut list.",
+          created_at: new Date(t - 3 * 86400000).toISOString(),
+        },
+        {
+          id: "demo-su-prev-2",
+          status: "on_track",
+          budget_status: "on_budget",
+          completion_pct: 35,
+          notes: "Kickoff complete; production calendar shared with lead agency.",
+          created_at: new Date(t - 10 * 86400000).toISOString(),
+        },
+      ]
+      setStatusUpdatesAll(list)
+      setLatestStatus(list[0] ?? null)
       return
     }
     setStatusLoading(true)
@@ -88,7 +114,9 @@ function PartnerActiveEngagementInner() {
       const res = await fetch(`/api/partner/projects/${projectId}/status-update`, { credentials: "same-origin" })
       const json = await res.json().catch(() => ({}))
       if (res.ok) {
-        setLatestStatus((json as { latest?: StatusUpdateRow | null }).latest ?? null)
+        const payload = json as { latest?: StatusUpdateRow | null; updates?: StatusUpdateRow[] }
+        setLatestStatus(payload.latest ?? null)
+        setStatusUpdatesAll(Array.isArray(payload.updates) ? payload.updates : [])
       }
     } finally {
       setStatusLoading(false)
@@ -312,19 +340,105 @@ function PartnerActiveEngagementInner() {
                 <p className="text-sm text-gray-500 mb-6">No status updates yet. Submit your first update below.</p>
               )}
 
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-6">
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-between gap-3 text-left"
+                  onClick={() => setHistoryOpen((prev) => !prev)}
+                >
+                  <h3 className="font-display font-bold text-lg text-[#0C3535]">Update history</h3>
+                  <span className="text-sm text-gray-600 shrink-0">{historyOpen ? "Hide" : "Show"}</span>
+                </button>
+                {historyOpen && (
+                  <div className="mt-4 space-y-3">
+                    {statusLoading ? (
+                      <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading history…
+                      </div>
+                    ) : previousStatusUpdates.length === 0 ? (
+                      <p className="text-sm text-gray-600">No earlier updates. New submissions will appear here.</p>
+                    ) : (
+                      previousStatusUpdates.map((u) => {
+                        const cardOpen = historyCardOpen[u.id] ?? false
+                        return (
+                          <div key={u.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                            <button
+                              type="button"
+                              className="w-full flex items-start justify-between gap-3 text-left"
+                              onClick={() =>
+                                setHistoryCardOpen((prev) => ({
+                                  ...prev,
+                                  [u.id]: !(prev[u.id] ?? false),
+                                }))
+                              }
+                            >
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-[#0C3535]/10 text-[#0C3535] font-medium">
+                                    {workflowStatusLabel(u.status)}
+                                  </span>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
+                                    {budgetStatusLabel(u.budget_status)}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-gray-600">{u.completion_pct}%</span>
+                                </div>
+                                <div className="font-mono text-[10px] text-gray-500">
+                                  {new Date(u.created_at).toLocaleString()}
+                                </div>
+                                {!cardOpen && (
+                                  <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap">
+                                    {(u.notes || "").trim() || "—"}
+                                  </p>
+                                )}
+                              </div>
+                              <span className="text-sm text-gray-600 shrink-0">{cardOpen ? "Hide" : "Show"}</span>
+                            </button>
+                            {cardOpen && (
+                              <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
+                                <div>
+                                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>Completion</span>
+                                    <span>{u.completion_pct}%</span>
+                                  </div>
+                                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                                    <div
+                                      className="h-full bg-[#0C3535]/80 rounded-full"
+                                      style={{ width: `${u.completion_pct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="font-mono text-[10px] uppercase text-gray-500 mb-1">Notes</div>
+                                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                    {(u.notes || "").trim() || "—"}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
               <form
                 className="space-y-4"
                 onSubmit={async (e) => {
                   e.preventDefault()
                   if (isDemo) {
-                    setLatestStatus({
-                      id: "demo-new",
+                    const created: StatusUpdateRow = {
+                      id: `demo-new-${Date.now()}`,
                       status: formStatus,
                       budget_status: formBudget,
                       completion_pct: formPct,
                       notes: formNotes.trim() || null,
                       created_at: new Date().toISOString(),
-                    })
+                    }
+                    setStatusUpdatesAll((prev) => [created, ...prev])
+                    setLatestStatus(created)
                     setFormNotes("")
                     return
                   }
@@ -348,8 +462,10 @@ function PartnerActiveEngagementInner() {
                       return
                     }
                     const created = (json as { update?: StatusUpdateRow }).update
-                    if (created) setLatestStatus(created)
-                    else await refreshStatus()
+                    if (created) {
+                      setLatestStatus(created)
+                      setStatusUpdatesAll((prev) => [created, ...prev.filter((r) => r.id !== created.id)])
+                    } else await refreshStatus()
                     setFormNotes("")
                   } catch {
                     setStatusError("Save failed")

@@ -69,24 +69,24 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     const { data: partnerships } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)
     const partnershipIds = (partnerships || []).map((p) => p.id as string)
     if (partnershipIds.length === 0) {
-      return NextResponse.json({ latest: null }, { headers: noStoreHeaders })
+      return NextResponse.json({ latest: null, updates: [] }, { headers: noStoreHeaders })
     }
 
-    const { data: row, error } = await supabase
+    const { data: rows, error } = await supabase
       .from("partner_status_updates")
       .select("*")
       .eq("project_id", projectId)
       .in("partnership_id", partnershipIds)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
 
     if (error) {
       console.error("[partner/status-update] GET", { message: error.message, code: error.code })
       return NextResponse.json({ error: "Failed to load status" }, { status: 500, headers: noStoreHeaders })
     }
 
-    return NextResponse.json({ latest: row }, { headers: noStoreHeaders })
+    const list = rows ?? []
+    const latest = list[0] ?? null
+    return NextResponse.json({ latest, updates: list }, { headers: noStoreHeaders })
   } catch (e) {
     console.error("[partner/status-update] GET unhandled", e)
     return NextResponse.json({ error: "Failed" }, { status: 500, headers: noStoreHeaders })
