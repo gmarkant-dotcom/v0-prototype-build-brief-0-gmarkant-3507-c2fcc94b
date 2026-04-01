@@ -6,7 +6,6 @@ import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
-import { EmptyState } from "@/components/empty-state"
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
 import {
   AlertTriangle,
@@ -22,6 +21,7 @@ import {
   Send,
   Users,
   FolderOpen,
+  Briefcase,
 } from "lucide-react"
 
 // Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
@@ -222,7 +222,17 @@ export default function PartnerDashboardPage() {
               </p>
             </div>
           </div>
-          <EmptyState type="projects" />
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center max-w-xl">
+            <Briefcase className="w-12 h-12 mx-auto mb-4 text-gray-300" aria-hidden />
+            <h3 className="font-display font-bold text-xl text-[#0C3535] mb-2">No active projects yet</h3>
+            <p className="text-gray-600">
+              You don&apos;t have any active projects yet. Open RFPs from your lead agency partners will appear in
+              your Open RFPs inbox.
+            </p>
+            <Button asChild variant="outline" className="mt-6 border-[#0C3535]/30 text-[#0C3535] hover:bg-[#0C3535]/5">
+              <Link href="/partner/rfps">Go to Open RFPs</Link>
+            </Button>
+          </div>
         </div>
       </PartnerLayout>
     )

@@ -33,20 +33,38 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ packages: [], error: error.message }, { status: 500 })
     }
 
-    const projectIds = [...new Set((packages || []).map((p) => p.project_id as string))]
+    const projectIds = [
+      ...new Set(
+        (packages || [])
+          .map((p) => p.project_id as string | null | undefined)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ]
     const agencyIds = [...new Set((packages || []).map((p) => p.agency_id as string))]
     const projectMap: Record<string, { name: string | null; client_name: string | null }> = {}
     const agencyMap: Record<string, { company_name: string | null; full_name: string | null }> = {}
 
     if (projectIds.length > 0) {
-      const { data: projects } = await supabase
+      const { data: projects, error: projectsError } = await supabase
         .from("projects")
         .select("id, name, client_name")
         .in("id", projectIds)
+      console.log("[partner/onboarding-packages] projects lookup raw result", {
+        projectIds,
+        data: projects,
+        error: projectsError,
+        rowCount: projects?.length ?? 0,
+      })
       for (const pr of projects || []) {
         const row = pr as { id: string; name: string | null; client_name: string | null }
         projectMap[row.id] = { name: row.name, client_name: row.client_name }
       }
+    } else {
+      console.log("[partner/onboarding-packages] projects lookup skipped", {
+        projectIds,
+        packageProjectIdsRaw: (packages || []).map((p) => p.project_id),
+        reason: "no valid project_id on packages",
+      })
     }
     if (agencyIds.length > 0) {
       const { data: agencies } = await supabase
