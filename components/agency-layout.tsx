@@ -26,7 +26,7 @@ const navSections = [
       { number: "01", title: "RFP Broadcast", aiPowered: true, href: "/agency" },
       { number: "02", title: "Bid Management", aiPowered: true, href: "/agency/bids" },
       { number: "03", title: "Onboarding", aiPowered: false, href: "/agency/onboarding" },
-      { number: "04", title: "Project Hub", aiPowered: false, href: "/agency/project" },
+      { number: "04", title: "Active Engagements", aiPowered: false, href: "/agency/project" },
       { number: "05", title: "Utilization", aiPowered: true, href: "/agency/utilization" },
       { number: "06", title: "MSA + Payments", aiPowered: true, href: "/agency/payments" },
     ]
