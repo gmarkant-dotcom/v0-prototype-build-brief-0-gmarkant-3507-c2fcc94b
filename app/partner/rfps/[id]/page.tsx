@@ -14,8 +14,6 @@ import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import {
   BUDGET_CURRENCY_OPTIONS,
   TIMELINE_UNIT_OPTIONS,
-  formatBudgetForDisplay,
-  formatTimelineForDisplay,
   parseBudgetProposal,
   parseTimelineProposal,
   buildBudgetProposalForSave,
@@ -829,6 +827,26 @@ export default function PartnerRfpDetailPage() {
                           timeline_proposal: v.timeline_proposal,
                           timeline_proposal_type: typeof v.timeline_proposal,
                         })
+                        const budgetObj = (() => {
+                          try {
+                            let val: unknown = v.budget_proposal
+                            if (typeof val === "string") val = JSON.parse(val)
+                            if (typeof val === "string") val = JSON.parse(val)
+                            return val as { amount?: number; currency?: string } | null
+                          } catch {
+                            return null
+                          }
+                        })()
+                        const timelineObj = (() => {
+                          try {
+                            let val: unknown = v.timeline_proposal
+                            if (typeof val === "string") val = JSON.parse(val)
+                            if (typeof val === "string") val = JSON.parse(val)
+                            return val as { duration?: number; unit?: string } | null
+                          } catch {
+                            return null
+                          }
+                        })()
                         return (
                           <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                             <div className="flex items-center justify-between gap-3">
@@ -842,11 +860,19 @@ export default function PartnerRfpDetailPage() {
                             <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
-                                <div>{formatBudgetForDisplay(v.budget_proposal)}</div>
+                                <div>
+                                  {budgetObj?.amount != null && budgetObj?.currency
+                                    ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
+                                    : "—"}
+                                </div>
                               </div>
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
-                                <div>{formatTimelineForDisplay(v.timeline_proposal)}</div>
+                                <div>
+                                  {timelineObj?.duration != null && timelineObj?.unit
+                                    ? `${timelineObj.duration} ${timelineObj.unit}`
+                                    : "—"}
+                                </div>
                               </div>
                             </div>
                             <p className="text-sm text-gray-700 mt-3">{preview || "—"}</p>
@@ -1199,27 +1225,59 @@ export default function PartnerRfpDetailPage() {
             </div>
           </div>
           ) : (
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
-              <div>
-                <div className="font-mono text-[10px] uppercase text-gray-500">Proposal</div>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{proposalText || "—"}</p>
-              </div>
-              <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
+            (() => {
+              const budgetObj = (() => {
+                try {
+                  let val: unknown =
+                    existing?.budget_proposal ??
+                    buildBudgetProposalForSave(budgetAmount, budgetCurrency, budgetCurrencyOther, budgetLegacyHint)
+                  if (typeof val === "string") val = JSON.parse(val)
+                  if (typeof val === "string") val = JSON.parse(val)
+                  return val as { amount?: number; currency?: string } | null
+                } catch {
+                  return null
+                }
+              })()
+              const timelineObj = (() => {
+                try {
+                  let val: unknown =
+                    existing?.timeline_proposal ??
+                    buildTimelineProposalForSave(timelineDuration, timelineUnit, timelineLegacyHint)
+                  if (typeof val === "string") val = JSON.parse(val)
+                  if (typeof val === "string") val = JSON.parse(val)
+                  return val as { duration?: number; unit?: string } | null
+                } catch {
+                  return null
+                }
+              })()
+              return (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
                   <div>
-                    {formatBudgetForDisplay(
-                      buildBudgetProposalForSave(budgetAmount, budgetCurrency, budgetCurrencyOther, budgetLegacyHint)
-                    )}
+                    <div className="font-mono text-[10px] uppercase text-gray-500">Proposal</div>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{proposalText || "—"}</p>
                   </div>
+                  <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
+                      <div>
+                        {budgetObj?.amount != null && budgetObj?.currency
+                          ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
+                          : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
+                      <div>
+                        {timelineObj?.duration != null && timelineObj?.unit
+                          ? `${timelineObj.duration} ${timelineObj.unit}`
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-600">This bid is read-only in its current state.</p>
                 </div>
-                <div>
-                  <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
-                  <div>{formatTimelineForDisplay(buildTimelineProposalForSave(timelineDuration, timelineUnit, timelineLegacyHint))}</div>
-                </div>
-              </div>
-              <p className="text-sm text-gray-600">This bid is read-only in its current state.</p>
-            </div>
+              )
+            })()
           )}
 
           {canEdit ? (
