@@ -10,6 +10,7 @@ import { isDemoMode, demoMasterProjects } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
 import { mapDbProjectToMaster } from "@/lib/project-mapper"
+import { budgetStatusLabel, workflowStatusLabel } from "@/lib/partner-status"
 import { 
   Search, 
   Filter, 
@@ -78,6 +79,14 @@ type MasterProject = {
   progress: number
   lastActivity: string
   stage: string
+  partnerStatusAlertCount?: number
+  partnerStatusAlertPreview?: {
+    status: string
+    budget_status: string
+    completion_pct: number
+    notes_preview: string | null
+    created_at: string
+  } | null
 }
 
 // Demo projects are now only loaded from demo-data.ts when in demo mode
@@ -147,6 +156,8 @@ function DashboardContent() {
             start_date?: string | null
             end_date?: string | null
             project_assignments?: { status: string }[]
+            partner_status_alert_count?: number
+            partner_status_alert_preview?: MasterProject["partnerStatusAlertPreview"]
           }) => {
             const m = mapDbProjectToMaster(p)
             const bids = p.project_assignments || []
@@ -178,6 +189,8 @@ function DashboardContent() {
                   : m.status === 'completed'
                     ? 'Closed'
                     : 'Setup',
+              partnerStatusAlertCount: p.partner_status_alert_count ?? 0,
+              partnerStatusAlertPreview: p.partner_status_alert_preview ?? null,
             }
           }
         )
@@ -567,6 +580,70 @@ function DashboardContent() {
                     )}>
                       {config.label}
                     </span>
+                    {(project.partnerStatusAlertCount ?? 0) > 0 && (
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                setSelectedProject({
+                                  id: project.id,
+                                  name: project.name,
+                                  client: project.client,
+                                  status: project.status,
+                                })
+                                router.push(
+                                  `/agency/project?projectId=${encodeURIComponent(project.id)}`
+                                )
+                              }}
+                              className="flex items-center gap-1 font-mono text-[9px] px-2.5 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25 transition-colors shrink-0"
+                            >
+                              <AlertTriangle className="w-3 h-3 text-amber-300" />
+                              {project.partnerStatusAlertCount} Alert
+                              {(project.partnerStatusAlertCount ?? 0) > 1 ? "s" : ""}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="bottom"
+                            align="start"
+                            className="max-w-sm p-3 bg-background border border-border text-left"
+                          >
+                            {project.partnerStatusAlertPreview ? (
+                              <div className="space-y-1.5 text-xs">
+                                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
+                                  Partner status
+                                </div>
+                                <div className="text-foreground">
+                                  <span className="font-medium">
+                                    {workflowStatusLabel(project.partnerStatusAlertPreview.status)}
+                                  </span>
+                                  <span className="text-foreground-muted"> · </span>
+                                  <span>
+                                    {budgetStatusLabel(project.partnerStatusAlertPreview.budget_status)}
+                                  </span>
+                                </div>
+                                <div className="text-foreground-muted">
+                                  Completion: {project.partnerStatusAlertPreview.completion_pct}%
+                                </div>
+                                {project.partnerStatusAlertPreview.notes_preview && (
+                                  <p className="text-foreground-muted leading-snug line-clamp-3">
+                                    {project.partnerStatusAlertPreview.notes_preview}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-foreground-muted">
+                                {project.partnerStatusAlertCount} unresolved partner update
+                                {(project.partnerStatusAlertCount ?? 0) > 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
                     {project.alerts.length > 0 && (
                       <TooltipProvider delayDuration={200}>
                         <Tooltip>

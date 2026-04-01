@@ -157,6 +157,84 @@ export async function GET(request: NextRequest) {
     }
 
     const list = assignments || []
+
+    type StatusUpdateRow = {
+      id: string
+      project_id: string
+      partnership_id: string
+      project_assignment_id: string
+      status: string
+      budget_status: string
+      completion_pct: number
+      notes: string | null
+      is_resolved: boolean
+      created_at: string
+    }
+
+    let allStatusRows: StatusUpdateRow[] = []
+    if (agencyProjectIds.length > 0) {
+      const { data: suRows, error: suErr } = await supabase
+        .from("partner_status_updates")
+        .select(
+          "id, project_id, partnership_id, project_assignment_id, status, budget_status, completion_pct, notes, is_resolved, created_at"
+        )
+        .in("project_id", agencyProjectIds)
+
+      if (suErr) {
+        console.error("[api] active-engagements partner_status_updates", {
+          message: suErr.message,
+          code: suErr.code,
+        })
+      } else {
+        allStatusRows = (suRows || []) as StatusUpdateRow[]
+      }
+    }
+
+    function statusUpdatesForPartner(projectId: string, partnershipId: string): StatusUpdateRow[] {
+      return allStatusRows
+        .filter((r) => r.project_id === projectId && r.partnership_id === partnershipId)
+        .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+    }
+
+    function isAlertRow(u: StatusUpdateRow): boolean {
+      return !u.is_resolved && u.status !== "on_track" && u.status !== "complete"
+    }
+
+    function summarizeStatusUpdates(updates: StatusUpdateRow[]) {
+      if (!updates.length) {
+        return {
+          current_status: null as string | null,
+          completion_pct: 0,
+          alert_count: 0,
+          latest_alert: null as {
+            id: string
+            status: string
+            budget_status: string
+            completion_pct: number
+            notes: string | null
+            created_at: string
+          } | null,
+        }
+      }
+      const latest = updates[0]
+      const unresolvedAlerts = updates.filter(isAlertRow)
+      const latestAlert = unresolvedAlerts[0]
+      return {
+        current_status: latest.status,
+        completion_pct: latest.completion_pct,
+        alert_count: unresolvedAlerts.length,
+        latest_alert: latestAlert
+          ? {
+              id: latestAlert.id,
+              status: latestAlert.status,
+              budget_status: latestAlert.budget_status,
+              completion_pct: latestAlert.completion_pct,
+              notes: latestAlert.notes,
+              created_at: latestAlert.created_at,
+            }
+          : null,
+      }
+    }
     const partnerIds = [
       ...new Set(
         list
@@ -253,6 +331,17 @@ export async function GET(request: NextRequest) {
       kickoffUrl: string | null
       kickoffType: string | null
       onboardingDocuments: { label: string; url: string }[]
+      current_status: string | null
+      completion_pct: number
+      alert_count: number
+      latest_alert: {
+        id: string
+        status: string
+        budget_status: string
+        completion_pct: number
+        notes: string | null
+        created_at: string
+      } | null
     }
 
     const byProject = new Map<string, PartnerRow[]>()
@@ -283,6 +372,8 @@ export async function GET(request: NextRequest) {
       const docs = (pkg?.onboarding_package_documents || []).slice().sort((x, y) => (x.sort_order ?? 0) - (y.sort_order ?? 0))
       const onboardingDocuments = docs.map((d) => ({ label: d.label, url: d.url }))
 
+      const statusSummary = summarizeStatusUpdates(statusUpdatesForPartner(projId, partnershipId))
+
       const row: PartnerRow = {
         assignmentId: a.id as string,
         partnershipId,
@@ -299,6 +390,10 @@ export async function GET(request: NextRequest) {
         kickoffUrl: pkg?.kickoff_url ?? null,
         kickoffType: pkg?.kickoff_type ?? null,
         onboardingDocuments,
+        current_status: statusSummary.current_status,
+        completion_pct: statusSummary.completion_pct,
+        alert_count: statusSummary.alert_count,
+        latest_alert: statusSummary.latest_alert,
       }
 
       const cur = byProject.get(projId) || []

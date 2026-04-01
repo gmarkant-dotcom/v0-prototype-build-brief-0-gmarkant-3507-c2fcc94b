@@ -408,6 +408,15 @@ export type DashboardDemoProject = {
   progress: number
   lastActivity: string
   stage: string
+  /** Unresolved partner status rows (at_risk / delayed / blocked) for dashboard demo */
+  partnerStatusAlertCount?: number
+  partnerStatusAlertPreview?: {
+    status: string
+    budget_status: string
+    completion_pct: number
+    notes_preview: string | null
+    created_at: string
+  } | null
 }
 
 export const demoMasterProjects: DashboardDemoProject[] = [
@@ -447,7 +456,15 @@ export const demoMasterProjects: DashboardDemoProject[] = [
     ],
     progress: 45,
     lastActivity: "2 hours ago",
-    stage: "Production"
+    stage: "Production",
+    partnerStatusAlertCount: 2,
+    partnerStatusAlertPreview: {
+      status: "at_risk",
+      budget_status: "incremental_needed",
+      completion_pct: 58,
+      notes_preview: "Waiting on revised scope sign-off; may need one extra sprint for deliverable B.",
+      created_at: new Date().toISOString(),
+    },
   },
   {
     id: "2",

@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
@@ -8,12 +8,23 @@ import { LeadAgencyFilter } from "@/components/lead-agency-filter"
 import { isDemoMode } from "@/lib/demo-data"
 import { formatEngagementBudget, formatEngagementTimeline } from "@/lib/active-engagement-parse"
 import { normalizeMeetingUrlForHref } from "@/lib/utils"
+import {
+  PARTNER_BUDGET_STATUSES,
+  PARTNER_WORKFLOW_STATUSES,
+  budgetStatusLabel,
+  workflowStatusLabel,
+} from "@/lib/partner-status"
 import { Loader2, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Slider } from "@/components/ui/slider"
 import { cn } from "@/lib/utils"
 
 const btnOutlineLight =
   "border-gray-300 !bg-white text-[#0C3535] shadow-sm hover:!bg-gray-50 hover:text-[#0C3535]"
+const btnPrimaryDark = "bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+const fieldClass = "border-gray-200 bg-white text-gray-900"
 
 type ActiveEngagementPayload = {
   found: boolean
@@ -34,6 +45,15 @@ type ActiveEngagementPayload = {
   onboardingDocuments?: { label: string; url: string }[]
 }
 
+type StatusUpdateRow = {
+  id: string
+  status: string
+  budget_status: string
+  completion_pct: number
+  notes: string | null
+  created_at: string
+}
+
 function PartnerActiveEngagementInner() {
   const params = useParams()
   const projectId = params.projectId as string
@@ -42,6 +62,38 @@ function PartnerActiveEngagementInner() {
   const [data, setData] = useState<ActiveEngagementPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isDemo)
+  const [latestStatus, setLatestStatus] = useState<StatusUpdateRow | null>(null)
+  const [statusLoading, setStatusLoading] = useState(false)
+  const [statusSaving, setStatusSaving] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const [formStatus, setFormStatus] = useState<string>("on_track")
+  const [formBudget, setFormBudget] = useState<string>("on_budget")
+  const [formPct, setFormPct] = useState<number>(50)
+  const [formNotes, setFormNotes] = useState("")
+
+  const refreshStatus = useCallback(async () => {
+    if (isDemo) {
+      setLatestStatus({
+        id: "demo-su",
+        status: "on_track",
+        budget_status: "on_budget",
+        completion_pct: 62,
+        notes: "All deliverables on schedule for this week.",
+        created_at: new Date().toISOString(),
+      })
+      return
+    }
+    setStatusLoading(true)
+    try {
+      const res = await fetch(`/api/partner/projects/${projectId}/status-update`, { credentials: "same-origin" })
+      const json = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setLatestStatus((json as { latest?: StatusUpdateRow | null }).latest ?? null)
+      }
+    } finally {
+      setStatusLoading(false)
+    }
+  }, [isDemo, projectId])
 
   useEffect(() => {
     if (isDemo) {
@@ -66,6 +118,7 @@ function PartnerActiveEngagementInner() {
           { label: "MSA", url: "https://demo.withligament.com/sample-assets/msa" },
         ],
       })
+      void refreshStatus()
       setLoading(false)
       return
     }
@@ -84,6 +137,9 @@ function PartnerActiveEngagementInner() {
           return
         }
         if (!cancelled) setData(json)
+        if (!cancelled && json.found) {
+          await refreshStatus()
+        }
       } catch {
         if (!cancelled) setError("Failed to load")
       } finally {
@@ -93,7 +149,15 @@ function PartnerActiveEngagementInner() {
     return () => {
       cancelled = true
     }
-  }, [projectId, isDemo])
+  }, [projectId, isDemo, refreshStatus])
+
+  useEffect(() => {
+    if (latestStatus && !statusSaving) {
+      setFormStatus(latestStatus.status)
+      setFormBudget(latestStatus.budget_status)
+      setFormPct(latestStatus.completion_pct)
+    }
+  }, [latestStatus?.id, statusSaving])
 
   const agencyName =
     data?.leadAgency?.companyName?.trim() || data?.leadAgency?.fullName?.trim() || "Lead agency"
@@ -205,6 +269,165 @@ function PartnerActiveEngagementInner() {
                   </dd>
                 </div>
               </dl>
+            </section>
+
+            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+              <h2 className="font-display font-bold text-lg text-[#0C3535] mb-4">Project status</h2>
+              {statusLoading ? (
+                <div className="flex items-center gap-2 text-gray-500 text-sm py-4">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading status…
+                </div>
+              ) : latestStatus ? (
+                <div className="space-y-3 mb-6 pb-6 border-b border-gray-100">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[10px] uppercase text-gray-500">Latest update</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-[#0C3535]/10 text-[#0C3535] font-medium">
+                      {workflowStatusLabel(latestStatus.status)}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
+                      {budgetStatusLabel(latestStatus.budget_status)}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>Completion</span>
+                      <span>{latestStatus.completion_pct}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className="h-full bg-[#0C3535]/80 rounded-full"
+                        style={{ width: `${latestStatus.completion_pct}%` }}
+                      />
+                    </div>
+                  </div>
+                  {latestStatus.notes && (
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{latestStatus.notes}</p>
+                  )}
+                  <p className="font-mono text-[10px] text-gray-400">
+                    {new Date(latestStatus.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 mb-6">No status updates yet. Submit your first update below.</p>
+              )}
+
+              <form
+                className="space-y-4"
+                onSubmit={async (e) => {
+                  e.preventDefault()
+                  if (isDemo) {
+                    setLatestStatus({
+                      id: "demo-new",
+                      status: formStatus,
+                      budget_status: formBudget,
+                      completion_pct: formPct,
+                      notes: formNotes.trim() || null,
+                      created_at: new Date().toISOString(),
+                    })
+                    setFormNotes("")
+                    return
+                  }
+                  setStatusSaving(true)
+                  setStatusError(null)
+                  try {
+                    const res = await fetch(`/api/partner/projects/${projectId}/status-update`, {
+                      method: "POST",
+                      credentials: "same-origin",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        status: formStatus,
+                        budget_status: formBudget,
+                        completion_pct: formPct,
+                        notes: formNotes.trim() || undefined,
+                      }),
+                    })
+                    const json = await res.json().catch(() => ({}))
+                    if (!res.ok) {
+                      setStatusError((json as { error?: string }).error || "Save failed")
+                      return
+                    }
+                    const created = (json as { update?: StatusUpdateRow }).update
+                    if (created) setLatestStatus(created)
+                    else await refreshStatus()
+                    setFormNotes("")
+                  } catch {
+                    setStatusError("Save failed")
+                  } finally {
+                    setStatusSaving(false)
+                  }
+                }}
+              >
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="font-mono text-[10px] text-gray-500 uppercase">Workflow status</Label>
+                    <select
+                      value={formStatus}
+                      onChange={(e) => setFormStatus(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      {PARTNER_WORKFLOW_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {workflowStatusLabel(s)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className="font-mono text-[10px] text-gray-500 uppercase">Budget status</Label>
+                    <select
+                      value={formBudget}
+                      onChange={(e) => setFormBudget(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+                    >
+                      {PARTNER_BUDGET_STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {budgetStatusLabel(s)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <Label className="font-mono text-[10px] text-gray-500 uppercase">
+                    Completion ({formPct}%)
+                  </Label>
+                  <Slider
+                    value={[formPct]}
+                    min={0}
+                    max={100}
+                    step={1}
+                    onValueChange={(v) => setFormPct(v[0] ?? 0)}
+                    className="mt-3 w-full"
+                  />
+                </div>
+                <div>
+                  <Label className="font-mono text-[10px] text-gray-500 uppercase">Notes</Label>
+                  <Textarea
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    placeholder="What changed since last update?"
+                    className={cn("mt-1 min-h-[100px]", fieldClass)}
+                  />
+                </div>
+                {statusError && (
+                  <p className="text-sm text-red-600">{statusError}</p>
+                )}
+                <Button
+                  type="submit"
+                  disabled={statusSaving}
+                  className={cn(btnPrimaryDark, "w-full sm:w-auto")}
+                >
+                  {statusSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting…
+                    </>
+                  ) : (
+                    "Submit status update"
+                  )}
+                </Button>
+              </form>
             </section>
 
             <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">

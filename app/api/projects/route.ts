@@ -58,6 +58,45 @@ export async function GET(request: NextRequest) {
         if (simple.error) throw simple.error
         projects = simple.data
       }
+
+      const agencyProjectIds = (projects || []).map((p: { id: string }) => p.id).filter(Boolean)
+      const countByProject = new Map<string, number>()
+      const firstByProject = new Map<string, { project_id: string; status: string; budget_status: string; completion_pct: number; notes: string | null; created_at: string }>()
+      if (agencyProjectIds.length > 0) {
+        const { data: psuRows, error: psuErr } = await supabase
+          .from('partner_status_updates')
+          .select('project_id, status, budget_status, completion_pct, notes, created_at')
+          .in('project_id', agencyProjectIds)
+          .eq('is_resolved', false)
+          .in('status', ['at_risk', 'delayed', 'blocked'])
+          .order('created_at', { ascending: false })
+
+        if (!psuErr && psuRows?.length) {
+          for (const row of psuRows) {
+            const pid = row.project_id as string
+            countByProject.set(pid, (countByProject.get(pid) || 0) + 1)
+            if (!firstByProject.has(pid)) firstByProject.set(pid, row)
+          }
+        }
+      }
+      projects = (projects || []).map((p: Record<string, unknown>) => {
+        const pid = p.id as string
+        const first = firstByProject.get(pid)
+        const notes = (first?.notes as string | null) || ''
+        return {
+          ...p,
+          partner_status_alert_count: countByProject.get(pid) || 0,
+          partner_status_alert_preview: first
+            ? {
+                status: first.status,
+                budget_status: first.budget_status,
+                completion_pct: first.completion_pct,
+                notes_preview: notes.length > 120 ? `${notes.slice(0, 120)}…` : notes || null,
+                created_at: first.created_at,
+              }
+            : null,
+        }
+      })
     } else if (profile?.role === 'partner') {
       const { data: userPartnerships, error: pErr } = await supabase
         .from('partnerships')
