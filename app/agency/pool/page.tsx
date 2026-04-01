@@ -319,6 +319,7 @@ export default function PartnerPoolPage() {
   }
 
   const handleConfirmNdaSigned = async (partnershipId: string) => {
+    console.log("[agency/pool] confirm NDA clicked", { partnershipId })
     if (!checkFeatureAccess("nda confirm")) return
     if (isDemo) return
     setConfirmingNdaFor(partnershipId)
@@ -328,6 +329,7 @@ export default function PartnerPoolPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partnershipId, action: 'confirm_nda' }),
       })
+      console.log("[agency/pool] confirm NDA response", { ok: response.ok, status: response.status, partnershipId })
       if (response.ok) {
         await loadPartnerships()
       } else {
@@ -692,18 +694,16 @@ export default function PartnerPoolPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!isDemo && (
+                    {!isDemo && !(item as Partnership).ndaConfirmedAt && (
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={!!(item as Partnership).ndaConfirmedAt || confirmingNdaFor === item.id}
+                        disabled={confirmingNdaFor === item.id}
                         onClick={() => handleConfirmNdaSigned(item.id)}
                         className="h-7 border-green-500/40 text-green-300 hover:bg-green-500/10"
                       >
                         {confirmingNdaFor === item.id
                           ? 'Saving...'
-                          : (item as Partnership).ndaConfirmedAt
-                          ? 'NDA Confirmed'
                           : 'Confirm NDA Signed'}
                       </Button>
                     )}
@@ -926,7 +926,7 @@ export default function PartnerPoolPage() {
                 className="bg-accent text-background hover:bg-accent/90"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Your First Partner
+                Add Partners
               </Button>
               <Button 
                 variant="outline"
