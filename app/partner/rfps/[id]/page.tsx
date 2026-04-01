@@ -7,7 +7,7 @@ import { PartnerChrome } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { createClient } from "@/lib/supabase/client"
 import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
@@ -129,12 +129,6 @@ function displayNameFromBlobPath(url: string): string {
   } catch {
     return "Uploaded file"
   }
-}
-
-function ensureAbsoluteUrl(url: string) {
-  if (!url) return url
-  if (url.startsWith("http://") || url.startsWith("https://")) return url
-  return `https://${url}`
 }
 
 function savedToDrafts(saved: SavedAttachment[]): DraftAttachment[] {
@@ -788,7 +782,7 @@ export default function PartnerRfpDetailPage() {
                   {inbox.agency_meeting_url ? (
                     <div className="mt-3">
                       <Button className="bg-cyan-600 hover:bg-cyan-600/90 text-white" asChild>
-                        <a href={ensureAbsoluteUrl(inbox.agency_meeting_url)} target="_blank" rel="noopener noreferrer">
+                        <a href={normalizeMeetingUrlForHref(inbox.agency_meeting_url)} target="_blank" rel="noopener noreferrer">
                           <CalendarDays className="w-4 h-4 mr-2" />
                           Schedule Meeting
                         </a>

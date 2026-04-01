@@ -79,7 +79,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       const responseId = (response as { id: string }).id
       const { data: versionRows, error: versionErr } = await supabase
         .from("partner_rfp_response_versions")
-        .select("id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at")
+        .select(
+          "id, response_id, version_number, proposal_text, budget_proposal, timeline_proposal, attachments, status_at_submission, submitted_at, change_notes"
+        )
         .eq("response_id", responseId)
         .order("version_number", { ascending: false })
 

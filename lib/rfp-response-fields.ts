@@ -154,34 +154,60 @@ export function parseTimelineProposal(raw: string): {
   return { ...empty, legacyHint: t }
 }
 
-export function formatBudgetForDisplay(raw: string): string {
-  const t = (raw ?? "").trim()
-  if (!t) return "—"
-  try {
-    const j = JSON.parse(t) as StoredBudget
-    if (j && typeof j.amount === "number" && j.currency) {
-      const cur =
-        j.currency === "Other" && j.custom?.trim() ? j.custom.trim() : j.currency
-      return `${j.amount.toLocaleString("en-US")} ${cur}`
-    }
-  } catch {
-    /* fall through */
+function parseStoredBudget(raw: string | Record<string, unknown> | null | undefined): StoredBudget | null {
+  if (raw == null) return null
+  if (typeof raw === "object" && raw !== null && "amount" in raw) {
+    return raw as StoredBudget
   }
-  return t
+  const t = String(raw ?? "").trim()
+  if (!t) return null
+  try {
+    return JSON.parse(t) as StoredBudget
+  } catch {
+    return null
+  }
 }
 
-export function formatTimelineForDisplay(raw: string): string {
-  const t = (raw ?? "").trim()
-  if (!t) return "—"
-  try {
-    const j = JSON.parse(t) as StoredTimeline
-    if (j && typeof j.duration === "number" && j.unit) {
-      return `${j.duration} ${j.unit}`
+export function formatBudgetForDisplay(raw: string | Record<string, unknown> | null | undefined): string {
+  const j = parseStoredBudget(raw)
+  if (j && typeof j === "object") {
+    const num = typeof j.amount === "number" ? j.amount : parseFloat(String(j.amount))
+    const cur = String(j.currency ?? "").trim()
+    if (Number.isFinite(num) && cur) {
+      const displayCur =
+        cur === "Other" && j.custom?.trim() ? j.custom.trim() : cur
+      return `${num.toLocaleString("en-US")} ${displayCur}`
     }
-  } catch {
-    /* fall through */
   }
-  return t
+  const t = typeof raw === "string" ? raw.trim() : ""
+  return t || "—"
+}
+
+function parseStoredTimeline(raw: string | Record<string, unknown> | null | undefined): StoredTimeline | null {
+  if (raw == null) return null
+  if (typeof raw === "object" && raw !== null && "duration" in raw) {
+    return raw as StoredTimeline
+  }
+  const t = String(raw ?? "").trim()
+  if (!t) return null
+  try {
+    return JSON.parse(t) as StoredTimeline
+  } catch {
+    return null
+  }
+}
+
+export function formatTimelineForDisplay(raw: string | Record<string, unknown> | null | undefined): string {
+  const j = parseStoredTimeline(raw)
+  if (j && typeof j === "object") {
+    const num = typeof j.duration === "number" ? j.duration : parseFloat(String(j.duration))
+    const u = String(j.unit ?? "").trim()
+    if (Number.isFinite(num) && u && TIMELINE_UNITS.has(u)) {
+      return `${num} ${u}`
+    }
+  }
+  const t = typeof raw === "string" ? raw.trim() : ""
+  return t || "—"
 }
 
 export function isBudgetValidForSubmit(stored: string): boolean {

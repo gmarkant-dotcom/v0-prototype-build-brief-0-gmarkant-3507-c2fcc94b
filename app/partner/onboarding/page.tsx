@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
 import { LeadAgencyFilter } from "@/components/lead-agency-filter"
 import { isDemoMode } from "@/lib/demo-data"
 import { EmptyState } from "@/components/empty-state"
@@ -540,7 +540,7 @@ export default function PartnerOnboardingPage() {
                       <h3 className="font-display font-bold text-lg text-[#0C3535] mb-3">Kickoff</h3>
                       {selectedApi.kickoff_type === "calendly" && selectedApi.kickoff_url && (
                         <Button className="bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90 font-display font-bold" asChild>
-                          <a href={selectedApi.kickoff_url} target="_blank" rel="noopener noreferrer">
+                          <a href={normalizeMeetingUrlForHref(selectedApi.kickoff_url)} target="_blank" rel="noopener noreferrer">
                             <Calendar className="w-4 h-4 mr-2" />
                             Schedule Kickoff
                           </a>
@@ -735,7 +735,7 @@ export default function PartnerOnboardingPage() {
                     className="w-full bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90 font-display font-bold"
                     asChild
                   >
-                    <a href={selectedPacket.kickoffScheduleLink} target="_blank" rel="noopener noreferrer">
+                    <a href={normalizeMeetingUrlForHref(selectedPacket.kickoffScheduleLink)} target="_blank" rel="noopener noreferrer">
                       <Calendar className="w-4 h-4 mr-2" />
                       Schedule Kickoff Call
                     </a>
