@@ -477,10 +477,6 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Partnership ID required' }, { status: 400 })
     }
 
-    if (!['active', 'suspended', 'terminated'].includes(status)) {
-      return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
-    }
-
     // Get partnership to verify ownership
     const { data: partnership } = await supabase
       .from('partnerships')
@@ -522,6 +518,10 @@ export async function PATCH(request: NextRequest) {
 
     if (!status) {
       return NextResponse.json({ error: 'Status required' }, { status: 400 })
+    }
+
+    if (!['active', 'suspended', 'terminated'].includes(status)) {
+      return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
     }
 
     // Partner responding to invitation (accept or decline)
