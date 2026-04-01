@@ -1245,10 +1245,10 @@ export default function PartnerRfpDetailPage() {
                     <div className="font-mono text-[10px] uppercase text-gray-500">Proposal</div>
                     <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{proposalText || "—"}</p>
                   </div>
-                  <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                  <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                     <div>
                       <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
-                      <div>
+                      <div className="text-gray-900">
                         {budgetObj?.amount != null && budgetObj?.currency
                           ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
                           : "—"}
@@ -1256,14 +1256,14 @@ export default function PartnerRfpDetailPage() {
                     </div>
                     <div>
                       <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
-                      <div>
+                      <div className="text-gray-900">
                         {timelineObj?.duration != null && timelineObj?.unit
                           ? `${timelineObj.duration} ${timelineObj.unit}`
                           : "—"}
                       </div>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-600">This bid is read-only in its current state.</p>
+                  <p className="text-sm text-gray-700">This bid is read-only in its current state.</p>
                 </div>
               )
             })()
