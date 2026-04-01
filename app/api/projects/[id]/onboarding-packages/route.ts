@@ -67,7 +67,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: projectId } = await params
+    const { id: rawProjectParam } = await params
+    const projectParam = decodeURIComponent((rawProjectParam || "").trim())
     const supabase = await createClient()
     const {
       data: { user },
@@ -79,10 +80,32 @@ export async function POST(
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
-    const { data: project } = await supabase.from("projects").select("id, title, agency_id").eq("id", projectId).single()
-    if (!project || project.agency_id !== user.id) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 })
+    // Primary path: route param is the project UUID.
+    let { data: project } = await supabase
+      .from("projects")
+      .select("id, title, agency_id")
+      .eq("id", projectParam)
+      .maybeSingle()
+
+    // Fallback path: tolerate accidental project title in route param.
+    if (!project) {
+      const byTitle = await supabase
+        .from("projects")
+        .select("id, title, agency_id")
+        .eq("agency_id", user.id)
+        .eq("title", projectParam)
+        .maybeSingle()
+      project = byTitle.data || null
     }
+
+    if (!project || project.agency_id !== user.id) {
+      console.warn("[onboarding-packages] POST project lookup failed", {
+        userId: user.id,
+        routeProjectParam: projectParam,
+      })
+      return NextResponse.json({ error: "Project not found", projectId: projectParam }, { status: 404 })
+    }
+    const projectId = project.id as string
 
     const body = await request.json()
     const {
