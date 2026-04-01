@@ -60,8 +60,8 @@ type AccessRequest = {
 const demoInvitations: PartnerInvitation[] = [
   {
     id: "demo-inv-1",
-    partnerEmail: "hello@fieldhousefilms.com",
-    partnerName: "Fieldhouse Films",
+    partnerEmail: "contact@demo.withligament.com",
+    partnerName: "Sample Production Studio",
     status: "accepted",
     invitedAt: "2026-02-15",
     acceptedAt: "2026-02-18",
@@ -349,24 +349,17 @@ export default function PartnerPoolPage() {
   }
 
   const handleConfirmNdaSigned = async (partnershipId: string) => {
-    console.log("[agency/pool] confirm NDA clicked", { partnershipId })
-    console.log("about to fetch")
     if (isDemo) {
-      console.log("[agency/pool] confirm NDA skipped in demo mode")
       return
     }
     setConfirmingNdaFor(partnershipId)
     try {
-      console.log("sending PATCH...", { url: "/api/partnerships", partnershipId, action: "confirm_nda" })
-      console.log("fetch call executing")
       const response = await fetch('/api/partnerships', {
         method: 'PATCH',
         credentials: "same-origin",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partnershipId, action: 'confirm_nda' }),
       })
-      console.log("PATCH response", response.status)
-      console.log("[agency/pool] confirm NDA response", { ok: response.ok, status: response.status, partnershipId })
       if (response.ok) {
         await loadPartnerships()
       } else {
@@ -513,12 +506,12 @@ export default function PartnerPoolPage() {
   // Sample partner template for production - shows all editable fields
   const samplePartnerTemplate: Partner = {
     id: "sample-1",
-    name: "Sample Partner Agency",
+    name: "Partner organization",
     discipline: "Video Production",
     type: "agency",
     location: "New York, NY",
-    email: "contact@samplepartner.com",
-    website: "samplepartner.com",
+    email: "",
+    website: "",
     rate: "$150-200/hr",
     experience: "10+ years of experience in video production for sports and entertainment brands.",
     rating: 4.8,
@@ -1526,7 +1519,7 @@ function AddEditPartnerModal({
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Fieldhouse Films"
+                  placeholder="e.g., Your production company"
                   className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 />
               </div>

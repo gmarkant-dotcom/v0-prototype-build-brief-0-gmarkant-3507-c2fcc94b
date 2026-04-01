@@ -129,7 +129,7 @@ interface Bid {
 const demoBids: Bid[] = [
   {
     id: "1",
-    vendor: "Fieldhouse Films",
+    vendor: "Sample Production Studio",
     discipline: "Video Production",
     amount: "$97,000",
     score: 87,
@@ -166,7 +166,7 @@ const demoBids: Bid[] = [
     },
     submission: {
       capabilitiesDeck: {
-        filename: "Fieldhouse_Films_Capabilities_2024.pdf",
+        filename: "Sample_Production_Capabilities.pdf",
         uploadedAt: "Mar 15, 2024",
         pageCount: 24
       },
@@ -294,7 +294,7 @@ const demoBids: Bid[] = [
           title: "WNBA All-Star Social Takeover",
           client: "WNBA",
           type: "link",
-          url: "https://example.com/case-study",
+          url: "https://demo.withligament.com/sample-assets/case-study",
           description: "Full social media management during All-Star weekend, 2.3M impressions"
         },
         {
@@ -405,7 +405,7 @@ const demoBids: Bid[] = [
           title: "NWSL Player Partnerships",
           client: "Various Brands",
           type: "link",
-          url: "https://example.com/roster-nwsl",
+          url: "https://demo.withligament.com/sample-assets/roster",
           description: "Overview of current NWSL player representation and brand deals"
         }
       ],

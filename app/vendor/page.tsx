@@ -29,11 +29,11 @@ function VendorHeader() {
         <div className="font-display font-black text-2xl text-white">LIGAMENT</div>
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <div className="font-display font-bold text-sm">Fieldhouse Films</div>
+            <div className="font-display font-bold text-sm">Your partner company</div>
             <div className="font-mono text-[10px] text-white/60">Active Partner</div>
           </div>
           <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-            <span className="font-mono text-xs text-accent">FF</span>
+            <span className="font-mono text-xs text-accent">YP</span>
           </div>
         </div>
       </div>

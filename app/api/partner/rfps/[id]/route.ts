@@ -72,21 +72,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     if (respQ.error) {
       if (respQ.error.code !== "42P01" && !/does not exist/i.test(respQ.error.message || "")) {
-        console.warn("[partner/rfps/[id]] response select:", respQ.error.message)
+        console.error("[partner/rfps/[id]] response select failed", { message: respQ.error.message, code: respQ.error.code })
       }
     } else {
       response = respQ.data
     }
-
-    console.log("[api] partner response row context", {
-      route: "/api/partner/rfps/[id]",
-      method: "GET",
-      userId: user.id,
-      inboxId: id,
-      hasResponse: !!response,
-      responseId: (response as { id?: string } | null)?.id ?? null,
-      responsePartnerId: (response as { partner_id?: string } | null)?.partner_id ?? null,
-    })
 
     let versions: unknown[] = []
     if (response && (response as { id?: string }).id) {
@@ -102,7 +92,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       if (!versionErr) {
         versions = versionRows || []
       } else {
-        console.warn("[api] partner version fetch failed", {
+        console.error("[api] partner version fetch failed", {
           route: "/api/partner/rfps/[id]",
           method: "GET",
           userId: user.id,
@@ -111,20 +101,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           message: versionErr.message,
         })
       }
-      console.log("[api] partner version fetch", {
-        route: "/api/partner/rfps/[id]",
-        method: "GET",
-        userId: user.id,
-        responseId,
-        versionCount: versions.length,
-      })
-    } else {
-      console.warn("[api] partner version fetch skipped (no response row)", {
-        route: "/api/partner/rfps/[id]",
-        method: "GET",
-        userId: user.id,
-        inboxId: id,
-      })
     }
 
     return NextResponse.json(

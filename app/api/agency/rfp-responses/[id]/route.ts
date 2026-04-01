@@ -266,13 +266,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         )
       }
 
-      console.log("[api] bid award: project_assignments upsert ok", {
-        route,
-        responseId: id,
-        projectId: awardContext.projectId,
-        partnershipId: awardContext.partnershipId,
-      })
-
       const { data: partner, error: partnerProfileErr } = await supabase
         .from("profiles")
         .select("email, full_name, company_name")

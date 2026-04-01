@@ -48,11 +48,6 @@ export async function POST(req: Request) {
     const lower = file.name.toLowerCase()
     let text = ""
     let warning: string | null = null
-    console.log("[extract-text][upload]", {
-      fileName: file.name,
-      contentType: file.type || "unknown",
-      sizeBytes: buffer.length,
-    })
 
     try {
       if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv")) {

@@ -174,7 +174,6 @@ export default function AgencyProfileSettingsPage() {
       setForm((prev) => ({ ...prev, is_discoverable: !checked }))
       return
     }
-    console.log("[agency/profile] discoverability saved", { is_discoverable: checked })
     setMessage("Marketplace discoverability updated.")
   }
 

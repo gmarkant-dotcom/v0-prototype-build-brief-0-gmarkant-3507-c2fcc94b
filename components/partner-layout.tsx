@@ -31,8 +31,8 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [userName, setUserName] = useState("Fieldhouse Films")
-  const [userInitials, setUserInitials] = useState("FF")
+  const [userName, setUserName] = useState("Partner")
+  const [userInitials, setUserInitials] = useState("P")
   const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {

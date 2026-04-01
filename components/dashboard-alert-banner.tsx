@@ -49,7 +49,7 @@ const alertDatabase: Record<string, {
     type: "payment",
     severity: "warning",
     title: "Invoice payment overdue",
-    description: "Payment to Fieldhouse Films for milestone 2 is 5 days overdue. Total amount: $38,800.",
+    description: "Payment to your production partner for milestone 2 is 5 days overdue. Total amount: $38,800.",
     section: "MSA + Payments",
     projectName: "Summer Festival Activation",
     actionItems: [

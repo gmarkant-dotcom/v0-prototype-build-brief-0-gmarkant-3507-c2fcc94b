@@ -144,7 +144,7 @@ export default function PartnerDashboardPage() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="font-display font-bold text-3xl text-[#0C3535]">
-              Welcome back{isDemo ? ", Fieldhouse Films" : ""}
+              Welcome back{isDemo ? ", Partner" : ""}
             </h1>
             <p className="text-gray-600 mt-1">
               Here&apos;s an overview of your partner account and opportunities

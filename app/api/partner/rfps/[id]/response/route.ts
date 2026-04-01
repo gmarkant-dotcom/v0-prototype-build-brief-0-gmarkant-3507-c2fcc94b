@@ -231,12 +231,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         agency_id: inbox.agency_id,
         version_number: nextVersion,
       }
-      console.log("[api] version insert payload", {
-        route,
-        method: "POST",
-        userId: user.id,
-        ...versionInsertPayload,
-      })
       const { error: versionErr } = await supabase.from("partner_rfp_response_versions").insert({
         ...versionInsertPayload,
         proposal_text,
@@ -247,7 +241,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         change_notes: changeNotes || null,
       })
       if (versionErr) {
-        console.warn("[api] version insert failed", {
+        console.error("[api] version insert failed", {
           route,
           method: "POST",
           userId: user.id,
@@ -255,14 +249,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           versionNumber: nextVersion,
           code: versionErr.code,
           message: versionErr.message,
-        })
-      } else {
-        console.log("[api] version insert success", {
-          route,
-          method: "POST",
-          userId: user.id,
-          responseId: saved.id,
-          versionNumber: nextVersion,
         })
       }
 

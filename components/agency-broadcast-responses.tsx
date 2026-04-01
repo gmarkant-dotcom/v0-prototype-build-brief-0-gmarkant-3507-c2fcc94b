@@ -117,29 +117,19 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
   } | null>(null)
 
   useEffect(() => {
-    if (awardDialog !== null) {
-      console.log("[agency/bids] award dialog open — debug state", {
-        busyId,
-        awardDialog,
-        confirmDisabledBecauseGlobalBusy: busyId !== null && busyId !== awardDialog.id,
-      })
-    }
-  }, [awardDialog, busyId])
-
-  useEffect(() => {
     if (isDemo) {
       setRows([
         {
           id: "demo-r1",
           inbox_item_id: "demo-inbox",
-          partner_display_name: "Fieldhouse Films",
+          partner_display_name: "Sample Production Studio",
           proposal_text:
             "We’d approach this as a modular production with a dedicated showrunner and a nimble B-cam unit for creator days…",
           budget_proposal: "$92,000 – $105,000",
           timeline_proposal: "10 weeks from kickoff to delivery of first wave",
           attachments: [
-            { type: "work_example", label: "Work Example", url: "https://example.com/work/1" },
-            { type: "proposal", label: "Proposal", url: "https://docs.google.com/presentation/demo" },
+            { type: "work_example", label: "Work Example", url: "https://demo.withligament.com/sample-assets/work-example" },
+            { type: "proposal", label: "Proposal", url: "https://demo.withligament.com/sample-assets/proposal-deck" },
           ],
           status: "submitted",
           created_at: new Date().toISOString(),
@@ -162,24 +152,11 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
       try {
         const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
         const url = `/api/agency/rfp-responses${qs}`
-        console.log(
-          "[agency/bids] AgencyBroadcastResponsesPanel → GET /api/agency/rfp-responses",
-          { url, pathname: typeof window !== "undefined" ? window.location.pathname : "" }
-        )
         const res = await fetch(url, { cache: "no-store", credentials: "same-origin" })
         const data = await res.json().catch(() => ({}))
-        console.log("[agency/bids] rfp-responses response", {
-          ok: res.ok,
-          status: res.status,
-          count: Array.isArray(data.responses) ? data.responses.length : 0,
-        })
         if (!res.ok) throw new Error((data?.error as string) || "Could not load responses")
         if (!cancelled) {
           const nextRows = (data.responses || []) as AgencyResponseRow[]
-          console.log(
-            "[agency/bids] versions per bid",
-            nextRows.map((row) => ({ responseId: row.id, versionCount: (row.versions || []).length }))
-          )
           setRows(nextRows)
         }
       } catch (e) {
@@ -730,7 +707,6 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                   (busyId !== null && busyId === awardDialog.id)
                 }
                 onClick={(e) => {
-                  console.log("confirm award clicked", awardDialog)
                   if (!awardDialog) {
                     e.preventDefault()
                     return

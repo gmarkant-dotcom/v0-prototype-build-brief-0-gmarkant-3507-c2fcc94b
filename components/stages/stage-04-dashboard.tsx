@@ -72,7 +72,7 @@ const projectDocuments: ProjectDocument[] = [
 const vendors: VendorStatus[] = [
   {
     id: "1",
-    name: "Fieldhouse Films",
+    name: "Sample Production Studio",
     discipline: "Video Production",
     contracted: "$97,000",
     utilized: 42,

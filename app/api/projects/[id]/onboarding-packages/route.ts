@@ -90,36 +90,21 @@ export async function POST(
   try {
     const { id: rawProjectParam } = await params
     const projectParam = decodeURIComponent((rawProjectParam || "").trim())
-    console.log(`${logPrefix} step:incoming`, {
-      rawProjectParam,
-      projectParam,
-      projectParamLength: projectParam.length,
-    })
 
     const supabase = await createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
-      console.log(`${logPrefix} step:auth — returning 401 Unauthorized (no user)`)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-    console.log(`${logPrefix} step:auth`, { userId: user.id })
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("role, company_name, full_name, meeting_url")
       .eq("id", user.id)
       .single()
-    console.log(`${logPrefix} step:profile`, {
-      userId: user.id,
-      role: profile?.role ?? null,
-      profileError: profileErr
-        ? { message: profileErr.message, code: profileErr.code, details: profileErr.details }
-        : null,
-    })
     if (profile?.role !== "agency") {
-      console.log(`${logPrefix} step:role-check — returning 403 Agency only (role=${profile?.role ?? "missing"})`)
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
@@ -132,50 +117,14 @@ export async function POST(
       .eq("id", projectParam)
       .maybeSingle()
 
-    console.log(`${logPrefix} step:project-lookup-by-id`, {
-      lookupKey: projectParam,
-      data: projectById,
-      error: projectByIdErr
-        ? { message: projectByIdErr.message, code: projectByIdErr.code, details: projectByIdErr.details }
-        : null,
-      rowFound: !!projectById,
-    })
-
     const project = projectById
 
-    const ownershipMatch = project ? project.agency_id === user.id : false
-    console.log(`${logPrefix} step:agency-ownership`, {
-      userId: user.id,
-      projectAgencyId: project?.agency_id ?? null,
-      ownershipMatch,
-    })
-
     if (!project || project.agency_id !== user.id) {
-      const reason404 = !project
-        ? "no_project_row_for_uuid"
-        : "agency_mismatch_project_agency_id_ne_user_id"
-      console.warn(`${logPrefix} step:404 Project not found`, {
-        reason404,
-        projectParam,
-        userId: user.id,
-        projectRowPresent: !!project,
-        projectIdIfAny: project?.id ?? null,
-        projectAgencyIdIfAny: project?.agency_id ?? null,
-      })
       return NextResponse.json({ error: "Project not found", projectId: projectParam }, { status: 404 })
     }
     const projectId = project.id as string
-    console.log(`${logPrefix} step:project-resolved`, { projectId, name: project.name })
 
     const body = await request.json()
-    console.log(`${logPrefix} step:body-parsed`, {
-      projectId,
-      hasPartnershipId: !!(body as { partnershipId?: string }).partnershipId,
-      hasAssignmentId: !!(body as { assignmentId?: string }).assignmentId,
-      documentCount: Array.isArray((body as { documents?: unknown }).documents)
-        ? (body as { documents: unknown[] }).documents.length
-        : 0,
-    })
     const {
       partnershipId,
       assignmentId,
@@ -195,7 +144,6 @@ export async function POST(
     }
 
     if (!partnershipId) {
-      console.log(`${logPrefix} step:validation — returning 400 partnershipId required`)
       return NextResponse.json({ error: "partnershipId required" }, { status: 400 })
     }
 
@@ -205,28 +153,10 @@ export async function POST(
       .eq("id", partnershipId)
       .single()
 
-    console.log(`${logPrefix} step:partnership-lookup`, {
-      partnershipId,
-      data: partnership,
-      error: partnershipErr
-        ? { message: partnershipErr.message, code: partnershipErr.code, details: partnershipErr.details }
-        : null,
-      agencyMatch: partnership ? partnership.agency_id === user.id : false,
-    })
-
     if (!partnership || partnership.agency_id !== user.id) {
-      console.log(`${logPrefix} step:404 Partnership not found`, {
-        reason: !partnership ? "no_row_or_query_error" : "agency_id_mismatch",
-        partnershipId,
-        userId: user.id,
-      })
       return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
     }
     if (partnership.status !== "active" || !partnership.partner_id) {
-      console.log(`${logPrefix} step:400 partnership not active or missing partner_id`, {
-        status: partnership.status,
-        hasPartnerId: !!partnership.partner_id,
-      })
       return NextResponse.json({ error: "Partnership must be active with a linked partner" }, { status: 400 })
     }
 
@@ -236,15 +166,6 @@ export async function POST(
       .eq("project_id", projectId)
       .eq("partnership_id", partnershipId)
       .maybeSingle()
-
-    console.log(`${logPrefix} step:project-assignment-lookup`, {
-      projectId,
-      partnershipId,
-      assignmentRow: assignmentCheck,
-      error: assignmentErr
-        ? { message: assignmentErr.message, code: assignmentErr.code, details: assignmentErr.details }
-        : null,
-    })
 
     if (assignmentErr) {
       console.error(`${logPrefix} project_assignments lookup failed`, {
@@ -257,7 +178,6 @@ export async function POST(
       return NextResponse.json({ error: "Could not verify project assignment" }, { status: 500 })
     }
     if (!assignmentCheck) {
-      console.log(`${logPrefix} step:400 no project_assignment for project+partnership`)
       return NextResponse.json(
         { error: "Partner must be assigned to this project before sending onboarding" },
         { status: 400 }
@@ -265,31 +185,23 @@ export async function POST(
     }
 
     if (assignmentId && assignmentCheck.id !== assignmentId) {
-      console.log(`${logPrefix} step:400 assignmentId mismatch`, {
-        bodyAssignmentId: assignmentId,
-        dbAssignmentId: assignmentCheck.id,
-      })
       return NextResponse.json({ error: "assignmentId does not match project and partnership" }, { status: 400 })
     }
 
     const docs: DocPayload[] = Array.isArray(documents) ? documents : []
     const projectDocCount = docs.filter((d) => d.documentRole === "project_doc").length
     if (projectDocCount > 10) {
-      console.log(`${logPrefix} step:400 too many project docs`, { projectDocCount })
       return NextResponse.json({ error: "Maximum 10 project documents" }, { status: 400 })
     }
     if (docs.length === 0) {
-      console.log(`${logPrefix} step:400 no documents`)
       return NextResponse.json({ error: "Add at least one document" }, { status: 400 })
     }
 
     for (const d of docs) {
       if (!d.label?.trim() || !d.url?.trim()) {
-        console.log(`${logPrefix} step:400 document missing label or url`)
         return NextResponse.json({ error: "Each document needs label and url" }, { status: 400 })
       }
       if (!d.url.startsWith("http://") && !d.url.startsWith("https://")) {
-        console.log(`${logPrefix} step:400 document url not http(s)`)
         return NextResponse.json({ error: "Each document url must be http(s)" }, { status: 400 })
       }
     }
@@ -394,7 +306,6 @@ export async function POST(
       data: { projectId, packageId: pkg.id },
     })
 
-    console.log(`${logPrefix} step:success`, { projectId, packageId: pkg.id, partnershipId })
     return NextResponse.json({ success: true, package: pkg })
   } catch (e) {
     console.error(`${logPrefix} uncaught exception`, e)

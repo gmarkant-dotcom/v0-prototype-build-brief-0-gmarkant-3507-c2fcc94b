@@ -220,7 +220,6 @@ export default function PartnerProfilePage() {
   }
   
   const handleSave = async () => {
-    console.log("[partner/profile] save clicked", { isDemo, hasProfileId: !!profileId })
     setSaving(true)
     setMessage(null)
     try {
@@ -252,7 +251,6 @@ export default function PartnerProfilePage() {
           })
           .eq("id", targetProfileId)
         if (error) throw error
-        console.log("[partner/profile] save success", { targetProfileId })
       }
       if (typeof window !== "undefined") {
         localStorage.setItem("partnerPrimaryDiscipline", formData.primaryDiscipline)

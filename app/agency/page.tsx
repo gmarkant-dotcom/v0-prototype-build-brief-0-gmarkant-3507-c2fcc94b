@@ -89,7 +89,7 @@ function buildMasterBriefSourceText(input: {
 
 // Demo partners - only shown in demo mode
 const demoPartners: Partner[] = [
-  { id: "1", name: "Fieldhouse Films", type: "production", discipline: "Video Production", bookmarked: true, ndaSigned: true, ndaSignedDate: "2023-06-15", msaApproved: true, msaApprovedDate: "2023-07-01", rating: 4.8, pastProjects: ["Q4 Brand Campaign", "Summer Series"] },
+  { id: "1", name: "Sample Production Studio", type: "production", discipline: "Video Production", bookmarked: true, ndaSigned: true, ndaSignedDate: "2023-06-15", msaApproved: true, msaApprovedDate: "2023-07-01", rating: 4.8, pastProjects: ["Q4 Brand Campaign", "Summer Series"] },
   { id: "2", name: "Tandem Social", type: "agency", discipline: "Social Media", bookmarked: true, ndaSigned: true, ndaSignedDate: "2023-08-20", msaApproved: true, msaApprovedDate: "2023-09-01", rating: 4.5, pastProjects: ["Brand Launch Q4"] },
   { id: "3", name: "Roster Agency", type: "agency", discipline: "Talent Relations", bookmarked: false, ndaSigned: false, msaApproved: false },
   { id: "4", name: "Sarah Chen", type: "freelancer", discipline: "Motion Design", bookmarked: true, ndaSigned: true, ndaSignedDate: "2023-05-10", msaApproved: false, rating: 4.9, pastProjects: ["Brand Refresh", "Product Launch"] },
@@ -302,15 +302,11 @@ function AgencyRFPContent() {
   }
 
   const triggerRfpTemplateFilePicker = () => {
-    console.log("[RFP Step 1b] template upload click — opening picker", {
-      hasInputRef: !!rfpTemplateFileInputRef.current,
-    })
     setRfpTemplateMode("upload")
     rfpTemplateFileInputRef.current?.click()
   }
 
   const handleRfpTemplateFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("[RFP Step 1b] template file input onChange fired")
     const file = e.target.files?.[0]
     if (!file) return
     if (!checkFeatureAccess("file uploads")) {
@@ -689,7 +685,6 @@ function AgencyRFPContent() {
 
   useEffect(() => {
     // Project switch should reset local RFP workflow state to avoid stale data.
-    console.log("project changed, resetting flow", selectedProject?.id)
     resetFlow()
   }, [selectedProject?.id])
   
@@ -1648,7 +1643,7 @@ function AgencyRFPContent() {
                 description="Provide any extra information the AI should consider when generating partner-specific RFPs."
               />
               <Textarea
-                placeholder="E.g., 'We have a strong existing relationship with Fieldhouse Films. Budget is flexible for exceptional talent. Timeline is firm - no extensions possible...'"
+                placeholder="E.g., preferred vendors, budget flexibility, or fixed timeline constraints the AI should respect."
                 value={additionalContext}
                 onChange={(e) => setAdditionalContext(e.target.value)}
                 className="mt-4 min-h-[100px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"

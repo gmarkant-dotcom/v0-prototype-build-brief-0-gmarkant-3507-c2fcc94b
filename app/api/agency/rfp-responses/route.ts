@@ -169,16 +169,6 @@ export async function GET(request: Request) {
       }
     }
 
-    console.log("[api] agency versions mapped", {
-      route,
-      method: "GET",
-      userId: user.id,
-      perResponseVersionCounts: merged.map((r) => ({
-        responseId: r.id,
-        versionCount: (versionsByResponseId[r.id as string] || []).length,
-      })),
-    })
-
     const mergedWithVersions = merged.map((r) => ({
       ...r,
       versions: versionsByResponseId[r.id as string] || [],

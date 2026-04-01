@@ -272,11 +272,6 @@ export function Stage03OnboardingWorkflow() {
     setSending(true)
     try {
       const onboardingUrl = `/api/projects/${selectedProject.id}/onboarding-packages`
-      console.log("[onboarding] Save & send request", {
-        selectedProjectId: selectedProject.id,
-        selectedProjectName: selectedProject.name,
-        onboardingUrl,
-      })
       const res = await fetch(onboardingUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

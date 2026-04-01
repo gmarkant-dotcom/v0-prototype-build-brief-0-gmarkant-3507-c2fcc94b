@@ -33,7 +33,7 @@ export default function PartnerPaymentsPage() {
     accountType: "checking",
     routingNumber: "XXXXXXXXX",
     accountNumber: "XXXXXXXXXXXX",
-    accountName: "Fieldhouse Films LLC",
+    accountName: "Sample Production Studio LLC",
   })
   
   const [rateInfo, setRateInfo] = useState({

@@ -24,12 +24,12 @@ type PartnerProfile = {
 const demoPartners: PartnerProfile[] = [
   {
     id: "demo-partner-1",
-    company_name: "Fieldhouse Films",
-    full_name: "Fieldhouse Films",
+    company_name: "Sample Production Studio",
+    full_name: "Sample Production Studio",
     bio: "Sports and documentary storytelling with nimble production teams.",
     location: "Los Angeles, CA",
-    email: "hello@fieldhousefilms.com",
-    website: "fieldhousefilms.com",
+    email: "contact@demo.withligament.com",
+    website: "demo.withligament.com",
     agency_type: "Production",
   },
   {

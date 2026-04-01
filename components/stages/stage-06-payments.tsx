@@ -31,10 +31,10 @@ interface ClientPayment {
 
 // Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
 const demoPayments: Payment[] = [
-  { id: "1", vendor: "Fieldhouse Films", milestone: "Kick-off", amount: 19400, status: "paid", dueDate: "Jan 15, 2026", paidDate: "Jan 14, 2026" },
-  { id: "2", vendor: "Fieldhouse Films", milestone: "Mid-point", amount: 38800, status: "paid", dueDate: "Mar 1, 2026", paidDate: "Feb 28, 2026" },
-  { id: "3", vendor: "Fieldhouse Films", milestone: "Delivery", amount: 29100, status: "pending", dueDate: "Apr 15, 2026" },
-  { id: "4", vendor: "Fieldhouse Films", milestone: "Final", amount: 9700, status: "upcoming", dueDate: "Jun 1, 2026" },
+  { id: "1", vendor: "Sample Production Studio", milestone: "Kick-off", amount: 19400, status: "paid", dueDate: "Jan 15, 2026", paidDate: "Jan 14, 2026" },
+  { id: "2", vendor: "Sample Production Studio", milestone: "Mid-point", amount: 38800, status: "paid", dueDate: "Mar 1, 2026", paidDate: "Feb 28, 2026" },
+  { id: "3", vendor: "Sample Production Studio", milestone: "Delivery", amount: 29100, status: "pending", dueDate: "Apr 15, 2026" },
+  { id: "4", vendor: "Sample Production Studio", milestone: "Final", amount: 9700, status: "upcoming", dueDate: "Jun 1, 2026" },
   { id: "5", vendor: "Tandem Social", milestone: "Kick-off", amount: 9600, status: "paid", dueDate: "Jan 15, 2026", paidDate: "Jan 15, 2026" },
   { id: "6", vendor: "Tandem Social", milestone: "Monthly #1", amount: 9600, status: "paid", dueDate: "Feb 1, 2026", paidDate: "Feb 1, 2026" },
   { id: "7", vendor: "Tandem Social", milestone: "Monthly #2", amount: 9600, status: "pending", dueDate: "Mar 1, 2026" },
@@ -68,7 +68,7 @@ interface Contract {
 }
 
 const contracts: Contract[] = [
-  { id: "msa-001", vendor: "Fieldhouse Films", type: "MSA + SOW", amount: 97000, status: "signed", signedDate: "Jan 10, 2026" },
+  { id: "msa-001", vendor: "Sample Production Studio", type: "MSA + SOW", amount: 97000, status: "signed", signedDate: "Jan 10, 2026" },
   { id: "msa-002", vendor: "Tandem Social", type: "MSA + SOW", amount: 48000, status: "signed", signedDate: "Jan 12, 2026" },
   { id: "msa-003", vendor: "Roster Agency", type: "MSA + SOW", amount: 40000, status: "signed", signedDate: "Jan 18, 2026" },
 ]

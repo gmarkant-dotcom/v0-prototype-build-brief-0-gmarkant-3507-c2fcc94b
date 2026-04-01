@@ -59,7 +59,7 @@ interface UtilizationRecord {
 const demoUtilization: UtilizationRecord[] = [
   {
     id: "1",
-    vendor: "Fieldhouse Films",
+    vendor: "Sample Production Studio",
     discipline: "Video Production",
     contracted: 97000,
     spent: 40740,
@@ -76,7 +76,7 @@ const demoUtilization: UtilizationRecord[] = [
     partnerContact: {
       name: "Marcus Rodriguez",
       role: "Executive Producer",
-      email: "marcus@fieldhousefilms.com",
+      email: "partner@demo.withligament.com",
       phone: "+1 (555) 876-5432"
     }
   },

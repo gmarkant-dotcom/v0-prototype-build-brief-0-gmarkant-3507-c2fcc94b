@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label"
 
 // Demo data - only shown in demo mode
 const demoVendors = [
-  { id: "1", name: "Fieldhouse Films", discipline: "Video Production", rate: "$$", experience: "5+ years sports content" },
+  { id: "1", name: "Sample Production Studio", discipline: "Video Production", rate: "$$", experience: "5+ years sports content" },
   { id: "2", name: "Tandem Social", discipline: "Social Media", rate: "$", experience: "Creator campaigns" },
   { id: "3", name: "Roster Agency", discipline: "Talent Relations", rate: "$$", experience: "Athlete partnerships" },
   { id: "4", name: "Sarah Chen", discipline: "Motion Design", rate: "$", experience: "After Effects, Cinema 4D specialist" },

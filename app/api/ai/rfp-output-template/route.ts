@@ -19,7 +19,6 @@ function truncateDetail(s: string, max = 800) {
 }
 
 export async function POST(req: Request) {
-  console.log("[rfp-output-template] POST handler entered")
   try {
     const supabase = await createClient()
     const {
@@ -27,7 +26,6 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      console.log("[rfp-output-template] unauthorized — no user")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -45,7 +43,6 @@ export async function POST(req: Request) {
       (profile?.role === "agency" && (profile?.is_paid || profile?.is_admin))
 
     if (!allowed) {
-      console.log("[rfp-output-template] forbidden — not allowed for AI", { userId: user.id, role: profile?.role })
       return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403 })
     }
 
@@ -54,15 +51,6 @@ export async function POST(req: Request) {
     const templateStyle = (body.templateStyle || "formal").toString() as keyof typeof STYLE_MAP
     const outputFormat = (body.outputFormat || "section").toString()
     const sensitivity = body.sensitivity || {}
-
-    console.log("[rfp-output-template] request parsed", {
-      userId: user.id,
-      briefCharCount: briefText.length,
-      briefNonWhitespace: briefText.replace(/\s/g, "").length,
-      templateStyle,
-      outputFormat,
-      hasAnthropicApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
-    })
 
     const scrubBrand = Boolean(sensitivity.scrubBrand)
     const scrubBudget = Boolean(sensitivity.scrubBudget)
@@ -74,7 +62,6 @@ export async function POST(req: Request) {
     }
 
     if (!briefText.trim()) {
-      console.log("[rfp-output-template] rejected — empty briefText")
       return NextResponse.json(
         {
           error: "Brief content is required to generate a template",
@@ -146,15 +133,11 @@ Do not output JSON. Use markdown-style headings (##) for sections. Keep it under
 CLIENT BRIEF (for context — respect scrubbing rules only when illustrating placeholder style):
 ${briefText}`
 
-    console.log("[rfp-output-template] calling generateText…")
     const result = await generateText({
       model: "anthropic/claude-sonnet-4-20250514" as any,
       prompt,
       temperature: 0.35,
       maxOutputTokens: 8192,
-    })
-    console.log("[rfp-output-template] generateText finished", {
-      textLength: (result.text || "").length,
     })
 
     const templateText = (result.text || "").trim()

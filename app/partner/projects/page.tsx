@@ -106,7 +106,7 @@ const demoProjects: Project[] = [
     partnerPointPerson: {
       name: "Marcus Rodriguez",
       role: "Executive Producer",
-      email: "marcus@fieldhousefilms.com",
+      email: "partner@demo.withligament.com",
       phone: "+1 (555) 876-5432",
     },
     documents: [
@@ -152,7 +152,7 @@ const demoOnboardingChecklist: OnboardingItem[] = [
 const brandRules = [
   {
     title: "Team Presentation",
-    description: "You present as part of the Electric Animal team for this engagement. You do not represent Fieldhouse Films externally on this project.",
+    description: "You present as part of the lead agency team for this engagement. Do not represent your own studio brand externally on this project.",
   },
   {
     title: "Communications",

@@ -87,7 +87,7 @@ export type MasterProject = {
 // Demo Projects
 export const demoProjects: MasterProject[] = [
   { id: "1", name: "NWSL Creator Content Series", client: "National Women's Soccer League", status: "active" },
-  { id: "2", name: "Q2 Brand Campaign", client: "Acme Corporation", status: "onboarding" },
+  { id: "2", name: "Q2 Brand Campaign", client: "Sample Client Inc.", status: "onboarding" },
   { id: "3", name: "Holiday Campaign 2025", client: "RetailMax", status: "completed" },
   { id: "4", name: "Summer Festival Activation", client: "BevCo International", status: "active" },
   { id: "5", name: "Product Launch - Series X", client: "TechStart Inc", status: "on_hold" },
@@ -97,14 +97,14 @@ export const demoProjects: MasterProject[] = [
 export const demoPartners: Partner[] = [
   {
     id: "1",
-    name: "Fieldhouse Films",
+    name: "Sample Production Studio",
     type: "production",
     discipline: "Video Production",
     rate: "$$",
     location: "Los Angeles, CA",
-    email: "hello@fieldhousefilms.com",
+    email: "contact@demo.withligament.com",
     phone: "(310) 555-0123",
-    website: "fieldhousefilms.com",
+    website: "demo.withligament.com",
     experience: "5+ years sports content, documentary-style storytelling, on-location production across 20+ markets",
     tags: ["Documentary", "Sports", "Social Content", "Live Events"],
     bookmarked: true,
@@ -368,7 +368,7 @@ export const demoPartners: Partner[] = [
 
 // Demo RFP Vendors (for Stage01RFP component)
 export const demoRfpVendors = [
-  { id: "1", name: "Fieldhouse Films", discipline: "Video Production", rate: "$$", experience: "5+ years sports content" },
+  { id: "1", name: "Sample Production Studio", discipline: "Video Production", rate: "$$", experience: "5+ years sports content" },
   { id: "2", name: "Tandem Social", discipline: "Social Media", rate: "$", experience: "Creator campaigns" },
   { id: "3", name: "Roster Agency", discipline: "Talent Relations", rate: "$$", experience: "Athlete partnerships" },
   { id: "4", name: "Sarah Chen", discipline: "Motion Design", rate: "$", experience: "After Effects, Cinema 4D specialist" },
@@ -438,8 +438,8 @@ export const demoMasterProjects: DashboardDemoProject[] = [
         id: "a2",
         type: "payment",
         severity: "critical",
-        title: "Fieldhouse Films payment overdue",
-        description: "Invoice #FH-2026-003 for $24,500 is 5 days overdue.",
+        title: "Sample Production Studio payment overdue",
+        description: "Invoice #DEMO-2026-003 for $24,500 is 5 days overdue.",
         section: "Payments",
         actionUrl: "/agency/payments",
         createdAt: "2026-03-22"

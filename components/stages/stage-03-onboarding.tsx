@@ -181,7 +181,7 @@ interface Partner {
 const partners: Partner[] = [
   {
     id: "1",
-    name: "Fieldhouse Films",
+    name: "Sample Production Studio",
     discipline: "Video Production",
     ndaSigned: true,
     ndaSignedDate: "Jun 15, 2023",
@@ -239,7 +239,6 @@ export function Stage03Onboarding() {
   
   const handleUploadComplete = (file: { url: string; filename: string }) => {
     if (!checkFeatureAccess()) return
-    console.log("Document uploaded:", file.filename)
     setShowUploadModal(false)
     setUploadingDocType(null)
   }

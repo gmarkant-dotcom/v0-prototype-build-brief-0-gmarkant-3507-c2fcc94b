@@ -539,7 +539,6 @@ export default function PartnerRfpDetailPage() {
         status,
         change_notes: changeNotes,
       }
-      console.log("[partner/rfps] POST /response", { inboxId: id, status, attachmentCount: attachments.length })
       const res = await fetch(`/api/partner/rfps/${id}/response`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -547,7 +546,6 @@ export default function PartnerRfpDetailPage() {
         body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => ({}))
-      console.log("[partner/rfps] response status", res.status, data)
       if (!res.ok) {
         const msg =
           [data?.error, data?.detail].filter(Boolean).join(" — ") || `Request failed (HTTP ${res.status})`

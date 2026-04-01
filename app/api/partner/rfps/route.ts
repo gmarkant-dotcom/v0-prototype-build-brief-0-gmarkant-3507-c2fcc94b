@@ -87,27 +87,6 @@ export async function GET() {
         agency_meeting_url: agencyMeetingUrlById[row.agency_id as string] || null,
       }
     })
-    const samplePartnerId = rows[0]?.partner_id ?? null
-    const sampleRecipientEmail = rows[0]?.recipient_email ?? null
-
-    // Diagnostic: rows explicitly keyed to this user (should match RLS for partner_id–scoped rows)
-    const { count: countByPartnerId } = await supabase
-      .from("partner_rfp_inbox")
-      .select("*", { count: "exact", head: true })
-      .eq("partner_id", user.id)
-
-    console.log(
-      `[partner/rfps] GET ok userId=${user.id} profileEmail=${profile?.email ?? "n/a"} rowsReturned=${mergedRows.length} countWherePartnerIdEqUser=${countByPartnerId ?? "?"}` +
-        (mergedRows.length > 0
-          ? ` sampleRowPartnerId=${samplePartnerId} sampleRecipientEmail=${sampleRecipientEmail}`
-          : "")
-    )
-    console.log("[partner/rfps] status merge diagnostics", {
-      userId: user.id,
-      rowsWithResponseStatus: mergedRows.filter((r) => !!r.response_status).length,
-      rowsWithoutResponseStatus: mergedRows.filter((r) => !r.response_status).length,
-    })
-
     return NextResponse.json({ rfps: mergedRows }, { headers: noStoreHeaders })
   } catch (e) {
     console.error("[partner/rfps] GET exception:", e)

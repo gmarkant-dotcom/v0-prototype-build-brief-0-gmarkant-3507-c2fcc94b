@@ -77,7 +77,7 @@ export default function PartnerLegalPage() {
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null)
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
   const [entityInfo, setEntityInfo] = useState(isDemo ? {
-    legalName: "Fieldhouse Films LLC",
+    legalName: "Sample Production Studio LLC",
     entityType: "llc",
     ein: "XX-XXXXXXX",
     address: "1234 Studio Way, Los Angeles, CA 90028",

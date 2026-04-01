@@ -201,7 +201,7 @@ export default function SignUpPage() {
                     type="text"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="Acme Agency"
+                    placeholder="Your organization"
                     required
                     className="bg-white/5 border-border/30 text-foreground placeholder:text-foreground-muted/50"
                   />

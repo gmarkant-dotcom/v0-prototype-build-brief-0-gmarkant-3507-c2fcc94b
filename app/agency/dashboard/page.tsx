@@ -311,7 +311,7 @@ function DashboardContent() {
                     id="client"
                     value={newProject.client}
                     onChange={(e) => setNewProject({ ...newProject, client: e.target.value })}
-                    placeholder="e.g., Acme Corp"
+                    placeholder="Client or brand name"
                     className="bg-white/5 border-border"
                   />
                 </div>
@@ -390,7 +390,7 @@ function DashboardContent() {
                 </Label>
                 <Input
                   id="client-name"
-                  placeholder="e.g., Acme Corporation"
+                  placeholder="Legal entity name"
                   value={newProject.client}
                   onChange={(e) => setNewProject(prev => ({ ...prev, client: e.target.value }))}
                   className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"

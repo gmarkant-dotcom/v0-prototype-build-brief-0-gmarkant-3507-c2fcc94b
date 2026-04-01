@@ -64,7 +64,7 @@ const demoOnboardingPackets: OnboardingPacket[] = [
     projectName: "NWSL Creator Content Series",
     agencyName: "Electric Animal",
     sentAt: "Mar 18, 2024",
-    message: "Welcome to the team! We're excited to have Fieldhouse Films join us on this project. Please review and complete the onboarding documents below before our kickoff call. Let me know if you have any questions. - Sarah",
+    message: "Welcome to the team! We're excited to partner with you on this project. Please review and complete the onboarding documents below before our kickoff call. Let me know if you have any questions. — Agency contact",
     kickoffScheduleLink: "https://calendly.com/sarah-chen-ea/nwsl-kickoff",
     status: "in_progress",
     documents: [
@@ -931,7 +931,7 @@ export default function PartnerOnboardingPage() {
             
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 mb-6 text-center">
               <div className="font-display text-2xl text-gray-300 italic">
-                Fieldhouse Films
+                Your organization
               </div>
               <div className="font-mono text-[10px] text-gray-400 mt-2">
                 Digital Signature

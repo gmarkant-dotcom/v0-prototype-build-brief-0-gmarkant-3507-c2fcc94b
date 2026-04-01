@@ -55,11 +55,6 @@ async function extractWithPdfjsNonLegacy(uint8: Uint8Array, fileName: string): P
   }
 
   const normalized = normalize(full)
-  console.log("[extract-text][pdfjs-dist/build]", {
-    fileName,
-    extractedChars: normalized.length,
-    preview: normalized.slice(0, 200),
-  })
   return normalized
 }
 
@@ -68,12 +63,6 @@ async function extractWithUnpdf(uint8: Uint8Array, fileName: string): Promise<st
   const result = await extractText(uint8, { mergePages: true })
   const raw = typeof result.text === "string" ? result.text : ""
   const normalized = normalize(raw)
-  console.log("[extract-text][unpdf]", {
-    fileName,
-    totalPages: result.totalPages,
-    extractedChars: normalized.length,
-    preview: normalized.slice(0, 200),
-  })
   return normalized
 }
 
