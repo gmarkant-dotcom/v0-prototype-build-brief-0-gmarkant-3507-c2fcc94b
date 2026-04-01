@@ -181,13 +181,14 @@ type ApiOnboardingPackage = {
   partner_reviewed_at: string | null
   custom_message: string | null
   created_at: string
-  project: { title: string | null; client_name?: string | null } | null
+  project: { name?: string | null; title?: string | null; client_name?: string | null } | null
   agency: { company_name: string | null; full_name: string | null } | null
   documents: ApiPkgDoc[]
 }
 
-function apiProjectTitle(project: ApiOnboardingPackage["project"]): string {
-  const t = (project?.title ?? "").trim()
+/** Prefer `name` (current schema); fall back to legacy `title` if present. */
+function apiProjectName(project: ApiOnboardingPackage["project"]): string {
+  const t = (project?.name ?? project?.title ?? "").trim()
   return t || "Project"
 }
 
@@ -494,7 +495,7 @@ export default function PartnerOnboardingPage() {
                 <div className="space-y-3">
                   {apiPackages.map((p) => {
                     const agencyName = p.agency?.company_name || p.agency?.full_name || "Lead agency"
-                    const projectTitle = apiProjectTitle(p.project)
+                    const projectName = apiProjectName(p.project)
                     const clientName = apiClientName(p.project)
                     const isSel = selectedApi?.id === p.id
                     return (
@@ -518,7 +519,7 @@ export default function PartnerOnboardingPage() {
                             isSel ? "text-white/90" : "text-gray-800"
                           )}
                         >
-                          {projectTitle}
+                          {projectName}
                         </div>
                         {clientName ? (
                           <div
@@ -556,7 +557,7 @@ export default function PartnerOnboardingPage() {
                 <div className="lg:col-span-2 space-y-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <h2 className="font-display font-bold text-2xl text-[#0C3535]">
-                      {apiProjectTitle(selectedApi.project)}
+                      {apiProjectName(selectedApi.project)}
                     </h2>
                     {selectedApiClientName ? (
                       <p className="text-xs text-gray-500 mt-1">{selectedApiClientName}</p>

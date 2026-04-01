@@ -35,17 +35,17 @@ export async function GET(_request: NextRequest) {
 
     const projectIds = [...new Set((packages || []).map((p) => p.project_id as string))]
     const agencyIds = [...new Set((packages || []).map((p) => p.agency_id as string))]
-    const projectMap: Record<string, { title: string | null; client_name: string | null }> = {}
+    const projectMap: Record<string, { name: string | null; client_name: string | null }> = {}
     const agencyMap: Record<string, { company_name: string | null; full_name: string | null }> = {}
 
     if (projectIds.length > 0) {
       const { data: projects } = await supabase
         .from("projects")
-        .select("id, title, client_name")
+        .select("id, name, client_name")
         .in("id", projectIds)
       for (const pr of projects || []) {
-        const row = pr as { id: string; title: string | null; client_name: string | null }
-        projectMap[row.id] = { title: row.title, client_name: row.client_name }
+        const row = pr as { id: string; name: string | null; client_name: string | null }
+        projectMap[row.id] = { name: row.name, client_name: row.client_name }
       }
     }
     if (agencyIds.length > 0) {
