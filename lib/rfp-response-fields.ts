@@ -28,6 +28,36 @@ export type StoredTimeline = {
 
 const TIMELINE_UNITS = new Set(["Days", "Weeks", "Months"])
 
+/** Maps DB/UI variants (e.g. "weeks", "Week") to canonical labels used in selects and display. */
+function normalizeTimelineUnit(u: string): "Days" | "Weeks" | "Months" | null {
+  const s = u.trim()
+  if (TIMELINE_UNITS.has(s)) return s as "Days" | "Weeks" | "Months"
+  const lower = s.toLowerCase()
+  if (lower === "day" || lower === "days") return "Days"
+  if (lower === "week" || lower === "weeks") return "Weeks"
+  if (lower === "month" || lower === "months") return "Months"
+  return null
+}
+
+/** If TEXT columns store double-encoded JSON (string of JSON), unwrap once. */
+function parseJsonObjectMaybeDoubleEncoded(t: string): unknown {
+  let parsed: unknown = JSON.parse(t)
+  if (typeof parsed === "string") {
+    const inner = parsed.trim()
+    if (
+      (inner.startsWith("{") && inner.endsWith("}")) ||
+      (inner.startsWith("[") && inner.endsWith("]"))
+    ) {
+      try {
+        parsed = JSON.parse(inner)
+      } catch {
+        /* keep string */
+      }
+    }
+  }
+  return parsed
+}
+
 export function serializeBudget(amount: number, currency: string, customOther?: string): string {
   const cur = currency === "Other" ? "Other" : currency
   const payload: StoredBudget = {
@@ -86,7 +116,7 @@ export function parseBudgetProposal(raw: string): {
   const t = (raw ?? "").trim()
   if (!t) return empty
   try {
-    const j = JSON.parse(t) as Record<string, unknown>
+    const j = parseJsonObjectMaybeDoubleEncoded(t) as Record<string, unknown>
     if (j && typeof j === "object" && "amount" in j && "currency" in j) {
       const amount = j.amount
       const num = typeof amount === "number" ? amount : parseFloat(String(amount))
@@ -127,12 +157,12 @@ export function parseTimelineProposal(raw: string): {
   const t = (raw ?? "").trim()
   if (!t) return empty
   try {
-    const j = JSON.parse(t) as Record<string, unknown>
+    const j = parseJsonObjectMaybeDoubleEncoded(t) as Record<string, unknown>
     if (j && typeof j === "object" && "duration" in j && "unit" in j) {
       const d = j.duration
       const num = typeof d === "number" ? d : parseFloat(String(d))
       const u = String(j.unit ?? "Weeks")
-      const unit = TIMELINE_UNITS.has(u) ? (u as "Days" | "Weeks" | "Months") : "Weeks"
+      const unit = normalizeTimelineUnit(u) ?? "Weeks"
       return {
         duration: Number.isFinite(num) ? String(num) : "",
         unit,
@@ -162,7 +192,7 @@ function parseStoredBudget(raw: string | Record<string, unknown> | null | undefi
   const t = String(raw ?? "").trim()
   if (!t) return null
   try {
-    return JSON.parse(t) as StoredBudget
+    return parseJsonObjectMaybeDoubleEncoded(t) as StoredBudget
   } catch {
     return null
   }
@@ -191,7 +221,7 @@ function parseStoredTimeline(raw: string | Record<string, unknown> | null | unde
   const t = String(raw ?? "").trim()
   if (!t) return null
   try {
-    return JSON.parse(t) as StoredTimeline
+    return parseJsonObjectMaybeDoubleEncoded(t) as StoredTimeline
   } catch {
     return null
   }
@@ -201,9 +231,9 @@ export function formatTimelineForDisplay(raw: string | Record<string, unknown> |
   const j = parseStoredTimeline(raw)
   if (j && typeof j === "object") {
     const num = typeof j.duration === "number" ? j.duration : parseFloat(String(j.duration))
-    const u = String(j.unit ?? "").trim()
-    if (Number.isFinite(num) && u && TIMELINE_UNITS.has(u)) {
-      return `${num} ${u}`
+    const uNorm = normalizeTimelineUnit(String(j.unit ?? "").trim())
+    if (Number.isFinite(num) && uNorm) {
+      return `${num} ${uNorm}`
     }
   }
   const t = typeof raw === "string" ? raw.trim() : ""

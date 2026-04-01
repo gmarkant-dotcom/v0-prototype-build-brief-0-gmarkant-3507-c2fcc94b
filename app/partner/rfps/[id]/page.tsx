@@ -177,8 +177,9 @@ type ResponseVersion = {
   response_id: string
   version_number: number
   proposal_text: string
-  budget_proposal: string
-  timeline_proposal: string
+  /** TEXT JSON string or object from PostgREST/jsonb depending on column type */
+  budget_proposal: string | Record<string, unknown> | null
+  timeline_proposal: string | Record<string, unknown> | null
   attachments: SavedAttachment[] | null
   status_at_submission: string
   submitted_at: string
@@ -821,6 +822,13 @@ export default function PartnerRfpDetailPage() {
                         const preview =
                           (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "—"
                         const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
+                        console.log("[partner/rfps/detail] version row raw (pre-format)", {
+                          versionRow: v,
+                          budget_proposal: v.budget_proposal,
+                          budget_proposal_type: typeof v.budget_proposal,
+                          timeline_proposal: v.timeline_proposal,
+                          timeline_proposal_type: typeof v.timeline_proposal,
+                        })
                         return (
                           <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                             <div className="flex items-center justify-between gap-3">
@@ -834,11 +842,11 @@ export default function PartnerRfpDetailPage() {
                             <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
-                                <div>{formatBudgetForDisplay(v.budget_proposal || "")}</div>
+                                <div>{formatBudgetForDisplay(v.budget_proposal)}</div>
                               </div>
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
-                                <div>{formatTimelineForDisplay(v.timeline_proposal || "")}</div>
+                                <div>{formatTimelineForDisplay(v.timeline_proposal)}</div>
                               </div>
                             </div>
                             <p className="text-sm text-gray-700 mt-3">{preview || "—"}</p>
