@@ -847,6 +847,11 @@ export default function PartnerRfpDetailPage() {
                             return null
                           }
                         })()
+                        console.log("[partner/rfps/detail] Submission History parsed", {
+                          version: v.version_number,
+                          budgetObj,
+                          timelineObj,
+                        })
                         return (
                           <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                             <div className="flex items-center justify-between gap-3">
@@ -861,17 +866,13 @@ export default function PartnerRfpDetailPage() {
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
                                 <div>
-                                  {budgetObj?.amount != null && budgetObj?.currency
-                                    ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
-                                    : "—"}
+                                  <span>TEST_BUDGET</span>
                                 </div>
                               </div>
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
                                 <div>
-                                  {timelineObj?.duration != null && timelineObj?.unit
-                                    ? `${timelineObj.duration} ${timelineObj.unit}`
-                                    : "—"}
+                                  <span>TEST_TIMELINE</span>
                                 </div>
                               </div>
                             </div>
