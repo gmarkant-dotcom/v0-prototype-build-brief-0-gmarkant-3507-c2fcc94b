@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -85,6 +86,16 @@ export function AgencyBroadcastResponsesPanel() {
     partner: string
     scope: string
   } | null>(null)
+
+  useEffect(() => {
+    if (awardDialog !== null) {
+      console.log("[agency/bids] award dialog open — debug state", {
+        busyId,
+        awardDialog,
+        confirmDisabledBecauseGlobalBusy: busyId !== null && busyId !== awardDialog.id,
+      })
+    }
+  }, [awardDialog, busyId])
 
   useEffect(() => {
     if (isDemo) {
@@ -623,19 +634,28 @@ export function AgencyBroadcastResponsesPanel() {
             <AlertDialogCancel type="button" className="border-border/60 text-foreground hover:bg-white/10 mt-0">
               Cancel
             </AlertDialogCancel>
-            <Button
-              type="button"
-              className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
-              disabled={busyId !== null || !awardDialog}
-              onClick={() => {
-                if (!awardDialog) return
-                const { id } = awardDialog
-                setAwardDialog(null)
-                void patchResponse(id, { status: "awarded" })
-              }}
-            >
-              Confirm Award
-            </Button>
+            <AlertDialogAction asChild>
+              <Button
+                type="button"
+                className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                disabled={
+                  !awardDialog ||
+                  (busyId !== null && busyId === awardDialog.id)
+                }
+                onClick={(e) => {
+                  console.log("confirm award clicked", awardDialog)
+                  if (!awardDialog) {
+                    e.preventDefault()
+                    return
+                  }
+                  const { id } = awardDialog
+                  setAwardDialog(null)
+                  void patchResponse(id, { status: "awarded" })
+                }}
+              >
+                Confirm Award
+              </Button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
