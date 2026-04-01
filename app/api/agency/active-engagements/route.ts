@@ -200,6 +200,12 @@ export async function GET(request: NextRequest) {
       return !u.is_resolved && u.status !== "on_track" && u.status !== "complete"
     }
 
+    function notesPreview60(notes: string | null): string {
+      const t = (notes || "").trim()
+      if (!t) return ""
+      return t.length <= 60 ? t : `${t.slice(0, 60)}…`
+    }
+
     function summarizeStatusUpdates(updates: StatusUpdateRow[]) {
       if (!updates.length) {
         return {
@@ -214,6 +220,7 @@ export async function GET(request: NextRequest) {
             notes: string | null
             created_at: string
           } | null,
+          alert_summaries: [] as { status: string; budget_status: string; notes_preview: string }[],
         }
       }
       const latest = updates[0]
@@ -233,6 +240,11 @@ export async function GET(request: NextRequest) {
               created_at: latestAlert.created_at,
             }
           : null,
+        alert_summaries: unresolvedAlerts.map((u) => ({
+          status: u.status,
+          budget_status: u.budget_status,
+          notes_preview: notesPreview60(u.notes),
+        })),
       }
     }
     const partnerIds = [
@@ -342,6 +354,7 @@ export async function GET(request: NextRequest) {
         notes: string | null
         created_at: string
       } | null
+      alert_summaries: { status: string; budget_status: string; notes_preview: string }[]
     }
 
     const byProject = new Map<string, PartnerRow[]>()
@@ -394,6 +407,7 @@ export async function GET(request: NextRequest) {
         completion_pct: statusSummary.completion_pct,
         alert_count: statusSummary.alert_count,
         latest_alert: statusSummary.latest_alert,
+        alert_summaries: statusSummary.alert_summaries,
       }
 
       const cur = byProject.get(projId) || []

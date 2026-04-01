@@ -17,6 +17,13 @@ import {
 import { Loader2, ExternalLink, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -27,6 +34,21 @@ import { cn } from "@/lib/utils"
 type OnboardingDoc = { label: string; url: string }
 
 type LatestAlert = {
+  id: string
+  status: string
+  budget_status: string
+  completion_pct: number
+  notes: string | null
+  created_at: string
+}
+
+type AlertSummaryLine = {
+  status: string
+  budget_status: string
+  notes_preview: string
+}
+
+type PanelStatusUpdate = {
   id: string
   status: string
   budget_status: string
@@ -55,12 +77,44 @@ type PartnerEngagementRow = {
   completion_pct: number
   alert_count: number
   latest_alert: LatestAlert | null
+  /** One line per unresolved alert (tooltip when alert_count > 1) */
+  alert_summaries?: AlertSummaryLine[]
 }
 
 type ProjectGroup = {
   id: string
   title: string
   partners: PartnerEngagementRow[]
+}
+
+const DEMO_ALERT_2: LatestAlert = {
+  id: "demo-status-alert-2",
+  status: "delayed",
+  budget_status: "over_budget",
+  completion_pct: 38,
+  notes: "Vendor slipped on B-roll delivery by four days; revised dates shared with lead agency.",
+  created_at: new Date(Date.now() - 86400000).toISOString(),
+}
+
+function demoPanelAlerts(): PanelStatusUpdate[] {
+  return [
+    {
+      id: "demo-status-alert-1",
+      status: "at_risk",
+      budget_status: "incremental_needed",
+      completion_pct: 45,
+      notes: "Waiting on revised scope from client.",
+      created_at: new Date().toISOString(),
+    },
+    {
+      id: DEMO_ALERT_2.id,
+      status: DEMO_ALERT_2.status,
+      budget_status: DEMO_ALERT_2.budget_status,
+      completion_pct: DEMO_ALERT_2.completion_pct,
+      notes: DEMO_ALERT_2.notes,
+      created_at: DEMO_ALERT_2.created_at,
+    },
+  ]
 }
 
 function statusBadgeClass(status: string | null): string {
@@ -80,6 +134,15 @@ function ActiveEngagementsInner() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resolvingUpdateId, setResolvingUpdateId] = useState<string | null>(null)
+  const [alertSheetOpen, setAlertSheetOpen] = useState(false)
+  const [alertSheetCtx, setAlertSheetCtx] = useState<{
+    projectId: string
+    partnershipId: string
+    partnerName: string
+  } | null>(null)
+  const [panelAlerts, setPanelAlerts] = useState<PanelStatusUpdate[]>([])
+  const [panelLoading, setPanelLoading] = useState(false)
+  const [resolvingPanelId, setResolvingPanelId] = useState<string | null>(null)
 
   const qProjectId = searchParams.get("projectId")
   const highlightId = searchParams.get("highlight")
@@ -141,7 +204,7 @@ function ActiveEngagementsInner() {
               ],
               current_status: "at_risk",
               completion_pct: 45,
-              alert_count: 1,
+              alert_count: 2,
               latest_alert: {
                 id: "demo-status-alert-1",
                 status: "at_risk",
@@ -150,6 +213,19 @@ function ActiveEngagementsInner() {
                 notes: "Waiting on revised scope from client.",
                 created_at: new Date().toISOString(),
               },
+              alert_summaries: [
+                {
+                  status: "at_risk",
+                  budget_status: "incremental_needed",
+                  notes_preview: "Waiting on revised scope from client.",
+                },
+                {
+                  status: "delayed",
+                  budget_status: "over_budget",
+                  notes_preview:
+                    "Vendor slipped on B-roll delivery by four days; revised da…",
+                },
+              ],
             },
           ],
         },
@@ -194,12 +270,6 @@ function ActiveEngagementsInner() {
   const partnerDisplayName = (p: PartnerEngagementRow["partner"]) =>
     p.companyName?.trim() || p.fullName?.trim() || "Partner"
 
-  const engagementHref = useCallback(
-    (projId: string, assignmentId: string) =>
-      `/agency/project?projectId=${encodeURIComponent(projId)}&highlight=${encodeURIComponent(assignmentId)}`,
-    []
-  )
-
   const reloadEngagements = useCallback(async () => {
     if (!selectedProject?.id || isDemo) return
     const q = new URLSearchParams({ projectId: selectedProject.id })
@@ -212,6 +282,120 @@ function ActiveEngagementsInner() {
     }
   }, [selectedProject?.id, isDemo])
 
+  const openAlertPanel = useCallback(
+    async (projectId: string, partnershipId: string, partnerName: string) => {
+      setAlertSheetCtx({ projectId, partnershipId, partnerName })
+      setAlertSheetOpen(true)
+      setPanelLoading(true)
+      setPanelAlerts([])
+      if (isDemo) {
+        setPanelAlerts(demoPanelAlerts())
+        setPanelLoading(false)
+        return
+      }
+      try {
+        const url = `/api/agency/projects/${encodeURIComponent(projectId)}/status-updates?partnershipId=${encodeURIComponent(partnershipId)}`
+        const res = await fetch(url, { credentials: "same-origin" })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok) {
+          const raw = (data as { updates?: Record<string, unknown>[] }).updates || []
+          setPanelAlerts(
+            raw.map((r) => ({
+              id: String(r.id),
+              status: String(r.status),
+              budget_status: String(r.budget_status),
+              completion_pct: Number(r.completion_pct),
+              notes: (r.notes as string | null) ?? null,
+              created_at: String(r.created_at),
+            }))
+          )
+        }
+      } finally {
+        setPanelLoading(false)
+      }
+    },
+    [isDemo]
+  )
+
+  const resolveFromPanel = useCallback(
+    async (updateId: string) => {
+      if (!alertSheetCtx) return
+      const { projectId, partnershipId } = alertSheetCtx
+
+      const syncDemoTable = (next: PanelStatusUpdate[]) => {
+        setProjectsData((projectsPrev) =>
+          projectsPrev.map((proj) =>
+            proj.id !== projectId
+              ? proj
+              : {
+                  ...proj,
+                  partners: proj.partners.map((row) =>
+                    row.partnershipId !== partnershipId
+                      ? row
+                      : next.length === 0
+                        ? { ...row, alert_count: 0, latest_alert: null, alert_summaries: [] }
+                        : {
+                            ...row,
+                            alert_count: next.length,
+                            latest_alert: {
+                              id: next[0].id,
+                              status: next[0].status,
+                              budget_status: next[0].budget_status,
+                              completion_pct: next[0].completion_pct,
+                              notes: next[0].notes,
+                              created_at: next[0].created_at,
+                            },
+                            alert_summaries: next.map((r) => {
+                              const t = (r.notes || "").trim()
+                              return {
+                                status: r.status,
+                                budget_status: r.budget_status,
+                                notes_preview: t.length <= 60 ? t : `${t.slice(0, 60)}…`,
+                              }
+                            }),
+                          }
+                  ),
+                }
+          )
+        )
+      }
+
+      if (isDemo) {
+        setPanelAlerts((prev) => {
+          const next = prev.filter((a) => a.id !== updateId)
+          syncDemoTable(next)
+          return next
+        })
+        return
+      }
+
+      setResolvingPanelId(updateId)
+      try {
+        const res = await fetch(`/api/agency/projects/${encodeURIComponent(projectId)}/status-updates`, {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ updateId }),
+        })
+        if (res.ok) {
+          setPanelAlerts((prev) => prev.filter((a) => a.id !== updateId))
+          await reloadEngagements()
+        }
+      } finally {
+        setResolvingPanelId(null)
+      }
+    },
+    [alertSheetCtx, isDemo, reloadEngagements]
+  )
+
+  useEffect(() => {
+    if (!alertSheetOpen || panelLoading) return
+    if (panelAlerts.length === 0) {
+      setAlertSheetOpen(false)
+      setAlertSheetCtx(null)
+    }
+  }, [alertSheetOpen, panelLoading, panelAlerts.length])
+
   const resolveAlert = useCallback(
     async (projectId: string, updateId: string) => {
       if (isDemo) {
@@ -221,11 +405,25 @@ function ActiveEngagementsInner() {
               ? proj
               : {
                   ...proj,
-                  partners: proj.partners.map((row) =>
-                    row.latest_alert?.id === updateId
-                      ? { ...row, alert_count: 0, latest_alert: null }
-                      : row
-                  ),
+                  partners: proj.partners.map((row) => {
+                    if (row.latest_alert?.id !== updateId) return row
+                    if ((row.alert_count ?? 0) <= 1) {
+                      return { ...row, alert_count: 0, latest_alert: null, alert_summaries: [] }
+                    }
+                    return {
+                      ...row,
+                      alert_count: row.alert_count - 1,
+                      latest_alert: {
+                        id: DEMO_ALERT_2.id,
+                        status: DEMO_ALERT_2.status,
+                        budget_status: DEMO_ALERT_2.budget_status,
+                        completion_pct: DEMO_ALERT_2.completion_pct,
+                        notes: DEMO_ALERT_2.notes,
+                        created_at: DEMO_ALERT_2.created_at,
+                      },
+                      alert_summaries: (row.alert_summaries ?? []).slice(1),
+                    }
+                  }),
                 }
           )
         )
@@ -321,39 +519,74 @@ function ActiveEngagementsInner() {
                                 <>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Link
-                                        href={engagementHref(proj.id, row.assignmentId)}
-                                        className="inline-flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded-full border border-amber-500/50 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 shrink-0"
+                                      <button
+                                        type="button"
+                                        className="inline-flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded-full border border-amber-500/50 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 shrink-0 cursor-pointer"
+                                        onClick={() =>
+                                          void openAlertPanel(
+                                            proj.id,
+                                            row.partnershipId,
+                                            partnerDisplayName(row.partner)
+                                          )
+                                        }
                                       >
                                         <AlertTriangle className="w-3 h-3" />
                                         {row.alert_count} Alert{row.alert_count > 1 ? "s" : ""}
-                                      </Link>
+                                      </button>
                                     </TooltipTrigger>
                                     <TooltipContent
                                       side="bottom"
-                                      className="max-w-xs bg-background border border-border text-foreground p-3"
+                                      className="max-w-sm bg-background border border-border text-foreground p-3"
                                     >
-                                      <div className="space-y-1 text-xs">
-                                        <div>
-                                          <span className="font-mono text-[10px] text-foreground-muted">Status: </span>
-                                          {workflowStatusLabel(row.latest_alert.status)}
+                                      {row.alert_count > 1 && (row.alert_summaries?.length ?? 0) > 0 ? (
+                                        <div className="space-y-2 text-xs">
+                                          {(row.alert_summaries ?? []).map((s, idx) => (
+                                            <div
+                                              key={`${s.status}-${idx}`}
+                                              className={cn(
+                                                "border-b border-border/40 pb-2 last:border-0 last:pb-0"
+                                              )}
+                                            >
+                                              <span className="font-medium text-foreground">
+                                                {workflowStatusLabel(s.status)}
+                                              </span>
+                                              <span className="text-foreground-muted"> · </span>
+                                              <span>{budgetStatusLabel(s.budget_status)}</span>
+                                              {s.notes_preview ? (
+                                                <p className="text-foreground-muted mt-1 line-clamp-2">
+                                                  {s.notes_preview}
+                                                </p>
+                                              ) : null}
+                                            </div>
+                                          ))}
                                         </div>
-                                        <div>
-                                          <span className="font-mono text-[10px] text-foreground-muted">Budget: </span>
-                                          {budgetStatusLabel(row.latest_alert.budget_status)}
+                                      ) : (
+                                        <div className="space-y-1 text-xs max-w-xs">
+                                          <div>
+                                            <span className="font-mono text-[10px] text-foreground-muted">
+                                              Status:{" "}
+                                            </span>
+                                            {workflowStatusLabel(row.latest_alert.status)}
+                                          </div>
+                                          <div>
+                                            <span className="font-mono text-[10px] text-foreground-muted">
+                                              Budget:{" "}
+                                            </span>
+                                            {budgetStatusLabel(row.latest_alert.budget_status)}
+                                          </div>
+                                          <div>
+                                            <span className="font-mono text-[10px] text-foreground-muted">
+                                              Completion:{" "}
+                                            </span>
+                                            {row.latest_alert.completion_pct}%
+                                          </div>
+                                          {row.latest_alert.notes && (
+                                            <p className="text-foreground-muted line-clamp-4 mt-1 whitespace-pre-wrap">
+                                              {row.latest_alert.notes}
+                                            </p>
+                                          )}
                                         </div>
-                                        <div>
-                                          <span className="font-mono text-[10px] text-foreground-muted">
-                                            Completion:{" "}
-                                          </span>
-                                          {row.latest_alert.completion_pct}%
-                                        </div>
-                                        {row.latest_alert.notes && (
-                                          <p className="text-foreground-muted line-clamp-4 mt-1 whitespace-pre-wrap">
-                                            {row.latest_alert.notes}
-                                          </p>
-                                        )}
-                                      </div>
+                                      )}
                                     </TooltipContent>
                                   </Tooltip>
                                   <Button
@@ -471,6 +704,102 @@ function ActiveEngagementsInner() {
           </div>
         </TooltipProvider>
       )}
+
+      <Sheet
+        open={alertSheetOpen}
+        onOpenChange={(open) => {
+          setAlertSheetOpen(open)
+          if (!open) {
+            setAlertSheetCtx(null)
+            setPanelAlerts([])
+            setPanelLoading(false)
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-lg flex flex-col gap-0 border-border bg-background p-0 [&>button]:text-foreground"
+        >
+          <SheetHeader className="p-6 pb-4 border-b border-border/60 shrink-0 text-left">
+            <SheetTitle className="font-display text-xl text-foreground pr-8">
+              Partner status alerts
+            </SheetTitle>
+            <SheetDescription className="text-foreground-muted text-sm">
+              {alertSheetCtx?.partnerName}
+              {alertSheetCtx && selectedProject ? ` · ${selectedProject.name}` : null}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
+            {panelLoading ? (
+              <div className="flex items-center gap-2 text-foreground-muted py-8">
+                <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                Loading alerts…
+              </div>
+            ) : panelAlerts.length === 0 ? (
+              <p className="text-sm text-foreground-muted">No unresolved status updates.</p>
+            ) : (
+              panelAlerts.map((a) => (
+                <div
+                  key={a.id}
+                  className="rounded-lg border border-border/60 bg-white/5 p-4 space-y-3"
+                >
+                  <div className="font-mono text-[10px] text-foreground-muted">
+                    {new Date(a.created_at).toLocaleString()}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span
+                      className={cn(
+                        "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wide",
+                        statusBadgeClass(a.status)
+                      )}
+                    >
+                      {workflowStatusLabel(a.status)}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-100">
+                      {budgetStatusLabel(a.budget_status)}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-foreground-muted mb-1">
+                      <span>Completion</span>
+                      <span>{a.completion_pct}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full bg-accent/80 rounded-full"
+                        style={{ width: `${Math.min(100, Math.max(0, a.completion_pct))}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Notes</div>
+                    <p className="text-sm text-foreground/90 whitespace-pre-wrap">
+                      {(a.notes || "").trim() || "—"}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full border-border text-foreground hover:bg-white/10"
+                    disabled={resolvingPanelId === a.id}
+                    onClick={() => void resolveFromPanel(a.id)}
+                  >
+                    {resolvingPanelId === a.id ? (
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                        Resolving…
+                      </span>
+                    ) : (
+                      "Mark resolved"
+                    )}
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

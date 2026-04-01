@@ -7,9 +7,10 @@ const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate",
 } as const
 
-export async function GET(_req: Request, { params }: { params: Promise<{ projectId: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const { projectId } = await params
+    const partnershipIdFilter = new URL(req.url).searchParams.get("partnershipId")?.trim() || null
     const supabase = await createClient()
     const {
       data: { user },
@@ -28,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
     }
 
-    const { data: rows, error } = await supabase
+    let query = supabase
       .from("partner_status_updates")
       .select(
         `
@@ -45,6 +46,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       .eq("project_id", projectId)
       .eq("is_resolved", false)
       .order("created_at", { ascending: false })
+
+    if (partnershipIdFilter) {
+      query = query.eq("partnership_id", partnershipIdFilter)
+    }
+
+    const { data: rows, error } = await query
 
     if (error) {
       console.error("[agency/status-updates] GET", error)

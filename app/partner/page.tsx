@@ -1,13 +1,28 @@
 "use client"
 
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { EmptyState } from "@/components/empty-state"
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
-import { AlertTriangle, Clock, FileText, MessageSquare, DollarSign, ChevronRight, Building2, Check, X, Clock3, Send } from "lucide-react"
+import {
+  AlertTriangle,
+  Clock,
+  FileText,
+  MessageSquare,
+  DollarSign,
+  ChevronRight,
+  Building2,
+  Check,
+  X,
+  Clock3,
+  Send,
+  Users,
+  FolderOpen,
+} from "lucide-react"
 
 // Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
 const demoProfileCompletion = {
@@ -102,10 +117,85 @@ const demoProjectAlerts = [
   },
 ]
 
+type PartnerSummary = {
+  agency_relationships: number
+  bids_submitted: number
+  active_engagements: number
+}
+
 export default function PartnerDashboardPage() {
   const isDemo = isDemoMode()
   const { connections, acceptInvitation, declineInvitation, isLoading: connectionsLoading } = useLeadAgencyFilter()
-  
+  const [summary, setSummary] = useState<PartnerSummary>({
+    agency_relationships: 0,
+    bids_submitted: 0,
+    active_engagements: 0,
+  })
+  const [summaryLoading, setSummaryLoading] = useState(true)
+
+  useEffect(() => {
+    if (isDemo) {
+      setSummary({
+        agency_relationships: 4,
+        bids_submitted: 12,
+        active_engagements: 1,
+      })
+      setSummaryLoading(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/partner/summary", { credentials: "same-origin" })
+        const data = await res.json().catch(() => ({}))
+        if (!cancelled && res.ok) {
+          setSummary({
+            agency_relationships: (data as PartnerSummary).agency_relationships ?? 0,
+            bids_submitted: (data as PartnerSummary).bids_submitted ?? 0,
+            active_engagements: (data as PartnerSummary).active_engagements ?? 0,
+          })
+        }
+      } finally {
+        if (!cancelled) setSummaryLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo])
+
+  const executiveSummaryCards = (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="glass rounded-xl p-5 text-center border border-[#0C3535]/10 shadow-sm">
+        <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center mx-auto mb-3">
+          <Users className="w-5 h-5 text-[#0C3535]" />
+        </div>
+        <div className="font-display font-bold text-3xl text-[#0C3535]">
+          {summaryLoading ? "—" : summary.agency_relationships}
+        </div>
+        <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Agency Relationships</div>
+      </div>
+      <div className="glass rounded-xl p-5 text-center border border-[#0C3535]/10 shadow-sm">
+        <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
+          <FileText className="w-5 h-5 text-blue-600" />
+        </div>
+        <div className="font-display font-bold text-3xl text-[#0C3535]">
+          {summaryLoading ? "—" : summary.bids_submitted}
+        </div>
+        <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Bids Submitted</div>
+      </div>
+      <div className="glass rounded-xl p-5 text-center border border-[#0C3535]/10 shadow-sm">
+        <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
+          <FolderOpen className="w-5 h-5 text-emerald-700" />
+        </div>
+        <div className="font-display font-bold text-3xl text-[#0C3535]">
+          {summaryLoading ? "—" : summary.active_engagements}
+        </div>
+        <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Active Engagements</div>
+      </div>
+    </div>
+  )
+
   // Use demo data or empty arrays for production
   const profileCompletion = isDemo ? demoProfileCompletion : { capabilities: 0, credentials: 0, legal: 0, payments: 0 }
   const totalCompletion = Math.round(
@@ -121,6 +211,7 @@ export default function PartnerDashboardPage() {
     return (
       <PartnerLayout>
         <div className="space-y-8">
+          {executiveSummaryCards}
           <div className="flex items-start justify-between">
             <div>
               <h1 className="font-display font-bold text-3xl text-[#0C3535]">
@@ -140,6 +231,8 @@ export default function PartnerDashboardPage() {
   return (
     <PartnerLayout>
       <div className="space-y-8">
+        {executiveSummaryCards}
+
         {/* Welcome Header */}
         <div className="flex items-start justify-between">
           <div>
