@@ -166,32 +166,32 @@ export default function PartnerDashboardPage() {
 
   const executiveSummaryCards = (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <div className="glass rounded-xl p-5 text-center border border-[#0C3535]/10 shadow-sm">
-        <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center mx-auto mb-3">
-          <Users className="w-5 h-5 text-[#0C3535]" />
+      <div className="rounded-xl p-5 text-center border border-white/10 bg-[#0C3535] shadow-sm">
+        <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mx-auto mb-3">
+          <Users className="w-5 h-5 text-white" />
         </div>
-        <div className="font-display font-bold text-3xl text-[#0C3535]">
+        <div className="text-white text-4xl font-bold font-display">
           {summaryLoading ? "—" : summary.agency_relationships}
         </div>
-        <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Agency Relationships</div>
+        <div className="text-gray-400 text-xs uppercase tracking-wider mt-1">Agency Relationships</div>
       </div>
-      <div className="glass rounded-xl p-5 text-center border border-[#0C3535]/10 shadow-sm">
-        <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
-          <FileText className="w-5 h-5 text-blue-600" />
+      <div className="rounded-xl p-5 text-center border border-white/10 bg-[#0C3535] shadow-sm">
+        <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mx-auto mb-3">
+          <FileText className="w-5 h-5 text-white" />
         </div>
-        <div className="font-display font-bold text-3xl text-[#0C3535]">
+        <div className="text-white text-4xl font-bold font-display">
           {summaryLoading ? "—" : summary.bids_submitted}
         </div>
-        <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Bids Submitted</div>
+        <div className="text-gray-400 text-xs uppercase tracking-wider mt-1">Bids Submitted</div>
       </div>
-      <div className="glass rounded-xl p-5 text-center border border-[#0C3535]/10 shadow-sm">
-        <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
-          <FolderOpen className="w-5 h-5 text-emerald-700" />
+      <div className="rounded-xl p-5 text-center border border-white/10 bg-[#0C3535] shadow-sm">
+        <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center mx-auto mb-3">
+          <FolderOpen className="w-5 h-5 text-white" />
         </div>
-        <div className="font-display font-bold text-3xl text-[#0C3535]">
+        <div className="text-white text-4xl font-bold font-display">
           {summaryLoading ? "—" : summary.active_engagements}
         </div>
-        <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Active Engagements</div>
+        <div className="text-gray-400 text-xs uppercase tracking-wider mt-1">Active Engagements</div>
       </div>
     </div>
   )

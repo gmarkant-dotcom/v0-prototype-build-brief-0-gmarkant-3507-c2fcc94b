@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null })
 
     let projects
-    
+    let partnerStatusAlertTotal: number | undefined
+
     if (profile?.role === 'agency') {
       // Try rich query first (with relationships), then fallback to plain projects query.
       const rich = await supabase
@@ -79,6 +80,7 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+      partnerStatusAlertTotal = Array.from(countByProject.values()).reduce((a, b) => a + b, 0)
       projects = (projects || []).map((p: Record<string, unknown>) => {
         const pid = p.id as string
         const first = firstByProject.get(pid)
@@ -129,21 +131,57 @@ export async function GET(request: NextRequest) {
 
       if (error) throw error
 
-      projects = data?.map((a) => ({
-        ...a.project,
-        assignment: {
-          id: a.id,
-          status: a.status,
-          invited_at: a.created_at,
-          responded_at: null as string | null,
-        },
-      }))
+      projects = (data || [])
+        .map((a) => {
+          const row = a as {
+            id: string
+            status: string
+            created_at: string
+            project: unknown
+          }
+          const pr = row.project
+          const proj = (Array.isArray(pr) ? pr[0] : pr) as Record<string, unknown> | null | undefined
+          if (!proj || typeof proj !== 'object') return null
+          const ag = proj.agency
+          const agency = (Array.isArray(ag) ? ag[0] : ag) as
+            | { company_name?: string | null; full_name?: string | null }
+            | null
+            | undefined
+          const titleRaw = (proj.title ?? proj.name ?? '') as string
+          const title = String(titleRaw).trim() || 'Untitled project'
+          return {
+            id: proj.id as string,
+            title,
+            name: title,
+            client_name: (proj.client_name as string | null) ?? null,
+            status: proj.status as string,
+            agency: agency
+              ? {
+                  company_name: agency.company_name ?? null,
+                  full_name: agency.full_name ?? null,
+                }
+              : null,
+            assignment: {
+              id: row.id,
+              status: row.status,
+              invited_at: row.created_at,
+              responded_at: null as string | null,
+            },
+          }
+        })
+        .filter(Boolean)
     } else {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, rowCount: Array.isArray(projects) ? projects.length : 0 })
-    return NextResponse.json({ projects }, { headers: noStoreHeaders })
+    return NextResponse.json(
+      {
+        projects,
+        ...(partnerStatusAlertTotal !== undefined ? { partner_status_alert_total: partnerStatusAlertTotal } : {}),
+      },
+      { headers: noStoreHeaders }
+    )
   } catch (error) {
     console.error('[api] failure', {
       route: '/api/projects',

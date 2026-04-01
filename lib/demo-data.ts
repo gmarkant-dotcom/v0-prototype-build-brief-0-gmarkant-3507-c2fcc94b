@@ -481,7 +481,15 @@ export const demoMasterProjects: DashboardDemoProject[] = [
     alerts: [],
     progress: 5,
     lastActivity: "Yesterday",
-    stage: "RFP"
+    stage: "RFP",
+    partnerStatusAlertCount: 1,
+    partnerStatusAlertPreview: {
+      status: "delayed",
+      budget_status: "over_budget",
+      completion_pct: 22,
+      notes_preview: "Post vendor requested additional week for color; budget impact under review.",
+      created_at: new Date().toISOString(),
+    },
   },
   {
     id: "3",

@@ -107,7 +107,13 @@ function formatBudget(amount: number): string {
 }
 
 function formatUtilization(spent: number, budget: number): string {
-  return Math.round((spent / budget) * 100) + "%"
+  const b = Number(budget)
+  const s = Number(spent)
+  if (!Number.isFinite(b) || b <= 0 || !Number.isFinite(s)) {
+    return "0%"
+  }
+  const pct = Math.round((s / b) * 100)
+  return `${Math.min(100, Math.max(0, pct))}%`
 }
 
 function DashboardContent() {
@@ -127,6 +133,7 @@ function DashboardContent() {
   })
   const [createProjectError, setCreateProjectError] = useState<string | null>(null)
   const [realProjects, setRealProjects] = useState<MasterProject[]>([])
+  const [partnerAlertAggregate, setPartnerAlertAggregate] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   
   const isDemo = isDemoMode()
@@ -189,12 +196,15 @@ function DashboardContent() {
                   : m.status === 'completed'
                     ? 'Closed'
                     : 'Setup',
-              partnerStatusAlertCount: p.partner_status_alert_count ?? 0,
+              partnerStatusAlertCount: Number(p.partner_status_alert_count) || 0,
               partnerStatusAlertPreview: p.partner_status_alert_preview ?? null,
             }
           }
         )
         setRealProjects(mapped)
+        const summed = mapped.reduce((acc, pr) => acc + (pr.partnerStatusAlertCount ?? 0), 0)
+        const fromApi = Number((data as { partner_status_alert_total?: unknown }).partner_status_alert_total)
+        setPartnerAlertAggregate(Number.isFinite(fromApi) ? fromApi : summed)
       }
     } catch (error) {
       console.error('Error fetching projects:', error)
@@ -215,7 +225,11 @@ function DashboardContent() {
   const activeProjects = projects.filter(p => p.status === "active").length
   const totalBudget = projects.reduce((sum, p) => sum + p.budget, 0)
   const totalSpent = projects.reduce((sum, p) => sum + p.spent, 0)
-  const totalAlerts = projects.reduce((sum, p) => sum + p.alerts.length, 0)
+  const partnerAlertsForStat = isDemo
+    ? projects.reduce((sum, p) => sum + (p.partnerStatusAlertCount ?? 0), 0)
+    : partnerAlertAggregate
+  const totalAlerts =
+    projects.reduce((sum, p) => sum + p.alerts.length, 0) + partnerAlertsForStat
   const totalPartners = projects.reduce((sum, p) => sum + p.partnerCount, 0)
 
   const handleCreateProject = async () => {

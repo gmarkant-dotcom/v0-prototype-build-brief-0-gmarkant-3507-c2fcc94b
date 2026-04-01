@@ -182,7 +182,8 @@ const documentIcons: Record<string, React.ElementType> = {
 
 type ProductionProjectListItem = {
   id: string
-  title: string
+  title?: string | null
+  name?: string | null
   client_name: string | null
   status: string
   agency?: { company_name?: string | null; full_name?: string | null } | null
@@ -249,7 +250,8 @@ export default function PartnerProjectsPage() {
           ) : (
             <div className="grid gap-3">
               {apiProjects.map((p) => {
-                const name = p.title || "Untitled project"
+                const name =
+                  (p.title || p.name || "").trim() || "Untitled project"
                 const agency =
                   p.agency?.company_name || p.agency?.full_name || "Lead agency"
                 return (

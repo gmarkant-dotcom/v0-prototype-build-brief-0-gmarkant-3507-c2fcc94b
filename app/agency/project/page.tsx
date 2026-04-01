@@ -317,6 +317,12 @@ function ActiveEngagementsInner() {
     [isDemo]
   )
 
+  const openAlertsForRow = useCallback((proj: ProjectGroup, row: PartnerEngagementRow) => {
+    const name =
+      row.partner.companyName?.trim() || row.partner.fullName?.trim() || "Partner"
+    void openAlertPanel(proj.id, row.partnershipId, name)
+  }, [openAlertPanel])
+
   const resolveFromPanel = useCallback(
     async (updateId: string) => {
       if (!alertSheetCtx) return
@@ -364,6 +370,10 @@ function ActiveEngagementsInner() {
         setPanelAlerts((prev) => {
           const next = prev.filter((a) => a.id !== updateId)
           syncDemoTable(next)
+          if (next.length === 0) {
+            setAlertSheetOpen(false)
+            setAlertSheetCtx(null)
+          }
           return next
         })
         return
@@ -378,7 +388,14 @@ function ActiveEngagementsInner() {
           body: JSON.stringify({ updateId }),
         })
         if (res.ok) {
-          setPanelAlerts((prev) => prev.filter((a) => a.id !== updateId))
+          setPanelAlerts((prev) => {
+            const next = prev.filter((a) => a.id !== updateId)
+            if (next.length === 0) {
+              setAlertSheetOpen(false)
+              setAlertSheetCtx(null)
+            }
+            return next
+          })
           await reloadEngagements()
         }
       } finally {
@@ -387,14 +404,6 @@ function ActiveEngagementsInner() {
     },
     [alertSheetCtx, isDemo, reloadEngagements]
   )
-
-  useEffect(() => {
-    if (!alertSheetOpen || panelLoading) return
-    if (panelAlerts.length === 0) {
-      setAlertSheetOpen(false)
-      setAlertSheetCtx(null)
-    }
-  }, [alertSheetOpen, panelLoading, panelAlerts.length])
 
   const resolveAlert = useCallback(
     async (projectId: string, updateId: string) => {
@@ -514,7 +523,13 @@ function ActiveEngagementsInner() {
                         >
                           <td className="py-3 pr-3">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-foreground font-medium">{partnerDisplayName(row.partner)}</span>
+                              <button
+                                type="button"
+                                className="text-foreground font-medium text-left hover:underline rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+                                onClick={() => openAlertsForRow(proj, row)}
+                              >
+                                {partnerDisplayName(row.partner)}
+                              </button>
                               {row.alert_count > 0 && row.latest_alert && (
                                 <>
                                   <Tooltip>
@@ -522,13 +537,7 @@ function ActiveEngagementsInner() {
                                       <button
                                         type="button"
                                         className="inline-flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded-full border border-amber-500/50 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 shrink-0 cursor-pointer"
-                                        onClick={() =>
-                                          void openAlertPanel(
-                                            proj.id,
-                                            row.partnershipId,
-                                            partnerDisplayName(row.partner)
-                                          )
-                                        }
+                                        onClick={() => openAlertsForRow(proj, row)}
                                       >
                                         <AlertTriangle className="w-3 h-3" />
                                         {row.alert_count} Alert{row.alert_count > 1 ? "s" : ""}
@@ -608,16 +617,22 @@ function ActiveEngagementsInner() {
                             </div>
                           </td>
                           <td className="py-3 pr-3">
-                            <span
-                              className={cn(
-                                "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wide inline-block",
-                                statusBadgeClass(row.current_status)
-                              )}
+                            <button
+                              type="button"
+                              className="text-left rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+                              onClick={() => openAlertsForRow(proj, row)}
                             >
-                              {row.current_status
-                                ? workflowStatusLabel(row.current_status)
-                                : "No updates"}
-                            </span>
+                              <span
+                                className={cn(
+                                  "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wide inline-block cursor-pointer hover:opacity-90",
+                                  statusBadgeClass(row.current_status)
+                                )}
+                              >
+                                {row.current_status
+                                  ? workflowStatusLabel(row.current_status)
+                                  : "No updates"}
+                              </span>
+                            </button>
                           </td>
                           <td className="py-3 pr-3 w-[100px]">
                             <div className="flex flex-col gap-1">
