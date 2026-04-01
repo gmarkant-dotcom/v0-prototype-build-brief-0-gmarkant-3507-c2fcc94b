@@ -548,7 +548,7 @@ function ActiveEngagementsInner() {
                         <th className="py-2 pr-3 font-medium">Budget</th>
                         <th className="py-2 pr-3 font-medium">Timeline</th>
                         <th className="py-2 pr-3 font-medium">Contact</th>
-                        <th className="py-2 pr-3 font-medium">Kickoff</th>
+                        <th className="py-2 pr-3 font-medium">Schedule Meeting</th>
                         <th className="py-2 font-medium">Documents</th>
                       </tr>
                     </thead>
@@ -712,7 +712,7 @@ function ActiveEngagementsInner() {
                                 className="inline-flex items-center gap-1 text-accent hover:underline font-mono text-[10px]"
                               >
                                 <ExternalLink className="w-3 h-3 shrink-0" />
-                                {row.kickoffType === "calendly" ? "Schedule" : "Link"}
+                                {row.kickoffType === "calendly" ? "Schedule Meeting" : "Link"}
                               </a>
                             ) : (
                               <span className="text-foreground-muted">—</span>

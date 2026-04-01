@@ -181,9 +181,19 @@ type ApiOnboardingPackage = {
   partner_reviewed_at: string | null
   custom_message: string | null
   created_at: string
-  project: { title: string | null } | null
+  project: { title: string | null; client_name?: string | null } | null
   agency: { company_name: string | null; full_name: string | null } | null
   documents: ApiPkgDoc[]
+}
+
+function apiProjectTitle(project: ApiOnboardingPackage["project"]): string {
+  const t = (project?.title ?? "").trim()
+  return t || "Project"
+}
+
+function apiClientName(project: ApiOnboardingPackage["project"]): string | null {
+  const c = (project?.client_name ?? "").trim()
+  return c || null
 }
 
 export default function PartnerOnboardingPage() {
@@ -249,6 +259,7 @@ export default function PartnerOnboardingPage() {
   }, [isDemo])
 
   const selectedApi = apiPackages.find((p) => p.id === selectedApiId) || apiPackages[0] || null
+  const selectedApiClientName = selectedApi ? apiClientName(selectedApi.project) : null
 
   const markReviewed = async () => {
     if (!selectedApi) return
@@ -483,6 +494,9 @@ export default function PartnerOnboardingPage() {
                 <div className="space-y-3">
                   {apiPackages.map((p) => {
                     const agencyName = p.agency?.company_name || p.agency?.full_name || "Lead agency"
+                    const projectTitle = apiProjectTitle(p.project)
+                    const clientName = apiClientName(p.project)
+                    const isSel = selectedApi?.id === p.id
                     return (
                       <button
                         key={p.id}
@@ -490,28 +504,45 @@ export default function PartnerOnboardingPage() {
                         onClick={() => setSelectedApiId(p.id)}
                         className={cn(
                           "w-full text-left p-4 rounded-xl border transition-colors",
-                          selectedApi?.id === p.id
+                          isSel
                             ? "bg-[#0C3535] text-white border-[#0C3535]"
                             : "bg-white border-gray-200 hover:border-[#0C3535]/30"
                         )}
                       >
-                        <div className="font-display font-bold">{p.project?.title || "Project"}</div>
+                        <div className={cn("font-display font-bold", isSel ? "text-white" : "text-[#0C3535]")}>
+                          {agencyName}
+                        </div>
                         <div
                           className={cn(
-                            "font-mono text-[10px] mt-1",
-                            selectedApi?.id === p.id ? "text-white/70" : "text-gray-500"
+                            "text-sm font-medium mt-1.5",
+                            isSel ? "text-white/90" : "text-gray-800"
                           )}
                         >
-                          {agencyName} · {new Date(p.created_at).toLocaleDateString()}
+                          {projectTitle}
+                        </div>
+                        {clientName ? (
+                          <div
+                            className={cn("text-xs mt-0.5", isSel ? "text-white/65" : "text-gray-500")}
+                          >
+                            {clientName}
+                          </div>
+                        ) : null}
+                        <div
+                          className={cn(
+                            "font-mono text-[10px] mt-2",
+                            isSel ? "text-white/70" : "text-gray-500"
+                          )}
+                        >
+                          {new Date(p.created_at).toLocaleDateString()}
                         </div>
                         <div
                           className={cn(
                             "font-mono text-[10px] mt-2 px-2 py-0.5 rounded-full inline-block",
                             p.status === "reviewed"
-                              ? selectedApi?.id === p.id
+                              ? isSel
                                 ? "bg-white/20"
                                 : "bg-green-100 text-green-800"
-                              : selectedApi?.id === p.id
+                              : isSel
                                 ? "bg-white/20"
                                 : "bg-amber-100 text-amber-900"
                           )}
@@ -525,8 +556,11 @@ export default function PartnerOnboardingPage() {
                 <div className="lg:col-span-2 space-y-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <h2 className="font-display font-bold text-2xl text-[#0C3535]">
-                      {selectedApi.project?.title || "Project"}
+                      {apiProjectTitle(selectedApi.project)}
                     </h2>
+                    {selectedApiClientName ? (
+                      <p className="text-xs text-gray-500 mt-1">{selectedApiClientName}</p>
+                    ) : null}
                     <p className="text-sm text-gray-600 mt-1">
                       From{" "}
                       {selectedApi.agency?.company_name || selectedApi.agency?.full_name || "your lead agency"}
