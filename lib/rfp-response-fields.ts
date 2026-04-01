@@ -39,21 +39,26 @@ function normalizeTimelineUnit(u: string): "Days" | "Weeks" | "Months" | null {
   return null
 }
 
-/** If TEXT columns store double-encoded JSON (string of JSON), unwrap once. */
+const MAX_JSON_UNWRAP = 10
+
+/**
+ * TEXT columns may store JSON serialized twice: the column value is a JSON string whose
+ * content is another JSON string that finally parses to an object, e.g.
+ * `JSON.stringify(JSON.stringify({ amount: 5000, currency: "USD" }))`.
+ * Unwrap while the result is still a string and JSON.parse succeeds.
+ */
 function parseJsonObjectMaybeDoubleEncoded(t: string): unknown {
-  let parsed: unknown = JSON.parse(t)
-  if (typeof parsed === "string") {
+  let parsed: unknown = JSON.parse(t.trim())
+  let depth = 0
+  while (typeof parsed === "string" && depth < MAX_JSON_UNWRAP) {
     const inner = parsed.trim()
-    if (
-      (inner.startsWith("{") && inner.endsWith("}")) ||
-      (inner.startsWith("[") && inner.endsWith("]"))
-    ) {
-      try {
-        parsed = JSON.parse(inner)
-      } catch {
-        /* keep string */
-      }
+    if (!inner) break
+    try {
+      parsed = JSON.parse(inner)
+    } catch {
+      break
     }
+    depth++
   }
   return parsed
 }
