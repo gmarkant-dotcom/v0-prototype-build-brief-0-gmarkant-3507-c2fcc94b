@@ -820,13 +820,6 @@ export default function PartnerRfpDetailPage() {
                         const preview =
                           (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "—"
                         const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
-                        console.log("[partner/rfps/detail] version row raw (pre-format)", {
-                          versionRow: v,
-                          budget_proposal: v.budget_proposal,
-                          budget_proposal_type: typeof v.budget_proposal,
-                          timeline_proposal: v.timeline_proposal,
-                          timeline_proposal_type: typeof v.timeline_proposal,
-                        })
                         const budgetObj = (() => {
                           try {
                             let val: unknown = v.budget_proposal
@@ -847,11 +840,6 @@ export default function PartnerRfpDetailPage() {
                             return null
                           }
                         })()
-                        console.log("[partner/rfps/detail] Submission History parsed", {
-                          version: v.version_number,
-                          budgetObj,
-                          timelineObj,
-                        })
                         return (
                           <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                             <div className="flex items-center justify-between gap-3">
@@ -866,13 +854,17 @@ export default function PartnerRfpDetailPage() {
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
                                 <div>
-                                  <span>TEST_BUDGET</span>
+                                  {budgetObj?.amount != null && budgetObj?.currency
+                                    ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
+                                    : "—"}
                                 </div>
                               </div>
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
                                 <div>
-                                  <span>TEST_TIMELINE</span>
+                                  {timelineObj?.duration != null && timelineObj?.unit
+                                    ? `${timelineObj.duration} ${timelineObj.unit}`
+                                    : "—"}
                                 </div>
                               </div>
                             </div>

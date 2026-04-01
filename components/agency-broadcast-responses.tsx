@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
-import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import { Button } from "@/components/ui/button"
@@ -39,6 +38,30 @@ type InboxSnippet = {
 } | null
 
 type AttachmentItem = { type: string; label: string; url: string }
+
+/** Partner API may return TEXT double-encoded as JSON string-of-string; unwrap twice then read fields. */
+function parseVersionBudgetObj(val: unknown): { amount?: number; currency?: string } | null {
+  try {
+    let v: unknown = val
+    if (typeof v === "string") v = JSON.parse(v)
+    if (typeof v === "string") v = JSON.parse(v)
+    return v as { amount?: number; currency?: string } | null
+  } catch {
+    return null
+  }
+}
+
+function parseVersionTimelineObj(val: unknown): { duration?: number; unit?: string } | null {
+  try {
+    let v: unknown = val
+    if (typeof v === "string") v = JSON.parse(v)
+    if (typeof v === "string") v = JSON.parse(v)
+    return v as { duration?: number; unit?: string } | null
+  } catch {
+    return null
+  }
+}
+
 type ResponseVersion = {
   id: string
   response_id: string
@@ -291,11 +314,23 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                   <div className="grid sm:grid-cols-2 gap-3 text-sm pt-3">
                     <div>
                       <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
-                      <div className="text-foreground">{formatBudgetForDisplay(r.budget_proposal)}</div>
+                      <div className="text-foreground">
+                        {(() => {
+                          const o = parseVersionBudgetObj(r.budget_proposal)
+                          return o?.amount != null && o?.currency
+                            ? `${Number(o.amount).toLocaleString("en-US")} ${o.currency}`
+                            : "—"
+                        })()}
+                      </div>
                     </div>
                     <div>
                       <div className="font-mono text-[10px] uppercase text-foreground-muted">Timeline</div>
-                      <div className="text-foreground">{formatTimelineForDisplay(r.timeline_proposal)}</div>
+                      <div className="text-foreground">
+                        {(() => {
+                          const o = parseVersionTimelineObj(r.timeline_proposal)
+                          return o?.duration != null && o?.unit ? `${o.duration} ${o.unit}` : "—"
+                        })()}
+                      </div>
                     </div>
                   </div>
                   {sent && (
@@ -350,7 +385,14 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                             <div className="grid sm:grid-cols-2 gap-3 text-sm">
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
-                                <div className="text-foreground">{formatBudgetForDisplay(selectedVersion.budget_proposal || "")}</div>
+                                <div className="text-foreground">
+                                  {(() => {
+                                    const o = parseVersionBudgetObj(selectedVersion.budget_proposal)
+                                    return o?.amount != null && o?.currency
+                                      ? `${Number(o.amount).toLocaleString("en-US")} ${o.currency}`
+                                      : "—"
+                                  })()}
+                                </div>
                                 {(selectedVersion.budget || selectedVersion.budget_currency) && (
                                   <div className="font-mono text-[10px] text-foreground-muted mt-1">
                                     {selectedVersion.budget || "—"} {selectedVersion.budget_currency || ""}
@@ -359,7 +401,12 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                               </div>
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-foreground-muted">Timeline</div>
-                                <div className="text-foreground">{formatTimelineForDisplay(selectedVersion.timeline_proposal || "")}</div>
+                                <div className="text-foreground">
+                                  {(() => {
+                                    const o = parseVersionTimelineObj(selectedVersion.timeline_proposal)
+                                    return o?.duration != null && o?.unit ? `${o.duration} ${o.unit}` : "—"
+                                  })()}
+                                </div>
                                 {(selectedVersion.timeline || selectedVersion.timeline_unit) && (
                                   <div className="font-mono text-[10px] text-foreground-muted mt-1">
                                     {selectedVersion.timeline || "—"} {selectedVersion.timeline_unit || ""}
