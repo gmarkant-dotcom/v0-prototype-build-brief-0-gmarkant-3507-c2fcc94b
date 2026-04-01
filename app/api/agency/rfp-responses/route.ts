@@ -3,8 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const url = new URL(request.url)
+    const projectIdParam = (url.searchParams.get("projectId") || "").trim()
     const route = "/api/agency/rfp-responses"
     const supabase = await createClient()
     const {
@@ -20,14 +22,35 @@ export async function GET() {
     if (profile?.role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
-    console.log("[api] start", { route, method: "GET", userId: user.id, role: profile.role })
+    console.log("[api] start", { route, method: "GET", userId: user.id, role: profile.role, projectId: projectIdParam || null })
 
     // RLS: policy "Agencies select RFP responses they own" — USING (agency_id = auth.uid())
-    const { data: responses, error } = await supabase
+    // Optional project-scoped filtering is applied via partner_rfp_inbox.project_id.
+    let inboxIdsForProject: string[] | null = null
+    if (projectIdParam) {
+      const { data: scopedInboxes, error: inboxErr } = await supabase
+        .from("partner_rfp_inbox")
+        .select("id")
+        .eq("agency_id", user.id)
+        .eq("project_id", projectIdParam)
+      if (inboxErr) {
+        return NextResponse.json({ error: inboxErr.message }, { status: 500 })
+      }
+      inboxIdsForProject = (scopedInboxes || []).map((r) => r.id as string)
+      if (inboxIdsForProject.length === 0) {
+        return NextResponse.json({ responses: [] }, { headers: { "Cache-Control": "private, no-store, no-cache, must-revalidate" } })
+      }
+    }
+
+    let responsesQuery = supabase
       .from("partner_rfp_responses")
       .select("*")
       .eq("agency_id", user.id)
       .order("updated_at", { ascending: false })
+    if (inboxIdsForProject) {
+      responsesQuery = responsesQuery.in("inbox_item_id", inboxIdsForProject)
+    }
+    const { data: responses, error } = await responsesQuery
 
     if (error) {
       console.error("[agency/rfp-responses] partner_rfp_responses select error", {

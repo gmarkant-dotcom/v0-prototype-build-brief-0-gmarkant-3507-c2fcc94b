@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { AgencyBroadcastResponsesPanel } from "@/components/agency-broadcast-responses"
 import { usePaidUser } from "@/contexts/paid-user-context"
+import { useSelectedProject } from "@/contexts/selected-project-context"
 import { X, FileText, Play, Download, ExternalLink, ChevronRight, Clock, DollarSign, Users, Briefcase, MessageSquare, Send, History, CheckCircle, AlertCircle, Paperclip } from "lucide-react"
 
 interface WorkSample {
@@ -504,6 +505,7 @@ export function Stage02Bids() {
   const isDemo = isDemoMode()
   const sampleBids = isDemo ? demoBids : []
   const { checkFeatureAccess } = usePaidUser()
+  const { selectedProject } = useSelectedProject()
   
   const [selectedBid, setSelectedBid] = useState<string | null>(null)
   const [awardedVendors, setAwardedVendors] = useState<string[]>([])
@@ -563,7 +565,7 @@ export function Stage02Bids() {
           subtitle="Review partner proposals from broadcast RFPs. Submissions appear below from partner_rfp_responses. AI scoring and comparison cards are available in demo preview."
           aiPowered
         />
-        <AgencyBroadcastResponsesPanel />
+        <AgencyBroadcastResponsesPanel projectId={selectedProject?.id ?? null} />
       </div>
     )
   }

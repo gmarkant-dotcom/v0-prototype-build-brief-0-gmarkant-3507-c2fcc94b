@@ -324,11 +324,14 @@ export default function PartnerPoolPage() {
     if (isDemo) return
     setConfirmingNdaFor(partnershipId)
     try {
+      console.log("sending PATCH...", { url: "/api/partnerships", partnershipId, action: "confirm_nda" })
       const response = await fetch('/api/partnerships', {
         method: 'PATCH',
+        credentials: "same-origin",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partnershipId, action: 'confirm_nda' }),
       })
+      console.log("PATCH response", response.status)
       console.log("[agency/pool] confirm NDA response", { ok: response.ok, status: response.status, partnershipId })
       if (response.ok) {
         await loadPartnerships()

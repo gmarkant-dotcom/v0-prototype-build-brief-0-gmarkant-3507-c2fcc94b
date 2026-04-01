@@ -67,7 +67,7 @@ type AgencyResponseRow = {
   versions?: ResponseVersion[]
 }
 
-export function AgencyBroadcastResponsesPanel() {
+export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: string | null }) {
   const isDemo = isDemoMode()
   const [loading, setLoading] = useState(!isDemo)
   const [error, setError] = useState<string | null>(null)
@@ -131,11 +131,13 @@ export function AgencyBroadcastResponsesPanel() {
       setLoading(true)
       setError(null)
       try {
+        const qs = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
+        const url = `/api/agency/rfp-responses${qs}`
         console.log(
           "[agency/bids] AgencyBroadcastResponsesPanel → GET /api/agency/rfp-responses",
-          typeof window !== "undefined" ? window.location.pathname : ""
+          { url, pathname: typeof window !== "undefined" ? window.location.pathname : "" }
         )
-        const res = await fetch("/api/agency/rfp-responses", { cache: "no-store", credentials: "same-origin" })
+        const res = await fetch(url, { cache: "no-store", credentials: "same-origin" })
         const data = await res.json().catch(() => ({}))
         console.log("[agency/bids] rfp-responses response", {
           ok: res.ok,
@@ -160,7 +162,7 @@ export function AgencyBroadcastResponsesPanel() {
     return () => {
       cancelled = true
     }
-  }, [isDemo])
+  }, [isDemo, projectId])
 
   if (loading) {
     return (
