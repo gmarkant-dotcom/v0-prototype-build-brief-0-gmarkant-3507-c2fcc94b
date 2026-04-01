@@ -165,11 +165,37 @@ const demoOnboardingPackets: OnboardingPacket[] = [
   },
 ]
 
+type ApiPkgDoc = {
+  id: string
+  label: string
+  url: string
+  document_role: string
+}
+
+type ApiOnboardingPackage = {
+  id: string
+  status: string
+  kickoff_type: string
+  kickoff_url: string | null
+  kickoff_availability: string | null
+  partner_reviewed_at: string | null
+  custom_message: string | null
+  created_at: string
+  project: { title: string | null } | null
+  agency: { company_name: string | null; full_name: string | null } | null
+  documents: ApiPkgDoc[]
+}
+
 export default function PartnerOnboardingPage() {
   const isDemo = isDemoMode()
   const router = useRouter()
   const onboardingPackets = isDemo ? demoOnboardingPackets : []
   const [packets, setPackets] = useState(onboardingPackets)
+  const [apiPackages, setApiPackages] = useState<ApiOnboardingPackage[]>([])
+  const [apiLoading, setApiLoading] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [selectedApiId, setSelectedApiId] = useState<string | null>(null)
+  const [markingReviewed, setMarkingReviewed] = useState(false)
   const [selectedPacket, setSelectedPacket] = useState<OnboardingPacket | null>(packets[0] || null)
   const [showSignModal, setShowSignModal] = useState(false)
   const [signingDoc, setSigningDoc] = useState<OnboardingDocument | null>(null)
@@ -195,6 +221,71 @@ export default function PartnerOnboardingPage() {
     }
     ensurePartnerAuth()
   }, [isDemo, router])
+
+  useEffect(() => {
+    if (isDemo) return
+    let cancelled = false
+    ;(async () => {
+      setApiLoading(true)
+      setApiError(null)
+      try {
+        const res = await fetch("/api/partner/onboarding-packages", { credentials: "same-origin" })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error((data?.error as string) || "Could not load onboarding")
+        const list = (data.packages || []) as ApiOnboardingPackage[]
+        if (!cancelled) {
+          setApiPackages(list)
+          setSelectedApiId((prev) => prev ?? (list[0]?.id ?? null))
+        }
+      } catch (e) {
+        if (!cancelled) setApiError(e instanceof Error ? e.message : "Failed to load")
+      } finally {
+        if (!cancelled) setApiLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo])
+
+  const selectedApi = apiPackages.find((p) => p.id === selectedApiId) || apiPackages[0] || null
+
+  const markReviewed = async () => {
+    if (!selectedApi) return
+    setMarkingReviewed(true)
+    setApiError(null)
+    try {
+      const res = await fetch(`/api/partner/onboarding-packages/${selectedApi.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ action: "mark_reviewed" }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((data?.error as string) || "Update failed")
+      setApiPackages((prev) =>
+        prev.map((p) =>
+          p.id === selectedApi.id
+            ? { ...p, status: "reviewed", partner_reviewed_at: new Date().toISOString() }
+            : p
+        )
+      )
+    } catch (e) {
+      setApiError(e instanceof Error ? e.message : "Failed")
+    } finally {
+      setMarkingReviewed(false)
+    }
+  }
+
+  const openDocHref = (doc: ApiPkgDoc) => {
+    if (doc.url.startsWith("http://") || doc.url.startsWith("https://")) {
+      if (doc.url.includes("blob.vercel-storage.com") || doc.url.includes("vercel-storage.com")) {
+        return `/api/partner/onboarding/file?documentId=${encodeURIComponent(doc.id)}`
+      }
+      return doc.url
+    }
+    return doc.url
+  }
   
   const getStatusColor = (status: DocumentStatus) => {
     switch (status) {
@@ -366,8 +457,169 @@ export default function PartnerOnboardingPage() {
           </div>
           <LeadAgencyFilter />
         </div>
+
+        {!isDemo && (
+          <>
+            {apiLoading && (
+              <div className="flex items-center gap-2 text-gray-600 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading packages…
+              </div>
+            )}
+            {apiError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">{apiError}</div>
+            )}
+            {!apiLoading && apiPackages.length === 0 && !apiError && (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <div className="font-display font-bold text-xl text-[#0C3535] mb-2">No onboarding packages</div>
+                <p className="text-gray-600">
+                  When your lead agency sends onboarding documents, they will appear here.
+                </p>
+              </div>
+            )}
+            {!apiLoading && selectedApi && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="space-y-3">
+                  {apiPackages.map((p) => {
+                    const agencyName = p.agency?.company_name || p.agency?.full_name || "Lead agency"
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setSelectedApiId(p.id)}
+                        className={cn(
+                          "w-full text-left p-4 rounded-xl border transition-colors",
+                          selectedApi?.id === p.id
+                            ? "bg-[#0C3535] text-white border-[#0C3535]"
+                            : "bg-white border-gray-200 hover:border-[#0C3535]/30"
+                        )}
+                      >
+                        <div className="font-display font-bold">{p.project?.title || "Project"}</div>
+                        <div
+                          className={cn(
+                            "font-mono text-[10px] mt-1",
+                            selectedApi?.id === p.id ? "text-white/70" : "text-gray-500"
+                          )}
+                        >
+                          {agencyName} · {new Date(p.created_at).toLocaleDateString()}
+                        </div>
+                        <div
+                          className={cn(
+                            "font-mono text-[10px] mt-2 px-2 py-0.5 rounded-full inline-block",
+                            p.status === "reviewed"
+                              ? selectedApi?.id === p.id
+                                ? "bg-white/20"
+                                : "bg-green-100 text-green-800"
+                              : selectedApi?.id === p.id
+                                ? "bg-white/20"
+                                : "bg-amber-100 text-amber-900"
+                          )}
+                        >
+                          {p.status === "reviewed" ? "Reviewed" : "Action needed"}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <h2 className="font-display font-bold text-2xl text-[#0C3535]">
+                      {selectedApi.project?.title || "Project"}
+                    </h2>
+                    <p className="text-sm text-gray-600 mt-1">
+                      From{" "}
+                      {selectedApi.agency?.company_name || selectedApi.agency?.full_name || "your lead agency"}
+                    </p>
+                    {selectedApi.custom_message && (
+                      <div className="mt-4 rounded-lg bg-[#0C3535]/5 p-4 text-sm text-[#0C3535] whitespace-pre-wrap">
+                        {selectedApi.custom_message}
+                      </div>
+                    )}
+                    <div className="mt-6 border-t border-gray-100 pt-6">
+                      <h3 className="font-display font-bold text-lg text-[#0C3535] mb-3">Kickoff</h3>
+                      {selectedApi.kickoff_type === "calendly" && selectedApi.kickoff_url && (
+                        <Button className="bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90 font-display font-bold" asChild>
+                          <a href={selectedApi.kickoff_url} target="_blank" rel="noopener noreferrer">
+                            <Calendar className="w-4 h-4 mr-2" />
+                            Schedule Kickoff
+                          </a>
+                        </Button>
+                      )}
+                      {selectedApi.kickoff_type === "availability" && selectedApi.kickoff_availability && (
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800 whitespace-pre-wrap">
+                          {selectedApi.kickoff_availability}
+                        </div>
+                      )}
+                      {selectedApi.kickoff_type === "none" && (
+                        <p className="text-sm text-gray-500">No kickoff details included.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    <h3 className="font-display font-bold text-lg text-[#0C3535] mb-4">Documents</h3>
+                    <ul className="space-y-3">
+                      {selectedApi.documents.map((doc) => {
+                        const href = openDocHref(doc)
+                        const isProxy = href.startsWith("/api/")
+                        return (
+                          <li
+                            key={doc.id}
+                            className="flex flex-wrap items-center justify-between gap-3 border border-gray-100 rounded-lg p-3"
+                          >
+                            <div>
+                              <div className="font-medium text-[#0C3535]">{doc.label}</div>
+                              <div className="font-mono text-[10px] text-gray-500 uppercase">{doc.document_role}</div>
+                            </div>
+                            <Button variant="outline" size="sm" className="border-gray-300" asChild>
+                              <a href={href} {...(isProxy ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
+                                <ExternalLink className="w-4 h-4 mr-1" />
+                                Open
+                              </a>
+                            </Button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+
+                  {selectedApi.status !== "reviewed" ? (
+                    <Button
+                      type="button"
+                      className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                      disabled={markingReviewed}
+                      onClick={() => void markReviewed()}
+                    >
+                      {markingReviewed ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Saving…
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Mark as reviewed
+                        </>
+                      )}
+                    </Button>
+                  ) : (
+                    <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900 flex items-center gap-2">
+                      <CheckCircle className="w-5 h-5 shrink-0" />
+                      You marked this package as reviewed
+                      {selectedApi.partner_reviewed_at &&
+                        ` on ${new Date(selectedApi.partner_reviewed_at).toLocaleString()}`}
+                      .
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
         
-        {packets.length === 0 ? (
+        {isDemo ? (
+          packets.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
             <div className="font-display font-bold text-xl text-[#0C3535] mb-2">
@@ -653,11 +905,12 @@ export default function PartnerOnboardingPage() {
               </div>
             )}
           </div>
-        )}
+        )
+        ) : null}
       </div>
       
-      {/* Sign Modal */}
-      {showSignModal && signingDoc && (
+      {/* Sign Modal (demo only) */}
+      {isDemo && showSignModal && signingDoc && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6">
             <div className="flex items-center gap-3 mb-6">

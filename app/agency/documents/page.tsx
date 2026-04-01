@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
+import { AgencyDocumentLibraryManager } from "@/components/agency-document-library-manager"
 
 type Document = {
   id: string
@@ -176,6 +177,21 @@ export default function DocumentsPage() {
   const isDemo = isDemoMode()
   const { checkFeatureAccess } = usePaidUser()
   const documents = isDemo ? demoDocuments : []
+
+  if (!isDemo) {
+    return (
+      <AgencyLayout>
+        <div className="p-8 max-w-6xl">
+          <StageHeader
+            stageNumber="◈"
+            title="Master Documents"
+            subtitle="Agency legal documents and key templates power RFPs and partner onboarding."
+          />
+          <AgencyDocumentLibraryManager />
+        </div>
+      </AgencyLayout>
+    )
+  }
   
   const [activeTab, setActiveTab] = useState<"all" | "templates" | "master_briefs" | "partner_briefs" | "requirements">("all")
   const [searchQuery, setSearchQuery] = useState("")

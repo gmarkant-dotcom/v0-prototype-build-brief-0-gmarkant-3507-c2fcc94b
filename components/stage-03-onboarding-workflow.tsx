@@ -1,0 +1,566 @@
+"use client"
+
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { StageHeader } from "@/components/stage-header"
+import { GlassCard, GlassCardHeader } from "@/components/glass-card"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { useSelectedProject } from "@/contexts/selected-project-context"
+import { usePaidUser } from "@/contexts/paid-user-context"
+import { EmptyState } from "@/components/empty-state"
+import { createClient } from "@/lib/supabase/client"
+import { cn } from "@/lib/utils"
+import { Loader2, Send, Link2, Upload, Plus, Trash2 } from "lucide-react"
+
+type AssignmentRow = {
+  id: string
+  status: string
+  partnership_id?: string
+  partnership: {
+    id: string
+    partner: { id: string; email: string | null; full_name: string | null; company_name: string | null } | null
+  } | null
+}
+
+type LibraryRow = {
+  id: string
+  section: string
+  kind: string
+  label: string
+  source_type: string
+  external_url: string | null
+  blob_url: string | null
+  file_name: string | null
+  updated_at: string
+}
+
+type ProjectAttach = { localId: string; label: string; urlInput: string; storedUrl: string | null; source: "url" | "file" }
+
+function newAttach(): ProjectAttach {
+  return {
+    localId: typeof crypto !== "undefined" ? crypto.randomUUID() : `a-${Date.now()}`,
+    label: "",
+    urlInput: "",
+    storedUrl: null,
+    source: "url",
+  }
+}
+
+function libraryUrl(row: LibraryRow): string {
+  if (row.source_type === "url" && row.external_url) return row.external_url
+  return row.blob_url || ""
+}
+
+export function Stage03OnboardingWorkflow() {
+  const { checkFeatureAccess } = usePaidUser()
+  const { selectedProject } = useSelectedProject()
+  const [assignments, setAssignments] = useState<AssignmentRow[]>([])
+  const [library, setLibrary] = useState<LibraryRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [loadLib, setLoadLib] = useState(false)
+  const [assignmentId, setAssignmentId] = useState("")
+  const [selectedLibIds, setSelectedLibIds] = useState<string[]>([])
+  const [projectItems, setProjectItems] = useState<ProjectAttach[]>([])
+  const [kickoffType, setKickoffType] = useState<"calendly" | "availability" | "none">("none")
+  const [kickoffUrl, setKickoffUrl] = useState("")
+  const [kickoffAvailability, setKickoffAvailability] = useState("")
+  const [customMessage, setCustomMessage] = useState("")
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [uploadingAttach, setUploadingAttach] = useState<string | null>(null)
+  const [meetingUrlProfile, setMeetingUrlProfile] = useState<string | null>(null)
+
+  const refreshLibrary = useCallback(async () => {
+    setLoadLib(true)
+    try {
+      const res = await fetch("/api/agency/library-documents", { credentials: "same-origin" })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) setLibrary((data.documents || []) as LibraryRow[])
+    } finally {
+      setLoadLib(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedProject?.id) return
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/projects/${selectedProject.id}/assignments`, { credentials: "same-origin" })
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        const rows = (data.assignments || []) as AssignmentRow[]
+        setAssignments(rows)
+        const awarded = rows.find((a) => a.status === "awarded")
+        const first = awarded || rows[0]
+        if (first) setAssignmentId(first.id)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedProject?.id])
+
+  useEffect(() => {
+    refreshLibrary()
+  }, [refreshLibrary])
+
+  useEffect(() => {
+    ;(async () => {
+      const supabase = createClient()
+      const { data } = await supabase.from("profiles").select("meeting_url").eq("id", (await supabase.auth.getUser()).data.user?.id || "").maybeSingle()
+      if (data?.meeting_url) {
+        setMeetingUrlProfile(data.meeting_url)
+        setKickoffUrl((u) => u || data.meeting_url || "")
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (kickoffType === "calendly" && meetingUrlProfile && !kickoffUrl) {
+      setKickoffUrl(meetingUrlProfile)
+    }
+  }, [kickoffType, meetingUrlProfile, kickoffUrl])
+
+  const selectedAssignment = useMemo(
+    () => assignments.find((a) => a.id === assignmentId),
+    [assignments, assignmentId]
+  )
+
+  const partnershipId = selectedAssignment?.partnership?.id || selectedAssignment?.partnership_id
+
+  const agencyDocs = useMemo(() => library.filter((d) => d.section === "agency"), [library])
+  const templateDocs = useMemo(() => library.filter((d) => d.section === "templates"), [library])
+
+  const toggleLib = (id: string) => {
+    setSelectedLibIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  const uploadForAttach = async (localId: string, file: File) => {
+    setUploadingAttach(localId)
+    setError(null)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      fd.append("folder", "onboarding-project")
+      const res = await fetch("/api/upload", { method: "POST", body: fd, credentials: "same-origin" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || "Upload failed")
+      setProjectItems((prev) =>
+        prev.map((p) =>
+          p.localId === localId
+            ? { ...p, storedUrl: data.url as string, urlInput: "", source: "file" }
+            : p
+        )
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed")
+    } finally {
+      setUploadingAttach(null)
+    }
+  }
+
+  const handleSaveSend = async () => {
+    setError(null)
+    setSuccess(null)
+    if (!checkFeatureAccess("onboarding package send")) return
+    if (!selectedProject?.id || !partnershipId) {
+      setError("Select a partner assignment.")
+      return
+    }
+
+    const docs: { documentRole: "agency_doc" | "project_doc" | "template"; libraryDocumentId: string | null; label: string; url: string }[] = []
+
+    for (const id of selectedLibIds) {
+      const row = library.find((l) => l.id === id)
+      if (!row) continue
+      const u = libraryUrl(row)
+      if (!u) continue
+      const role: "agency_doc" | "template" = row.section === "agency" ? "agency_doc" : "template"
+      docs.push({
+        documentRole: role,
+        libraryDocumentId: row.id,
+        label: row.label,
+        url: u,
+      })
+    }
+
+    for (const p of projectItems) {
+      const url = p.source === "file" ? p.storedUrl : p.urlInput.trim()
+      if (!p.label.trim() || !url) continue
+      docs.push({
+        documentRole: "project_doc",
+        libraryDocumentId: null,
+        label: p.label.trim(),
+        url: url.trim(),
+      })
+    }
+
+    if (docs.length === 0) {
+      setError("Select at least one library document or add a project document with label and URL/file.")
+      return
+    }
+
+    const projectCount = docs.filter((d) => d.documentRole === "project_doc").length
+    if (projectCount > 10) {
+      setError("Maximum 10 project documents.")
+      return
+    }
+
+    setSending(true)
+    try {
+      const res = await fetch(`/api/projects/${selectedProject.id}/onboarding-packages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          partnershipId,
+          assignmentId,
+          kickoffType,
+          kickoffUrl: kickoffType === "calendly" ? kickoffUrl : "",
+          kickoffAvailability: kickoffType === "availability" ? kickoffAvailability : "",
+          customMessage,
+          documents: docs,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError((data?.error as string) || `Save failed (${res.status})`)
+        return
+      }
+      setSuccess("Onboarding package sent. Your partner was emailed and can open /partner/onboarding.")
+      setSelectedLibIds([])
+      setProjectItems([])
+      setCustomMessage("")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (!selectedProject) {
+    return (
+      <div className="p-8 max-w-6xl">
+        <StageHeader
+          stageNumber="03"
+          title="Onboarding + Ways of Working"
+          subtitle="Build onboarding packages from your document library and send to assigned partners."
+          aiPowered={false}
+        />
+        <EmptyState
+          title="Select a project"
+          description="Choose a project from the sidebar to send onboarding materials."
+          icon="onboarding"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-8 max-w-6xl">
+      <StageHeader
+        stageNumber="03"
+        title="Onboarding + Ways of Working"
+        subtitle="Select agency library documents, add project files or links, set kickoff preferences, and send to a partner."
+        aiPowered={false}
+      />
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-foreground-muted py-12">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Loading…
+        </div>
+      ) : assignments.length === 0 ? (
+        <EmptyState
+          title="No partner assignments yet"
+          description="Assign an active partner to this project before sending onboarding."
+          icon="onboarding"
+        />
+      ) : (
+        <div className="space-y-6 mt-6">
+          <GlassCard className="p-6 space-y-4">
+            <GlassCardHeader title="Partner" description="One package per send — pick the assignment for this partner." />
+            <div className="space-y-2">
+              <Label>Assignment</Label>
+              <Select value={assignmentId} onValueChange={setAssignmentId}>
+                <SelectTrigger className="bg-white/5 border-border">
+                  <SelectValue placeholder="Select partner assignment" />
+                </SelectTrigger>
+                <SelectContent>
+                  {assignments.map((a) => {
+                    const name =
+                      a.partnership?.partner?.company_name ||
+                      a.partnership?.partner?.full_name ||
+                      "Partner"
+                    return (
+                      <SelectItem key={a.id} value={a.id}>
+                        {name} ({a.status})
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          </GlassCard>
+
+          <GlassCard className="p-6 space-y-4">
+            <GlassCardHeader
+              title="Agency documents"
+              description="From your library (NDA, MSA, SOW). Upload missing files under Agency → Documents."
+            />
+            {loadLib ? (
+              <Loader2 className="w-5 h-5 animate-spin text-accent" />
+            ) : agencyDocs.length === 0 ? (
+              <p className="text-sm text-foreground-muted font-mono">
+                No agency library documents yet. Add NDA / MSA / SOW on the Documents page.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {agencyDocs.map((d) => {
+                  const u = libraryUrl(d)
+                  const disabled = !u
+                  return (
+                    <label
+                      key={d.id}
+                      className={cn(
+                        "flex items-start gap-3 rounded-lg border border-border/60 p-3",
+                        disabled && "opacity-50"
+                      )}
+                    >
+                      <Checkbox
+                        checked={selectedLibIds.includes(d.id)}
+                        onCheckedChange={() => !disabled && toggleLib(d.id)}
+                        disabled={disabled}
+                      />
+                      <div>
+                        <div className="font-display font-semibold text-foreground">{d.label}</div>
+                        <div className="font-mono text-[10px] text-foreground-muted uppercase">{d.kind}</div>
+                        {!u && <div className="text-xs text-amber-400 mt-1">No file or URL on record</div>}
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </GlassCard>
+
+          <GlassCard className="p-6 space-y-4">
+            <GlassCardHeader
+              title="Templates (optional)"
+              description="Include key templates from your library in this package."
+            />
+            {templateDocs.length === 0 ? (
+              <p className="text-sm text-foreground-muted font-mono">No template rows in library yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {templateDocs.map((d) => {
+                  const u = libraryUrl(d)
+                  const disabled = !u
+                  return (
+                    <label
+                      key={d.id}
+                      className={cn(
+                        "flex items-start gap-3 rounded-lg border border-border/60 p-3",
+                        disabled && "opacity-50"
+                      )}
+                    >
+                      <Checkbox
+                        checked={selectedLibIds.includes(d.id)}
+                        onCheckedChange={() => !disabled && toggleLib(d.id)}
+                        disabled={disabled}
+                      />
+                      <div>
+                        <div className="font-display font-semibold text-foreground">{d.label}</div>
+                        <div className="font-mono text-[10px] text-foreground-muted">{d.kind}</div>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </GlassCard>
+
+          <GlassCard className="p-6 space-y-4">
+            <GlassCardHeader
+              title="Project documents"
+              description="Up to 10 items — paste a link or upload PDF/DOCX (same pattern as partner bid attachments)."
+            />
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-border/60"
+                disabled={projectItems.length >= 10}
+                onClick={() => setProjectItems((prev) => [...prev, newAttach()])}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Add item
+              </Button>
+            </div>
+            <div className="space-y-4">
+              {projectItems.map((p) => (
+                <div key={p.localId} className="rounded-lg border border-border/60 p-4 space-y-3 bg-white/5">
+                  <div className="flex justify-between gap-2">
+                    <Input
+                      placeholder="Label (e.g. Creative Brief)"
+                      value={p.label}
+                      onChange={(e) =>
+                        setProjectItems((prev) =>
+                          prev.map((x) => (x.localId === p.localId ? { ...x, label: e.target.value } : x))
+                        )
+                      }
+                      className="bg-white/5 border-border max-w-md"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setProjectItems((prev) => prev.filter((x) => x.localId !== p.localId))}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={p.source === "url" ? "default" : "outline"}
+                      className={p.source === "url" ? "bg-accent text-accent-foreground" : "border-border/60"}
+                      onClick={() =>
+                        setProjectItems((prev) =>
+                          prev.map((x) => (x.localId === p.localId ? { ...x, source: "url" } : x))
+                        )
+                      }
+                    >
+                      <Link2 className="w-3.5 h-3.5 mr-1" />
+                      URL
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={p.source === "file" ? "default" : "outline"}
+                      className={p.source === "file" ? "bg-accent text-accent-foreground" : "border-border/60"}
+                      onClick={() =>
+                        setProjectItems((prev) =>
+                          prev.map((x) =>
+                            x.localId === p.localId ? { ...x, source: "file", urlInput: "", storedUrl: null } : x
+                          )
+                        )
+                      }
+                    >
+                      <Upload className="w-3.5 h-3.5 mr-1" />
+                      Upload
+                    </Button>
+                  </div>
+                  {p.source === "url" ? (
+                    <Input
+                      placeholder="https://…"
+                      value={p.urlInput}
+                      onChange={(e) =>
+                        setProjectItems((prev) =>
+                          prev.map((x) => (x.localId === p.localId ? { ...x, urlInput: e.target.value } : x))
+                        )
+                      }
+                      className="bg-white/5 border-border"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        accept=".pdf,.docx"
+                        className="text-sm text-foreground-muted"
+                        disabled={uploadingAttach === p.localId}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (f) void uploadForAttach(p.localId, f)
+                          e.target.value = ""
+                        }}
+                      />
+                      {uploadingAttach === p.localId && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {p.storedUrl && <span className="text-xs text-green-400 font-mono">Uploaded</span>}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+
+          <GlassCard className="p-6 space-y-4">
+            <GlassCardHeader title="Kickoff meeting" />
+            <RadioGroup
+              value={kickoffType}
+              onValueChange={(v) => setKickoffType(v as typeof kickoffType)}
+              className="space-y-3"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="calendly" id="k-cal" />
+                <Label htmlFor="k-cal">Send Calendly link</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="availability" id="k-av" />
+                <Label htmlFor="k-av">Share my availability</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="none" id="k-no" />
+                <Label htmlFor="k-no">Skip for now</Label>
+              </div>
+            </RadioGroup>
+            {kickoffType === "calendly" && (
+              <div>
+                <Label className="text-xs font-mono text-foreground-muted">Calendly or scheduling URL</Label>
+                <Input
+                  value={kickoffUrl}
+                  onChange={(e) => setKickoffUrl(e.target.value)}
+                  placeholder="https://calendly.com/…"
+                  className="mt-1 bg-white/5 border-border"
+                />
+              </div>
+            )}
+            {kickoffType === "availability" && (
+              <Textarea
+                value={kickoffAvailability}
+                onChange={(e) => setKickoffAvailability(e.target.value)}
+                placeholder="Enter your available times…"
+                className="min-h-[100px] bg-white/5 border-border"
+              />
+            )}
+          </GlassCard>
+
+          <GlassCard className="p-6 space-y-4">
+            <Label className="text-xs font-mono text-foreground-muted">Optional message</Label>
+            <Textarea
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              className="bg-white/5 border-border min-h-[80px]"
+            />
+            <Button
+              className="bg-accent text-accent-foreground"
+              disabled={sending || !partnershipId}
+              onClick={() => void handleSaveSend()}
+            >
+              {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+              Save &amp; send
+            </Button>
+            {error && <p className="text-sm text-red-400 font-mono">{error}</p>}
+            {success && <p className="text-sm text-green-400 font-mono">{success}</p>}
+          </GlassCard>
+        </div>
+      )}
+    </div>
+  )
+}

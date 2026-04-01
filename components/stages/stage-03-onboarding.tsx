@@ -11,7 +11,7 @@ import { FileUpload } from "@/components/file-upload"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { isDemoMode } from "@/lib/demo-data"
 import { EmptyState } from "@/components/empty-state"
-import { Stage03OnboardingProduction } from "@/components/stage-03-onboarding-production"
+import { Stage03OnboardingWorkflow } from "@/components/stage-03-onboarding-workflow"
 import { 
   FileText, 
   Shield, 
@@ -317,7 +317,7 @@ export function Stage03Onboarding() {
   })
   
   if (!isDemo) {
-    return <Stage03OnboardingProduction />
+    return <Stage03OnboardingWorkflow />
   }
   
   return (

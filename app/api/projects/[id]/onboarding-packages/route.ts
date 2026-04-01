@@ -1,0 +1,254 @@
+import { type NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { createNotification } from "@/lib/notifications"
+export const dynamic = "force-dynamic"
+
+type DocPayload = {
+  documentRole: "agency_doc" | "project_doc" | "template"
+  libraryDocumentId?: string | null
+  label: string
+  url: string
+}
+
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+}
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: projectId } = await params
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: project } = await supabase.from("projects").select("agency_id").eq("id", projectId).single()
+    if (!project || project.agency_id !== user.id) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
+    const { data: packages, error } = await supabase
+      .from("onboarding_packages")
+      .select(
+        `
+        *,
+        partnership:partnerships(
+          id,
+          partner:profiles!partnerships_partner_id_fkey(id, email, full_name, company_name)
+        )
+      `
+      )
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("[onboarding-packages] GET", error)
+      return NextResponse.json({ packages: [], error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ packages: packages || [] })
+  } catch (e) {
+    console.error("[onboarding-packages] GET", e)
+    return NextResponse.json({ error: "Failed" }, { status: 500 })
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: projectId } = await params
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: profile } = await supabase.from("profiles").select("role, company_name, full_name, meeting_url").eq("id", user.id).single()
+    if (profile?.role !== "agency") {
+      return NextResponse.json({ error: "Agency only" }, { status: 403 })
+    }
+
+    const { data: project } = await supabase.from("projects").select("id, title, agency_id").eq("id", projectId).single()
+    if (!project || project.agency_id !== user.id) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 })
+    }
+
+    const body = await request.json()
+    const {
+      partnershipId,
+      assignmentId,
+      kickoffType = "none",
+      kickoffUrl = "",
+      kickoffAvailability = "",
+      customMessage = "",
+      documents = [],
+    } = body as {
+      partnershipId?: string
+      assignmentId?: string
+      kickoffType?: string
+      kickoffUrl?: string
+      kickoffAvailability?: string
+      customMessage?: string
+      documents?: DocPayload[]
+    }
+
+    if (!partnershipId) {
+      return NextResponse.json({ error: "partnershipId required" }, { status: 400 })
+    }
+
+    const { data: partnership } = await supabase
+      .from("partnerships")
+      .select("id, agency_id, partner_id, status")
+      .eq("id", partnershipId)
+      .single()
+
+    if (!partnership || partnership.agency_id !== user.id) {
+      return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
+    }
+    if (partnership.status !== "active" || !partnership.partner_id) {
+      return NextResponse.json({ error: "Partnership must be active with a linked partner" }, { status: 400 })
+    }
+
+    const { data: assignmentCheck } = await supabase
+      .from("project_assignments")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("partnership_id", partnershipId)
+      .maybeSingle()
+
+    if (!assignmentCheck) {
+      return NextResponse.json(
+        { error: "Partner must be assigned to this project before sending onboarding" },
+        { status: 400 }
+      )
+    }
+
+    if (assignmentId && assignmentCheck.id !== assignmentId) {
+      return NextResponse.json({ error: "assignmentId does not match project and partnership" }, { status: 400 })
+    }
+
+    const docs: DocPayload[] = Array.isArray(documents) ? documents : []
+    const projectDocCount = docs.filter((d) => d.documentRole === "project_doc").length
+    if (projectDocCount > 10) {
+      return NextResponse.json({ error: "Maximum 10 project documents" }, { status: 400 })
+    }
+    if (docs.length === 0) {
+      return NextResponse.json({ error: "Add at least one document" }, { status: 400 })
+    }
+
+    for (const d of docs) {
+      if (!d.label?.trim() || !d.url?.trim()) {
+        return NextResponse.json({ error: "Each document needs label and url" }, { status: 400 })
+      }
+      if (!d.url.startsWith("http://") && !d.url.startsWith("https://")) {
+        return NextResponse.json({ error: "Each document url must be http(s)" }, { status: 400 })
+      }
+    }
+
+    const kt = ["calendly", "availability", "none"].includes(kickoffType) ? kickoffType : "none"
+    const finalKickoffUrl = kt === "calendly" ? (kickoffUrl || profile?.meeting_url || "").trim() : null
+    const finalAvailability = kt === "availability" ? (kickoffAvailability || "").trim() : null
+
+    const { data: pkg, error: pkgErr } = await supabase
+      .from("onboarding_packages")
+      .insert({
+        project_id: projectId,
+        agency_id: user.id,
+        partnership_id: partnershipId,
+        kickoff_type: kt,
+        kickoff_url: finalKickoffUrl || null,
+        kickoff_availability: finalAvailability || null,
+        custom_message: customMessage?.trim() || null,
+        status: "sent",
+        updated_at: new Date().toISOString(),
+      })
+      .select()
+      .single()
+
+    if (pkgErr || !pkg) {
+      console.error("[onboarding-packages] insert package", pkgErr)
+      return NextResponse.json({ error: pkgErr?.message || "Could not create package (run migration 024?)" }, { status: 500 })
+    }
+
+    const rows = docs.map((d, i) => ({
+      package_id: pkg.id,
+      document_role: d.documentRole,
+      library_document_id: d.libraryDocumentId || null,
+      label: d.label.trim(),
+      url: d.url.trim(),
+      sort_order: i,
+    }))
+
+    const { error: docErr } = await supabase.from("onboarding_package_documents").insert(rows)
+    if (docErr) {
+      console.error("[onboarding-packages] insert docs", docErr)
+      await supabase.from("onboarding_packages").delete().eq("id", pkg.id)
+      return NextResponse.json({ error: "Could not save document list" }, { status: 500 })
+    }
+
+    const { data: partnerProfile } = await supabase
+      .from("profiles")
+      .select("email, full_name, company_name")
+      .eq("id", partnership.partner_id)
+      .single()
+
+    const partnerEmail = partnerProfile?.email
+    const agencyName = profile.company_name || profile.full_name || "Your lead agency"
+    const projectTitle = project.title || "Project"
+    const base = siteBaseUrl()
+    const onboardingUrl = `${base}/partner/onboarding`
+
+    const docListHtml = docs.map((d) => `<li>${escapeHtml(d.label.trim())}</li>`).join("")
+    let kickoffHtml = ""
+    if (kt === "calendly" && finalKickoffUrl) {
+      kickoffHtml = `<p><strong>Kickoff:</strong> <a href="${escapeHtml(finalKickoffUrl)}">Schedule here</a></p>`
+    } else if (kt === "availability" && finalAvailability) {
+      kickoffHtml = `<p><strong>Agency availability:</strong><br/>${escapeHtml(finalAvailability)}</p>`
+    }
+
+    if (partnerEmail) {
+      await sendTransactionalEmail({
+        to: partnerEmail,
+        subject: "Your onboarding documents are ready",
+        html: `
+        <div style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535;max-width:560px">
+          <p><strong>${escapeHtml(agencyName)}</strong> shared an onboarding package for <strong>${escapeHtml(projectTitle)}</strong>.</p>
+          ${customMessage ? `<p style="border-left:3px solid #C8F53C;padding-left:12px">${escapeHtml(customMessage)}</p>` : ""}
+          <p><strong>Documents</strong></p>
+          <ul>${docListHtml}</ul>
+          ${kickoffHtml}
+          <p>
+            <a href="${onboardingUrl}" style="display:inline-block;background:#0C3535;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Open onboarding</a>
+          </p>
+        </div>
+      `,
+      })
+    }
+
+    await createNotification({
+      supabase,
+      userId: partnership.partner_id,
+      type: "onboarding_deployed",
+      title: "Onboarding documents ready",
+      message: `${agencyName} sent onboarding materials for "${projectTitle}".`,
+      link: "/partner/onboarding",
+      data: { projectId, packageId: pkg.id },
+    })
+
+    return NextResponse.json({ success: true, package: pkg })
+  } catch (e) {
+    console.error("[onboarding-packages] POST", e)
+    return NextResponse.json({ error: "Failed" }, { status: 500 })
+  }
+}
