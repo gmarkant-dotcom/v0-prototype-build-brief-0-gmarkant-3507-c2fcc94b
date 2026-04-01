@@ -867,7 +867,7 @@ export default function PartnerRfpDetailPage() {
                             <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
-                                <div>
+                                <div className="text-gray-900">
                                   {budgetObj?.amount != null && budgetObj?.currency
                                     ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
                                     : "—"}
@@ -875,7 +875,7 @@ export default function PartnerRfpDetailPage() {
                               </div>
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
-                                <div>
+                                <div className="text-gray-900">
                                   {timelineObj?.duration != null && timelineObj?.unit
                                     ? `${timelineObj.duration} ${timelineObj.unit}`
                                     : "—"}
