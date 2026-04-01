@@ -4,6 +4,12 @@ const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ])
 
+const EXTENSION_TO_MIME: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
 const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024
 
 export const UPLOAD_VALIDATION_MESSAGE =
@@ -18,7 +24,16 @@ export function validateUploadFile(file: File): { ok: true } | { ok: false; mess
     return { ok: false, message: "File is too large. Maximum size is 20MB." }
   }
 
-  if (!ALLOWED_UPLOAD_MIME_TYPES.has(file.type)) {
+  let effectiveType = file.type
+  if (!effectiveType || !ALLOWED_UPLOAD_MIME_TYPES.has(effectiveType)) {
+    const lower = file.name.toLowerCase()
+    const ext = [".pdf", ".docx", ".pptx"].find((e) => lower.endsWith(e))
+    if (ext && EXTENSION_TO_MIME[ext]) {
+      effectiveType = EXTENSION_TO_MIME[ext]
+    }
+  }
+
+  if (!ALLOWED_UPLOAD_MIME_TYPES.has(effectiveType)) {
     return { ok: false, message: UPLOAD_VALIDATION_MESSAGE }
   }
 

@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     const canUpload =
       isDemoMode ||
       profile?.role === 'partner' ||
+      profile?.role === 'agency' ||
       profile?.is_admin ||
       profile?.is_paid
 

@@ -157,9 +157,18 @@ export function Stage03OnboardingWorkflow() {
       const fd = new FormData()
       fd.append("file", file)
       fd.append("folder", "onboarding-project")
-      const res = await fetch("/api/upload", { method: "POST", body: fd, credentials: "same-origin" })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || "Upload failed")
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: fd,
+        credentials: "same-origin",
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; url?: string }
+      if (!res.ok) {
+        throw new Error(data?.error || `Upload failed (${res.status})`)
+      }
+      if (!data.url) {
+        throw new Error("Upload succeeded but no file URL was returned")
+      }
       setProjectItems((prev) =>
         prev.map((p) =>
           p.localId === localId

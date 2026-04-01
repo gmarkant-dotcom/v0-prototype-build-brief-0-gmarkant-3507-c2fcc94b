@@ -103,13 +103,12 @@ export async function POST(
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
-    // Primary path: route param is the project UUID.
     const {
       data: projectById,
       error: projectByIdErr,
     } = await supabase
       .from("projects")
-      .select("id, title, agency_id")
+      .select("id, name, agency_id")
       .eq("id", projectParam)
       .maybeSingle()
 
@@ -122,30 +121,7 @@ export async function POST(
       rowFound: !!projectById,
     })
 
-    let project = projectById
-
-    // Fallback path: tolerate accidental project title in route param.
-    if (!project) {
-      const {
-        data: projectByTitle,
-        error: projectByTitleErr,
-      } = await supabase
-        .from("projects")
-        .select("id, title, agency_id")
-        .eq("agency_id", user.id)
-        .eq("title", projectParam)
-        .maybeSingle()
-      project = projectByTitle || null
-      console.log(`${logPrefix} step:project-lookup-by-title-fallback`, {
-        agencyIdFilter: user.id,
-        titleParam: projectParam,
-        data: projectByTitle,
-        error: projectByTitleErr
-          ? { message: projectByTitleErr.message, code: projectByTitleErr.code, details: projectByTitleErr.details }
-          : null,
-        rowFound: !!projectByTitle,
-      })
-    }
+    const project = projectById
 
     const ownershipMatch = project ? project.agency_id === user.id : false
     console.log(`${logPrefix} step:agency-ownership`, {
@@ -156,7 +132,7 @@ export async function POST(
 
     if (!project || project.agency_id !== user.id) {
       const reason404 = !project
-        ? "no_project_row_after_id_and_title_lookups"
+        ? "no_project_row_for_uuid"
         : "agency_mismatch_project_agency_id_ne_user_id"
       console.warn(`${logPrefix} step:404 Project not found`, {
         reason404,
@@ -169,7 +145,7 @@ export async function POST(
       return NextResponse.json({ error: "Project not found", projectId: projectParam }, { status: 404 })
     }
     const projectId = project.id as string
-    console.log(`${logPrefix} step:project-resolved`, { projectId, title: project.title })
+    console.log(`${logPrefix} step:project-resolved`, { projectId, name: project.name })
 
     const body = await request.json()
     console.log(`${logPrefix} step:body-parsed`, {
@@ -337,7 +313,7 @@ export async function POST(
 
     const partnerEmail = partnerProfile?.email
     const agencyName = profile.company_name || profile.full_name || "Your lead agency"
-    const projectTitle = project.title || "Project"
+    const projectTitle = project.name || "Project"
     const base = siteBaseUrl()
     const onboardingUrl = `${base}/partner/onboarding`
 
