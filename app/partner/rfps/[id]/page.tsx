@@ -184,6 +184,29 @@ type ResponseVersion = {
   change_notes?: string | null
 }
 
+/** API may return JSON string-of-string; unwrap up to twice, then read amount/currency. */
+function parseVersionBudgetFields(val: unknown): { amount?: number; currency?: string } | null {
+  try {
+    let v: unknown = val
+    if (typeof v === "string") v = JSON.parse(v)
+    if (typeof v === "string") v = JSON.parse(v)
+    return v as { amount?: number; currency?: string } | null
+  } catch {
+    return null
+  }
+}
+
+function parseVersionTimelineFields(val: unknown): { duration?: number; unit?: string } | null {
+  try {
+    let v: unknown = val
+    if (typeof v === "string") v = JSON.parse(v)
+    if (typeof v === "string") v = JSON.parse(v)
+    return v as { duration?: number; unit?: string } | null
+  } catch {
+    return null
+  }
+}
+
 function draftsToPayload(drafts: DraftAttachment[]): SavedAttachment[] {
   const out: SavedAttachment[] = []
   for (const d of drafts) {
@@ -366,7 +389,6 @@ export default function PartnerRfpDetailPage() {
           setInbox(data.inbox as InboxRow)
           const r = data.response as ResponseRow | null
           const versionRows = (data.versions || []) as ResponseVersion[]
-          console.log("[partner/rfps/detail] versions from API", { count: versionRows.length, versions: versionRows })
           setVersions(versionRows)
           if (r) {
             setExisting(r)
@@ -406,6 +428,15 @@ export default function PartnerRfpDetailPage() {
       cancelled = true
     }
   }, [id, isDemoDetail])
+
+  /** No separate awarded-state Submission History branch — it lives under Status & Feedback. Open that tab for terminal outcomes so history is visible (default tab is My Bid). */
+  useEffect(() => {
+    if (loading || isDemoDetail) return
+    const st = existing?.status
+    if (st === "awarded" || st === "declined") {
+      setActiveTab("status")
+    }
+  }, [loading, isDemoDetail, existing?.status])
 
   /** Session + `profiles.role === partner` only — no subscription / plan checks. */
   const ensurePartnerAuth = useCallback(async (): Promise<boolean> => {
@@ -820,26 +851,8 @@ export default function PartnerRfpDetailPage() {
                         const preview =
                           (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "—"
                         const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
-                        const budgetObj = (() => {
-                          try {
-                            let val: unknown = v.budget_proposal
-                            if (typeof val === "string") val = JSON.parse(val)
-                            if (typeof val === "string") val = JSON.parse(val)
-                            return val as { amount?: number; currency?: string } | null
-                          } catch {
-                            return null
-                          }
-                        })()
-                        const timelineObj = (() => {
-                          try {
-                            let val: unknown = v.timeline_proposal
-                            if (typeof val === "string") val = JSON.parse(val)
-                            if (typeof val === "string") val = JSON.parse(val)
-                            return val as { duration?: number; unit?: string } | null
-                          } catch {
-                            return null
-                          }
-                        })()
+                        const budgetObj = parseVersionBudgetFields(v.budget_proposal)
+                        const timelineObj = parseVersionTimelineFields(v.timeline_proposal)
                         return (
                           <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                             <div className="flex items-center justify-between gap-3">
@@ -1219,30 +1232,12 @@ export default function PartnerRfpDetailPage() {
           </div>
           ) : (
             (() => {
-              const budgetObj = (() => {
-                try {
-                  let val: unknown =
-                    existing?.budget_proposal ??
-                    buildBudgetProposalForSave(budgetAmount, budgetCurrency, budgetCurrencyOther, budgetLegacyHint)
-                  if (typeof val === "string") val = JSON.parse(val)
-                  if (typeof val === "string") val = JSON.parse(val)
-                  return val as { amount?: number; currency?: string } | null
-                } catch {
-                  return null
-                }
-              })()
-              const timelineObj = (() => {
-                try {
-                  let val: unknown =
-                    existing?.timeline_proposal ??
-                    buildTimelineProposalForSave(timelineDuration, timelineUnit, timelineLegacyHint)
-                  if (typeof val === "string") val = JSON.parse(val)
-                  if (typeof val === "string") val = JSON.parse(val)
-                  return val as { duration?: number; unit?: string } | null
-                } catch {
-                  return null
-                }
-              })()
+              const budgetObj = parseVersionBudgetFields(
+                existing?.budget_proposal ?? buildBudgetProposalForSave(budgetAmount, budgetCurrency, budgetCurrencyOther, budgetLegacyHint)
+              )
+              const timelineObj = parseVersionTimelineFields(
+                existing?.timeline_proposal ?? buildTimelineProposalForSave(timelineDuration, timelineUnit, timelineLegacyHint)
+              )
               return (
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
                   <div>
