@@ -9,6 +9,15 @@ import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel
 import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Loader2, ChevronDown, ChevronRight, Download, ExternalLink, CheckCircle, Star, CalendarDays } from "lucide-react"
 
 function externalLinkLabel(url: string): string {
@@ -71,6 +80,11 @@ export function AgencyBroadcastResponsesPanel() {
   const [shortlistHoverIds, setShortlistHoverIds] = useState<Record<string, boolean>>({})
   const [meetingHoverIds, setMeetingHoverIds] = useState<Record<string, boolean>>({})
   const [selectedVersionByResponseId, setSelectedVersionByResponseId] = useState<Record<string, string>>({})
+  const [awardDialog, setAwardDialog] = useState<{
+    id: string
+    partner: string
+    scope: string
+  } | null>(null)
 
   useEffect(() => {
     if (isDemo) {
@@ -526,7 +540,13 @@ export function AgencyBroadcastResponsesPanel() {
                       <Button
                         size="sm"
                         className="bg-green-600 hover:bg-green-600/90 text-white"
-                        onClick={() => patchResponse(r.id, { status: "awarded" })}
+                        onClick={() =>
+                          setAwardDialog({
+                            id: r.id,
+                            partner: r.partner_display_name,
+                            scope: scopeName,
+                          })
+                        }
                         disabled={busyId === r.id || r.status === "awarded"}
                       >
                         Award
@@ -567,6 +587,39 @@ export function AgencyBroadcastResponsesPanel() {
           )
         })}
       </div>
+
+      <AlertDialog open={awardDialog !== null} onOpenChange={(open) => !open && setAwardDialog(null)}>
+        <AlertDialogContent className="border-border/60 bg-background/95 backdrop-blur-md sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display text-foreground">Award this bid?</AlertDialogTitle>
+            <AlertDialogDescription className="text-foreground/80 text-left text-sm leading-relaxed">
+              {awardDialog ? (
+                <>
+                  You&apos;re about to award <span className="font-semibold text-foreground">{awardDialog.partner}</span>{" "}
+                  the <span className="font-semibold text-foreground">{awardDialog.scope}</span>. This action cannot be
+                  undone. The partner will be notified immediately.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel className="border-border/60 text-foreground hover:bg-white/10 mt-0">Cancel</AlertDialogCancel>
+            <Button
+              type="button"
+              className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+              disabled={busyId !== null || !awardDialog}
+              onClick={() => {
+                if (!awardDialog) return
+                const { id } = awardDialog
+                setAwardDialog(null)
+                void patchResponse(id, { status: "awarded" })
+              }}
+            >
+              Confirm Award
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </GlassCard>
   )
 }
