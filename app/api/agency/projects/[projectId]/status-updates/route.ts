@@ -29,20 +29,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
     }
 
+    // Use a plain select (no nested embed). Nested partnership embeds can return zero rows
+    // under RLS/embed quirks even when the agency can read partner_status_updates.
     let query = supabase
       .from("partner_status_updates")
-      .select(
-        `
-        *,
-        partnership:partnerships(
-          id,
-          partner:profiles!partnerships_partner_id_fkey(
-            company_name,
-            full_name
-          )
-        )
-      `
-      )
+      .select("*")
       .eq("project_id", projectId)
       .eq("is_resolved", false)
       .order("created_at", { ascending: false })
@@ -51,6 +42,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       query = query.eq("partnership_id", partnershipIdFilter)
     }
 
+    console.log("[agency/status-updates] GET", {
+      projectId,
+      partnershipIdFilter,
+    })
+
     const { data: rows, error } = await query
 
     if (error) {
@@ -58,18 +54,36 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       return NextResponse.json({ error: "Failed to load updates" }, { status: 500, headers: noStoreHeaders })
     }
 
-    const updates = (rows || []).map((r) => {
-      const p = r.partnership as
-        | { partner?: { company_name?: string | null; full_name?: string | null } | null }
-        | { partner?: { company_name?: string | null; full_name?: string | null } | null }[]
-        | null
-      const inner = Array.isArray(p) ? p[0] : p
-      const partnerEmbed = inner?.partner
-      const partner = Array.isArray(partnerEmbed) ? partnerEmbed[0] : partnerEmbed
-      const partnerName =
-        partner?.company_name?.trim() || partner?.full_name?.trim() || "Partner"
-      const { partnership: _x, ...rest } = r as Record<string, unknown>
-      return { ...rest, partner_display_name: partnerName }
+    const partnershipIds = [...new Set((rows || []).map((r) => r.partnership_id as string).filter(Boolean))]
+    const nameByPartnershipId = new Map<string, string>()
+    if (partnershipIds.length > 0) {
+      const { data: pships } = await supabase
+        .from("partnerships")
+        .select(
+          `
+          id,
+          partner:profiles!partnerships_partner_id_fkey(company_name, full_name)
+        `
+        )
+        .in("id", partnershipIds)
+      for (const row of pships || []) {
+        const pr = row.partner as { company_name?: string | null; full_name?: string | null } | null
+        const inner = Array.isArray(pr) ? pr[0] : pr
+        const partnerName =
+          inner?.company_name?.trim() || inner?.full_name?.trim() || "Partner"
+        nameByPartnershipId.set(row.id as string, partnerName)
+      }
+    }
+
+    const updates = (rows || []).map((r) => ({
+      ...r,
+      partner_display_name: nameByPartnershipId.get(r.partnership_id as string) || "Partner",
+    }))
+
+    console.log("[agency/status-updates] GET result", {
+      projectId,
+      partnershipIdFilter,
+      rowCount: updates.length,
     })
 
     return NextResponse.json({ updates }, { headers: noStoreHeaders })

@@ -178,14 +178,69 @@ export async function POST(
       })
       return NextResponse.json({ error: "Could not verify project assignment" }, { status: 500 })
     }
+
     if (!assignmentCheck) {
-      return NextResponse.json(
-        { error: "Partner must be assigned to this project before sending onboarding" },
-        { status: 400 }
-      )
+      const { data: awardedRows, error: awardErr } = await supabase
+        .from("partner_rfp_responses")
+        .select(
+          `
+          id,
+          partner_id,
+          partner_rfp_inbox(project_id, partnership_id)
+        `
+        )
+        .eq("agency_id", user.id)
+        .eq("status", "awarded")
+
+      if (awardErr) {
+        console.error(`${logPrefix} awarded bid lookup failed`, awardErr)
+        return NextResponse.json({ error: "Could not verify awarded bid for onboarding" }, { status: 500 })
+      }
+
+      const unwrapInbox = (
+        embed:
+          | { project_id?: string | null; partnership_id?: string | null }
+          | { project_id?: string | null; partnership_id?: string | null }[]
+          | null
+      ) => {
+        if (!embed) return null
+        return Array.isArray(embed) ? embed[0] ?? null : embed
+      }
+
+      let allowedByAward = false
+      for (const row of awardedRows || []) {
+        const inbox = unwrapInbox(row.partner_rfp_inbox as Parameters<typeof unwrapInbox>[0])
+        if (!inbox || inbox.project_id !== projectId) continue
+        let rowPship = inbox.partnership_id as string | null
+        const partnerId = row.partner_id as string | null
+        if (!rowPship && partnerId) {
+          const { data: rel } = await supabase
+            .from("partnerships")
+            .select("id")
+            .eq("agency_id", user.id)
+            .eq("partner_id", partnerId)
+            .eq("status", "active")
+            .maybeSingle()
+          rowPship = rel?.id ?? null
+        }
+        if (rowPship === partnershipId) {
+          allowedByAward = true
+          break
+        }
+      }
+
+      if (!allowedByAward) {
+        return NextResponse.json(
+          {
+            error:
+              "Partner must be assigned or have an awarded bid on this project before sending onboarding.",
+          },
+          { status: 400 }
+        )
+      }
     }
 
-    if (assignmentId && assignmentCheck.id !== assignmentId) {
+    if (assignmentCheck && assignmentId && assignmentCheck.id !== assignmentId) {
       return NextResponse.json({ error: "assignmentId does not match project and partnership" }, { status: 400 })
     }
 

@@ -179,7 +179,16 @@ function DashboardContent() {
       const response = await fetch('/api/projects')
       if (response.ok) {
         const data = await response.json()
-        const mapped = (data.projects || []).map(
+        const rawList = (data.projects || []) as Record<string, unknown>[]
+        if (rawList.length > 0) {
+          console.log('[dashboard] raw /api/projects first row keys', Object.keys(rawList[0]))
+          console.log('[dashboard] raw /api/projects first row alert fields', {
+            partner_status_alert_count: rawList[0].partner_status_alert_count,
+            partnerStatusAlertCount: rawList[0].partnerStatusAlertCount,
+            partner_status_alert_preview: rawList[0].partner_status_alert_preview,
+          })
+        }
+        const mapped = rawList.map(
           (p: {
             id: string
             title?: string
@@ -192,7 +201,8 @@ function DashboardContent() {
             project_assignments?: { status: string }[]
             dashboard_workflow_stage?: string
             dashboard_workflow_label?: string
-            partner_status_alert_count?: number
+            partner_status_alert_count?: unknown
+            partnerStatusAlertCount?: unknown
             partner_status_alert_preview?: MasterProject["partnerStatusAlertPreview"]
           }) => {
             const m = mapDbProjectToMaster(p)
@@ -202,6 +212,13 @@ function DashboardContent() {
             ).length
             const wfKey = (p.dashboard_workflow_stage || 'setup') as DashboardWorkflowStageKey
             const wfLabel = p.dashboard_workflow_label || workflowStageConfig[wfKey]?.label || 'Setup'
+            const rawAlert =
+              p.partner_status_alert_count ?? p.partnerStatusAlertCount
+            const partnerAlertNum =
+              typeof rawAlert === 'number' && Number.isFinite(rawAlert)
+                ? rawAlert
+                : Number.parseInt(String(rawAlert ?? ''), 10)
+            const partnerStatusAlertCount = Number.isFinite(partnerAlertNum) ? partnerAlertNum : 0
             return {
               id: m.id,
               name: m.name,
@@ -229,7 +246,7 @@ function DashboardContent() {
                     : 'Setup',
               workflowStageKey: wfKey in workflowStageConfig ? wfKey : 'setup',
               workflowStageLabel: wfLabel,
-              partnerStatusAlertCount: Number(p.partner_status_alert_count) || 0,
+              partnerStatusAlertCount,
               partnerStatusAlertPreview: p.partner_status_alert_preview ?? null,
             }
           }

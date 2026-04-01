@@ -166,11 +166,12 @@ export async function GET(request: NextRequest) {
           bidProjectIds,
           inboxProjectIds
         )
+        const alertCount = countByProject.get(pid) ?? 0
         return {
           ...p,
           dashboard_workflow_stage: wf.key,
           dashboard_workflow_label: wf.label,
-          partner_status_alert_count: countByProject.get(pid) || 0,
+          partner_status_alert_count: alertCount,
           partner_status_alert_preview: first
             ? {
                 status: first.status,
@@ -182,6 +183,13 @@ export async function GET(request: NextRequest) {
             : null,
         }
       })
+      console.log(
+        '[api/projects] partner_status_alert_count per project',
+        (projects as { id: string; partner_status_alert_count?: number }[]).map((row) => ({
+          id: row.id,
+          partner_status_alert_count: row.partner_status_alert_count ?? 0,
+        }))
+      )
     } else if (profile?.role === 'partner') {
       const { data: userPartnerships, error: pErr } = await supabase
         .from('partnerships')

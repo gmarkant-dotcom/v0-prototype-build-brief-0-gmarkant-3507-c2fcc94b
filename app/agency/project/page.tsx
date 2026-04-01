@@ -303,8 +303,16 @@ function ActiveEngagementsInner() {
         return
       }
       try {
-        const url = `/api/agency/projects/${encodeURIComponent(projectId)}/status-updates?partnershipId=${encodeURIComponent(partnershipId)}`
-        const res = await fetch(url, { credentials: "same-origin" })
+        const path = `/api/agency/projects/${encodeURIComponent(projectId)}/status-updates?partnershipId=${encodeURIComponent(partnershipId)}`
+        const absolute =
+          typeof window !== "undefined" ? new URL(path, window.location.origin).href : path
+        console.log("[active-engagements] open alert panel GET status-updates", {
+          fetchUrl: absolute,
+          rowProjectId: projectId,
+          partnershipId,
+          selectedSidebarProjectId: selectedProject?.id ?? null,
+        })
+        const res = await fetch(path, { credentials: "same-origin" })
         const data = await res.json().catch(() => ({}))
         if (res.ok) {
           const raw = (data as { updates?: Record<string, unknown>[] }).updates || []
@@ -318,19 +326,27 @@ function ActiveEngagementsInner() {
               created_at: String(r.created_at),
             }))
           )
+        } else {
+          console.warn("[active-engagements] status-updates GET failed", res.status, data)
         }
       } finally {
         setPanelLoading(false)
       }
     },
-    [isDemo]
+    [isDemo, selectedProject?.id]
   )
 
   const openAlertsForRow = useCallback((proj: ProjectGroup, row: PartnerEngagementRow) => {
     const name =
       row.partner.companyName?.trim() || row.partner.fullName?.trim() || "Partner"
-    void openAlertPanel(proj.id, row.partnershipId, name)
-  }, [openAlertPanel])
+    const rowProjectId = proj.id
+    console.log("[active-engagements] openAlertsForRow", {
+      rowProjectId,
+      partnershipId: row.partnershipId,
+      selectedSidebarProjectId: selectedProject?.id ?? null,
+    })
+    void openAlertPanel(rowProjectId, row.partnershipId, name)
+  }, [openAlertPanel, selectedProject?.id])
 
   const resolveFromPanel = useCallback(
     async (updateId: string) => {

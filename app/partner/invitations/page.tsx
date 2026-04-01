@@ -174,7 +174,7 @@ export default function PartnerInvitationsPage() {
             Active Partnership
           </span>
         ) : (
-          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 font-semibold">
+          <span className="bg-green-100 text-green-800 border border-green-200 font-medium text-xs px-2 py-1 rounded-full">
             Active Partnership
           </span>
         )
@@ -313,33 +313,39 @@ export default function PartnerInvitationsPage() {
             </h2>
             <div className="space-y-4">
               {activePartnerships.map((partnership) => (
-                <GlassCard key={partnership.id} className="p-6 hover:bg-white/[0.03] transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
-                      <Building2 className="w-6 h-6 text-emerald-800" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <h3 className="font-display font-semibold text-lg text-gray-900">
-                          {partnership.agency?.company_name || partnership.agency?.full_name || "Lead Agency"}
-                        </h3>
-                        {getStatusBadge(partnership.status, "light")}
-                      </div>
-                      {partnership.agency?.email && (
-                        <p className="text-sm text-gray-600 mb-1">{partnership.agency.email}</p>
-                      )}
-                      <p className="text-sm text-gray-600">
-                        You are part of this agency&apos;s partner network. You&apos;ll receive project assignments from them.
-                      </p>
-                      {partnership.accepted_at && (
-                        <p className="text-xs text-gray-500 mt-2">
-                          Partnered since {new Date(partnership.accepted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                        </p>
-                      )}
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
+                <div
+                  key={partnership.id}
+                  className="bg-white border border-gray-200 shadow-sm rounded-xl p-5 flex items-start gap-4"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
+                    <Building2 className="w-6 h-6 text-gray-700" />
                   </div>
-                </GlassCard>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <h3 className="font-display text-gray-900 text-lg font-bold">
+                        {partnership.agency?.company_name || partnership.agency?.full_name || "Lead Agency"}
+                      </h3>
+                      {getStatusBadge(partnership.status, "light")}
+                    </div>
+                    {partnership.agency?.email && (
+                      <p className="text-gray-700 text-sm mb-2">{partnership.agency.email}</p>
+                    )}
+                    <p className="text-gray-600 text-sm leading-relaxed">
+                      You are part of this agency&apos;s partner network. You&apos;ll receive project assignments from them.
+                    </p>
+                    {partnership.accepted_at && (
+                      <p className="text-gray-500 text-xs mt-3">
+                        Partnered since{" "}
+                        {new Date(partnership.accepted_at).toLocaleDateString("en-US", {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 shrink-0 mt-1" aria-hidden />
+                </div>
               ))}
             </div>
           </div>

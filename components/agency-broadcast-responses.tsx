@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
@@ -695,6 +696,21 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                       >
                         {r.status === "declined" ? "Declined" : "Decline"}
                       </Button>
+                      {r.status === "awarded" && projectId && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white border border-white/10"
+                          asChild
+                        >
+                          <Link
+                            href={`/agency/onboarding?projectId=${encodeURIComponent(projectId)}`}
+                            prefetch={false}
+                          >
+                            Start Onboarding
+                          </Link>
+                        </Button>
+                      )}
                       {r.status === "declined" && (
                         <Button
                           type="button"

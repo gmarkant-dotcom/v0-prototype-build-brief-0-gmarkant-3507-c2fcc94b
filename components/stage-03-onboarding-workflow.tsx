@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { StageHeader } from "@/components/stage-header"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
@@ -21,16 +22,25 @@ import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
 import { createClient } from "@/lib/supabase/client"
 import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
+import { isDemoMode } from "@/lib/demo-data"
 import { Loader2, Send, Link2, Upload, Plus, Trash2 } from "lucide-react"
 
-type AssignmentRow = {
-  id: string
+type OnboardingPartnerRow = {
+  assignmentId: string | null
+  partnershipId: string
   status: string
-  partnership_id?: string
-  partnership: {
+  source: "assignment" | "awarded_bid"
+  partner: {
     id: string
-    partner: { id: string; email: string | null; full_name: string | null; company_name: string | null } | null
+    email: string | null
+    full_name: string | null
+    company_name: string | null
   } | null
+  scopeLabel: string | null
+}
+
+function partnerOptionKey(p: OnboardingPartnerRow): string {
+  return p.assignmentId ? `a:${p.assignmentId}` : `p:${p.partnershipId}`
 }
 
 type LibraryRow = {
@@ -64,12 +74,15 @@ function libraryUrl(row: LibraryRow): string {
 
 export function Stage03OnboardingWorkflow() {
   const { checkFeatureAccess } = usePaidUser()
-  const { selectedProject } = useSelectedProject()
-  const [assignments, setAssignments] = useState<AssignmentRow[]>([])
+  const searchParams = useSearchParams()
+  const qProjectId = searchParams.get("projectId")
+  const missedProjectRefreshRef = useRef(false)
+  const { selectedProject, setSelectedProject, projects, refreshProjects } = useSelectedProject()
+  const [onboardingPartners, setOnboardingPartners] = useState<OnboardingPartnerRow[]>([])
   const [library, setLibrary] = useState<LibraryRow[]>([])
   const [loading, setLoading] = useState(false)
   const [loadLib, setLoadLib] = useState(false)
-  const [assignmentId, setAssignmentId] = useState("")
+  const [partnerSelectionKey, setPartnerSelectionKey] = useState("")
   const [selectedLibIds, setSelectedLibIds] = useState<string[]>([])
   const [projectItems, setProjectItems] = useState<ProjectAttach[]>([])
   const [kickoffType, setKickoffType] = useState<"calendly" | "availability" | "none">("none")
@@ -82,14 +95,38 @@ export function Stage03OnboardingWorkflow() {
   const [uploadingAttach, setUploadingAttach] = useState<string | null>(null)
   const [meetingUrlProfile, setMeetingUrlProfile] = useState<string | null>(null)
 
-  const refreshAssignments = useCallback(async () => {
+  useEffect(() => {
+    missedProjectRefreshRef.current = false
+  }, [qProjectId])
+
+  useEffect(() => {
+    const pid = qProjectId?.trim()
+    if (!pid || isDemoMode()) return
+    const match = projects.find((p) => p.id === pid)
+    if (match && selectedProject?.id !== pid) {
+      setSelectedProject(match)
+    }
+  }, [qProjectId, projects, selectedProject?.id, setSelectedProject])
+
+  useEffect(() => {
+    const pid = qProjectId?.trim()
+    if (!pid || isDemoMode()) return
+    if (projects.some((p) => p.id === pid)) return
+    if (missedProjectRefreshRef.current) return
+    missedProjectRefreshRef.current = true
+    void refreshProjects()
+  }, [qProjectId, projects, refreshProjects])
+
+  const loadOnboardingPartners = useCallback(async () => {
     if (!selectedProject?.id) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/projects/${selectedProject.id}/assignments`, { credentials: "same-origin" })
+      const res = await fetch(`/api/projects/${selectedProject.id}/onboarding-partners`, {
+        credentials: "same-origin",
+      })
       if (!res.ok) {
         const bodyText = await res.text().catch(() => "")
-        console.error("[onboarding] assignments fetch failed", {
+        console.error("[onboarding] onboarding-partners fetch failed", {
           projectId: selectedProject.id,
           status: res.status,
           bodyPreview: bodyText.slice(0, 500),
@@ -97,11 +134,15 @@ export function Stage03OnboardingWorkflow() {
         return
       }
       const data = await res.json().catch(() => ({}))
-      const rows = (data.assignments || []) as AssignmentRow[]
-      setAssignments(rows)
+      const rows = (data.partners || []) as OnboardingPartnerRow[]
+      setOnboardingPartners(rows)
       const awarded = rows.find((a) => a.status === "awarded")
       const first = awarded || rows[0]
-      if (first) setAssignmentId(first.id)
+      if (first) {
+        setPartnerSelectionKey(partnerOptionKey(first))
+      } else {
+        setPartnerSelectionKey("")
+      }
     } finally {
       setLoading(false)
     }
@@ -127,8 +168,8 @@ export function Stage03OnboardingWorkflow() {
 
   useEffect(() => {
     if (!selectedProject?.id) return
-    void refreshAssignments()
-  }, [selectedProject?.id, refreshAssignments])
+    void loadOnboardingPartners()
+  }, [selectedProject?.id, loadOnboardingPartners])
 
   useEffect(() => {
     refreshLibrary()
@@ -171,12 +212,13 @@ export function Stage03OnboardingWorkflow() {
     }
   }, [kickoffType, meetingUrlProfile, kickoffUrl])
 
-  const selectedAssignment = useMemo(
-    () => assignments.find((a) => a.id === assignmentId),
-    [assignments, assignmentId]
+  const selectedPartnerRow = useMemo(
+    () => onboardingPartners.find((p) => partnerOptionKey(p) === partnerSelectionKey),
+    [onboardingPartners, partnerSelectionKey]
   )
 
-  const partnershipId = selectedAssignment?.partnership?.id || selectedAssignment?.partnership_id
+  const partnershipId = selectedPartnerRow?.partnershipId
+  const assignmentIdForSend = selectedPartnerRow?.assignmentId ?? ""
 
   const agencyDocs = useMemo(() => library.filter((d) => d.section === "agency"), [library])
   const templateDocs = useMemo(() => library.filter((d) => d.section === "templates"), [library])
@@ -274,7 +316,7 @@ export function Stage03OnboardingWorkflow() {
         credentials: "same-origin",
         body: JSON.stringify({
           partnershipId,
-          assignmentId,
+          assignmentId: assignmentIdForSend || undefined,
           kickoffType,
           kickoffUrl:
             kickoffType === "calendly" ? normalizeMeetingUrlForHref(kickoffUrl.trim()) || kickoffUrl.trim() : "",
@@ -289,7 +331,7 @@ export function Stage03OnboardingWorkflow() {
         console.error("[onboarding] POST onboarding-packages failed", {
           projectId: selectedProject.id,
           partnershipId,
-          assignmentId,
+          assignmentId: assignmentIdForSend,
           status: res.status,
           error: msg,
         })
@@ -304,7 +346,7 @@ export function Stage03OnboardingWorkflow() {
       console.error("[onboarding] POST onboarding-packages threw", {
         projectId: selectedProject.id,
         partnershipId,
-        assignmentId,
+        assignmentId: assignmentIdForSend,
         message: e instanceof Error ? e.message : String(e),
       })
       setError(e instanceof Error ? e.message : "Request failed")
@@ -345,31 +387,34 @@ export function Stage03OnboardingWorkflow() {
           <Loader2 className="w-5 h-5 animate-spin" />
           Loading…
         </div>
-      ) : assignments.length === 0 ? (
+      ) : onboardingPartners.length === 0 ? (
         <EmptyState
-          title="No partner linked to this project yet"
-          description="When you award a bid in Bid Management, a project assignment is created automatically so you can send onboarding here. RFP broadcasts must include this project so the inbox row has a project_id."
+          title="No awarded partner found for onboarding"
+          description="Award a bid in Bid Management (with the broadcast linked to this project), or ensure an active project assignment exists. Awarded bids without an assignment row still appear here when the inbox is tied to this project."
           icon="onboarding"
         />
       ) : (
         <div className="space-y-6 mt-6">
           <GlassCard className="p-6 space-y-4">
-            <GlassCardHeader title="Partner" description="One package per send — pick the assignment for this partner." />
+            <GlassCardHeader title="Partner" description="One package per send — pick the partner (assignment or awarded bid)." />
             <div className="space-y-2">
-              <Label>Assignment</Label>
-              <Select value={assignmentId} onValueChange={setAssignmentId}>
+              <Label>Partner</Label>
+              <Select value={partnerSelectionKey} onValueChange={setPartnerSelectionKey}>
                 <SelectTrigger className="bg-white/5 border-border">
-                  <SelectValue placeholder="Select partner assignment" />
+                  <SelectValue placeholder="Select partner" />
                 </SelectTrigger>
                 <SelectContent>
-                  {assignments.map((a) => {
+                  {onboardingPartners.map((a) => {
                     const name =
-                      a.partnership?.partner?.company_name ||
-                      a.partnership?.partner?.full_name ||
+                      a.partner?.company_name?.trim() ||
+                      a.partner?.full_name?.trim() ||
+                      a.partner?.email?.trim() ||
                       "Partner"
+                    const scope = a.scopeLabel ? ` · ${a.scopeLabel}` : ""
+                    const src = a.source === "awarded_bid" ? "awarded bid" : a.status
                     return (
-                      <SelectItem key={a.id} value={a.id}>
-                        {name} ({a.status})
+                      <SelectItem key={partnerOptionKey(a)} value={partnerOptionKey(a)}>
+                        {name} ({src}){scope}
                       </SelectItem>
                     )
                   })}
