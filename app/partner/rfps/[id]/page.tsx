@@ -853,6 +853,7 @@ export default function PartnerRfpDetailPage() {
                         const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
                         const budgetObj = parseVersionBudgetFields(v.budget_proposal)
                         const timelineObj = parseVersionTimelineFields(v.timeline_proposal)
+                        console.log("[partner/rfps/detail] version card render", { id: v.id, budget_proposal: v.budget_proposal, budgetObj, timelineObj })
                         return (
                           <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                             <div className="flex items-center justify-between gap-3">
