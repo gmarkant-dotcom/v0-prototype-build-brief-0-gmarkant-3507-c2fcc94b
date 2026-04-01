@@ -20,7 +20,7 @@ import { useSelectedProject } from "@/contexts/selected-project-context"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
 import { createClient } from "@/lib/supabase/client"
-import { cn } from "@/lib/utils"
+import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
 import { Loader2, Send, Link2, Upload, Plus, Trash2 } from "lucide-react"
 
 type AssignmentRow = {
@@ -248,19 +248,15 @@ export function Stage03OnboardingWorkflow() {
     }
 
     for (const p of projectItems) {
-      const url = p.source === "file" ? p.storedUrl : p.urlInput.trim()
-      if (!p.label.trim() || !url) continue
+      const raw = p.source === "file" ? (p.storedUrl || "").trim() : p.urlInput.trim()
+      if (!p.label.trim() || !raw) continue
+      const url = normalizeMeetingUrlForHref(raw) || raw
       docs.push({
         documentRole: "project_doc",
         libraryDocumentId: null,
         label: p.label.trim(),
-        url: url.trim(),
+        url,
       })
-    }
-
-    if (docs.length === 0) {
-      setError("Select at least one library document or add a project document with label and URL/file.")
-      return
     }
 
     const projectCount = docs.filter((d) => d.documentRole === "project_doc").length
@@ -280,7 +276,8 @@ export function Stage03OnboardingWorkflow() {
           partnershipId,
           assignmentId,
           kickoffType,
-          kickoffUrl: kickoffType === "calendly" ? kickoffUrl : "",
+          kickoffUrl:
+            kickoffType === "calendly" ? normalizeMeetingUrlForHref(kickoffUrl.trim()) || kickoffUrl.trim() : "",
           kickoffAvailability: kickoffType === "availability" ? kickoffAvailability : "",
           customMessage,
           documents: docs,

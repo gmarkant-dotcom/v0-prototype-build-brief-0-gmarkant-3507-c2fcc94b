@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
+import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { isDemoMode } from "@/lib/demo-data"
 import { createClient } from "@/lib/supabase/client"
 import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
@@ -34,6 +35,8 @@ import {
   Plus,
   Link as LinkIcon,
   CalendarDays,
+  ExternalLink,
+  Download,
 } from "lucide-react"
 
 /** Readable text on white cards (defaults are transparent / light in dark theme). */
@@ -83,6 +86,14 @@ const TAG_OPTIONS: { value: AttachmentTag; label: string }[] = [
 function labelForTag(tag: AttachmentTag, otherLabel: string): string {
   if (tag === "other") return otherLabel.trim()
   return TAG_OPTIONS.find((o) => o.value === tag)?.label || tag
+}
+
+function externalLinkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "")
+  } catch {
+    return "Link"
+  }
 }
 
 type SavedAttachment = { type: string; label: string; url: string }
@@ -850,7 +861,7 @@ export default function PartnerRfpDetailPage() {
                         const isOriginal = v.version_number === 1
                         const preview =
                           (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "—"
-                        const attachmentCount = Array.isArray(v.attachments) ? v.attachments.length : 0
+                        const versionAttachments = Array.isArray(v.attachments) ? v.attachments : []
                         const budgetObj = parseVersionBudgetFields(v.budget_proposal)
                         const timelineObj = parseVersionTimelineFields(v.timeline_proposal)
                         return (
@@ -881,14 +892,59 @@ export default function PartnerRfpDetailPage() {
                                 </div>
                               </div>
                             </div>
-                            <p className="text-sm text-gray-700 mt-3">{preview || "—"}</p>
+                            <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap">{preview || "—"}</p>
+                            <div className="mt-3">
+                              <div className="font-mono text-[10px] uppercase text-gray-500 mb-2">Attachments</div>
+                              {versionAttachments.length === 0 ? (
+                                <p className="text-sm text-gray-500 font-mono text-[10px]">No attachments</p>
+                              ) : (
+                                <ul className="space-y-2">
+                                  {versionAttachments.map((att, i) => {
+                                    const isBlob = isVercelBlobStorageUrl(att.url)
+                                    const displayName = isBlob
+                                      ? displayFilenameFromBlobUrl(att.url)
+                                      : externalLinkLabel(att.url)
+                                    const downloadHref = isBlob
+                                      ? `/api/partner/blob-download?url=${encodeURIComponent(att.url)}`
+                                      : null
+                                    return (
+                                      <li
+                                        key={`${att.url}-${i}`}
+                                        className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm border border-gray-200 rounded-lg p-3 bg-white"
+                                      >
+                                        <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 shrink-0">
+                                          {att.label}
+                                        </span>
+                                        <span className="text-gray-900 min-w-0 flex-1 truncate" title={displayName}>
+                                          {displayName}
+                                        </span>
+                                        {isBlob && downloadHref ? (
+                                          <Button variant="outline" size="sm" className={cn(btnOutlineLight, "shrink-0 h-8")} asChild>
+                                            <a href={downloadHref}>
+                                              <Download className="w-3.5 h-3.5 mr-1.5" />
+                                              Download
+                                            </a>
+                                          </Button>
+                                        ) : (
+                                          <Button variant="outline" size="sm" className={cn(btnOutlineLight, "shrink-0 h-8")} asChild>
+                                            <a href={att.url} target="_blank" rel="noopener noreferrer">
+                                              <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                                              Open
+                                            </a>
+                                          </Button>
+                                        )}
+                                      </li>
+                                    )
+                                  })}
+                                </ul>
+                              )}
+                            </div>
                             {v.change_notes && (
                               <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
                                 <div className="font-mono text-[10px] uppercase text-amber-800">Change notes</div>
                                 <p className="text-sm text-amber-900 whitespace-pre-wrap">{v.change_notes}</p>
                               </div>
                             )}
-                            <p className="font-mono text-[10px] text-gray-500 mt-2">Attachments: {attachmentCount}</p>
                           </div>
                         )
                       })

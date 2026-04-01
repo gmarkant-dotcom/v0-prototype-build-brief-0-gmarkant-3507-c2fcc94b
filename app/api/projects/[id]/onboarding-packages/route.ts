@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { createNotification } from "@/lib/notifications"
+import { normalizeMeetingUrlForHref } from "@/lib/utils"
 export const dynamic = "force-dynamic"
 
 type DocPayload = {
@@ -188,27 +189,41 @@ export async function POST(
       return NextResponse.json({ error: "assignmentId does not match project and partnership" }, { status: 400 })
     }
 
-    const docs: DocPayload[] = Array.isArray(documents) ? documents : []
+    const rawDocs: DocPayload[] = Array.isArray(documents) ? documents : []
+    /** Drop empty slots; require label+url only for rows the client actually filled in. */
+    const docs: DocPayload[] = []
+    for (const d of rawDocs) {
+      const label = (d.label || "").trim()
+      const rawUrl = (d.url || "").trim()
+      if (!label && !rawUrl) continue
+      if (!label || !rawUrl) {
+        return NextResponse.json({ error: "Each document needs label and url" }, { status: 400 })
+      }
+      const url = normalizeMeetingUrlForHref(rawUrl)
+      if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) {
+        return NextResponse.json({ error: "Each document url must be http(s)" }, { status: 400 })
+      }
+      docs.push({
+        ...d,
+        label,
+        url,
+      })
+    }
+
     const projectDocCount = docs.filter((d) => d.documentRole === "project_doc").length
     if (projectDocCount > 10) {
       return NextResponse.json({ error: "Maximum 10 project documents" }, { status: 400 })
     }
-    if (docs.length === 0) {
-      return NextResponse.json({ error: "Add at least one document" }, { status: 400 })
-    }
-
-    for (const d of docs) {
-      if (!d.label?.trim() || !d.url?.trim()) {
-        return NextResponse.json({ error: "Each document needs label and url" }, { status: 400 })
-      }
-      if (!d.url.startsWith("http://") && !d.url.startsWith("https://")) {
-        return NextResponse.json({ error: "Each document url must be http(s)" }, { status: 400 })
-      }
-    }
 
     const kt = ["calendly", "availability", "none"].includes(kickoffType) ? kickoffType : "none"
-    const finalKickoffUrl = kt === "calendly" ? (kickoffUrl || profile?.meeting_url || "").trim() : null
+    const calendlySource = (kickoffUrl || profile?.meeting_url || "").trim()
+    const finalKickoffUrl =
+      kt === "calendly" ? normalizeMeetingUrlForHref(calendlySource) || null : null
     const finalAvailability = kt === "availability" ? (kickoffAvailability || "").trim() : null
+
+    if (kt === "calendly" && calendlySource && !finalKickoffUrl) {
+      return NextResponse.json({ error: "Calendly or scheduling URL could not be normalized" }, { status: 400 })
+    }
 
     const { data: pkg, error: pkgErr } = await supabase
       .from("onboarding_packages")
@@ -217,7 +232,7 @@ export async function POST(
         agency_id: user.id,
         partnership_id: partnershipId,
         kickoff_type: kt,
-        kickoff_url: finalKickoffUrl || null,
+        kickoff_url: finalKickoffUrl,
         kickoff_availability: finalAvailability || null,
         custom_message: customMessage?.trim() || null,
         status: "sent",
@@ -231,20 +246,22 @@ export async function POST(
       return NextResponse.json({ error: pkgErr?.message || "Could not create package (run migration 024?)" }, { status: 500 })
     }
 
-    const rows = docs.map((d, i) => ({
-      package_id: pkg.id,
-      document_role: d.documentRole,
-      library_document_id: d.libraryDocumentId || null,
-      label: d.label.trim(),
-      url: d.url.trim(),
-      sort_order: i,
-    }))
+    if (docs.length > 0) {
+      const rows = docs.map((d, i) => ({
+        package_id: pkg.id,
+        document_role: d.documentRole,
+        library_document_id: d.libraryDocumentId || null,
+        label: d.label.trim(),
+        url: d.url.trim(),
+        sort_order: i,
+      }))
 
-    const { error: docErr } = await supabase.from("onboarding_package_documents").insert(rows)
-    if (docErr) {
-      console.error("[onboarding-packages] insert docs", docErr)
-      await supabase.from("onboarding_packages").delete().eq("id", pkg.id)
-      return NextResponse.json({ error: "Could not save document list" }, { status: 500 })
+      const { error: docErr } = await supabase.from("onboarding_package_documents").insert(rows)
+      if (docErr) {
+        console.error("[onboarding-packages] insert docs", docErr)
+        await supabase.from("onboarding_packages").delete().eq("id", pkg.id)
+        return NextResponse.json({ error: "Could not save document list" }, { status: 500 })
+      }
     }
 
     const { data: partnerProfile, error: partnerProfileErr } = await supabase
@@ -269,7 +286,10 @@ export async function POST(
     const base = siteBaseUrl()
     const onboardingUrl = `${base}/partner/onboarding`
 
-    const docListHtml = docs.map((d) => `<li>${escapeHtml(d.label.trim())}</li>`).join("")
+    const docListHtml =
+      docs.length > 0
+        ? docs.map((d) => `<li>${escapeHtml(d.label.trim())}</li>`).join("")
+        : "<li><em>No documents attached to this package.</em></li>"
     let kickoffHtml = ""
     if (kt === "calendly" && finalKickoffUrl) {
       kickoffHtml = `<p><strong>Kickoff:</strong> <a href="${escapeHtml(finalKickoffUrl)}">Schedule here</a></p>`

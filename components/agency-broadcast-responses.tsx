@@ -412,15 +412,64 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                                 )
                               })()}
                             </div>
+                            <div className="pt-1">
+                              <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
+                              {(() => {
+                                const att = Array.isArray(selectedVersion.attachments) ? selectedVersion.attachments : []
+                                if (att.length === 0) {
+                                  return (
+                                    <p className="text-sm text-foreground-muted font-mono text-[10px]">No attachments</p>
+                                  )
+                                }
+                                return (
+                                  <ul className="space-y-2">
+                                    {att.map((a, i) => {
+                                      const isBlob = isVercelBlobStorageUrl(a.url)
+                                      const displayName = isBlob
+                                        ? displayFilenameFromBlobUrl(a.url)
+                                        : externalLinkLabel(a.url)
+                                      const downloadHref = isBlob
+                                        ? `/api/agency/blob-download?url=${encodeURIComponent(a.url)}`
+                                        : null
+                                      return (
+                                        <li
+                                          key={`${a.url}-${i}`}
+                                          className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm border border-border/60 rounded-lg p-2 bg-white/5"
+                                        >
+                                          <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-white/10 text-foreground-muted shrink-0">
+                                            {a.label}
+                                          </span>
+                                          <span className="text-foreground min-w-0 flex-1 truncate" title={displayName}>
+                                            {displayName}
+                                          </span>
+                                          {isBlob && downloadHref ? (
+                                            <Button variant="outline" size="sm" className="shrink-0 border-border/60 h-8" asChild>
+                                              <a href={downloadHref}>
+                                                <Download className="w-3.5 h-3.5 mr-1.5" />
+                                                Download
+                                              </a>
+                                            </Button>
+                                          ) : (
+                                            <Button variant="outline" size="sm" className="shrink-0 border-border/60 h-8" asChild>
+                                              <a href={a.url} target="_blank" rel="noopener noreferrer">
+                                                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                                                Open
+                                              </a>
+                                            </Button>
+                                          )}
+                                        </li>
+                                      )
+                                    })}
+                                  </ul>
+                                )
+                              })()}
+                            </div>
                             {selectedVersion.change_notes && (
                               <div className="rounded-md border border-amber-300/50 bg-amber-500/10 p-2">
                                 <div className="font-mono text-[10px] uppercase text-amber-200">Change notes</div>
                                 <p className="text-sm text-amber-100 whitespace-pre-wrap">{selectedVersion.change_notes}</p>
                               </div>
                             )}
-                            <p className="font-mono text-[10px] text-foreground-muted">
-                              Attachments: {Array.isArray(selectedVersion.attachments) ? selectedVersion.attachments.length : 0}
-                            </p>
                           </div>
                         )}
                       </>
