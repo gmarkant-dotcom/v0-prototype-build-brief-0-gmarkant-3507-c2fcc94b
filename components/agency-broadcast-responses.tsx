@@ -210,6 +210,7 @@ export function AgencyBroadcastResponsesPanel() {
   }
 
   return (
+    <>
     <GlassCard className="mb-8">
       <GlassCardHeader
         label="Broadcast inbox"
@@ -479,6 +480,7 @@ export function AgencyBroadcastResponsesPanel() {
 
                     <div className="flex flex-wrap gap-2 items-center">
                       <Button
+                        type="button"
                         size="sm"
                         variant={r.status === "meeting_requested" ? "default" : "outline"}
                         className={cn(
@@ -512,6 +514,7 @@ export function AgencyBroadcastResponsesPanel() {
                           : "Request Meeting"}
                       </Button>
                       <Button
+                        type="button"
                         size="sm"
                         variant={r.status === "shortlisted" ? "default" : "outline"}
                         className={cn(
@@ -538,6 +541,7 @@ export function AgencyBroadcastResponsesPanel() {
                           : "Shortlist"}
                       </Button>
                       <Button
+                        type="button"
                         size="sm"
                         className="bg-green-600 hover:bg-green-600/90 text-white"
                         onClick={() =>
@@ -558,6 +562,7 @@ export function AgencyBroadcastResponsesPanel() {
                         className="h-8 max-w-xs text-sm"
                       />
                       <Button
+                        type="button"
                         size="sm"
                         variant="outline"
                         className="border-red-400/40 text-red-300"
@@ -570,6 +575,7 @@ export function AgencyBroadcastResponsesPanel() {
                       </Button>
                       {r.status === "declined" && (
                         <Button
+                          type="button"
                           size="sm"
                           variant="outline"
                           className="border-border/60 text-foreground"
@@ -587,23 +593,36 @@ export function AgencyBroadcastResponsesPanel() {
           )
         })}
       </div>
+    </GlassCard>
 
-      <AlertDialog open={awardDialog !== null} onOpenChange={(open) => !open && setAwardDialog(null)}>
-        <AlertDialogContent className="border-border/60 bg-background/95 backdrop-blur-md sm:max-w-md">
+      <AlertDialog
+        open={awardDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setAwardDialog(null)
+        }}
+      >
+        <AlertDialogContent className="border border-white/15 bg-[#081F1F] text-foreground shadow-2xl sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="font-display text-foreground">Award this bid?</AlertDialogTitle>
-            <AlertDialogDescription className="text-foreground/80 text-left text-sm leading-relaxed">
-              {awardDialog ? (
-                <>
-                  You&apos;re about to award <span className="font-semibold text-foreground">{awardDialog.partner}</span>{" "}
-                  the <span className="font-semibold text-foreground">{awardDialog.scope}</span>. This action cannot be
-                  undone. The partner will be notified immediately.
-                </>
-              ) : null}
+            <AlertDialogDescription asChild>
+              <p className="text-foreground/85 text-left text-sm leading-relaxed">
+                {awardDialog ? (
+                  <>
+                    You&apos;re about to award{" "}
+                    <span className="font-semibold text-foreground">{awardDialog.partner}</span> the{" "}
+                    <span className="font-semibold text-foreground">{awardDialog.scope}</span>. This action cannot be
+                    undone. The partner will be notified immediately.
+                  </>
+                ) : (
+                  <span />
+                )}
+              </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-2">
-            <AlertDialogCancel className="border-border/60 text-foreground hover:bg-white/10 mt-0">Cancel</AlertDialogCancel>
+            <AlertDialogCancel type="button" className="border-border/60 text-foreground hover:bg-white/10 mt-0">
+              Cancel
+            </AlertDialogCancel>
             <Button
               type="button"
               className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
@@ -620,6 +639,6 @@ export function AgencyBroadcastResponsesPanel() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </GlassCard>
+    </>
   )
 }
