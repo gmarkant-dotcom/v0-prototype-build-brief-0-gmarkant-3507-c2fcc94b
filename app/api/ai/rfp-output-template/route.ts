@@ -12,7 +12,14 @@ const STYLE_MAP = {
   creative: "Creative agency style: punchy, brand-forward language while staying professional.",
 } as const
 
+function truncateDetail(s: string, max = 800) {
+  const t = s.trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, max)}…`
+}
+
 export async function POST(req: Request) {
+  console.log("[rfp-output-template] POST handler entered")
   try {
     const supabase = await createClient()
     const {
@@ -20,6 +27,7 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser()
 
     if (!user) {
+      console.log("[rfp-output-template] unauthorized — no user")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -37,14 +45,24 @@ export async function POST(req: Request) {
       (profile?.role === "agency" && (profile?.is_paid || profile?.is_admin))
 
     if (!allowed) {
+      console.log("[rfp-output-template] forbidden — not allowed for AI", { userId: user.id, role: profile?.role })
       return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403 })
     }
 
-    const body = await req.json()
+    const body = await req.json().catch(() => ({}))
     let briefText = (body.briefText || "").toString()
     const templateStyle = (body.templateStyle || "formal").toString() as keyof typeof STYLE_MAP
     const outputFormat = (body.outputFormat || "section").toString()
     const sensitivity = body.sensitivity || {}
+
+    console.log("[rfp-output-template] request parsed", {
+      userId: user.id,
+      briefCharCount: briefText.length,
+      briefNonWhitespace: briefText.replace(/\s/g, "").length,
+      templateStyle,
+      outputFormat,
+      hasAnthropicApiKey: Boolean(process.env.ANTHROPIC_API_KEY),
+    })
 
     const scrubBrand = Boolean(sensitivity.scrubBrand)
     const scrubBudget = Boolean(sensitivity.scrubBudget)
@@ -56,7 +74,25 @@ export async function POST(req: Request) {
     }
 
     if (!briefText.trim()) {
-      return NextResponse.json({ error: "Brief content is required to generate a template" }, { status: 400 })
+      console.log("[rfp-output-template] rejected — empty briefText")
+      return NextResponse.json(
+        {
+          error: "Brief content is required to generate a template",
+          hint: "Complete Step 1a (upload, paste, link, or additional brief) before generating the output template.",
+        },
+        { status: 400 }
+      )
+    }
+
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error("[rfp-output-template] ANTHROPIC_API_KEY is not set")
+      return NextResponse.json(
+        {
+          error: "AI is not configured on the server.",
+          detail: "Set ANTHROPIC_API_KEY in Vercel Project → Settings → Environment Variables and redeploy.",
+        },
+        { status: 503 }
+      )
     }
 
     const styleLine =
@@ -110,21 +146,32 @@ Do not output JSON. Use markdown-style headings (##) for sections. Keep it under
 CLIENT BRIEF (for context — respect scrubbing rules only when illustrating placeholder style):
 ${briefText}`
 
+    console.log("[rfp-output-template] calling generateText…")
     const result = await generateText({
       model: "anthropic/claude-sonnet-4-20250514" as any,
       prompt,
       temperature: 0.35,
       maxOutputTokens: 8192,
     })
+    console.log("[rfp-output-template] generateText finished", {
+      textLength: (result.text || "").length,
+    })
 
     const templateText = (result.text || "").trim()
     if (!templateText) {
-      return NextResponse.json({ error: "Empty AI response" }, { status: 500 })
+      console.error("[rfp-output-template] empty model text")
+      return NextResponse.json(
+        {
+          error: "Empty AI response",
+          detail: "The model returned no text. Check Anthropic status, model id, and logs above.",
+        },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ templateText })
   } catch (error) {
-    console.error("rfp-output-template error:", error)
+    console.error("[rfp-output-template] error:", error)
     const msg = error instanceof Error ? error.message : String(error)
     const missingKey =
       /API key|api key|ANTHROPIC|authentication|401|unauthorized/i.test(msg) &&
@@ -134,7 +181,7 @@ ${briefText}`
         error: missingKey
           ? "AI is not configured (missing or invalid API key)."
           : "Failed to generate output template",
-        detail: process.env.NODE_ENV === "development" ? msg : undefined,
+        detail: truncateDetail(msg),
       },
       { status: 500 }
     )

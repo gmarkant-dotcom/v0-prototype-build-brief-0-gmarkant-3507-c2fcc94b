@@ -109,6 +109,8 @@ function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
   const { selectedProject } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  /** Must stay mounted when switching 1b tabs so "Upload file" can call .click() (input was inside `upload` branch only → ref null in AI mode). */
+  const rfpTemplateFileInputRef = useRef<HTMLInputElement>(null)
   
   const isDemo = isDemoMode()
   const [poolPartners, setPoolPartners] = useState<Partner[]>([])
@@ -290,6 +292,55 @@ function AgencyRFPContent() {
     fileInputRef.current?.click()
   }
 
+  const triggerRfpTemplateFilePicker = () => {
+    console.log("[RFP Step 1b] template upload click — opening picker", {
+      hasInputRef: !!rfpTemplateFileInputRef.current,
+    })
+    setRfpTemplateMode("upload")
+    rfpTemplateFileInputRef.current?.click()
+  }
+
+  const handleRfpTemplateFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("[RFP Step 1b] template file input onChange fired")
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!checkFeatureAccess("file uploads")) {
+      setRfpTemplateUploadError("File uploads require an active subscription (or use demo mode).")
+      e.target.value = ""
+      return
+    }
+    setRfpTemplateUploadError(null)
+    setRfpTemplateExtractWarning(null)
+    setIsUploadingRfpTemplate(true)
+    try {
+      const extractFd = new FormData()
+      extractFd.append("file", file)
+      const extractRes = await fetch("/api/documents/extract-text", {
+        method: "POST",
+        body: extractFd,
+      })
+      const extractPayload = await extractRes.json().catch(() => ({}))
+      if (!extractRes.ok) {
+        throw new Error(extractPayload?.error || "Could not read template text")
+      }
+
+      setUploadedRfpTemplate({ name: file.name, url: "" })
+      const warning = typeof extractPayload?.warning === "string" ? extractPayload.warning : null
+      setRfpTemplateExtractWarning(warning)
+      setTemplateSourceText((extractPayload.text || "").toString())
+      setRfpTemplateMode("upload")
+      setSelectedRfpTemplate("uploaded")
+    } catch (err) {
+      setRfpTemplateUploadError(err instanceof Error ? err.message : "Template processing failed")
+      setRfpTemplateExtractWarning(null)
+      setUploadedRfpTemplate(null)
+      setTemplateSourceText("")
+    } finally {
+      setIsUploadingRfpTemplate(false)
+      e.target.value = ""
+    }
+  }
+
   // Generate Master RFP (AI-backed)
   const generateMasterRfp = async () => {
     setGenerateMasterBriefError(null)
@@ -388,15 +439,23 @@ function AgencyRFPContent() {
       briefAugmentText,
     })
     if (!sourceText.trim()) {
-      setAiTemplateError("Add a client brief in Step 1a first.")
+      setAiTemplateError(
+        "Add a client brief in Step 1a first (upload a file, paste text, add a Google Doc link, or use the optional additional brief field). AI needs that text to infer structure."
+      )
       return
     }
-    if (!checkFeatureAccess()) return
+    if (!checkFeatureAccess("AI output template")) {
+      setAiTemplateError("Subscription required for AI features, or enable demo mode.")
+      return
+    }
     setIsGeneratingAiTemplate(true)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 125_000)
     try {
       const res = await fetch("/api/ai/rfp-output-template", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           briefText: sourceText,
           templateStyle: aiTemplateStyle,
@@ -409,20 +468,42 @@ function AgencyRFPContent() {
           },
         }),
       })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(
-          [payload?.error, payload?.detail].filter(Boolean).join(" ") || "Generation failed"
-        )
+      let payload: Record<string, unknown> = {}
+      try {
+        payload = (await res.json()) as Record<string, unknown>
+      } catch {
+        payload = {}
       }
-      setTemplateSourceText((payload.templateText || "").toString())
+      if (!res.ok) {
+        const parts = [
+          typeof payload.error === "string" ? payload.error : null,
+          typeof payload.hint === "string" ? payload.hint : null,
+          typeof payload.detail === "string" ? payload.detail : null,
+          !payload.error && !payload.detail && !payload.hint ? `HTTP ${res.status}` : null,
+        ].filter(Boolean)
+        throw new Error(parts.join(" — ") || "Generation failed")
+      }
+      const text = (payload.templateText || "").toString().trim()
+      if (!text) {
+        throw new Error("AI returned an empty template. Check server logs and ANTHROPIC_API_KEY on Vercel.")
+      }
+      setTemplateSourceText(text)
       setSelectedRfpTemplate("ai")
       setUploadedRfpTemplate(null)
       setRfpTemplateExtractWarning(null)
       setRfpTemplateUploadError(null)
     } catch (e) {
-      setAiTemplateError(e instanceof Error ? e.message : "Failed to generate template")
+      if (e instanceof Error && e.name === "AbortError") {
+        setAiTemplateError(
+          "Request timed out (125s). On Vercel Hobby, functions may cap earlier—upgrade or check /api/ai/rfp-output-template logs."
+        )
+      } else {
+        setAiTemplateError(
+          e instanceof Error ? e.message : "Failed to generate template. Check the Network tab for /api/ai/rfp-output-template."
+        )
+      }
     } finally {
+      clearTimeout(timeoutId)
       setIsGeneratingAiTemplate(false)
     }
   }
@@ -826,10 +907,19 @@ function AgencyRFPContent() {
                 description="Upload a Word/PDF structure, or generate a layout with AI. The Master RFP step maps your client brief into this format (sections, headings, tone)."
               />
 
+              <input
+                ref={rfpTemplateFileInputRef}
+                id="rfp-template-file-input"
+                type="file"
+                accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                className="sr-only"
+                onChange={(e) => void handleRfpTemplateFileChange(e)}
+              />
+
               <div className="flex flex-wrap gap-2 mt-4">
                 <button
                   type="button"
-                  onClick={() => setRfpTemplateMode("upload")}
+                  onClick={() => triggerRfpTemplateFilePicker()}
                   className={cn(
                     "font-mono text-xs px-3 py-2 rounded-lg border transition-colors flex items-center gap-2",
                     rfpTemplateMode === "upload"
@@ -936,50 +1026,10 @@ function AgencyRFPContent() {
                         </Button>
                       </div>
                     )}
-                    <label className="w-full text-left p-3 rounded-lg border border-dashed border-border hover:border-accent/50 transition-colors flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="file"
-                        accept=".pdf,.docx,.txt,.md"
-                        className="sr-only"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0]
-                          if (!file) return
-                          if (!checkFeatureAccess("file uploads")) return
-                          setRfpTemplateUploadError(null)
-                          setRfpTemplateExtractWarning(null)
-                          setIsUploadingRfpTemplate(true)
-                          try {
-                            const extractFd = new FormData()
-                            extractFd.append("file", file)
-                            const extractRes = await fetch("/api/documents/extract-text", {
-                              method: "POST",
-                              body: extractFd,
-                            })
-                            const extractPayload = await extractRes.json().catch(() => ({}))
-                            if (!extractRes.ok) {
-                              throw new Error(extractPayload?.error || "Could not read template text")
-                            }
-
-                            setUploadedRfpTemplate({ name: file.name, url: "" })
-                            const warning =
-                              typeof extractPayload?.warning === "string"
-                                ? extractPayload.warning
-                                : null
-                            setRfpTemplateExtractWarning(warning)
-                            setTemplateSourceText((extractPayload.text || "").toString())
-                            setRfpTemplateMode("upload")
-                            setSelectedRfpTemplate("uploaded")
-                          } catch (err) {
-                            setRfpTemplateUploadError(err instanceof Error ? err.message : "Template processing failed")
-                            setRfpTemplateExtractWarning(null)
-                            setUploadedRfpTemplate(null)
-                            setTemplateSourceText("")
-                          } finally {
-                            setIsUploadingRfpTemplate(false)
-                            e.target.value = ""
-                          }
-                        }}
-                      />
+                    <label
+                      htmlFor="rfp-template-file-input"
+                      className="w-full text-left p-3 rounded-lg border border-dashed border-border hover:border-accent/50 transition-colors flex items-center gap-3 cursor-pointer"
+                    >
                       {isUploadingRfpTemplate ? (
                         <>
                           <Loader2 className="w-5 h-5 text-accent animate-spin" />
@@ -992,8 +1042,24 @@ function AgencyRFPContent() {
                         </>
                       )}
                     </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-border/60 text-foreground-muted"
+                      disabled={isUploadingRfpTemplate}
+                      onClick={() => triggerRfpTemplateFilePicker()}
+                    >
+                      <Upload className="w-3.5 h-3.5 mr-1.5" />
+                      Choose file…
+                    </Button>
                     {rfpTemplateUploadError && (
-                      <p className="text-xs text-red-300 px-1">{rfpTemplateUploadError}</p>
+                      <div
+                        role="alert"
+                        className="rounded-lg border border-red-400/40 bg-red-950/40 px-3 py-2 text-xs text-red-200"
+                      >
+                        {rfpTemplateUploadError}
+                      </div>
                     )}
                     {rfpTemplateExtractWarning && !rfpTemplateUploadError && (
                       <p className="text-xs text-amber-300 px-1">{rfpTemplateExtractWarning}</p>
@@ -1106,7 +1172,12 @@ function AgencyRFPContent() {
                       )}
                     </Button>
                     {aiTemplateError && (
-                      <p className="text-xs text-red-300">{aiTemplateError}</p>
+                      <div
+                        role="alert"
+                        className="rounded-lg border border-red-400/40 bg-red-950/40 px-3 py-2 text-xs text-red-200"
+                      >
+                        {aiTemplateError}
+                      </div>
                     )}
                     {selectedRfpTemplate === "ai" && templateSourceText.trim() && (
                       <p className="font-mono text-[10px] text-foreground-muted">
