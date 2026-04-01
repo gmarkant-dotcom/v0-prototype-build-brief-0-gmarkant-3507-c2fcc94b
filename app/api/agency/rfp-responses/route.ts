@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { parseBudgetProposal, parseTimelineProposal } from "@/lib/rfp-response-fields"
 
 export const dynamic = "force-dynamic"
 
@@ -105,7 +106,19 @@ export async function GET(request: Request) {
         )
         .in("response_id", responseIds)
         .order("version_number", { ascending: false })
-      for (const v of versions || []) {
+      for (const rawVersion of versions || []) {
+        const budgetParsed = parseBudgetProposal((rawVersion.budget_proposal as string) || "")
+        const timelineParsed = parseTimelineProposal((rawVersion.timeline_proposal as string) || "")
+        const v = {
+          ...rawVersion,
+          budget: budgetParsed.amount || null,
+          budget_currency:
+            budgetParsed.currency === "Other"
+              ? budgetParsed.customOther || "Other"
+              : budgetParsed.currency || null,
+          timeline: timelineParsed.duration || null,
+          timeline_unit: timelineParsed.unit || null,
+        }
         const responseId = v.response_id as string
         if (!versionsByResponseId[responseId]) versionsByResponseId[responseId] = []
         versionsByResponseId[responseId].push(v)

@@ -45,7 +45,11 @@ type ResponseVersion = {
   version_number: number
   proposal_text: string
   budget_proposal: string
+  budget?: string | null
+  budget_currency?: string | null
   timeline_proposal: string
+  timeline?: string | null
+  timeline_unit?: string | null
   attachments: AttachmentItem[] | null
   status_at_submission: string
   submitted_at: string
@@ -347,10 +351,20 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
                                 <div className="text-foreground">{formatBudgetForDisplay(selectedVersion.budget_proposal || "")}</div>
+                                {(selectedVersion.budget || selectedVersion.budget_currency) && (
+                                  <div className="font-mono text-[10px] text-foreground-muted mt-1">
+                                    {selectedVersion.budget || "—"} {selectedVersion.budget_currency || ""}
+                                  </div>
+                                )}
                               </div>
                               <div>
                                 <div className="font-mono text-[10px] uppercase text-foreground-muted">Timeline</div>
                                 <div className="text-foreground">{formatTimelineForDisplay(selectedVersion.timeline_proposal || "")}</div>
+                                {(selectedVersion.timeline || selectedVersion.timeline_unit) && (
+                                  <div className="font-mono text-[10px] text-foreground-muted mt-1">
+                                    {selectedVersion.timeline || "—"} {selectedVersion.timeline_unit || ""}
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div>

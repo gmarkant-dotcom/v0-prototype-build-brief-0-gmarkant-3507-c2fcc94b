@@ -94,12 +94,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       if (inbox?.project_id) {
         let resolvedPartnershipId = inbox.partnership_id as string | null
-        if (!resolvedPartnershipId && inbox.partner_id) {
+        const partnerIdForResolution = (inbox.partner_id as string | null) || (existing.partner_id as string | null)
+        if (!resolvedPartnershipId && partnerIdForResolution) {
           const { data: rel } = await supabase
             .from("partnerships")
             .select("id")
             .eq("agency_id", user.id)
-            .eq("partner_id", inbox.partner_id)
+            .eq("partner_id", partnerIdForResolution)
             .eq("status", "active")
             .maybeSingle()
           resolvedPartnershipId = rel?.id ?? null
@@ -184,7 +185,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             route,
             responseId: id,
             inboxId: inbox.id,
-            partnerId: inbox.partner_id,
+            partnerId: partnerIdForResolution,
           })
         }
       } else {
