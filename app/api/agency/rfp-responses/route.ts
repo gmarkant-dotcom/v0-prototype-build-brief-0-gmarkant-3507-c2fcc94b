@@ -62,23 +62,36 @@ export async function GET(request: Request) {
     }
 
     const list = responses || []
-    console.log("[api] success", { route, method: "GET", userId: user.id, role: profile.role, rowCount: list.length })
 
-    const inboxIds = [...new Set(list.map((r) => r.inbox_item_id))]
+    let inboxQuery = supabase
+      .from("partner_rfp_inbox")
+      .select("id, scope_item_name, scope_item_description, created_at, updated_at, master_rfp_json, status, partner_id, recipient_email")
+      .eq("agency_id", user.id)
+      .order("created_at", { ascending: false })
+    if (projectIdParam) inboxQuery = inboxQuery.eq("project_id", projectIdParam)
+    const { data: allInboxes, error: allInboxErr } = await inboxQuery
+    if (allInboxErr) return NextResponse.json({ error: allInboxErr.message }, { status: 500 })
 
-    let inboxById: Record<string, Record<string, unknown>> = {}
-    if (inboxIds.length > 0) {
-      const { data: inboxes } = await supabase
-        .from("partner_rfp_inbox")
-        .select("id, scope_item_name, scope_item_description, created_at, master_rfp_json, status")
-        .in("id", inboxIds)
-        .eq("agency_id", user.id)
-
-      inboxById = Object.fromEntries((inboxes || []).map((i) => [i.id as string, i as Record<string, unknown>]))
+    const inboxIds = [...new Set((allInboxes || []).map((r) => r.id as string))]
+    const partnerIds = [...new Set((allInboxes || []).map((r) => r.partner_id).filter(Boolean) as string[])]
+    let profileById: Record<string, { full_name: string | null; company_name: string | null; email: string | null }> = {}
+    if (partnerIds.length > 0) {
+      const { data: partnerProfiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, company_name, email")
+        .in("id", partnerIds)
+      profileById = Object.fromEntries(
+        (partnerProfiles || []).map((p) => [p.id as string, { full_name: p.full_name, company_name: p.company_name, email: p.email }])
+      )
     }
+
+    const inboxById = Object.fromEntries((allInboxes || []).map((i) => [i.id as string, i as Record<string, unknown>]))
+    console.log("[api] success", { route, method: "GET", userId: user.id, role: profile.role, responseCount: list.length, inboxCount: inboxIds.length })
 
     const merged = list.map((r) => ({
       ...r,
+      response_id: r.id,
+      response_exists: true,
       inbox: inboxById[r.inbox_item_id as string] ?? null,
     }))
 
@@ -114,8 +127,38 @@ export async function GET(request: Request) {
       versions: versionsByResponseId[r.id as string] || [],
     }))
 
+    const existingInboxIds = new Set(mergedWithVersions.map((r) => r.inbox_item_id as string))
+    const awaitingRows = (allInboxes || [])
+      .filter((i) => !existingInboxIds.has(i.id as string))
+      .map((i) => {
+        const pid = (i.partner_id as string | null) || null
+        const pr = pid ? profileById[pid] : null
+        const displayName =
+          pr?.company_name || pr?.full_name || pr?.email || (i.recipient_email as string | null) || "Partner"
+        return {
+          id: `inbox-${i.id}`,
+          response_id: null,
+          response_exists: false,
+          inbox_item_id: i.id,
+          partner_display_name: displayName,
+          proposal_text: "Awaiting partner response.",
+          budget_proposal: "",
+          timeline_proposal: "",
+          attachments: [],
+          status: "awaiting_response",
+          created_at: i.created_at,
+          updated_at: i.updated_at || i.created_at,
+          inbox: i,
+          versions: [],
+        }
+      })
+
+    const combined = [...mergedWithVersions, ...awaitingRows].sort(
+      (a, b) => new Date(b.updated_at as string).getTime() - new Date(a.updated_at as string).getTime()
+    )
+
     return NextResponse.json(
-      { responses: mergedWithVersions },
+      { responses: combined },
       {
         headers: {
           "Cache-Control": "private, no-store, no-cache, must-revalidate",

@@ -54,6 +54,8 @@ type ResponseVersion = {
 
 type AgencyResponseRow = {
   id: string
+  response_id?: string | null
+  response_exists?: boolean
   inbox_item_id: string
   partner_display_name: string
   proposal_text: string
@@ -196,6 +198,13 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
     )
   }
 
+  const groupedRows = rows.reduce<Record<string, AgencyResponseRow[]>>((acc, row) => {
+    const scope = row.inbox?.scope_item_name || "Scoped line"
+    if (!acc[scope]) acc[scope] = []
+    acc[scope].push(row)
+    return acc
+  }, {})
+
   const patchResponse = async (id: string, payload: Record<string, unknown>) => {
     setBusyId(id)
     setError(null)
@@ -228,11 +237,15 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
       <GlassCardHeader
         label="Broadcast inbox"
         title="Partner responses"
-        description="Review proposals submitted against scoped RFP lines you broadcast to partners."
+        description="Review broadcast lines by scope item, including partners still awaiting response."
       />
-      <div className="space-y-2 mt-4">
-        {rows.map((r) => {
+      <div className="space-y-4 mt-4">
+        {Object.entries(groupedRows).map(([scopeGroup, groupRows]) => (
+          <div key={scopeGroup} className="space-y-2">
+            <p className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted">{scopeGroup}</p>
+            {groupRows.map((r) => {
           const expanded = openId === r.id
+          const canMutate = Boolean(r.response_id)
           const versions = r.versions || []
           const selectedVersionId = selectedVersionByResponseId[r.id] || versions[0]?.id || ""
           const selectedVersion = versions.find((v) => v.id === selectedVersionId) || versions[0] || null
@@ -263,10 +276,10 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                 <span
                   className={cn(
                     "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase shrink-0",
-                    getBidStatusColor(r.status)
+                    r.status === "awaiting_response" ? "bg-amber-500/20 text-amber-300" : getBidStatusColor(r.status)
                   )}
                 >
-                  {getBidStatusLabel(r.status, "agency")}
+                  {r.status === "awaiting_response" ? "Awaiting response" : getBidStatusLabel(r.status, "agency")}
                 </span>
               </button>
               {expanded && (
@@ -417,7 +430,7 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                     </div>
                   )}
 
-                  <div className="border-t border-border/50 pt-4 space-y-3">
+                  {canMutate && <div className="border-t border-border/50 pt-4 space-y-3">
                     <div>
                       <label className="block font-mono text-[10px] uppercase text-foreground-muted mb-1">Agency feedback</label>
                       {(() => {
@@ -599,12 +612,14 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                         </Button>
                       )}
                     </div>
-                  </div>
+                  </div>}
                 </div>
               )}
             </div>
           )
-        })}
+            })}
+          </div>
+        ))}
       </div>
     </GlassCard>
 

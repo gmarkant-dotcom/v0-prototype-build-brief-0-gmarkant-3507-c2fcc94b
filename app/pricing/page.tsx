@@ -8,11 +8,11 @@ const tiers = [
   {
     id: "core",
     name: "Core",
-    price: "$299/month",
-    description: "For smaller teams getting started with vendor orchestration.",
+    price: "$3,000 annually",
+    description: "For smaller teams getting started with vendor orchestration on an annual plan.",
     features: [
       "Up to 10 active partners",
-      "5 projects/month",
+      "Up to 60 projects/year",
       "Basic AI tools",
       "Email support",
     ],
@@ -20,8 +20,8 @@ const tiers = [
   {
     id: "studio",
     name: "Studio",
-    price: "$699/month",
-    description: "For growing agencies running multiple active projects.",
+    price: "$8,000 annually",
+    description: "For growing agencies running multiple active projects on an annual plan.",
     features: [
       "Up to 50 active partners",
       "Unlimited projects",
