@@ -186,25 +186,43 @@ export default function PartnerDashboardPage() {
     ;(async () => {
       setActiveProjectsLoading(true)
       try {
-        const res = await fetch("/api/partner/projects", { credentials: "same-origin" })
-        const data = (await res.json().catch(() => ({}))) as {
-          projects?: Array<{ id: string; name: string; client_name: string | null }>
-        }
-        if (!cancelled && res.ok && Array.isArray(data.projects)) {
-          setFetchedActiveProjects(
-            data.projects.map((p) => ({
-              id: p.id,
-              name: p.name,
-              client: (p.client_name ?? "").trim() || "—",
+        const res = await fetch("/api/partner/projects", {
+          credentials: "same-origin",
+          cache: "no-store",
+        })
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+        const raw = data?.projects
+        const list = Array.isArray(raw) ? raw : []
+        if (!cancelled && res.ok) {
+          const mapped: DashboardActiveProject[] = []
+          for (const item of list) {
+            if (!item || typeof item !== "object") continue
+            const p = item as Record<string, unknown>
+            const id = p.id != null ? String(p.id).trim() : ""
+            if (!id) continue
+            const nameRaw = p.name != null ? String(p.name).trim() : ""
+            const name = nameRaw || "Project"
+            const clientRaw =
+              p.client_name != null && typeof p.client_name === "string"
+                ? p.client_name.trim()
+                : ""
+            mapped.push({
+              id,
+              name,
+              client: clientRaw || "—",
               status: "Awarded",
               nextMilestone: "—",
               nextMilestoneDate: "—",
               progress: 0,
-            }))
-          )
+            })
+          }
+          setFetchedActiveProjects(mapped)
         } else if (!cancelled) {
           setFetchedActiveProjects([])
         }
+      } catch (e) {
+        console.error("[partner/dashboard] /api/partner/projects", e)
+        if (!cancelled) setFetchedActiveProjects([])
       } finally {
         if (!cancelled) setActiveProjectsLoading(false)
       }

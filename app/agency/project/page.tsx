@@ -183,6 +183,11 @@ function ActiveEngagementsInner() {
   }, [highlightId, loading, projectsData])
 
   useEffect(() => {
+    setPanelAlerts([])
+    setAlertSheetCtx(null)
+  }, [selectedProject?.id])
+
+  useEffect(() => {
     if (isDemo) {
       if (!selectedProject) {
         setProjectsData([])

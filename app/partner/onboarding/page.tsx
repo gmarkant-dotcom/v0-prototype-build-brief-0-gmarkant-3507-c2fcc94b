@@ -577,7 +577,7 @@ export default function PartnerOnboardingPage() {
                         <Button className="bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90 font-display font-bold" asChild>
                           <a href={normalizeMeetingUrlForHref(selectedApi.kickoff_url)} target="_blank" rel="noopener noreferrer">
                             <Calendar className="w-4 h-4 mr-2" />
-                            Schedule Kickoff
+                            Schedule Meeting
                           </a>
                         </Button>
                       )}
