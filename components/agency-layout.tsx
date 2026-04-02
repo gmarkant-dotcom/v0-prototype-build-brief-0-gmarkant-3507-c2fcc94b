@@ -9,7 +9,7 @@ import { LigamentLogo } from "./ligament-logo"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditCard } from "lucide-react"
-import { SelectedProjectProvider, useSelectedProject } from "@/contexts/selected-project-context"
+import { SelectedProjectProvider, useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
 
@@ -107,6 +107,18 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
     await supabase.auth.signOut()
     router.push("/")
     router.refresh()
+  }
+
+  /** Keep the current workflow route; only replace `projectId` in the query string. */
+  const selectProjectAndNavigate = (project: MasterProject) => {
+    setSelectedProject(project)
+    setProjectSelectorOpen(false)
+    const path = pathname || "/agency"
+    const sp = new URLSearchParams(
+      typeof window !== "undefined" ? window.location.search.slice(1) : ""
+    )
+    sp.set("projectId", project.id)
+    router.push(`${path}?${sp.toString()}`)
   }
 
   return (
@@ -220,11 +232,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                     {projects.filter(p => p.status === "active" || p.status === "onboarding").map((project) => (
                       <button
                         key={project.id}
-                        onClick={() => {
-                          setSelectedProject(project)
-                          setProjectSelectorOpen(false)
-                          router.push("/agency/project")
-                        }}
+                        onClick={() => selectProjectAndNavigate(project)}
                         className={cn(
                           "w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left",
                           selectedProject?.id === project.id && "bg-accent/10"
@@ -256,11 +264,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                       {projects.filter(p => p.status === "on_hold").map((project) => (
                         <button
                           key={project.id}
-                          onClick={() => {
-                            setSelectedProject(project)
-                            setProjectSelectorOpen(false)
-                            router.push("/agency/project")
-                          }}
+                          onClick={() => selectProjectAndNavigate(project)}
                           className={cn(
                             "w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left opacity-60",
                             selectedProject?.id === project.id && "bg-accent/10 opacity-100"
