@@ -26,17 +26,33 @@ type AwardedResponseRow = {
   partner_rfp_inbox: InboxSnippet | InboxSnippet[] | null
 }
 
+type OnboardingDocRow = {
+  id: string
+  label: string
+  url: string
+  sort_order: number | null
+}
+
+type OnboardingPkgRow = {
+  id: string
+  kickoff_url: string | null
+  kickoff_type: string | null
+  created_at: string
+  onboarding_package_documents: OnboardingDocRow[] | null
+}
+
 function inboxRow(embed: AwardedResponseRow["partner_rfp_inbox"]): InboxSnippet | null {
   if (!embed) return null
   return Array.isArray(embed) ? embed[0] ?? null : embed
 }
 
-function pickResponseForAssignment(
+/** All awarded responses for this project + partnership + partner (one row per scope in UI). */
+function responsesForAssignment(
   rows: AwardedResponseRow[],
   projectId: string,
   partnershipId: string,
   partnerId: string
-): AwardedResponseRow | null {
+): AwardedResponseRow[] {
   const candidates = rows.filter((r) => {
     if (r.partner_id !== partnerId) return false
     const inbox = inboxRow(r.partner_rfp_inbox)
@@ -44,9 +60,8 @@ function pickResponseForAssignment(
     if (inbox.partnership_id && inbox.partnership_id !== partnershipId) return false
     return true
   })
-  if (candidates.length === 0) return null
   candidates.sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""))
-  return candidates[0] ?? null
+  return candidates
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ projectId: string }> }) {
@@ -86,16 +101,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     }
 
     const partnershipIds = (partnerships || []).map((p) => p.id as string)
-    console.log("[api] partner active-engagement partnerships", {
-      userId: user.id,
-      projectId,
-      partnershipCount: partnershipIds.length,
-      partnershipIds,
-    })
 
     if (partnershipIds.length === 0) {
       console.log("[api] partner active-engagement no partnerships — found false", { userId: user.id, projectId })
-      return NextResponse.json({ found: false }, { headers: noStoreHeaders })
+      return NextResponse.json({ found: false, engagements: [] }, { headers: noStoreHeaders })
     }
 
     const { data: assignmentRows, error: asgErr } = await supabase
@@ -106,6 +115,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
         project_id,
         partnership_id,
         status,
+        awarded_at,
         partnership:partnerships!inner(id, partner_id)
       `
       )
@@ -113,7 +123,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       .eq("status", "awarded")
       .in("partnership_id", partnershipIds)
       .order("updated_at", { ascending: false })
-      .limit(5)
 
     if (asgErr) {
       console.error("[api] partner active-engagement assignments lookup failed", {
@@ -127,41 +136,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     }
 
     const rows = assignmentRows || []
-    console.log("[api] partner active-engagement assignments", {
-      userId: user.id,
-      projectId,
-      rowCount: rows.length,
-      assignments: rows.map((r) => ({
-        id: r.id,
-        project_id: r.project_id,
-        partnership_id: r.partnership_id,
-        status: r.status,
-      })),
-    })
-
-    const assignment = rows[0] ?? null
-
-    if (!assignment) {
+    if (rows.length === 0) {
       console.log("[api] partner active-engagement no awarded assignment", { userId: user.id, projectId, partnershipIds })
-      return NextResponse.json({ found: false }, { headers: noStoreHeaders })
+      return NextResponse.json({ found: false, engagements: [] }, { headers: noStoreHeaders })
     }
-
-    const partnershipId = assignment.partnership_id as string
 
     const { data: project, error: projectErr } = await supabase
       .from("projects")
       .select("id, name, agency_id")
       .eq("id", projectId)
       .maybeSingle()
-
-    console.log("[api] partner active-engagement project lookup", {
-      userId: user.id,
-      projectId,
-      projectErr: projectErr
-        ? { message: projectErr.message, code: projectErr.code, details: projectErr.details }
-        : null,
-      hasProject: !!project,
-    })
 
     if (projectErr) {
       console.error("[api] partner active-engagement project query error", {
@@ -177,7 +161,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       console.log("[api] partner active-engagement project not found (RLS or missing row)", {
         userId: user.id,
         projectId,
-        assignmentId: assignment.id,
       })
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
     }
@@ -222,42 +205,112 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     }
 
     const responses = (respRows || []) as AwardedResponseRow[]
-    const resp = pickResponseForAssignment(responses, projectId, partnershipId, user.id)
-    const inbox = resp ? inboxRow(resp.partner_rfp_inbox) : null
 
-    const { data: pkg, error: pkgErr } = await supabase
-      .from("onboarding_packages")
-      .select(
+    const pkgCache = new Map<string, OnboardingPkgRow | null>()
+    async function latestPackage(pid: string, partnershipId: string): Promise<OnboardingPkgRow | null> {
+      const key = `${pid}:${partnershipId}`
+      if (pkgCache.has(key)) return pkgCache.get(key) ?? null
+      const { data, error } = await supabase
+        .from("onboarding_packages")
+        .select(
+          `
+          id,
+          kickoff_url,
+          kickoff_type,
+          created_at,
+          onboarding_package_documents(id, label, url, sort_order)
         `
-        id,
-        kickoff_url,
-        kickoff_type,
-        created_at,
-        onboarding_package_documents(id, label, url, sort_order)
-      `
-      )
-      .eq("project_id", projectId)
-      .eq("partnership_id", partnershipId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+        )
+        .eq("project_id", pid)
+        .eq("partnership_id", partnershipId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-    if (pkgErr) {
-      console.error("[api] partner active-engagement package", { message: pkgErr.message, code: pkgErr.code })
+      if (error) {
+        console.error("[api] partner active-engagement package", {
+          projectId: pid,
+          partnershipId,
+          message: error.message,
+          code: error.code,
+        })
+        pkgCache.set(key, null)
+        return null
+      }
+      const row = data as OnboardingPkgRow | null
+      pkgCache.set(key, row)
+      return row
     }
 
-    type DocRow = { id: string; label: string; url: string; sort_order: number | null }
-    const rawDocs = (pkg as { onboarding_package_documents?: DocRow[] | null } | null)?.onboarding_package_documents
-    const docs = (rawDocs || []).slice().sort((x, y) => (x.sort_order ?? 0) - (y.sort_order ?? 0))
-    const onboardingDocuments = docs.map((d) => ({ label: d.label, url: d.url }))
+    type EngagementOut = {
+      assignmentId: string
+      partnershipId: string
+      awardedResponseId: string | null
+      scopeItemName: string | null
+      proposalText: string
+      budgetProposal: string
+      timelineProposal: string
+      kickoffUrl: string | null
+      kickoffType: string | null
+      onboardingDocuments: { label: string; url: string }[]
+    }
 
-    console.log("[api] success", { route: ROUTE, method: "GET", userId: user.id, found: true, projectId })
+    const engagements: EngagementOut[] = []
+
+    for (const assignment of rows) {
+      const partnershipId = assignment.partnership_id as string
+
+      const pkg = await latestPackage(projectId, partnershipId)
+      const rawDocs = pkg?.onboarding_package_documents
+      const docs = (rawDocs || []).slice().sort((x, y) => (x.sort_order ?? 0) - (y.sort_order ?? 0))
+      const onboardingDocuments = docs.map((d) => ({ label: d.label, url: d.url }))
+
+      const forAssignment = responsesForAssignment(responses, projectId, partnershipId, user.id)
+
+      if (forAssignment.length === 0) {
+        engagements.push({
+          assignmentId: assignment.id as string,
+          partnershipId,
+          awardedResponseId: null,
+          scopeItemName: null,
+          proposalText: "",
+          budgetProposal: "",
+          timelineProposal: "",
+          kickoffUrl: pkg?.kickoff_url ?? null,
+          kickoffType: pkg?.kickoff_type ?? null,
+          onboardingDocuments,
+        })
+      } else {
+        for (const resp of forAssignment) {
+          const inbox = inboxRow(resp.partner_rfp_inbox)
+          engagements.push({
+            assignmentId: assignment.id as string,
+            partnershipId,
+            awardedResponseId: resp.id,
+            scopeItemName: inbox?.scope_item_name ?? null,
+            proposalText: resp.proposal_text ?? "",
+            budgetProposal: resp.budget_proposal ?? "",
+            timelineProposal: resp.timeline_proposal ?? "",
+            kickoffUrl: pkg?.kickoff_url ?? null,
+            kickoffType: pkg?.kickoff_type ?? null,
+            onboardingDocuments,
+          })
+        }
+      }
+    }
+
+    console.log("[api] success", {
+      route: ROUTE,
+      method: "GET",
+      userId: user.id,
+      found: engagements.length > 0,
+      projectId,
+      engagementCount: engagements.length,
+    })
 
     return NextResponse.json(
       {
-        found: true,
-        assignmentId: assignment.id,
-        partnershipId,
+        found: engagements.length > 0,
         project: {
           id: project.id,
           title: projectName,
@@ -269,13 +322,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
               companyName: leadAgency.company_name,
             }
           : null,
-        scopeItemName: inbox?.scope_item_name ?? null,
-        proposalText: resp?.proposal_text ?? "",
-        budgetProposal: resp?.budget_proposal ?? "",
-        timelineProposal: resp?.timeline_proposal ?? "",
-        kickoffUrl: (pkg as { kickoff_url?: string | null } | null)?.kickoff_url ?? null,
-        kickoffType: (pkg as { kickoff_type?: string | null } | null)?.kickoff_type ?? null,
-        onboardingDocuments,
+        engagements,
       },
       { headers: noStoreHeaders }
     )

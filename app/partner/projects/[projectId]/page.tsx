@@ -14,11 +14,12 @@ import {
   budgetStatusLabel,
   workflowStatusLabel,
 } from "@/lib/partner-status"
-import { Loader2, ExternalLink } from "lucide-react"
+import { Loader2, ExternalLink, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Slider } from "@/components/ui/slider"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 
 const btnOutlineLight =
@@ -26,23 +27,28 @@ const btnOutlineLight =
 const btnPrimaryDark = "bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
 const fieldClass = "border-gray-200 bg-white text-gray-900"
 
-type ActiveEngagementPayload = {
+type EngagementItem = {
+  assignmentId: string
+  partnershipId: string
+  awardedResponseId: string | null
+  scopeItemName: string | null
+  proposalText: string
+  budgetProposal: string
+  timelineProposal: string
+  kickoffUrl: string | null
+  kickoffType: string | null
+  onboardingDocuments: { label: string; url: string }[]
+}
+
+type PagePayload = {
   found: boolean
-  assignmentId?: string
-  partnershipId?: string
   project?: { id: string; title: string }
   leadAgency?: {
     email: string | null
     fullName: string | null
     companyName: string | null
   } | null
-  scopeItemName?: string | null
-  proposalText?: string
-  budgetProposal?: string
-  timelineProposal?: string
-  kickoffUrl?: string | null
-  kickoffType?: string | null
-  onboardingDocuments?: { label: string; url: string }[]
+  engagements: EngagementItem[]
 }
 
 type StatusUpdateRow = {
@@ -54,99 +60,184 @@ type StatusUpdateRow = {
   created_at: string
 }
 
+type AssignmentUiState = {
+  latest: StatusUpdateRow | null
+  updates: StatusUpdateRow[]
+  loading: boolean
+  saving: boolean
+  error: string | null
+  formStatus: string
+  formBudget: string
+  formPct: number
+  formNotes: string
+  historyOpen: boolean
+  historyCardOpen: Record<string, boolean>
+}
+
+function engagementCardKey(e: EngagementItem): string {
+  return e.awardedResponseId ? `${e.assignmentId}-${e.awardedResponseId}` : e.assignmentId
+}
+
+function defaultAssignmentUi(): AssignmentUiState {
+  return {
+    latest: null,
+    updates: [],
+    loading: false,
+    saving: false,
+    error: null,
+    formStatus: "on_track",
+    formBudget: "on_budget",
+    formPct: 50,
+    formNotes: "",
+    historyOpen: false,
+    historyCardOpen: {},
+  }
+}
+
 function PartnerActiveEngagementInner() {
   const params = useParams()
   const projectId = params.projectId as string
   const isDemo = isDemoMode()
 
-  const [data, setData] = useState<ActiveEngagementPayload | null>(null)
+  const [pageData, setPageData] = useState<PagePayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(!isDemo)
-  const [latestStatus, setLatestStatus] = useState<StatusUpdateRow | null>(null)
-  const [statusLoading, setStatusLoading] = useState(false)
-  const [statusSaving, setStatusSaving] = useState(false)
-  const [statusError, setStatusError] = useState<string | null>(null)
-  const [formStatus, setFormStatus] = useState<string>("on_track")
-  const [formBudget, setFormBudget] = useState<string>("on_budget")
-  const [formPct, setFormPct] = useState<number>(50)
-  const [formNotes, setFormNotes] = useState("")
-  const [statusUpdatesAll, setStatusUpdatesAll] = useState<StatusUpdateRow[]>([])
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [historyCardOpen, setHistoryCardOpen] = useState<Record<string, boolean>>({})
+  const [expandedCard, setExpandedCard] = useState<Record<string, boolean>>({})
+  const [assignmentUi, setAssignmentUi] = useState<Record<string, AssignmentUiState>>({})
 
-  const previousStatusUpdates = useMemo(() => statusUpdatesAll.slice(1), [statusUpdatesAll])
-
-  const refreshStatus = useCallback(async () => {
-    if (isDemo) {
-      const t = Date.now()
-      const list: StatusUpdateRow[] = [
-        {
-          id: "demo-su",
-          status: "on_track",
-          budget_status: "on_budget",
-          completion_pct: 62,
-          notes: "All deliverables on schedule for this week.",
-          created_at: new Date(t).toISOString(),
-        },
-        {
-          id: "demo-su-prev-1",
-          status: "at_risk",
-          budget_status: "incremental_needed",
-          completion_pct: 48,
-          notes: "Waiting on client feedback before locking the cut list.",
-          created_at: new Date(t - 3 * 86400000).toISOString(),
-        },
-        {
-          id: "demo-su-prev-2",
-          status: "on_track",
-          budget_status: "on_budget",
-          completion_pct: 35,
-          notes: "Kickoff complete; production calendar shared with lead agency.",
-          created_at: new Date(t - 10 * 86400000).toISOString(),
-        },
-      ]
-      setStatusUpdatesAll(list)
-      setLatestStatus(list[0] ?? null)
-      return
-    }
-    setStatusLoading(true)
-    try {
-      const res = await fetch(`/api/partner/projects/${projectId}/status-update`, { credentials: "same-origin" })
-      const json = await res.json().catch(() => ({}))
-      if (res.ok) {
-        const payload = json as { latest?: StatusUpdateRow | null; updates?: StatusUpdateRow[] }
-        setLatestStatus(payload.latest ?? null)
-        setStatusUpdatesAll(Array.isArray(payload.updates) ? payload.updates : [])
+  const refreshAssignmentStatus = useCallback(
+    async (assignmentId: string) => {
+      if (isDemo) {
+        const t = Date.now()
+        const list: StatusUpdateRow[] = [
+          {
+            id: "demo-su",
+            status: "on_track",
+            budget_status: "on_budget",
+            completion_pct: 62,
+            notes: "All deliverables on schedule for this week.",
+            created_at: new Date(t).toISOString(),
+          },
+          {
+            id: "demo-su-prev-1",
+            status: "at_risk",
+            budget_status: "incremental_needed",
+            completion_pct: 48,
+            notes: "Waiting on client feedback before locking the cut list.",
+            created_at: new Date(t - 3 * 86400000).toISOString(),
+          },
+          {
+            id: "demo-su-prev-2",
+            status: "on_track",
+            budget_status: "on_budget",
+            completion_pct: 35,
+            notes: "Kickoff complete; production calendar shared with lead agency.",
+            created_at: new Date(t - 10 * 86400000).toISOString(),
+          },
+        ]
+        setAssignmentUi((prev) => ({
+          ...prev,
+          [assignmentId]: {
+            ...(prev[assignmentId] ?? defaultAssignmentUi()),
+            latest: list[0] ?? null,
+            updates: list,
+            loading: false,
+            formStatus: list[0]?.status ?? prev[assignmentId]?.formStatus ?? "on_track",
+            formBudget: list[0]?.budget_status ?? prev[assignmentId]?.formBudget ?? "on_budget",
+            formPct: list[0]?.completion_pct ?? prev[assignmentId]?.formPct ?? 50,
+          },
+        }))
+        return
       }
-    } finally {
-      setStatusLoading(false)
-    }
-  }, [isDemo, projectId])
+      setAssignmentUi((prev) => ({
+        ...prev,
+        [assignmentId]: { ...(prev[assignmentId] ?? defaultAssignmentUi()), loading: true },
+      }))
+      try {
+        const q = new URLSearchParams({ assignmentId })
+        const res = await fetch(`/api/partner/projects/${projectId}/status-update?${q}`, {
+          credentials: "same-origin",
+        })
+        const json = await res.json().catch(() => ({}))
+        if (res.ok) {
+          const payload = json as { latest?: StatusUpdateRow | null; updates?: StatusUpdateRow[] }
+          const latest = payload.latest ?? null
+          const updates = Array.isArray(payload.updates) ? payload.updates : []
+          setAssignmentUi((prev) => {
+            const cur = prev[assignmentId] ?? defaultAssignmentUi()
+            return {
+              ...prev,
+              [assignmentId]: {
+                ...cur,
+                latest,
+                updates,
+                loading: false,
+                formStatus: latest?.status ?? cur.formStatus,
+                formBudget: latest?.budget_status ?? cur.formBudget,
+                formPct: latest?.completion_pct ?? cur.formPct,
+              },
+            }
+          })
+        } else {
+          setAssignmentUi((prev) => ({
+            ...prev,
+            [assignmentId]: { ...(prev[assignmentId] ?? defaultAssignmentUi()), loading: false },
+          }))
+        }
+      } catch {
+        setAssignmentUi((prev) => ({
+          ...prev,
+          [assignmentId]: { ...(prev[assignmentId] ?? defaultAssignmentUi()), loading: false },
+        }))
+      }
+    },
+    [isDemo, projectId]
+  )
 
   useEffect(() => {
     if (isDemo) {
-      setData({
+      const sharedDocs = [
+        { label: "Mutual NDA", url: "https://demo.withligament.com/sample-assets/nda" },
+        { label: "MSA", url: "https://demo.withligament.com/sample-assets/msa" },
+      ]
+      setPageData({
         found: true,
-        assignmentId: "demo",
         project: { id: projectId, title: "NWSL Creator Content Series" },
         leadAgency: {
           companyName: "Electric Animal",
           fullName: "Sarah Chen",
           email: "hello@demo.withligament.com",
         },
-        scopeItemName: "Video production",
-        proposalText:
-          "We’d staff a modular production pod with a showrunner, DP, and post lead. Weekly cuts for review each Friday.",
-        budgetProposal: JSON.stringify({ amount: 98000, currency: "USD" }),
-        timelineProposal: JSON.stringify({ duration: 10, unit: "weeks" }),
-        kickoffUrl: "https://calendly.com/demo/kickoff",
-        kickoffType: "calendly",
-        onboardingDocuments: [
-          { label: "Mutual NDA", url: "https://demo.withligament.com/sample-assets/nda" },
-          { label: "MSA", url: "https://demo.withligament.com/sample-assets/msa" },
+        engagements: [
+          {
+            assignmentId: "demo",
+            partnershipId: "demo-ph",
+            awardedResponseId: "demo-r1",
+            scopeItemName: "Video production",
+            proposalText:
+              "We’d staff a modular production pod with a showrunner, DP, and post lead. Weekly cuts for review each Friday.",
+            budgetProposal: JSON.stringify({ amount: 98000, currency: "USD" }),
+            timelineProposal: JSON.stringify({ duration: 10, unit: "weeks" }),
+            kickoffUrl: "https://calendly.com/demo/kickoff",
+            kickoffType: "calendly",
+            onboardingDocuments: sharedDocs,
+          },
+          {
+            assignmentId: "demo",
+            partnershipId: "demo-ph",
+            awardedResponseId: "demo-r2",
+            scopeItemName: "Social cutdowns",
+            proposalText:
+              "15–30s cutdowns per episode, platform-native captions, and a 4-week paid test plan.",
+            budgetProposal: JSON.stringify({ amount: 24000, currency: "USD" }),
+            timelineProposal: JSON.stringify({ duration: 4, unit: "weeks" }),
+            kickoffUrl: "https://calendly.com/demo/kickoff",
+            kickoffType: "calendly",
+            onboardingDocuments: sharedDocs,
+          },
         ],
       })
-      void refreshStatus()
+      void refreshAssignmentStatus("demo")
       setLoading(false)
       return
     }
@@ -159,14 +250,18 @@ function PartnerActiveEngagementInner() {
         const res = await fetch(`/api/partner/projects/${projectId}/active-engagement`, {
           credentials: "same-origin",
         })
-        const json = (await res.json().catch(() => ({}))) as ActiveEngagementPayload & { error?: string }
+        const json = (await res.json().catch(() => ({}))) as PagePayload & { error?: string }
         if (!res.ok) {
           if (!cancelled) setError(json.error || "Failed to load")
           return
         }
-        if (!cancelled) setData(json)
-        if (!cancelled && json.found) {
-          await refreshStatus()
+        if (!cancelled) {
+          setPageData({
+            found: json.found,
+            project: json.project,
+            leadAgency: json.leadAgency ?? null,
+            engagements: Array.isArray(json.engagements) ? json.engagements : [],
+          })
         }
       } catch {
         if (!cancelled) setError("Failed to load")
@@ -177,18 +272,34 @@ function PartnerActiveEngagementInner() {
     return () => {
       cancelled = true
     }
-  }, [projectId, isDemo, refreshStatus])
+  }, [projectId, isDemo, refreshAssignmentStatus])
 
   useEffect(() => {
-    if (latestStatus && !statusSaving) {
-      setFormStatus(latestStatus.status)
-      setFormBudget(latestStatus.budget_status)
-      setFormPct(latestStatus.completion_pct)
+    if (isDemo || !pageData?.engagements?.length) return
+    const ids = [...new Set(pageData.engagements.map((e) => e.assignmentId))]
+    setAssignmentUi((prev) => {
+      const next = { ...prev }
+      for (const id of ids) {
+        if (!next[id]) next[id] = defaultAssignmentUi()
+      }
+      return next
+    })
+    for (const id of ids) {
+      void refreshAssignmentStatus(id)
     }
-  }, [latestStatus?.id, statusSaving])
+  }, [pageData?.engagements, isDemo, refreshAssignmentStatus])
 
   const agencyName =
-    data?.leadAgency?.companyName?.trim() || data?.leadAgency?.fullName?.trim() || "Lead agency"
+    pageData?.leadAgency?.companyName?.trim() ||
+    pageData?.leadAgency?.fullName?.trim() ||
+    "Lead agency"
+
+  const kickoffFromFirst = pageData?.engagements?.[0]
+
+  const uniqueAssignmentIds = useMemo(
+    () => [...new Set(pageData?.engagements?.map((e) => e.assignmentId) ?? [])],
+    [pageData?.engagements]
+  )
 
   return (
     <PartnerLayout>
@@ -201,9 +312,9 @@ function PartnerActiveEngagementInner() {
             >
               ← All projects
             </Link>
-            <h1 className="font-display font-bold text-3xl text-[#0C3535]">Active Engagement</h1>
-            {data?.found && data.project && (
-              <p className="text-lg text-gray-700 mt-2 font-display font-semibold">{data.project.title}</p>
+            <h1 className="font-display font-bold text-3xl text-[#0C3535]">Active engagements</h1>
+            {pageData?.found && pageData.project && (
+              <p className="text-lg text-gray-700 mt-2 font-display font-semibold">{pageData.project.title}</p>
             )}
           </div>
           <LeadAgencyFilter />
@@ -220,32 +331,41 @@ function PartnerActiveEngagementInner() {
           <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-800">{error}</div>
         )}
 
-        {!loading && !error && data && !data.found && (
+        {!loading && !error && pageData && !pageData.found && (
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center text-gray-700">
             No active engagement found for this project. You&apos;ll see details here after the lead agency awards your
             bid.
           </div>
         )}
 
-        {!loading && !error && data?.found && (
+        {!loading && !error && pageData?.found && pageData.engagements.length === 0 && (
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center text-gray-700">
+            No awarded scope items were found for this project yet.
+          </div>
+        )}
+
+        {!loading && !error && pageData?.found && pageData.engagements.length > 0 && (
           <div className="space-y-6">
             <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
               <h2 className="font-display font-bold text-lg text-[#0C3535] mb-4">Lead agency contact</h2>
               <dl className="space-y-2 text-sm">
                 <div>
                   <dt className="font-mono text-[10px] uppercase text-gray-500">Company</dt>
-                  <dd className="text-gray-900">{data.leadAgency?.companyName || "—"}</dd>
+                  <dd className="text-gray-900">{pageData.leadAgency?.companyName || "—"}</dd>
                 </div>
                 <div>
                   <dt className="font-mono text-[10px] uppercase text-gray-500">Contact name</dt>
-                  <dd className="text-gray-900">{data.leadAgency?.fullName || "—"}</dd>
+                  <dd className="text-gray-900">{pageData.leadAgency?.fullName || "—"}</dd>
                 </div>
                 <div>
                   <dt className="font-mono text-[10px] uppercase text-gray-500">Email</dt>
                   <dd>
-                    {data.leadAgency?.email ? (
-                      <a href={`mailto:${data.leadAgency.email}`} className="text-[#0C3535] underline font-mono text-xs">
-                        {data.leadAgency.email}
+                    {pageData.leadAgency?.email ? (
+                      <a
+                        href={`mailto:${pageData.leadAgency.email}`}
+                        className="text-[#0C3535] underline font-mono text-xs"
+                      >
+                        {pageData.leadAgency.email}
                       </a>
                     ) : (
                       "—"
@@ -255,15 +375,17 @@ function PartnerActiveEngagementInner() {
                 <div>
                   <dt className="font-mono text-[10px] uppercase text-gray-500">Schedule Meeting</dt>
                   <dd>
-                    {data.kickoffUrl ? (
+                    {kickoffFromFirst?.kickoffUrl ? (
                       <a
-                        href={normalizeMeetingUrlForHref(data.kickoffUrl)}
+                        href={normalizeMeetingUrlForHref(kickoffFromFirst.kickoffUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-[#0C3535] font-medium hover:underline"
                       >
                         <ExternalLink className="w-4 h-4" />
-                        {data.kickoffType === "calendly" ? "Schedule a meeting" : "Open scheduling link"}
+                        {kickoffFromFirst.kickoffType === "calendly"
+                          ? "Schedule a meeting"
+                          : "Open scheduling link"}
                       </a>
                     ) : (
                       <span className="text-gray-500">Not provided yet</span>
@@ -273,298 +395,441 @@ function PartnerActiveEngagementInner() {
               </dl>
             </section>
 
-            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h2 className="font-display font-bold text-lg text-[#0C3535] mb-4">Your scope</h2>
-              <dl className="space-y-3 text-sm">
-                <div>
-                  <dt className="font-mono text-[10px] uppercase text-gray-500">Scope item</dt>
-                  <dd className="text-gray-900 font-medium">{data.scopeItemName || "—"}</dd>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <dt className="font-mono text-[10px] uppercase text-gray-500">Proposed budget</dt>
-                    <dd className="text-gray-900">{formatEngagementBudget(data.budgetProposal)}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-mono text-[10px] uppercase text-gray-500">Proposed timeline</dt>
-                    <dd className="text-gray-900">{formatEngagementTimeline(data.timelineProposal)}</dd>
-                  </div>
-                </div>
-                <div>
-                  <dt className="font-mono text-[10px] uppercase text-gray-500 mb-1">Proposal</dt>
-                  <dd className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-                    {(data.proposalText || "").trim() || "—"}
-                  </dd>
-                </div>
-              </dl>
-            </section>
+            <div className="space-y-4">
+              <h2 className="font-display font-bold text-lg text-[#0C3535]">Awarded scope items</h2>
+              {pageData.engagements.map((eng) => {
+                const ckey = engagementCardKey(eng)
+                const open = expandedCard[ckey] ?? false
+                const ui = assignmentUi[eng.assignmentId] ?? defaultAssignmentUi()
+                const previousStatusUpdates = ui.updates.slice(1)
 
-            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h2 className="font-display font-bold text-lg text-[#0C3535] mb-4">Project status</h2>
-              {statusLoading ? (
-                <div className="flex items-center gap-2 text-gray-500 text-sm py-4">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading status…
-                </div>
-              ) : latestStatus ? (
-                <div className="space-y-3 mb-6 pb-6 border-b border-gray-100">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[10px] uppercase text-gray-500">Latest update</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-[#0C3535]/10 text-[#0C3535] font-medium">
-                      {workflowStatusLabel(latestStatus.status)}
-                    </span>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
-                      {budgetStatusLabel(latestStatus.budget_status)}
-                    </span>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Completion</span>
-                      <span>{latestStatus.completion_pct}%</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className="h-full bg-[#0C3535]/80 rounded-full"
-                        style={{ width: `${latestStatus.completion_pct}%` }}
-                      />
-                    </div>
-                  </div>
-                  {latestStatus.notes && (
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{latestStatus.notes}</p>
-                  )}
-                  <p className="font-mono text-[10px] text-gray-400">
-                    {new Date(latestStatus.created_at).toLocaleString()}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500 mb-6">No status updates yet. Submit your first update below.</p>
-              )}
-
-              <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-6">
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-between gap-3 text-left"
-                  onClick={() => setHistoryOpen((prev) => !prev)}
-                >
-                  <h3 className="font-display font-bold text-lg text-[#0C3535]">Update history</h3>
-                  <span className="text-sm text-gray-600 shrink-0">{historyOpen ? "Hide" : "Show"}</span>
-                </button>
-                {historyOpen && (
-                  <div className="mt-4 space-y-3">
-                    {statusLoading ? (
-                      <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Loading history…
+                return (
+                  <Collapsible
+                    key={ckey}
+                    open={open}
+                    onOpenChange={(v) => setExpandedCard((prev) => ({ ...prev, [ckey]: v }))}
+                    className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+                  >
+                    <div className="p-5 border-b border-gray-100">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-display font-bold text-base text-[#0C3535]">
+                            {eng.scopeItemName?.trim() || "Scope item"}
+                          </h3>
+                          <div className="mt-2 grid sm:grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <div className="font-mono text-[10px] uppercase text-gray-500">Proposed budget</div>
+                              <div className="text-gray-900">{formatEngagementBudget(eng.budgetProposal)}</div>
+                            </div>
+                            <div>
+                              <div className="font-mono text-[10px] uppercase text-gray-500">Proposed timeline</div>
+                              <div className="text-gray-900">{formatEngagementTimeline(eng.timelineProposal)}</div>
+                            </div>
+                          </div>
+                        </div>
+                        <CollapsibleTrigger asChild>
+                          <Button type="button" variant="outline" size="sm" className={cn(btnOutlineLight, "shrink-0")}>
+                            <span className="mr-1">{open ? "Collapse" : "Details & status"}</span>
+                            <ChevronDown
+                              className={cn("w-4 h-4 transition-transform", open && "rotate-180")}
+                            />
+                          </Button>
+                        </CollapsibleTrigger>
                       </div>
-                    ) : previousStatusUpdates.length === 0 ? (
-                      <p className="text-sm text-gray-600">No earlier updates. New submissions will appear here.</p>
-                    ) : (
-                      previousStatusUpdates.map((u) => {
-                        const cardOpen = historyCardOpen[u.id] ?? false
-                        return (
-                          <div key={u.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    </div>
+
+                    <CollapsibleContent>
+                      <div className="p-5 space-y-6 border-t border-gray-100">
+                        <div>
+                          <h4 className="font-mono text-[10px] uppercase text-gray-500 mb-2">Proposal</h4>
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                            {(eng.proposalText || "").trim() || "—"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <h4 className="font-display font-bold text-sm text-[#0C3535] mb-3">Documents</h4>
+                          {(eng.onboardingDocuments || []).length === 0 ? (
+                            <p className="text-sm text-gray-500">No onboarding documents have been shared yet.</p>
+                          ) : (
+                            <ul className="space-y-2">
+                              {(eng.onboardingDocuments || []).map((d, i) => (
+                                <li key={`${d.url}-${i}`}>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className={cn(btnOutlineLight, "justify-start h-auto py-2")}
+                                    asChild
+                                  >
+                                    <a href={d.url} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="w-3.5 h-3.5 mr-2 shrink-0" />
+                                      {d.label}
+                                    </a>
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-5 space-y-4">
+                          <h4 className="font-display font-bold text-lg text-[#0C3535]">Project status</h4>
+                          <p className="text-xs text-gray-500 font-mono">
+                            Updates apply to assignment{" "}
+                            <span className="text-gray-700">{eng.assignmentId.slice(0, 8)}…</span>
+                            {uniqueAssignmentIds.length > 1 ? (
+                              <span> (shared if you have multiple scopes on the same assignment)</span>
+                            ) : null}
+                          </p>
+                          {ui.loading ? (
+                            <div className="flex items-center gap-2 text-gray-500 text-sm py-4">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Loading status…
+                            </div>
+                          ) : ui.latest ? (
+                            <div className="space-y-3 mb-6 pb-6 border-b border-gray-200">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-mono text-[10px] uppercase text-gray-500">Latest update</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-[#0C3535]/10 text-[#0C3535] font-medium">
+                                  {workflowStatusLabel(ui.latest.status)}
+                                </span>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
+                                  {budgetStatusLabel(ui.latest.budget_status)}
+                                </span>
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                  <span>Completion</span>
+                                  <span>{ui.latest.completion_pct}%</span>
+                                </div>
+                                <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                                  <div
+                                    className="h-full bg-[#0C3535]/80 rounded-full"
+                                    style={{ width: `${ui.latest.completion_pct}%` }}
+                                  />
+                                </div>
+                              </div>
+                              {ui.latest.notes && (
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{ui.latest.notes}</p>
+                              )}
+                              <p className="font-mono text-[10px] text-gray-400">
+                                {new Date(ui.latest.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-500 mb-6">No status updates yet. Submit your first update below.</p>
+                          )}
+
+                          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
                             <button
                               type="button"
-                              className="w-full flex items-start justify-between gap-3 text-left"
+                              className="w-full flex items-center justify-between gap-3 text-left"
                               onClick={() =>
-                                setHistoryCardOpen((prev) => ({
-                                  ...prev,
-                                  [u.id]: !(prev[u.id] ?? false),
-                                }))
+                                setAssignmentUi((prev) => {
+                                  const cur = prev[eng.assignmentId] ?? defaultAssignmentUi()
+                                  return {
+                                    ...prev,
+                                    [eng.assignmentId]: { ...cur, historyOpen: !cur.historyOpen },
+                                  }
+                                })
                               }
                             >
-                              <div className="min-w-0 flex-1 space-y-2">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-[#0C3535]/10 text-[#0C3535] font-medium">
-                                    {workflowStatusLabel(u.status)}
-                                  </span>
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
-                                    {budgetStatusLabel(u.budget_status)}
-                                  </span>
-                                  <span className="font-mono text-[10px] text-gray-600">{u.completion_pct}%</span>
-                                </div>
-                                <div className="font-mono text-[10px] text-gray-500">
-                                  {new Date(u.created_at).toLocaleString()}
-                                </div>
-                                {!cardOpen && (
-                                  <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap">
-                                    {(u.notes || "").trim() || "—"}
-                                  </p>
-                                )}
-                              </div>
-                              <span className="text-sm text-gray-600 shrink-0">{cardOpen ? "Hide" : "Show"}</span>
+                              <h5 className="font-display font-bold text-base text-[#0C3535]">Update history</h5>
+                              <span className="text-sm text-gray-600 shrink-0">
+                                {ui.historyOpen ? "Hide" : "Show"}
+                              </span>
                             </button>
-                            {cardOpen && (
-                              <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
-                                <div>
-                                  <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                    <span>Completion</span>
-                                    <span>{u.completion_pct}%</span>
+                            {ui.historyOpen && (
+                              <div className="mt-4 space-y-3">
+                                {ui.loading ? (
+                                  <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Loading history…
                                   </div>
-                                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-                                    <div
-                                      className="h-full bg-[#0C3535]/80 rounded-full"
-                                      style={{ width: `${u.completion_pct}%` }}
-                                    />
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="font-mono text-[10px] uppercase text-gray-500 mb-1">Notes</div>
-                                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                                    {(u.notes || "").trim() || "—"}
-                                  </p>
-                                </div>
+                                ) : previousStatusUpdates.length === 0 ? (
+                                  <p className="text-sm text-gray-600">No earlier updates.</p>
+                                ) : (
+                                  previousStatusUpdates.map((u) => {
+                                    const cardOpen = ui.historyCardOpen[u.id] ?? false
+                                    return (
+                                      <div key={u.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                                        <button
+                                          type="button"
+                                          className="w-full flex items-start justify-between gap-3 text-left"
+                                          onClick={() =>
+                                            setAssignmentUi((prev) => {
+                                              const cur = prev[eng.assignmentId] ?? defaultAssignmentUi()
+                                              return {
+                                                ...prev,
+                                                [eng.assignmentId]: {
+                                                  ...cur,
+                                                  historyCardOpen: {
+                                                    ...cur.historyCardOpen,
+                                                    [u.id]: !cardOpen,
+                                                  },
+                                                },
+                                              }
+                                            })
+                                          }
+                                        >
+                                          <div className="min-w-0 flex-1 space-y-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <span className="text-xs px-2 py-0.5 rounded-full bg-[#0C3535]/10 text-[#0C3535] font-medium">
+                                                {workflowStatusLabel(u.status)}
+                                              </span>
+                                              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
+                                                {budgetStatusLabel(u.budget_status)}
+                                              </span>
+                                              <span className="font-mono text-[10px] text-gray-600">{u.completion_pct}%</span>
+                                            </div>
+                                            <div className="font-mono text-[10px] text-gray-500">
+                                              {new Date(u.created_at).toLocaleString()}
+                                            </div>
+                                            {!cardOpen && (
+                                              <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap">
+                                                {(u.notes || "").trim() || "—"}
+                                              </p>
+                                            )}
+                                          </div>
+                                          <span className="text-sm text-gray-600 shrink-0">{cardOpen ? "Hide" : "Show"}</span>
+                                        </button>
+                                        {cardOpen && (
+                                          <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
+                                            <div>
+                                              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                <span>Completion</span>
+                                                <span>{u.completion_pct}%</span>
+                                              </div>
+                                              <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                                                <div
+                                                  className="h-full bg-[#0C3535]/80 rounded-full"
+                                                  style={{ width: `${u.completion_pct}%` }}
+                                                />
+                                              </div>
+                                            </div>
+                                            <div>
+                                              <div className="font-mono text-[10px] uppercase text-gray-500 mb-1">Notes</div>
+                                              <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                                {(u.notes || "").trim() || "—"}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })
+                                )}
                               </div>
                             )}
                           </div>
-                        )
-                      })
-                    )}
-                  </div>
-                )}
-              </div>
 
-              <form
-                className="space-y-4"
-                onSubmit={async (e) => {
-                  e.preventDefault()
-                  if (isDemo) {
-                    const created: StatusUpdateRow = {
-                      id: `demo-new-${Date.now()}`,
-                      status: formStatus,
-                      budget_status: formBudget,
-                      completion_pct: formPct,
-                      notes: formNotes.trim() || null,
-                      created_at: new Date().toISOString(),
-                    }
-                    setStatusUpdatesAll((prev) => [created, ...prev])
-                    setLatestStatus(created)
-                    setFormNotes("")
-                    return
-                  }
-                  setStatusSaving(true)
-                  setStatusError(null)
-                  try {
-                    const res = await fetch(`/api/partner/projects/${projectId}/status-update`, {
-                      method: "POST",
-                      credentials: "same-origin",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        status: formStatus,
-                        budget_status: formBudget,
-                        completion_pct: formPct,
-                        notes: formNotes.trim() || undefined,
-                      }),
-                    })
-                    const json = await res.json().catch(() => ({}))
-                    if (!res.ok) {
-                      setStatusError((json as { error?: string }).error || "Save failed")
-                      return
-                    }
-                    const created = (json as { update?: StatusUpdateRow }).update
-                    if (created) {
-                      setLatestStatus(created)
-                      setStatusUpdatesAll((prev) => [created, ...prev.filter((r) => r.id !== created.id)])
-                    } else await refreshStatus()
-                    setFormNotes("")
-                  } catch {
-                    setStatusError("Save failed")
-                  } finally {
-                    setStatusSaving(false)
-                  }
-                }}
-              >
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label className="font-mono text-[10px] text-gray-500 uppercase">Workflow status</Label>
-                    <select
-                      value={formStatus}
-                      onChange={(e) => setFormStatus(e.target.value)}
-                      className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                      {PARTNER_WORKFLOW_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {workflowStatusLabel(s)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <Label className="font-mono text-[10px] text-gray-500 uppercase">Budget status</Label>
-                    <select
-                      value={formBudget}
-                      onChange={(e) => setFormBudget(e.target.value)}
-                      className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
-                    >
-                      {PARTNER_BUDGET_STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {budgetStatusLabel(s)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <Label className="font-mono text-[10px] text-gray-500 uppercase">
-                    Completion ({formPct}%)
-                  </Label>
-                  <Slider
-                    value={[formPct]}
-                    min={0}
-                    max={100}
-                    step={1}
-                    onValueChange={(v) => setFormPct(v[0] ?? 0)}
-                    className="mt-3 w-full"
-                  />
-                </div>
-                <div>
-                  <Label className="font-mono text-[10px] text-gray-500 uppercase">Notes</Label>
-                  <Textarea
-                    value={formNotes}
-                    onChange={(e) => setFormNotes(e.target.value)}
-                    placeholder="What changed since last update?"
-                    className={cn("mt-1 min-h-[100px]", fieldClass)}
-                  />
-                </div>
-                {statusError && (
-                  <p className="text-sm text-red-600">{statusError}</p>
-                )}
-                <Button
-                  type="submit"
-                  disabled={statusSaving}
-                  className={cn(btnPrimaryDark, "w-full sm:w-auto")}
-                >
-                  {statusSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Submitting…
-                    </>
-                  ) : (
-                    "Submit status update"
-                  )}
-                </Button>
-              </form>
-            </section>
-
-            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h2 className="font-display font-bold text-lg text-[#0C3535] mb-4">Project documents</h2>
-              {(data.onboardingDocuments || []).length === 0 ? (
-                <p className="text-sm text-gray-500">No onboarding documents have been shared yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {(data.onboardingDocuments || []).map((d, i) => (
-                    <li key={`${d.url}-${i}`}>
-                      <Button variant="outline" size="sm" className={cn(btnOutlineLight, "justify-start h-auto py-2")} asChild>
-                        <a href={d.url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="w-3.5 h-3.5 mr-2 shrink-0" />
-                          {d.label}
-                        </a>
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+                          <form
+                            className="space-y-4"
+                            onSubmit={async (e) => {
+                              e.preventDefault()
+                              if (isDemo) {
+                                const created: StatusUpdateRow = {
+                                  id: `demo-new-${Date.now()}`,
+                                  status: ui.formStatus,
+                                  budget_status: ui.formBudget,
+                                  completion_pct: ui.formPct,
+                                  notes: ui.formNotes.trim() || null,
+                                  created_at: new Date().toISOString(),
+                                }
+                                setAssignmentUi((prev) => {
+                                  const cur = prev[eng.assignmentId] ?? defaultAssignmentUi()
+                                  return {
+                                    ...prev,
+                                    [eng.assignmentId]: {
+                                      ...cur,
+                                      latest: created,
+                                      updates: [created, ...cur.updates.filter((r) => r.id !== created.id)],
+                                      formNotes: "",
+                                    },
+                                  }
+                                })
+                                return
+                              }
+                              setAssignmentUi((prev) => ({
+                                ...prev,
+                                [eng.assignmentId]: {
+                                  ...(prev[eng.assignmentId] ?? defaultAssignmentUi()),
+                                  saving: true,
+                                  error: null,
+                                },
+                              }))
+                              try {
+                                const res = await fetch(`/api/partner/projects/${projectId}/status-update`, {
+                                  method: "POST",
+                                  credentials: "same-origin",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    project_assignment_id: eng.assignmentId,
+                                    status: ui.formStatus,
+                                    budget_status: ui.formBudget,
+                                    completion_pct: ui.formPct,
+                                    notes: ui.formNotes.trim() || undefined,
+                                  }),
+                                })
+                                const json = await res.json().catch(() => ({}))
+                                if (!res.ok) {
+                                  setAssignmentUi((prev) => ({
+                                    ...prev,
+                                    [eng.assignmentId]: {
+                                      ...(prev[eng.assignmentId] ?? defaultAssignmentUi()),
+                                      saving: false,
+                                      error: (json as { error?: string }).error || "Save failed",
+                                    },
+                                  }))
+                                  return
+                                }
+                                const created = (json as { update?: StatusUpdateRow }).update
+                                if (created) {
+                                  setAssignmentUi((prev) => {
+                                    const cur = prev[eng.assignmentId] ?? defaultAssignmentUi()
+                                    return {
+                                      ...prev,
+                                      [eng.assignmentId]: {
+                                        ...cur,
+                                        saving: false,
+                                        error: null,
+                                        latest: created,
+                                        updates: [created, ...cur.updates.filter((r) => r.id !== created.id)],
+                                        formNotes: "",
+                                      },
+                                    }
+                                  })
+                                } else {
+                                  await refreshAssignmentStatus(eng.assignmentId)
+                                  setAssignmentUi((prev) => ({
+                                    ...prev,
+                                    [eng.assignmentId]: {
+                                      ...(prev[eng.assignmentId] ?? defaultAssignmentUi()),
+                                      saving: false,
+                                      error: null,
+                                      formNotes: "",
+                                    },
+                                  }))
+                                }
+                              } catch {
+                                setAssignmentUi((prev) => ({
+                                  ...prev,
+                                  [eng.assignmentId]: {
+                                    ...(prev[eng.assignmentId] ?? defaultAssignmentUi()),
+                                    saving: false,
+                                    error: "Save failed",
+                                  },
+                                }))
+                              }
+                            }}
+                          >
+                            <div className="grid sm:grid-cols-2 gap-4">
+                              <div>
+                                <Label className="font-mono text-[10px] text-gray-500 uppercase">Workflow status</Label>
+                                <select
+                                  value={ui.formStatus}
+                                  onChange={(e) =>
+                                    setAssignmentUi((prev) => ({
+                                      ...prev,
+                                      [eng.assignmentId]: {
+                                        ...(prev[eng.assignmentId] ?? defaultAssignmentUi()),
+                                        formStatus: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+                                >
+                                  {PARTNER_WORKFLOW_STATUSES.map((s) => (
+                                    <option key={s} value={s}>
+                                      {workflowStatusLabel(s)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <Label className="font-mono text-[10px] text-gray-500 uppercase">Budget status</Label>
+                                <select
+                                  value={ui.formBudget}
+                                  onChange={(e) =>
+                                    setAssignmentUi((prev) => ({
+                                      ...prev,
+                                      [eng.assignmentId]: {
+                                        ...(prev[eng.assignmentId] ?? defaultAssignmentUi()),
+                                        formBudget: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+                                >
+                                  {PARTNER_BUDGET_STATUSES.map((s) => (
+                                    <option key={s} value={s}>
+                                      {budgetStatusLabel(s)}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            <div>
+                              <Label className="font-mono text-[10px] text-gray-500 uppercase">
+                                Completion ({ui.formPct}%)
+                              </Label>
+                              <Slider
+                                value={[ui.formPct]}
+                                min={0}
+                                max={100}
+                                step={1}
+                                onValueChange={(v) =>
+                                  setAssignmentUi((prev) => ({
+                                    ...prev,
+                                    [eng.assignmentId]: {
+                                      ...(prev[eng.assignmentId] ?? defaultAssignmentUi()),
+                                      formPct: v[0] ?? 0,
+                                    },
+                                  }))
+                                }
+                                className="mt-3 w-full"
+                              />
+                            </div>
+                            <div>
+                              <Label className="font-mono text-[10px] text-gray-500 uppercase">Notes</Label>
+                              <Textarea
+                                value={ui.formNotes}
+                                onChange={(e) =>
+                                  setAssignmentUi((prev) => ({
+                                    ...prev,
+                                    [eng.assignmentId]: {
+                                      ...(prev[eng.assignmentId] ?? defaultAssignmentUi()),
+                                      formNotes: e.target.value,
+                                    },
+                                  }))
+                                }
+                                placeholder="What changed since last update?"
+                                className={cn("mt-1 min-h-[100px]", fieldClass)}
+                              />
+                            </div>
+                            {ui.error && <p className="text-sm text-red-600">{ui.error}</p>}
+                            <Button
+                              type="submit"
+                              disabled={ui.saving}
+                              className={cn(btnPrimaryDark, "w-full sm:w-auto")}
+                            >
+                              {ui.saving ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  Submitting…
+                                </>
+                              ) : (
+                                "Submit status update"
+                              )}
+                            </Button>
+                          </form>
+                        </div>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )
+              })}
+            </div>
 
             {isDemo && (
               <p className="font-mono text-[10px] text-gray-500">

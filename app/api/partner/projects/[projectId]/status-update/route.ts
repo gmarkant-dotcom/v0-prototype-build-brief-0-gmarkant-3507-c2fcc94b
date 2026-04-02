@@ -49,10 +49,11 @@ function parseBody(body: unknown): {
   }
 }
 
-/** Latest status row for this partner + project (any resolution). */
-export async function GET(_req: Request, { params }: { params: Promise<{ projectId: string }> }) {
+/** Latest status rows for this partner + project; optional ?assignmentId= filters by project_assignment_id. */
+export async function GET(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
   try {
     const { projectId } = await params
+    const assignmentIdFilter = new URL(req.url).searchParams.get("assignmentId")?.trim() || null
     const supabase = await createClient()
     const {
       data: { user },
@@ -72,12 +73,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       return NextResponse.json({ latest: null, updates: [] }, { headers: noStoreHeaders })
     }
 
-    const { data: rows, error } = await supabase
+    let q = supabase
       .from("partner_status_updates")
       .select("*")
       .eq("project_id", projectId)
       .in("partnership_id", partnershipIds)
-      .order("created_at", { ascending: false })
+    if (assignmentIdFilter) {
+      q = q.eq("project_assignment_id", assignmentIdFilter)
+    }
+    const { data: rows, error } = await q.order("created_at", { ascending: false })
 
     if (error) {
       console.error("[partner/status-update] GET", { message: error.message, code: error.code })
@@ -109,35 +113,66 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
       return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
     }
 
-    const body = parseBody(await req.json().catch(() => null))
-    if ("error" in body) {
-      return NextResponse.json({ error: body.error }, { status: 400, headers: noStoreHeaders })
-    }
-
+    const bodyRaw = await req.json().catch(() => null)
     const { data: partnerships } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)
     const partnershipIds = (partnerships || []).map((p) => p.id as string)
     if (partnershipIds.length === 0) {
       return NextResponse.json({ error: "No partnership" }, { status: 403, headers: noStoreHeaders })
     }
 
-    const { data: assignment, error: aErr } = await supabase
-      .from("project_assignments")
-      .select("id, partnership_id, project_id, status")
-      .eq("project_id", projectId)
-      .in("partnership_id", partnershipIds)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
+    const bodyObj = bodyRaw && typeof bodyRaw === "object" ? (bodyRaw as Record<string, unknown>) : {}
+    const requestedAssignmentId =
+      typeof bodyObj.project_assignment_id === "string" ? bodyObj.project_assignment_id.trim() : ""
 
-    if (aErr) {
-      console.error("[partner/status-update] POST assignment", aErr)
-      return NextResponse.json({ error: "Failed to resolve assignment" }, { status: 500, headers: noStoreHeaders })
+    type PaRow = { id: string; partnership_id: string; project_id: string; status: string }
+    let assignment: PaRow | null = null
+
+    if (requestedAssignmentId) {
+      const { data: row, error: aErr } = await supabase
+        .from("project_assignments")
+        .select("id, partnership_id, project_id, status")
+        .eq("id", requestedAssignmentId)
+        .eq("project_id", projectId)
+        .in("partnership_id", partnershipIds)
+        .eq("status", "awarded")
+        .maybeSingle()
+
+      if (aErr) {
+        console.error("[partner/status-update] POST assignment by id", aErr)
+        return NextResponse.json({ error: "Failed to resolve assignment" }, { status: 500, headers: noStoreHeaders })
+      }
+      assignment = row as PaRow | null
+    } else {
+      const { data: row, error: aErr } = await supabase
+        .from("project_assignments")
+        .select("id, partnership_id, project_id, status")
+        .eq("project_id", projectId)
+        .in("partnership_id", partnershipIds)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (aErr) {
+        console.error("[partner/status-update] POST assignment", aErr)
+        return NextResponse.json({ error: "Failed to resolve assignment" }, { status: 500, headers: noStoreHeaders })
+      }
+      assignment = row as PaRow | null
     }
+
     if (!assignment) {
       return NextResponse.json(
-        { error: "No project assignment for this project and your partnership" },
+        {
+          error: requestedAssignmentId
+            ? "Invalid or inaccessible project assignment for this project"
+            : "No project assignment for this project and your partnership",
+        },
         { status: 400, headers: noStoreHeaders }
       )
+    }
+
+    const body = parseBody(bodyRaw)
+    if ("error" in body) {
+      return NextResponse.json({ error: body.error }, { status: 400, headers: noStoreHeaders })
     }
 
     const now = new Date().toISOString()
