@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
@@ -9,8 +9,11 @@ const noStore = {
   Expires: "0",
 } as const
 
-/** Embedded JSON in `profiles.bio` when `rate_info` column is missing (run scripts/030-partner-payments-rls.sql). */
+/** Embedded JSON in `profiles.bio` when `rate_info` column is missing. */
 const RATE_INFO_BIO_MARKER = "\n\n__LIGAMENT_PARTNER_RATE_V1__\n"
+
+/** JSONB root: map of partnership_id → rate fields. */
+const BY_PARTNERSHIP_KEY = "by_partnership_id" as const
 
 type PartnerRateInfoPayload = {
   hourly_rate: string
@@ -28,31 +31,6 @@ const defaultRateInfo = (): PartnerRateInfoPayload => ({
   notes: "",
 })
 
-function parseRateInfoFromBio(rawBio: string | null): { cleanBio: string; embedded: PartnerRateInfoPayload | null } {
-  if (!rawBio) return { cleanBio: "", embedded: null }
-  const idx = rawBio.indexOf(RATE_INFO_BIO_MARKER)
-  if (idx === -1) return { cleanBio: rawBio.trim(), embedded: null }
-  const cleanBio = rawBio.slice(0, idx).trimEnd()
-  const jsonPart = rawBio.slice(idx + RATE_INFO_BIO_MARKER.length).trim()
-  try {
-    const parsed = JSON.parse(jsonPart) as Partial<PartnerRateInfoPayload>
-    return {
-      cleanBio,
-      embedded: {
-        ...defaultRateInfo(),
-        ...parsed,
-        hourly_rate: String(parsed.hourly_rate ?? ""),
-        project_minimum: String(parsed.project_minimum ?? ""),
-        payment_terms: String(parsed.payment_terms ?? "net_30"),
-        payment_terms_custom: String(parsed.payment_terms_custom ?? ""),
-        notes: String(parsed.notes ?? ""),
-      },
-    }
-  } catch {
-    return { cleanBio: rawBio.trim(), embedded: null }
-  }
-}
-
 function mergeRateInfo(base: PartnerRateInfoPayload, patch: Partial<PartnerRateInfoPayload>): PartnerRateInfoPayload {
   return {
     hourly_rate: patch.hourly_rate !== undefined ? String(patch.hourly_rate) : base.hourly_rate,
@@ -64,13 +42,94 @@ function mergeRateInfo(base: PartnerRateInfoPayload, patch: Partial<PartnerRateI
   }
 }
 
+function extractMapAndLegacy(raw: unknown): {
+  map: Record<string, PartnerRateInfoPayload>
+  legacy: PartnerRateInfoPayload | null
+} {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { map: {}, legacy: null }
+  const o = raw as Record<string, unknown>
+  const by = o[BY_PARTNERSHIP_KEY]
+  if (by && typeof by === "object" && !Array.isArray(by)) {
+    const map: Record<string, PartnerRateInfoPayload> = {}
+    for (const [k, v] of Object.entries(by as Record<string, unknown>)) {
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        map[k] = mergeRateInfo(defaultRateInfo(), v as Partial<PartnerRateInfoPayload>)
+      }
+    }
+    return { map, legacy: null }
+  }
+  if (
+    "hourly_rate" in o ||
+    "project_minimum" in o ||
+    "payment_terms" in o ||
+    "payment_terms_custom" in o ||
+    "notes" in o
+  ) {
+    return { map: {}, legacy: mergeRateInfo(defaultRateInfo(), o as Partial<PartnerRateInfoPayload>) }
+  }
+  return { map: {}, legacy: null }
+}
+
+function rateForPartnership(
+  partnershipId: string | null,
+  map: Record<string, PartnerRateInfoPayload>,
+  legacy: PartnerRateInfoPayload | null
+): PartnerRateInfoPayload {
+  if (partnershipId && map[partnershipId]) return map[partnershipId]
+  if (partnershipId && legacy) return legacy
+  if (!partnershipId && legacy) return legacy
+  return defaultRateInfo()
+}
+
+function parseRateInfoFromBio(rawBio: string | null): {
+  cleanBio: string
+  map: Record<string, PartnerRateInfoPayload>
+  legacy: PartnerRateInfoPayload | null
+} {
+  if (!rawBio) return { cleanBio: "", map: {}, legacy: null }
+  const idx = rawBio.indexOf(RATE_INFO_BIO_MARKER)
+  if (idx === -1) return { cleanBio: rawBio.trim(), map: {}, legacy: null }
+  const cleanBio = rawBio.slice(0, idx).trimEnd()
+  const jsonPart = rawBio.slice(idx + RATE_INFO_BIO_MARKER.length).trim()
+  try {
+    const parsed = JSON.parse(jsonPart) as unknown
+    const { map, legacy } = extractMapAndLegacy(parsed)
+    if (Object.keys(map).length === 0 && legacy) {
+      return { cleanBio, map: {}, legacy }
+    }
+    if (Object.keys(map).length > 0) {
+      return { cleanBio, map, legacy }
+    }
+    const flat = mergeRateInfo(defaultRateInfo(), (parsed as Partial<PartnerRateInfoPayload>) || {})
+    return { cleanBio, map: {}, legacy: flat }
+  } catch {
+    return { cleanBio: rawBio.trim(), map: {}, legacy: null }
+  }
+}
+
 function isMissingRateInfoColumnError(err: { message?: string; code?: string } | null): boolean {
   if (!err?.message) return false
   const m = err.message.toLowerCase()
   return m.includes("rate_info") || (m.includes("column") && m.includes("does not exist"))
 }
 
-export async function GET() {
+async function assertPartnerOwnsPartnership(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  partnershipId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("partnerships")
+    .select("id, partner_id, status")
+    .eq("id", partnershipId)
+    .maybeSingle()
+  if (error || !data) return false
+  if (data.partner_id !== userId) return false
+  if (String(data.status || "").toLowerCase() !== "active") return false
+  return true
+}
+
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     const {
@@ -84,6 +143,14 @@ export async function GET() {
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
     if (profile?.role !== "partner") {
       return NextResponse.json({ error: "Partners only" }, { status: 403, headers: noStore })
+    }
+
+    const partnershipId = request.nextUrl.searchParams.get("partnershipId")
+    if (partnershipId) {
+      const ok = await assertPartnerOwnsPartnership(supabase, user.id, partnershipId)
+      if (!ok) {
+        return NextResponse.json({ error: "Invalid or inactive partnership" }, { status: 403, headers: noStore })
+      }
     }
 
     let withRate = await supabase
@@ -114,21 +181,27 @@ export async function GET() {
       rate_info?: unknown
     }
 
-    let rateInfo = defaultRateInfo()
+    let map: Record<string, PartnerRateInfoPayload> = {}
+    let legacy: PartnerRateInfoPayload | null = null
 
-    if (storage === "column" && row.rate_info != null && typeof row.rate_info === "object" && !Array.isArray(row.rate_info)) {
-      rateInfo = mergeRateInfo(defaultRateInfo(), row.rate_info as Partial<PartnerRateInfoPayload>)
-    } else if (storage === "bio_embedded") {
-      const { cleanBio, embedded } = parseRateInfoFromBio(row.bio)
-      row.bio = cleanBio
-      if (embedded) rateInfo = embedded
-    } else if (storage === "column") {
-      const { cleanBio, embedded } = parseRateInfoFromBio(row.bio)
-      if (embedded) {
-        row.bio = cleanBio
-        rateInfo = embedded
+    if (storage === "column" && row.rate_info != null) {
+      const parsed = extractMapAndLegacy(row.rate_info)
+      map = parsed.map
+      legacy = parsed.legacy
+    }
+
+    if (storage === "bio_embedded" || storage === "column") {
+      const b = parseRateInfoFromBio(row.bio)
+      row.bio = b.cleanBio
+      if (Object.keys(b.map).length > 0) {
+        map = { ...map, ...b.map }
+      }
+      if (b.legacy) {
+        legacy = legacy ?? b.legacy
       }
     }
+
+    const rateInfo = rateForPartnership(partnershipId, map, legacy)
 
     return NextResponse.json(
       {
@@ -136,6 +209,7 @@ export async function GET() {
         location: row.location ?? "",
         website: row.website ?? "",
         rate_info: rateInfo,
+        partnership_id: partnershipId,
         rate_info_storage: storage,
         migration_note: migrationNote,
       },
@@ -168,6 +242,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: noStore })
     }
 
+    const partnershipIdRaw = body.partnership_id
+    const partnershipId = typeof partnershipIdRaw === "string" ? partnershipIdRaw.trim() : ""
+    if (!partnershipId) {
+      return NextResponse.json({ error: "partnership_id is required" }, { status: 400, headers: noStore })
+    }
+
+    const ok = await assertPartnerOwnsPartnership(supabase, user.id, partnershipId)
+    if (!ok) {
+      return NextResponse.json({ error: "Invalid or inactive partnership" }, { status: 403, headers: noStore })
+    }
+
     const bioIn = body.bio !== undefined ? String(body.bio) : undefined
     const locationIn = body.location !== undefined ? String(body.location) : undefined
     const websiteIn = body.website !== undefined ? String(body.website) : undefined
@@ -175,11 +260,6 @@ export async function POST(req: Request) {
       body.rate_info && typeof body.rate_info === "object" && !Array.isArray(body.rate_info)
         ? (body.rate_info as Partial<PartnerRateInfoPayload>)
         : ({} as Partial<PartnerRateInfoPayload>)
-
-    let currentBio = ""
-    let currentLocation = ""
-    let currentWebsite = ""
-    let currentRate = defaultRateInfo()
 
     let load = await supabase
       .from("profiles")
@@ -206,23 +286,36 @@ export async function POST(req: Request) {
       rate_info?: unknown
     }
 
+    let currentBio = ""
+    let currentLocation = ""
+    let currentWebsite = ""
+    let map: Record<string, PartnerRateInfoPayload> = {}
+    let legacy: PartnerRateInfoPayload | null = null
+
     if (useBioEmbed) {
-      const { cleanBio, embedded } = parseRateInfoFromBio(row.bio)
-      currentBio = cleanBio
-      currentRate = embedded ? embedded : defaultRateInfo()
+      const parsed = parseRateInfoFromBio(row.bio)
+      currentBio = parsed.cleanBio
+      map = { ...parsed.map }
+      legacy = parsed.legacy
       currentLocation = row.location ?? ""
       currentWebsite = row.website ?? ""
     } else {
       currentBio = row.bio ?? ""
       currentLocation = row.location ?? ""
       currentWebsite = row.website ?? ""
-      if (row.rate_info != null && typeof row.rate_info === "object" && !Array.isArray(row.rate_info)) {
-        currentRate = mergeRateInfo(defaultRateInfo(), row.rate_info as Partial<PartnerRateInfoPayload>)
+      if (row.rate_info != null) {
+        const parsed = extractMapAndLegacy(row.rate_info)
+        map = { ...parsed.map }
+        legacy = parsed.legacy
       } else {
-        const { cleanBio, embedded } = parseRateInfoFromBio(row.bio)
-        if (embedded) {
-          currentBio = cleanBio
-          currentRate = embedded
+        const parsed = parseRateInfoFromBio(row.bio)
+        if (parsed.map && Object.keys(parsed.map).length > 0) {
+          currentBio = parsed.cleanBio
+          map = { ...parsed.map }
+          legacy = parsed.legacy
+        } else if (parsed.legacy) {
+          currentBio = parsed.cleanBio
+          legacy = parsed.legacy
         }
       }
     }
@@ -230,10 +323,15 @@ export async function POST(req: Request) {
     const nextBio = bioIn !== undefined ? bioIn : currentBio
     const nextLocation = locationIn !== undefined ? locationIn : currentLocation
     const nextWebsite = websiteIn !== undefined ? websiteIn : currentWebsite
-    const nextRate = mergeRateInfo(currentRate, ratePatch)
+
+    const existingForPartnership = map[partnershipId] ?? (legacy ? { ...legacy } : defaultRateInfo())
+    const nextForPartnership = mergeRateInfo(existingForPartnership, ratePatch)
+    map[partnershipId] = nextForPartnership
+
+    const storedRoot: Record<string, unknown> = { [BY_PARTNERSHIP_KEY]: map }
 
     if (useBioEmbed) {
-      const storedBio = `${nextBio.trimEnd()}${RATE_INFO_BIO_MARKER}${JSON.stringify(nextRate)}`
+      const storedBio = `${nextBio.trimEnd()}${RATE_INFO_BIO_MARKER}${JSON.stringify(storedRoot)}`
       const { error: upErr } = await supabase
         .from("profiles")
         .update({
@@ -255,13 +353,13 @@ export async function POST(req: Request) {
           ...(bioIn !== undefined ? { bio: nextBio || null } : {}),
           ...(locationIn !== undefined ? { location: nextLocation || null } : {}),
           ...(websiteIn !== undefined ? { website: nextWebsite || null } : {}),
-          rate_info: nextRate as unknown as Record<string, unknown>,
+          rate_info: storedRoot,
           updated_at: new Date().toISOString(),
         })
         .eq("id", user.id)
 
       if (upErr && isMissingRateInfoColumnError(upErr)) {
-        const storedBio = `${nextBio.trimEnd()}${RATE_INFO_BIO_MARKER}${JSON.stringify(nextRate)}`
+        const storedBio = `${nextBio.trimEnd()}${RATE_INFO_BIO_MARKER}${JSON.stringify(storedRoot)}`
         const { error: up2 } = await supabase
           .from("profiles")
           .update({

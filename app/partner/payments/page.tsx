@@ -28,6 +28,13 @@ type PartnershipPayments = {
   milestones: MilestoneRow[]
 }
 
+type PartnershipApiRow = {
+  id: string
+  agency_id: string
+  status?: string | null
+  agency?: { company_name?: string | null; full_name?: string | null } | null
+}
+
 type RateInfoPayload = {
   hourly_rate: string
   project_minimum: string
@@ -36,69 +43,89 @@ type RateInfoPayload = {
   notes: string
 }
 
-const demoPartnerships: PartnershipPayments[] = [
-  {
-    partnership_id: "demo-p1",
-    agency_id: "demo-agency-1",
-    agency_name: "Tandem Social",
-    milestones: [
-      {
-        id: "dm1",
-        title: "Kick-off",
-        amount: 19400,
-        currency: "USD",
-        due_date: "2026-01-14",
-        status: "paid",
-        paid_at: "2026-01-14T12:00:00Z",
-        project_name: "NWSL Creator Content Series",
-        client_name: "NWSL",
-        notes: null,
-      },
-      {
-        id: "dm2",
-        title: "Mid-point delivery",
-        amount: 38800,
-        currency: "USD",
-        due_date: "2026-02-28",
-        status: "paid",
-        paid_at: "2026-02-28T12:00:00Z",
-        project_name: "NWSL Creator Content Series",
-        client_name: "NWSL",
-        notes: null,
-      },
-      {
-        id: "dm3",
-        title: "Final delivery",
-        amount: 29100,
-        currency: "USD",
-        due_date: "2026-04-15",
-        status: "invoiced",
-        paid_at: null,
-        project_name: "NWSL Creator Content Series",
-        client_name: "NWSL",
-        notes: null,
-      },
-      {
-        id: "dm4",
-        title: "Wrap & reporting",
-        amount: 9700,
-        currency: "USD",
-        due_date: "2026-06-01",
-        status: "pending",
-        paid_at: null,
-        project_name: "NWSL Creator Content Series",
-        client_name: "NWSL",
-        notes: null,
-      },
-    ],
-  },
-  {
-    partnership_id: "demo-p2",
-    agency_id: "demo-agency-2",
-    agency_name: "North Star Media",
-    milestones: [],
-  },
+const emptyRate = (): RateInfoPayload => ({
+  hourly_rate: "",
+  project_minimum: "",
+  payment_terms: "net_30",
+  payment_terms_custom: "",
+  notes: "",
+})
+
+const demoMilestonesByPartnership: Record<string, MilestoneRow[]> = {
+  "demo-p1": [
+    {
+      id: "dm1",
+      title: "Kick-off",
+      amount: 19400,
+      currency: "USD",
+      due_date: "2026-01-14",
+      status: "paid",
+      paid_at: "2026-01-14T12:00:00Z",
+      project_name: "NWSL Creator Content Series",
+      client_name: "NWSL",
+      notes: null,
+    },
+    {
+      id: "dm2",
+      title: "Mid-point delivery",
+      amount: 38800,
+      currency: "USD",
+      due_date: "2026-02-28",
+      status: "paid",
+      paid_at: "2026-02-28T12:00:00Z",
+      project_name: "NWSL Creator Content Series",
+      client_name: "NWSL",
+      notes: null,
+    },
+    {
+      id: "dm3",
+      title: "Final delivery",
+      amount: 29100,
+      currency: "USD",
+      due_date: "2026-04-15",
+      status: "invoiced",
+      paid_at: null,
+      project_name: "NWSL Creator Content Series",
+      client_name: "NWSL",
+      notes: null,
+    },
+    {
+      id: "dm4",
+      title: "Wrap & reporting",
+      amount: 9700,
+      currency: "USD",
+      due_date: "2026-06-01",
+      status: "pending",
+      paid_at: null,
+      project_name: "NWSL Creator Content Series",
+      client_name: "NWSL",
+      notes: null,
+    },
+  ],
+  "demo-p2": [],
+}
+
+const demoActivePartnerships: PartnershipApiRow[] = [
+  { id: "demo-p1", agency_id: "demo-agency-1", status: "active", agency: { company_name: "Tandem Social" } },
+  { id: "demo-p2", agency_id: "demo-agency-2", status: "active", agency: { company_name: "North Star Media" } },
 ]
+
+const demoRatesSeeded: Record<string, RateInfoPayload> = {
+  "demo-p1": {
+    hourly_rate: "250",
+    project_minimum: "5000",
+    payment_terms: "net_30",
+    payment_terms_custom: "",
+    notes: "",
+  },
+  "demo-p2": {
+    hourly_rate: "200",
+    project_minimum: "4000",
+    payment_terms: "net_45",
+    payment_terms_custom: "",
+    notes: "NY metro preferred.",
+  },
+}
 
 function formatMoney(amount: number, currency: string) {
   try {
@@ -136,131 +163,195 @@ function summarize(milestones: MilestoneRow[]) {
   }
 }
 
+function agencyLabel(p: PartnershipApiRow) {
+  const a = p.agency
+  const name = (a?.company_name || "").trim() || (a?.full_name || "").trim()
+  return name || "Lead agency"
+}
+
 export default function PartnerPaymentsPage() {
   const isDemo = isDemoMode()
 
-  const [partnerships, setPartnerships] = useState<PartnershipPayments[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const [activePartnerships, setActivePartnerships] = useState<PartnershipApiRow[]>([])
+  const [partnershipsError, setPartnershipsError] = useState<string | null>(null)
+  const [loadingPartnerships, setLoadingPartnerships] = useState(!isDemo)
+
+  const [milestonesByPartnership, setMilestonesByPartnership] = useState<Record<string, MilestoneRow[]>>({})
+  const [paymentsError, setPaymentsError] = useState<string | null>(null)
   const [loadingPayments, setLoadingPayments] = useState(!isDemo)
+
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const [bio, setBio] = useState("")
   const [location, setLocation] = useState("")
   const [website, setWebsite] = useState("")
-  const [rateInfo, setRateInfo] = useState<RateInfoPayload>({
-    hourly_rate: "",
-    project_minimum: "",
-    payment_terms: "net_30",
-    payment_terms_custom: "",
-    notes: "",
-  })
-  const [loadingRate, setLoadingRate] = useState(!isDemo)
+  const [rateInfo, setRateInfo] = useState<RateInfoPayload>(emptyRate)
+  const [loadingRate, setLoadingRate] = useState(false)
   const [rateError, setRateError] = useState<string | null>(null)
   const [savingRate, setSavingRate] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
-  const loadPayments = useCallback(async () => {
+  const [demoRates, setDemoRates] = useState<Record<string, RateInfoPayload>>(demoRatesSeeded)
+
+  const mergedRows: PartnershipPayments[] = useMemo(() => {
+    return activePartnerships.map((p) => ({
+      partnership_id: p.id,
+      agency_id: p.agency_id,
+      agency_name: agencyLabel(p),
+      milestones: milestonesByPartnership[p.id] ?? [],
+    }))
+  }, [activePartnerships, milestonesByPartnership])
+
+  const loadPartnershipsAndPayments = useCallback(async () => {
     if (isDemo) {
-      setPartnerships(demoPartnerships)
-      setSelectedId(demoPartnerships[0]?.partnership_id ?? null)
-      setLoadingPayments(false)
-      return
-    }
-    setLoadingPayments(true)
-    setLoadError(null)
-    try {
-      const res = await fetch("/api/partner/payments", { credentials: "same-origin" })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setLoadError((data as { error?: string }).error || "Failed to load payments")
-        setPartnerships([])
-        setSelectedId(null)
-        return
-      }
-      const list = ((data as { partnerships?: PartnershipPayments[] }).partnerships || []) as PartnershipPayments[]
-      setPartnerships(list)
+      setActivePartnerships(demoActivePartnerships)
+      setMilestonesByPartnership(demoMilestonesByPartnership)
       setSelectedId((prev) => {
-        if (prev && list.some((p) => p.partnership_id === prev)) return prev
-        return list[0]?.partnership_id ?? null
+        const ids = demoActivePartnerships.map((p) => p.id)
+        if (prev && ids.includes(prev)) return prev
+        return ids[0] ?? null
       })
+      setLoadingPartnerships(false)
+      setLoadingPayments(false)
+      setPartnershipsError(null)
+      setPaymentsError(null)
+      return
+    }
+
+    setLoadingPartnerships(true)
+    setLoadingPayments(true)
+    setPartnershipsError(null)
+    setPaymentsError(null)
+
+    try {
+      const [partRes, payRes] = await Promise.all([
+        fetch("/api/partnerships", { credentials: "same-origin" }),
+        fetch("/api/partner/payments", { credentials: "same-origin" }),
+      ])
+
+      const partData = await partRes.json().catch(() => ({}))
+      if (!partRes.ok) {
+        setPartnershipsError((partData as { error?: string }).error || "Failed to load partnerships")
+        setActivePartnerships([])
+      } else {
+        const rows = ((partData as { partnerships?: PartnershipApiRow[] }).partnerships || []).filter(
+          (p) => String(p.status || "").toLowerCase() === "active"
+        )
+        setActivePartnerships(rows)
+        setSelectedId((prev) => {
+          const ids = rows.map((r) => r.id)
+          if (prev && ids.includes(prev)) return prev
+          return ids[0] ?? null
+        })
+      }
+
+      const payData = await payRes.json().catch(() => ({}))
+      if (!payRes.ok) {
+        setPaymentsError((payData as { error?: string }).error || "Failed to load payment milestones")
+        setMilestonesByPartnership({})
+      } else {
+        const list = (payData as { partnerships?: PartnershipPayments[] }).partnerships || []
+        const map: Record<string, MilestoneRow[]> = {}
+        for (const entry of list) {
+          map[entry.partnership_id] = entry.milestones || []
+        }
+        setMilestonesByPartnership(map)
+      }
     } catch {
-      setLoadError("Failed to load payments")
-      setPartnerships([])
+      setPartnershipsError("Failed to load partnerships")
+      setPaymentsError("Failed to load payments")
+      setActivePartnerships([])
+      setMilestonesByPartnership({})
     } finally {
+      setLoadingPartnerships(false)
       setLoadingPayments(false)
     }
   }, [isDemo])
 
-  const loadRate = useCallback(async () => {
-    if (isDemo) {
-      setBio("")
-      setLocation("")
-      setWebsite("")
-      setRateInfo({
-        hourly_rate: "250",
-        project_minimum: "5000",
-        payment_terms: "net_30",
-        payment_terms_custom: "",
-        notes: "",
-      })
-      setLoadingRate(false)
-      return
-    }
-    setLoadingRate(true)
-    setRateError(null)
-    try {
-      const res = await fetch("/api/partner/rate-info", { credentials: "same-origin" })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        setRateError((data as { error?: string }).error || "Failed to load rate information")
+  useEffect(() => {
+    loadPartnershipsAndPayments()
+  }, [loadPartnershipsAndPayments])
+
+  const loadRateForSelection = useCallback(
+    async (partnershipId: string | null) => {
+      if (!partnershipId) {
+        setRateInfo(emptyRate())
         return
       }
-      const d = data as {
-        bio?: string
-        location?: string
-        website?: string
-        rate_info?: Partial<RateInfoPayload>
+      if (isDemo) {
+        setBio("")
+        setLocation("")
+        setWebsite("")
+        setRateInfo({ ...emptyRate(), ...(demoRates[partnershipId] || {}) })
+        setRateError(null)
+        setLoadingRate(false)
+        return
       }
-      setBio(d.bio ?? "")
-      setLocation(d.location ?? "")
-      setWebsite(d.website ?? "")
-      const ri = d.rate_info || {}
-      setRateInfo({
-        hourly_rate: String(ri.hourly_rate ?? ""),
-        project_minimum: String(ri.project_minimum ?? ""),
-        payment_terms: String(ri.payment_terms ?? "net_30"),
-        payment_terms_custom: String(ri.payment_terms_custom ?? ""),
-        notes: String(ri.notes ?? ""),
-      })
-    } catch {
-      setRateError("Failed to load rate information")
-    } finally {
-      setLoadingRate(false)
-    }
-  }, [isDemo])
+      setLoadingRate(true)
+      setRateError(null)
+      try {
+        const res = await fetch(
+          `/api/partner/rate-info?partnershipId=${encodeURIComponent(partnershipId)}`,
+          { credentials: "same-origin" }
+        )
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setRateError((data as { error?: string }).error || "Failed to load rate information")
+          setRateInfo(emptyRate())
+          return
+        }
+        const d = data as {
+          bio?: string
+          location?: string
+          website?: string
+          rate_info?: Partial<RateInfoPayload>
+        }
+        setBio(d.bio ?? "")
+        setLocation(d.location ?? "")
+        setWebsite(d.website ?? "")
+        const ri = d.rate_info || {}
+        setRateInfo({
+          hourly_rate: String(ri.hourly_rate ?? ""),
+          project_minimum: String(ri.project_minimum ?? ""),
+          payment_terms: String(ri.payment_terms ?? "net_30"),
+          payment_terms_custom: String(ri.payment_terms_custom ?? ""),
+          notes: String(ri.notes ?? ""),
+        })
+      } catch {
+        setRateError("Failed to load rate information")
+        setRateInfo(emptyRate())
+      } finally {
+        setLoadingRate(false)
+      }
+    },
+    [isDemo, demoRates]
+  )
 
   useEffect(() => {
-    loadPayments()
-  }, [loadPayments])
-
-  useEffect(() => {
-    loadRate()
-  }, [loadRate])
+    void loadRateForSelection(selectedId)
+  }, [selectedId, loadRateForSelection])
 
   const selected = useMemo(
-    () => partnerships.find((p) => p.partnership_id === selectedId) ?? null,
-    [partnerships, selectedId]
+    () => mergedRows.find((p) => p.partnership_id === selectedId) ?? null,
+    [mergedRows, selectedId]
   )
 
   const summary = useMemo(() => summarize(selected?.milestones ?? []), [selected])
 
+  const loadingShell = loadingPartnerships || loadingPayments
+
   const saveRateInfo = async () => {
+    if (!selectedId) return
     setSavingRate(true)
     setSaveSuccess(false)
     setRateError(null)
     try {
       if (isDemo) {
         await new Promise((r) => setTimeout(r, 400))
+        setDemoRates((prev) => ({
+          ...prev,
+          [selectedId]: { ...rateInfo },
+        }))
         setSaveSuccess(true)
         window.setTimeout(() => setSaveSuccess(false), 4000)
         return
@@ -270,6 +361,7 @@ export default function PartnerPaymentsPage() {
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          partnership_id: selectedId,
           bio,
           location,
           website,
@@ -304,30 +396,30 @@ export default function PartnerPaymentsPage() {
         <div>
           <h1 className="font-display font-bold text-3xl text-[#0C3535]">Payment Setup</h1>
           <p className="text-gray-600 mt-1">
-            View payment schedules from your lead agencies and save your standard rate details.
+            View payment schedules from your lead agencies and save rate details for each relationship.
           </p>
         </div>
 
-        {/* Lead agency selector */}
+        {/* Lead agency pills (from /api/partnerships — active only) */}
         <div className="space-y-3">
           <p className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Lead agency</p>
-          {loadingPayments ? (
+          {loadingShell ? (
             <div className="text-sm text-gray-500">Loading partnerships…</div>
-          ) : loadError ? (
-            <div className="text-sm text-red-600">{loadError}</div>
-          ) : partnerships.length === 0 ? (
+          ) : partnershipsError ? (
+            <div className="text-sm text-red-600">{partnershipsError}</div>
+          ) : activePartnerships.length === 0 ? (
             <div className="text-sm text-gray-600 rounded-xl border border-gray-200 bg-white px-4 py-3">
-              No active partnerships yet. Accept an invitation to see payment schedules here.
+              No active partnerships yet. Accept an invitation to see payment schedules and rate fields here.
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {partnerships.map((p) => {
-                const active = p.partnership_id === selectedId
+              {activePartnerships.map((p) => {
+                const active = p.id === selectedId
                 return (
                   <button
-                    key={p.partnership_id}
+                    key={p.id}
                     type="button"
-                    onClick={() => setSelectedId(p.partnership_id)}
+                    onClick={() => setSelectedId(p.id)}
                     className={cn(
                       "rounded-full px-4 py-2 text-sm font-medium border transition-colors",
                       active
@@ -335,15 +427,16 @@ export default function PartnerPaymentsPage() {
                         : "bg-white text-[#0C3535] border-gray-200 hover:border-gray-300"
                     )}
                   >
-                    {p.agency_name}
+                    {agencyLabel(p)}
                   </button>
                 )
               })}
             </div>
           )}
+          {paymentsError ? <div className="text-sm text-amber-700">{paymentsError}</div> : null}
         </div>
 
-        {/* Payment schedule */}
+        {/* Payment schedule — milestones for selected partnership only */}
         {selected && (
           <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
             <div>
@@ -437,15 +530,21 @@ export default function PartnerPaymentsPage() {
           </div>
         )}
 
-        {/* Rate information */}
+        {/* Rate information — scoped to selected partnership */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
           <h2 className="font-display font-bold text-lg text-[#0C3535]">Rate information</h2>
-          {loadingRate ? (
+          {!selectedId ? (
+            <p className="text-sm text-gray-500">Select a lead agency to view and edit rates for that relationship.</p>
+          ) : loadingRate ? (
             <div className="text-sm text-gray-500">Loading…</div>
           ) : rateError ? (
             <div className="text-sm text-red-600">{rateError}</div>
           ) : (
             <>
+              <p className="text-sm text-gray-600">
+                Rates below are stored for <span className="font-medium text-[#0C3535]">{selected?.agency_name}</span>{" "}
+                only.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div>
                   <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
@@ -460,7 +559,7 @@ export default function PartnerPaymentsPage() {
                       placeholder="e.g. 250"
                     />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">For reference with your partners</p>
+                  <p className="text-xs text-gray-400 mt-1">For reference with this agency</p>
                 </div>
 
                 <div>
@@ -521,7 +620,7 @@ export default function PartnerPaymentsPage() {
 
               {saveSuccess ? (
                 <p className="text-sm text-green-700" role="status">
-                  Rate information saved.
+                  Rate information saved for this agency.
                 </p>
               ) : null}
 
@@ -539,7 +638,6 @@ export default function PartnerPaymentsPage() {
           )}
         </div>
 
-        {/* Banking placeholder */}
         <div className="bg-white rounded-xl border border-dashed border-gray-200 p-6">
           <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Banking details</h2>
           <p className="text-sm text-gray-600">
