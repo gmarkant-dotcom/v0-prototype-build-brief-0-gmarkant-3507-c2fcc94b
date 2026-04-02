@@ -27,6 +27,23 @@ function dashboardWorkflowForProject(
   return { key: 'setup', label: 'Setup' }
 }
 
+/** TEMP: verbose PostgREST / Supabase error logging for debugging 500s on GET /api/projects */
+function logSupabaseError(label: string, err: unknown) {
+  const e = err as {
+    message?: string
+    code?: string
+    details?: string
+    hint?: string
+  }
+  console.error(`[api/projects] ${label}`, {
+    message: e?.message ?? (err instanceof Error ? err.message : String(err)),
+    code: e?.code,
+    details: e?.details,
+    hint: e?.hint,
+    full: err,
+  })
+}
+
 // GET - List projects for current user
 export async function GET(request: NextRequest) {
   try {
@@ -70,13 +87,20 @@ export async function GET(request: NextRequest) {
       if (!rich.error) {
         projects = rich.data
       } else {
+        console.error(
+          '[api/projects] agency GET rich query failed (falling back to simple projects select)',
+          JSON.stringify(rich.error)
+        )
         const simple = await supabase
           .from('projects')
           .select('*')
           .eq('agency_id', user.id)
           .order('created_at', { ascending: false })
 
-        if (simple.error) throw simple.error
+        if (simple.error) {
+          console.error('[api/projects] agency GET simple projects query failed', JSON.stringify(simple.error))
+          throw simple.error
+        }
         projects = simple.data
       }
 
@@ -147,6 +171,9 @@ export async function GET(request: NextRequest) {
           (r) => !PARTNER_ALERT_EXCLUDED_STATUSES.has(String(r.status || ''))
         )
 
+        if (psuErr) {
+          logSupabaseError('agency GET partner_status_updates query failed', psuErr)
+        }
         if (!psuErr && alertRows.length) {
           for (const row of alertRows) {
             const pid = row.project_id as string
@@ -274,11 +301,11 @@ export async function GET(request: NextRequest) {
       { headers: noStoreHeaders }
     )
   } catch (error) {
-    console.error('[api] failure', {
-      route: '/api/projects',
-      method: 'GET',
-      code: 500,
+    console.error('[api] failure GET /api/projects detailed', {
+      isError: error instanceof Error,
       message: error instanceof Error ? error.message : String(error),
+      stringified: JSON.stringify(error),
+      keys: error && typeof error === 'object' ? Object.keys(error as object) : [],
     })
     return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500, headers: noStoreHeaders })
   }
