@@ -10,10 +10,8 @@ import { Loader2, TrendingDown, TrendingUp, Wallet } from "lucide-react"
 type ScopeRow = {
   response_id: string
   scope_item_name: string
-  estimated_amount: number | null
   awarded_amount: number | null
   currency: string
-  variance: number | null
   project_assignment_id: string | null
   partner_completion_pct: number | null
 }
@@ -23,6 +21,8 @@ type ProjectRow = {
   project_name: string
   client_name: string | null
   client_budget: number | null
+  start_date: string | null
+  end_date: string | null
   scopes: ScopeRow[]
   total_awarded: number
   currency: string
@@ -59,19 +59,6 @@ function formatMoney(amount: number, currency: string): string {
 function formatClientBudget(amount: number | null): string {
   if (amount == null || amount === 0) return "—"
   return formatMoney(amount, "USD")
-}
-
-/** Green: at or under estimate. Amber: over by ≤10%. Red: over by >10%. */
-function varianceTone(
-  variance: number | null,
-  estimated: number | null
-): "green" | "amber" | "red" | "neutral" {
-  if (variance == null || estimated == null || estimated <= 0) return "neutral"
-  if (variance >= 0) return "green"
-  const over = -variance
-  const pct = over / estimated
-  if (pct <= 0.1) return "amber"
-  return "red"
 }
 
 function marginTone(margin: number | null): "green" | "amber" | "red" | "neutral" {
@@ -131,6 +118,50 @@ function UtilBar({
 }
 
 function CompletionCell({ pct }: { pct: number | null }) {
+  if (pct == null) return <span className="text-foreground-muted">—</span>
+  const w = Math.min(100, Math.max(0, pct))
+  return (
+    <div className="flex items-center gap-3 min-w-[140px]">
+      <div className="flex-1 h-2 rounded-full bg-white/10 overflow-hidden min-w-[72px]">
+        <div
+          className="h-full rounded-full bg-teal-500/80"
+          style={{ width: `${w}%` }}
+        />
+      </div>
+      <span className="font-mono text-xs text-foreground tabular-nums shrink-0 w-10 text-right">{pct}%</span>
+    </div>
+  )
+}
+
+/** Local calendar day; supports YYYY-MM-DD prefix or parseable date strings. */
+function parseProjectDateMs(s: string): number | null {
+  const trimmed = s.trim()
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed)
+  if (ymd) {
+    const t = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])).getTime()
+    return Number.isFinite(t) ? t : null
+  }
+  const parsed = Date.parse(trimmed)
+  if (!Number.isFinite(parsed)) return null
+  const d = new Date(parsed)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+}
+
+/** Elapsed share of [start_date, end_date] through today, 0–100. Null if dates missing or invalid span. */
+function timeframeCompletionPct(start: string | null, end: string | null): number | null {
+  if (start == null || end == null) return null
+  const startMs = parseProjectDateMs(start)
+  const endMs = parseProjectDateMs(end)
+  if (startMs == null || endMs == null) return null
+  const span = endMs - startMs
+  if (span <= 0) return null
+  const now = new Date()
+  const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const raw = ((todayMs - startMs) / span) * 100
+  return Math.round(Math.min(100, Math.max(0, raw)))
+}
+
+function TimeframeCell({ pct }: { pct: number | null }) {
   if (pct == null) return <span className="text-foreground-muted">—</span>
   const w = Math.min(100, Math.max(0, pct))
   return (
@@ -318,6 +349,7 @@ export default function AgencyUtilizationPage() {
               {projects.map((p) => {
                 const margin =
                   p.client_budget != null ? p.client_budget - p.total_awarded : null
+                const timeframePct = timeframeCompletionPct(p.start_date ?? null, p.end_date ?? null)
                 return (
                   <AccordionItem
                     key={p.project_id}
@@ -370,13 +402,11 @@ export default function AgencyUtilizationPage() {
                               <th className="py-3 px-4 font-medium">Scope</th>
                               <th className="py-3 px-4 font-medium">Partner completion</th>
                               <th className="py-3 px-4 font-medium">Awarded</th>
-                              <th className="py-3 px-4 font-medium">Variance</th>
+                              <th className="py-3 px-4 font-medium">Timeframe completion</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {p.scopes.map((s) => {
-                              const tone = varianceTone(s.variance, s.estimated_amount)
-                              return (
+                            {p.scopes.map((s) => (
                                 <tr key={s.response_id} className="border-b border-border/30 last:border-0">
                                   <td className="py-3 px-4 text-foreground font-medium">{s.scope_item_name}</td>
                                   <td className="py-3 px-4">
@@ -385,12 +415,11 @@ export default function AgencyUtilizationPage() {
                                   <td className="py-3 px-4 text-foreground tabular-nums">
                                     {s.awarded_amount != null ? formatMoney(s.awarded_amount, s.currency) : "—"}
                                   </td>
-                                  <td className={cn("py-3 px-4 font-medium tabular-nums", toneClass(tone))}>
-                                    {s.variance != null ? formatMoney(s.variance, s.currency) : "—"}
+                                  <td className="py-3 px-4">
+                                    <TimeframeCell pct={timeframePct} />
                                   </td>
                                 </tr>
-                              )
-                            })}
+                              ))}
                           </tbody>
                         </table>
                       </div>

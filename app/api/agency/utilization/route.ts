@@ -100,12 +100,18 @@ export async function GET() {
       if (pid) projectIds.add(String(pid))
     }
 
-    type ProjectMeta = { name: string; client_name: string | null; client_budget: number | null }
+    type ProjectMeta = {
+      name: string
+      client_name: string | null
+      client_budget: number | null
+      start_date: string | null
+      end_date: string | null
+    }
     let projectMeta = new Map<string, ProjectMeta>()
     if (projectIds.size > 0) {
       const { data: projects, error: projErr } = await supabase
         .from("projects")
-        .select("id, name, client_name, budget_range")
+        .select("id, name, client_name, budget_range, start_date, end_date")
         .eq("agency_id", user.id)
         .in("id", [...projectIds])
 
@@ -118,7 +124,12 @@ export async function GET() {
         const name = ((p as { name?: string | null }).name || "").trim() || "Untitled project"
         const client_name = ((p as { client_name?: string | null }).client_name ?? null) as string | null
         const client_budget = parseClientBudget((p as { budget_range?: unknown }).budget_range)
-        projectMeta.set(id, { name, client_name, client_budget })
+        const rawStart = (p as { start_date?: string | null }).start_date
+        const rawEnd = (p as { end_date?: string | null }).end_date
+        const start_date =
+          rawStart != null && String(rawStart).trim() !== "" ? String(rawStart) : null
+        const end_date = rawEnd != null && String(rawEnd).trim() !== "" ? String(rawEnd) : null
+        projectMeta.set(id, { name, client_name, client_budget, start_date, end_date })
       }
     }
 
@@ -242,6 +253,8 @@ export async function GET() {
       project_name: string
       client_name: string | null
       client_budget: number | null
+      start_date: string | null
+      end_date: string | null
       scopes: ScopeOut[]
       total_awarded: number
       currency: string
@@ -265,6 +278,8 @@ export async function GET() {
         project_name: meta.name,
         client_name: meta.client_name,
         client_budget: meta.client_budget,
+        start_date: meta.start_date,
+        end_date: meta.end_date,
         scopes,
         total_awarded,
         currency,
