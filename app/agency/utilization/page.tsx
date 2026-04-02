@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { GlassCard } from "@/components/glass-card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
@@ -177,11 +178,16 @@ function TimeframeCell({ pct }: { pct: number | null }) {
   )
 }
 
-export default function AgencyUtilizationPage() {
+function AgencyUtilizationPageInner() {
+  const searchParams = useSearchParams()
+  const urlProjectId = searchParams.get("projectId")
+
   const [projects, setProjects] = useState<ProjectRow[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [openAccordion, setOpenAccordion] = useState<string[]>([])
+  const [highlightProjectId, setHighlightProjectId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -209,6 +215,27 @@ export default function AgencyUtilizationPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (loading || !urlProjectId || projects.length === 0) return
+    const match = projects.some((p) => p.project_id === urlProjectId)
+    if (!match) return
+
+    setOpenAccordion((prev) => (prev.includes(urlProjectId) ? prev : [...prev, urlProjectId]))
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document.getElementById(`util-project-${urlProjectId}`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        })
+      })
+    })
+
+    setHighlightProjectId(urlProjectId)
+    const t = window.setTimeout(() => setHighlightProjectId(null), 2000)
+    return () => window.clearTimeout(t)
+  }, [loading, urlProjectId, projects])
 
   return (
     <AgencyLayout>
@@ -345,7 +372,12 @@ export default function AgencyUtilizationPage() {
         {!loading && !error && projects.length > 0 && (
           <div className="space-y-4">
             <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">By project</h2>
-            <Accordion type="multiple" className="space-y-3">
+            <Accordion
+              type="multiple"
+              value={openAccordion}
+              onValueChange={setOpenAccordion}
+              className="space-y-3"
+            >
               {projects.map((p) => {
                 const margin =
                   p.client_budget != null ? p.client_budget - p.total_awarded : null
@@ -353,8 +385,12 @@ export default function AgencyUtilizationPage() {
                 return (
                   <AccordionItem
                     key={p.project_id}
+                    id={`util-project-${p.project_id}`}
                     value={p.project_id}
-                    className="glass-card rounded-xl border border-border/40 px-4 data-[state=open]:border-accent/30"
+                    className={cn(
+                      "glass-card rounded-xl border border-border/40 px-4 ring-2 transition-[box-shadow] duration-700 data-[state=open]:border-accent/30",
+                      highlightProjectId === p.project_id ? "ring-amber-400/60" : "ring-transparent"
+                    )}
                   >
                     <AccordionTrigger className="py-4 hover:no-underline text-left">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 w-full pr-2">
@@ -432,5 +468,22 @@ export default function AgencyUtilizationPage() {
         )}
       </div>
     </AgencyLayout>
+  )
+}
+
+export default function AgencyUtilizationPage() {
+  return (
+    <Suspense
+      fallback={
+        <AgencyLayout>
+          <div className="p-8 max-w-6xl mx-auto flex items-center justify-center gap-2 text-foreground-muted py-16">
+            <Loader2 className="w-6 h-6 animate-spin shrink-0" />
+            Loading utilization…
+          </div>
+        </AgencyLayout>
+      }
+    >
+      <AgencyUtilizationPageInner />
+    </Suspense>
   )
 }
