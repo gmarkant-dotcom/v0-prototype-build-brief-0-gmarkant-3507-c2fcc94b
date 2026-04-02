@@ -1,0 +1,68 @@
+-- MSA agreements (per partnership) and payment milestones (per project / awarded scope).
+-- Run after partnerships, projects, partner_rfp_responses exist.
+
+-- Agencies can read partner profiles for partnerships they own (for joins / MSA UI).
+DROP POLICY IF EXISTS "Agencies read profiles of their partners" ON public.profiles;
+CREATE POLICY "Agencies read profiles of their partners"
+  ON public.profiles
+  FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.partnerships p
+      WHERE p.agency_id = auth.uid() AND p.partner_id = profiles.id
+    )
+  );
+
+CREATE TABLE IF NOT EXISTS public.msa_agreements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  partnership_id UUID NOT NULL REFERENCES public.partnerships(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'signed', 'expired')),
+  document_url TEXT,
+  signed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_msa_agreements_agency ON public.msa_agreements(agency_id);
+CREATE INDEX IF NOT EXISTS idx_msa_agreements_partnership ON public.msa_agreements(partnership_id);
+
+ALTER TABLE public.msa_agreements ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Agencies manage own MSA agreements"
+  ON public.msa_agreements
+  FOR ALL
+  TO authenticated
+  USING (agency_id = auth.uid())
+  WITH CHECK (agency_id = auth.uid());
+
+CREATE TABLE IF NOT EXISTS public.payment_milestones (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  partnership_id UUID REFERENCES public.partnerships(id) ON DELETE SET NULL,
+  partner_rfp_response_id UUID REFERENCES public.partner_rfp_responses(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  amount NUMERIC(14, 2) NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'USD',
+  due_date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'invoiced', 'paid')),
+  notes TEXT,
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_milestones_agency ON public.payment_milestones(agency_id);
+CREATE INDEX IF NOT EXISTS idx_payment_milestones_project ON public.payment_milestones(project_id);
+CREATE INDEX IF NOT EXISTS idx_payment_milestones_response ON public.payment_milestones(partner_rfp_response_id);
+
+ALTER TABLE public.payment_milestones ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Agencies manage own payment milestones"
+  ON public.payment_milestones
+  FOR ALL
+  TO authenticated
+  USING (agency_id = auth.uid())
+  WITH CHECK (agency_id = auth.uid());
