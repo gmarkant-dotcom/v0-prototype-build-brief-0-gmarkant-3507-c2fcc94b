@@ -50,12 +50,17 @@ export async function GET() {
 
     const { data: projectRows, error: projErr } = await supabase
       .from("projects")
-      .select("id, title, client_name, budget_range")
+      .select("*")
       .eq("agency_id", user.id)
-      .order("title", { ascending: true })
+      .order("created_at", { ascending: false })
 
     if (projErr) {
-      console.error("[api/agency/msa/milestones] projects", projErr)
+      console.error("[api/agency/msa/milestones] projects query failed", {
+        message: projErr.message,
+        code: projErr.code,
+        details: projErr.details,
+        hint: projErr.hint,
+      })
       return NextResponse.json({ error: "Failed to load projects" }, { status: 500, headers: noStore })
     }
 
@@ -71,7 +76,12 @@ export async function GET() {
       .order("due_date", { ascending: true })
 
     if (milErr) {
-      console.error("[api/agency/msa/milestones] milestones", milErr)
+      console.error("[api/agency/msa/milestones] payment_milestones query failed", {
+        message: milErr.message,
+        code: milErr.code,
+        details: milErr.details,
+        hint: milErr.hint,
+      })
       return NextResponse.json({ error: "Failed to load milestones" }, { status: 500, headers: noStore })
     }
 
@@ -95,41 +105,68 @@ export async function GET() {
     if (projectIds.length > 0) {
       const { data: respRows, error: respErr } = await supabase
         .from("partner_rfp_responses")
-        .select(
-          `
-          id,
-          partner_display_name,
-          inbox_item_id,
-          partner_rfp_inbox (
-            project_id,
-            partnership_id,
-            scope_item_name,
-            estimated_budget
-          )
-        `
-        )
+        .select("id, partner_display_name, inbox_item_id")
         .eq("agency_id", user.id)
         .eq("status", "awarded")
 
       if (respErr) {
-        console.error("[api/agency/msa/milestones] responses", respErr)
+        console.error("[api/agency/msa/milestones] partner_rfp_responses (awarded) query failed", {
+          message: respErr.message,
+          code: respErr.code,
+          details: respErr.details,
+          hint: respErr.hint,
+        })
         return NextResponse.json({ error: "Failed to load awarded bids" }, { status: 500, headers: noStore })
       }
 
+      const inboxIds = [...new Set((respRows || []).map((r) => r.inbox_item_id as string).filter(Boolean))]
+      const inboxById = new Map<
+        string,
+        {
+          project_id: string | null
+          partnership_id: string | null
+          scope_item_name: string | null
+          estimated_budget: string | null
+        }
+      >()
+
+      if (inboxIds.length > 0) {
+        const { data: inboxRows, error: inboxErr } = await supabase
+          .from("partner_rfp_inbox")
+          .select("id, project_id, partnership_id, scope_item_name, estimated_budget")
+          .eq("agency_id", user.id)
+          .in("id", inboxIds)
+
+        if (inboxErr) {
+          console.error("[api/agency/msa/milestones] partner_rfp_inbox batch for awarded responses failed", {
+            message: inboxErr.message,
+            code: inboxErr.code,
+            details: inboxErr.details,
+            hint: inboxErr.hint,
+          })
+          return NextResponse.json({ error: "Failed to load awarded bids" }, { status: 500, headers: noStore })
+        }
+
+        for (const row of inboxRows || []) {
+          inboxById.set(row.id as string, {
+            project_id: row.project_id != null ? String(row.project_id) : null,
+            partnership_id: row.partnership_id != null ? String(row.partnership_id) : null,
+            scope_item_name: (row.scope_item_name as string | null) ?? null,
+            estimated_budget: (row.estimated_budget as string | null) ?? null,
+          })
+        }
+      }
+
       for (const r of respRows || []) {
-        const embed = r.partner_rfp_inbox as
-          | { project_id?: string | null; partnership_id?: string | null; scope_item_name?: string | null; estimated_budget?: string | null }
-          | { project_id?: string | null; partnership_id?: string | null; scope_item_name?: string | null; estimated_budget?: string | null }[]
-          | null
-        const row = Array.isArray(embed) ? embed[0] : embed
-        const project_id = row?.project_id ? String(row.project_id) : null
+        const ib = inboxById.get(r.inbox_item_id as string)
+        const project_id = ib?.project_id ?? null
         if (!project_id || !projectIds.includes(project_id)) continue
         awardedScopes.push({
           response_id: r.id as string,
           project_id,
-          partnership_id: row.partnership_id != null ? String(row.partnership_id) : null,
-          scope_item_name: (row.scope_item_name || "Scope").trim() || "Scope",
-          estimated_budget: (row.estimated_budget as string | null) ?? null,
+          partnership_id: ib?.partnership_id ?? null,
+          scope_item_name: (ib?.scope_item_name || "Scope").trim() || "Scope",
+          estimated_budget: ib?.estimated_budget ?? null,
           partner_display_name: (r.partner_display_name as string) || "Partner",
         })
       }
@@ -144,9 +181,12 @@ export async function GET() {
 
     const payload = projects.map((p) => {
       const pid = p.id as string
-      const project_name = ((p.title || "") as string).trim() || "Untitled project"
-      const client_name = ((p.client_name as string | null) ?? null) as string | null
-      const client_budget = parseClientBudget(p.budget_range)
+      const raw = p as Record<string, unknown>
+      const project_name =
+        String(raw.title || raw.name || "")
+          .trim() || "Untitled project"
+      const client_name = (raw.client_name as string | null) ?? null
+      const client_budget = parseClientBudget(raw.budget_range)
 
       const ms = milestonesByProject.get(pid) || []
       const total_milestones_amount = ms.reduce((sum, x) => sum + Number(x.amount ?? 0), 0)

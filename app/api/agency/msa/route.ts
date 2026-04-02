@@ -45,13 +45,18 @@ export async function GET() {
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("[api/agency/msa] GET", error)
+      console.error("[api/agency/msa] msa_agreements query failed", {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      })
       return NextResponse.json({ error: "Failed to load agreements" }, { status: 500, headers: noStore })
     }
 
     const list = rows || []
     const partnershipIds = [...new Set(list.map((r) => r.partnership_id as string))]
-    const shipById = new Map<string, { partner_id: string }>()
+    const shipById = new Map<string, { partner_id: string | null }>()
     if (partnershipIds.length > 0) {
       const { data: ships, error: shipErr } = await supabase
         .from("partnerships")
@@ -59,15 +64,26 @@ export async function GET() {
         .eq("agency_id", user.id)
         .in("id", partnershipIds)
       if (shipErr) {
-        console.error("[api/agency/msa] partnerships", shipErr)
+        console.error("[api/agency/msa] partnerships batch for MSA failed", {
+          message: shipErr.message,
+          code: shipErr.code,
+          details: shipErr.details,
+          hint: shipErr.hint,
+        })
         return NextResponse.json({ error: "Failed to load partnerships" }, { status: 500, headers: noStore })
       }
       for (const s of ships || []) {
-        shipById.set(s.id as string, { partner_id: s.partner_id as string })
+        shipById.set(s.id as string, { partner_id: (s.partner_id as string | null) ?? null })
       }
     }
 
-    const partnerIds = [...new Set([...shipById.values()].map((x) => x.partner_id))]
+    const partnerIds = [
+      ...new Set(
+        [...shipById.values()]
+          .map((x) => x.partner_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+      ),
+    ]
     const profById = new Map<
       string,
       { company_name: string | null; display_name: string | null; full_name: string | null; email: string | null }
@@ -78,7 +94,12 @@ export async function GET() {
         .select("id, company_name, display_name, full_name, email")
         .in("id", partnerIds)
       if (pErr) {
-        console.error("[api/agency/msa] profiles", pErr)
+        console.error("[api/agency/msa] profiles batch for MSA partners failed", {
+          message: pErr.message,
+          code: pErr.code,
+          details: pErr.details,
+          hint: pErr.hint,
+        })
         return NextResponse.json({ error: "Failed to load partner profiles" }, { status: 500, headers: noStore })
       }
       for (const p of profs || []) {
@@ -93,7 +114,8 @@ export async function GET() {
 
     const agreements = list.map((r) => {
       const ship = shipById.get(r.partnership_id as string)
-      const prof = ship ? profById.get(ship.partner_id) : undefined
+      const prof =
+        ship?.partner_id != null && ship.partner_id !== "" ? profById.get(ship.partner_id) : undefined
       return {
         id: r.id as string,
         partnership_id: r.partnership_id as string,
