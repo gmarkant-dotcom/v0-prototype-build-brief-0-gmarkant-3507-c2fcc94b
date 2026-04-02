@@ -1,276 +1,551 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 
-type Payment = {
+type MilestoneRow = {
   id: string
-  project: string
-  milestone: string
+  title: string
   amount: number
-  status: "paid" | "pending" | "upcoming"
-  date: string
-  invoiceId?: string
+  currency: string
+  due_date: string
+  status: string
+  paid_at: string | null
+  project_name: string
+  client_name: string | null
+  notes: string | null
 }
 
-// Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
-const demoPaymentHistory: Payment[] = [
-  { id: "1", project: "NWSL Creator Content Series", milestone: "Kick-off", amount: 19400, status: "paid", date: "Jan 14, 2026", invoiceId: "INV-001" },
-  { id: "2", project: "NWSL Creator Content Series", milestone: "Mid-point", amount: 38800, status: "paid", date: "Feb 28, 2026", invoiceId: "INV-002" },
-  { id: "3", project: "NWSL Creator Content Series", milestone: "Delivery", amount: 29100, status: "pending", date: "Apr 15, 2026" },
-  { id: "4", project: "NWSL Creator Content Series", milestone: "Final", amount: 9700, status: "upcoming", date: "Jun 1, 2026" },
+type PartnershipPayments = {
+  partnership_id: string
+  agency_id: string
+  agency_name: string
+  milestones: MilestoneRow[]
+}
+
+type RateInfoPayload = {
+  hourly_rate: string
+  project_minimum: string
+  payment_terms: string
+  payment_terms_custom: string
+  notes: string
+}
+
+const demoPartnerships: PartnershipPayments[] = [
+  {
+    partnership_id: "demo-p1",
+    agency_id: "demo-agency-1",
+    agency_name: "Tandem Social",
+    milestones: [
+      {
+        id: "dm1",
+        title: "Kick-off",
+        amount: 19400,
+        currency: "USD",
+        due_date: "2026-01-14",
+        status: "paid",
+        paid_at: "2026-01-14T12:00:00Z",
+        project_name: "NWSL Creator Content Series",
+        client_name: "NWSL",
+        notes: null,
+      },
+      {
+        id: "dm2",
+        title: "Mid-point delivery",
+        amount: 38800,
+        currency: "USD",
+        due_date: "2026-02-28",
+        status: "paid",
+        paid_at: "2026-02-28T12:00:00Z",
+        project_name: "NWSL Creator Content Series",
+        client_name: "NWSL",
+        notes: null,
+      },
+      {
+        id: "dm3",
+        title: "Final delivery",
+        amount: 29100,
+        currency: "USD",
+        due_date: "2026-04-15",
+        status: "invoiced",
+        paid_at: null,
+        project_name: "NWSL Creator Content Series",
+        client_name: "NWSL",
+        notes: null,
+      },
+      {
+        id: "dm4",
+        title: "Wrap & reporting",
+        amount: 9700,
+        currency: "USD",
+        due_date: "2026-06-01",
+        status: "pending",
+        paid_at: null,
+        project_name: "NWSL Creator Content Series",
+        client_name: "NWSL",
+        notes: null,
+      },
+    ],
+  },
+  {
+    partnership_id: "demo-p2",
+    agency_id: "demo-agency-2",
+    agency_name: "North Star Media",
+    milestones: [],
+  },
 ]
+
+function formatMoney(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: currency || "USD" }).format(amount)
+  } catch {
+    return `${currency || "USD"} ${amount.toLocaleString()}`
+  }
+}
+
+function formatDueDate(iso: string) {
+  try {
+    const d = new Date(`${iso}T12:00:00`)
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+  } catch {
+    return iso
+  }
+}
+
+function statusBadgeClass(status: string) {
+  const s = status.toLowerCase()
+  if (s === "paid") return "bg-green-100 text-green-800"
+  if (s === "invoiced") return "bg-amber-100 text-amber-800"
+  return "bg-gray-100 text-gray-600"
+}
+
+function summarize(milestones: MilestoneRow[]) {
+  const totalOwed = milestones.reduce((sum, m) => sum + (Number.isFinite(m.amount) ? m.amount : 0), 0)
+  const totalPaid = milestones
+    .filter((m) => m.status.toLowerCase() === "paid")
+    .reduce((sum, m) => sum + (Number.isFinite(m.amount) ? m.amount : 0), 0)
+  return {
+    totalOwed,
+    totalPaid,
+    totalOutstanding: Math.max(0, totalOwed - totalPaid),
+  }
+}
 
 export default function PartnerPaymentsPage() {
   const isDemo = isDemoMode()
-  const paymentHistory = isDemo ? demoPaymentHistory : []
-  const [bankInfo, setBankInfo] = useState({
-    bankName: "Chase Bank",
-    accountType: "checking",
-    routingNumber: "XXXXXXXXX",
-    accountNumber: "XXXXXXXXXXXX",
-    accountName: "Sample Production Studio LLC",
+
+  const [partnerships, setPartnerships] = useState<PartnershipPayments[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loadingPayments, setLoadingPayments] = useState(!isDemo)
+
+  const [bio, setBio] = useState("")
+  const [location, setLocation] = useState("")
+  const [website, setWebsite] = useState("")
+  const [rateInfo, setRateInfo] = useState<RateInfoPayload>({
+    hourly_rate: "",
+    project_minimum: "",
+    payment_terms: "net_30",
+    payment_terms_custom: "",
+    notes: "",
   })
-  
-  const [rateInfo, setRateInfo] = useState({
-    dayRate: "2500",
-    projectMinimum: "5000",
-    paymentTerms: "net_30",
-  })
-  
-  const totalPaid = paymentHistory.filter(p => p.status === "paid").reduce((sum, p) => sum + p.amount, 0)
-  const totalPending = paymentHistory.filter(p => p.status === "pending").reduce((sum, p) => sum + p.amount, 0)
-  const totalUpcoming = paymentHistory.filter(p => p.status === "upcoming").reduce((sum, p) => sum + p.amount, 0)
-  
+  const [loadingRate, setLoadingRate] = useState(!isDemo)
+  const [rateError, setRateError] = useState<string | null>(null)
+  const [savingRate, setSavingRate] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  const loadPayments = useCallback(async () => {
+    if (isDemo) {
+      setPartnerships(demoPartnerships)
+      setSelectedId(demoPartnerships[0]?.partnership_id ?? null)
+      setLoadingPayments(false)
+      return
+    }
+    setLoadingPayments(true)
+    setLoadError(null)
+    try {
+      const res = await fetch("/api/partner/payments", { credentials: "same-origin" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setLoadError((data as { error?: string }).error || "Failed to load payments")
+        setPartnerships([])
+        setSelectedId(null)
+        return
+      }
+      const list = ((data as { partnerships?: PartnershipPayments[] }).partnerships || []) as PartnershipPayments[]
+      setPartnerships(list)
+      setSelectedId((prev) => {
+        if (prev && list.some((p) => p.partnership_id === prev)) return prev
+        return list[0]?.partnership_id ?? null
+      })
+    } catch {
+      setLoadError("Failed to load payments")
+      setPartnerships([])
+    } finally {
+      setLoadingPayments(false)
+    }
+  }, [isDemo])
+
+  const loadRate = useCallback(async () => {
+    if (isDemo) {
+      setBio("")
+      setLocation("")
+      setWebsite("")
+      setRateInfo({
+        hourly_rate: "250",
+        project_minimum: "5000",
+        payment_terms: "net_30",
+        payment_terms_custom: "",
+        notes: "",
+      })
+      setLoadingRate(false)
+      return
+    }
+    setLoadingRate(true)
+    setRateError(null)
+    try {
+      const res = await fetch("/api/partner/rate-info", { credentials: "same-origin" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setRateError((data as { error?: string }).error || "Failed to load rate information")
+        return
+      }
+      const d = data as {
+        bio?: string
+        location?: string
+        website?: string
+        rate_info?: Partial<RateInfoPayload>
+      }
+      setBio(d.bio ?? "")
+      setLocation(d.location ?? "")
+      setWebsite(d.website ?? "")
+      const ri = d.rate_info || {}
+      setRateInfo({
+        hourly_rate: String(ri.hourly_rate ?? ""),
+        project_minimum: String(ri.project_minimum ?? ""),
+        payment_terms: String(ri.payment_terms ?? "net_30"),
+        payment_terms_custom: String(ri.payment_terms_custom ?? ""),
+        notes: String(ri.notes ?? ""),
+      })
+    } catch {
+      setRateError("Failed to load rate information")
+    } finally {
+      setLoadingRate(false)
+    }
+  }, [isDemo])
+
+  useEffect(() => {
+    loadPayments()
+  }, [loadPayments])
+
+  useEffect(() => {
+    loadRate()
+  }, [loadRate])
+
+  const selected = useMemo(
+    () => partnerships.find((p) => p.partnership_id === selectedId) ?? null,
+    [partnerships, selectedId]
+  )
+
+  const summary = useMemo(() => summarize(selected?.milestones ?? []), [selected])
+
+  const saveRateInfo = async () => {
+    setSavingRate(true)
+    setSaveSuccess(false)
+    setRateError(null)
+    try {
+      if (isDemo) {
+        await new Promise((r) => setTimeout(r, 400))
+        setSaveSuccess(true)
+        window.setTimeout(() => setSaveSuccess(false), 4000)
+        return
+      }
+      const res = await fetch("/api/partner/rate-info", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bio,
+          location,
+          website,
+          rate_info: {
+            hourly_rate: rateInfo.hourly_rate,
+            project_minimum: rateInfo.project_minimum,
+            payment_terms: rateInfo.payment_terms,
+            payment_terms_custom: rateInfo.payment_terms_custom,
+            notes: rateInfo.notes,
+          },
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setRateError((data as { error?: string }).error || "Save failed")
+        return
+      }
+      if ((data as { success?: boolean }).success) {
+        setSaveSuccess(true)
+        window.setTimeout(() => setSaveSuccess(false), 4000)
+      }
+    } catch {
+      setRateError("Save failed")
+    } finally {
+      setSavingRate(false)
+    }
+  }
+
   return (
     <PartnerLayout>
       <div className="max-w-4xl mx-auto space-y-8">
         <div>
           <h1 className="font-display font-bold text-3xl text-[#0C3535]">Payment Setup</h1>
           <p className="text-gray-600 mt-1">
-            Manage your rates, payment preferences, and banking information.
+            View payment schedules from your lead agencies and save your standard rate details.
           </p>
         </div>
-        
-        {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-green-50 rounded-xl border border-green-200 p-5 text-center">
-            <div className="font-display font-bold text-3xl text-green-600">
-              ${totalPaid.toLocaleString()}
+
+        {/* Lead agency selector */}
+        <div className="space-y-3">
+          <p className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Lead agency</p>
+          {loadingPayments ? (
+            <div className="text-sm text-gray-500">Loading partnerships…</div>
+          ) : loadError ? (
+            <div className="text-sm text-red-600">{loadError}</div>
+          ) : partnerships.length === 0 ? (
+            <div className="text-sm text-gray-600 rounded-xl border border-gray-200 bg-white px-4 py-3">
+              No active partnerships yet. Accept an invitation to see payment schedules here.
             </div>
-            <div className="font-mono text-[10px] text-green-600 uppercase tracking-wider mt-1">
-              Total Paid
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {partnerships.map((p) => {
+                const active = p.partnership_id === selectedId
+                return (
+                  <button
+                    key={p.partnership_id}
+                    type="button"
+                    onClick={() => setSelectedId(p.partnership_id)}
+                    className={cn(
+                      "rounded-full px-4 py-2 text-sm font-medium border transition-colors",
+                      active
+                        ? "bg-[#0C3535] text-white border-[#0C3535]"
+                        : "bg-white text-[#0C3535] border-gray-200 hover:border-gray-300"
+                    )}
+                  >
+                    {p.agency_name}
+                  </button>
+                )
+              })}
             </div>
-          </div>
-          <div className="bg-yellow-50 rounded-xl border border-yellow-200 p-5 text-center">
-            <div className="font-display font-bold text-3xl text-yellow-600">
-              ${totalPending.toLocaleString()}
-            </div>
-            <div className="font-mono text-[10px] text-yellow-600 uppercase tracking-wider mt-1">
-              Pending
-            </div>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
-            <div className="font-display font-bold text-3xl text-[#0C3535]">
-              ${totalUpcoming.toLocaleString()}
-            </div>
-            <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">
-              Upcoming
-            </div>
-          </div>
+          )}
         </div>
-        
-        {/* Rate Information */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Rate Information</h2>
-          
-          <div className="grid grid-cols-3 gap-6">
+
+        {/* Payment schedule */}
+        {selected && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Standard Day Rate
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                <Input
-                  value={rateInfo.dayRate}
-                  onChange={(e) => setRateInfo(prev => ({ ...prev, dayRate: e.target.value }))}
-                  className="border-gray-200 pl-7 text-gray-900 placeholder:text-gray-500"
+              <h2 className="font-display font-bold text-lg text-[#0C3535]">Payment schedule</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Milestones shared by <span className="font-medium text-[#0C3535]">{selected.agency_name}</span>.
+              </p>
+            </div>
+
+            {selected.milestones.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4 text-center">
+                    <div className="font-display font-bold text-xl text-[#0C3535]">
+                      {formatMoney(summary.totalOwed, selected.milestones[0]?.currency || "USD")}
+                    </div>
+                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Total owed</div>
+                  </div>
+                  <div className="rounded-lg border border-green-100 bg-green-50/60 p-4 text-center">
+                    <div className="font-display font-bold text-xl text-green-700">
+                      {formatMoney(summary.totalPaid, selected.milestones[0]?.currency || "USD")}
+                    </div>
+                    <div className="font-mono text-[10px] text-green-700 uppercase tracking-wider mt-1">Total paid</div>
+                  </div>
+                  <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-4 text-center">
+                    <div className="font-display font-bold text-xl text-amber-800">
+                      {formatMoney(summary.totalOutstanding, selected.milestones[0]?.currency || "USD")}
+                    </div>
+                    <div className="font-mono text-[10px] text-amber-800 uppercase tracking-wider mt-1">
+                      Outstanding
+                    </div>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
+                          Project
+                        </th>
+                        <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
+                          Scope / title
+                        </th>
+                        <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
+                          Amount
+                        </th>
+                        <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
+                          Due date
+                        </th>
+                        <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
+                          Status
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selected.milestones.map((m) => (
+                        <tr key={m.id} className="border-b border-gray-100">
+                          <td className="py-3 pr-2">
+                            <div className="font-display font-bold text-sm text-[#0C3535]">{m.project_name}</div>
+                            {m.client_name ? (
+                              <div className="text-xs text-gray-500">{m.client_name}</div>
+                            ) : null}
+                          </td>
+                          <td className="py-3 text-sm text-gray-700">{m.title}</td>
+                          <td className="py-3 text-right font-mono text-sm text-[#0C3535]">
+                            {formatMoney(m.amount, m.currency)}
+                          </td>
+                          <td className="py-3 text-right font-mono text-xs text-gray-500">
+                            {formatDueDate(m.due_date)}
+                          </td>
+                          <td className="py-3 text-right">
+                            <span
+                              className={cn(
+                                "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize inline-block",
+                                statusBadgeClass(m.status)
+                              )}
+                            >
+                              {m.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-600">No payment schedule set up yet by this agency.</p>
+            )}
+          </div>
+        )}
+
+        {/* Rate information */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
+          <h2 className="font-display font-bold text-lg text-[#0C3535]">Rate information</h2>
+          {loadingRate ? (
+            <div className="text-sm text-gray-500">Loading…</div>
+          ) : rateError ? (
+            <div className="text-sm text-red-600">{rateError}</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Hourly rate
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                    <Input
+                      value={rateInfo.hourly_rate}
+                      onChange={(e) => setRateInfo((prev) => ({ ...prev, hourly_rate: e.target.value }))}
+                      className="border-gray-200 pl-7 text-gray-900 placeholder:text-gray-500"
+                      placeholder="e.g. 250"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">For reference with your partners</p>
+                </div>
+
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Project minimum
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                    <Input
+                      value={rateInfo.project_minimum}
+                      onChange={(e) => setRateInfo((prev) => ({ ...prev, project_minimum: e.target.value }))}
+                      className="border-gray-200 pl-7 text-gray-900 placeholder:text-gray-500"
+                      placeholder="e.g. 5000"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Preferred payment terms
+                  </label>
+                  <select
+                    value={rateInfo.payment_terms}
+                    onChange={(e) => setRateInfo((prev) => ({ ...prev, payment_terms: e.target.value }))}
+                    className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                  >
+                    <option value="net_15">Net 15</option>
+                    <option value="net_30">Net 30</option>
+                    <option value="net_45">Net 45</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+              </div>
+
+              {rateInfo.payment_terms === "custom" ? (
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Custom terms
+                  </label>
+                  <Input
+                    value={rateInfo.payment_terms_custom}
+                    onChange={(e) => setRateInfo((prev) => ({ ...prev, payment_terms_custom: e.target.value }))}
+                    className="border-gray-200 text-gray-900"
+                    placeholder="Describe your terms"
+                  />
+                </div>
+              ) : null}
+
+              <div>
+                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Notes</label>
+                <Textarea
+                  value={rateInfo.notes}
+                  onChange={(e) => setRateInfo((prev) => ({ ...prev, notes: e.target.value }))}
+                  className="border-gray-200 text-gray-900 min-h-[100px]"
+                  placeholder="Optional context for your rates or billing preferences"
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1">For reference only</p>
-            </div>
-            
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Project Minimum
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                <Input
-                  value={rateInfo.projectMinimum}
-                  onChange={(e) => setRateInfo(prev => ({ ...prev, projectMinimum: e.target.value }))}
-                  className="border-gray-200 pl-7 text-gray-900 placeholder:text-gray-500"
-                />
+
+              {saveSuccess ? (
+                <p className="text-sm text-green-700" role="status">
+                  Rate information saved.
+                </p>
+              ) : null}
+
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                  disabled={savingRate}
+                  onClick={() => void saveRateInfo()}
+                >
+                  {savingRate ? "Saving…" : "Save rate info"}
+                </Button>
               </div>
-              <p className="text-xs text-gray-400 mt-1">Minimum project budget</p>
-            </div>
-            
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Preferred Payment Terms
-              </label>
-              <select
-                value={rateInfo.paymentTerms}
-                onChange={(e) => setRateInfo(prev => ({ ...prev, paymentTerms: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
-              >
-                <option value="net_15">Net 15</option>
-                <option value="net_30">Net 30</option>
-                <option value="net_45">Net 45</option>
-                <option value="net_60">Net 60</option>
-              </select>
-            </div>
-          </div>
-          
-          <div className="flex justify-end mt-6">
-            <Button className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
-              Save Rate Info
-            </Button>
-          </div>
+            </>
+          )}
         </div>
-        
-        {/* Banking Information */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="font-display font-bold text-lg text-[#0C3535]">Banking Information</h2>
-              <p className="text-sm text-gray-600">Secure ACH transfer details for receiving payments.</p>
-            </div>
-            <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-green-100 text-green-700">
-              Verified
-            </span>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Bank Name
-              </label>
-              <Input
-                value={bankInfo.bankName}
-                onChange={(e) => setBankInfo(prev => ({ ...prev, bankName: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-              />
-            </div>
-            
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Account Type
-              </label>
-              <select
-                value={bankInfo.accountType}
-                onChange={(e) => setBankInfo(prev => ({ ...prev, accountType: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
-              >
-                <option value="checking">Checking</option>
-                <option value="savings">Savings</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Routing Number
-              </label>
-              <Input
-                value={bankInfo.routingNumber}
-                onChange={(e) => setBankInfo(prev => ({ ...prev, routingNumber: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-                type="password"
-              />
-            </div>
-            
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Account Number
-              </label>
-              <Input
-                value={bankInfo.accountNumber}
-                onChange={(e) => setBankInfo(prev => ({ ...prev, accountNumber: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-                type="password"
-              />
-            </div>
-            
-            <div className="col-span-2">
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Account Holder Name
-              </label>
-              <Input
-                value={bankInfo.accountName}
-                onChange={(e) => setBankInfo(prev => ({ ...prev, accountName: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-              />
-            </div>
-          </div>
-          
-          <div className="flex justify-end mt-6">
-            <Button className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
-              Update Banking Info
-            </Button>
-          </div>
-        </div>
-        
-        {/* Payment History */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Payment History</h2>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Project</th>
-                  <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Milestone</th>
-                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Amount</th>
-                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Date</th>
-                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Status</th>
-                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">Invoice</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentHistory.map((payment) => (
-                  <tr key={payment.id} className="border-b border-gray-100">
-                    <td className="py-4 font-display font-bold text-sm text-[#0C3535]">{payment.project}</td>
-                    <td className="py-4 text-sm text-gray-600">{payment.milestone}</td>
-                    <td className="py-4 text-right font-mono text-sm text-[#0C3535]">${payment.amount.toLocaleString()}</td>
-                    <td className="py-4 text-right font-mono text-xs text-gray-500">{payment.date}</td>
-                    <td className="py-4 text-right">
-                      <span className={cn(
-                        "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize",
-                        payment.status === "paid" && "bg-green-100 text-green-700",
-                        payment.status === "pending" && "bg-yellow-100 text-yellow-700",
-                        payment.status === "upcoming" && "bg-gray-100 text-gray-600"
-                      )}>
-                        {payment.status}
-                      </span>
-                    </td>
-                    <td className="py-4 text-right">
-                      {payment.invoiceId ? (
-                        <Button variant="ghost" size="sm" className="text-[#0C3535] hover:text-[#0C3535]/80">
-                          {payment.invoiceId}
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-gray-400">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+        {/* Banking placeholder */}
+        <div className="bg-white rounded-xl border border-dashed border-gray-200 p-6">
+          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Banking details</h2>
+          <p className="text-sm text-gray-600">
+            Banking details are managed securely via your payment provider. We do not collect account or routing numbers
+            on this page.
+          </p>
         </div>
       </div>
     </PartnerLayout>
