@@ -123,6 +123,16 @@ type PartnerSummary = {
   active_engagements: number
 }
 
+type DashboardActiveProject = {
+  id: string
+  name: string
+  client: string
+  status: string
+  nextMilestone: string
+  nextMilestoneDate: string
+  progress: number
+}
+
 export default function PartnerDashboardPage() {
   const isDemo = isDemoMode()
   const { connections, acceptInvitation, declineInvitation, isLoading: connectionsLoading } = useLeadAgencyFilter()
@@ -132,6 +142,8 @@ export default function PartnerDashboardPage() {
     active_engagements: 0,
   })
   const [summaryLoading, setSummaryLoading] = useState(true)
+  const [fetchedActiveProjects, setFetchedActiveProjects] = useState<DashboardActiveProject[]>([])
+  const [activeProjectsLoading, setActiveProjectsLoading] = useState(!isDemo)
 
   useEffect(() => {
     if (isDemo) {
@@ -157,6 +169,44 @@ export default function PartnerDashboardPage() {
         }
       } finally {
         if (!cancelled) setSummaryLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo])
+
+  useEffect(() => {
+    if (isDemo) {
+      setFetchedActiveProjects([])
+      setActiveProjectsLoading(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      setActiveProjectsLoading(true)
+      try {
+        const res = await fetch("/api/partner/projects", { credentials: "same-origin" })
+        const data = (await res.json().catch(() => ({}))) as {
+          projects?: Array<{ id: string; name: string; client_name: string | null }>
+        }
+        if (!cancelled && res.ok && Array.isArray(data.projects)) {
+          setFetchedActiveProjects(
+            data.projects.map((p) => ({
+              id: p.id,
+              name: p.name,
+              client: (p.client_name ?? "").trim() || "—",
+              status: "Awarded",
+              nextMilestone: "—",
+              nextMilestoneDate: "—",
+              progress: 0,
+            }))
+          )
+        } else if (!cancelled) {
+          setFetchedActiveProjects([])
+        }
+      } finally {
+        if (!cancelled) setActiveProjectsLoading(false)
       }
     })()
     return () => {
@@ -202,12 +252,12 @@ export default function PartnerDashboardPage() {
     Object.values(profileCompletion).reduce((a, b) => a + b, 0) / Object.keys(profileCompletion).length
   )
   const openRFPs = isDemo ? demoOpenRFPs : []
-  const activeProjects = isDemo ? demoActiveProjects : []
+  const activeProjects: DashboardActiveProject[] = isDemo ? demoActiveProjects : fetchedActiveProjects
   const upcomingPayments = isDemo ? demoUpcomingPayments : []
   const projectAlerts = isDemo ? demoProjectAlerts : []
   
-  // Show simplified empty state for production users
-  if (!isDemo && activeProjects.length === 0 && openRFPs.length === 0) {
+  // Show simplified empty state for production users (after awarded projects load)
+  if (!isDemo && !activeProjectsLoading && activeProjects.length === 0 && openRFPs.length === 0) {
     return (
       <PartnerLayout>
         <div className="space-y-8">
@@ -266,7 +316,9 @@ export default function PartnerDashboardPage() {
             <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Open RFPs</div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
-            <div className="font-display font-bold text-3xl text-[#0C3535]">{activeProjects.length}</div>
+            <div className="font-display font-bold text-3xl text-[#0C3535]">
+              {activeProjectsLoading ? "—" : activeProjects.length}
+            </div>
             <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Active Projects</div>
           </div>
           <div className="bg-white rounded-xl border border-green-200 p-5 text-center bg-green-50">
@@ -573,31 +625,39 @@ export default function PartnerDashboardPage() {
               </Link>
             </div>
             <div className="space-y-3">
-              {activeProjects.map((project) => (
-                <div key={project.id} className="p-4 rounded-lg border border-gray-200">
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-display font-bold text-sm text-[#0C3535]">{project.name}</h4>
-                      <div className="font-mono text-[10px] text-gray-500 mt-0.5">for {project.client}</div>
+              {activeProjectsLoading && !isDemo ? (
+                <p className="text-sm text-gray-500 py-2">Loading projects…</p>
+              ) : (
+                activeProjects.map((project) => (
+                  <Link
+                    key={project.id}
+                    href={`/partner/projects/${encodeURIComponent(project.id)}`}
+                    className="block p-4 rounded-lg border border-gray-200 hover:border-[#0C3535]/30 transition-colors"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4 className="font-display font-bold text-sm text-[#0C3535]">{project.name}</h4>
+                        <div className="font-mono text-[10px] text-gray-500 mt-0.5">for {project.client}</div>
+                      </div>
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                        {project.status}
+                      </span>
                     </div>
-                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                      {project.status}
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600">Next: {project.nextMilestone}</span>
-                      <span className="font-mono text-gray-500">{project.nextMilestoneDate}</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">Next: {project.nextMilestone}</span>
+                        <span className="font-mono text-gray-500">{project.nextMilestoneDate}</span>
+                      </div>
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#0C3535] rounded-full"
+                          style={{ width: `${project.progress}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-[#0C3535] rounded-full"
-                        style={{ width: `${project.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
+                  </Link>
+                ))
+              )}
             </div>
           </div>
         </div>

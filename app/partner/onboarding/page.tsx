@@ -572,7 +572,7 @@ export default function PartnerOnboardingPage() {
                       </div>
                     )}
                     <div className="mt-6 border-t border-gray-100 pt-6">
-                      <h3 className="font-display font-bold text-lg text-[#0C3535] mb-3">Kickoff</h3>
+                      <h3 className="font-display font-bold text-lg text-[#0C3535] mb-3">Schedule Meeting</h3>
                       {selectedApi.kickoff_type === "calendly" && selectedApi.kickoff_url && (
                         <Button className="bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90 font-display font-bold" asChild>
                           <a href={normalizeMeetingUrlForHref(selectedApi.kickoff_url)} target="_blank" rel="noopener noreferrer">

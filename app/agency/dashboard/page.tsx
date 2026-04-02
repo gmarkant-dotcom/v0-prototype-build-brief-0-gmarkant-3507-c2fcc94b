@@ -235,7 +235,10 @@ function DashboardContent() {
               partnerCount: bids.length,
               activeRfps: (p.status || '').toLowerCase() === 'open' ? 1 : 0,
               pendingBids,
-              alerts: [],
+              alerts:
+                partnerStatusAlertCount > 0
+                  ? (Array.from({ length: partnerStatusAlertCount }, () => ({})) as ProjectAlert[])
+                  : [],
               progress: 0,
               lastActivity: 'Recently',
               stage:
@@ -282,7 +285,8 @@ function DashboardContent() {
     ? projects.reduce((sum, p) => sum + (p.partnerStatusAlertCount ?? 0), 0)
     : partnerAlertAggregate
   const totalAlerts =
-    projects.reduce((sum, p) => sum + p.alerts.length, 0) + partnerAlertsForStat
+    projects.reduce((sum, p) => sum + p.alerts.length, 0) +
+    (isDemo ? partnerAlertsForStat : 0)
   const totalPartners = projects.reduce((sum, p) => sum + p.partnerCount, 0)
 
   const handleCreateProject = async () => {

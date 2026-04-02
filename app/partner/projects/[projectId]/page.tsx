@@ -253,7 +253,7 @@ function PartnerActiveEngagementInner() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-gray-500">Kickoff</dt>
+                  <dt className="font-mono text-[10px] uppercase text-gray-500">Schedule Meeting</dt>
                   <dd>
                     {data.kickoffUrl ? (
                       <a
