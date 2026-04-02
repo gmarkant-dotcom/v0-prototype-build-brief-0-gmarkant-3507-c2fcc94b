@@ -141,7 +141,7 @@ export async function POST(req: Request) {
       .from("payment_milestones")
       .select("title, amount, currency, due_date, status, notes")
       .eq("agency_id", user.id)
-      .eq("partner_rfp_response_id", response_id)
+      .eq("response_id", response_id)
 
     const { data: partnerProfile } = await supabase
       .from("profiles")

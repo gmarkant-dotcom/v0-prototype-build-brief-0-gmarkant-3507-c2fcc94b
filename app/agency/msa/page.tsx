@@ -33,7 +33,7 @@ type MilestoneRow = {
   id: string
   project_id: string
   partnership_id: string | null
-  partner_rfp_response_id: string | null
+  response_id: string | null
   title: string
   amount: number
   currency: string
@@ -42,6 +42,7 @@ type MilestoneRow = {
   notes: string | null
   paid_at: string | null
   created_at: string
+  updated_at?: string | null
 }
 
 type AwardedScope = {
@@ -138,12 +139,16 @@ export default function AgencyMsaPage() {
       const msaData = await msaRes.json().catch(() => ({}))
       const partData = await partRes.json().catch(() => ({}))
       const milData = await milRes.json().catch(() => ({}))
-      if (!msaRes.ok) throw new Error(msaData.error || "Failed to load MSA data")
-      if (!partRes.ok) throw new Error(partData.error || "Failed to load partnerships")
-      if (!milRes.ok) throw new Error(milData.error || "Failed to load milestones")
-      setAgreements(msaData.agreements || [])
-      setPartnerships((partData.partnerships || []) as PartnershipRow[])
-      setProjectGroups(milData.projects || [])
+
+      if (msaRes.ok) setAgreements(msaData.agreements || [])
+      if (partRes.ok) setPartnerships((partData.partnerships || []) as PartnershipRow[])
+      if (milRes.ok) setProjectGroups(milData.projects || [])
+
+      const errs: string[] = []
+      if (!msaRes.ok) errs.push((msaData as { error?: string }).error || "Failed to load MSA data")
+      if (!partRes.ok) errs.push((partData as { error?: string }).error || "Failed to load partnerships")
+      if (!milRes.ok) errs.push((milData as { error?: string }).error || "Failed to load milestones")
+      if (errs.length > 0) throw new Error(errs.join(" "))
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load")
     } finally {
@@ -257,7 +262,7 @@ export default function AgencyMsaPage() {
           currency: s.currency || "USD",
           due_date: s.due_date.slice(0, 10),
           notes: s.notes || null,
-          partner_rfp_response_id: responseId,
+          response_id: responseId,
           partnership_id: partnershipId,
         }),
       })
@@ -291,7 +296,7 @@ export default function AgencyMsaPage() {
         amount: string
         currency: string
         due_date: string
-        partner_rfp_response_id: string
+        response_id: string
         notes: string
       }
     >
@@ -303,7 +308,7 @@ export default function AgencyMsaPage() {
       amount: "",
       currency: "USD",
       due_date: "",
-      partner_rfp_response_id: "",
+      response_id: "",
       notes: "",
     }
 
@@ -316,7 +321,7 @@ export default function AgencyMsaPage() {
     setAddingMilestone(projectId)
     try {
       const scope =
-        f.partner_rfp_response_id && scopes.find((s) => s.response_id === f.partner_rfp_response_id)
+        f.response_id && scopes.find((s) => s.response_id === f.response_id)
       const res = await fetch("/api/agency/msa/milestones", {
         method: "POST",
         credentials: "same-origin",
@@ -328,7 +333,7 @@ export default function AgencyMsaPage() {
           currency: f.currency || "USD",
           due_date: f.due_date,
           notes: f.notes.trim() || null,
-          partner_rfp_response_id: f.partner_rfp_response_id || null,
+          response_id: f.response_id || null,
           partnership_id: scope?.partnership_id ?? null,
         }),
       })
@@ -341,7 +346,7 @@ export default function AgencyMsaPage() {
           amount: "",
           currency: "USD",
           due_date: "",
-          partner_rfp_response_id: "",
+          response_id: "",
           notes: "",
         },
       }))
@@ -713,11 +718,11 @@ export default function AgencyMsaPage() {
                               />
                               <select
                                 className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
-                                value={f.partner_rfp_response_id}
+                                value={f.response_id}
                                 onChange={(e) =>
                                   setNewMilestone((prev) => ({
                                     ...prev,
-                                    [g.project_id]: { ...f, partner_rfp_response_id: e.target.value },
+                                    [g.project_id]: { ...f, response_id: e.target.value },
                                   }))
                                 }
                               >

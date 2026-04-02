@@ -48,11 +48,25 @@ export async function GET() {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // Auth user id must match projects.agency_id under RLS (same JWT as createClient).
     const { data: projectRows, error: projErr } = await supabase
       .from("projects")
       .select("*")
       .eq("agency_id", user.id)
       .order("created_at", { ascending: false })
+
+    // Temporary debug: raw PostgREST outcome for projects (dev or MSA_DEBUG_PROJECTS=1).
+    if (process.env.NODE_ENV === "development" || process.env.MSA_DEBUG_PROJECTS === "1") {
+      console.log("[api/agency/msa/milestones] DEBUG projects query raw", {
+        authUserId: user.id,
+        error: projErr
+          ? { message: projErr.message, code: projErr.code, details: projErr.details, hint: projErr.hint }
+          : null,
+        data: projectRows,
+        dataRowCount: projectRows?.length ?? 0,
+        sampleRowsAgencyId: (projectRows || []).slice(0, 3).map((p) => (p as { agency_id?: string }).agency_id),
+      })
+    }
 
     if (projErr) {
       console.error("[api/agency/msa/milestones] projects query failed", {
@@ -65,28 +79,33 @@ export async function GET() {
     }
 
     const projects = projectRows || []
-    const projectIds = projects.map((p) => p.id as string)
+    const agencyProjectIds = projects.map((p) => p.id as string)
 
-    const { data: milestoneRows, error: milErr } = await supabase
-      .from("payment_milestones")
-      .select(
-        "id, project_id, partnership_id, partner_rfp_response_id, title, amount, currency, due_date, status, notes, paid_at, created_at"
-      )
-      .eq("agency_id", user.id)
-      .order("due_date", { ascending: true })
+    let milestoneRows: Record<string, unknown>[] = []
 
-    if (milErr) {
-      console.error("[api/agency/msa/milestones] payment_milestones query failed", {
-        message: milErr.message,
-        code: milErr.code,
-        details: milErr.details,
-        hint: milErr.hint,
-      })
-      return NextResponse.json({ error: "Failed to load milestones" }, { status: 500, headers: noStore })
+    if (agencyProjectIds.length > 0) {
+      const { data, error: milErr } = await supabase
+        .from("payment_milestones")
+        .select(
+          "id, project_id, partnership_id, response_id, title, amount, currency, due_date, status, notes, paid_at, created_at, updated_at"
+        )
+        .in("project_id", agencyProjectIds)
+        .order("due_date", { ascending: true })
+      if (milErr) {
+        console.error("[api/agency/msa/milestones] payment_milestones query failed (continuing with empty milestones)", {
+          message: milErr.message,
+          code: milErr.code,
+          details: milErr.details,
+          hint: milErr.hint,
+        })
+        milestoneRows = []
+      } else {
+        milestoneRows = (data ?? []) as Record<string, unknown>[]
+      }
     }
 
-    const milestonesByProject = new Map<string, typeof milestoneRows>()
-    for (const m of milestoneRows || []) {
+    const milestonesByProject = new Map<string, Record<string, unknown>[]>()
+    for (const m of milestoneRows) {
       const pid = m.project_id as string
       const arr = milestonesByProject.get(pid) || []
       arr.push(m)
@@ -102,7 +121,7 @@ export async function GET() {
       partner_display_name: string
     }> = []
 
-    if (projectIds.length > 0) {
+    if (agencyProjectIds.length > 0) {
       const { data: respRows, error: respErr } = await supabase
         .from("partner_rfp_responses")
         .select("id, partner_display_name, inbox_item_id")
@@ -160,7 +179,7 @@ export async function GET() {
       for (const r of respRows || []) {
         const ib = inboxById.get(r.inbox_item_id as string)
         const project_id = ib?.project_id ?? null
-        if (!project_id || !projectIds.includes(project_id)) continue
+        if (!project_id || !agencyProjectIds.includes(project_id)) continue
         awardedScopes.push({
           response_id: r.id as string,
           project_id,
@@ -209,7 +228,7 @@ export async function GET() {
           id: m.id as string,
           project_id: m.project_id as string,
           partnership_id: (m.partnership_id as string | null) ?? null,
-          partner_rfp_response_id: (m.partner_rfp_response_id as string | null) ?? null,
+          response_id: (m.response_id as string | null) ?? null,
           title: m.title as string,
           amount: Number(m.amount),
           currency: (m.currency as string) || "USD",
@@ -218,6 +237,7 @@ export async function GET() {
           notes: (m.notes as string | null) ?? null,
           paid_at: (m.paid_at as string | null) ?? null,
           created_at: m.created_at as string,
+          updated_at: (m.updated_at as string | null) ?? null,
         })),
         awarded_scopes: scopesByProject.get(pid) || [],
       }
@@ -253,10 +273,13 @@ export async function POST(req: Request) {
       body.partnership_id != null && String(body.partnership_id).trim() !== ""
         ? String(body.partnership_id).trim()
         : null
-    const partner_rfp_response_id =
-      body.partner_rfp_response_id != null && String(body.partner_rfp_response_id).trim() !== ""
+    const response_id =
+      (body.response_id != null && String(body.response_id).trim() !== ""
+        ? String(body.response_id).trim()
+        : null) ||
+      (body.partner_rfp_response_id != null && String(body.partner_rfp_response_id).trim() !== ""
         ? String(body.partner_rfp_response_id).trim()
-        : null
+        : null)
 
     if (!project_id || !title || due_date == null || due_date === "") {
       return NextResponse.json(
@@ -273,11 +296,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
     }
 
-    if (partner_rfp_response_id) {
+    if (response_id) {
       const { data: resp, error: rErr } = await supabase
         .from("partner_rfp_responses")
         .select("id, inbox_item_id")
-        .eq("id", partner_rfp_response_id)
+        .eq("id", response_id)
         .eq("agency_id", user.id)
         .eq("status", "awarded")
         .maybeSingle()
@@ -309,7 +332,6 @@ export async function POST(req: Request) {
     const { data: row, error } = await supabase
       .from("payment_milestones")
       .insert({
-        agency_id: user.id,
         project_id,
         title,
         amount: amt,
@@ -318,7 +340,7 @@ export async function POST(req: Request) {
         status: "pending",
         notes: notes || null,
         partnership_id,
-        partner_rfp_response_id,
+        response_id,
       })
       .select()
       .single()
@@ -351,11 +373,24 @@ export async function PATCH(req: Request) {
     const id = (body.id as string | undefined)?.trim()
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400, headers: noStore })
 
+    const { data: agencyProjectRows, error: apErr } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("agency_id", user.id)
+    if (apErr) {
+      console.error("[api/agency/msa/milestones] PATCH agency projects", apErr)
+      return NextResponse.json({ error: "Failed to verify projects" }, { status: 500, headers: noStore })
+    }
+    const agencyProjectIds = (agencyProjectRows || []).map((p) => p.id as string)
+    if (agencyProjectIds.length === 0) {
+      return NextResponse.json({ error: "Milestone not found" }, { status: 404, headers: noStore })
+    }
+
     const { data: existing, error: exErr } = await supabase
       .from("payment_milestones")
       .select("id")
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .in("project_id", agencyProjectIds)
       .maybeSingle()
     if (exErr || !existing) {
       return NextResponse.json({ error: "Milestone not found" }, { status: 404, headers: noStore })
@@ -391,7 +426,7 @@ export async function PATCH(req: Request) {
       .from("payment_milestones")
       .update(updates)
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .in("project_id", agencyProjectIds)
       .select()
       .single()
 

@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS public.payment_milestones (
   agency_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   partnership_id UUID REFERENCES public.partnerships(id) ON DELETE SET NULL,
-  partner_rfp_response_id UUID REFERENCES public.partner_rfp_responses(id) ON DELETE SET NULL,
+  response_id UUID REFERENCES public.partner_rfp_responses(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   amount NUMERIC(14, 2) NOT NULL,
   currency TEXT NOT NULL DEFAULT 'USD',
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS public.payment_milestones (
 
 CREATE INDEX IF NOT EXISTS idx_payment_milestones_agency ON public.payment_milestones(agency_id);
 CREATE INDEX IF NOT EXISTS idx_payment_milestones_project ON public.payment_milestones(project_id);
-CREATE INDEX IF NOT EXISTS idx_payment_milestones_response ON public.payment_milestones(partner_rfp_response_id);
+CREATE INDEX IF NOT EXISTS idx_payment_milestones_response ON public.payment_milestones(response_id);
 
 ALTER TABLE public.payment_milestones ENABLE ROW LEVEL SECURITY;
 

@@ -40,8 +40,8 @@ export async function GET(request: NextRequest) {
     let partnerships
     
     if (profile?.role === 'agency') {
-      // Agency sees partners they've invited
-      const { data, error } = await supabase
+      // Agency sees rows where they are agency_id (not partner_id).
+      const rich = await supabase
         .from('partnerships')
         .select(`
           *,
@@ -52,8 +52,26 @@ export async function GET(request: NextRequest) {
         .eq('agency_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (error) throw error
-      partnerships = data
+      if (!rich.error && rich.data) {
+        partnerships = rich.data
+      } else {
+        if (rich.error) {
+          console.error('[api] GET /partnerships agency branch embed failed, falling back to plain select', {
+            userId: user.id,
+            message: rich.error.message,
+            code: rich.error.code,
+            details: rich.error.details,
+            hint: rich.error.hint,
+          })
+        }
+        const simple = await supabase
+          .from('partnerships')
+          .select('*')
+          .eq('agency_id', user.id)
+          .order('created_at', { ascending: false })
+        if (simple.error) throw simple.error
+        partnerships = simple.data
+      }
     } else {
       // Partner sees agencies that invited them (by partner_id OR by email)
       // First get the partner's email from their profile
