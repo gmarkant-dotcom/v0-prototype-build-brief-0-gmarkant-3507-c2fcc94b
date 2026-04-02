@@ -17,14 +17,35 @@ function parseBudget(raw: unknown): { amount: number; currency: string } | null 
   return { amount: Number(o.amount), currency }
 }
 
+/** Parse projects.budget_range: strip $, commas, whitespace; parseFloat. Numbers pass through. */
+function parseClientBudget(raw: unknown): number | null {
+  if (raw == null) return null
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw
+  if (typeof raw !== "string") return null
+  const s = raw.replace(/[$,\s]/g, "").trim()
+  if (!s) return null
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? n : null
+}
+
 function unwrapInbox(
-  embed: { project_id?: string | null; scope_item_name?: string | null; estimated_budget?: string | null } | null | undefined | unknown[]
+  embed:
+    | {
+        project_id?: string | null
+        partnership_id?: string | null
+        scope_item_name?: string | null
+        estimated_budget?: string | null
+      }
+    | null
+    | undefined
+    | unknown[]
 ) {
   if (!embed) return null
   const row = Array.isArray(embed) ? embed[0] : embed
   if (!row || typeof row !== "object") return null
   return row as {
     project_id?: string | null
+    partnership_id?: string | null
     scope_item_name?: string | null
     estimated_budget?: string | null
   }
@@ -57,6 +78,7 @@ export async function GET() {
         budget_proposal,
         partner_rfp_inbox (
           project_id,
+          partnership_id,
           scope_item_name,
           estimated_budget
         )
@@ -78,11 +100,12 @@ export async function GET() {
       if (pid) projectIds.add(String(pid))
     }
 
-    let projectMeta = new Map<string, { name: string; client_name: string | null }>()
+    type ProjectMeta = { name: string; client_name: string | null; client_budget: number | null }
+    let projectMeta = new Map<string, ProjectMeta>()
     if (projectIds.size > 0) {
       const { data: projects, error: projErr } = await supabase
         .from("projects")
-        .select("id, name, client_name")
+        .select("id, name, client_name, budget_range")
         .eq("agency_id", user.id)
         .in("id", [...projectIds])
 
@@ -94,10 +117,40 @@ export async function GET() {
         const id = p.id as string
         const name = ((p as { name?: string | null }).name || "").trim() || "Untitled project"
         const client_name = ((p as { client_name?: string | null }).client_name ?? null) as string | null
-        projectMeta.set(id, { name, client_name })
+        const client_budget = parseClientBudget((p as { budget_range?: unknown }).budget_range)
+        projectMeta.set(id, { name, client_name, client_budget })
       }
     }
 
+    const pairKeys = new Set<string>()
+    for (const r of rows) {
+      const inbox = unwrapInbox(r.partner_rfp_inbox as Parameters<typeof unwrapInbox>[0])
+      if (!inbox?.project_id || !inbox.partnership_id) continue
+      const projectId = String(inbox.project_id)
+      if (!projectMeta.has(projectId)) continue
+      pairKeys.add(`${projectId}:${String(inbox.partnership_id)}`)
+    }
+
+    const assignmentByPair = new Map<string, string>()
+    if (pairKeys.size > 0 && projectIds.size > 0) {
+      const { data: asgRows, error: asgErr } = await supabase
+        .from("project_assignments")
+        .select("id, project_id, partnership_id, status")
+        .in("project_id", [...projectIds])
+        .eq("status", "awarded")
+
+      if (asgErr) {
+        console.error("[api/agency/utilization] assignments", asgErr)
+      } else {
+        for (const a of asgRows || []) {
+          const pid = a.project_id as string
+          const pship = a.partnership_id as string
+          assignmentByPair.set(`${pid}:${pship}`, a.id as string)
+        }
+      }
+    }
+
+    const assignmentIdsForStatus = new Set<string>()
     type ScopeOut = {
       response_id: string
       scope_item_name: string
@@ -105,18 +158,8 @@ export async function GET() {
       awarded_amount: number | null
       currency: string
       variance: number | null
-    }
-
-    type ProjectOut = {
-      project_id: string
-      project_name: string
-      client_name: string | null
-      scopes: ScopeOut[]
-      total_estimated: number
-      total_awarded: number
-      total_variance: number
-      currency: string
-      mixed_currency: boolean
+      project_assignment_id: string | null
+      partner_completion_pct: number | null
     }
 
     const byProject = new Map<string, ScopeOut[]>()
@@ -127,10 +170,15 @@ export async function GET() {
       const projectId = String(inbox.project_id)
       if (!projectMeta.has(projectId)) continue
 
+      const partnershipId = inbox.partnership_id != null ? String(inbox.partnership_id) : null
+      const project_assignment_id =
+        partnershipId != null ? assignmentByPair.get(`${projectId}:${partnershipId}`) ?? null : null
+      if (project_assignment_id) assignmentIdsForStatus.add(project_assignment_id)
+
       const est = parseBudget(inbox.estimated_budget)
       const awd = parseBudget((r as { budget_proposal?: unknown }).budget_proposal)
 
-      let currency = awd?.currency ?? est?.currency ?? "USD"
+      const currency = awd?.currency ?? est?.currency ?? "USD"
       const estimated_amount = est?.amount ?? null
       const awarded_amount = awd?.amount ?? null
 
@@ -146,11 +194,58 @@ export async function GET() {
         awarded_amount,
         currency,
         variance,
+        project_assignment_id,
+        partner_completion_pct: null,
       }
 
       const list = byProject.get(projectId) || []
       list.push(scope)
       byProject.set(projectId, list)
+    }
+
+    const latestCompletionByAssignment = new Map<string, number | null>()
+    if (assignmentIdsForStatus.size > 0) {
+      const { data: statusRows, error: stErr } = await supabase
+        .from("partner_status_updates")
+        .select("project_assignment_id, completion_pct, created_at")
+        .in("project_assignment_id", [...assignmentIdsForStatus])
+        .order("created_at", { ascending: false })
+
+      if (stErr) {
+        console.error("[api/agency/utilization] partner_status_updates", stErr)
+      } else {
+        for (const row of statusRows || []) {
+          const aid = row.project_assignment_id as string
+          if (!latestCompletionByAssignment.has(aid)) {
+            const pct = row.completion_pct
+            latestCompletionByAssignment.set(
+              aid,
+              typeof pct === "number" && Number.isFinite(pct) ? Math.round(pct) : null
+            )
+          }
+        }
+      }
+    }
+
+    for (const [, scopes] of byProject) {
+      for (const s of scopes) {
+        if (s.project_assignment_id) {
+          s.partner_completion_pct = latestCompletionByAssignment.has(s.project_assignment_id)
+            ? (latestCompletionByAssignment.get(s.project_assignment_id) ?? null)
+            : null
+        }
+      }
+    }
+
+    type ProjectOut = {
+      project_id: string
+      project_name: string
+      client_name: string | null
+      client_budget: number | null
+      scopes: ScopeOut[]
+      total_awarded: number
+      currency: string
+      mixed_currency: boolean
     }
 
     const projects: ProjectOut[] = []
@@ -163,18 +258,15 @@ export async function GET() {
       const mixed_currency = currencies.size > 1
       const currency = mixed_currency ? "MIXED" : scopes[0]?.currency ?? "USD"
 
-      const total_estimated = scopes.reduce((sum, s) => sum + (s.estimated_amount ?? 0), 0)
       const total_awarded = scopes.reduce((sum, s) => sum + (s.awarded_amount ?? 0), 0)
-      const total_variance = total_estimated - total_awarded
 
       projects.push({
         project_id: projectId,
         project_name: meta.name,
         client_name: meta.client_name,
+        client_budget: meta.client_budget,
         scopes,
-        total_estimated,
         total_awarded,
-        total_variance,
         currency,
         mixed_currency,
       })
@@ -182,12 +274,11 @@ export async function GET() {
 
     projects.sort((a, b) => a.project_name.localeCompare(b.project_name))
 
-    const currencyBuckets = new Map<string, { total_estimated: number; total_awarded: number }>()
+    const currencyBuckets = new Map<string, { total_awarded: number }>()
     for (const p of projects) {
       for (const s of p.scopes) {
         const cur = s.currency
-        const b = currencyBuckets.get(cur) || { total_estimated: 0, total_awarded: 0 }
-        if (s.estimated_amount != null) b.total_estimated += s.estimated_amount
+        const b = currencyBuckets.get(cur) || { total_awarded: 0 }
         if (s.awarded_amount != null) b.total_awarded += s.awarded_amount
         currencyBuckets.set(cur, b)
       }
@@ -196,23 +287,36 @@ export async function GET() {
     const by_currency = [...currencyBuckets.entries()]
       .map(([currency, v]) => ({
         currency,
-        total_estimated: v.total_estimated,
         total_awarded: v.total_awarded,
-        total_remaining: v.total_estimated - v.total_awarded,
       }))
       .sort((a, b) => a.currency.localeCompare(b.currency))
 
     const mixed_currencies = currencyBuckets.size > 1
     const primary = by_currency[0]
-    const hasData = by_currency.length > 0
+    const hasAwardData = by_currency.length > 0
+
+    let total_client_budget: number | null = null
+    let sumCb = 0
+    let anyCb = false
+    for (const p of projects) {
+      if (p.client_budget != null) {
+        sumCb += p.client_budget
+        anyCb = true
+      }
+    }
+    if (anyCb) total_client_budget = sumCb
+
+    const total_awarded_all = projects.reduce((s, p) => s + p.total_awarded, 0)
+
     const summary = {
-      total_estimated:
-        !hasData ? null : mixed_currencies ? null : primary?.total_estimated ?? null,
-      total_awarded: !hasData ? null : mixed_currencies ? null : primary?.total_awarded ?? null,
-      total_remaining:
-        !hasData ? null : mixed_currencies ? null : (primary?.total_estimated ?? 0) - (primary?.total_awarded ?? 0),
-      currency: !hasData ? null : mixed_currencies ? null : primary?.currency ?? null,
-      mixed_currencies: hasData && mixed_currencies,
+      total_client_budget,
+      total_awarded:
+        !hasAwardData ? null : mixed_currencies ? null : primary?.total_awarded ?? null,
+      total_awarded_all,
+      total_margin:
+        total_client_budget == null ? null : total_client_budget - total_awarded_all,
+      currency: !hasAwardData ? null : mixed_currencies ? null : primary?.currency ?? null,
+      mixed_currencies: hasAwardData && mixed_currencies,
       by_currency,
     }
 
