@@ -26,6 +26,25 @@ function parseClientBudget(raw: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/** Active engagement: project has no end_date or end_date is today or later (UTC date). */
+function projectActiveByEndDate(endDate: string | null | undefined): boolean {
+  if (endDate == null || String(endDate).trim() === '') return true
+  const d = new Date(endDate)
+  if (!Number.isFinite(d.getTime())) return true
+  const end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  const now = new Date()
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  return end >= today
+}
+
+function inboxEmbedProjectId(raw: unknown): string | null {
+  if (!raw) return null
+  const ib = Array.isArray(raw) ? raw[0] : raw
+  if (!ib || typeof ib !== 'object') return null
+  const pid = (ib as { project_id?: string | null }).project_id
+  return pid ? String(pid) : null
+}
+
 const noStoreHeaders = {
   'Cache-Control': 'private, no-store, no-cache, must-revalidate',
 } as const
@@ -266,40 +285,42 @@ export async function GET(request: NextRequest) {
 
       let total_awarded_engagements = 0
       let total_active_engagements = 0
-      if (agencyProjectIds.length > 0) {
-        const { data: awRows, error: awErr } = await supabase
-          .from('project_assignments')
-          .select('id')
-          .in('project_id', agencyProjectIds)
-          .eq('status', 'awarded')
+      const agencyProjectIdSet = new Set(agencyProjectIds)
+      const { data: engagementRespRows, error: engErr } = await supabase
+        .from('partner_rfp_responses')
+        .select('partner_rfp_inbox(project_id)')
+        .eq('agency_id', user.id)
+        .eq('status', 'awarded')
 
-        if (awErr) {
-          logSupabaseError('agency GET awarded assignments for dashboard stats', awErr)
-        } else {
-          const awardedIds = (awRows || []).map((r) => r.id as string).filter(Boolean)
-          total_awarded_engagements = awardedIds.length
-          if (awardedIds.length > 0) {
-            const { data: stRows, error: stErr } = await supabase
-              .from('partner_status_updates')
-              .select('project_assignment_id, status, created_at')
-              .in('project_assignment_id', awardedIds)
-              .order('created_at', { ascending: false })
+      if (engErr) {
+        logSupabaseError('agency GET awarded partner_rfp_responses for engagement stats', engErr)
+      } else {
+        const projectIdPerResponse: string[] = []
+        for (const r of engagementRespRows || []) {
+          const pid = inboxEmbedProjectId((r as { partner_rfp_inbox?: unknown }).partner_rfp_inbox)
+          if (!pid || !agencyProjectIdSet.has(pid)) continue
+          projectIdPerResponse.push(pid)
+          total_awarded_engagements++
+        }
 
-            if (stErr) {
-              logSupabaseError('agency GET partner_status_updates for dashboard stats', stErr)
-              total_active_engagements = awardedIds.length
-            } else {
-              const latestByAssignment = new Map<string, string>()
-              for (const row of stRows || []) {
-                const aid = row.project_assignment_id as string
-                if (!latestByAssignment.has(aid)) {
-                  latestByAssignment.set(aid, String(row.status || ''))
-                }
-              }
-              for (const aid of awardedIds) {
-                const st = latestByAssignment.get(aid)
-                if (!st || st !== 'complete') total_active_engagements++
-              }
+        const uniqueForDates = [...new Set(projectIdPerResponse)]
+        if (uniqueForDates.length > 0) {
+          const { data: projRows, error: peErr } = await supabase
+            .from('projects')
+            .select('id, end_date')
+            .eq('agency_id', user.id)
+            .in('id', uniqueForDates)
+
+          const endDateByProject = new Map<string, string | null>()
+          if (peErr) {
+            logSupabaseError('agency GET projects end_date for engagement stats', peErr)
+            total_active_engagements = total_awarded_engagements
+          } else {
+            for (const pr of projRows || []) {
+              endDateByProject.set(String(pr.id), (pr.end_date as string | null) ?? null)
+            }
+            for (const pid of projectIdPerResponse) {
+              if (projectActiveByEndDate(endDateByProject.get(pid))) total_active_engagements++
             }
           }
         }
