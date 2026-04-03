@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { useSelectedProjectSafe } from "@/contexts/selected-project-context"
@@ -726,6 +727,15 @@ export default function PartnerPoolPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {!isDemo && (item as Partnership).partnerId && (
+                      <Link
+                        href={`/agency/pool/${encodeURIComponent((item as Partnership).partnerId)}`}
+                        className="inline-flex items-center gap-1 font-mono text-[10px] text-accent hover:underline px-2 py-1 rounded-md border border-accent/30 hover:bg-accent/10"
+                      >
+                        View profile
+                        <ChevronRight className="w-3 h-3" />
+                      </Link>
+                    )}
                     {!isDemo && !(item as Partnership).ndaConfirmedAt && (
                       <Button
                         size="sm"

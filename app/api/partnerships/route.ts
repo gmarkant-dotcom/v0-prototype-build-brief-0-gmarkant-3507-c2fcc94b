@@ -169,11 +169,14 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      // Attach agency data to each partnership
-      partnerships = allPartnerships.map(p => ({
-        ...p,
-        agency: agencyProfiles[p.agency_id] || null
-      }))
+      // Attach agency data; strip private lead-agency notes (never exposed to partners).
+      partnerships = allPartnerships.map((p) => {
+        const { partnership_notes: _omitNotes, ...rest } = p as Record<string, unknown>
+        return {
+          ...rest,
+          agency: agencyProfiles[p.agency_id as string] || null,
+        }
+      })
     }
 
     console.log('[api] success', {
