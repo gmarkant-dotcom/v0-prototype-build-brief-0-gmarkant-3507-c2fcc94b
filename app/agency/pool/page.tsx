@@ -116,6 +116,15 @@ function parseBioTags(bio: string | null | undefined): string[] {
     .filter(Boolean)
 }
 
+/** Split profile `agency_type` when it lists multiple specialties (comma or semicolon). */
+function splitAgencyTypeValues(value: string | null | undefined): string[] {
+  if (!value?.trim()) return []
+  return value
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 function agencyTypeMatchesFilter(selectedType: string, agencyType: string | null | undefined): boolean {
   if (selectedType === "All") return true
   const at = (agencyType || "").trim().toLowerCase()
@@ -268,9 +277,6 @@ export default function PartnerPoolPage() {
     }
     return []
   })
-  
-  // Combined disciplines for filtering
-  const allFilterDisciplines = ["All", ...disciplines.filter(d => d !== "All"), ...customDisciplines]
   
   // Success notification state
   const [successModal, setSuccessModal] = useState<{
@@ -903,6 +909,33 @@ export default function PartnerPoolPage() {
     [filteredNetworkRows],
   )
 
+  const dynamicDisciplineFilters = useMemo(() => {
+    const seen = new Map<string, string>()
+    const add = (raw: string) => {
+      const t = raw.trim()
+      if (!t) return
+      const k = t.toLowerCase()
+      if (!seen.has(k)) seen.set(k, t)
+    }
+
+    if (isDemo) {
+      for (const p of partners) {
+        for (const part of splitAgencyTypeValues(p.discipline)) add(part)
+        for (const tag of p.tags || []) add(tag)
+      }
+    } else {
+      for (const p of partnerships) {
+        for (const part of splitAgencyTypeValues(p.partnerAgencyType)) add(part)
+        for (const tag of parseBioTags(p.partnerBio)) add(tag)
+      }
+    }
+
+    const sorted = [...seen.values()].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" }),
+    )
+    return ["All", ...sorted]
+  }, [isDemo, partners, partnerships])
+
   const totalFilteredMatches = filteredNetworkRows.length + filteredPartners.length
   const hasNetworkSource = allNetworkRows.length > 0
 
@@ -1067,7 +1100,7 @@ export default function PartnerPoolPage() {
           {/* Discipline Filter */}
           <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
             <span className="font-mono text-[10px] text-foreground-muted mr-2">Discipline:</span>
-            {allFilterDisciplines.map((discipline) => (
+            {dynamicDisciplineFilters.map((discipline) => (
               <button
                 key={discipline}
                 onClick={() => setSelectedDiscipline(discipline)}
