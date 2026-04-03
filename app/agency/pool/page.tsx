@@ -108,14 +108,6 @@ function isPartnershipNotesBlacklisted(notes: unknown): boolean {
 
 const NEW_PARTNERSHIP_DAYS = 30
 
-function parseBioTags(bio: string | null | undefined): string[] {
-  if (!bio?.trim()) return []
-  return bio
-    .split(/[,;#\n]+/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-}
-
 /** Split profile `agency_type` when it lists multiple specialties (comma or semicolon). */
 function splitAgencyTypeValues(value: string | null | undefined): string[] {
   if (!value?.trim()) return []
@@ -146,14 +138,8 @@ function disciplineMatches(
   if (selectedDiscipline === "All") return true
   const needle = selectedDiscipline.trim().toLowerCase()
   if (!needle) return true
-  const at = (agencyType || "").trim().toLowerCase()
-  if (at && (at === needle || at.includes(needle) || needle.includes(at))) return true
-  for (const t of parseBioTags(bio)) {
-    const x = t.toLowerCase()
-    if (x === needle || x.includes(needle) || needle.includes(x)) return true
-  }
-  for (const t of extraTags) {
-    const x = t.toLowerCase()
+  for (const token of splitAgencyTypeValues(agencyType)) {
+    const x = token.toLowerCase()
     if (x === needle || x.includes(needle) || needle.includes(x)) return true
   }
   return false
@@ -837,8 +823,7 @@ export default function PartnerPoolPage() {
         if (!agencyTypeMatchesFilter(selectedType, at)) return false
         if (!demoInvitationMatchesStatus(inv, partner, selectedStatus)) return false
         if (!demoInvitationMatchesLegal(partner, selectedLegal)) return false
-        const tagSource = partner ? [...partner.tags, partner.discipline] : []
-        if (!disciplineMatches(selectedDiscipline, at, partner?.experience ?? null, tagSource)) return false
+        if (!disciplineMatches(selectedDiscipline, partner?.discipline ?? null, null, [])) return false
         return true
       }
       const p = row.p
@@ -852,7 +837,7 @@ export default function PartnerPoolPage() {
       if (!agencyTypeMatchesFilter(selectedType, p.partnerAgencyType)) return false
       if (!partnershipMatchesStatusFilter(p, selectedStatus)) return false
       if (!partnershipMatchesLegalFilter(p, selectedLegal)) return false
-      if (!disciplineMatches(selectedDiscipline, p.partnerAgencyType, p.partnerBio, [])) return false
+      if (!disciplineMatches(selectedDiscipline, p.partnerAgencyType, null, [])) return false
       return true
     })
   }, [
@@ -886,7 +871,7 @@ export default function PartnerPoolPage() {
       if (selectedLegal === "MSA Approved" && !p.msaApproved) return false
       if (selectedLegal === "No NDA" && p.ndaSigned) return false
       if (selectedLegal === "No MSA" && p.msaApproved) return false
-      if (!disciplineMatches(selectedDiscipline, typeLabel, p.experience, [...p.tags])) return false
+      if (!disciplineMatches(selectedDiscipline, p.discipline, null, [])) return false
       if (showBookmarkedOnly && !p.bookmarked) return false
       return true
     })
@@ -921,12 +906,10 @@ export default function PartnerPoolPage() {
     if (isDemo) {
       for (const p of partners) {
         for (const part of splitAgencyTypeValues(p.discipline)) add(part)
-        for (const tag of p.tags || []) add(tag)
       }
     } else {
       for (const p of partnerships) {
         for (const part of splitAgencyTypeValues(p.partnerAgencyType)) add(part)
-        for (const tag of parseBioTags(p.partnerBio)) add(tag)
       }
     }
 
