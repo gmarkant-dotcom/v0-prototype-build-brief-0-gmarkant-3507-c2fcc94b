@@ -70,8 +70,6 @@ function websiteHref(url: string | null | undefined): string | null {
 type PartnershipNotesShape = {
   notes?: string
   overall_rating?: number | null
-  strengths?: string
-  areas_for_improvement?: string
   would_work_again?: boolean | null
   blacklisted?: boolean
 }
@@ -176,8 +174,6 @@ export default function AgencyPartnerProfilePage() {
         body: JSON.stringify({
           notes: notesState.notes ?? "",
           overall_rating: notesState.overall_rating ?? null,
-          strengths: notesState.strengths ?? "",
-          areas_for_improvement: notesState.areas_for_improvement ?? "",
           would_work_again: notesState.would_work_again ?? null,
           blacklisted: notesState.blacklisted ?? false,
         }),
@@ -481,29 +477,6 @@ export default function AgencyPartnerProfilePage() {
                     />
                   </button>
                 ))}
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <Label className="font-mono text-[10px] text-foreground-muted uppercase">Strengths</Label>
-                <Textarea
-                  value={notesState.strengths ?? ""}
-                  onChange={(e) => setNotesState((s) => ({ ...s, strengths: e.target.value }))}
-                  rows={3}
-                  className="mt-1.5 bg-white/5 border-border text-foreground"
-                />
-              </div>
-              <div>
-                <Label className="font-mono text-[10px] text-foreground-muted uppercase">
-                  Areas for improvement
-                </Label>
-                <Textarea
-                  value={notesState.areas_for_improvement ?? ""}
-                  onChange={(e) => setNotesState((s) => ({ ...s, areas_for_improvement: e.target.value }))}
-                  rows={3}
-                  className="mt-1.5 bg-white/5 border-border text-foreground"
-                />
               </div>
             </div>
 

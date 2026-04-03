@@ -12,8 +12,6 @@ const noStore = {
 type PartnershipNotesShape = {
   notes?: string
   overall_rating?: number | null
-  strengths?: string
-  areas_for_improvement?: string
   would_work_again?: boolean | null
   blacklisted?: boolean
 }
@@ -30,9 +28,6 @@ function mergeNotes(base: PartnershipNotesShape, patch: PartnershipNotesShape): 
     notes: patch.notes !== undefined ? patch.notes : base.notes,
     overall_rating:
       patch.overall_rating !== undefined ? patch.overall_rating : base.overall_rating,
-    strengths: patch.strengths !== undefined ? patch.strengths : base.strengths,
-    areas_for_improvement:
-      patch.areas_for_improvement !== undefined ? patch.areas_for_improvement : base.areas_for_improvement,
     would_work_again:
       patch.would_work_again !== undefined ? patch.would_work_again : base.would_work_again,
     blacklisted: patch.blacklisted !== undefined ? patch.blacklisted : base.blacklisted,
@@ -123,8 +118,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
     const patch: PartnershipNotesShape = {}
 
     if (body.notes !== undefined) patch.notes = String(body.notes)
-    if (body.strengths !== undefined) patch.strengths = String(body.strengths)
-    if (body.areas_for_improvement !== undefined) patch.areas_for_improvement = String(body.areas_for_improvement)
 
     if (body.overall_rating !== undefined && body.overall_rating !== null) {
       const n = Number(body.overall_rating)

@@ -31,6 +31,8 @@ type Partnership = {
   ndaConfirmedAt?: string | null
   ndaConfirmedBy?: string | null
   invitationMessage?: string
+  /** Agency-private JSON from DB; used for blacklisted flag in pool stats */
+  partnership_notes?: unknown
 }
 
 // Legacy Partner invitation type (for backward compatibility)
@@ -78,6 +80,23 @@ const demoInvitations: PartnerInvitation[] = [
   },
 ]
 
+function isPartnershipNotesBlacklisted(notes: unknown): boolean {
+  if (notes == null) return false
+  if (typeof notes === "string") {
+    try {
+      const o = JSON.parse(notes) as { blacklisted?: unknown }
+      return o?.blacklisted === true || String(o?.blacklisted) === "true"
+    } catch {
+      return false
+    }
+  }
+  if (typeof notes === "object" && !Array.isArray(notes)) {
+    const b = (notes as { blacklisted?: unknown }).blacklisted
+    return b === true || String(b) === "true"
+  }
+  return false
+}
+
 const legalFilters = ["All", "NDA Signed", "MSA Approved", "No NDA", "No MSA"]
 const statusFilters = ["All", "Active", "Pending", "New", "Blacklisted"]
 const types = partnerTypes
@@ -102,6 +121,7 @@ export default function PartnerPoolPage() {
   
   // Partnerships state (new closed ecosystem)
   const [partnerships, setPartnerships] = useState<Partnership[]>([])
+  const [partnersWithActiveEngagements, setPartnersWithActiveEngagements] = useState(0)
   
   // Invitation state
   const [invitations, setInvitations] = useState<PartnerInvitation[]>([])
@@ -168,24 +188,48 @@ export default function PartnerPoolPage() {
     }
     setIsLoaded(true)
   }, [isDemo])
+
+  useEffect(() => {
+    if (isDemo || !isLoaded) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/agency/utilization")
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        const n = (data.summary as { partners_with_active_engagements?: number } | undefined)
+          ?.partners_with_active_engagements
+        if (!cancelled) {
+          setPartnersWithActiveEngagements(Number.isFinite(Number(n)) ? Number(n) : 0)
+        }
+      } catch {
+        if (!cancelled) setPartnersWithActiveEngagements(0)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo, isLoaded])
   
   const loadPartnerships = async () => {
     try {
       const response = await fetch('/api/partnerships')
       if (response.ok) {
         const data = await response.json().catch(() => ({}))
-        const loaded: Partnership[] = (data.partnerships || []).map((p: any) => ({
-          id: p.id,
-          partnerId: p.partner?.id || p.partner_id,
-          partnerEmail: p.partner?.email || p.partner_email, // Use partner_email for email-only invitations
-          partnerName: p.partner?.full_name,
-          partnerCompany: p.partner?.company_name,
-          status: p.status,
-          invitedAt: p.invited_at || p.created_at,
-          acceptedAt: p.accepted_at,
-          ndaConfirmedAt: p.nda_confirmed_at || null,
-          ndaConfirmedBy: p.nda_confirmed_by || null,
-          invitationMessage: p.invitation_message,
+        const loaded: Partnership[] = (data.partnerships || []).map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          partnerId: (p.partner as { id?: string } | undefined)?.id || (p.partner_id as string),
+          partnerEmail:
+            (p.partner as { email?: string } | undefined)?.email || (p.partner_email as string),
+          partnerName: (p.partner as { full_name?: string } | undefined)?.full_name,
+          partnerCompany: (p.partner as { company_name?: string } | undefined)?.company_name,
+          status: p.status as Partnership["status"],
+          invitedAt: (p.invited_at || p.created_at) as string,
+          acceptedAt: p.accepted_at as string | undefined,
+          ndaConfirmedAt: (p.nda_confirmed_at as string | null) ?? null,
+          ndaConfirmedBy: (p.nda_confirmed_by as string | null) ?? null,
+          invitationMessage: p.invitation_message as string | undefined,
+          partnership_notes: p.partnership_notes,
         }))
         setPartnerships(loaded)
       }
@@ -608,10 +652,17 @@ export default function PartnerPoolPage() {
     return true
   })
 
-  const bookmarkedCount = partners.filter(p => p.bookmarked).length
-  const ndaSignedCount = partners.filter(p => p.ndaSigned).length
-  const msaApprovedCount = partners.filter(p => p.msaApproved).length
-  const blacklistedCount = partners.filter(p => p.status === "blacklisted").length
+  const activePartnersStat = isDemo
+    ? activePartnerships
+    : partnerships.filter((p) => p.status === "active").length
+
+  const partnersWithActiveEngagementsStat = isDemo
+    ? Math.min(activePartnerships, 2)
+    : partnersWithActiveEngagements
+
+  const blacklistedPartnersStat = isDemo
+    ? partners.filter((p) => p.status === "blacklisted").length
+    : partnerships.filter((p) => isPartnershipNotesBlacklisted(p.partnership_notes)).length
 
   return (
     <AgencyLayout>
@@ -815,30 +866,22 @@ export default function PartnerPoolPage() {
         )}
 
         {/* Stats Row */}
-        <div className="grid grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-foreground">{partners.filter(p => p.status !== "blacklisted").length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">Active Partners</div>
+            <div className="font-display font-bold text-3xl text-foreground">{activePartnersStat}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+              Active Partners
+            </div>
           </GlassCard>
           <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-accent">{bookmarkedCount}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">Bookmarked</div>
+            <div className="font-display font-bold text-3xl text-accent">{partnersWithActiveEngagementsStat}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+              Partners with Active Engagements
+            </div>
           </GlassCard>
           <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-success">{ndaSignedCount}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">NDA Signed</div>
-          </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-success">{msaApprovedCount}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">MSA Approved</div>
-          </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-foreground">{partners.filter(p => p.status === "active").length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">Active</div>
-          </GlassCard>
-          <GlassCard className="p-4 text-center cursor-pointer hover:border-red-500/30 transition-colors" onClick={() => setShowBlacklisted(!showBlacklisted)}>
-            <div className="font-display font-bold text-3xl text-red-400">{blacklistedCount}</div>
-            <div className="font-mono text-[10px] text-red-400 uppercase">Blacklisted</div>
+            <div className="font-display font-bold text-3xl text-red-400">{blacklistedPartnersStat}</div>
+            <div className="font-mono text-[10px] text-red-400 uppercase tracking-wider mt-1">Blacklisted</div>
           </GlassCard>
         </div>
 

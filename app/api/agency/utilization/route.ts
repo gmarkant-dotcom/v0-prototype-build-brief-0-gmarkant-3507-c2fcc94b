@@ -28,6 +28,17 @@ function parseClientBudget(raw: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/** Project still "active" for engagement stats: no end_date or end_date is today or later (UTC). */
+function projectActiveByEndDate(endDate: string | null | undefined): boolean {
+  if (endDate == null || String(endDate).trim() === "") return true
+  const d = new Date(endDate)
+  if (!Number.isFinite(d.getTime())) return true
+  const end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  const now = new Date()
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  return end >= today
+}
+
 function unwrapInbox(
   embed:
     | {
@@ -323,6 +334,19 @@ export async function GET() {
 
     const total_awarded_all = projects.reduce((s, p) => s + p.total_awarded, 0)
 
+    /** Distinct partnership_ids with ≥1 awarded response on a project that has not passed end_date. */
+    const activeEngagedPartnershipIds = new Set<string>()
+    for (const r of rows) {
+      const inbox = unwrapInbox(r.partner_rfp_inbox as Parameters<typeof unwrapInbox>[0])
+      if (!inbox?.project_id || !inbox.partnership_id) continue
+      const projectId = String(inbox.project_id)
+      const meta = projectMeta.get(projectId)
+      if (!meta) continue
+      if (!projectActiveByEndDate(meta.end_date)) continue
+      activeEngagedPartnershipIds.add(String(inbox.partnership_id))
+    }
+    const partners_with_active_engagements = activeEngagedPartnershipIds.size
+
     const summary = {
       total_client_budget,
       total_awarded:
@@ -333,6 +357,7 @@ export async function GET() {
       currency: !hasAwardData ? null : mixed_currencies ? null : primary?.currency ?? null,
       mixed_currencies: hasAwardData && mixed_currencies,
       by_currency,
+      partners_with_active_engagements,
     }
 
     return NextResponse.json({ projects, summary }, { headers: noStoreHeaders })
