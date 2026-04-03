@@ -694,45 +694,26 @@ export default function PartnerPoolPage() {
             </Button>
           </div>
         </div>
-        
-        {/* Pending Confirmations Alert */}
-        {pendingInvitations > 0 && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-display font-bold text-foreground">
-                  {pendingInvitations} Invitation{pendingInvitations > 1 ? 's' : ''} Awaiting Response
-                </h3>
-                <p className="text-sm text-foreground-muted">
-                  Waiting for these partners to accept your invitation.
-                </p>
-              </div>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <GlassCard className="p-4 text-center">
+            <div className="font-display font-bold text-3xl text-foreground">{activePartnersStat}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+              Active Partners
             </div>
-            <div className="mt-4 space-y-2">
-              {(isDemo ? invitations.filter(inv => inv.status === 'pending') : partnerships.filter(p => p.status === 'pending')).map(item => (
-                <div key={item.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                      <Mail className="w-4 h-4 text-amber-400" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-foreground">
-                        {isDemo ? ((item as PartnerInvitation).partnerName || (item as PartnerInvitation).partnerEmail) : ((item as Partnership).partnerCompany || (item as Partnership).partnerName || (item as Partnership).partnerEmail)}
-                      </div>
-                      <div className="font-mono text-[10px] text-foreground-muted">
-                        Invited on {new Date(isDemo ? (item as PartnerInvitation).invitedAt : (item as Partnership).invitedAt || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </div>
-                    </div>
-                  </div>
-                  <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">Pending</span>
-                </div>
-              ))}
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <div className="font-display font-bold text-3xl text-accent">{partnersWithActiveEngagementsStat}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+              Partners with Active Engagements
             </div>
-          </div>
-        )}
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <div className="font-display font-bold text-3xl text-red-400">{blacklistedPartnersStat}</div>
+            <div className="font-mono text-[10px] text-red-400 uppercase tracking-wider mt-1">Blacklisted</div>
+          </GlassCard>
+        </div>
 
         {/* Active Partnerships Section */}
         {activePartnerships > 0 && (
@@ -807,83 +788,6 @@ export default function PartnerPoolPage() {
             </div>
           </div>
         )}
-
-        {/* Access Requests Alert */}
-        {accessRequests.length > 0 && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-                <UserPlus className="w-5 h-5 text-amber-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-display font-bold text-foreground">
-                  {accessRequests.length} Partner Request{accessRequests.length > 1 ? 's' : ''} Pending
-                </h3>
-                <p className="font-mono text-xs text-foreground-muted">
-                  Partners are requesting to join your network
-                </p>
-              </div>
-            </div>
-            
-            <div className="mt-4 space-y-2">
-              {accessRequests.map(request => (
-                <div key={request.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                      <User className="w-4 h-4 text-amber-400" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-foreground">{request.partnerCompany || request.partnerName || request.partnerEmail}</div>
-                      <div className="font-mono text-[10px] text-foreground-muted">
-                        {request.requestMessage ? `"${request.requestMessage.slice(0, 50)}${request.requestMessage.length > 50 ? '...' : ''}"` : 'No message provided'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDeclineRequest(request.id)}
-                      disabled={processingRequest === request.id}
-                      className="border-red-500/30 text-red-400 hover:bg-red-500/10"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      onClick={() => handleApproveRequest(request.id)}
-                      disabled={processingRequest === request.id}
-                      className="bg-accent text-background hover:bg-accent/90"
-                    >
-                      <CheckCircle className="w-4 h-4 mr-1" />
-                      Approve
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-foreground">{activePartnersStat}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
-              Active Partners
-            </div>
-          </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-accent">{partnersWithActiveEngagementsStat}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
-              Partners with Active Engagements
-            </div>
-          </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-red-400">{blacklistedPartnersStat}</div>
-            <div className="font-mono text-[10px] text-red-400 uppercase tracking-wider mt-1">Blacklisted</div>
-          </GlassCard>
-        </div>
 
         {/* Filters */}
         <GlassCard className="mb-6">
@@ -1147,6 +1051,102 @@ export default function PartnerPoolPage() {
 </div>
             </GlassCard>
           ))}
+          </div>
+        )}
+
+        {/* Pending Confirmations Alert */}
+        {pendingInvitations > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-display font-bold text-foreground">
+                  {pendingInvitations} Invitation{pendingInvitations > 1 ? 's' : ''} Awaiting Response
+                </h3>
+                <p className="text-sm text-foreground-muted">
+                  Waiting for these partners to accept your invitation.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {(isDemo ? invitations.filter(inv => inv.status === 'pending') : partnerships.filter(p => p.status === 'pending')).map(item => (
+                <div key={item.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                      <Mail className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-foreground">
+                        {isDemo ? ((item as PartnerInvitation).partnerName || (item as PartnerInvitation).partnerEmail) : ((item as Partnership).partnerCompany || (item as Partnership).partnerName || (item as Partnership).partnerEmail)}
+                      </div>
+                      <div className="font-mono text-[10px] text-foreground-muted">
+                        Invited on {new Date(isDemo ? (item as PartnerInvitation).invitedAt : (item as Partnership).invitedAt || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">Pending</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Access Requests Alert */}
+        {accessRequests.length > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                <UserPlus className="w-5 h-5 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-display font-bold text-foreground">
+                  {accessRequests.length} Partner Request{accessRequests.length > 1 ? 's' : ''} Pending
+                </h3>
+                <p className="font-mono text-xs text-foreground-muted">
+                  Partners are requesting to join your network
+                </p>
+              </div>
+            </div>
+            
+            <div className="mt-4 space-y-2">
+              {accessRequests.map(request => (
+                <div key={request.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                      <User className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div>
+                      <div className="font-medium text-foreground">{request.partnerCompany || request.partnerName || request.partnerEmail}</div>
+                      <div className="font-mono text-[10px] text-foreground-muted">
+                        {request.requestMessage ? `"${request.requestMessage.slice(0, 50)}${request.requestMessage.length > 50 ? '...' : ''}"` : 'No message provided'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDeclineRequest(request.id)}
+                      disabled={processingRequest === request.id}
+                      className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleApproveRequest(request.id)}
+                      disabled={processingRequest === request.id}
+                      className="bg-accent text-background hover:bg-accent/90"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         
