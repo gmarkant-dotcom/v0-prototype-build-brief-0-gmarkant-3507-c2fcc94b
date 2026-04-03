@@ -222,7 +222,7 @@ export async function PATCH(
       .select(`
         *,
         partnership:partnerships(agency_id, partner_id),
-        project:projects(id, agency_id, title)
+        project:projects(id, agency_id, title, status)
       `)
       .eq('id', assignmentId)
       .eq('project_id', projectId)
@@ -313,6 +313,26 @@ export async function PATCH(
         .single()
 
       if (error) throw error
+
+      if (status === 'awarded') {
+        const preAward = new Set(['draft', 'onboarding'])
+        const proj = assignment.project as { status?: string | null } | null | undefined
+        const ps = String(proj?.status ?? '').toLowerCase()
+        if (preAward.has(ps)) {
+          const { error: projUpdErr } = await supabase
+            .from('projects')
+            .update({ status: 'in_progress', updated_at: updates.updated_at as string })
+            .eq('id', projectId)
+            .eq('agency_id', user.id)
+          if (projUpdErr) {
+            console.error('[api] PATCH assignment awarded: project status bump failed', {
+              projectId,
+              message: projUpdErr.message,
+              code: projUpdErr.code,
+            })
+          }
+        }
+      }
 
       if (status === 'awarded' && assignment.partnership.partner_id) {
         const { data: agencyProfile } = await supabase

@@ -266,6 +266,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         )
       }
 
+      // Move project out of pre-award states once work is awarded. DB uses `in_progress` for live work
+      // (CHECK on projects.status); it maps to UI "active" in mapDbProjectToMaster — not a literal `active` row value.
+      const preAwardStatuses = new Set(["draft", "onboarding"])
+      const { data: projRow, error: projLoadErr } = await supabase
+        .from("projects")
+        .select("status")
+        .eq("id", awardContext.projectId)
+        .eq("agency_id", user.id)
+        .maybeSingle()
+      if (projLoadErr) {
+        console.error("[api] bid award: load project status failed (assignment recorded)", {
+          route,
+          projectId: awardContext.projectId,
+          message: projLoadErr.message,
+          code: projLoadErr.code,
+        })
+      } else if (projRow && preAwardStatuses.has(String(projRow.status || "").toLowerCase())) {
+        const { error: projUpdErr } = await supabase
+          .from("projects")
+          .update({ status: "in_progress", updated_at: now })
+          .eq("id", awardContext.projectId)
+          .eq("agency_id", user.id)
+        if (projUpdErr) {
+          console.error("[api] bid award: project status bump failed (assignment recorded)", {
+            route,
+            projectId: awardContext.projectId,
+            message: projUpdErr.message,
+            code: projUpdErr.code,
+          })
+        }
+      }
+
       const { data: partner, error: partnerProfileErr } = await supabase
         .from("profiles")
         .select("email, full_name, company_name")
