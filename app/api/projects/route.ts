@@ -1,7 +1,30 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { parseDoubleJson } from '@/lib/active-engagement-parse'
 
 export const dynamic = 'force-dynamic'
+
+type BudgetJson = { amount?: number; currency?: string }
+
+/** Same as /api/agency/utilization: JSON / double-encoded budget_proposal → amount + currency. */
+function parsePartnerBudgetProposal(raw: unknown): { amount: number; currency: string } | null {
+  const o = parseDoubleJson<BudgetJson>(raw)
+  if (!o || o.amount == null || !Number.isFinite(Number(o.amount))) return null
+  const currency =
+    typeof o.currency === 'string' && o.currency.trim() ? o.currency.trim().toUpperCase() : 'USD'
+  return { amount: Number(o.amount), currency }
+}
+
+/** Same as /api/agency/utilization: projects.budget_range → number. */
+function parseClientBudget(raw: unknown): number | null {
+  if (raw == null) return null
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw
+  if (typeof raw !== 'string') return null
+  const s = raw.replace(/[$,\s]/g, '').trim()
+  if (!s) return null
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? n : null
+}
 
 const noStoreHeaders = {
   'Cache-Control': 'private, no-store, no-cache, must-revalidate',
@@ -64,6 +87,15 @@ export async function GET(request: NextRequest) {
 
     let projects
     let partnerStatusAlertTotal: number | undefined
+    let agencyDashboardStats:
+      | {
+          total_unique_clients: number
+          total_active_engagements: number
+          total_awarded_engagements: number
+          total_client_budget: number | null
+          total_partner_spend_usd: number
+        }
+      | undefined
 
     if (profile?.role === 'agency') {
       // Try rich query first (with relationships), then fallback to plain projects query.
@@ -217,6 +249,84 @@ export async function GET(request: NextRequest) {
           partner_status_alert_count: row.partner_status_alert_count ?? 0,
         }))
       )
+
+      const clientNameSet = new Set<string>()
+      let clientBudgetSum = 0
+      let anyClientBudget = false
+      for (const p of projects || []) {
+        const row = p as { client_name?: string | null; budget_range?: unknown }
+        const cn = String(row.client_name ?? '').trim()
+        if (cn) clientNameSet.add(cn)
+        const b = parseClientBudget(row.budget_range)
+        if (b != null) {
+          clientBudgetSum += b
+          anyClientBudget = true
+        }
+      }
+
+      let total_awarded_engagements = 0
+      let total_active_engagements = 0
+      if (agencyProjectIds.length > 0) {
+        const { data: awRows, error: awErr } = await supabase
+          .from('project_assignments')
+          .select('id')
+          .in('project_id', agencyProjectIds)
+          .eq('status', 'awarded')
+
+        if (awErr) {
+          logSupabaseError('agency GET awarded assignments for dashboard stats', awErr)
+        } else {
+          const awardedIds = (awRows || []).map((r) => r.id as string).filter(Boolean)
+          total_awarded_engagements = awardedIds.length
+          if (awardedIds.length > 0) {
+            const { data: stRows, error: stErr } = await supabase
+              .from('partner_status_updates')
+              .select('project_assignment_id, status, created_at')
+              .in('project_assignment_id', awardedIds)
+              .order('created_at', { ascending: false })
+
+            if (stErr) {
+              logSupabaseError('agency GET partner_status_updates for dashboard stats', stErr)
+              total_active_engagements = awardedIds.length
+            } else {
+              const latestByAssignment = new Map<string, string>()
+              for (const row of stRows || []) {
+                const aid = row.project_assignment_id as string
+                if (!latestByAssignment.has(aid)) {
+                  latestByAssignment.set(aid, String(row.status || ''))
+                }
+              }
+              for (const aid of awardedIds) {
+                const st = latestByAssignment.get(aid)
+                if (!st || st !== 'complete') total_active_engagements++
+              }
+            }
+          }
+        }
+      }
+
+      let total_partner_spend_usd = 0
+      const { data: spendRows, error: spendErr } = await supabase
+        .from('partner_rfp_responses')
+        .select('budget_proposal')
+        .eq('agency_id', user.id)
+        .eq('status', 'awarded')
+      if (spendErr) {
+        logSupabaseError('agency GET awarded partner_rfp_responses for dashboard spend', spendErr)
+      } else {
+        for (const r of spendRows || []) {
+          const parsed = parsePartnerBudgetProposal((r as { budget_proposal?: unknown }).budget_proposal)
+          if (parsed) total_partner_spend_usd += parsed.amount
+        }
+      }
+
+      agencyDashboardStats = {
+        total_unique_clients: clientNameSet.size,
+        total_active_engagements,
+        total_awarded_engagements,
+        total_client_budget: anyClientBudget ? clientBudgetSum : null,
+        total_partner_spend_usd,
+      }
     } else if (profile?.role === 'partner') {
       const { data: userPartnerships, error: pErr } = await supabase
         .from('partnerships')
@@ -297,6 +407,7 @@ export async function GET(request: NextRequest) {
       {
         projects,
         ...(partnerStatusAlertTotal !== undefined ? { partner_status_alert_total: partnerStatusAlertTotal } : {}),
+        ...(agencyDashboardStats !== undefined ? { agency_dashboard_stats: agencyDashboardStats } : {}),
       },
       { headers: noStoreHeaders }
     )

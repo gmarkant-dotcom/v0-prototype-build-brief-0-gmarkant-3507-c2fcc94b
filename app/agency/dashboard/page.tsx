@@ -11,20 +11,22 @@ import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
 import { mapDbProjectToMaster } from "@/lib/project-mapper"
 import { budgetStatusLabel, workflowStatusLabel } from "@/lib/partner-status"
-import { 
-  Search, 
-  Filter, 
-  AlertTriangle, 
-  TrendingUp, 
-  Users, 
-  DollarSign, 
+import {
+  Search,
+  Filter,
+  AlertTriangle,
+  DollarSign,
   Calendar,
   MoreVertical,
   FolderOpen,
+  Building2,
+  Layers,
+  Activity,
+  Banknote,
   Clock,
   ArrowUpRight,
   Plus,
-  ChevronRight
+  ChevronRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -133,14 +135,16 @@ function formatBudget(amount: number): string {
   return "$" + (amount / 1000).toFixed(0) + "K"
 }
 
-function formatUtilization(spent: number, budget: number): string {
-  const b = Number(budget)
-  const s = Number(spent)
-  if (!Number.isFinite(b) || b <= 0 || !Number.isFinite(s)) {
-    return "0%"
+function formatUsdWhole(amount: number): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    }).format(amount)
+  } catch {
+    return `$${Math.round(amount).toLocaleString()}`
   }
-  const pct = Math.round((s / b) * 100)
-  return `${Math.min(100, Math.max(0, pct))}%`
 }
 
 function DashboardContent() {
@@ -161,6 +165,13 @@ function DashboardContent() {
   const [createProjectError, setCreateProjectError] = useState<string | null>(null)
   const [realProjects, setRealProjects] = useState<MasterProject[]>([])
   const [partnerAlertAggregate, setPartnerAlertAggregate] = useState(0)
+  const [agencyDashboardStats, setAgencyDashboardStats] = useState<{
+    total_unique_clients: number
+    total_active_engagements: number
+    total_awarded_engagements: number
+    total_client_budget: number | null
+    total_partner_spend_usd: number
+  } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
   const isDemo = isDemoMode()
@@ -261,9 +272,40 @@ function DashboardContent() {
         )
         const fromApi = Number((data as { partner_status_alert_total?: unknown }).partner_status_alert_total)
         setPartnerAlertAggregate(Number.isFinite(fromApi) ? fromApi : summed)
+        const ads = (
+          data as {
+            agency_dashboard_stats?: {
+              total_unique_clients?: unknown
+              total_active_engagements?: unknown
+              total_awarded_engagements?: unknown
+              total_client_budget?: unknown
+              total_partner_spend_usd?: unknown
+            }
+          }
+        ).agency_dashboard_stats
+        setAgencyDashboardStats(
+          ads && typeof ads === "object"
+            ? {
+                total_unique_clients: Number(ads.total_unique_clients) || 0,
+                total_active_engagements: Number(ads.total_active_engagements) || 0,
+                total_awarded_engagements: Number(ads.total_awarded_engagements) || 0,
+                total_client_budget:
+                  ads.total_client_budget == null
+                    ? null
+                    : (() => {
+                        const n = Number(ads.total_client_budget)
+                        return Number.isFinite(n) ? n : null
+                      })(),
+                total_partner_spend_usd: Number(ads.total_partner_spend_usd) || 0,
+              }
+            : null
+        )
+      } else {
+        setAgencyDashboardStats(null)
       }
     } catch (error) {
       console.error('Error fetching projects:', error)
+      setAgencyDashboardStats(null)
     }
     setIsLoading(false)
   }
@@ -278,16 +320,34 @@ function DashboardContent() {
     return matchesSearch && matchesStatus
   })
   
-  const activeProjects = projects.filter(p => p.status === "active").length
-  const totalBudget = projects.reduce((sum, p) => sum + p.budget, 0)
-  const totalSpent = projects.reduce((sum, p) => sum + p.spent, 0)
   const partnerAlertsForStat = isDemo
     ? projects.reduce((sum, p) => sum + (p.partnerStatusAlertCount ?? 0), 0)
     : partnerAlertAggregate
   const totalAlerts =
     projects.reduce((sum, p) => sum + p.alerts.length, 0) +
     (isDemo ? partnerAlertsForStat : 0)
-  const totalPartners = projects.reduce((sum, p) => sum + p.partnerCount, 0)
+
+  const demoDashboardStats = isDemo
+    ? {
+        total_unique_clients: new Set(projects.map((p) => p.client.trim()).filter(Boolean)).size,
+        total_active_engagements: projects
+          .filter((p) => p.workflowStageKey === "active_engagements")
+          .reduce((s, p) => s + p.partnerCount, 0),
+        total_awarded_engagements: projects.reduce((s, p) => s + p.partnerCount, 0),
+        total_client_budget: projects.reduce((s, p) => s + p.budget, 0),
+        total_partner_spend_usd: projects.reduce((s, p) => s + p.spent, 0),
+      }
+    : null
+
+  const dashStats = isDemo
+    ? demoDashboardStats!
+    : agencyDashboardStats ?? {
+        total_unique_clients: 0,
+        total_active_engagements: 0,
+        total_awarded_engagements: 0,
+        total_client_budget: null as number | null,
+        total_partner_spend_usd: 0,
+      }
 
   const handleCreateProject = async () => {
     if (!checkFeatureAccess("project creation")) return
@@ -554,44 +614,72 @@ function DashboardContent() {
         </Dialog>
       </div>
       
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <div className="glass rounded-xl p-5 text-center">
           <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center mx-auto mb-3">
-            <FolderOpen className="w-5 h-5 text-accent" />
+            <Building2 className="w-5 h-5 text-accent" />
           </div>
-          <div className="font-display font-bold text-3xl text-foreground">{activeProjects}</div>
-          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Active Projects</div>
+          <div className="font-display font-bold text-3xl text-foreground">{dashStats.total_unique_clients}</div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+            Total Client Projects
+          </div>
+        </div>
+        <div className="glass rounded-xl p-5 text-center">
+          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
+            <Activity className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div className="font-display font-bold text-3xl text-foreground">{dashStats.total_active_engagements}</div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+            Total Active Engagements
+          </div>
+        </div>
+        <div className="glass rounded-xl p-5 text-center">
+          <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center mx-auto mb-3">
+            <Layers className="w-5 h-5 text-violet-400" />
+          </div>
+          <div className="font-display font-bold text-3xl text-foreground">{dashStats.total_awarded_engagements}</div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Total Engagements</div>
         </div>
         <div className="glass rounded-xl p-5 text-center">
           <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center mx-auto mb-3">
             <DollarSign className="w-5 h-5 text-green-400" />
           </div>
-          <div className="font-display font-bold text-3xl text-foreground">{formatBudget(totalBudget)}</div>
-          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Total Budget</div>
+          <div className="font-display font-bold text-3xl text-foreground">
+            {dashStats.total_client_budget == null ? "—" : formatBudget(dashStats.total_client_budget)}
+          </div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+            Total Client Budget
+          </div>
         </div>
         <div className="glass rounded-xl p-5 text-center">
           <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center mx-auto mb-3">
-            <TrendingUp className="w-5 h-5 text-blue-400" />
+            <Banknote className="w-5 h-5 text-blue-400" />
           </div>
-          <div className="font-display font-bold text-3xl text-foreground">{formatUtilization(totalSpent, totalBudget)}</div>
-          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Utilized</div>
+          <div className="font-display font-bold text-3xl text-foreground">
+            {formatUsdWhole(dashStats.total_partner_spend_usd)}
+          </div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+            Total Partner Spend
+          </div>
         </div>
         <div className="glass rounded-xl p-5 text-center">
-          <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
-            <Users className="w-5 h-5 text-purple-400" />
-          </div>
-          <div className="font-display font-bold text-3xl text-foreground">{totalPartners}</div>
-          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Partner Teams</div>
-        </div>
-        <div className="glass rounded-xl p-5 text-center">
-          <div className={cn(
-            "w-10 h-10 rounded-lg flex items-center justify-center mx-auto mb-3",
-            totalAlerts > 0 ? "bg-red-500/10" : "bg-green-500/10"
-          )}>
+          <div
+            className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center mx-auto mb-3",
+              totalAlerts > 0 ? "bg-red-500/10" : "bg-green-500/10"
+            )}
+          >
             <AlertTriangle className={cn("w-5 h-5", totalAlerts > 0 ? "text-red-400" : "text-green-400")} />
           </div>
-          <div className={cn("font-display font-bold text-3xl", totalAlerts > 0 ? "text-red-400" : "text-foreground")}>{totalAlerts}</div>
-          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Alerts</div>
+          <div
+            className={cn(
+              "font-display font-bold text-3xl",
+              totalAlerts > 0 ? "text-red-400" : "text-foreground"
+            )}
+          >
+            {totalAlerts}
+          </div>
+          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Total Alerts</div>
         </div>
       </div>
       
