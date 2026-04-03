@@ -83,6 +83,8 @@ export async function POST(req: Request) {
     const partnership_id = (body.partnership_id as string | undefined)?.trim() || null
     const response_id = (body.response_id as string | undefined)?.trim()
 
+    console.log("[ai-schedule] body", { project_id, response_id, partnership_id })
+
     if (!project_id || !response_id) {
       return NextResponse.json(
         { error: "project_id and response_id are required" },
@@ -96,6 +98,11 @@ export async function POST(req: Request) {
       .eq("id", project_id)
       .eq("agency_id", user.id)
       .maybeSingle()
+    console.log("[ai-schedule] project lookup", {
+      project_id,
+      found: !!project,
+      error: pErr?.message,
+    })
     if (pErr || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
     }
@@ -124,6 +131,11 @@ export async function POST(req: Request) {
       .eq("status", "awarded")
       .maybeSingle()
 
+    console.log("[ai-schedule] response lookup", {
+      response_id,
+      found: !!resp,
+      error: rErr?.message,
+    })
     if (rErr || !resp) {
       return NextResponse.json({ error: "Awarded response not found" }, { status: 404, headers: noStore })
     }
