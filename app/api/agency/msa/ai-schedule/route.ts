@@ -94,7 +94,7 @@ export async function POST(req: Request) {
 
     const { data: project, error: pErr } = await supabase
       .from("projects")
-      .select("id, title, client_name, budget_range")
+      .select("id, name, client_name, budget_range")
       .eq("id", project_id)
       .eq("agency_id", user.id)
       .maybeSingle()
@@ -161,7 +161,7 @@ export async function POST(req: Request) {
       .eq("id", resp.partner_id as string)
       .maybeSingle()
 
-    const projectName = ((project.title || "") as string).trim() || "Project"
+    const projectName = ((project.name || "") as string).trim() || "Project"
     const clientName = ((project.client_name as string | null) || "").trim() || "Client"
 
     const scopeName = (inbox.scope_item_name || "").trim() || "Scope"
