@@ -132,7 +132,7 @@ export async function GET() {
       partnership_id,
       project_id,
       response_id,
-      project:projects ( title, name, client_name ),
+      project:projects ( name, client_name ),
       response:partner_rfp_responses (
         id,
         partner_rfp_inbox ( scope_item_name )
