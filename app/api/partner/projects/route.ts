@@ -7,7 +7,7 @@ const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate",
 } as const
 
-type Proj = { id: string; name?: string | null; title?: string | null; client_name?: string | null }
+type Proj = { id: string; name?: string | null; client_name?: string | null }
 
 function unwrap<T>(raw: T | T[] | null | undefined): T | null {
   if (raw == null) return null
@@ -61,7 +61,6 @@ export async function GET() {
         project:projects(
           id,
           name,
-          title,
           client_name
         )
       `
@@ -135,7 +134,7 @@ export async function GET() {
       if (!proj?.id) continue
       const pid = String(proj.id)
       const partnershipId = String(a.partnership_id)
-      const nameRaw = (proj.name ?? proj.title ?? "").trim()
+      const nameRaw = (proj.name ?? "").trim()
       const name = nameRaw || "Project"
       const key = `${pid}:${partnershipId}`
       const response_id = responseIdByProjectPartnership.get(key) ?? null
