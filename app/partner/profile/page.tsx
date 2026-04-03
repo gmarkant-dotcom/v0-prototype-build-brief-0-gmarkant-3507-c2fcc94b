@@ -130,7 +130,8 @@ export default function PartnerProfilePage() {
       setFormData((prev) => ({
         ...prev,
         companyName: data?.company_name || data?.full_name || "",
-        type: data?.agency_type || "",
+        primaryDiscipline:
+          data?.agency_type?.trim() ? data.agency_type : prev.primaryDiscipline,
         bio: data?.bio || "",
         location: data?.location || "",
         website: data?.website || "",
@@ -242,7 +243,7 @@ export default function PartnerProfilePage() {
           .from("profiles")
           .update({
             company_name: formData.companyName,
-            agency_type: formData.type,
+            agency_type: formData.primaryDiscipline,
             bio: formData.bio,
             location: formData.location,
             website: formData.website,
