@@ -60,7 +60,7 @@ export async function POST(req: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, is_paid, is_admin")
+      .select("role, is_paid, is_admin, payment_terms, payment_terms_custom")
       .eq("id", user.id)
       .single()
 
@@ -83,8 +83,6 @@ export async function POST(req: Request) {
     const partnership_id = (body.partnership_id as string | undefined)?.trim() || null
     const response_id = (body.response_id as string | undefined)?.trim()
 
-    console.log("[ai-schedule] body", { project_id, response_id, partnership_id })
-
     if (!project_id || !response_id) {
       return NextResponse.json(
         { error: "project_id and response_id are required" },
@@ -98,11 +96,6 @@ export async function POST(req: Request) {
       .eq("id", project_id)
       .eq("agency_id", user.id)
       .maybeSingle()
-    console.log("[ai-schedule] project lookup", {
-      project_id,
-      found: !!project,
-      error: pErr?.message,
-    })
     if (pErr || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
     }
@@ -131,11 +124,6 @@ export async function POST(req: Request) {
       .eq("status", "awarded")
       .maybeSingle()
 
-    console.log("[ai-schedule] response lookup", {
-      response_id,
-      found: !!resp,
-      error: rErr?.message,
-    })
     if (rErr || !resp) {
       return NextResponse.json({ error: "Awarded response not found" }, { status: 404, headers: noStore })
     }
@@ -185,7 +173,42 @@ export async function POST(req: Request) {
         ? JSON.stringify(existingMilestones, null, 2)
         : "None yet for this awarded response."
 
+    const ptRaw = ((profile as { payment_terms?: string | null } | null)?.payment_terms || "").trim().toLowerCase()
+    const ptCustom = ((profile as { payment_terms_custom?: string | null } | null)?.payment_terms_custom || "").trim()
+    const netDays: 15 | 30 | 45 | null =
+      ptRaw === "net_15" ? 15 : ptRaw === "net_45" ? 45 : ptRaw === "custom" ? null : 30
+    const paymentTermsLine =
+      ptRaw === "net_15"
+        ? "Net 15 (payment due 15 calendar days after invoice date)"
+        : ptRaw === "net_45"
+          ? "Net 45 (payment due 45 calendar days after invoice date)"
+          : ptRaw === "custom" && ptCustom
+            ? `Custom: ${ptCustom}`
+            : ptRaw === "custom"
+              ? "Custom (no detail on file — treat like Net 30 unless the custom text below overrides)"
+              : ptRaw === "net_30" || !ptRaw
+                ? "Net 30 (default — payment due 30 calendar days after invoice date)"
+                : `Stored terms "${ptRaw}" — if not a standard net term, default due dates as Net 30`
+
+    const paymentDueDateRules =
+      netDays != null
+        ? `The agency pays invoices on Net ${netDays}: for each milestone, first infer the invoice issue date from the project timeline (when that phase is complete, deliverable submitted, or milestone achieved). Set that milestone's due_date to invoice_issue_date + ${netDays} calendar days (output as YYYY-MM-DD).`
+        : `The agency uses custom payment terms. Infer invoice issue dates from the timeline; set each milestone due_date to match the custom terms above. If timing is ambiguous, use invoice issue date + 30 calendar days.`
+
     const prompt = `You are helping a lead agency design a payment milestone schedule for an outsourced scope that was awarded to a partner.
+
+## 1) Invoice schedule structure (creative production practice)
+- Include a substantial **deposit** of roughly **25–50%** of the allocated budget **before work begins**, when budget and timeline reasonably support it.
+- Add a **midpoint** milestone tied to a **key deliverable** (e.g. concept approval, first draft, rough cut, or similar gate).
+- Hold a **final balance** for **delivery / client approval** or final acceptance.
+- If the engagement spans **more than 60 calendar days** from inferred start to end (use inbox timeline, partner timeline proposal, and scope hints), add **monthly progress billing** milestones between deposit and final payment; each must have notes tying it to a project phase.
+
+## 2) Due dates vs agency payment terms
+Agency profile payment terms: ${paymentTermsLine}
+${paymentDueDateRules}
+${ptRaw === "custom" && ptCustom ? `\nCustom terms detail: ${ptCustom}\n` : ""}
+
+---
 
 Project: ${projectName}
 Client: ${clientName}
@@ -209,13 +232,13 @@ Existing milestones already recorded for this awarded response (avoid duplicatin
 ${existingBlock}
 
 Return a JSON object with key "milestones": an array of 3–8 payment milestones that fit the scope, awarded budget, and timeline. Each milestone must have:
-- title: short label (e.g. "Kickoff", "Creative delivery")
+- title: short label (e.g. "Kickoff deposit", "Midpoint — first draft", "Final delivery")
 - amount: positive number (numeric only)
 - currency: ISO code like USD
-- due_date: ISO 8601 date string (YYYY-MM-DD preferred)
-- notes: one sentence rationale tied to deliverables or timing
+- due_date: YYYY-MM-DD (must follow section 2 rules relative to inferred invoice dates)
+- notes: one sentence tying amount/timing to deliverables, phase, and (if applicable) net payment terms
 
-Total of suggested amounts should not exceed the implied awarded budget unless the brief clearly allows; align dates with the proposed timeline.`
+Total of suggested amounts should not exceed the implied awarded budget unless the brief clearly allows; align dates with the proposed timeline and payment terms above.`
 
     const result = await generateText({
       model: "anthropic/claude-sonnet-4-20250514" as any,

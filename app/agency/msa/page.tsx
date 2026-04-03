@@ -250,24 +250,38 @@ export default function AgencyMsaPage() {
     s: AiSuggestion
   ) => {
     setAddingMilestone(projectId)
+    const dueDate =
+      typeof s.due_date === "string" && s.due_date.length >= 10 ? s.due_date.slice(0, 10) : ""
+    const payload = {
+      project_id: projectId,
+      title: s.title,
+      amount: s.amount,
+      currency: s.currency || "USD",
+      due_date: dueDate,
+      notes: s.notes ?? null,
+      response_id: responseId,
+      partnership_id: partnershipId,
+    }
     try {
+      if (!dueDate) {
+        console.error("[agency/msa] milestone POST skipped: invalid due_date on suggestion", s)
+        throw new Error("AI suggestion is missing a valid due_date")
+      }
       const res = await fetch("/api/agency/msa/milestones", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_id: projectId,
-          title: s.title,
-          amount: s.amount,
-          currency: s.currency || "USD",
-          due_date: s.due_date.slice(0, 10),
-          notes: s.notes || null,
-          response_id: responseId,
-          partnership_id: partnershipId,
-        }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || "Failed to add milestone")
+      if (!res.ok) {
+        console.error("[agency/msa] milestone POST failed", {
+          status: res.status,
+          responseBody: data,
+          payload,
+        })
+        throw new Error(data.error || "Failed to add milestone")
+      }
       await loadAll()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Add failed")
@@ -322,23 +336,31 @@ export default function AgencyMsaPage() {
     try {
       const scope =
         f.response_id && scopes.find((s) => s.response_id === f.response_id)
+      const manualPayload = {
+        project_id: projectId,
+        title: f.title.trim(),
+        amount: parseFloat(f.amount) || 0,
+        currency: f.currency || "USD",
+        due_date: f.due_date,
+        notes: f.notes.trim() || null,
+        response_id: f.response_id || null,
+        partnership_id: scope?.partnership_id ?? null,
+      }
       const res = await fetch("/api/agency/msa/milestones", {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          project_id: projectId,
-          title: f.title.trim(),
-          amount: parseFloat(f.amount) || 0,
-          currency: f.currency || "USD",
-          due_date: f.due_date,
-          notes: f.notes.trim() || null,
-          response_id: f.response_id || null,
-          partnership_id: scope?.partnership_id ?? null,
-        }),
+        body: JSON.stringify(manualPayload),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || "Failed to add")
+      if (!res.ok) {
+        console.error("[agency/msa] milestone POST failed (manual add)", {
+          status: res.status,
+          responseBody: data,
+          payload: manualPayload,
+        })
+        throw new Error(data.error || "Failed to add")
+      }
       setNewMilestone((prev) => ({
         ...prev,
         [projectId]: {

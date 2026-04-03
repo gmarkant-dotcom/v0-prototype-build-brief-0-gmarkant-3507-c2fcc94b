@@ -53,6 +53,8 @@ type ProfileState = {
   avatar_url: string
   meeting_url: string
   is_discoverable: boolean
+  payment_terms: string
+  payment_terms_custom: string
 }
 
 export default function AgencyProfileSettingsPage() {
@@ -80,6 +82,8 @@ export default function AgencyProfileSettingsPage() {
     avatar_url: "",
     meeting_url: "",
     is_discoverable: false,
+    payment_terms: "net_30",
+    payment_terms_custom: "",
   })
 
   useEffect(() => {
@@ -95,7 +99,7 @@ export default function AgencyProfileSettingsPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, is_discoverable, bio, location, website, agency_type, avatar_url, meeting_url"
+          "id, role, email, full_name, company_name, is_discoverable, bio, location, website, agency_type, avatar_url, meeting_url, payment_terms, payment_terms_custom"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -115,6 +119,8 @@ export default function AgencyProfileSettingsPage() {
         avatar_url: profile.avatar_url || "",
         meeting_url: profile.meeting_url || "",
         is_discoverable: !!profile.is_discoverable,
+        payment_terms: (profile as { payment_terms?: string | null }).payment_terms || "net_30",
+        payment_terms_custom: (profile as { payment_terms_custom?: string | null }).payment_terms_custom || "",
       })
       if (typeof window !== "undefined") {
         const savedDiscipline = localStorage.getItem("agencyPrimaryDiscipline")
@@ -149,6 +155,9 @@ export default function AgencyProfileSettingsPage() {
         avatar_url: form.avatar_url || null,
         meeting_url: form.meeting_url || null,
         is_discoverable: form.is_discoverable,
+        payment_terms: form.payment_terms || "net_30",
+        payment_terms_custom:
+          form.payment_terms === "custom" ? form.payment_terms_custom.trim() || null : null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", form.id)
@@ -375,6 +384,32 @@ export default function AgencyProfileSettingsPage() {
                 className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
+          </div>
+          <div>
+            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+              Preferred payment terms
+            </label>
+            <p className="text-xs text-foreground-muted mb-2">
+              Used when generating MSA payment schedules (e.g. Net 30 = payment due 30 days after invoice).
+            </p>
+            <select
+              value={form.payment_terms}
+              onChange={(e) => setForm((p) => ({ ...p, payment_terms: e.target.value }))}
+              className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+            >
+              <option value="net_15">Net 15</option>
+              <option value="net_30">Net 30</option>
+              <option value="net_45">Net 45</option>
+              <option value="custom">Custom</option>
+            </select>
+            {form.payment_terms === "custom" ? (
+              <Input
+                value={form.payment_terms_custom}
+                onChange={(e) => setForm((p) => ({ ...p, payment_terms_custom: e.target.value }))}
+                placeholder="Describe your standard payment terms"
+                className="mt-2 bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              />
+            ) : null}
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Scheduling Link</label>
