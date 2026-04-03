@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
@@ -33,6 +33,11 @@ type Partnership = {
   invitationMessage?: string
   /** Agency-private JSON from DB; used for blacklisted flag in pool stats */
   partnership_notes?: unknown
+  /** Enriched client-side (profiles + msa_agreements); not from GET /api/partnerships shape */
+  partnerDisplayName?: string | null
+  partnerAgencyType?: string | null
+  partnerBio?: string | null
+  msaSigned?: boolean
 }
 
 // Legacy Partner invitation type (for backward compatibility)
@@ -58,6 +63,10 @@ type AccessRequest = {
   requestMessage?: string
   createdAt: string
 }
+
+type NetworkRow =
+  | { mode: "demo"; inv: PartnerInvitation; partner?: Partner }
+  | { mode: "prod"; p: Partnership }
 
 // Demo invitations
 const demoInvitations: PartnerInvitation[] = [
@@ -97,6 +106,118 @@ function isPartnershipNotesBlacklisted(notes: unknown): boolean {
   return false
 }
 
+const NEW_PARTNERSHIP_DAYS = 30
+
+function parseBioTags(bio: string | null | undefined): string[] {
+  if (!bio?.trim()) return []
+  return bio
+    .split(/[,;#\n]+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+}
+
+function agencyTypeMatchesFilter(selectedType: string, agencyType: string | null | undefined): boolean {
+  if (selectedType === "All") return true
+  const at = (agencyType || "").trim().toLowerCase()
+  if (!at) return false
+  const s = selectedType.toLowerCase()
+  if (at === s) return true
+  if (s === "agency" && /\bagency\b/.test(at)) return true
+  if (s === "freelancer" && /freelancer|independent|contractor|solo/.test(at)) return true
+  if (s === "production" && /production|studio|video|film/.test(at)) return true
+  return at.includes(s) || s.split(/\s+/).some((w) => w.length > 2 && at.includes(w))
+}
+
+function disciplineMatches(
+  selectedDiscipline: string,
+  agencyType: string | null | undefined,
+  bio: string | null | undefined,
+  extraTags: string[],
+): boolean {
+  if (selectedDiscipline === "All") return true
+  const needle = selectedDiscipline.trim().toLowerCase()
+  if (!needle) return true
+  const at = (agencyType || "").trim().toLowerCase()
+  if (at && (at === needle || at.includes(needle) || needle.includes(at))) return true
+  for (const t of parseBioTags(bio)) {
+    const x = t.toLowerCase()
+    if (x === needle || x.includes(needle) || needle.includes(x)) return true
+  }
+  for (const t of extraTags) {
+    const x = t.toLowerCase()
+    if (x === needle || x.includes(needle) || needle.includes(x)) return true
+  }
+  return false
+}
+
+function partnershipIsNew(p: Partnership): boolean {
+  if (p.status !== "active" || isPartnershipNotesBlacklisted(p.partnership_notes)) return false
+  const raw = p.acceptedAt || p.invitedAt
+  if (!raw) return false
+  const t = new Date(raw).getTime()
+  if (Number.isNaN(t)) return false
+  const days = (Date.now() - t) / (86400 * 1000)
+  return days >= 0 && days <= NEW_PARTNERSHIP_DAYS
+}
+
+function partnershipMatchesStatusFilter(p: Partnership, selectedStatus: string): boolean {
+  if (selectedStatus === "All") return true
+  const bl = isPartnershipNotesBlacklisted(p.partnership_notes)
+  if (selectedStatus === "Blacklisted") return bl
+  if (bl) return false
+  if (selectedStatus === "Pending") return p.status === "pending"
+  if (selectedStatus === "New") return partnershipIsNew(p)
+  if (selectedStatus === "Active") {
+    return p.status === "active"
+  }
+  return true
+}
+
+function partnershipMatchesLegalFilter(p: Partnership, selectedLegal: string): boolean {
+  if (selectedLegal === "All") return true
+  const nda = Boolean(p.ndaConfirmedAt)
+  const msa = Boolean(p.msaSigned)
+  if (selectedLegal === "NDA Signed") return nda
+  if (selectedLegal === "MSA Approved") return msa
+  if (selectedLegal === "No NDA") return !nda
+  if (selectedLegal === "No MSA") return !msa
+  return true
+}
+
+function demoInvitationEffectiveStatus(inv: PartnerInvitation, partner: Partner | undefined): string {
+  if (partner?.status === "blacklisted") return "Blacklisted"
+  if (inv.status === "pending") return "Pending"
+  if (partner?.status === "new") return "New"
+  if (inv.status === "accepted" || inv.status === "confirmed") return "Active"
+  return "Pending"
+}
+
+function demoInvitationMatchesStatus(inv: PartnerInvitation, partner: Partner | undefined, selectedStatus: string): boolean {
+  if (selectedStatus === "All") return true
+  const eff = demoInvitationEffectiveStatus(inv, partner)
+  if (selectedStatus === "Blacklisted") return eff === "Blacklisted"
+  if (eff === "Blacklisted") return false
+  return eff === selectedStatus
+}
+
+function demoPartnerAgencyTypeLabel(partner: Partner | undefined): string | null {
+  if (!partner) return null
+  if (partner.type === "agency") return "Agency"
+  if (partner.type === "freelancer") return "Freelancer"
+  return "Production"
+}
+
+function demoInvitationMatchesLegal(partner: Partner | undefined, selectedLegal: string): boolean {
+  if (selectedLegal === "All") return true
+  const nda = Boolean(partner?.ndaSigned)
+  const msa = Boolean(partner?.msaApproved)
+  if (selectedLegal === "NDA Signed") return nda
+  if (selectedLegal === "MSA Approved") return msa
+  if (selectedLegal === "No NDA") return !nda
+  if (selectedLegal === "No MSA") return !msa
+  return true
+}
+
 const legalFilters = ["All", "NDA Signed", "MSA Approved", "No NDA", "No MSA"]
 const statusFilters = ["All", "Active", "Pending", "New", "Blacklisted"]
 const types = partnerTypes
@@ -116,7 +237,6 @@ export default function PartnerPoolPage() {
   const [selectedLegal, setSelectedLegal] = useState("All")
   const [selectedStatus, setSelectedStatus] = useState("All")
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false)
-  const [showBlacklisted, setShowBlacklisted] = useState(false)
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null)
   
   // Partnerships state (new closed ecosystem)
@@ -214,25 +334,86 @@ export default function PartnerPoolPage() {
   const loadPartnerships = async () => {
     try {
       const response = await fetch('/api/partnerships')
-      if (response.ok) {
-        const data = await response.json().catch(() => ({}))
-        const loaded: Partnership[] = (data.partnerships || []).map((p: Record<string, unknown>) => ({
-          id: p.id as string,
-          partnerId: (p.partner as { id?: string } | undefined)?.id || (p.partner_id as string),
-          partnerEmail:
-            (p.partner as { email?: string } | undefined)?.email || (p.partner_email as string),
-          partnerName: (p.partner as { full_name?: string } | undefined)?.full_name,
-          partnerCompany: (p.partner as { company_name?: string } | undefined)?.company_name,
-          status: p.status as Partnership["status"],
-          invitedAt: (p.invited_at || p.created_at) as string,
-          acceptedAt: p.accepted_at as string | undefined,
-          ndaConfirmedAt: (p.nda_confirmed_at as string | null) ?? null,
-          ndaConfirmedBy: (p.nda_confirmed_by as string | null) ?? null,
-          invitationMessage: p.invitation_message as string | undefined,
-          partnership_notes: p.partnership_notes,
-        }))
-        setPartnerships(loaded)
+      if (!response.ok) return
+      const data = await response.json().catch(() => ({}))
+      let loaded: Partnership[] = (data.partnerships || []).map((p: Record<string, unknown>) => ({
+        id: p.id as string,
+        partnerId: (p.partner as { id?: string } | undefined)?.id || (p.partner_id as string),
+        partnerEmail:
+          (p.partner as { email?: string } | undefined)?.email || (p.partner_email as string),
+        partnerName: (p.partner as { full_name?: string } | undefined)?.full_name,
+        partnerCompany: (p.partner as { company_name?: string } | undefined)?.company_name,
+        status: p.status as Partnership["status"],
+        invitedAt: (p.invited_at || p.created_at) as string,
+        acceptedAt: p.accepted_at as string | undefined,
+        ndaConfirmedAt: (p.nda_confirmed_at as string | null) ?? null,
+        ndaConfirmedBy: (p.nda_confirmed_by as string | null) ?? null,
+        invitationMessage: p.invitation_message as string | undefined,
+        partnership_notes: p.partnership_notes,
+      }))
+
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (user && loaded.length > 0) {
+        const partnerIds = [
+          ...new Set(
+            loaded
+              .map((row) => row.partnerId)
+              .filter((id): id is string => typeof id === "string" && id.length > 0),
+          ),
+        ]
+        const profileById: Record<
+          string,
+          {
+            company_name: string | null
+            full_name: string | null
+            display_name: string | null
+            agency_type: string | null
+            bio: string | null
+          }
+        > = {}
+        if (partnerIds.length > 0) {
+          const { data: profs } = await supabase
+            .from("profiles")
+            .select("id, company_name, full_name, display_name, agency_type, bio")
+            .in("id", partnerIds)
+          for (const pr of profs || []) {
+            profileById[pr.id as string] = {
+              company_name: pr.company_name as string | null,
+              full_name: pr.full_name as string | null,
+              display_name: pr.display_name as string | null,
+              agency_type: pr.agency_type as string | null,
+              bio: pr.bio as string | null,
+            }
+          }
+        }
+        const { data: msaRows } = await supabase
+          .from("msa_agreements")
+          .select("partnership_id, status")
+          .eq("agency_id", user.id)
+        const msaSignedIds = new Set(
+          (msaRows || [])
+            .filter((r) => (r.status as string) === "signed")
+            .map((r) => r.partnership_id as string),
+        )
+        loaded = loaded.map((row) => {
+          const prof = row.partnerId ? profileById[row.partnerId] : undefined
+          return {
+            ...row,
+            partnerDisplayName: prof?.display_name ?? null,
+            partnerAgencyType: prof?.agency_type ?? null,
+            partnerBio: prof?.bio ?? null,
+            partnerName: row.partnerName || prof?.full_name || undefined,
+            partnerCompany: row.partnerCompany || prof?.company_name || undefined,
+            msaSigned: msaSignedIds.has(row.id),
+          }
+        })
+      } else {
+        loaded = loaded.map((row) => ({ ...row, msaSigned: false }))
       }
+      setPartnerships(loaded)
     } catch (error) {
       console.error('Error loading partnerships:', error)
     }
@@ -534,11 +715,6 @@ export default function PartnerPoolPage() {
     }
   }
   
-  // Pending invitations count (invitations sent but not yet accepted)
-  const pendingInvitations = isDemo 
-    ? invitations.filter(inv => inv.status === 'pending').length
-    : partnerships.filter(p => p.status === 'pending').length
-  
   // Active partnerships count
   const activePartnerships = isDemo
     ? invitations.filter(inv => inv.status === 'accepted' || inv.status === 'confirmed').length
@@ -625,6 +801,111 @@ export default function PartnerPoolPage() {
     setEditingPartner(null)
   }
 
+  const allNetworkRows: NetworkRow[] = useMemo(() => {
+    if (!isLoaded) return []
+    if (isDemo) {
+      return invitations
+        .filter((inv) => inv.status !== "declined")
+        .map((inv) => ({
+          mode: "demo" as const,
+          inv,
+          partner: partners.find((x) => x.email.toLowerCase() === inv.partnerEmail.toLowerCase()),
+        }))
+    }
+    return partnerships.map((p) => ({ mode: "prod" as const, p }))
+  }, [isDemo, isLoaded, invitations, partners, partnerships])
+
+  const filteredNetworkRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    return allNetworkRows.filter((row) => {
+      if (row.mode === "demo") {
+        const { inv, partner } = row
+        if (q) {
+          const hay = [inv.partnerName, inv.partnerEmail, partner?.name, partner?.email]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+          if (!hay.includes(q)) return false
+        }
+        const at = demoPartnerAgencyTypeLabel(partner)
+        if (!agencyTypeMatchesFilter(selectedType, at)) return false
+        if (!demoInvitationMatchesStatus(inv, partner, selectedStatus)) return false
+        if (!demoInvitationMatchesLegal(partner, selectedLegal)) return false
+        const tagSource = partner ? [...partner.tags, partner.discipline] : []
+        if (!disciplineMatches(selectedDiscipline, at, partner?.experience ?? null, tagSource)) return false
+        return true
+      }
+      const p = row.p
+      if (q) {
+        const hay = [p.partnerCompany, p.partnerName, p.partnerDisplayName, p.partnerEmail]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      if (!agencyTypeMatchesFilter(selectedType, p.partnerAgencyType)) return false
+      if (!partnershipMatchesStatusFilter(p, selectedStatus)) return false
+      if (!partnershipMatchesLegalFilter(p, selectedLegal)) return false
+      if (!disciplineMatches(selectedDiscipline, p.partnerAgencyType, p.partnerBio, [])) return false
+      return true
+    })
+  }, [
+    allNetworkRows,
+    searchQuery,
+    selectedType,
+    selectedStatus,
+    selectedLegal,
+    selectedDiscipline,
+  ])
+
+  const filteredPartners = useMemo(() => {
+    if (!isLoaded) return []
+    const q = searchQuery.trim().toLowerCase()
+    return partners.filter((p) => {
+      if (q) {
+        const hay = [p.name, p.email, ...(p.tags || [])].filter(Boolean).join(" ").toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      const typeLabel = demoPartnerAgencyTypeLabel(p)
+      if (!agencyTypeMatchesFilter(selectedType, typeLabel)) return false
+      if (selectedStatus === "Blacklisted") {
+        if (p.status !== "blacklisted") return false
+      } else if (selectedStatus !== "All") {
+        if (p.status === "blacklisted") return false
+        if (selectedStatus === "Active" && p.status !== "active") return false
+        if (selectedStatus === "Pending" && p.status !== "pending") return false
+        if (selectedStatus === "New" && p.status !== "new") return false
+      }
+      if (selectedLegal === "NDA Signed" && !p.ndaSigned) return false
+      if (selectedLegal === "MSA Approved" && !p.msaApproved) return false
+      if (selectedLegal === "No NDA" && p.ndaSigned) return false
+      if (selectedLegal === "No MSA" && p.msaApproved) return false
+      if (!disciplineMatches(selectedDiscipline, typeLabel, p.experience, [...p.tags])) return false
+      if (showBookmarkedOnly && !p.bookmarked) return false
+      return true
+    })
+  }, [
+    isLoaded,
+    partners,
+    searchQuery,
+    selectedType,
+    selectedStatus,
+    selectedLegal,
+    selectedDiscipline,
+    showBookmarkedOnly,
+  ])
+
+  const filteredPendingNetworkRows = useMemo(
+    () =>
+      filteredNetworkRows.filter((r) =>
+        r.mode === "demo" ? r.inv.status === "pending" : r.p.status === "pending",
+      ),
+    [filteredNetworkRows],
+  )
+
+  const totalFilteredMatches = filteredNetworkRows.length + filteredPartners.length
+  const hasNetworkSource = allNetworkRows.length > 0
+
   if (!isLoaded) {
     return (
       <AgencyLayout title="Partner Pool">
@@ -634,23 +915,6 @@ export default function PartnerPoolPage() {
       </AgencyLayout>
     )
   }
-
-  const filteredPartners = partners.filter(p => {
-    if (searchQuery && !p.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !p.discipline.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false
-    }
-    if (selectedDiscipline !== "All" && p.discipline !== selectedDiscipline) return false
-    if (selectedType !== "All" && p.type !== selectedType.toLowerCase()) return false
-    if (selectedLegal === "NDA Signed" && !p.ndaSigned) return false
-    if (selectedLegal === "MSA Approved" && !p.msaApproved) return false
-    if (selectedLegal === "No NDA" && p.ndaSigned) return false
-    if (selectedLegal === "No MSA" && p.msaApproved) return false
-    if (selectedStatus !== "All" && p.status !== selectedStatus.toLowerCase()) return false
-    if (showBookmarkedOnly && !p.bookmarked) return false
-    if (!showBlacklisted && p.status === "blacklisted" && selectedStatus !== "Blacklisted") return false
-    return true
-  })
 
   const activePartnersStat = isDemo
     ? activePartnerships
@@ -714,80 +978,6 @@ export default function PartnerPoolPage() {
             <div className="font-mono text-[10px] text-red-400 uppercase tracking-wider mt-1">Blacklisted</div>
           </GlassCard>
         </div>
-
-        {/* Active Partnerships Section */}
-        {activePartnerships > 0 && (
-          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                <CheckCircle className="w-5 h-5 text-green-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-display font-bold text-foreground">
-                  {activePartnerships} Active Partnership{activePartnerships > 1 ? 's' : ''}
-                </h3>
-                <p className="text-sm text-foreground-muted">
-                  Partners in your network with full access to assigned projects.
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 space-y-2">
-              {(isDemo ? invitations.filter(inv => inv.status === 'accepted' || inv.status === 'confirmed') : partnerships.filter(p => p.status === 'active')).map(item => (
-                <div key={item.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
-                      <Building2 className="w-4 h-4 text-green-400" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-foreground">
-                        {isDemo ? ((item as PartnerInvitation).partnerName || (item as PartnerInvitation).partnerEmail) : ((item as Partnership).partnerCompany || (item as Partnership).partnerName || (item as Partnership).partnerEmail)}
-                      </div>
-                      <div className="font-mono text-[10px] text-foreground-muted">
-                        Active since {new Date(isDemo ? (item as PartnerInvitation).acceptedAt || '' : (item as Partnership).acceptedAt || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </div>
-                      {!isDemo && (
-                        <div className="font-mono text-[10px] mt-1">
-                          {(item as Partnership).ndaConfirmedAt ? (
-                            <span className="text-green-400">
-                              NDA Signed {new Date((item as Partnership).ndaConfirmedAt || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </span>
-                          ) : (
-                            <span className="text-amber-300">NDA Pending</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!isDemo && (item as Partnership).partnerId && (
-                      <Link
-                        href={`/agency/pool/${encodeURIComponent((item as Partnership).partnerId)}`}
-                        className="inline-flex items-center gap-1 font-mono text-[10px] text-accent hover:underline px-2 py-1 rounded-md border border-accent/30 hover:bg-accent/10"
-                      >
-                        View profile
-                        <ChevronRight className="w-3 h-3" />
-                      </Link>
-                    )}
-                    {!isDemo && !(item as Partnership).ndaConfirmedAt && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={confirmingNdaFor === item.id}
-                        onClick={() => handleConfirmNdaSigned(item.id)}
-                        className="h-7 border-green-500/40 text-green-300 hover:bg-green-500/10"
-                      >
-                        {confirmingNdaFor === item.id
-                          ? 'Saving...'
-                          : 'Confirm NDA Signed'}
-                      </Button>
-                    )}
-                    <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-green-500/10 text-green-400">Active</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Filters */}
         <GlassCard className="mb-6">
@@ -894,45 +1084,255 @@ export default function PartnerPoolPage() {
           </div>
         </GlassCard>
 
-        {/* Partner Grid */}
-        {filteredPartners.length === 0 && partners.length === 0 ? (
-          <GlassCard className="p-12 text-center">
-            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
-              <UserPlus className="w-8 h-8 text-accent" />
+        {(allNetworkRows.length > 0 || partners.length > 0) && (
+          <p className="font-mono text-[11px] text-foreground-muted mb-6">
+            Showing {totalFilteredMatches} result{totalFilteredMatches !== 1 ? "s" : ""}
+            {allNetworkRows.length > 0 && (
+              <span>
+                {" "}
+                · {filteredNetworkRows.length} in network (of {allNetworkRows.length})
+              </span>
+            )}
+            {partners.length > 0 && (
+              <span>
+                {" "}
+                · {filteredPartners.length} in discovery (of {partners.length})
+              </span>
+            )}
+          </p>
+        )}
+
+        {hasNetworkSource && (
+          <div className="mb-8 rounded-lg border border-border bg-white/[0.03] p-4">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5 text-accent" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-foreground">Partner network</h3>
+                <p className="text-sm text-foreground-muted">
+                  Active partnerships, pending invites, and status for your roster.
+                </p>
+              </div>
             </div>
-            <h3 className="font-display font-bold text-xl text-foreground mb-2">
-              Build Your Partner Network
-            </h3>
-            <p className="text-foreground-muted max-w-md mx-auto mb-6">
-              Start by adding partners to your pool. You can manually add partners or invite them via email to join your network.
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <Button 
-                onClick={() => {
-                  setEditingPartner(null)
-                  setShowAddPartnerModal(true)
-                }}
-                className="bg-accent text-background hover:bg-accent/90"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Partners
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={() => setShowInviteModal(true)}
-                className="border-accent text-accent hover:bg-accent/10"
-              >
-                <UserPlus className="w-4 h-4 mr-2" />
-                Invite via Email
-              </Button>
-            </div>
-          </GlassCard>
-        ) : filteredPartners.length === 0 ? (
-          <GlassCard className="p-8 text-center col-span-full">
-            <p className="text-foreground-muted">No partners match your current filters.</p>
-          </GlassCard>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredNetworkRows.length === 0 ? (
+              <p className="mt-4 text-sm text-foreground-muted">No partners match your filters.</p>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {filteredNetworkRows.map((row) => {
+                  if (row.mode === "demo") {
+                    const { inv, partner } = row
+                    const bl = partner?.status === "blacklisted"
+                    const pending = inv.status === "pending"
+                    const eff = demoInvitationEffectiveStatus(inv, partner)
+                    const showActiveUi = eff === "Active" || eff === "New"
+                    const title = inv.partnerName || inv.partnerEmail
+                    const subLine = pending
+                      ? `Invited ${new Date(inv.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                      : `Active since ${new Date(inv.acceptedAt || inv.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                    return (
+                      <div
+                        key={inv.id}
+                        className={cn(
+                          "flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white/5 p-3",
+                          bl
+                            ? "border-red-500/30"
+                            : pending
+                              ? "border-amber-500/25"
+                              : showActiveUi
+                                ? "border-green-500/25"
+                                : "border-border",
+                        )}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                              bl
+                                ? "bg-red-500/20"
+                                : pending
+                                  ? "bg-amber-500/20"
+                                  : showActiveUi
+                                    ? "bg-green-500/20"
+                                    : "bg-white/10",
+                            )}
+                          >
+                            <Building2
+                              className={cn(
+                                "w-4 h-4",
+                                bl ? "text-red-400" : pending ? "text-amber-400" : showActiveUi ? "text-green-400" : "text-foreground-muted",
+                              )}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-medium text-foreground truncate">{title}</div>
+                            <div className="font-mono text-[10px] text-foreground-muted">{subLine}</div>
+                            {partner && (
+                              <div className="font-mono text-[10px] mt-1 text-foreground-muted">
+                                {partner.ndaSigned ? (
+                                  <span className="text-green-400">NDA on file</span>
+                                ) : (
+                                  <span className="text-amber-300">NDA pending</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={cn(
+                              "font-mono text-[10px] px-2 py-1 rounded-full",
+                              bl
+                                ? "bg-red-500/10 text-red-400"
+                                : pending
+                                  ? "bg-amber-500/10 text-amber-400"
+                                  : eff === "New"
+                                    ? "bg-accent/10 text-accent"
+                                    : "bg-green-500/10 text-green-400",
+                            )}
+                          >
+                            {eff}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  }
+                  const p = row.p
+                  const bl = isPartnershipNotesBlacklisted(p.partnership_notes)
+                  const pending = p.status === "pending"
+                  const isActive = p.status === "active" && !bl
+                  const isNew = partnershipIsNew(p)
+                  const title = p.partnerCompany || p.partnerName || p.partnerEmail
+                  const subLine = pending
+                    ? `Invited ${new Date(p.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                    : p.acceptedAt
+                      ? `Active since ${new Date(p.acceptedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                      : `Since ${new Date(p.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                  const badgeLabel = bl
+                    ? "Blacklisted"
+                    : pending
+                      ? "Pending"
+                      : p.status === "suspended"
+                        ? "Suspended"
+                        : p.status === "terminated"
+                          ? "Terminated"
+                          : isNew
+                            ? "New"
+                            : "Active"
+                  return (
+                    <div
+                      key={p.id}
+                      className={cn(
+                        "flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white/5 p-3",
+                        bl
+                          ? "border-red-500/30"
+                          : pending
+                            ? "border-amber-500/25"
+                            : isActive
+                              ? "border-green-500/25"
+                              : "border-border",
+                      )}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className={cn(
+                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                            bl
+                              ? "bg-red-500/20"
+                              : pending
+                                ? "bg-amber-500/20"
+                                : isActive
+                                  ? "bg-green-500/20"
+                                  : "bg-white/10",
+                          )}
+                        >
+                          <Building2
+                            className={cn(
+                              "w-4 h-4",
+                              bl ? "text-red-400" : pending ? "text-amber-400" : isActive ? "text-green-400" : "text-foreground-muted",
+                            )}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-medium text-foreground truncate">{title}</div>
+                          <div className="font-mono text-[10px] text-foreground-muted">{subLine}</div>
+                          <div className="font-mono text-[10px] mt-1">
+                            {p.ndaConfirmedAt ? (
+                              <span className="text-green-400">
+                                NDA signed{" "}
+                                {new Date(p.ndaConfirmedAt).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </span>
+                            ) : (
+                              <span className="text-amber-300">NDA pending</span>
+                            )}
+                            {p.msaSigned ? (
+                              <span className="text-green-400 ml-2">MSA signed</span>
+                            ) : (
+                              <span className="text-foreground-muted ml-2">MSA open</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {p.partnerId && !bl && (
+                          <Link
+                            href={`/agency/pool/${encodeURIComponent(p.partnerId)}`}
+                            className="inline-flex items-center gap-1 font-mono text-[10px] text-accent hover:underline px-2 py-1 rounded-md border border-accent/30 hover:bg-accent/10"
+                          >
+                            View profile
+                            <ChevronRight className="w-3 h-3" />
+                          </Link>
+                        )}
+                        {isActive && !p.ndaConfirmedAt && !bl && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={confirmingNdaFor === p.id}
+                            onClick={() => handleConfirmNdaSigned(p.id)}
+                            className="h-7 border-green-500/40 text-green-300 hover:bg-green-500/10"
+                          >
+                            {confirmingNdaFor === p.id ? "Saving..." : "Confirm NDA Signed"}
+                          </Button>
+                        )}
+                        <span
+                          className={cn(
+                            "font-mono text-[10px] px-2 py-1 rounded-full",
+                            bl
+                              ? "bg-red-500/10 text-red-400"
+                              : pending
+                                ? "bg-amber-500/10 text-amber-400"
+                                : isNew
+                                  ? "bg-accent/10 text-accent"
+                                  : p.status === "active"
+                                    ? "bg-green-500/10 text-green-400"
+                                    : "bg-white/10 text-foreground-muted",
+                          )}
+                        >
+                          {badgeLabel}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Discovery grid */}
+        {partners.length > 0 ? (
+          <>
+            <h3 className="font-display font-bold text-lg text-foreground mb-4">Discovery</h3>
+            {filteredPartners.length === 0 ? (
+              <GlassCard className="p-8 text-center col-span-full mb-6">
+                <p className="text-foreground-muted">No partners match your filters.</p>
+              </GlassCard>
+            ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             {filteredPartners.map((partner) => (
             <GlassCard
               key={partner.id}
@@ -1052,10 +1452,44 @@ export default function PartnerPoolPage() {
             </GlassCard>
           ))}
           </div>
-        )}
+            )}
+          </>
+        ) : !hasNetworkSource ? (
+          <GlassCard className="p-12 text-center mb-6">
+            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+              <UserPlus className="w-8 h-8 text-accent" />
+            </div>
+            <h3 className="font-display font-bold text-xl text-foreground mb-2">
+              Build Your Partner Network
+            </h3>
+            <p className="text-foreground-muted max-w-md mx-auto mb-6">
+              Start by adding partners to your pool. You can manually add partners or invite them via email to join your network.
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                onClick={() => {
+                  setEditingPartner(null)
+                  setShowAddPartnerModal(true)
+                }}
+                className="bg-accent text-background hover:bg-accent/90"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Partners
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowInviteModal(true)}
+                className="border-accent text-accent hover:bg-accent/10"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Invite via Email
+              </Button>
+            </div>
+          </GlassCard>
+        ) : null}
 
         {/* Pending Confirmations Alert */}
-        {pendingInvitations > 0 && (
+        {filteredPendingNetworkRows.length > 0 && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
@@ -1063,7 +1497,7 @@ export default function PartnerPoolPage() {
               </div>
               <div className="flex-1">
                 <h3 className="font-display font-bold text-foreground">
-                  {pendingInvitations} Invitation{pendingInvitations > 1 ? 's' : ''} Awaiting Response
+                  {filteredPendingNetworkRows.length} Invitation{filteredPendingNetworkRows.length > 1 ? "s" : ""} Awaiting Response
                 </h3>
                 <p className="text-sm text-foreground-muted">
                   Waiting for these partners to accept your invitation.
@@ -1071,24 +1505,62 @@ export default function PartnerPoolPage() {
               </div>
             </div>
             <div className="mt-4 space-y-2">
-              {(isDemo ? invitations.filter(inv => inv.status === 'pending') : partnerships.filter(p => p.status === 'pending')).map(item => (
-                <div key={item.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                      <Mail className="w-4 h-4 text-amber-400" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-foreground">
-                        {isDemo ? ((item as PartnerInvitation).partnerName || (item as PartnerInvitation).partnerEmail) : ((item as Partnership).partnerCompany || (item as Partnership).partnerName || (item as Partnership).partnerEmail)}
+              {filteredPendingNetworkRows.map((row) => {
+                if (row.mode === "demo") {
+                  const inv = row.inv
+                  return (
+                    <div key={inv.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                          <Mail className="w-4 h-4 text-amber-400" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-foreground">
+                            {inv.partnerName || inv.partnerEmail}
+                          </div>
+                          <div className="font-mono text-[10px] text-foreground-muted">
+                            Invited on{" "}
+                            {new Date(inv.invitedAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      <div className="font-mono text-[10px] text-foreground-muted">
-                        Invited on {new Date(isDemo ? (item as PartnerInvitation).invitedAt : (item as Partnership).invitedAt || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">
+                        Pending
+                      </span>
+                    </div>
+                  )
+                }
+                const p = row.p
+                return (
+                  <div key={p.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                        <Mail className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-foreground">
+                          {p.partnerCompany || p.partnerName || p.partnerEmail}
+                        </div>
+                        <div className="font-mono text-[10px] text-foreground-muted">
+                          Invited on{" "}
+                          {new Date(p.invitedAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </div>
                       </div>
                     </div>
+                    <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">
+                      Pending
+                    </span>
                   </div>
-                  <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">Pending</span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
