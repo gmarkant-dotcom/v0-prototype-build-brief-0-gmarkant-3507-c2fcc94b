@@ -6,6 +6,7 @@ import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 
@@ -17,16 +18,24 @@ type MilestoneRow = {
   due_date: string
   status: string
   paid_at: string | null
+  notes: string | null
+  partnership_id: string | null
+  project_id: string
+  response_id: string | null
   project_name: string
   client_name: string | null
-  notes: string | null
+  scope_item_name: string | null
 }
 
-type PartnershipPayments = {
+type PartnerEngagement = {
+  id: string
+  name: string
+  client_name: string | null
+  assignment_id: string
   partnership_id: string
-  agency_id: string
-  agency_name: string
-  milestones: MilestoneRow[]
+  agency_id: string | null
+  awarded_at: string | null
+  response_id: string | null
 }
 
 type PartnershipApiRow = {
@@ -52,59 +61,88 @@ const emptyRate = (): RateInfoPayload => ({
   notes: "",
 })
 
-const demoMilestonesByPartnership: Record<string, MilestoneRow[]> = {
-  "demo-p1": [
-    {
-      id: "dm1",
-      title: "Kick-off",
-      amount: 19400,
-      currency: "USD",
-      due_date: "2026-01-14",
-      status: "paid",
-      paid_at: "2026-01-14T12:00:00Z",
-      project_name: "NWSL Creator Content Series",
-      client_name: "NWSL",
-      notes: null,
-    },
-    {
-      id: "dm2",
-      title: "Mid-point delivery",
-      amount: 38800,
-      currency: "USD",
-      due_date: "2026-02-28",
-      status: "paid",
-      paid_at: "2026-02-28T12:00:00Z",
-      project_name: "NWSL Creator Content Series",
-      client_name: "NWSL",
-      notes: null,
-    },
-    {
-      id: "dm3",
-      title: "Final delivery",
-      amount: 29100,
-      currency: "USD",
-      due_date: "2026-04-15",
-      status: "invoiced",
-      paid_at: null,
-      project_name: "NWSL Creator Content Series",
-      client_name: "NWSL",
-      notes: null,
-    },
-    {
-      id: "dm4",
-      title: "Wrap & reporting",
-      amount: 9700,
-      currency: "USD",
-      due_date: "2026-06-01",
-      status: "pending",
-      paid_at: null,
-      project_name: "NWSL Creator Content Series",
-      client_name: "NWSL",
-      notes: null,
-    },
-  ],
-  "demo-p2": [],
-}
+const DEMO_RESPONSE_ID = "demo-resp-1"
+const DEMO_PROJECT_ID = "demo-project-nwsl"
+
+const demoEngagements: PartnerEngagement[] = [
+  {
+    id: DEMO_PROJECT_ID,
+    name: "NWSL Creator Content Series",
+    client_name: "NWSL",
+    assignment_id: "demo-asg-1",
+    partnership_id: "demo-p1",
+    agency_id: "demo-agency-1",
+    awarded_at: "2026-01-01T12:00:00Z",
+    response_id: DEMO_RESPONSE_ID,
+  },
+]
+
+const demoMilestones: MilestoneRow[] = [
+  {
+    id: "dm1",
+    title: "Kick-off",
+    amount: 19400,
+    currency: "USD",
+    due_date: "2026-01-14",
+    status: "paid",
+    paid_at: "2026-01-14T12:00:00Z",
+    notes: null,
+    partnership_id: "demo-p1",
+    project_id: DEMO_PROJECT_ID,
+    response_id: DEMO_RESPONSE_ID,
+    project_name: "NWSL Creator Content Series",
+    client_name: "NWSL",
+    scope_item_name: "Creator content",
+  },
+  {
+    id: "dm2",
+    title: "Mid-point delivery",
+    amount: 38800,
+    currency: "USD",
+    due_date: "2026-02-28",
+    status: "paid",
+    paid_at: "2026-02-28T12:00:00Z",
+    notes: null,
+    partnership_id: "demo-p1",
+    project_id: DEMO_PROJECT_ID,
+    response_id: DEMO_RESPONSE_ID,
+    project_name: "NWSL Creator Content Series",
+    client_name: "NWSL",
+    scope_item_name: "Creator content",
+  },
+  {
+    id: "dm3",
+    title: "Final delivery",
+    amount: 29100,
+    currency: "USD",
+    due_date: "2026-04-15",
+    status: "invoiced",
+    paid_at: null,
+    notes: null,
+    partnership_id: "demo-p1",
+    project_id: DEMO_PROJECT_ID,
+    response_id: DEMO_RESPONSE_ID,
+    project_name: "NWSL Creator Content Series",
+    client_name: "NWSL",
+    scope_item_name: "Creator content",
+  },
+  {
+    id: "dm4",
+    title: "Wrap & reporting",
+    amount: 9700,
+    currency: "USD",
+    due_date: "2026-06-01",
+    status: "pending",
+    paid_at: null,
+    notes: null,
+    partnership_id: "demo-p1",
+    project_id: DEMO_PROJECT_ID,
+    response_id: DEMO_RESPONSE_ID,
+    project_name: "NWSL Creator Content Series",
+    client_name: "NWSL",
+    scope_item_name: "Creator content",
+  },
+]
 
 const demoActivePartnerships: PartnershipApiRow[] = [
   { id: "demo-p1", agency_id: "demo-agency-1", status: "active", agency: { company_name: "Tandem Social" } },
@@ -152,18 +190,6 @@ function statusBadgeClass(status: string) {
   return "bg-gray-100 text-gray-600"
 }
 
-function summarize(milestones: MilestoneRow[]) {
-  const totalOwed = milestones.reduce((sum, m) => sum + (Number.isFinite(m.amount) ? m.amount : 0), 0)
-  const totalPaid = milestones
-    .filter((m) => m.status.toLowerCase() === "paid")
-    .reduce((sum, m) => sum + (Number.isFinite(m.amount) ? m.amount : 0), 0)
-  return {
-    totalOwed,
-    totalPaid,
-    totalOutstanding: Math.max(0, totalOwed - totalPaid),
-  }
-}
-
 function agencyLabel(p: PartnershipApiRow) {
   const a = p.agency
   const name = (a?.company_name || "").trim() || (a?.full_name || "").trim()
@@ -180,6 +206,17 @@ function agencyInitials(name: string) {
     .slice(0, 2)
 }
 
+/** Milestones for one awarded engagement (match response_id when set; else project + partnership). */
+function milestonesForEngagement(milestones: MilestoneRow[], eng: PartnerEngagement): MilestoneRow[] {
+  return milestones.filter((m) => {
+    if (m.project_id !== eng.id) return false
+    if (m.response_id) {
+      return eng.response_id != null && m.response_id === eng.response_id
+    }
+    return m.partnership_id == null || m.partnership_id === eng.partnership_id
+  })
+}
+
 export default function PartnerPaymentsPage() {
   const isDemo = isDemoMode()
 
@@ -187,13 +224,19 @@ export default function PartnerPaymentsPage() {
   const [partnershipsError, setPartnershipsError] = useState<string | null>(null)
   const [loadingPartnerships, setLoadingPartnerships] = useState(!isDemo)
 
-  const [milestonesByPartnership, setMilestonesByPartnership] = useState<Record<string, MilestoneRow[]>>({})
+  const [allMilestones, setAllMilestones] = useState<MilestoneRow[]>([])
   const [paymentsError, setPaymentsError] = useState<string | null>(null)
   const [loadingPayments, setLoadingPayments] = useState(!isDemo)
+
+  const [engagements, setEngagements] = useState<PartnerEngagement[]>([])
+  const [engagementsError, setEngagementsError] = useState<string | null>(null)
+  const [loadingEngagements, setLoadingEngagements] = useState(!isDemo)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [agencyDropdownOpen, setAgencyDropdownOpen] = useState(false)
   const agencyDropdownRef = useRef<HTMLDivElement>(null)
+
+  const [openEngagementAssignmentId, setOpenEngagementAssignmentId] = useState<string | null>(null)
 
   const [bio, setBio] = useState("")
   const [location, setLocation] = useState("")
@@ -206,19 +249,11 @@ export default function PartnerPaymentsPage() {
 
   const [demoRates, setDemoRates] = useState<Record<string, RateInfoPayload>>(demoRatesSeeded)
 
-  const mergedRows: PartnershipPayments[] = useMemo(() => {
-    return activePartnerships.map((p) => ({
-      partnership_id: p.id,
-      agency_id: p.agency_id,
-      agency_name: agencyLabel(p),
-      milestones: milestonesByPartnership[p.id] ?? [],
-    }))
-  }, [activePartnerships, milestonesByPartnership])
-
-  const loadPartnershipsAndPayments = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     if (isDemo) {
       setActivePartnerships(demoActivePartnerships)
-      setMilestonesByPartnership(demoMilestonesByPartnership)
+      setAllMilestones(demoMilestones)
+      setEngagements(demoEngagements)
       setSelectedId((prev) => {
         const ids = demoActivePartnerships.map((p) => p.id)
         if (prev && ids.includes(prev)) return prev
@@ -226,20 +261,25 @@ export default function PartnerPaymentsPage() {
       })
       setLoadingPartnerships(false)
       setLoadingPayments(false)
+      setLoadingEngagements(false)
       setPartnershipsError(null)
       setPaymentsError(null)
+      setEngagementsError(null)
       return
     }
 
     setLoadingPartnerships(true)
     setLoadingPayments(true)
+    setLoadingEngagements(true)
     setPartnershipsError(null)
     setPaymentsError(null)
+    setEngagementsError(null)
 
     try {
-      const [partRes, payRes] = await Promise.all([
+      const [partRes, payRes, engRes] = await Promise.all([
         fetch("/api/partnerships", { credentials: "same-origin" }),
         fetch("/api/partner/payments", { credentials: "same-origin" }),
+        fetch("/api/partner/projects", { credentials: "same-origin" }),
       ])
 
       const partData = await partRes.json().catch(() => ({}))
@@ -261,29 +301,56 @@ export default function PartnerPaymentsPage() {
       const payData = await payRes.json().catch(() => ({}))
       if (!payRes.ok) {
         setPaymentsError((payData as { error?: string }).error || "Failed to load payment milestones")
-        setMilestonesByPartnership({})
+        setAllMilestones([])
       } else {
-        const list = (payData as { partnerships?: PartnershipPayments[] }).partnerships || []
-        const map: Record<string, MilestoneRow[]> = {}
-        for (const entry of list) {
-          map[entry.partnership_id] = entry.milestones || []
+        const raw = (payData as { milestones?: unknown }).milestones
+        const list = Array.isArray(raw) ? raw : []
+        setAllMilestones(list as MilestoneRow[])
+      }
+
+      const engData = await engRes.json().catch(() => ({}))
+      if (!engRes.ok) {
+        setEngagementsError((engData as { error?: string }).error || "Failed to load engagements")
+        setEngagements([])
+      } else {
+        const raw = (engData as { projects?: unknown }).projects
+        const list = Array.isArray(raw) ? raw : []
+        const mapped: PartnerEngagement[] = []
+        for (const item of list) {
+          if (!item || typeof item !== "object") continue
+          const p = item as Record<string, unknown>
+          const id = p.id != null ? String(p.id) : ""
+          if (!id) continue
+          mapped.push({
+            id,
+            name: String(p.name || "Project"),
+            client_name: p.client_name != null ? String(p.client_name) : null,
+            assignment_id: String(p.assignment_id || ""),
+            partnership_id: String(p.partnership_id || ""),
+            agency_id: p.agency_id != null ? String(p.agency_id) : null,
+            awarded_at: p.awarded_at != null ? String(p.awarded_at) : null,
+            response_id: p.response_id != null ? String(p.response_id) : null,
+          })
         }
-        setMilestonesByPartnership(map)
+        setEngagements(mapped.filter((e) => e.assignment_id && e.partnership_id))
       }
     } catch {
       setPartnershipsError("Failed to load partnerships")
       setPaymentsError("Failed to load payments")
+      setEngagementsError("Failed to load engagements")
       setActivePartnerships([])
-      setMilestonesByPartnership({})
+      setAllMilestones([])
+      setEngagements([])
     } finally {
       setLoadingPartnerships(false)
       setLoadingPayments(false)
+      setLoadingEngagements(false)
     }
   }, [isDemo])
 
   useEffect(() => {
-    loadPartnershipsAndPayments()
-  }, [loadPartnershipsAndPayments])
+    loadAll()
+  }, [loadAll])
 
   useEffect(() => {
     const onPointerDown = (e: MouseEvent) => {
@@ -299,6 +366,16 @@ export default function PartnerPaymentsPage() {
     () => activePartnerships.find((p) => p.id === selectedId) ?? null,
     [activePartnerships, selectedId]
   )
+
+  const engagementsForAgency = useMemo(() => {
+    if (!selectedId) return []
+    return engagements.filter((e) => e.partnership_id === selectedId)
+  }, [engagements, selectedId])
+
+  useEffect(() => {
+    const first = engagementsForAgency[0]?.assignment_id ?? null
+    setOpenEngagementAssignmentId(first)
+  }, [selectedId, engagementsForAgency])
 
   const loadRateForSelection = useCallback(
     async (partnershipId: string | null) => {
@@ -359,14 +436,7 @@ export default function PartnerPaymentsPage() {
     void loadRateForSelection(selectedId)
   }, [selectedId, loadRateForSelection])
 
-  const selected = useMemo(
-    () => mergedRows.find((p) => p.partnership_id === selectedId) ?? null,
-    [mergedRows, selectedId]
-  )
-
-  const summary = useMemo(() => summarize(selected?.milestones ?? []), [selected])
-
-  const loadingShell = loadingPartnerships || loadingPayments
+  const loadingShell = loadingPartnerships || loadingPayments || loadingEngagements
 
   const saveRateInfo = async () => {
     if (!selectedId) return
@@ -428,7 +498,7 @@ export default function PartnerPaymentsPage() {
           </p>
         </div>
 
-        {/* Lead agency selector — same dropdown pattern as partner onboarding LeadAgencyFilter */}
+        {/* Top: Lead agency dropdown */}
         <div className="space-y-3">
           <p className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Lead agency</p>
           {loadingShell ? (
@@ -494,103 +564,107 @@ export default function PartnerPaymentsPage() {
             </div>
           )}
           {paymentsError ? <div className="text-sm text-amber-700">{paymentsError}</div> : null}
+          {engagementsError ? <div className="text-sm text-amber-700">{engagementsError}</div> : null}
         </div>
 
-        {/* Payment schedule — milestones for selected partnership only */}
-        {selected && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-            <div>
-              <h2 className="font-display font-bold text-lg text-[#0C3535]">Payment schedule</h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Milestones shared by <span className="font-medium text-[#0C3535]">{selected.agency_name}</span>.
-              </p>
+        {/* Middle: Active engagements accordion */}
+        <div className="space-y-4">
+          <h2 className="font-display font-bold text-lg text-[#0C3535]">Active engagements</h2>
+          {!selectedId ? (
+            <p className="text-sm text-gray-500">Select a lead agency to see awarded engagements.</p>
+          ) : loadingShell ? (
+            <div className="h-24 bg-gray-100 rounded-xl animate-pulse" />
+          ) : engagementsForAgency.length === 0 ? (
+            <div className="text-sm text-gray-600 rounded-xl border border-gray-200 bg-white px-4 py-4">
+              No awarded engagements with this agency yet.
             </div>
+          ) : (
+            <div className="space-y-2">
+              {engagementsForAgency.map((eng) => {
+                const ms = milestonesForEngagement(allMilestones, eng)
+                const isOpen = openEngagementAssignmentId === eng.assignment_id
+                return (
+                  <Collapsible
+                    key={eng.assignment_id}
+                    open={isOpen}
+                    onOpenChange={(open) => setOpenEngagementAssignmentId(open ? eng.assignment_id : null)}
+                    className="rounded-xl border border-gray-200 bg-white overflow-hidden"
+                  >
+                    <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/80 transition-colors">
+                      <ChevronDown
+                        className={cn("w-4 h-4 text-gray-500 shrink-0 transition-transform", isOpen && "rotate-180")}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-display font-bold text-sm text-[#0C3535] truncate">{eng.name}</div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {eng.client_name || "Client TBD"}
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="border-t border-gray-100 px-4 pb-4 pt-2">
+                        {ms.length === 0 ? (
+                          <p className="text-sm text-gray-600 py-2">No payment schedule set up yet.</p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-gray-200">
+                                  <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2 pr-2">
+                                    Title
+                                  </th>
+                                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                    Amount
+                                  </th>
+                                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                    Due date
+                                  </th>
+                                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                    Status
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ms.map((m) => (
+                                  <tr key={m.id} className="border-b border-gray-100">
+                                    <td className="py-2 pr-2">
+                                      <div className="text-gray-900 font-medium">{m.title}</div>
+                                      {m.scope_item_name ? (
+                                        <div className="text-xs text-gray-500">{m.scope_item_name}</div>
+                                      ) : null}
+                                    </td>
+                                    <td className="py-2 text-right font-mono text-[#0C3535]">
+                                      {formatMoney(m.amount, m.currency)}
+                                    </td>
+                                    <td className="py-2 text-right font-mono text-xs text-gray-500">
+                                      {formatDueDate(m.due_date)}
+                                    </td>
+                                    <td className="py-2 text-right">
+                                      <span
+                                        className={cn(
+                                          "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize inline-block",
+                                          statusBadgeClass(m.status)
+                                        )}
+                                      >
+                                        {m.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
-            {selected.milestones.length > 0 ? (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4 text-center">
-                    <div className="font-display font-bold text-xl text-[#0C3535]">
-                      {formatMoney(summary.totalOwed, selected.milestones[0]?.currency || "USD")}
-                    </div>
-                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Total owed</div>
-                  </div>
-                  <div className="rounded-lg border border-green-100 bg-green-50/60 p-4 text-center">
-                    <div className="font-display font-bold text-xl text-green-700">
-                      {formatMoney(summary.totalPaid, selected.milestones[0]?.currency || "USD")}
-                    </div>
-                    <div className="font-mono text-[10px] text-green-700 uppercase tracking-wider mt-1">Total paid</div>
-                  </div>
-                  <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-4 text-center">
-                    <div className="font-display font-bold text-xl text-amber-800">
-                      {formatMoney(summary.totalOutstanding, selected.milestones[0]?.currency || "USD")}
-                    </div>
-                    <div className="font-mono text-[10px] text-amber-800 uppercase tracking-wider mt-1">
-                      Outstanding
-                    </div>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-200">
-                        <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
-                          Project
-                        </th>
-                        <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
-                          Scope / title
-                        </th>
-                        <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
-                          Amount
-                        </th>
-                        <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
-                          Due date
-                        </th>
-                        <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-3">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selected.milestones.map((m) => (
-                        <tr key={m.id} className="border-b border-gray-100">
-                          <td className="py-3 pr-2">
-                            <div className="font-display font-bold text-sm text-[#0C3535]">{m.project_name}</div>
-                            {m.client_name ? (
-                              <div className="text-xs text-gray-500">{m.client_name}</div>
-                            ) : null}
-                          </td>
-                          <td className="py-3 text-sm text-gray-700">{m.title}</td>
-                          <td className="py-3 text-right font-mono text-sm text-[#0C3535]">
-                            {formatMoney(m.amount, m.currency)}
-                          </td>
-                          <td className="py-3 text-right font-mono text-xs text-gray-500">
-                            {formatDueDate(m.due_date)}
-                          </td>
-                          <td className="py-3 text-right">
-                            <span
-                              className={cn(
-                                "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize inline-block",
-                                statusBadgeClass(m.status)
-                              )}
-                            >
-                              {m.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-gray-600">No payment schedule set up yet by this agency.</p>
-            )}
-          </div>
-        )}
-
-        {/* Rate information — scoped to selected partnership */}
+        {/* Bottom: Rate information */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
           <h2 className="font-display font-bold text-lg text-[#0C3535]">Rate information</h2>
           {!selectedId ? (
@@ -602,7 +676,10 @@ export default function PartnerPaymentsPage() {
           ) : (
             <>
               <p className="text-sm text-gray-600">
-                Rates below are stored for <span className="font-medium text-[#0C3535]">{selected?.agency_name}</span>{" "}
+                Rates below are stored for{" "}
+                <span className="font-medium text-[#0C3535]">
+                  {selectedPartnershipRow ? agencyLabel(selectedPartnershipRow) : "this agency"}
+                </span>{" "}
                 only.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">

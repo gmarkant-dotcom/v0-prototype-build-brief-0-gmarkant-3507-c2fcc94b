@@ -9,14 +9,41 @@ const noStore = {
   Expires: "0",
 } as const
 
-type ProjectEmbed = { title?: string | null; client_name?: string | null }
+type ProjectEmbed = { title?: string | null; name?: string | null; client_name?: string | null }
 
-function normalizeProjectEmbed(project: ProjectEmbed | ProjectEmbed[] | null): ProjectEmbed | null {
-  if (!project) return null
-  if (Array.isArray(project)) return project[0] ?? null
-  return project
+type InboxEmbed = { scope_item_name?: string | null }
+
+type ResponseEmbed = {
+  id?: string
+  partner_rfp_inbox?: InboxEmbed | InboxEmbed[] | null
 }
 
+function normalizeOne<T>(raw: T | T[] | null | undefined): T | null {
+  if (raw == null) return null
+  if (Array.isArray(raw)) return (raw[0] as T) ?? null
+  return raw as T
+}
+
+function projectDisplayName(proj: ProjectEmbed | null): string {
+  if (!proj) return "Project"
+  const t = (proj.title || proj.name || "").trim()
+  return t || "Project"
+}
+
+function scopeFromResponse(res: ResponseEmbed | null): string | null {
+  if (!res) return null
+  const inbox = normalizeOne<InboxEmbed>(res.partner_rfp_inbox)
+  const s = (inbox?.scope_item_name || "").trim()
+  return s || null
+}
+
+/**
+ * GET payment milestones visible to the partner:
+ * - Rows with partnership_id in the partner's active partnerships, OR
+ * - Rows on project_id where the partner has an awarded assignment (covers NULL partnership_id on milestones).
+ *
+ * Embeds: projects (title, client_name), partner_rfp_responses → partner_rfp_inbox (scope_item_name).
+ */
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -78,52 +105,118 @@ export async function GET() {
       }
     }
 
-    let milestoneRows: Array<{
-      id: string
-      title: string
-      amount: number | string
-      currency: string
-      due_date: string
-      status: string
-      paid_at: string | null
-      notes: string | null
-      partnership_id: string | null
-      project: ProjectEmbed | ProjectEmbed[] | null
-    }> = []
+    let awardedProjectIds: string[] = []
+    if (partnershipIds.length > 0) {
+      const { data: asg, error: asgErr } = await supabase
+        .from("project_assignments")
+        .select("project_id")
+        .in("partnership_id", partnershipIds)
+        .eq("status", "awarded")
+
+      if (asgErr) {
+        console.error("[api/partner/payments] awarded assignments failed", asgErr)
+      } else {
+        awardedProjectIds = [...new Set((asg || []).map((r) => r.project_id as string).filter(Boolean))]
+      }
+    }
+
+    const selectMilestones = `
+      id,
+      title,
+      amount,
+      currency,
+      due_date,
+      status,
+      paid_at,
+      notes,
+      partnership_id,
+      project_id,
+      response_id,
+      project:projects ( title, name, client_name ),
+      response:partner_rfp_responses (
+        id,
+        partner_rfp_inbox ( scope_item_name )
+      )
+    `
+
+    const byId = new Map<string, Record<string, unknown>>()
 
     if (partnershipIds.length > 0) {
-      const { data: miles, error: mErr } = await supabase
+      const { data: byPartnership, error: e1 } = await supabase
         .from("payment_milestones")
-        .select(
-          `
-          id,
-          title,
-          amount,
-          currency,
-          due_date,
-          status,
-          paid_at,
-          notes,
-          partnership_id,
-          project:projects ( title, client_name )
-        `
-        )
+        .select(selectMilestones)
         .in("partnership_id", partnershipIds)
         .order("due_date", { ascending: true })
 
-      if (mErr) {
-        console.error("[api/partner/payments] payment_milestones failed", {
-          message: mErr.message,
-          code: mErr.code,
+      if (e1) {
+        console.error("[api/partner/payments] payment_milestones by partnership_id failed", {
+          message: e1.message,
+          code: e1.code,
+          details: e1.details,
+          hint: e1.hint,
         })
         return NextResponse.json({ error: "Failed to load payment milestones" }, { status: 500, headers: noStore })
       }
-
-      milestoneRows = (miles || []) as typeof milestoneRows
+      for (const row of byPartnership || []) {
+        byId.set(String((row as { id: string }).id), row as Record<string, unknown>)
+      }
     }
 
-    const milestonesByPartnership = new Map<string, typeof milestoneRows>()
-    for (const m of milestoneRows) {
+    if (awardedProjectIds.length > 0) {
+      const { data: byProject, error: e2 } = await supabase
+        .from("payment_milestones")
+        .select(selectMilestones)
+        .in("project_id", awardedProjectIds)
+        .order("due_date", { ascending: true })
+
+      if (e2) {
+        console.error("[api/partner/payments] payment_milestones by project_id failed", {
+          message: e2.message,
+          code: e2.code,
+          details: e2.details,
+          hint: e2.hint,
+        })
+        return NextResponse.json({ error: "Failed to load payment milestones" }, { status: 500, headers: noStore })
+      }
+      for (const row of byProject || []) {
+        byId.set(String((row as { id: string }).id), row as Record<string, unknown>)
+      }
+    }
+
+    const milestoneRows = [...byId.values()].sort((a, b) => {
+      const da = String(a.due_date || "")
+      const db = String(b.due_date || "")
+      return da.localeCompare(db)
+    })
+
+    const toApiRow = (m: Record<string, unknown>) => {
+      const proj = normalizeOne<ProjectEmbed>(m.project as ProjectEmbed | ProjectEmbed[] | null)
+      const res = normalizeOne<ResponseEmbed>(m.response as ResponseEmbed | ResponseEmbed[] | null)
+      const amountRaw = m.amount
+      const amount =
+        typeof amountRaw === "string" ? parseFloat(amountRaw) : Number(amountRaw)
+      return {
+        id: m.id as string,
+        title: m.title as string,
+        amount: Number.isFinite(amount) ? amount : 0,
+        currency: (m.currency as string) || "USD",
+        due_date: m.due_date as string,
+        status: m.status as string,
+        paid_at: (m.paid_at as string | null) ?? null,
+        notes: (m.notes as string | null) ?? null,
+        partnership_id: (m.partnership_id as string | null) ?? null,
+        project_id: m.project_id as string,
+        response_id: (m.response_id as string | null) ?? null,
+        project_name: projectDisplayName(proj),
+        client_name: proj?.client_name ?? null,
+        scope_item_name: scopeFromResponse(res),
+      }
+    }
+
+    const milestones = milestoneRows.map(toApiRow)
+
+    const milestonesByPartnership = new Map<string, typeof milestones>()
+    for (const m of milestones) {
       const pid = m.partnership_id
       if (!pid) continue
       const arr = milestonesByPartnership.get(pid) || []
@@ -139,27 +232,11 @@ export async function GET() {
         partnership_id: pid,
         agency_id: aid,
         agency_name: agencyNameById[aid] || "Agency",
-        milestones: list.map((m) => {
-          const proj = normalizeProjectEmbed(m.project)
-          const title = proj?.title ?? null
-          const client = proj?.client_name ?? null
-          return {
-            id: m.id,
-            title: m.title,
-            amount: typeof m.amount === "string" ? parseFloat(m.amount) : Number(m.amount),
-            currency: m.currency || "USD",
-            due_date: m.due_date,
-            status: m.status,
-            paid_at: m.paid_at,
-            project_name: title || "Project",
-            client_name: client ?? null,
-            notes: m.notes,
-          }
-        }),
+        milestones: list,
       }
     })
 
-    return NextResponse.json({ partnerships }, { headers: noStore })
+    return NextResponse.json({ milestones, partnerships }, { headers: noStore })
   } catch (e) {
     console.error("[api/partner/payments] unexpected", e)
     return NextResponse.json({ error: "Internal error" }, { status: 500, headers: noStore })
