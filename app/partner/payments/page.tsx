@@ -39,6 +39,13 @@ type PartnerEngagement = {
   awarded_at: string | null
 }
 
+type GroupedProject = {
+  project_id: string
+  project_name: string
+  client_name: string | null
+  scopes: PartnerEngagement[]
+}
+
 type PartnershipApiRow = {
   id: string
   agency_id: string
@@ -63,6 +70,7 @@ const emptyRate = (): RateInfoPayload => ({
 })
 
 const DEMO_RESPONSE_ID = "demo-resp-1"
+const DEMO_RESPONSE_ID_2 = "demo-resp-2"
 const DEMO_PROJECT_ID = "demo-project-nwsl"
 
 const demoEngagements: PartnerEngagement[] = [
@@ -76,6 +84,17 @@ const demoEngagements: PartnerEngagement[] = [
     awarded_at: "2026-01-01T12:00:00Z",
     response_id: DEMO_RESPONSE_ID,
     scope_item_name: "Creator content",
+  },
+  {
+    project_id: DEMO_PROJECT_ID,
+    project_name: "NWSL Creator Content Series",
+    client_name: "NWSL",
+    assignment_id: "demo-asg-1",
+    partnership_id: "demo-p1",
+    agency_id: "demo-agency-1",
+    awarded_at: "2026-01-01T12:00:00Z",
+    response_id: DEMO_RESPONSE_ID_2,
+    scope_item_name: "Paid media",
   },
 ]
 
@@ -238,7 +257,10 @@ export default function PartnerPaymentsPage() {
   const [agencyDropdownOpen, setAgencyDropdownOpen] = useState(false)
   const agencyDropdownRef = useRef<HTMLDivElement>(null)
 
-  const [openEngagementAssignmentId, setOpenEngagementAssignmentId] = useState<string | null>(null)
+  /** Accordion open project (project_id). */
+  const [openProjectId, setOpenProjectId] = useState<string | null>(null)
+  /** "" = All projects; else project_id */
+  const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>("")
 
   const [bio, setBio] = useState("")
   const [location, setLocation] = useState("")
@@ -381,13 +403,54 @@ export default function PartnerPaymentsPage() {
     return engagements.filter((e) => e.partnership_id === selectedId)
   }, [engagements, selectedId])
 
+  const projectsGrouped = useMemo((): GroupedProject[] => {
+    const map = new Map<string, GroupedProject>()
+    for (const e of engagementsForAgency) {
+      const existing = map.get(e.project_id)
+      if (!existing) {
+        map.set(e.project_id, {
+          project_id: e.project_id,
+          project_name: e.project_name,
+          client_name: e.client_name,
+          scopes: [e],
+        })
+      } else {
+        existing.scopes.push(e)
+        if (!existing.client_name && e.client_name) existing.client_name = e.client_name
+      }
+    }
+    for (const g of map.values()) {
+      g.scopes.sort((a, b) => (a.scope_item_name ?? "").localeCompare(b.scope_item_name ?? ""))
+    }
+    return [...map.values()].sort((a, b) => a.project_name.localeCompare(b.project_name))
+  }, [engagementsForAgency])
+
+  const projectFilterOptions = useMemo(() => {
+    return projectsGrouped.map((g) => ({
+      project_id: g.project_id,
+      label: `${g.client_name?.trim() || "Client"} / ${g.project_name}`,
+    }))
+  }, [projectsGrouped])
+
+  const visibleProjects = useMemo(() => {
+    if (!selectedProjectFilter) return projectsGrouped
+    return projectsGrouped.filter((g) => g.project_id === selectedProjectFilter)
+  }, [projectsGrouped, selectedProjectFilter])
+
   useEffect(() => {
-    const first = engagementsForAgency[0]
-    const rowKey = first
-      ? `${first.assignment_id || "no-asg"}:${first.response_id ?? "no-resp"}`
-      : null
-    setOpenEngagementAssignmentId(rowKey)
-  }, [selectedId, engagementsForAgency])
+    setSelectedProjectFilter("")
+  }, [selectedId])
+
+  useEffect(() => {
+    const ids = selectedProjectFilter
+      ? projectsGrouped.filter((g) => g.project_id === selectedProjectFilter).map((g) => g.project_id)
+      : projectsGrouped.map((g) => g.project_id)
+    if (ids.length === 0) {
+      setOpenProjectId(null)
+      return
+    }
+    setOpenProjectId((prev) => (prev && ids.includes(prev) ? prev : ids[0]))
+  }, [selectedId, selectedProjectFilter, projectsGrouped])
 
   const loadRateForSelection = useCallback(
     async (partnershipId: string | null) => {
@@ -579,7 +642,7 @@ export default function PartnerPaymentsPage() {
           {engagementsError ? <div className="text-sm text-amber-700">{engagementsError}</div> : null}
         </div>
 
-        {/* Middle: Active engagements accordion */}
+        {/* Middle: Active engagements — grouped by project */}
         <div className="space-y-4">
           <h2 className="font-display font-bold text-lg text-[#0C3535]">Active engagements</h2>
           {!selectedId ? (
@@ -591,89 +654,129 @@ export default function PartnerPaymentsPage() {
               No awarded engagements with this agency yet.
             </div>
           ) : (
-            <div className="space-y-2">
-              {engagementsForAgency.map((eng) => {
-                const ms = milestonesForEngagement(allMilestones, eng)
-                const rowKey = `${eng.assignment_id || "no-asg"}:${eng.response_id ?? "no-resp"}`
-                const isOpen = openEngagementAssignmentId === rowKey
-                return (
-                  <Collapsible
-                    key={rowKey}
-                    open={isOpen}
-                    onOpenChange={(open) => setOpenEngagementAssignmentId(open ? rowKey : null)}
-                    className="rounded-xl border border-gray-200 bg-white overflow-hidden"
-                  >
-                    <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/80 transition-colors">
-                      <ChevronDown
-                        className={cn("w-4 h-4 text-gray-500 shrink-0 transition-transform", isOpen && "rotate-180")}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-display font-bold text-sm text-[#0C3535] truncate">
-                          {eng.project_name}
-                        </div>
-                        <div className="text-xs text-gray-500 truncate">{eng.client_name || "Client TBD"}</div>
-                      </div>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <div className="border-t border-gray-100 px-4 pb-4 pt-2">
-                        {ms.length === 0 ? (
-                          <p className="text-sm text-gray-600 py-2">No payment schedule set up yet.</p>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-200">
-                                  <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2 pr-2">
-                                    Title
-                                  </th>
-                                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
-                                    Amount
-                                  </th>
-                                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
-                                    Due date
-                                  </th>
-                                  <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
-                                    Status
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {ms.map((m) => (
-                                  <tr key={m.id} className="border-b border-gray-100">
-                                    <td className="py-2 pr-2">
-                                      <div className="text-gray-900 font-medium">{m.title}</div>
-                                      {m.scope_item_name ? (
-                                        <div className="text-xs text-gray-500">{m.scope_item_name}</div>
-                                      ) : null}
-                                    </td>
-                                    <td className="py-2 text-right font-mono text-[#0C3535]">
-                                      {formatMoney(m.amount, m.currency)}
-                                    </td>
-                                    <td className="py-2 text-right font-mono text-xs text-gray-500">
-                                      {formatDueDate(m.due_date)}
-                                    </td>
-                                    <td className="py-2 text-right">
-                                      <span
-                                        className={cn(
-                                          "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize inline-block",
-                                          statusBadgeClass(m.status)
-                                        )}
-                                      >
-                                        {m.status}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+            <>
+              <div className="space-y-2 max-w-md">
+                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider">
+                  Client / Project
+                </label>
+                <select
+                  value={selectedProjectFilter}
+                  onChange={(e) => setSelectedProjectFilter(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-[#0C3535]/30 bg-white text-sm text-[#0C3535]"
+                >
+                  <option value="">All projects</option>
+                  {projectFilterOptions.map((opt) => (
+                    <option key={opt.project_id} value={opt.project_id}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                {visibleProjects.length === 0 ? (
+                  <div className="text-sm text-gray-600 rounded-xl border border-gray-200 bg-white px-4 py-4">
+                    No projects match this filter.
+                  </div>
+                ) : (
+                  visibleProjects.map((group) => {
+                    const isOpen = openProjectId === group.project_id
+                    return (
+                      <Collapsible
+                        key={group.project_id}
+                        open={isOpen}
+                        onOpenChange={(open) => {
+                          if (open) setOpenProjectId(group.project_id)
+                          else if (openProjectId === group.project_id) setOpenProjectId(null)
+                        }}
+                        className="rounded-xl border border-gray-200 bg-white overflow-hidden"
+                      >
+                        <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/80 transition-colors">
+                          <ChevronDown
+                            className={cn(
+                              "w-4 h-4 text-gray-500 shrink-0 transition-transform",
+                              isOpen && "rotate-180"
+                            )}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-display font-bold text-sm text-[#0C3535] truncate">
+                              {group.project_name}
+                            </div>
+                            <div className="text-xs text-gray-500 truncate">
+                              {group.client_name || "Client TBD"}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                )
-              })}
-            </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-6">
+                            {group.scopes.map((scope) => {
+                              const ms = milestonesForEngagement(allMilestones, scope)
+                              const scopeKey = `${scope.response_id ?? "no-resp"}:${scope.assignment_id}:${scope.scope_item_name ?? ""}`
+                              const scopeLabel =
+                                scope.scope_item_name?.trim() || (scope.response_id ? "Scope" : "Project")
+                              return (
+                                <div key={scopeKey} className="space-y-2">
+                                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">
+                                    {scopeLabel}
+                                  </div>
+                                  {ms.length === 0 ? (
+                                    <p className="text-sm text-gray-600 pl-0">No payment schedule set up yet.</p>
+                                  ) : (
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="border-b border-gray-200">
+                                            <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2 pr-2">
+                                              Title
+                                            </th>
+                                            <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                              Amount
+                                            </th>
+                                            <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                              Due date
+                                            </th>
+                                            <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                              Status
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {ms.map((m) => (
+                                            <tr key={m.id} className="border-b border-gray-100">
+                                              <td className="py-2 pr-2 text-gray-900 font-medium">{m.title}</td>
+                                              <td className="py-2 text-right font-mono text-[#0C3535]">
+                                                {formatMoney(m.amount, m.currency)}
+                                              </td>
+                                              <td className="py-2 text-right font-mono text-xs text-gray-500">
+                                                {formatDueDate(m.due_date)}
+                                              </td>
+                                              <td className="py-2 text-right">
+                                                <span
+                                                  className={cn(
+                                                    "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize inline-block",
+                                                    statusBadgeClass(m.status)
+                                                  )}
+                                                >
+                                                  {m.status}
+                                                </span>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )
+                  })
+                )}
+              </div>
+            </>
           )}
         </div>
 
