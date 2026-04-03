@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Building2, Check, ChevronDown } from "lucide-react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -169,6 +170,16 @@ function agencyLabel(p: PartnershipApiRow) {
   return name || "Lead agency"
 }
 
+function agencyInitials(name: string) {
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return "LA"
+  return parts
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
+}
+
 export default function PartnerPaymentsPage() {
   const isDemo = isDemoMode()
 
@@ -181,6 +192,8 @@ export default function PartnerPaymentsPage() {
   const [loadingPayments, setLoadingPayments] = useState(!isDemo)
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [agencyDropdownOpen, setAgencyDropdownOpen] = useState(false)
+  const agencyDropdownRef = useRef<HTMLDivElement>(null)
 
   const [bio, setBio] = useState("")
   const [location, setLocation] = useState("")
@@ -271,6 +284,21 @@ export default function PartnerPaymentsPage() {
   useEffect(() => {
     loadPartnershipsAndPayments()
   }, [loadPartnershipsAndPayments])
+
+  useEffect(() => {
+    const onPointerDown = (e: MouseEvent) => {
+      if (agencyDropdownRef.current && !agencyDropdownRef.current.contains(e.target as Node)) {
+        setAgencyDropdownOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown)
+    return () => document.removeEventListener("mousedown", onPointerDown)
+  }, [])
+
+  const selectedPartnershipRow = useMemo(
+    () => activePartnerships.find((p) => p.id === selectedId) ?? null,
+    [activePartnerships, selectedId]
+  )
 
   const loadRateForSelection = useCallback(
     async (partnershipId: string | null) => {
@@ -400,11 +428,11 @@ export default function PartnerPaymentsPage() {
           </p>
         </div>
 
-        {/* Lead agency pills (from /api/partnerships — active only) */}
+        {/* Lead agency selector — same dropdown pattern as partner onboarding LeadAgencyFilter */}
         <div className="space-y-3">
           <p className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Lead agency</p>
           {loadingShell ? (
-            <div className="text-sm text-gray-500">Loading partnerships…</div>
+            <div className="h-9 w-48 max-w-full bg-gray-100 rounded-lg animate-pulse" />
           ) : partnershipsError ? (
             <div className="text-sm text-red-600">{partnershipsError}</div>
           ) : activePartnerships.length === 0 ? (
@@ -412,25 +440,57 @@ export default function PartnerPaymentsPage() {
               No active partnerships yet. Accept an invitation to see payment schedules and rate fields here.
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {activePartnerships.map((p) => {
-                const active = p.id === selectedId
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setSelectedId(p.id)}
-                    className={cn(
-                      "rounded-full px-4 py-2 text-sm font-medium border transition-colors",
-                      active
-                        ? "bg-[#0C3535] text-white border-[#0C3535]"
-                        : "bg-white text-[#0C3535] border-gray-200 hover:border-gray-300"
-                    )}
-                  >
-                    {agencyLabel(p)}
-                  </button>
-                )
-              })}
+            <div className="relative max-w-md" ref={agencyDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setAgencyDropdownOpen((o) => !o)}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors min-w-[200px] w-full max-w-sm",
+                  selectedPartnershipRow
+                    ? "bg-[#0C3535] border-[#0C3535] text-white"
+                    : "bg-[#0C3535]/10 border-[#0C3535]/30 text-[#0C3535] hover:bg-[#0C3535]/20"
+                )}
+              >
+                <Building2 className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm font-medium truncate flex-1 text-left">
+                  {selectedPartnershipRow ? agencyLabel(selectedPartnershipRow) : "Select lead agency"}
+                </span>
+                <ChevronDown
+                  className={cn("w-4 h-4 flex-shrink-0 transition-transform", agencyDropdownOpen && "rotate-180")}
+                />
+              </button>
+
+              {agencyDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-full min-w-[250px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
+                  {activePartnerships.map((p) => {
+                    const label = agencyLabel(p)
+                    const isSelected = p.id === selectedId
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(p.id)
+                          setAgencyDropdownOpen(false)
+                        }}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                          isSelected ? "bg-[#0C3535]/10 text-[#0C3535]" : "hover:bg-gray-50 text-gray-700"
+                        )}
+                      >
+                        <div className="w-8 h-8 rounded-full bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-bold text-[#0C3535]">{agencyInitials(label)}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{label}</div>
+                          <div className="text-xs text-gray-500 truncate">Payment schedule and rate card</div>
+                        </div>
+                        {isSelected ? <Check className="w-4 h-4 text-[#0C3535] flex-shrink-0" /> : null}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
           {paymentsError ? <div className="text-sm text-amber-700">{paymentsError}</div> : null}
