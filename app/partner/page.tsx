@@ -195,12 +195,16 @@ export default function PartnerDashboardPage() {
         const list = Array.isArray(raw) ? raw : []
         if (!cancelled && res.ok) {
           const mapped: DashboardActiveProject[] = []
+          const seenProjectIds = new Set<string>()
           for (const item of list) {
             if (!item || typeof item !== "object") continue
             const p = item as Record<string, unknown>
-            const id = p.id != null ? String(p.id).trim() : ""
-            if (!id) continue
-            const nameRaw = p.name != null ? String(p.name).trim() : ""
+            const id =
+              p.project_id != null ? String(p.project_id).trim() : p.id != null ? String(p.id).trim() : ""
+            if (!id || seenProjectIds.has(id)) continue
+            seenProjectIds.add(id)
+            const nameRaw =
+              p.project_name != null ? String(p.project_name).trim() : p.name != null ? String(p.name).trim() : ""
             const name = nameRaw || "Project"
             const clientRaw =
               p.client_name != null && typeof p.client_name === "string"

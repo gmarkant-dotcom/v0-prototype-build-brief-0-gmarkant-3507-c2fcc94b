@@ -7,17 +7,11 @@ const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate",
 } as const
 
-type Proj = { id: string; name?: string | null; client_name?: string | null }
-
-function unwrap<T>(raw: T | T[] | null | undefined): T | null {
-  if (raw == null) return null
-  if (Array.isArray(raw)) return raw[0] ?? null
-  return raw as T
-}
+type ProjectRow = { id: string; name?: string | null; client_name?: string | null }
 
 /**
- * Partner dashboard: one row per awarded assignment (engagement).
- * Includes partnership_id, agency_id, and response_id when an awarded partner_rfp_response matches the same project + partnership.
+ * One row per awarded partner_rfp_response (per scope), plus fallback rows for awarded
+ * project_assignments that have no matching awarded response.
  */
 export async function GET() {
   try {
@@ -50,39 +44,7 @@ export async function GET() {
       return NextResponse.json({ projects: [] }, { headers: noStoreHeaders })
     }
 
-    const { data: rows, error: asgErr } = await supabase
-      .from("project_assignments")
-      .select(
-        `
-        id,
-        awarded_at,
-        project_id,
-        partnership_id,
-        project:projects(
-          id,
-          name,
-          client_name
-        )
-      `
-      )
-      .in("partnership_id", partnershipIds)
-      .eq("status", "awarded")
-      .order("awarded_at", { ascending: false, nullsFirst: false })
-
-    if (asgErr) throw asgErr
-
-    const shipIds = [...new Set((rows || []).map((r) => String(r.partnership_id)).filter(Boolean))]
-    const agencyByPartnership = new Map<string, string | null>()
-    if (shipIds.length > 0) {
-      const { data: ships, error: sErr } = await supabase
-        .from("partnerships")
-        .select("id, agency_id")
-        .in("id", shipIds)
-      if (sErr) throw sErr
-      for (const s of ships || []) {
-        agencyByPartnership.set(s.id as string, s.agency_id != null ? String(s.agency_id) : null)
-      }
-    }
+    const partnershipIdSet = new Set(partnershipIds)
 
     const { data: respRows, error: rErr } = await supabase
       .from("partner_rfp_responses")
@@ -93,12 +55,15 @@ export async function GET() {
     if (rErr) throw rErr
 
     const inboxIds = [...new Set((respRows || []).map((r) => r.inbox_item_id as string).filter(Boolean))]
-    const inboxById = new Map<string, { project_id: string | null; partnership_id: string | null }>()
+    const inboxById = new Map<
+      string,
+      { project_id: string | null; partnership_id: string | null; scope_item_name: string | null }
+    >()
 
     if (inboxIds.length > 0) {
       const { data: inboxRows, error: iErr } = await supabase
         .from("partner_rfp_inbox")
-        .select("id, project_id, partnership_id")
+        .select("id, project_id, partnership_id, scope_item_name")
         .in("id", inboxIds)
 
       if (iErr) throw iErr
@@ -106,50 +71,138 @@ export async function GET() {
         inboxById.set(ib.id as string, {
           project_id: ib.project_id != null ? String(ib.project_id) : null,
           partnership_id: ib.partnership_id != null ? String(ib.partnership_id) : null,
+          scope_item_name: (ib.scope_item_name as string | null) ?? null,
         })
       }
     }
 
-    const responseIdByProjectPartnership = new Map<string, string>()
-    for (const r of respRows || []) {
-      const ib = inboxById.get(r.inbox_item_id as string)
-      if (!ib?.project_id || !ib.partnership_id) continue
-      const key = `${ib.project_id}:${ib.partnership_id}`
-      responseIdByProjectPartnership.set(key, r.id as string)
-    }
+    const { data: asgRows, error: asgErr } = await supabase
+      .from("project_assignments")
+      .select("id, project_id, partnership_id, awarded_at")
+      .in("partnership_id", partnershipIds)
+      .eq("status", "awarded")
 
-    const projects: Array<{
-      id: string
-      name: string
-      client_name: string | null
-      assignment_id: string
-      partnership_id: string
-      agency_id: string | null
-      awarded_at: string | null
-      response_id: string | null
-    }> = []
+    if (asgErr) throw asgErr
 
-    for (const a of rows || []) {
-      const proj = unwrap<Proj>(a.project as Proj | Proj[] | null)
-      if (!proj?.id) continue
-      const pid = String(proj.id)
-      const partnershipId = String(a.partnership_id)
-      const nameRaw = (proj.name ?? "").trim()
-      const name = nameRaw || "Project"
-      const key = `${pid}:${partnershipId}`
-      const response_id = responseIdByProjectPartnership.get(key) ?? null
-
-      projects.push({
-        id: pid,
-        name,
-        client_name: (proj.client_name as string | null) ?? null,
+    const assignmentByProjectPartnership = new Map<
+      string,
+      { assignment_id: string; awarded_at: string | null }
+    >()
+    for (const a of asgRows || []) {
+      const p = String(a.project_id)
+      const ship = String(a.partnership_id)
+      assignmentByProjectPartnership.set(`${p}:${ship}`, {
         assignment_id: a.id as string,
-        partnership_id: partnershipId,
-        agency_id: agencyByPartnership.get(partnershipId) ?? null,
         awarded_at: (a.awarded_at as string | null) ?? null,
-        response_id,
       })
     }
+
+    const agencyByPartnership = new Map<string, string | null>()
+    if (partnershipIds.length > 0) {
+      const { data: ships, error: sErr } = await supabase
+        .from("partnerships")
+        .select("id, agency_id")
+        .in("id", partnershipIds)
+      if (sErr) throw sErr
+      for (const s of ships || []) {
+        agencyByPartnership.set(s.id as string, s.agency_id != null ? String(s.agency_id) : null)
+      }
+    }
+
+    const projectIdsNeeded = new Set<string>()
+    for (const r of respRows || []) {
+      const ib = inboxById.get(r.inbox_item_id as string)
+      if (!ib?.project_id || !ib.partnership_id || !partnershipIdSet.has(ib.partnership_id)) continue
+      projectIdsNeeded.add(ib.project_id)
+    }
+    for (const a of asgRows || []) {
+      projectIdsNeeded.add(String(a.project_id))
+    }
+
+    const projectById = new Map<string, ProjectRow>()
+    if (projectIdsNeeded.size > 0) {
+      const { data: projRows, error: prErr } = await supabase
+        .from("projects")
+        .select("id, name, client_name")
+        .in("id", [...projectIdsNeeded])
+      if (prErr) throw prErr
+      for (const pr of projRows || []) {
+        projectById.set(pr.id as string, pr as ProjectRow)
+      }
+    }
+
+    type Out = {
+      project_id: string
+      project_name: string
+      client_name: string | null
+      partnership_id: string
+      agency_id: string | null
+      assignment_id: string
+      response_id: string | null
+      scope_item_name: string | null
+      awarded_at: string | null
+    }
+
+    const projects: Out[] = []
+    const projectPartnershipWithResponse = new Set<string>()
+
+    for (const r of respRows || []) {
+      const ib = inboxById.get(r.inbox_item_id as string)
+      if (!ib?.project_id || !ib.partnership_id || !partnershipIdSet.has(ib.partnership_id)) continue
+
+      const project_id = ib.project_id
+      const partnership_id = ib.partnership_id
+      const key = `${project_id}:${partnership_id}`
+      projectPartnershipWithResponse.add(key)
+
+      const asg = assignmentByProjectPartnership.get(key)
+      const proj = projectById.get(project_id)
+      const project_name = (proj?.name ?? "").trim() || "Project"
+      const scopeRaw = (ib.scope_item_name ?? "").trim()
+      const scope_item_name = scopeRaw || null
+
+      projects.push({
+        project_id,
+        project_name,
+        client_name: (proj?.client_name as string | null) ?? null,
+        partnership_id,
+        agency_id: agencyByPartnership.get(partnership_id) ?? null,
+        assignment_id: asg?.assignment_id ?? "",
+        response_id: r.id as string,
+        scope_item_name,
+        awarded_at: asg?.awarded_at ?? null,
+      })
+    }
+
+    for (const a of asgRows || []) {
+      const project_id = String(a.project_id)
+      const partnership_id = String(a.partnership_id)
+      const key = `${project_id}:${partnership_id}`
+      if (projectPartnershipWithResponse.has(key)) continue
+
+      const proj = projectById.get(project_id)
+      const project_name = (proj?.name ?? "").trim() || "Project"
+
+      projects.push({
+        project_id,
+        project_name,
+        client_name: (proj?.client_name as string | null) ?? null,
+        partnership_id,
+        agency_id: agencyByPartnership.get(partnership_id) ?? null,
+        assignment_id: a.id as string,
+        response_id: null,
+        scope_item_name: project_name,
+        awarded_at: (a.awarded_at as string | null) ?? null,
+      })
+    }
+
+    projects.sort((a, b) => {
+      const pn = a.project_name.localeCompare(b.project_name)
+      if (pn !== 0) return pn
+      const sn = (a.scope_item_name ?? "").localeCompare(b.scope_item_name ?? "")
+      if (sn !== 0) return sn
+      return (a.response_id ?? "").localeCompare(b.response_id ?? "")
+    })
 
     return NextResponse.json({ projects }, { headers: noStoreHeaders })
   } catch (e) {

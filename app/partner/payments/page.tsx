@@ -28,14 +28,15 @@ type MilestoneRow = {
 }
 
 type PartnerEngagement = {
-  id: string
-  name: string
+  project_id: string
+  project_name: string
   client_name: string | null
-  assignment_id: string
   partnership_id: string
   agency_id: string | null
-  awarded_at: string | null
+  assignment_id: string
   response_id: string | null
+  scope_item_name: string | null
+  awarded_at: string | null
 }
 
 type PartnershipApiRow = {
@@ -66,14 +67,15 @@ const DEMO_PROJECT_ID = "demo-project-nwsl"
 
 const demoEngagements: PartnerEngagement[] = [
   {
-    id: DEMO_PROJECT_ID,
-    name: "NWSL Creator Content Series",
+    project_id: DEMO_PROJECT_ID,
+    project_name: "NWSL Creator Content Series",
     client_name: "NWSL",
     assignment_id: "demo-asg-1",
     partnership_id: "demo-p1",
     agency_id: "demo-agency-1",
     awarded_at: "2026-01-01T12:00:00Z",
     response_id: DEMO_RESPONSE_ID,
+    scope_item_name: "Creator content",
   },
 ]
 
@@ -209,7 +211,7 @@ function agencyInitials(name: string) {
 /** Milestones for one awarded engagement (match response_id when set; else project + partnership). */
 function milestonesForEngagement(milestones: MilestoneRow[], eng: PartnerEngagement): MilestoneRow[] {
   return milestones.filter((m) => {
-    if (m.project_id !== eng.id) return false
+    if (m.project_id !== eng.project_id) return false
     if (m.response_id) {
       return eng.response_id != null && m.response_id === eng.response_id
     }
@@ -319,20 +321,27 @@ export default function PartnerPaymentsPage() {
         for (const item of list) {
           if (!item || typeof item !== "object") continue
           const p = item as Record<string, unknown>
-          const id = p.id != null ? String(p.id) : ""
-          if (!id) continue
+          const project_id =
+            p.project_id != null ? String(p.project_id) : p.id != null ? String(p.id) : ""
+          if (!project_id) continue
+          const project_name = String(p.project_name ?? p.name ?? "Project")
+          const scope =
+            p.scope_item_name != null && String(p.scope_item_name).trim() !== ""
+              ? String(p.scope_item_name).trim()
+              : null
           mapped.push({
-            id,
-            name: String(p.name || "Project"),
+            project_id,
+            project_name,
             client_name: p.client_name != null ? String(p.client_name) : null,
             assignment_id: String(p.assignment_id || ""),
             partnership_id: String(p.partnership_id || ""),
             agency_id: p.agency_id != null ? String(p.agency_id) : null,
             awarded_at: p.awarded_at != null ? String(p.awarded_at) : null,
             response_id: p.response_id != null ? String(p.response_id) : null,
+            scope_item_name: scope,
           })
         }
-        setEngagements(mapped.filter((e) => e.assignment_id && e.partnership_id))
+        setEngagements(mapped.filter((e) => e.partnership_id && (e.assignment_id || e.response_id)))
       }
     } catch {
       setPartnershipsError("Failed to load partnerships")
@@ -373,8 +382,11 @@ export default function PartnerPaymentsPage() {
   }, [engagements, selectedId])
 
   useEffect(() => {
-    const first = engagementsForAgency[0]?.assignment_id ?? null
-    setOpenEngagementAssignmentId(first)
+    const first = engagementsForAgency[0]
+    const rowKey = first
+      ? `${first.assignment_id || "no-asg"}:${first.response_id ?? "no-resp"}`
+      : null
+    setOpenEngagementAssignmentId(rowKey)
   }, [selectedId, engagementsForAgency])
 
   const loadRateForSelection = useCallback(
@@ -582,12 +594,13 @@ export default function PartnerPaymentsPage() {
             <div className="space-y-2">
               {engagementsForAgency.map((eng) => {
                 const ms = milestonesForEngagement(allMilestones, eng)
-                const isOpen = openEngagementAssignmentId === eng.assignment_id
+                const rowKey = `${eng.assignment_id || "no-asg"}:${eng.response_id ?? "no-resp"}`
+                const isOpen = openEngagementAssignmentId === rowKey
                 return (
                   <Collapsible
-                    key={eng.assignment_id}
+                    key={rowKey}
                     open={isOpen}
-                    onOpenChange={(open) => setOpenEngagementAssignmentId(open ? eng.assignment_id : null)}
+                    onOpenChange={(open) => setOpenEngagementAssignmentId(open ? rowKey : null)}
                     className="rounded-xl border border-gray-200 bg-white overflow-hidden"
                   >
                     <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/80 transition-colors">
@@ -595,10 +608,10 @@ export default function PartnerPaymentsPage() {
                         className={cn("w-4 h-4 text-gray-500 shrink-0 transition-transform", isOpen && "rotate-180")}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="font-display font-bold text-sm text-[#0C3535] truncate">{eng.name}</div>
-                        <div className="text-xs text-gray-500 truncate">
-                          {eng.client_name || "Client TBD"}
+                        <div className="font-display font-bold text-sm text-[#0C3535] truncate">
+                          {eng.project_name}
                         </div>
+                        <div className="text-xs text-gray-500 truncate">{eng.client_name || "Client TBD"}</div>
                       </div>
                     </CollapsibleTrigger>
                     <CollapsibleContent>
