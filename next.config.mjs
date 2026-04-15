@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs"
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
@@ -11,4 +13,11 @@ const nextConfig = {
   // Next 16 defaults to Turbopack; do not add a webpack() hook here or production build fails.
 }
 
-export default nextConfig
+export default withSentryConfig(nextConfig, {
+  org: "liveligood",
+  project: "ligament",
+  silent: true,
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+})
