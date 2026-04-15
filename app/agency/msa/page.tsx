@@ -5,6 +5,7 @@ import { AgencyLayout } from "@/components/agency-layout"
 import { GlassCard } from "@/components/glass-card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { AlertTriangle, FileText, Loader2, Plus, Sparkles } from "lucide-react"
 
@@ -189,6 +190,7 @@ export default function AgencyMsaPage() {
   const [savingSynthesisProjectId, setSavingSynthesisProjectId] = useState<string | null>(null)
   const [synthesisSuccessByProject, setSynthesisSuccessByProject] = useState<Record<string, string>>({})
   const [synthesisConflictPrompt, setSynthesisConflictPrompt] = useState<SynthesisConflictPrompt | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
 
   const loadAll = useCallback(async () => {
     setError(null)
@@ -222,6 +224,16 @@ export default function AgencyMsaPage() {
     loadAll()
   }, [loadAll])
 
+  useEffect(() => {
+    if (projectGroups.length === 0) {
+      setSelectedProjectId(null)
+      return
+    }
+    if (!selectedProjectId || !projectGroups.some((g) => g.project_id === selectedProjectId)) {
+      setSelectedProjectId(projectGroups[0].project_id)
+    }
+  }, [projectGroups, selectedProjectId])
+
   const activePartnerships = useMemo(
     () => partnerships.filter((p) => (p.status || "").toLowerCase() === "active"),
     [partnerships]
@@ -237,6 +249,59 @@ export default function AgencyMsaPage() {
     }
     return m
   }, [agreements])
+
+  const selectedProjectGroup = useMemo(
+    () => projectGroups.find((g) => g.project_id === selectedProjectId) || null,
+    [projectGroups, selectedProjectId]
+  )
+
+  const getProjectPartnerships = useCallback(
+    (group: ProjectMilestoneGroup) => {
+      const ids = new Set<string>()
+      for (const scope of group.awarded_scopes) {
+        if (scope.partnership_id) ids.add(scope.partnership_id)
+      }
+      for (const milestone of group.milestones) {
+        if (milestone.partnership_id) ids.add(milestone.partnership_id)
+      }
+      const relevant = activePartnerships.filter((p) => ids.has(p.id))
+      return relevant.length > 0 ? relevant : activePartnerships
+    },
+    [activePartnerships]
+  )
+
+  const getProjectMsaSummaryStatus = useCallback(
+    (group: ProjectMilestoneGroup) => {
+      const projectPartnerships = getProjectPartnerships(group)
+      if (projectPartnerships.length === 0) return "pending"
+
+      let allSigned = true
+      let hasSent = false
+      let hasPending = false
+      let hasExpired = false
+
+      for (const p of projectPartnerships) {
+        const ag = latestAgreementByPartnership.get(p.id)
+        if (!ag) {
+          hasPending = true
+          allSigned = false
+          continue
+        }
+        const status = (ag.status || "").toLowerCase()
+        if (status === "sent") hasSent = true
+        if (status === "pending") hasPending = true
+        if (status === "expired") hasExpired = true
+        if (status !== "signed") allSigned = false
+      }
+
+      if (allSigned) return "signed"
+      if (hasSent) return "sent"
+      if (hasPending) return "pending"
+      if (hasExpired) return "expired"
+      return "pending"
+    },
+    [getProjectPartnerships, latestAgreementByPartnership]
+  )
 
   const createMsa = async (partnershipId: string) => {
     setSavingMsa(partnershipId)
@@ -809,6 +874,8 @@ export default function AgencyMsaPage() {
     }
   }
 
+  const detailProjectGroups = selectedProjectGroup ? [selectedProjectGroup] : []
+
   return (
     <AgencyLayout>
       <div className="p-8 max-w-6xl mx-auto space-y-10">
@@ -839,12 +906,106 @@ export default function AgencyMsaPage() {
         {!loading && (
           <>
             <section className="space-y-4">
-              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Client cash flow</h2>
+              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Projects overview</h2>
               {projectGroups.length === 0 ? (
                 <GlassCard className="p-8 text-center text-foreground-muted text-sm">No projects yet.</GlassCard>
               ) : (
-                <Accordion type="multiple" className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {projectGroups.map((g) => {
+                    const cashIn = g.client_cash_flow.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+                    const cashInReceived = g.client_cash_flow
+                      .filter((row) => row.status === "received")
+                      .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+                    const cashInExpected = cashIn - cashInReceived
+                    const cashOut = g.milestones.reduce((sum, row) => sum + Number(row.amount || 0), 0)
+                    const cashOutPaid = g.milestones
+                      .filter((row) => row.status === "paid")
+                      .reduce((sum, row) => sum + Number(row.amount || 0), 0)
+                    const cashOutOutstanding = cashOut - cashOutPaid
+                    const netMargin = cashIn - cashOut
+                    const netMarginPct = cashIn > 0 ? Math.round((netMargin / cashIn) * 100) : 0
+                    const marginPositive = netMargin > 0
+                    const projectMsaStatus = getProjectMsaSummaryStatus(g)
+
+                    return (
+                      <GlassCard
+                        key={`project-summary-${g.project_id}`}
+                        className={cn(
+                          "p-5 space-y-4 border border-border/40 transition-colors",
+                          selectedProjectId === g.project_id ? "border-accent/40" : ""
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-display font-bold text-lg text-foreground">{g.project_name}</h3>
+                            <p className="text-sm text-foreground-muted">{g.client_name || "No client set"}</p>
+                            <p className="text-xs text-foreground-muted mt-1">
+                              <span className="font-mono uppercase tracking-wider">Client Budget:</span>{" "}
+                              <span className="text-foreground">{formatBudgetDisplay(g)}</span>
+                            </p>
+                          </div>
+                          <span className={msaStatusBadge(projectMsaStatus)}>{projectMsaStatus}</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                          <div className="rounded-lg border border-border/40 bg-white/[0.02] p-3">
+                            <div className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Cash In</div>
+                            <div className="font-display font-bold text-base text-foreground">{formatMoney(cashIn, "USD")}</div>
+                            <div className="text-xs text-foreground-muted mt-1">
+                              Received {formatMoney(cashInReceived, "USD")} · Expected {formatMoney(cashInExpected, "USD")}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border/40 bg-white/[0.02] p-3">
+                            <div className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Cash Out</div>
+                            <div className="font-display font-bold text-base text-foreground">{formatMoney(cashOut, "USD")}</div>
+                            <div className="text-xs text-foreground-muted mt-1">
+                              Paid {formatMoney(cashOutPaid, "USD")} · Outstanding {formatMoney(cashOutOutstanding, "USD")}
+                            </div>
+                          </div>
+                          <div className="rounded-lg border border-border/40 bg-white/[0.02] p-3">
+                            <div className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Net Margin</div>
+                            <div className={cn("font-display font-bold text-base", marginPositive ? "text-emerald-300" : "text-red-300")}>
+                              {formatMoney(netMargin, "USD")}
+                            </div>
+                            <div className={cn("text-xs mt-1", marginPositive ? "text-emerald-300/80" : "text-red-300/80")}>
+                              {netMarginPct}% of cash in
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-gray-900"
+                            onClick={() => setSelectedProjectId(g.project_id)}
+                          >
+                            {selectedProjectId === g.project_id ? "Viewing Details" : "View Details →"}
+                          </Button>
+                        </div>
+                      </GlassCard>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+
+            {selectedProjectGroup ? (
+              <Tabs defaultValue="client-payments" className="space-y-4">
+                <TabsList>
+                  <TabsTrigger value="client-payments">Client Payments</TabsTrigger>
+                  <TabsTrigger value="partner-payments">Partner Payments</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="client-payments" className="space-y-0">
+            <section className="space-y-4">
+              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Client cash flow</h2>
+              {detailProjectGroups.length === 0 ? (
+                <GlassCard className="p-8 text-center text-foreground-muted text-sm">No projects yet.</GlassCard>
+              ) : (
+                <Accordion type="multiple" className="space-y-3">
+                  {detailProjectGroups.map((g) => {
                     const cf = getCashFlowForm(g.project_id)
                     const totalExpected = g.client_cash_flow.reduce((sum, row) => sum + Number(row.amount || 0), 0)
                     return (
@@ -1116,6 +1277,9 @@ export default function AgencyMsaPage() {
                 </Accordion>
               )}
             </section>
+                </TabsContent>
+
+                <TabsContent value="partner-payments" className="space-y-4">
 
             <section className="space-y-4">
               <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">MSA tracker</h2>
@@ -1225,11 +1389,11 @@ export default function AgencyMsaPage() {
 
             <section className="space-y-4">
               <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Payment milestones</h2>
-              {projectGroups.length === 0 ? (
+              {detailProjectGroups.length === 0 ? (
                 <GlassCard className="p-8 text-center text-foreground-muted text-sm">No projects yet.</GlassCard>
               ) : (
                 <Accordion type="multiple" className="space-y-3">
-                  {projectGroups.map((g) => {
+                  {detailProjectGroups.map((g) => {
                     const overage =
                       g.client_budget != null && g.budget_alert ? g.total_milestones_amount - g.client_budget : 0
                     const f = getNewMilestoneForm(g.project_id)
@@ -1711,6 +1875,13 @@ export default function AgencyMsaPage() {
                 </Accordion>
               )}
             </section>
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <GlassCard className="p-8 text-center text-foreground-muted text-sm">
+                Select a project to view payment details.
+              </GlassCard>
+            )}
           </>
         )}
       </div>
