@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { generateText } from "ai"
+import { streamText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 
 export const maxDuration = 120
@@ -133,26 +133,15 @@ Do not output JSON. Use markdown-style headings (##) for sections. Keep it under
 CLIENT BRIEF (for context — respect scrubbing rules only when illustrating placeholder style):
 ${briefText}`
 
-    const result = await generateText({
+    const result = streamText({
       model: "anthropic/claude-sonnet-4-20250514" as any,
       prompt,
       temperature: 0.35,
       maxOutputTokens: 8192,
+      abortSignal: req.signal,
     })
 
-    const templateText = (result.text || "").trim()
-    if (!templateText) {
-      console.error("[rfp-output-template] empty model text")
-      return NextResponse.json(
-        {
-          error: "Empty AI response",
-          detail: "The model returned no text. Check Anthropic status, model id, and logs above.",
-        },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({ templateText })
+    return result.toTextStreamResponse()
   } catch (error) {
     console.error("[rfp-output-template] error:", error)
     const msg = error instanceof Error ? error.message : String(error)

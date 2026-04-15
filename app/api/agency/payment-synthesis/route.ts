@@ -1,30 +1,11 @@
 import { NextResponse } from "next/server"
-import { generateText } from "ai"
-import { z } from "zod"
+import { streamText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
 const noStore = { "Cache-Control": "private, no-store, no-cache, must-revalidate" } as const
-
-const recommendationSchema = z.object({
-  partner_name: z.string(),
-  title: z.string(),
-  amount: z.number(),
-  currency: z.string(),
-  due_date: z.string(),
-  rationale: z.string(),
-})
-
-type Recommendation = z.infer<typeof recommendationSchema>
-
-type PartnerContext = {
-  partner_name: string
-  partnership_id: string | null
-  response_id: string | null
-  has_milestones: boolean
-}
 
 function parseBudgetRange(raw: string | null | undefined): number | null {
   if (!raw) return null
@@ -43,27 +24,6 @@ function parseDate(raw: string | null | undefined): string {
   return raw.slice(0, 10)
 }
 
-function maybeParseJsonArray(raw: string): unknown[] | null {
-  try {
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function extractJsonArray(raw: string): unknown[] | null {
-  const direct = maybeParseJsonArray(raw)
-  if (direct) return direct
-  const firstBracket = raw.indexOf("[")
-  const lastBracket = raw.lastIndexOf("]")
-  if (firstBracket >= 0 && lastBracket > firstBracket) {
-    const sliced = raw.slice(firstBracket, lastBracket + 1)
-    return maybeParseJsonArray(sliced)
-  }
-  return null
-}
-
 function partnerDisplayFromProfile(profile: {
   company_name?: string | null
   display_name?: string | null
@@ -77,19 +37,6 @@ function partnerDisplayFromProfile(profile: {
     (profile.email || "").trim() ||
     "Partner"
   )
-}
-
-function normalizePartnerKey(name: string): string {
-  return name.trim().toLowerCase()
-}
-
-function choosePartnerContext(name: string, contexts: PartnerContext[]): PartnerContext | null {
-  const key = normalizePartnerKey(name)
-  if (!key) return null
-  const exact = contexts.find((c) => normalizePartnerKey(c.partner_name) === key)
-  if (exact) return exact
-  const included = contexts.find((c) => normalizePartnerKey(c.partner_name).includes(key) || key.includes(normalizePartnerKey(c.partner_name)))
-  return included || null
 }
 
 export async function POST(req: Request) {
@@ -126,7 +73,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "project_id is required" }, { status: 400, headers: noStore })
     }
 
-    let partnerContexts: PartnerContext[] = []
     let summary = ""
     let systemPrompt = ""
 
@@ -319,29 +265,6 @@ export async function POST(req: Request) {
         )
       }
 
-      const partnerContextMap = new Map<string, PartnerContext>()
-      for (const item of milestoneItems) {
-        const key = normalizePartnerKey(item.partner_name)
-        if (!key) continue
-        partnerContextMap.set(key, {
-          partner_name: item.partner_name,
-          partnership_id: item.partnership_id,
-          response_id: item.response_id,
-          has_milestones: true,
-        })
-      }
-      for (const aw of awardedWithoutMilestones) {
-        const key = normalizePartnerKey(aw.partner_name)
-        if (!key || partnerContextMap.has(key)) continue
-        partnerContextMap.set(key, {
-          partner_name: aw.partner_name,
-          partnership_id: aw.partnership_id,
-          response_id: aw.response_id,
-          has_milestones: false,
-        })
-      }
-      partnerContexts = Array.from(partnerContextMap.values())
-
       const projectName = ((project.name as string | null) || "").trim() || "Project"
       const clientName = ((project.client_name as string | null) || "").trim() || "Client"
       const clientBudgetRaw = (project.budget_range as string | null) || null
@@ -434,57 +357,21 @@ Prioritize: paying partners after the agency receives client funds, flagging any
 
     console.log("[api/agency/payment-synthesis] synthesized user prompt", summary)
 
-    let aiText = ""
-    try {
-      const ai = await generateText({
-        model: "anthropic/claude-sonnet-4-20250514" as any,
-        system: systemPrompt,
-        prompt: summary,
-        temperature: 0.2,
-        maxOutputTokens: 4096,
-      })
-      aiText = ai.text || ""
-    } catch (apiError) {
-      console.error("[api/agency/payment-synthesis] Anthropic API call failed", apiError)
-      return NextResponse.json(
-        {
-          error: "Could not generate payment synthesis",
-          detail:
-            process.env.NODE_ENV === "development"
-              ? apiError instanceof Error
-                ? apiError.message
-                : String(apiError)
-              : undefined,
-        },
-        { status: 500, headers: noStore }
-      )
-    }
-
-    const arr = extractJsonArray(aiText || "")
-    if (!arr) {
-      return NextResponse.json(
-        { error: "AI returned non-JSON output", detail: (aiText || "").slice(0, 500) },
-        { status: 500, headers: noStore }
-      )
-    }
-    const parsed = z.array(recommendationSchema).safeParse(arr)
-    if (!parsed.success || parsed.data.length === 0) {
-      return NextResponse.json(
-        { error: "AI returned invalid recommendations", detail: parsed.success ? undefined : parsed.error.flatten() },
-        { status: 500, headers: noStore }
-      )
-    }
-
-    const recommendations = parsed.data.map((item: Recommendation) => {
-      const context = choosePartnerContext(item.partner_name, partnerContexts)
-      return {
-        ...item,
-        partnership_id: context?.partnership_id || null,
-        response_id: context?.response_id || null,
-      }
+    const result = streamText({
+      model: "anthropic/claude-sonnet-4-20250514" as any,
+      system: systemPrompt,
+      prompt: summary,
+      temperature: 0.2,
+      maxOutputTokens: 4096,
+      abortSignal: req.signal,
     })
 
-    return NextResponse.json({ recommendations }, { headers: noStore })
+    return result.toTextStreamResponse({
+      headers: {
+        ...noStore,
+        "Content-Type": "text/plain; charset=utf-8",
+      },
+    })
   } catch (error) {
     console.error("Payment synthesis error:", error)
     console.error("[api/agency/payment-synthesis]", error)

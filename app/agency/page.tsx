@@ -15,6 +15,7 @@ import { useSelectedProject } from "@/contexts/selected-project-context"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2, Sparkles } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
+import { readTextStream } from "@/lib/read-text-stream"
 
 // Types
 type UploadMethod = "pdf" | "docx" | "pptx" | "google" | "paste" | null
@@ -457,6 +458,12 @@ function AgencyRFPContent() {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 125_000)
     try {
+      setSelectedRfpTemplate("ai")
+      setTemplateSourceText("")
+      setUploadedRfpTemplate(null)
+      setRfpTemplateExtractWarning(null)
+      setRfpTemplateUploadError(null)
+
       const res = await fetch("/api/ai/rfp-output-template", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -473,30 +480,36 @@ function AgencyRFPContent() {
           },
         }),
       })
-      let payload: Record<string, unknown> = {}
-      try {
-        payload = (await res.json()) as Record<string, unknown>
-      } catch {
-        payload = {}
-      }
       if (!res.ok) {
+        const errorText = await res.text().catch(() => "")
+        let payload: Record<string, unknown> = {}
+        try {
+          payload = JSON.parse(errorText) as Record<string, unknown>
+        } catch {
+          payload = {}
+        }
         const parts = [
           typeof payload.error === "string" ? payload.error : null,
           typeof payload.hint === "string" ? payload.hint : null,
           typeof payload.detail === "string" ? payload.detail : null,
-          !payload.error && !payload.detail && !payload.hint ? `HTTP ${res.status}` : null,
+          !payload.error && !payload.detail && !payload.hint
+            ? errorText.trim() || `HTTP ${res.status}`
+            : null,
         ].filter(Boolean)
         throw new Error(parts.join(" — ") || "Generation failed")
       }
-      const text = (payload.templateText || "").toString().trim()
-      if (!text) {
+
+      if (!res.body) {
+        throw new Error("No stream body returned from template route")
+      }
+
+      const text = await readTextStream(res.body, (fullText) => {
+        setTemplateSourceText(fullText)
+      })
+
+      if (!text.trim()) {
         throw new Error("AI returned an empty template. Check server logs and ANTHROPIC_API_KEY on Vercel.")
       }
-      setTemplateSourceText(text)
-      setSelectedRfpTemplate("ai")
-      setUploadedRfpTemplate(null)
-      setRfpTemplateExtractWarning(null)
-      setRfpTemplateUploadError(null)
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") {
         setAiTemplateError(

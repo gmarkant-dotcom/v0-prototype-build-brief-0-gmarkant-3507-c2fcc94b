@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SelectedProjectHeader } from "@/components/selected-project-header"
 import { useSelectedProjectSafe } from "@/contexts/selected-project-context"
+import { readTextStream } from "@/lib/read-text-stream"
 import { cn } from "@/lib/utils"
 import { AlertTriangle, Loader2, Plus, Sparkles } from "lucide-react"
 
@@ -136,6 +137,31 @@ function normalizeName(v: string): string {
   return v.trim().toLowerCase()
 }
 
+function maybeParseJsonArray(raw: string): unknown[] | null {
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function extractJsonArray(raw: string): unknown[] | null {
+  const direct = maybeParseJsonArray(raw)
+  if (direct) return direct
+  const firstBracket = raw.indexOf("[")
+  const lastBracket = raw.lastIndexOf("]")
+  if (firstBracket >= 0 && lastBracket > firstBracket) {
+    const sliced = raw.slice(firstBracket, lastBracket + 1)
+    return maybeParseJsonArray(sliced)
+  }
+  return null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
 function msaStatusBadge(status: string) {
   const s = status.toLowerCase()
   const base = "font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border"
@@ -196,6 +222,7 @@ export function AgencyMsaContent() {
     Record<string, PaymentSynthesisRecommendation[] | "loading" | "error">
   >({})
   const [synthesisLoadingProjectId, setSynthesisLoadingProjectId] = useState<string | null>(null)
+  const [synthesisStreamingText, setSynthesisStreamingText] = useState<Record<string, string>>({})
   const [savingSynthesisProjectId, setSavingSynthesisProjectId] = useState<string | null>(null)
   const [synthesisSuccessByProject, setSynthesisSuccessByProject] = useState<Record<string, string>>({})
   const [synthesisConflictPrompt, setSynthesisConflictPrompt] = useState<SynthesisConflictPrompt | null>(null)
@@ -549,6 +576,7 @@ export function AgencyMsaContent() {
   const runPaymentSynthesis = async (projectId: string) => {
     setSynthesisLoadingProjectId(projectId)
     setSynthesisPreview((prev) => ({ ...prev, [projectId]: "loading" }))
+    setSynthesisStreamingText((prev) => ({ ...prev, [projectId]: "" }))
     setSynthesisSuccessByProject((prev) => ({ ...prev, [projectId]: "" }))
     try {
       const res = await fetch("/api/agency/payment-synthesis", {
@@ -557,14 +585,96 @@ export function AgencyMsaContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project_id: projectId }),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || "Failed to generate synthesis")
-      setSynthesisPreview((prev) => ({ ...prev, [projectId]: data.recommendations || [] }))
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "")
+        let message = "Failed to generate synthesis"
+        try {
+          const parsed = JSON.parse(errorText) as { error?: string }
+          if (typeof parsed.error === "string" && parsed.error.trim()) {
+            message = parsed.error
+          }
+        } catch {
+          if (errorText.trim()) message = errorText.trim()
+        }
+        throw new Error(message)
+      }
+
+      if (!res.body) {
+        throw new Error("No stream body returned from synthesis route")
+      }
+
+      const fullText = await readTextStream(res.body, (text) => {
+        setSynthesisStreamingText((prev) => ({ ...prev, [projectId]: text }))
+      })
+
+      const arr = extractJsonArray(fullText)
+      if (!arr) {
+        throw new Error("AI returned non-JSON output")
+      }
+
+      const group = projectGroups.find((g) => g.project_id === projectId) || null
+      const partnerContexts = new Map<string, { partnership_id: string | null; response_id: string | null }>()
+      if (group) {
+        for (const m of group.milestones) {
+          const partnerKey = normalizeName((m.partner_name || "").trim())
+          if (!partnerKey || partnerContexts.has(partnerKey)) continue
+          partnerContexts.set(partnerKey, {
+            partnership_id: m.partnership_id || null,
+            response_id: m.response_id || null,
+          })
+        }
+        for (const scope of group.awarded_scopes) {
+          const partnerKey = normalizeName((scope.partner_display_name || "").trim())
+          if (!partnerKey || partnerContexts.has(partnerKey)) continue
+          partnerContexts.set(partnerKey, {
+            partnership_id: scope.partnership_id || null,
+            response_id: scope.response_id || null,
+          })
+        }
+      }
+
+      const recommendations = arr
+        .map((item) => {
+          if (!isRecord(item)) return null
+          const partner_name = (item.partner_name || "").toString().trim()
+          const title = (item.title || "").toString().trim()
+          const currency = ((item.currency || "USD").toString().trim() || "USD").toUpperCase()
+          const due_date = (item.due_date || "").toString().slice(0, 10)
+          const rationale = (item.rationale || "").toString().trim()
+          const amountRaw = Number(item.amount)
+          const amount = Number.isFinite(amountRaw) ? amountRaw : 0
+          if (!partner_name || !title || !due_date) return null
+          const partnerKey = normalizeName(partner_name)
+          const matchedContext =
+            partnerContexts.get(partnerKey) ||
+            Array.from(partnerContexts.entries()).find(
+              ([k]) => k.includes(partnerKey) || partnerKey.includes(k)
+            )?.[1] ||
+            null
+          return {
+            partner_name,
+            title,
+            amount,
+            currency,
+            due_date,
+            rationale,
+            partnership_id: matchedContext?.partnership_id || null,
+            response_id: matchedContext?.response_id || null,
+          } satisfies PaymentSynthesisRecommendation
+        })
+        .filter(Boolean) as PaymentSynthesisRecommendation[]
+
+      if (recommendations.length === 0) {
+        throw new Error("AI returned invalid recommendations")
+      }
+
+      setSynthesisPreview((prev) => ({ ...prev, [projectId]: recommendations }))
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to generate synthesis")
       setSynthesisPreview((prev) => ({ ...prev, [projectId]: "error" }))
     } finally {
       setSynthesisLoadingProjectId(null)
+      setSynthesisStreamingText((prev) => ({ ...prev, [projectId]: "" }))
     }
   }
 
@@ -1308,7 +1418,10 @@ export function AgencyMsaContent() {
                             ) : null}
                             {synthesisPreview[g.project_id] === "loading" ? (
                               <p className="text-xs text-foreground-muted flex items-center gap-2">
-                                <Loader2 className="w-3 h-3 animate-spin" /> Building recommended schedule…
+                                <Loader2 className="w-3 h-3 animate-spin" /> Building recommended schedule…{" "}
+                                {synthesisStreamingText[g.project_id]
+                                  ? `(${synthesisStreamingText[g.project_id].length.toLocaleString()} chars received)`
+                                  : "(waiting for first chunk…)"}
                               </p>
                             ) : null}
                             {synthesisPreview[g.project_id] === "error" ? (
