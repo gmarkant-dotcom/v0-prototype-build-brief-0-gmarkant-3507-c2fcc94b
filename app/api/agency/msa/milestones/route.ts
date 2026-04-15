@@ -474,7 +474,6 @@ export async function POST(req: Request) {
     const { data: row, error } = await supabase
       .from("payment_milestones")
       .insert({
-        agency_id: user.id,
         project_id,
         title,
         amount: amt,
