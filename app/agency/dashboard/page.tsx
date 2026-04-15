@@ -149,6 +149,7 @@ function formatUsdWhole(amount: number): string {
 }
 
 function DashboardContent() {
+  console.log("SENTRY DSN CHECK:", process.env.NEXT_PUBLIC_SENTRY_DSN)
   Sentry.captureMessage("Sentry client-side smoke test")
   const router = useRouter()
   const { refreshProjects, addProject, setSelectedProject } = useSelectedProject()
