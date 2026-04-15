@@ -1119,7 +1119,9 @@ export default function AgencyMsaPage() {
                                             <div className="flex items-center gap-2">
                                               <Button
                                                 size="sm"
-                                                variant={decision === "replace" ? "secondary" : "outline"}
+                                                variant="outline"
+                                                className="border-[#0C3535] bg-[#0C3535] text-white hover:bg-[#0C3535]/90 hover:text-white"
+                                                style={{ color: "white" }}
                                                 onClick={() =>
                                                   setSynthesisConflictPrompt((prev) =>
                                                     prev
@@ -1135,7 +1137,13 @@ export default function AgencyMsaPage() {
                                               </Button>
                                               <Button
                                                 size="sm"
-                                                variant={decision === "keep" ? "secondary" : "outline"}
+                                                variant="outline"
+                                                className={
+                                                  decision === "keep"
+                                                    ? "border-gray-300 bg-gray-100 text-gray-900 hover:bg-gray-200"
+                                                    : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
+                                                }
+                                                style={{ color: "#111827" }}
                                                 onClick={() =>
                                                   setSynthesisConflictPrompt((prev) =>
                                                     prev
@@ -1422,7 +1430,13 @@ export default function AgencyMsaPage() {
                                       </td>
                                       <td className="py-3 px-3">
                                         {m.status === "pending" && (
-                                          <Button size="sm" variant="outline" onClick={() => patchMilestone(m.id, "invoiced")}>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="border-[#0C3535] bg-[#0C3535] text-white hover:bg-[#0C3535]/90 hover:text-white"
+                                            style={{ color: "white" }}
+                                            onClick={() => patchMilestone(m.id, "invoiced")}
+                                          >
                                             Mark invoiced
                                           </Button>
                                         )}

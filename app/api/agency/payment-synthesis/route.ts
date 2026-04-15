@@ -163,6 +163,16 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Failed to load milestones" }, { status: 500, headers: noStore })
       }
 
+      const dedupedMilestoneMap = new Map<string, (typeof milestones)[number]>()
+      for (const milestone of milestones || []) {
+        const id = String((milestone as { id?: string | null }).id || "")
+        if (!id) continue
+        if (!dedupedMilestoneMap.has(id)) {
+          dedupedMilestoneMap.set(id, milestone)
+        }
+      }
+      const dedupedMilestones = Array.from(dedupedMilestoneMap.values())
+
       const { data: awardedResponses, error: rErr } = await supabase
         .from("partner_rfp_responses")
         .select("id, inbox_item_id, partner_display_name, budget_proposal")
@@ -180,6 +190,7 @@ export async function POST(req: Request) {
           .from("partner_rfp_inbox")
           .select("id, project_id, partnership_id")
           .eq("agency_id", user.id)
+          .eq("project_id", project_id)
           .in("id", inboxIds)
         if (iErr) {
           console.error("[api/agency/payment-synthesis] inbox query failed", iErr)
@@ -211,8 +222,8 @@ export async function POST(req: Request) {
         budget_proposal: string
       }>
 
-      const partnershipIds = [...new Set((milestones || []).map((m) => m.partnership_id as string | null).filter(Boolean))]
-      const responseIds = [...new Set((milestones || []).map((m) => m.response_id as string | null).filter(Boolean))]
+      const partnershipIds = [...new Set((dedupedMilestones || []).map((m) => m.partnership_id as string | null).filter(Boolean))]
+      const responseIds = [...new Set((dedupedMilestones || []).map((m) => m.response_id as string | null).filter(Boolean))]
 
       const partnershipToPartner = new Map<string, string | null>()
       if (partnershipIds.length > 0) {
@@ -258,7 +269,7 @@ export async function POST(req: Request) {
         }
       }
 
-      const milestoneItems = (milestones || []).map((m) => {
+      const milestoneItems = (dedupedMilestones || []).map((m) => {
         const partnership_id = (m.partnership_id as string | null) || null
         const response_id = (m.response_id as string | null) || null
         const partner_name =
