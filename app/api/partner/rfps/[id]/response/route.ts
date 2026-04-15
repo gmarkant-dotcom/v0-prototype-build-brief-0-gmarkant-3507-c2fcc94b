@@ -10,6 +10,7 @@ type Body = {
   proposal_text?: string
   budget_proposal?: string
   timeline_proposal?: string
+  payment_terms?: unknown
   attachments?: unknown
   status?: "draft" | "submitted"
   change_notes?: string
@@ -28,6 +29,39 @@ export type SavedAttachment = {
   type: string
   label: string
   url: string
+}
+
+type PaymentTermsPayload = {
+  deposit_required_pct: number | null
+  payment_schedule_preference: string | null
+  preferred_currency: string | null
+  additional_notes: string | null
+}
+
+function normalizePaymentTerms(raw: unknown): PaymentTermsPayload {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}
+  const parsedDeposit =
+    source.deposit_required_pct === null || source.deposit_required_pct === undefined
+      ? null
+      : Number(source.deposit_required_pct)
+  const deposit_required_pct =
+    Number.isFinite(parsedDeposit) && parsedDeposit >= 0 && parsedDeposit <= 100 ? parsedDeposit : null
+
+  const payment_schedule_preference = String(source.payment_schedule_preference ?? "")
+    .trim()
+    .slice(0, 80) || null
+  const preferred_currency = String(source.preferred_currency ?? "")
+    .trim()
+    .toUpperCase()
+    .slice(0, 16) || null
+  const additional_notes = String(source.additional_notes ?? "").trim() || null
+
+  return {
+    deposit_required_pct,
+    payment_schedule_preference,
+    preferred_currency,
+    additional_notes,
+  }
 }
 
 function normalizeAttachments(raw: unknown): SavedAttachment[] {
@@ -121,6 +155,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const proposal_text = (body.proposal_text ?? "").toString()
     const budget_proposal = (body.budget_proposal ?? "").toString()
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
+    const payment_terms = normalizePaymentTerms(body.payment_terms)
     const attachments = normalizeAttachments(body.attachments)
     const changeNotes = (body.change_notes ?? "").toString().trim()
 
@@ -161,6 +196,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       proposal_text,
       budget_proposal,
       timeline_proposal,
+      payment_terms,
       attachments,
       partner_display_name,
       status,

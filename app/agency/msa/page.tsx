@@ -174,6 +174,14 @@ export default function AgencyMsaPage() {
   const [addingMilestone, setAddingMilestone] = useState<string | null>(null)
   const [addingCashFlowProject, setAddingCashFlowProject] = useState<string | null>(null)
   const [updatingCashFlowId, setUpdatingCashFlowId] = useState<string | null>(null)
+  const [editingCashFlowId, setEditingCashFlowId] = useState<string | null>(null)
+  const [editingCashFlowDraft, setEditingCashFlowDraft] = useState<{
+    label: string
+    amount: string
+    currency: string
+    expected_date: string
+    status: "expected" | "received"
+  } | null>(null)
   const [synthesisPreview, setSynthesisPreview] = useState<
     Record<string, PaymentSynthesisRecommendation[] | "loading" | "error">
   >({})
@@ -461,6 +469,57 @@ export default function AgencyMsaPage() {
     }
   }
 
+  const beginEditClientCashFlow = (entry: ClientCashFlowRow) => {
+    setEditingCashFlowId(entry.id)
+    setEditingCashFlowDraft({
+      label: entry.label,
+      amount: String(entry.amount),
+      currency: entry.currency || "USD",
+      expected_date: entry.expected_date?.slice(0, 10) || "",
+      status: entry.status === "received" ? "received" : "expected",
+    })
+  }
+
+  const cancelEditClientCashFlow = () => {
+    setEditingCashFlowId(null)
+    setEditingCashFlowDraft(null)
+  }
+
+  const saveEditClientCashFlow = async (entryId: string) => {
+    if (!editingCashFlowDraft) return
+    if (!editingCashFlowDraft.label.trim() || !editingCashFlowDraft.expected_date) {
+      setError("Client cash flow label and expected date are required")
+      return
+    }
+    setUpdatingCashFlowId(entryId)
+    try {
+      const payload = {
+        id: entryId,
+        label: editingCashFlowDraft.label.trim(),
+        amount: parseFloat(editingCashFlowDraft.amount) || 0,
+        currency: (editingCashFlowDraft.currency || "USD").toUpperCase(),
+        expected_date: editingCashFlowDraft.expected_date,
+        status: editingCashFlowDraft.status,
+      }
+      const res = await fetch("/api/agency/client-cash-flow", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update client cash flow entry")
+      }
+      cancelEditClientCashFlow()
+      await loadAll()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update client cash flow entry")
+    } finally {
+      setUpdatingCashFlowId(null)
+    }
+  }
+
   const canGenerateSynthesis = (g: ProjectMilestoneGroup) => {
     const hasMilestones = g.milestones.some((m) => !!m.partner_name || !!m.partnership_id || !!m.response_id)
     const hasAwardedBidAmount = g.awarded_scopes.some((sc) => ((sc.budget_proposal || "").trim().length > 0))
@@ -522,6 +581,18 @@ export default function AgencyMsaPage() {
       return
     }
     void saveAcceptedSynthesis(group.project_id, recs, {})
+  }
+
+  const setConflictDecision = (partner: string, choice: "replace" | "keep") => {
+    console.log("[agency/msa] conflict decision click", { partner, choice })
+    setSynthesisConflictPrompt((prev) =>
+      prev
+        ? {
+            ...prev,
+            decisions: { ...prev.decisions, [partner]: choice },
+          }
+        : prev
+    )
   }
 
   const saveAcceptedSynthesis = async (
@@ -706,156 +777,277 @@ export default function AgencyMsaPage() {
               {projectGroups.length === 0 ? (
                 <GlassCard className="p-8 text-center text-foreground-muted text-sm">No projects yet.</GlassCard>
               ) : (
-                <div className="space-y-3">
+                <Accordion type="multiple" className="space-y-3">
                   {projectGroups.map((g) => {
                     const cf = getCashFlowForm(g.project_id)
+                    const totalExpected = g.client_cash_flow.reduce((sum, row) => sum + Number(row.amount || 0), 0)
                     return (
-                      <GlassCard key={`client-cf-${g.project_id}`} className="p-4 space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <h3 className="font-display font-bold text-base text-foreground">{g.project_name}</h3>
-                            <p className="text-xs text-foreground-muted">
-                              Add expected and received client payments to model incoming cash.
-                            </p>
+                      <AccordionItem
+                        key={`client-cf-${g.project_id}`}
+                        value={`client-cf-${g.project_id}`}
+                        className="glass-card rounded-xl border border-border/40 px-4 data-[state=open]:border-accent/30"
+                      >
+                        <AccordionTrigger className="py-4 hover:no-underline text-left">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 w-full pr-2">
+                            <div>
+                              <div className="font-display font-bold text-lg text-foreground">{g.project_name}</div>
+                              <div className="text-xs text-foreground-muted">
+                                {g.client_cash_flow.length} entries · {formatMoney(totalExpected, "USD")} total expected
+                              </div>
+                            </div>
                           </div>
-                        </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-6 pt-0 space-y-4">
+                          <p className="text-xs text-foreground-muted">
+                            Add expected and received client payments to model incoming cash.
+                          </p>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                          <input
-                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
-                            placeholder="Label (Deposit, Mid-project, Final)"
-                            value={cf.label}
-                            onChange={(e) =>
-                              setNewCashFlow((prev) => ({
-                                ...prev,
-                                [g.project_id]: { ...cf, label: e.target.value },
-                              }))
-                            }
-                          />
-                          <input
-                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
-                            placeholder="Amount"
-                            type="number"
-                            value={cf.amount}
-                            onChange={(e) =>
-                              setNewCashFlow((prev) => ({
-                                ...prev,
-                                [g.project_id]: { ...cf, amount: e.target.value },
-                              }))
-                            }
-                          />
-                          <input
-                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
-                            placeholder="Currency"
-                            value={cf.currency}
-                            onChange={(e) =>
-                              setNewCashFlow((prev) => ({
-                                ...prev,
-                                [g.project_id]: { ...cf, currency: e.target.value.toUpperCase() },
-                              }))
-                            }
-                          />
-                          <input
-                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
-                            type="date"
-                            value={cf.expected_date}
-                            onChange={(e) =>
-                              setNewCashFlow((prev) => ({
-                                ...prev,
-                                [g.project_id]: { ...cf, expected_date: e.target.value },
-                              }))
-                            }
-                          />
-                          <select
-                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
-                            value={cf.status}
-                            onChange={(e) =>
-                              setNewCashFlow((prev) => ({
-                                ...prev,
-                                [g.project_id]: {
-                                  ...cf,
-                                  status: e.target.value === "received" ? "received" : "expected",
-                                },
-                              }))
-                            }
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                            <input
+                              className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
+                              placeholder="Label (Deposit, Mid-project, Final)"
+                              value={cf.label}
+                              onChange={(e) =>
+                                setNewCashFlow((prev) => ({
+                                  ...prev,
+                                  [g.project_id]: { ...cf, label: e.target.value },
+                                }))
+                              }
+                            />
+                            <input
+                              className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
+                              placeholder="Amount"
+                              type="number"
+                              value={cf.amount}
+                              onChange={(e) =>
+                                setNewCashFlow((prev) => ({
+                                  ...prev,
+                                  [g.project_id]: { ...cf, amount: e.target.value },
+                                }))
+                              }
+                            />
+                            <input
+                              className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
+                              placeholder="Currency"
+                              value={cf.currency}
+                              onChange={(e) =>
+                                setNewCashFlow((prev) => ({
+                                  ...prev,
+                                  [g.project_id]: { ...cf, currency: e.target.value.toUpperCase() },
+                                }))
+                              }
+                            />
+                            <input
+                              className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
+                              type="date"
+                              value={cf.expected_date}
+                              onChange={(e) =>
+                                setNewCashFlow((prev) => ({
+                                  ...prev,
+                                  [g.project_id]: { ...cf, expected_date: e.target.value },
+                                }))
+                              }
+                            />
+                            <select
+                              className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
+                              value={cf.status}
+                              onChange={(e) =>
+                                setNewCashFlow((prev) => ({
+                                  ...prev,
+                                  [g.project_id]: {
+                                    ...cf,
+                                    status: e.target.value === "received" ? "received" : "expected",
+                                  },
+                                }))
+                              }
+                            >
+                              <option value="expected">Expected</option>
+                              <option value="received">Received</option>
+                            </select>
+                          </div>
+                          <Button
+                            size="sm"
+                            disabled={addingCashFlowProject === g.project_id}
+                            onClick={() => addClientCashFlowEntry(g.project_id)}
                           >
-                            <option value="expected">Expected</option>
-                            <option value="received">Received</option>
-                          </select>
-                        </div>
-                        <Button
-                          size="sm"
-                          disabled={addingCashFlowProject === g.project_id}
-                          onClick={() => addClientCashFlowEntry(g.project_id)}
-                        >
-                          {addingCashFlowProject === g.project_id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            "Add client cash flow entry"
-                          )}
-                        </Button>
+                            {addingCashFlowProject === g.project_id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              "Add client cash flow entry"
+                            )}
+                          </Button>
 
-                        <div className="overflow-x-auto rounded-lg border border-border/50">
-                          <table className="w-full text-sm min-w-[640px]">
-                            <thead>
-                              <tr className="border-b border-border/50 font-mono text-[10px] uppercase tracking-wider text-foreground-muted text-left">
-                                <th className="py-3 px-3 font-medium">Label</th>
-                                <th className="py-3 px-3 font-medium">Amount</th>
-                                <th className="py-3 px-3 font-medium">Currency</th>
-                                <th className="py-3 px-3 font-medium">Expected Date</th>
-                                <th className="py-3 px-3 font-medium">Status</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {g.client_cash_flow.length === 0 ? (
-                                <tr>
-                                  <td colSpan={5} className="py-6 px-3 text-foreground-muted text-center text-sm">
-                                    No client cash flow entries yet.
-                                  </td>
+                          <div className="overflow-x-auto rounded-lg border border-border/50">
+                            <table className="w-full text-sm min-w-[760px]">
+                              <thead>
+                                <tr className="border-b border-border/50 font-mono text-[10px] uppercase tracking-wider text-foreground-muted text-left">
+                                  <th className="py-3 px-3 font-medium">Label</th>
+                                  <th className="py-3 px-3 font-medium">Amount</th>
+                                  <th className="py-3 px-3 font-medium">Currency</th>
+                                  <th className="py-3 px-3 font-medium">Expected Date</th>
+                                  <th className="py-3 px-3 font-medium">Status</th>
+                                  <th className="py-3 px-3 font-medium">Actions</th>
                                 </tr>
-                              ) : (
-                                g.client_cash_flow.map((entry) => {
-                                  const isReceived = entry.status === "received"
-                                  return (
-                                    <tr key={entry.id} className="border-b border-border/30 last:border-0">
-                                      <td className="py-3 px-3 font-medium text-foreground">{entry.label}</td>
-                                      <td className="py-3 px-3 tabular-nums">{formatMoney(entry.amount, entry.currency)}</td>
-                                      <td className="py-3 px-3">{entry.currency}</td>
-                                      <td className="py-3 px-3 font-mono text-xs">{entry.expected_date}</td>
-                                      <td className="py-3 px-3">
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className={
-                                            isReceived
-                                              ? "border-border bg-white/5 text-foreground-muted hover:bg-white/10"
-                                              : "border-[#0C3535] bg-[#0C3535] text-white hover:bg-[#0C3535]/90 hover:text-white"
-                                          }
-                                          disabled={updatingCashFlowId === entry.id}
-                                          onClick={() =>
-                                            patchClientCashFlowStatus(entry.id, isReceived ? "expected" : "received")
-                                          }
-                                        >
-                                          {updatingCashFlowId === entry.id ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                          ) : isReceived ? (
-                                            "Received"
-                                          ) : (
-                                            "Expected"
-                                          )}
-                                        </Button>
-                                      </td>
-                                    </tr>
-                                  )
-                                })
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </GlassCard>
+                              </thead>
+                              <tbody>
+                                {g.client_cash_flow.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={6} className="py-6 px-3 text-foreground-muted text-center text-sm">
+                                      No client cash flow entries yet.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  g.client_cash_flow.map((entry) => {
+                                    const isEditing = editingCashFlowId === entry.id && !!editingCashFlowDraft
+                                    const isReceived = entry.status === "received"
+                                    return (
+                                      <tr key={entry.id} className="border-b border-border/30 last:border-0">
+                                        {isEditing && editingCashFlowDraft ? (
+                                          <>
+                                            <td className="py-2 px-3">
+                                              <input
+                                                className="w-full rounded-lg border border-border bg-white/5 px-2 py-1.5 text-sm"
+                                                value={editingCashFlowDraft.label}
+                                                onChange={(e) =>
+                                                  setEditingCashFlowDraft((prev) =>
+                                                    prev ? { ...prev, label: e.target.value } : prev
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <input
+                                                className="w-full rounded-lg border border-border bg-white/5 px-2 py-1.5 text-sm"
+                                                type="number"
+                                                value={editingCashFlowDraft.amount}
+                                                onChange={(e) =>
+                                                  setEditingCashFlowDraft((prev) =>
+                                                    prev ? { ...prev, amount: e.target.value } : prev
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <input
+                                                className="w-full rounded-lg border border-border bg-white/5 px-2 py-1.5 text-sm"
+                                                value={editingCashFlowDraft.currency}
+                                                onChange={(e) =>
+                                                  setEditingCashFlowDraft((prev) =>
+                                                    prev ? { ...prev, currency: e.target.value.toUpperCase() } : prev
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <input
+                                                className="w-full rounded-lg border border-border bg-white/5 px-2 py-1.5 text-sm"
+                                                type="date"
+                                                value={editingCashFlowDraft.expected_date}
+                                                onChange={(e) =>
+                                                  setEditingCashFlowDraft((prev) =>
+                                                    prev ? { ...prev, expected_date: e.target.value } : prev
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <select
+                                                className="w-full rounded-lg border border-border bg-white/5 px-2 py-1.5 text-sm text-foreground"
+                                                value={editingCashFlowDraft.status}
+                                                onChange={(e) =>
+                                                  setEditingCashFlowDraft((prev) =>
+                                                    prev
+                                                      ? {
+                                                          ...prev,
+                                                          status: e.target.value === "received" ? "received" : "expected",
+                                                        }
+                                                      : prev
+                                                  )
+                                                }
+                                              >
+                                                <option value="expected">Expected</option>
+                                                <option value="received">Received</option>
+                                              </select>
+                                            </td>
+                                            <td className="py-2 px-3">
+                                              <div className="flex items-center gap-2">
+                                                <Button
+                                                  type="button"
+                                                  size="sm"
+                                                  disabled={updatingCashFlowId === entry.id}
+                                                  onClick={() => saveEditClientCashFlow(entry.id)}
+                                                >
+                                                  {updatingCashFlowId === entry.id ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                  ) : (
+                                                    "Save"
+                                                  )}
+                                                </Button>
+                                                <Button
+                                                  type="button"
+                                                  size="sm"
+                                                  variant="outline"
+                                                  onClick={cancelEditClientCashFlow}
+                                                >
+                                                  Cancel
+                                                </Button>
+                                              </div>
+                                            </td>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <td className="py-3 px-3 font-medium text-foreground">{entry.label}</td>
+                                            <td className="py-3 px-3 tabular-nums">{formatMoney(entry.amount, entry.currency)}</td>
+                                            <td className="py-3 px-3">{entry.currency}</td>
+                                            <td className="py-3 px-3 font-mono text-xs">{entry.expected_date}</td>
+                                            <td className="py-3 px-3">
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className={
+                                                  isReceived
+                                                    ? "border-border bg-white/5 text-foreground-muted hover:bg-white/10"
+                                                    : "border-[#0C3535] bg-[#0C3535] text-white hover:bg-[#0C3535]/90 hover:text-white"
+                                                }
+                                                disabled={updatingCashFlowId === entry.id}
+                                                onClick={() =>
+                                                  patchClientCashFlowStatus(entry.id, isReceived ? "expected" : "received")
+                                                }
+                                              >
+                                                {updatingCashFlowId === entry.id ? (
+                                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : isReceived ? (
+                                                  "Received"
+                                                ) : (
+                                                  "Expected"
+                                                )}
+                                              </Button>
+                                            </td>
+                                            <td className="py-3 px-3">
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => beginEditClientCashFlow(entry)}
+                                              >
+                                                Edit
+                                              </Button>
+                                            </td>
+                                          </>
+                                        )}
+                                      </tr>
+                                    )
+                                  })
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
                     )
                   })}
-                </div>
+                </Accordion>
               )}
             </section>
 
@@ -1118,24 +1310,17 @@ export default function AgencyMsaPage() {
                                             </p>
                                             <div className="flex items-center gap-2">
                                               <Button
+                                                type="button"
                                                 size="sm"
                                                 variant="outline"
                                                 className="border-[#0C3535] bg-[#0C3535] text-white hover:bg-[#0C3535]/90 hover:text-white"
                                                 style={{ color: "white" }}
-                                                onClick={() =>
-                                                  setSynthesisConflictPrompt((prev) =>
-                                                    prev
-                                                      ? {
-                                                          ...prev,
-                                                          decisions: { ...prev.decisions, [partner]: "replace" },
-                                                        }
-                                                      : prev
-                                                  )
-                                                }
+                                                onClick={() => setConflictDecision(partner, "replace")}
                                               >
                                                 Replace
                                               </Button>
                                               <Button
+                                                type="button"
                                                 size="sm"
                                                 variant="outline"
                                                 className={
@@ -1144,16 +1329,7 @@ export default function AgencyMsaPage() {
                                                     : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50"
                                                 }
                                                 style={{ color: "#111827" }}
-                                                onClick={() =>
-                                                  setSynthesisConflictPrompt((prev) =>
-                                                    prev
-                                                      ? {
-                                                          ...prev,
-                                                          decisions: { ...prev.decisions, [partner]: "keep" },
-                                                        }
-                                                      : prev
-                                                  )
-                                                }
+                                                onClick={() => setConflictDecision(partner, "keep")}
                                               >
                                                 Keep
                                               </Button>
@@ -1171,13 +1347,17 @@ export default function AgencyMsaPage() {
                                             (name) => !synthesisConflictPrompt.decisions[name]
                                           )
                                         }
-                                        onClick={() =>
+                                        onClick={() => {
+                                          console.log("[agency/msa] accept synthesis with conflict decisions", {
+                                            projectId: g.project_id,
+                                            decisions: synthesisConflictPrompt.decisions,
+                                          })
                                           saveAcceptedSynthesis(
                                             g.project_id,
                                             synthesisConflictPrompt.recommendations,
                                             synthesisConflictPrompt.decisions
                                           )
-                                        }
+                                        }}
                                       >
                                         {savingSynthesisProjectId === g.project_id ? (
                                           <Loader2 className="w-4 h-4 animate-spin" />

@@ -175,7 +175,7 @@ export async function POST(req: Request) {
 
       const { data: awardedResponses, error: rErr } = await supabase
         .from("partner_rfp_responses")
-        .select("id, inbox_item_id, partner_display_name, budget_proposal")
+        .select("id, inbox_item_id, partner_display_name, budget_proposal, payment_terms")
         .eq("agency_id", user.id)
         .eq("status", "awarded")
       if (rErr) {
@@ -213,6 +213,7 @@ export async function POST(req: Request) {
             partnership_id: ib.partnership_id,
             partner_name: ((r.partner_display_name as string | null) || "").trim() || "Partner",
             budget_proposal: ((r.budget_proposal as string | null) || "").trim(),
+            payment_terms: (r.payment_terms as Record<string, unknown> | null) ?? null,
           }
         })
         .filter(Boolean) as Array<{
@@ -220,6 +221,7 @@ export async function POST(req: Request) {
         partnership_id: string | null
         partner_name: string
         budget_proposal: string
+        payment_terms: Record<string, unknown> | null
       }>
 
       const partnershipIds = [...new Set((dedupedMilestones || []).map((m) => m.partnership_id as string | null).filter(Boolean))]
@@ -255,16 +257,21 @@ export async function POST(req: Request) {
       }
 
       const responseToPartner = new Map<string, string>()
+      const responseToPaymentTerms = new Map<string, Record<string, unknown> | null>()
       if (responseIds.length > 0) {
         const { data: responseRows } = await supabase
           .from("partner_rfp_responses")
-          .select("id, partner_display_name")
+          .select("id, partner_display_name, payment_terms")
           .eq("agency_id", user.id)
           .in("id", responseIds)
         for (const row of responseRows || []) {
           responseToPartner.set(
             String(row.id),
             ((row.partner_display_name as string | null) || "").trim() || "Partner"
+          )
+          responseToPaymentTerms.set(
+            String(row.id),
+            (row.payment_terms as Record<string, unknown> | null) ?? null
           )
         }
       }
@@ -285,6 +292,8 @@ export async function POST(req: Request) {
           status: String(m.status || "pending"),
           partnership_id,
           response_id,
+          payment_terms:
+            (response_id ? responseToPaymentTerms.get(response_id) : null) ?? null,
         }
       })
 
@@ -374,7 +383,9 @@ export async function POST(req: Request) {
         ? milestoneItems
             .map(
               (m) =>
-                `- ${m.partner_name} | ${m.title} | amount=${m.amount} ${m.currency} | due_date=${m.due_date} | status=${m.status}`
+                `- ${m.partner_name} | ${m.title} | amount=${m.amount} ${m.currency} | due_date=${m.due_date} | status=${m.status} | payment_terms=${
+                  m.payment_terms ? JSON.stringify(m.payment_terms) : "N/A"
+                }`
             )
             .join("\n")
         : "- none",
@@ -386,7 +397,7 @@ export async function POST(req: Request) {
               (a) =>
                 `- ${a.partner_name} | response_id=${a.response_id} | partnership_id=${a.partnership_id || "null"} | budget_proposal=${
                   a.budget_proposal || "N/A"
-                }`
+                } | payment_terms=${a.payment_terms ? JSON.stringify(a.payment_terms) : "N/A"}`
             )
             .join("\n")
         : "- none",

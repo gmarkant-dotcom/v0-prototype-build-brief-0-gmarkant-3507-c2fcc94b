@@ -51,6 +51,14 @@ const btnOutlineLight =
 const btnPrimaryDark =
   "!bg-[#0C3535] !text-white hover:!bg-[#0C3535]/90 font-display font-bold border-transparent"
 
+const PAYMENT_SCHEDULE_OPTIONS = [
+  "Milestone-based",
+  "Net 30",
+  "Net 60",
+  "Net 90",
+  "Upon completion",
+] as const
+
 type InboxRow = {
   id: string
   agency_id: string
@@ -174,6 +182,7 @@ type ResponseRow = {
   proposal_text: string
   budget_proposal: string
   timeline_proposal: string
+  payment_terms?: Record<string, unknown> | null
   attachments: SavedAttachment[] | null
   status: string
   agency_feedback?: string | null
@@ -229,6 +238,28 @@ function draftsToPayload(drafts: DraftAttachment[]): SavedAttachment[] {
     out.push({ type: tag, label, url })
   }
   return out.slice(0, 6)
+}
+
+function parsePaymentTerms(raw: unknown): {
+  deposit_required_pct: string
+  payment_schedule_preference: string
+  preferred_currency: string
+  additional_notes: string
+} {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}
+  const depositRaw = source.deposit_required_pct
+  const depositValue =
+    typeof depositRaw === "number" && Number.isFinite(depositRaw)
+      ? String(depositRaw)
+      : typeof depositRaw === "string"
+        ? depositRaw
+        : ""
+  return {
+    deposit_required_pct: depositValue,
+    payment_schedule_preference: String(source.payment_schedule_preference ?? "").trim(),
+    preferred_currency: (String(source.preferred_currency ?? "").trim().toUpperCase() || "USD"),
+    additional_notes: String(source.additional_notes ?? "").trim(),
+  }
 }
 
 function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
@@ -361,6 +392,12 @@ export default function PartnerRfpDetailPage() {
   const [timelineDuration, setTimelineDuration] = useState("")
   const [timelineUnit, setTimelineUnit] = useState<"Days" | "Weeks" | "Months">("Weeks")
   const [timelineLegacyHint, setTimelineLegacyHint] = useState<string | null>(null)
+  const [paymentTermsDepositRequired, setPaymentTermsDepositRequired] = useState("")
+  const [paymentTermsSchedulePreference, setPaymentTermsSchedulePreference] = useState<string>(
+    PAYMENT_SCHEDULE_OPTIONS[0]
+  )
+  const [paymentTermsPreferredCurrency, setPaymentTermsPreferredCurrency] = useState("USD")
+  const [paymentTermsAdditionalNotes, setPaymentTermsAdditionalNotes] = useState("")
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([])
   const [uploadingId, setUploadingId] = useState<string | null>(null)
   const [savingKind, setSavingKind] = useState<null | "draft" | "submitted">(null)
@@ -413,6 +450,11 @@ export default function PartnerRfpDetailPage() {
             setTimelineDuration(tp.duration)
             setTimelineUnit(tp.unit)
             setTimelineLegacyHint(tp.legacyHint)
+            const pt = parsePaymentTerms(r.payment_terms)
+            setPaymentTermsDepositRequired(pt.deposit_required_pct)
+            setPaymentTermsSchedulePreference(pt.payment_schedule_preference || PAYMENT_SCHEDULE_OPTIONS[0])
+            setPaymentTermsPreferredCurrency(pt.preferred_currency || "USD")
+            setPaymentTermsAdditionalNotes(pt.additional_notes)
             const att = Array.isArray(r.attachments) ? r.attachments : []
             setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
           } else {
@@ -425,6 +467,10 @@ export default function PartnerRfpDetailPage() {
             setTimelineDuration("")
             setTimelineUnit("Weeks")
             setTimelineLegacyHint(null)
+            setPaymentTermsDepositRequired("")
+            setPaymentTermsSchedulePreference(PAYMENT_SCHEDULE_OPTIONS[0])
+            setPaymentTermsPreferredCurrency("USD")
+            setPaymentTermsAdditionalNotes("")
             setDraftAttachments([])
             setVersions([])
           }
@@ -546,6 +592,13 @@ export default function PartnerRfpDetailPage() {
         proposal_text: proposalText,
         budget_proposal,
         timeline_proposal,
+        payment_terms: {
+          deposit_required_pct:
+            paymentTermsDepositRequired.trim() === "" ? null : Number(paymentTermsDepositRequired),
+          payment_schedule_preference: paymentTermsSchedulePreference || null,
+          preferred_currency: paymentTermsPreferredCurrency.trim().toUpperCase() || "USD",
+          additional_notes: paymentTermsAdditionalNotes.trim() || null,
+        },
         attachments,
         status,
         change_notes: changeNotes,
@@ -586,6 +639,11 @@ export default function PartnerRfpDetailPage() {
         setTimelineDuration(tp.duration)
         setTimelineUnit(tp.unit)
         setTimelineLegacyHint(tp.legacyHint)
+        const pt = parsePaymentTerms(row.payment_terms)
+        setPaymentTermsDepositRequired(pt.deposit_required_pct)
+        setPaymentTermsSchedulePreference(pt.payment_schedule_preference || PAYMENT_SCHEDULE_OPTIONS[0])
+        setPaymentTermsPreferredCurrency(pt.preferred_currency || "USD")
+        setPaymentTermsAdditionalNotes(pt.additional_notes)
         const att = Array.isArray(row.attachments) ? row.attachments : []
         setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
       }
@@ -1080,6 +1138,70 @@ export default function PartnerRfpDetailPage() {
                     Previous value (edit above to replace): <span className="font-mono">{timelineLegacyHint}</span>
                   </p>
                 )}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+              <h3 className="font-display font-bold text-sm text-[#0C3535] mb-3">Payment Terms</h3>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Deposit Required (%)
+                  </label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    step="any"
+                    value={paymentTermsDepositRequired}
+                    onChange={(e) => setPaymentTermsDepositRequired(e.target.value)}
+                    placeholder="0-100"
+                    className={inputClass}
+                    disabled={!canEdit}
+                  />
+                </div>
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Payment Schedule Preference
+                  </label>
+                  <select
+                    value={paymentTermsSchedulePreference}
+                    onChange={(e) => setPaymentTermsSchedulePreference(e.target.value)}
+                    disabled={!canEdit}
+                    className={cn(inputClass, "h-10 rounded-md text-sm w-full")}
+                  >
+                    {PAYMENT_SCHEDULE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Preferred Currency
+                  </label>
+                  <Input
+                    value={paymentTermsPreferredCurrency}
+                    onChange={(e) => setPaymentTermsPreferredCurrency(e.target.value.toUpperCase())}
+                    placeholder="USD"
+                    className={inputClass}
+                    disabled={!canEdit}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Additional Payment Notes
+                  </label>
+                  <Textarea
+                    value={paymentTermsAdditionalNotes}
+                    onChange={(e) => setPaymentTermsAdditionalNotes(e.target.value)}
+                    placeholder="Optional notes about deposit timing, invoicing cadence, terms, or constraints."
+                    className={cn(fieldClass, "min-h-[90px]")}
+                    disabled={!canEdit}
+                  />
+                </div>
               </div>
             </div>
 
