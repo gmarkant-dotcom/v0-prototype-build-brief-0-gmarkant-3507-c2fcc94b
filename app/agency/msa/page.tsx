@@ -589,7 +589,11 @@ export default function AgencyMsaPage() {
       prev
         ? {
             ...prev,
-            decisions: { ...prev.decisions, [partner]: choice },
+            decisions: {
+              ...prev.decisions,
+              [partner]: choice,
+              [normalizeName(partner)]: choice,
+            },
           }
         : prev
     )
@@ -600,10 +604,20 @@ export default function AgencyMsaPage() {
     recs: PaymentSynthesisRecommendation[],
     decisions: Record<string, "replace" | "keep">
   ) => {
+    console.log("[agency/msa] accept handler fired", {
+      synthesisResults: recs,
+      conflictDecisions: decisions,
+    })
     setSavingSynthesisProjectId(projectId)
     try {
       const group = projectGroups.find((g) => g.project_id === projectId)
       if (!group) throw new Error("Project group not found")
+
+      console.log("[agency/msa] conflict decision state before guard", {
+        projectId,
+        conflictPartners: synthesisConflictPrompt?.projectId === projectId ? synthesisConflictPrompt.conflictPartners : [],
+        decisions,
+      })
 
       const decisionsByKey = new Map(Object.entries(decisions).map(([k, v]) => [normalizeName(k), v]))
       const recsToInsert = recs.filter((rec) => {
@@ -624,7 +638,13 @@ export default function AgencyMsaPage() {
         })
         .map((m) => m.id)
 
+      console.log("[agency/msa] replace flow computed", {
+        replaceKeys: Array.from(replaceKeys),
+        milestoneIdsToDelete,
+      })
+
       if (milestoneIdsToDelete.length > 0) {
+        console.log("[agency/msa] deleting existing milestones", { milestoneIdsToDelete })
         const delRes = await fetch("/api/agency/msa/milestones", {
           method: "DELETE",
           credentials: "same-origin",
@@ -632,31 +652,76 @@ export default function AgencyMsaPage() {
           body: JSON.stringify({ ids: milestoneIdsToDelete }),
         })
         const delData = await delRes.json().catch(() => ({}))
-        if (!delRes.ok) throw new Error(delData.error || "Failed to replace existing milestones")
+        if (!delRes.ok) {
+          console.error("[agency/msa] delete existing milestones failed", {
+            status: delRes.status,
+            responseBody: delData,
+          })
+          throw new Error(delData.error || "Failed to replace existing milestones")
+        }
+        console.log("[agency/msa] delete existing milestones complete", { deleted: delData?.deleted ?? milestoneIdsToDelete.length })
       }
 
-      for (const rec of recsToInsert) {
-        const dueDate =
-          typeof rec.due_date === "string" && rec.due_date.length >= 10 ? rec.due_date.slice(0, 10) : ""
-        if (!dueDate) continue
-        const payload = {
+      const milestonesToSave = recsToInsert
+        .map((rec) => {
+          const dueDate =
+            typeof rec.due_date === "string" && rec.due_date.length >= 10 ? rec.due_date.slice(0, 10) : ""
+          if (!dueDate) return null
+          return {
+            rec,
+            payload: {
+              project_id: projectId,
+              title: rec.title,
+              amount: rec.amount,
+              currency: rec.currency || "USD",
+              due_date: dueDate,
+              notes: rec.rationale,
+              response_id: rec.response_id || null,
+              partnership_id: rec.partnership_id || null,
+            },
+          }
+        })
+        .filter(Boolean) as Array<{
+        rec: PaymentSynthesisRecommendation
+        payload: {
           project_id: projectId,
-          title: rec.title,
-          amount: rec.amount,
-          currency: rec.currency || "USD",
-          due_date: dueDate,
-          notes: rec.rationale,
-          response_id: rec.response_id || null,
-          partnership_id: rec.partnership_id || null,
+          title: string
+          amount: number
+          currency: string
+          due_date: string
+          notes: string
+          response_id: string | null
+          partnership_id: string | null
         }
+      }>
+
+      console.log("[agency/msa] saving milestones", { milestonesToSave })
+
+      if (milestonesToSave.length === 0 && milestoneIdsToDelete.length === 0) {
+        setSynthesisSuccessByProject((prev) => ({
+          ...prev,
+          [projectId]: "No changes to save. All recommendations were kept as existing milestones.",
+        }))
+        setSynthesisConflictPrompt(null)
+        return
+      }
+
+      for (const row of milestonesToSave) {
         const res = await fetch("/api/agency/msa/milestones", {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(row.payload),
         })
         const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || "Failed to save synthesized milestone")
+        if (!res.ok) {
+          console.error("[agency/msa] save synthesized milestone failed", {
+            status: res.status,
+            responseBody: data,
+            payload: row.payload,
+          })
+          throw new Error(data.error || "Failed to save synthesized milestone")
+        }
       }
 
       await loadAll()
@@ -667,6 +732,7 @@ export default function AgencyMsaPage() {
         [projectId]: "AI recommended schedule saved successfully.",
       }))
     } catch (e) {
+      console.error("[agency/msa] accept handler failed", e)
       setError(e instanceof Error ? e.message : "Failed to save synthesized schedule")
     } finally {
       setSavingSynthesisProjectId(null)
@@ -1299,7 +1365,9 @@ export default function AgencyMsaPage() {
                                     </p>
                                     <div className="space-y-2">
                                       {synthesisConflictPrompt.conflictPartners.map((partner) => {
-                                        const decision = synthesisConflictPrompt.decisions[partner]
+                                        const decision =
+                                          synthesisConflictPrompt.decisions[partner] ||
+                                          synthesisConflictPrompt.decisions[normalizeName(partner)]
                                         return (
                                           <div
                                             key={`conflict-${g.project_id}-${partner}`}
@@ -1344,7 +1412,11 @@ export default function AgencyMsaPage() {
                                         disabled={
                                           savingSynthesisProjectId === g.project_id ||
                                           synthesisConflictPrompt.conflictPartners.some(
-                                            (name) => !synthesisConflictPrompt.decisions[name]
+                                            (name) =>
+                                              !(
+                                                synthesisConflictPrompt.decisions[name] ||
+                                                synthesisConflictPrompt.decisions[normalizeName(name)]
+                                              )
                                           )
                                         }
                                         onClick={() => {

@@ -904,7 +904,7 @@ export default function PartnerRfpDetailPage() {
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 <button
                   type="button"
-                  className="w-full flex items-center justify-between"
+                  className="w-full flex items-center justify-between text-[#0C3535]"
                   onClick={() => setHistoryOpen((prev) => !prev)}
                 >
                   <h3 className="font-display font-bold text-lg text-[#0C3535]">Submission History</h3>

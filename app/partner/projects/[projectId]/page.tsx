@@ -523,7 +523,7 @@ function PartnerActiveEngagementInner() {
                           <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
                             <button
                               type="button"
-                              className="w-full flex items-center justify-between gap-3 text-left"
+                              className="w-full flex items-center justify-between gap-3 text-left text-gray-900"
                               onClick={() =>
                                 setAssignmentUi((prev) => {
                                   const cur = prev[eng.assignmentId] ?? defaultAssignmentUi()
@@ -555,7 +555,7 @@ function PartnerActiveEngagementInner() {
                                       <div key={u.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                                         <button
                                           type="button"
-                                          className="w-full flex items-start justify-between gap-3 text-left"
+                                          className="w-full flex items-start justify-between gap-3 text-left text-gray-900"
                                           onClick={() =>
                                             setAssignmentUi((prev) => {
                                               const cur = prev[eng.assignmentId] ?? defaultAssignmentUi()

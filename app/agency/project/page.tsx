@@ -669,7 +669,7 @@ function ActiveEngagementsInner() {
                           <td className="py-3 pr-3">
                             <button
                               type="button"
-                              className="text-left rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+                              className="text-left text-foreground rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
                               onClick={() => openAlertsForRow(proj, row)}
                             >
                               <span

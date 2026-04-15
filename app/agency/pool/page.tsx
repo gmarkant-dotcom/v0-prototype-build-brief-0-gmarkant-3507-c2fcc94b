@@ -2269,7 +2269,7 @@ function AddEditPartnerModal({
               {formData.tags?.map(tag => (
                 <span key={tag} className="font-mono text-xs px-3 py-1 rounded-full bg-white/10 text-foreground flex items-center gap-1">
                   {tag}
-                  <button onClick={() => removeTag(tag)} className="hover:text-red-400">
+                  <button onClick={() => removeTag(tag)} className="text-foreground hover:text-red-400">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
@@ -2299,7 +2299,7 @@ function AddEditPartnerModal({
                 <span key={cred} className="font-mono text-xs px-3 py-1 rounded-full bg-accent/10 text-accent flex items-center gap-1">
                   <Award className="w-3 h-3" />
                   {cred}
-                  <button onClick={() => removeCredential(cred)} className="hover:text-red-400">
+                  <button onClick={() => removeCredential(cred)} className="text-accent hover:text-red-400">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
