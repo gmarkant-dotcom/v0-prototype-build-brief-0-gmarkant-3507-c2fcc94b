@@ -147,7 +147,7 @@ export default function TermsPage() {
             <p>
               For legal notices or questions about these Terms, contact:
               <br />
-              legal@withligament.com
+              hello@withligament.com
               <br />
               Liveligood, Inc.
               <br />

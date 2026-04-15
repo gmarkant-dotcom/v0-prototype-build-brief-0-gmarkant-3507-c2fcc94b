@@ -130,7 +130,7 @@ export default function PrivacyPage() {
             <p>
               For privacy questions or requests, contact:
               <br />
-              legal@withligament.com
+              hello@withligament.com
               <br />
               Liveligood, Inc.
               <br />
