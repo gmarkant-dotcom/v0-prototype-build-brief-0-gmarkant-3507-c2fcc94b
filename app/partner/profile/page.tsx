@@ -152,7 +152,7 @@ export default function PartnerProfilePage() {
       const { data } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, is_discoverable, bio, location, website, agency_type, avatar_url, reel_url, capabilities_overview_url, credentials, work_examples"
+          "id, role, email, full_name, company_name, is_discoverable, bio, location, website, agency_type, avatar_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -168,7 +168,14 @@ export default function PartnerProfilePage() {
         bio: data?.bio || "",
         location: data?.location || "",
         website: data?.website || "",
+        selectedCapabilities: Array.isArray((data as { capabilities?: unknown } | null)?.capabilities)
+          ? ((data as { capabilities?: unknown[] }).capabilities?.map((x) => String(x)) || [])
+          : [],
       }))
+      const loadedCaps = Array.isArray((data as { capabilities?: unknown } | null)?.capabilities)
+        ? ((data as { capabilities?: unknown[] }).capabilities?.map((x) => String(x)) || [])
+        : []
+      setCustomCapabilities(loadedCaps.filter((x) => !capabilities.includes(x)))
       setReelUrl((data as { reel_url?: string | null } | null)?.reel_url || "")
       setCapabilitiesOverviewUrl((data as { capabilities_overview_url?: string | null } | null)?.capabilities_overview_url || "")
       const savedCredentialsFromDb = ((data as { credentials?: unknown } | null)?.credentials || []) as Array<Partial<CredentialItem>>
@@ -194,13 +201,9 @@ export default function PartnerProfilePage() {
       )
       if (typeof window !== "undefined") {
         const savedDiscipline = localStorage.getItem("partnerPrimaryDiscipline")
-        const savedCaps = localStorage.getItem("partnerSelectedCapabilities")
-        const savedCustomCaps = localStorage.getItem("partnerCustomCapabilities")
         const savedTeamSize = localStorage.getItem("partnerTeamSize")
         const savedYearFounded = localStorage.getItem("partnerYearFounded")
         if (savedDiscipline) setFormData((prev) => ({ ...prev, primaryDiscipline: savedDiscipline }))
-        if (savedCaps) setFormData((prev) => ({ ...prev, selectedCapabilities: JSON.parse(savedCaps) }))
-        if (savedCustomCaps) setCustomCapabilities(JSON.parse(savedCustomCaps))
         if (savedTeamSize) setFormData((prev) => ({ ...prev, teamSize: savedTeamSize }))
         if (savedYearFounded) setFormData((prev) => ({ ...prev, yearFounded: savedYearFounded }))
       }
@@ -381,6 +384,7 @@ export default function PartnerProfilePage() {
             bio: formData.bio,
             location: formData.location,
             website: formData.website,
+            capabilities: formData.selectedCapabilities,
             reel_url: reelUrl || null,
             capabilities_overview_url: capabilitiesOverviewUrl || null,
             credentials,
@@ -393,8 +397,6 @@ export default function PartnerProfilePage() {
       }
       if (typeof window !== "undefined") {
         localStorage.setItem("partnerPrimaryDiscipline", formData.primaryDiscipline)
-        localStorage.setItem("partnerSelectedCapabilities", JSON.stringify(formData.selectedCapabilities))
-        localStorage.setItem("partnerCustomCapabilities", JSON.stringify(customCapabilities))
         localStorage.setItem("partnerTeamSize", formData.teamSize)
         localStorage.setItem("partnerYearFounded", formData.yearFounded)
       }

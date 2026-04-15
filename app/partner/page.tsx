@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
+import { createClient } from "@/lib/supabase/client"
 import {
   AlertTriangle,
   Clock,
@@ -25,11 +26,12 @@ import {
 } from "lucide-react"
 
 // Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
-const demoProfileCompletion = {
-  capabilities: 100,
-  credentials: 80,
-  legal: 60,
-  payments: 100,
+const demoProfileChecklist = {
+  capabilities: true,
+  credentials: true,
+  reel: true,
+  legal: true,
+  payments: true,
 }
 
 const demoOpenRFPs = [
@@ -133,6 +135,14 @@ type DashboardActiveProject = {
   progress: number
 }
 
+type ProfileChecklist = {
+  capabilities: boolean
+  credentials: boolean
+  reel: boolean
+  legal: boolean
+  payments: boolean
+}
+
 export default function PartnerDashboardPage() {
   const isDemo = isDemoMode()
   const { connections, acceptInvitation, declineInvitation, isLoading: connectionsLoading } = useLeadAgencyFilter()
@@ -144,6 +154,13 @@ export default function PartnerDashboardPage() {
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [fetchedActiveProjects, setFetchedActiveProjects] = useState<DashboardActiveProject[]>([])
   const [activeProjectsLoading, setActiveProjectsLoading] = useState(!isDemo)
+  const [profileChecklist, setProfileChecklist] = useState<ProfileChecklist>({
+    capabilities: false,
+    credentials: false,
+    reel: false,
+    legal: false,
+    payments: false,
+  })
 
   useEffect(() => {
     if (isDemo) {
@@ -171,6 +188,114 @@ export default function PartnerDashboardPage() {
         if (!cancelled) setSummaryLoading(false)
       }
     })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo])
+
+  useEffect(() => {
+    if (isDemo) {
+      setProfileChecklist(demoProfileChecklist)
+      return
+    }
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+
+        let profileData:
+          | {
+              capabilities?: unknown
+              credentials?: unknown
+              reel_url?: string | null
+            }
+          | null = null
+
+        const profileQuery = await supabase
+          .from("profiles")
+          .select("capabilities, credentials, reel_url")
+          .eq("id", user.id)
+          .maybeSingle()
+
+        if (!profileQuery.error) {
+          profileData = profileQuery.data as typeof profileData
+        } else {
+          const fallback = await supabase
+            .from("profiles")
+            .select("credentials, reel_url")
+            .eq("id", user.id)
+            .maybeSingle()
+          profileData = fallback.data as typeof profileData
+        }
+
+        const partnershipsRes = await fetch("/api/partnerships", { credentials: "same-origin" })
+        const partnershipsPayload = (await partnershipsRes.json().catch(() => ({}))) as {
+          partnerships?: Array<{
+            id?: string
+            status?: string | null
+            nda_confirmed_at?: string | null
+          }>
+        }
+        const partnerships = Array.isArray(partnershipsPayload.partnerships)
+          ? partnershipsPayload.partnerships
+          : []
+        const activePartnership = partnerships.find((p) => String(p.status || "").toLowerCase() === "active")
+
+        let paymentInfoComplete = false
+        if (activePartnership?.id) {
+          const riRes = await fetch(
+            `/api/partner/rate-info?partnershipId=${encodeURIComponent(String(activePartnership.id))}`,
+            { credentials: "same-origin" },
+          )
+          const riData = (await riRes.json().catch(() => ({}))) as {
+            rate_info?: {
+              hourly_rate?: string
+              project_minimum?: string
+              payment_terms_custom?: string
+              notes?: string
+            }
+          }
+          const ri = riData.rate_info || {}
+          paymentInfoComplete = Boolean(
+            String(ri.hourly_rate || "").trim() ||
+              String(ri.project_minimum || "").trim() ||
+              String(ri.payment_terms_custom || "").trim() ||
+              String(ri.notes || "").trim(),
+          )
+        }
+
+        const capabilities = Array.isArray(profileData?.capabilities) ? profileData?.capabilities : []
+        const credentials = Array.isArray(profileData?.credentials) ? profileData?.credentials : []
+        const reel = String(profileData?.reel_url || "").trim()
+        const legalComplete = partnerships.some((p) => Boolean(p.nda_confirmed_at))
+
+        if (!cancelled) {
+          setProfileChecklist({
+            capabilities: capabilities.length > 0,
+            credentials: credentials.length > 0,
+            reel: reel.length > 0,
+            legal: legalComplete,
+            payments: paymentInfoComplete,
+          })
+        }
+      } catch {
+        if (!cancelled) {
+          setProfileChecklist({
+            capabilities: false,
+            credentials: false,
+            reel: false,
+            legal: false,
+            payments: false,
+          })
+        }
+      }
+    })()
+
     return () => {
       cancelled = true
     }
@@ -268,8 +393,14 @@ export default function PartnerDashboardPage() {
     </div>
   )
 
-  // Use demo data or empty arrays for production
-  const profileCompletion = isDemo ? demoProfileCompletion : { capabilities: 0, credentials: 0, legal: 0, payments: 0 }
+  // Use demo data or computed checks from saved partner profile fields.
+  const profileCompletion = {
+    capabilities: profileChecklist.capabilities ? 100 : 0,
+    credentials: profileChecklist.credentials ? 100 : 0,
+    reel: profileChecklist.reel ? 100 : 0,
+    legal: profileChecklist.legal ? 100 : 0,
+    payments: profileChecklist.payments ? 100 : 0,
+  }
   const totalCompletion = Math.round(
     Object.values(profileCompletion).reduce((a, b) => a + b, 0) / Object.keys(profileCompletion).length
   )
@@ -475,7 +606,7 @@ export default function PartnerDashboardPage() {
                           size="sm" 
                           variant="outline"
                           onClick={() => declineInvitation(connection.id)}
-                          className="flex-1 text-xs border-gray-300"
+                          className="flex-1 text-xs text-gray-900 border-gray-300"
                         >
                           Decline
                         </Button>
@@ -578,32 +709,48 @@ export default function PartnerDashboardPage() {
                 </p>
               </div>
               <Link href="/partner/profile">
-                <Button className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
+                <Button className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90">
                   Complete Profile →
                 </Button>
               </Link>
             </div>
-            <div className="grid grid-cols-4 gap-4 mt-6">
-              {Object.entries(profileCompletion).map(([key, value]) => (
-                <div key={key} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wider capitalize">{key}</span>
-                    <span className={cn(
-                      "font-mono text-[10px]",
-                      value === 100 ? "text-green-600" : "text-yellow-600"
-                    )}>{value}%</span>
-                  </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className={cn(
-                        "h-full rounded-full transition-all",
-                        value === 100 ? "bg-green-500" : "bg-yellow-500"
-                      )}
-                      style={{ width: `${value}%` }}
-                    />
-                  </div>
+            <div className="space-y-3 mt-6">
+              {[
+                { key: "capabilities", label: "Capabilities", done: profileChecklist.capabilities },
+                { key: "credentials", label: "Credentials & Portfolio", done: profileChecklist.credentials },
+                { key: "reel", label: "Reel & Work Examples", done: profileChecklist.reel },
+                { key: "legal", label: "Legal & Compliance", done: profileChecklist.legal },
+                { key: "payments", label: "Payment Info", done: profileChecklist.payments },
+              ].map((item) => (
+                <div key={item.key} className="flex items-center justify-between p-3 rounded-lg border border-[#0C3535]/15 bg-white/70">
+                  <span className="font-mono text-xs text-gray-700">{item.label}</span>
+                  <span
+                    className={cn(
+                      "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase",
+                      item.done ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700",
+                    )}
+                  >
+                    {item.done ? "Complete" : "Pending"}
+                  </span>
                 </div>
               ))}
+            </div>
+
+            <div className="space-y-2 mt-5">
+              <Button
+                asChild
+                variant="outline"
+                className="w-full border-[#0C3535]/30 text-gray-900 hover:bg-[#0C3535]/5"
+              >
+                <Link href="/partner/legal">Set Up Legal</Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="w-full border-[#0C3535]/30 text-gray-900 hover:bg-[#0C3535]/5"
+              >
+                <Link href="/partner/payments">Set Up Payment Info</Link>
+              </Button>
             </div>
           </div>
         )}
