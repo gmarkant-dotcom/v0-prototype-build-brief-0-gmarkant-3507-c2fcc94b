@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AgencyLayout } from "@/components/agency-layout"
 import { GlassCard } from "@/components/glass-card"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
@@ -178,6 +178,7 @@ export default function AgencyMsaPage() {
   const [synthesisSuccessByProject, setSynthesisSuccessByProject] = useState<Record<string, string>>({})
   const [synthesisConflictPrompt, setSynthesisConflictPrompt] = useState<SynthesisConflictPrompt | null>(null)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const detailPanelRef = useRef<HTMLDivElement | null>(null)
 
   const loadAll = useCallback(async () => {
     setError(null)
@@ -819,6 +820,15 @@ export default function AgencyMsaPage() {
 
   const detailProjectGroups = selectedProjectGroup ? [selectedProjectGroup] : []
 
+  const handleViewDetails = (projectId: string) => {
+    setSelectedProjectId(projectId)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      })
+    })
+  }
+
   return (
     <AgencyLayout>
       <div className="p-8 max-w-6xl mx-auto space-y-10">
@@ -922,7 +932,7 @@ export default function AgencyMsaPage() {
                             size="sm"
                             variant={selectedProjectId === g.project_id ? "default" : "outline"}
                             className={selectedProjectId === g.project_id ? "text-white" : "text-gray-900"}
-                            onClick={() => setSelectedProjectId(g.project_id)}
+                            onClick={() => handleViewDetails(g.project_id)}
                           >
                             {selectedProjectId === g.project_id ? "Viewing Details" : "View Details →"}
                           </Button>
@@ -935,7 +945,14 @@ export default function AgencyMsaPage() {
             </section>
 
             {selectedProjectId && selectedProjectGroup ? (
-              <Tabs key={selectedProjectId} defaultValue="client-payments" className="space-y-4">
+              <div ref={detailPanelRef} className="space-y-3">
+                <div className="rounded-lg border border-accent/20 bg-accent/5 px-4 py-2">
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">
+                    Project Details —{" "}
+                    <span className="text-foreground">{selectedProjectGroup.project_name}</span>
+                  </p>
+                </div>
+                <Tabs key={selectedProjectId} defaultValue="client-payments" className="space-y-4">
                 <TabsList>
                   <TabsTrigger value="client-payments">Client Payments</TabsTrigger>
                   <TabsTrigger value="partner-payments">Partner Payments</TabsTrigger>
@@ -1715,7 +1732,8 @@ export default function AgencyMsaPage() {
               )}
             </section>
                 </TabsContent>
-              </Tabs>
+                </Tabs>
+              </div>
             ) : (
               <GlassCard className="p-8 text-center text-foreground-muted text-sm">
                 Select a project to view payment details.
