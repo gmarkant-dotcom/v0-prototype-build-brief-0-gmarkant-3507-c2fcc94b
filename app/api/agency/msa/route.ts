@@ -27,6 +27,7 @@ async function requireAgency(supabase: Awaited<ReturnType<typeof createClient>>,
 }
 
 export async function GET() {
+  throw new Error("Sentry smoke test - delete after confirming")
   try {
     const supabase = await createClient()
     const {
