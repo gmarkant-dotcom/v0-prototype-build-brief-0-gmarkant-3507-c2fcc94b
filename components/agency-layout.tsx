@@ -442,14 +442,14 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           {/* Legal Footer */}
           <div className="mt-4 pt-3 border-t border-border/30 flex items-center justify-center gap-3">
             <Link 
-              href="/legal/terms" 
+              href="/terms" 
               className="font-mono text-[9px] text-foreground-muted/60 hover:text-foreground-muted transition-colors"
             >
               Terms
             </Link>
             <span className="text-foreground-muted/30">|</span>
             <Link 
-              href="/legal/privacy" 
+              href="/privacy" 
               className="font-mono text-[9px] text-foreground-muted/60 hover:text-foreground-muted transition-colors"
             >
               Privacy

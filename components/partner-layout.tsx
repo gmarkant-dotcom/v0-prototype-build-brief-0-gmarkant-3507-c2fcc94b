@@ -209,14 +209,14 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
           </div>
           <div className="flex items-center gap-4">
             <Link 
-              href="/legal/terms" 
+              href="/terms" 
               className="font-mono text-[10px] text-gray-500 hover:text-[#0C3535] transition-colors"
             >
               Terms of Service
             </Link>
             <span className="text-gray-300">|</span>
             <Link 
-              href="/legal/privacy" 
+              href="/privacy" 
               className="font-mono text-[10px] text-gray-500 hover:text-[#0C3535] transition-colors"
             >
               Privacy Policy
