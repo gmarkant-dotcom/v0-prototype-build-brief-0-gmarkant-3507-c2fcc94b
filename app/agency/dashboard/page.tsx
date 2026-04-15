@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import * as Sentry from "@sentry/nextjs"
 import { AgencyLayout } from "@/components/agency-layout"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { cn } from "@/lib/utils"
@@ -148,6 +149,7 @@ function formatUsdWhole(amount: number): string {
 }
 
 function DashboardContent() {
+  Sentry.captureMessage("Sentry client-side smoke test")
   const router = useRouter()
   const { refreshProjects, addProject, setSelectedProject } = useSelectedProject()
   const { checkFeatureAccess } = usePaidUser()
