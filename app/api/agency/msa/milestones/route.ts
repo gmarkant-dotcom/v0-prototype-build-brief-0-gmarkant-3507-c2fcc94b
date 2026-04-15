@@ -119,12 +119,13 @@ export async function GET() {
       scope_item_name: string
       estimated_budget: string | null
       partner_display_name: string
+      budget_proposal: string | null
     }> = []
 
     if (agencyProjectIds.length > 0) {
       const { data: respRows, error: respErr } = await supabase
         .from("partner_rfp_responses")
-        .select("id, partner_display_name, inbox_item_id")
+        .select("id, partner_display_name, inbox_item_id, budget_proposal")
         .eq("agency_id", user.id)
         .eq("status", "awarded")
 
@@ -187,6 +188,7 @@ export async function GET() {
           scope_item_name: (ib?.scope_item_name || "Scope").trim() || "Scope",
           estimated_budget: ib?.estimated_budget ?? null,
           partner_display_name: (r.partner_display_name as string) || "Partner",
+          budget_proposal: (r.budget_proposal as string | null) ?? null,
         })
       }
     }
@@ -196,6 +198,134 @@ export async function GET() {
       const arr = scopesByProject.get(s.project_id) || []
       arr.push(s)
       scopesByProject.set(s.project_id, arr)
+    }
+
+    const milestonePartnershipIds = [
+      ...new Set(
+        milestoneRows
+          .map((m) => (m.partnership_id != null ? String(m.partnership_id) : null))
+          .filter((v): v is string => Boolean(v))
+      ),
+    ]
+    const milestoneResponseIds = [
+      ...new Set(
+        milestoneRows
+          .map((m) => (m.response_id != null ? String(m.response_id) : null))
+          .filter((v): v is string => Boolean(v))
+      ),
+    ]
+
+    const partnerNameByPartnership = new Map<string, string>()
+    if (milestonePartnershipIds.length > 0) {
+      const { data: partnershipRows } = await supabase
+        .from("partnerships")
+        .select("id, partner_id")
+        .eq("agency_id", user.id)
+        .in("id", milestonePartnershipIds)
+
+      const partnerIds = [
+        ...new Set(
+          (partnershipRows || [])
+            .map((r) => (r.partner_id != null ? String(r.partner_id) : null))
+            .filter((v): v is string => Boolean(v))
+        ),
+      ]
+      const profileById = new Map<
+        string,
+        {
+          company_name?: string | null
+          display_name?: string | null
+          full_name?: string | null
+          email?: string | null
+        }
+      >()
+      if (partnerIds.length > 0) {
+        const { data: partnerProfiles } = await supabase
+          .from("profiles")
+          .select("id, company_name, display_name, full_name, email")
+          .in("id", partnerIds)
+        for (const prof of partnerProfiles || []) {
+          profileById.set(String(prof.id), prof)
+        }
+      }
+
+      for (const row of partnershipRows || []) {
+        const partnerId = row.partner_id != null ? String(row.partner_id) : null
+        const profile = partnerId ? profileById.get(partnerId) : null
+        const label =
+          (profile?.company_name || "").trim() ||
+          (profile?.display_name || "").trim() ||
+          (profile?.full_name || "").trim() ||
+          (profile?.email || "").trim() ||
+          "Partner"
+        partnerNameByPartnership.set(String(row.id), label)
+      }
+    }
+
+    const partnerNameByResponse = new Map<string, string>()
+    if (milestoneResponseIds.length > 0) {
+      const { data: responseRows } = await supabase
+        .from("partner_rfp_responses")
+        .select("id, partner_display_name")
+        .eq("agency_id", user.id)
+        .in("id", milestoneResponseIds)
+      for (const row of responseRows || []) {
+        partnerNameByResponse.set(
+          String(row.id),
+          ((row.partner_display_name as string | null) || "").trim() || "Partner"
+        )
+      }
+    }
+
+    let clientCashFlowRows: Array<{
+      id: string
+      project_id: string
+      label: string
+      amount: number
+      currency: string
+      expected_date: string
+      status: string
+      received_at: string | null
+      created_at: string
+    }> = []
+    if (agencyProjectIds.length > 0) {
+      const { data: cfRows, error: cfErr } = await supabase
+        .from("client_cash_flow")
+        .select("id, project_id, label, amount, currency, expected_date, status, received_at, created_at")
+        .eq("agency_id", user.id)
+        .in("project_id", agencyProjectIds)
+        .order("expected_date", { ascending: true })
+        .order("created_at", { ascending: true })
+      if (cfErr) {
+        // If migration hasn't been run yet, keep page functional with empty cash-flow rows.
+        const missingTable = cfErr.code === "42P01"
+        if (!missingTable) {
+          console.error("[api/agency/msa/milestones] client_cash_flow query failed", {
+            message: cfErr.message,
+            code: cfErr.code,
+            details: cfErr.details,
+            hint: cfErr.hint,
+          })
+        }
+      } else {
+        clientCashFlowRows = (cfRows || []).map((r) => ({
+          id: String(r.id),
+          project_id: String(r.project_id),
+          label: String(r.label || "Client payment"),
+          amount: Number(r.amount || 0),
+          currency: String(r.currency || "USD"),
+          expected_date: String(r.expected_date || ""),
+          status: String(r.status || "expected"),
+          received_at: (r.received_at as string | null) ?? null,
+          created_at: String(r.created_at || ""),
+        }))
+      }
+    }
+    const clientCashFlowByProject = new Map<string, typeof clientCashFlowRows>()
+    for (const row of clientCashFlowRows) {
+      const arr = clientCashFlowByProject.get(row.project_id) || []
+      arr.push(row)
+      clientCashFlowByProject.set(row.project_id, arr)
     }
 
     const payload = projects.map((p) => {
@@ -229,6 +359,10 @@ export async function GET() {
           project_id: m.project_id as string,
           partnership_id: (m.partnership_id as string | null) ?? null,
           response_id: (m.response_id as string | null) ?? null,
+          partner_name:
+            ((m.partnership_id as string | null) && partnerNameByPartnership.get(String(m.partnership_id))) ||
+            ((m.response_id as string | null) && partnerNameByResponse.get(String(m.response_id))) ||
+            null,
           title: m.title as string,
           amount: Number(m.amount),
           currency: (m.currency as string) || "USD",
@@ -240,6 +374,7 @@ export async function GET() {
           updated_at: (m.updated_at as string | null) ?? null,
         })),
         awarded_scopes: scopesByProject.get(pid) || [],
+        client_cash_flow: clientCashFlowByProject.get(pid) || [],
       }
     })
 
@@ -439,6 +574,65 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ milestone: row }, { headers: noStore })
   } catch (e) {
     console.error("[api/agency/msa/milestones] PATCH", e)
+    return NextResponse.json({ error: "Failed" }, { status: 500, headers: noStore })
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
+    if (!(await requireAgency(supabase, user.id))) {
+      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
+    }
+
+    const body = await req.json().catch(() => ({}))
+    const idsRaw = Array.isArray(body.ids) ? body.ids : []
+    const ids = idsRaw
+      .map((v) => (typeof v === "string" ? v.trim() : ""))
+      .filter((v): v is string => Boolean(v))
+    if (ids.length === 0) {
+      return NextResponse.json({ error: "ids are required" }, { status: 400, headers: noStore })
+    }
+
+    const { data: agencyProjects, error: apErr } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("agency_id", user.id)
+    if (apErr) {
+      console.error("[api/agency/msa/milestones] DELETE agency projects", apErr)
+      return NextResponse.json({ error: "Failed to verify projects" }, { status: 500, headers: noStore })
+    }
+    const agencyProjectIds = (agencyProjects || []).map((p) => String(p.id))
+    if (agencyProjectIds.length === 0) {
+      return NextResponse.json({ deleted: 0 }, { headers: noStore })
+    }
+
+    const { data: candidates, error: cErr } = await supabase
+      .from("payment_milestones")
+      .select("id")
+      .in("id", ids)
+      .in("project_id", agencyProjectIds)
+    if (cErr) {
+      console.error("[api/agency/msa/milestones] DELETE candidates", cErr)
+      return NextResponse.json({ error: "Failed to validate milestones" }, { status: 500, headers: noStore })
+    }
+    const deletableIds = (candidates || []).map((r) => String(r.id))
+    if (deletableIds.length === 0) {
+      return NextResponse.json({ deleted: 0 }, { headers: noStore })
+    }
+
+    const { error } = await supabase.from("payment_milestones").delete().in("id", deletableIds)
+    if (error) {
+      console.error("[api/agency/msa/milestones] DELETE", error)
+      return NextResponse.json({ error: "Failed to delete milestones" }, { status: 500, headers: noStore })
+    }
+    return NextResponse.json({ deleted: deletableIds.length }, { headers: noStore })
+  } catch (e) {
+    console.error("[api/agency/msa/milestones] DELETE", e)
     return NextResponse.json({ error: "Failed" }, { status: 500, headers: noStore })
   }
 }

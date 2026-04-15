@@ -34,6 +34,7 @@ type MilestoneRow = {
   project_id: string
   partnership_id: string | null
   response_id: string | null
+  partner_name?: string | null
   title: string
   amount: number
   currency: string
@@ -52,6 +53,7 @@ type AwardedScope = {
   scope_item_name: string
   estimated_budget: string | null
   partner_display_name: string
+  budget_proposal?: string | null
 }
 
 type ProjectMilestoneGroup = {
@@ -65,6 +67,7 @@ type ProjectMilestoneGroup = {
   budget_alert: boolean
   milestones: MilestoneRow[]
   awarded_scopes: AwardedScope[]
+  client_cash_flow: ClientCashFlowRow[]
 }
 
 type AiSuggestion = {
@@ -73,6 +76,36 @@ type AiSuggestion = {
   currency: string
   due_date: string
   notes: string
+}
+
+type ClientCashFlowRow = {
+  id: string
+  project_id: string
+  label: string
+  amount: number
+  currency: string
+  expected_date: string
+  status: "expected" | "received"
+  received_at: string | null
+  created_at: string
+}
+
+type PaymentSynthesisRecommendation = {
+  partner_name: string
+  title: string
+  amount: number
+  currency: string
+  due_date: string
+  rationale: string
+  partnership_id?: string | null
+  response_id?: string | null
+}
+
+type SynthesisConflictPrompt = {
+  projectId: string
+  recommendations: PaymentSynthesisRecommendation[]
+  conflictPartners: string[]
+  decisions: Record<string, "replace" | "keep">
 }
 
 function partnerLabel(p: PartnershipRow): string {
@@ -97,6 +130,10 @@ function formatMoney(amount: number, currency: string): string {
   } catch {
     return `${amount.toLocaleString("en-US")} ${currency}`
   }
+}
+
+function normalizeName(v: string): string {
+  return v.trim().toLowerCase()
 }
 
 function msaStatusBadge(status: string) {
@@ -127,6 +164,15 @@ export default function AgencyMsaPage() {
   const [aiLoadingId, setAiLoadingId] = useState<string | null>(null)
   const [savingMsa, setSavingMsa] = useState<string | null>(null)
   const [addingMilestone, setAddingMilestone] = useState<string | null>(null)
+  const [addingCashFlowProject, setAddingCashFlowProject] = useState<string | null>(null)
+  const [updatingCashFlowId, setUpdatingCashFlowId] = useState<string | null>(null)
+  const [synthesisPreview, setSynthesisPreview] = useState<
+    Record<string, PaymentSynthesisRecommendation[] | "loading" | "error">
+  >({})
+  const [synthesisLoadingProjectId, setSynthesisLoadingProjectId] = useState<string | null>(null)
+  const [savingSynthesisProjectId, setSavingSynthesisProjectId] = useState<string | null>(null)
+  const [synthesisSuccessByProject, setSynthesisSuccessByProject] = useState<Record<string, string>>({})
+  const [synthesisConflictPrompt, setSynthesisConflictPrompt] = useState<SynthesisConflictPrompt | null>(null)
 
   const loadAll = useCallback(async () => {
     setError(null)
@@ -326,6 +372,228 @@ export default function AgencyMsaPage() {
       notes: "",
     }
 
+  const [newCashFlow, setNewCashFlow] = useState<
+    Record<
+      string,
+      {
+        label: string
+        amount: string
+        currency: string
+        expected_date: string
+        status: "expected" | "received"
+      }
+    >
+  >({})
+
+  const getCashFlowForm = (projectId: string) =>
+    newCashFlow[projectId] || {
+      label: "",
+      amount: "",
+      currency: "USD",
+      expected_date: "",
+      status: "expected" as const,
+    }
+
+  const addClientCashFlowEntry = async (projectId: string) => {
+    const f = getCashFlowForm(projectId)
+    if (!f.label.trim() || !f.expected_date) {
+      setError("Client cash flow label and expected date are required")
+      return
+    }
+    setAddingCashFlowProject(projectId)
+    try {
+      const payload = {
+        project_id: projectId,
+        label: f.label.trim(),
+        amount: parseFloat(f.amount) || 0,
+        currency: (f.currency || "USD").toUpperCase(),
+        expected_date: f.expected_date,
+        status: f.status,
+      }
+      const res = await fetch("/api/agency/client-cash-flow", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to add client cash flow entry")
+      }
+      setNewCashFlow((prev) => ({
+        ...prev,
+        [projectId]: { label: "", amount: "", currency: "USD", expected_date: "", status: "expected" },
+      }))
+      await loadAll()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to add client cash flow entry")
+    } finally {
+      setAddingCashFlowProject(null)
+    }
+  }
+
+  const patchClientCashFlowStatus = async (id: string, status: "expected" | "received") => {
+    setUpdatingCashFlowId(id)
+    try {
+      const res = await fetch("/api/agency/client-cash-flow", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, status }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update client cash flow status")
+      }
+      await loadAll()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update client cash flow status")
+    } finally {
+      setUpdatingCashFlowId(null)
+    }
+  }
+
+  const canGenerateSynthesis = (g: ProjectMilestoneGroup) => {
+    const hasMilestones = g.milestones.some((m) => !!m.partner_name || !!m.partnership_id || !!m.response_id)
+    const hasAwardedBidAmount = g.awarded_scopes.some((sc) => ((sc.budget_proposal || "").trim().length > 0))
+    return hasMilestones || hasAwardedBidAmount
+  }
+
+  const runPaymentSynthesis = async (projectId: string) => {
+    setSynthesisLoadingProjectId(projectId)
+    setSynthesisPreview((prev) => ({ ...prev, [projectId]: "loading" }))
+    setSynthesisSuccessByProject((prev) => ({ ...prev, [projectId]: "" }))
+    try {
+      const res = await fetch("/api/agency/payment-synthesis", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Failed to generate synthesis")
+      setSynthesisPreview((prev) => ({ ...prev, [projectId]: data.recommendations || [] }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate synthesis")
+      setSynthesisPreview((prev) => ({ ...prev, [projectId]: "error" }))
+    } finally {
+      setSynthesisLoadingProjectId(null)
+    }
+  }
+
+  const detectConflictPartners = (
+    group: ProjectMilestoneGroup,
+    recs: PaymentSynthesisRecommendation[]
+  ): string[] => {
+    const existingPartners = new Set(
+      group.milestones
+        .map((m) => (m.partner_name || "").trim())
+        .filter(Boolean)
+        .map(normalizeName)
+    )
+    const conflicts = new Set<string>()
+    for (const rec of recs) {
+      const partner = rec.partner_name.trim()
+      if (!partner) continue
+      if (existingPartners.has(normalizeName(partner))) {
+        conflicts.add(partner)
+      }
+    }
+    return Array.from(conflicts)
+  }
+
+  const beginAcceptSynthesis = (group: ProjectMilestoneGroup, recs: PaymentSynthesisRecommendation[]) => {
+    const conflicts = detectConflictPartners(group, recs)
+    if (conflicts.length > 0) {
+      setSynthesisConflictPrompt({
+        projectId: group.project_id,
+        recommendations: recs,
+        conflictPartners: conflicts,
+        decisions: {},
+      })
+      return
+    }
+    void saveAcceptedSynthesis(group.project_id, recs, {})
+  }
+
+  const saveAcceptedSynthesis = async (
+    projectId: string,
+    recs: PaymentSynthesisRecommendation[],
+    decisions: Record<string, "replace" | "keep">
+  ) => {
+    setSavingSynthesisProjectId(projectId)
+    try {
+      const group = projectGroups.find((g) => g.project_id === projectId)
+      if (!group) throw new Error("Project group not found")
+
+      const decisionsByKey = new Map(Object.entries(decisions).map(([k, v]) => [normalizeName(k), v]))
+      const recsToInsert = recs.filter((rec) => {
+        const key = normalizeName(rec.partner_name || "")
+        if (!key || !decisionsByKey.has(key)) return true
+        return decisionsByKey.get(key) !== "keep"
+      })
+
+      const replaceKeys = new Set(
+        Array.from(decisionsByKey.entries())
+          .filter(([, v]) => v === "replace")
+          .map(([k]) => k)
+      )
+      const milestoneIdsToDelete = group.milestones
+        .filter((m) => {
+          const key = normalizeName((m.partner_name || "").trim())
+          return key && replaceKeys.has(key)
+        })
+        .map((m) => m.id)
+
+      if (milestoneIdsToDelete.length > 0) {
+        const delRes = await fetch("/api/agency/msa/milestones", {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: milestoneIdsToDelete }),
+        })
+        const delData = await delRes.json().catch(() => ({}))
+        if (!delRes.ok) throw new Error(delData.error || "Failed to replace existing milestones")
+      }
+
+      for (const rec of recsToInsert) {
+        const dueDate =
+          typeof rec.due_date === "string" && rec.due_date.length >= 10 ? rec.due_date.slice(0, 10) : ""
+        if (!dueDate) continue
+        const payload = {
+          project_id: projectId,
+          title: rec.title,
+          amount: rec.amount,
+          currency: rec.currency || "USD",
+          due_date: dueDate,
+          notes: rec.rationale,
+          response_id: rec.response_id || null,
+          partnership_id: rec.partnership_id || null,
+        }
+        const res = await fetch("/api/agency/msa/milestones", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error || "Failed to save synthesized milestone")
+      }
+
+      await loadAll()
+      setSynthesisConflictPrompt(null)
+      setSynthesisPreview((prev) => ({ ...prev, [projectId]: [] }))
+      setSynthesisSuccessByProject((prev) => ({
+        ...prev,
+        [projectId]: "AI recommended schedule saved successfully.",
+      }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save synthesized schedule")
+    } finally {
+      setSavingSynthesisProjectId(null)
+    }
+  }
+
   const submitNewMilestone = async (projectId: string, scopes: AwardedScope[]) => {
     const f = getNewMilestoneForm(projectId)
     if (!f.title.trim() || !f.due_date) {
@@ -425,6 +693,159 @@ export default function AgencyMsaPage() {
 
         {!loading && (
           <>
+            <section className="space-y-4">
+              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Client cash flow</h2>
+              {projectGroups.length === 0 ? (
+                <GlassCard className="p-8 text-center text-foreground-muted text-sm">No projects yet.</GlassCard>
+              ) : (
+                <div className="space-y-3">
+                  {projectGroups.map((g) => {
+                    const cf = getCashFlowForm(g.project_id)
+                    return (
+                      <GlassCard key={`client-cf-${g.project_id}`} className="p-4 space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h3 className="font-display font-bold text-base text-foreground">{g.project_name}</h3>
+                            <p className="text-xs text-foreground-muted">
+                              Add expected and received client payments to model incoming cash.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                          <input
+                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
+                            placeholder="Label (Deposit, Mid-project, Final)"
+                            value={cf.label}
+                            onChange={(e) =>
+                              setNewCashFlow((prev) => ({
+                                ...prev,
+                                [g.project_id]: { ...cf, label: e.target.value },
+                              }))
+                            }
+                          />
+                          <input
+                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
+                            placeholder="Amount"
+                            type="number"
+                            value={cf.amount}
+                            onChange={(e) =>
+                              setNewCashFlow((prev) => ({
+                                ...prev,
+                                [g.project_id]: { ...cf, amount: e.target.value },
+                              }))
+                            }
+                          />
+                          <input
+                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
+                            placeholder="Currency"
+                            value={cf.currency}
+                            onChange={(e) =>
+                              setNewCashFlow((prev) => ({
+                                ...prev,
+                                [g.project_id]: { ...cf, currency: e.target.value.toUpperCase() },
+                              }))
+                            }
+                          />
+                          <input
+                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm"
+                            type="date"
+                            value={cf.expected_date}
+                            onChange={(e) =>
+                              setNewCashFlow((prev) => ({
+                                ...prev,
+                                [g.project_id]: { ...cf, expected_date: e.target.value },
+                              }))
+                            }
+                          />
+                          <select
+                            className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
+                            value={cf.status}
+                            onChange={(e) =>
+                              setNewCashFlow((prev) => ({
+                                ...prev,
+                                [g.project_id]: {
+                                  ...cf,
+                                  status: e.target.value === "received" ? "received" : "expected",
+                                },
+                              }))
+                            }
+                          >
+                            <option value="expected">Expected</option>
+                            <option value="received">Received</option>
+                          </select>
+                        </div>
+                        <Button
+                          size="sm"
+                          disabled={addingCashFlowProject === g.project_id}
+                          onClick={() => addClientCashFlowEntry(g.project_id)}
+                        >
+                          {addingCashFlowProject === g.project_id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            "Add client cash flow entry"
+                          )}
+                        </Button>
+
+                        <div className="overflow-x-auto rounded-lg border border-border/50">
+                          <table className="w-full text-sm min-w-[640px]">
+                            <thead>
+                              <tr className="border-b border-border/50 font-mono text-[10px] uppercase tracking-wider text-foreground-muted text-left">
+                                <th className="py-3 px-3 font-medium">Label</th>
+                                <th className="py-3 px-3 font-medium">Amount</th>
+                                <th className="py-3 px-3 font-medium">Currency</th>
+                                <th className="py-3 px-3 font-medium">Expected Date</th>
+                                <th className="py-3 px-3 font-medium">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {g.client_cash_flow.length === 0 ? (
+                                <tr>
+                                  <td colSpan={5} className="py-6 px-3 text-foreground-muted text-center text-sm">
+                                    No client cash flow entries yet.
+                                  </td>
+                                </tr>
+                              ) : (
+                                g.client_cash_flow.map((entry) => {
+                                  const isReceived = entry.status === "received"
+                                  return (
+                                    <tr key={entry.id} className="border-b border-border/30 last:border-0">
+                                      <td className="py-3 px-3 font-medium text-foreground">{entry.label}</td>
+                                      <td className="py-3 px-3 tabular-nums">{formatMoney(entry.amount, entry.currency)}</td>
+                                      <td className="py-3 px-3">{entry.currency}</td>
+                                      <td className="py-3 px-3 font-mono text-xs">{entry.expected_date}</td>
+                                      <td className="py-3 px-3">
+                                        <Button
+                                          size="sm"
+                                          variant={isReceived ? "secondary" : "outline"}
+                                          disabled={updatingCashFlowId === entry.id}
+                                          onClick={() =>
+                                            patchClientCashFlowStatus(entry.id, isReceived ? "expected" : "received")
+                                          }
+                                        >
+                                          {updatingCashFlowId === entry.id ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                          ) : isReceived ? (
+                                            "Received"
+                                          ) : (
+                                            "Expected"
+                                          )}
+                                        </Button>
+                                      </td>
+                                    </tr>
+                                  )
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </GlassCard>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+
             <section className="space-y-4">
               <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">MSA tracker</h2>
               {activePartnerships.length === 0 ? (
@@ -595,6 +1016,183 @@ export default function AgencyMsaPage() {
                               </div>
                             </div>
                           ) : null}
+
+                          <div className="space-y-3 rounded-lg border border-accent/20 bg-accent/5 p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <h3 className="font-display font-bold text-sm text-foreground">
+                                  AI Payment Synthesis
+                                </h3>
+                                <p className="text-xs text-foreground-muted">
+                                  AI Recommended — Review Before Saving
+                                </p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={!canGenerateSynthesis(g) || synthesisLoadingProjectId === g.project_id}
+                                onClick={() => runPaymentSynthesis(g.project_id)}
+                              >
+                                {synthesisLoadingProjectId === g.project_id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  "Generate Recommended Schedule"
+                                )}
+                              </Button>
+                            </div>
+                            {!canGenerateSynthesis(g) ? (
+                              <p className="text-xs text-foreground-muted">
+                                Add partner milestones or ensure an awarded bid includes budget data before generating.
+                              </p>
+                            ) : null}
+                            {synthesisPreview[g.project_id] === "loading" ? (
+                              <p className="text-xs text-foreground-muted flex items-center gap-2">
+                                <Loader2 className="w-3 h-3 animate-spin" /> Building recommended schedule…
+                              </p>
+                            ) : null}
+                            {synthesisPreview[g.project_id] === "error" ? (
+                              <p className="text-xs text-red-400">Could not generate payment synthesis. Try again.</p>
+                            ) : null}
+                            {Array.isArray(synthesisPreview[g.project_id]) &&
+                            synthesisPreview[g.project_id].length > 0 ? (
+                              <div className="space-y-3">
+                                <div className="overflow-x-auto rounded-lg border border-accent/30">
+                                  <table className="w-full text-sm min-w-[900px]">
+                                    <thead>
+                                      <tr className="border-b border-border/50 font-mono text-[10px] uppercase tracking-wider text-foreground-muted text-left">
+                                        <th className="py-3 px-3 font-medium">Partner</th>
+                                        <th className="py-3 px-3 font-medium">Milestone Title</th>
+                                        <th className="py-3 px-3 font-medium">Amount</th>
+                                        <th className="py-3 px-3 font-medium">Currency</th>
+                                        <th className="py-3 px-3 font-medium">Recommended Date</th>
+                                        <th className="py-3 px-3 font-medium">Rationale</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {synthesisPreview[g.project_id].map((row, idx) => (
+                                        <tr key={`${g.project_id}-syn-${idx}`} className="border-b border-border/30 last:border-0">
+                                          <td className="py-3 px-3">{row.partner_name}</td>
+                                          <td className="py-3 px-3 font-medium">{row.title}</td>
+                                          <td className="py-3 px-3 tabular-nums">{formatMoney(row.amount, row.currency)}</td>
+                                          <td className="py-3 px-3">{row.currency}</td>
+                                          <td className="py-3 px-3 font-mono text-xs">{row.due_date?.slice(0, 10)}</td>
+                                          <td className="py-3 px-3 text-xs text-foreground-muted">{row.rationale}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+
+                                {synthesisConflictPrompt?.projectId === g.project_id ? (
+                                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-3">
+                                    <p className="text-sm text-amber-200">
+                                      Existing milestones found. Choose Replace or Keep before saving.
+                                    </p>
+                                    <div className="space-y-2">
+                                      {synthesisConflictPrompt.conflictPartners.map((partner) => {
+                                        const decision = synthesisConflictPrompt.decisions[partner]
+                                        return (
+                                          <div
+                                            key={`conflict-${g.project_id}-${partner}`}
+                                            className="flex flex-wrap items-center justify-between gap-2"
+                                          >
+                                            <p className="text-xs text-amber-100">
+                                              Existing milestones found for {partner}. Replace or keep existing?
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                              <Button
+                                                size="sm"
+                                                variant={decision === "replace" ? "secondary" : "outline"}
+                                                onClick={() =>
+                                                  setSynthesisConflictPrompt((prev) =>
+                                                    prev
+                                                      ? {
+                                                          ...prev,
+                                                          decisions: { ...prev.decisions, [partner]: "replace" },
+                                                        }
+                                                      : prev
+                                                  )
+                                                }
+                                              >
+                                                Replace
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant={decision === "keep" ? "secondary" : "outline"}
+                                                onClick={() =>
+                                                  setSynthesisConflictPrompt((prev) =>
+                                                    prev
+                                                      ? {
+                                                          ...prev,
+                                                          decisions: { ...prev.decisions, [partner]: "keep" },
+                                                        }
+                                                      : prev
+                                                  )
+                                                }
+                                              >
+                                                Keep
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Button
+                                        size="sm"
+                                        disabled={
+                                          savingSynthesisProjectId === g.project_id ||
+                                          synthesisConflictPrompt.conflictPartners.some(
+                                            (name) => !synthesisConflictPrompt.decisions[name]
+                                          )
+                                        }
+                                        onClick={() =>
+                                          saveAcceptedSynthesis(
+                                            g.project_id,
+                                            synthesisConflictPrompt.recommendations,
+                                            synthesisConflictPrompt.decisions
+                                          )
+                                        }
+                                      >
+                                        {savingSynthesisProjectId === g.project_id ? (
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                          "Accept & Save Schedule"
+                                        )}
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setSynthesisConflictPrompt(null)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    disabled={savingSynthesisProjectId === g.project_id}
+                                    onClick={() =>
+                                      beginAcceptSynthesis(
+                                        g,
+                                        synthesisPreview[g.project_id] as PaymentSynthesisRecommendation[]
+                                      )
+                                    }
+                                  >
+                                    {savingSynthesisProjectId === g.project_id ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      "Accept & Save Schedule"
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            ) : null}
+                            {synthesisSuccessByProject[g.project_id] ? (
+                              <p className="text-xs text-emerald-300">{synthesisSuccessByProject[g.project_id]}</p>
+                            ) : null}
+                          </div>
 
                           {g.awarded_scopes.length > 0 ? (
                             <div className="space-y-4">
@@ -780,6 +1378,7 @@ export default function AgencyMsaPage() {
                             <table className="w-full text-sm min-w-[640px]">
                               <thead>
                                 <tr className="border-b border-border/50 font-mono text-[10px] uppercase tracking-wider text-foreground-muted text-left">
+                                  <th className="py-3 px-3 font-medium">Partner</th>
                                   <th className="py-3 px-3 font-medium">Title</th>
                                   <th className="py-3 px-3 font-medium">Amount</th>
                                   <th className="py-3 px-3 font-medium">Due</th>
@@ -790,13 +1389,14 @@ export default function AgencyMsaPage() {
                               <tbody>
                                 {g.milestones.length === 0 ? (
                                   <tr>
-                                    <td colSpan={5} className="py-6 px-3 text-foreground-muted text-center text-sm">
+                                    <td colSpan={6} className="py-6 px-3 text-foreground-muted text-center text-sm">
                                       No milestones yet.
                                     </td>
                                   </tr>
                                 ) : (
                                   g.milestones.map((m) => (
                                     <tr key={m.id} className="border-b border-border/30 last:border-0">
+                                      <td className="py-3 px-3">{m.partner_name || "—"}</td>
                                       <td className="py-3 px-3 font-medium text-foreground">{m.title}</td>
                                       <td className="py-3 px-3 tabular-nums">{formatMoney(m.amount, m.currency)}</td>
                                       <td className="py-3 px-3 font-mono text-xs">{m.due_date}</td>
