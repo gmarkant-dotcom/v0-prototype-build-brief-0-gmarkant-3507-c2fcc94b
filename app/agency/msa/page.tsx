@@ -7,7 +7,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { SelectedProjectHeader } from "@/components/selected-project-header"
-import { useSelectedProject } from "@/contexts/selected-project-context"
+import { useSelectedProjectSafe } from "@/contexts/selected-project-context"
 import { cn } from "@/lib/utils"
 import { AlertTriangle, Loader2, Plus, Sparkles } from "lucide-react"
 
@@ -154,7 +154,26 @@ function milestoneStatusBadge(status: string) {
 }
 
 export default function AgencyMsaPage() {
-  const { selectedProject } = useSelectedProject()
+  return (
+    <AgencyLayout>
+      <AgencyMsaContent />
+    </AgencyLayout>
+  )
+}
+
+export function AgencyMsaContent() {
+  const projectContext = useSelectedProjectSafe()
+  if (!projectContext) {
+    return (
+      <div className="p-8 max-w-6xl mx-auto">
+        <div className="flex items-center gap-2 text-foreground-muted py-12">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          Loading…
+        </div>
+      </div>
+    )
+  }
+  const { selectedProject } = projectContext
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [agreements, setAgreements] = useState<MsaAgreement[]>([])
@@ -812,7 +831,6 @@ export default function AgencyMsaPage() {
   const detailProjectGroups = selectedProjectGroup ? [selectedProjectGroup] : []
 
   return (
-    <AgencyLayout>
       <div className="p-8 max-w-6xl mx-auto space-y-10">
         <SelectedProjectHeader />
         <div>
@@ -1697,6 +1715,5 @@ export default function AgencyMsaPage() {
           </>
         )}
       </div>
-    </AgencyLayout>
   )
 }
