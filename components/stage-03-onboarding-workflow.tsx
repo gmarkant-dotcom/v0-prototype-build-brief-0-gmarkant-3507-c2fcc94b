@@ -57,6 +57,15 @@ type LibraryRow = {
 
 type ProjectAttach = { localId: string; label: string; urlInput: string; storedUrl: string | null; source: "url" | "file" }
 
+type MsaAgreement = {
+  id: string
+  partnership_id: string
+  status: string
+  document_url: string | null
+  signed_at: string | null
+  created_at: string
+}
+
 function newAttach(): ProjectAttach {
   return {
     localId: typeof crypto !== "undefined" ? crypto.randomUUID() : `a-${Date.now()}`,
@@ -70,6 +79,15 @@ function newAttach(): ProjectAttach {
 function libraryUrl(row: LibraryRow): string {
   if (row.source_type === "url" && row.external_url) return row.external_url
   return row.blob_url || ""
+}
+
+function msaStatusBadge(status: string) {
+  const s = status.toLowerCase()
+  const base = "font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border"
+  if (s === "signed") return cn(base, "border-emerald-500/50 bg-emerald-500/15 text-emerald-200")
+  if (s === "sent") return cn(base, "border-amber-500/50 bg-amber-500/15 text-amber-200")
+  if (s === "expired") return cn(base, "border-red-500/50 bg-red-500/15 text-red-200")
+  return cn(base, "border-border bg-white/5 text-foreground-muted")
 }
 
 export function Stage03OnboardingWorkflow() {
@@ -94,6 +112,10 @@ export function Stage03OnboardingWorkflow() {
   const [success, setSuccess] = useState<string | null>(null)
   const [uploadingAttach, setUploadingAttach] = useState<string | null>(null)
   const [meetingUrlProfile, setMeetingUrlProfile] = useState<string | null>(null)
+  const [agreements, setAgreements] = useState<MsaAgreement[]>([])
+  const [docUrlDraft, setDocUrlDraft] = useState<Record<string, string>>({})
+  const [savingMsa, setSavingMsa] = useState<string | null>(null)
+  const [msaError, setMsaError] = useState<string | null>(null)
 
   useEffect(() => {
     missedProjectRefreshRef.current = false
@@ -217,8 +239,22 @@ export function Stage03OnboardingWorkflow() {
     [onboardingPartners, partnerSelectionKey]
   )
 
+  const latestAgreementByPartnership = useMemo(() => {
+    const map = new Map<string, MsaAgreement>()
+    const sorted = [...agreements].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    for (const agreement of sorted) {
+      if (!map.has(agreement.partnership_id)) {
+        map.set(agreement.partnership_id, agreement)
+      }
+    }
+    return map
+  }, [agreements])
+
   const partnershipId = selectedPartnerRow?.partnershipId
   const assignmentIdForSend = selectedPartnerRow?.assignmentId ?? ""
+  const selectedPartnerAgreement = partnershipId ? latestAgreementByPartnership.get(partnershipId) : undefined
 
   const agencyDocs = useMemo(() => library.filter((d) => d.section === "agency"), [library])
   const templateDocs = useMemo(() => library.filter((d) => d.section === "templates"), [library])
@@ -262,6 +298,70 @@ export function Stage03OnboardingWorkflow() {
     } finally {
       setUploadingAttach(null)
     }
+  }
+
+  const loadMsaAgreements = useCallback(async () => {
+    setMsaError(null)
+    try {
+      const res = await fetch("/api/agency/msa", { credentials: "same-origin" })
+      const data = (await res.json().catch(() => ({}))) as { agreements?: MsaAgreement[]; error?: string }
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load MSA agreements")
+      }
+      setAgreements(data.agreements || [])
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Failed to load MSA agreements"
+      setMsaError(message)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadMsaAgreements()
+  }, [loadMsaAgreements])
+
+  const createMsa = async (targetPartnershipId: string) => {
+    setSavingMsa(targetPartnershipId)
+    setMsaError(null)
+    try {
+      const res = await fetch("/api/agency/msa", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partnership_id: targetPartnershipId }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(data.error || "Failed to create MSA record")
+      await loadMsaAgreements()
+    } catch (e) {
+      setMsaError(e instanceof Error ? e.message : "Failed to create MSA record")
+    } finally {
+      setSavingMsa(null)
+    }
+  }
+
+  const patchMsa = async (id: string, patch: Record<string, unknown>) => {
+    setSavingMsa(id)
+    setMsaError(null)
+    try {
+      const res = await fetch("/api/agency/msa", {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...patch }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(data.error || "Failed to update MSA")
+      await loadMsaAgreements()
+    } catch (e) {
+      setMsaError(e instanceof Error ? e.message : "Failed to update MSA")
+    } finally {
+      setSavingMsa(null)
+    }
+  }
+
+  const saveDocumentUrl = async (agreement: MsaAgreement) => {
+    const url = (docUrlDraft[agreement.id] ?? agreement.document_url ?? "").trim()
+    await patchMsa(agreement.id, { document_url: url || null })
   }
 
   const handleSaveSend = async () => {
@@ -665,6 +765,131 @@ export function Stage03OnboardingWorkflow() {
             {error && <p className="text-sm text-red-400 font-mono">{error}</p>}
             {success && <p className="text-sm text-green-400 font-mono">{success}</p>}
           </GlassCard>
+
+          {selectedPartnerRow ? (
+            <GlassCard className="p-6 space-y-4">
+              <GlassCardHeader
+                title="MSA tracker"
+                description="Track MSA status for this selected partnership without leaving onboarding."
+              />
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="font-display font-bold text-base text-foreground">
+                    {(selectedPartnerRow.partner?.company_name || "").trim() ||
+                      (selectedPartnerRow.partner?.full_name || "").trim() ||
+                      (selectedPartnerRow.partner?.email || "").trim() ||
+                      "Partner"}
+                  </div>
+                  <div className="font-mono text-[10px] text-foreground-muted mt-1">Partnership</div>
+                </div>
+                <span className={msaStatusBadge(selectedPartnerAgreement?.status || "pending")}>
+                  {selectedPartnerAgreement?.status || "pending"}
+                </span>
+              </div>
+
+              {!selectedPartnerAgreement ? (
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={savingMsa === selectedPartnerRow.partnershipId}
+                  onClick={() => createMsa(selectedPartnerRow.partnershipId)}
+                >
+                  {savingMsa === selectedPartnerRow.partnershipId ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    "Start MSA record"
+                  )}
+                </Button>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <label className="font-mono text-[9px] uppercase text-foreground-muted">Document URL</label>
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
+                        placeholder="https://…"
+                        value={docUrlDraft[selectedPartnerAgreement.id] ?? selectedPartnerAgreement.document_url ?? ""}
+                        onChange={(e) =>
+                          setDocUrlDraft((prev) => ({ ...prev, [selectedPartnerAgreement.id]: e.target.value }))
+                        }
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={savingMsa === selectedPartnerAgreement.id}
+                        onClick={() => saveDocumentUrl(selectedPartnerAgreement)}
+                      >
+                        Save
+                      </Button>
+                    </div>
+                    {selectedPartnerAgreement.document_url ? (
+                      <a
+                        href={selectedPartnerAgreement.document_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+                      >
+                        Open document
+                      </a>
+                    ) : null}
+                  </div>
+
+                  {selectedPartnerAgreement.signed_at ? (
+                    <p className="font-mono text-[10px] text-foreground-muted">
+                      Signed {new Date(selectedPartnerAgreement.signed_at).toLocaleDateString()}
+                    </p>
+                  ) : null}
+
+                  <div className="flex flex-wrap gap-2">
+                    {selectedPartnerAgreement.status === "pending" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={savingMsa === selectedPartnerAgreement.id}
+                        onClick={() => patchMsa(selectedPartnerAgreement.id, { status: "sent" })}
+                      >
+                        Mark sent
+                      </Button>
+                    )}
+                    {selectedPartnerAgreement.status === "sent" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={savingMsa === selectedPartnerAgreement.id}
+                        onClick={() => patchMsa(selectedPartnerAgreement.id, { status: "signed" })}
+                      >
+                        Mark signed
+                      </Button>
+                    )}
+                    {selectedPartnerAgreement.status !== "expired" && selectedPartnerAgreement.status !== "pending" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-foreground-muted"
+                        disabled={savingMsa === selectedPartnerAgreement.id}
+                        onClick={() => patchMsa(selectedPartnerAgreement.id, { status: "expired" })}
+                      >
+                        Mark expired
+                      </Button>
+                    )}
+                    {selectedPartnerAgreement.status === "expired" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={savingMsa === selectedPartnerAgreement.id}
+                        onClick={() => patchMsa(selectedPartnerAgreement.id, { status: "pending" })}
+                      >
+                        Reset to pending
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
+              {msaError ? (
+                <p className="text-xs text-red-400 font-mono">{msaError}</p>
+              ) : null}
+            </GlassCard>
+          ) : null}
         </div>
       )}
     </div>

@@ -7,7 +7,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
-import { AlertTriangle, FileText, Loader2, Plus, Sparkles } from "lucide-react"
+import { AlertTriangle, Loader2, Plus, Sparkles } from "lucide-react"
 
 type MsaAgreement = {
   id: string
@@ -110,17 +110,6 @@ type SynthesisConflictPrompt = {
   decisions: Record<string, "replace" | "keep">
 }
 
-function partnerLabel(p: PartnershipRow): string {
-  const pr = p.partner
-  if (!pr) return "Partner"
-  return (
-    (pr.company_name || "").trim() ||
-    (pr.full_name || "").trim() ||
-    (pr.email || "").trim() ||
-    "Partner"
-  )
-}
-
 function formatMoney(amount: number, currency: string): string {
   if (!Number.isFinite(amount)) return "—"
   try {
@@ -168,10 +157,8 @@ export default function AgencyMsaPage() {
   const [agreements, setAgreements] = useState<MsaAgreement[]>([])
   const [partnerships, setPartnerships] = useState<PartnershipRow[]>([])
   const [projectGroups, setProjectGroups] = useState<ProjectMilestoneGroup[]>([])
-  const [docUrlDraft, setDocUrlDraft] = useState<Record<string, string>>({})
   const [aiPreview, setAiPreview] = useState<Record<string, AiSuggestion[] | "loading" | "error">>({})
   const [aiLoadingId, setAiLoadingId] = useState<string | null>(null)
-  const [savingMsa, setSavingMsa] = useState<string | null>(null)
   const [addingMilestone, setAddingMilestone] = useState<string | null>(null)
   const [addingCashFlowProject, setAddingCashFlowProject] = useState<string | null>(null)
   const [updatingCashFlowId, setUpdatingCashFlowId] = useState<string | null>(null)
@@ -302,49 +289,6 @@ export default function AgencyMsaPage() {
     },
     [getProjectPartnerships, latestAgreementByPartnership]
   )
-
-  const createMsa = async (partnershipId: string) => {
-    setSavingMsa(partnershipId)
-    try {
-      const res = await fetch("/api/agency/msa", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partnership_id: partnershipId }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || "Failed to create")
-      await loadAll()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Create failed")
-    } finally {
-      setSavingMsa(null)
-    }
-  }
-
-  const patchMsa = async (id: string, patch: Record<string, unknown>) => {
-    setSavingMsa(id)
-    try {
-      const res = await fetch("/api/agency/msa", {
-        method: "PATCH",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...patch }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error || "Failed to update")
-      await loadAll()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Update failed")
-    } finally {
-      setSavingMsa(null)
-    }
-  }
-
-  const saveDocumentUrl = async (ag: MsaAgreement) => {
-    const url = (docUrlDraft[ag.id] ?? ag.document_url ?? "").trim()
-    await patchMsa(ag.id, { document_url: url || null })
-  }
 
   const runAiSchedule = async (projectId: string, partnershipId: string | null, responseId: string) => {
     setAiLoadingId(responseId)
@@ -749,7 +693,7 @@ export default function AgencyMsaPage() {
         .filter(Boolean) as Array<{
         rec: PaymentSynthesisRecommendation
         payload: {
-          project_id: projectId,
+          project_id: string
           title: string
           amount: number
           currency: string
@@ -812,8 +756,7 @@ export default function AgencyMsaPage() {
     }
     setAddingMilestone(projectId)
     try {
-      const scope =
-        f.response_id && scopes.find((s) => s.response_id === f.response_id)
+      const scope = f.response_id ? scopes.find((s) => s.response_id === f.response_id) : undefined
       const manualPayload = {
         project_id: projectId,
         title: f.title.trim(),
@@ -880,10 +823,10 @@ export default function AgencyMsaPage() {
     <AgencyLayout>
       <div className="p-8 max-w-6xl mx-auto space-y-10">
         <div>
-          <h1 className="font-display font-black text-3xl text-foreground tracking-tight">MSA &amp; Payments</h1>
+          <h1 className="font-display font-black text-3xl text-foreground tracking-tight">Cash Flow &amp; Payments</h1>
           <p className="text-foreground-muted mt-2 text-sm max-w-2xl">
-            Track master service agreements by partnership and payment milestones by project. AI can suggest a milestone
-            schedule from awarded bid context.
+            Track project cash inflows and partner payment milestones in one place, with AI-assisted schedule synthesis from
+            awarded bid context.
           </p>
         </div>
 
@@ -932,7 +875,7 @@ export default function AgencyMsaPage() {
                         key={`project-summary-${g.project_id}`}
                         className={cn(
                           "p-5 space-y-4 border border-border/40 transition-colors",
-                          selectedProjectId === g.project_id ? "border-accent/40" : ""
+                          selectedProjectId === g.project_id ? "border-accent/40 bg-accent/5 shadow-[0_0_0_1px_rgba(12,53,53,0.25)]" : ""
                         )}
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -977,8 +920,8 @@ export default function AgencyMsaPage() {
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
-                            className="text-gray-900"
+                            variant={selectedProjectId === g.project_id ? "default" : "outline"}
+                            className={selectedProjectId === g.project_id ? "text-white" : "text-gray-900"}
                             onClick={() => setSelectedProjectId(g.project_id)}
                           >
                             {selectedProjectId === g.project_id ? "Viewing Details" : "View Details →"}
@@ -991,8 +934,8 @@ export default function AgencyMsaPage() {
               )}
             </section>
 
-            {selectedProjectGroup ? (
-              <Tabs defaultValue="client-payments" className="space-y-4">
+            {selectedProjectId && selectedProjectGroup ? (
+              <Tabs key={selectedProjectId} defaultValue="client-payments" className="space-y-4">
                 <TabsList>
                   <TabsTrigger value="client-payments">Client Payments</TabsTrigger>
                   <TabsTrigger value="partner-payments">Partner Payments</TabsTrigger>
@@ -1280,113 +1223,6 @@ export default function AgencyMsaPage() {
                 </TabsContent>
 
                 <TabsContent value="partner-payments" className="space-y-4">
-
-            <section className="space-y-4">
-              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">MSA tracker</h2>
-              {activePartnerships.length === 0 ? (
-                <GlassCard className="p-8 text-center text-foreground-muted text-sm">
-                  No active partnerships yet. Accept a partner invitation to manage MSAs here.
-                </GlassCard>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activePartnerships.map((p) => {
-                    const ag = latestAgreementByPartnership.get(p.id)
-                    const name = partnerLabel(p)
-                    return (
-                      <GlassCard key={p.id} className="p-5 space-y-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-display font-bold text-lg text-foreground">{name}</div>
-                            <div className="font-mono text-[10px] text-foreground-muted mt-1">Partnership</div>
-                          </div>
-                          {ag ? (
-                            <span className={msaStatusBadge(ag.status)}>{ag.status}</span>
-                          ) : (
-                            <span className={msaStatusBadge("pending")}>no msa</span>
-                          )}
-                        </div>
-
-                        {!ag ? (
-                          <Button
-                            size="sm"
-                            className="w-full"
-                            disabled={savingMsa === p.id}
-                            onClick={() => createMsa(p.id)}
-                          >
-                            {savingMsa === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Start MSA record"}
-                          </Button>
-                        ) : (
-                          <>
-                            <div className="space-y-2">
-                              <label className="font-mono text-[9px] uppercase text-foreground-muted">Document URL</label>
-                              <div className="flex gap-2">
-                                <input
-                                  className="flex-1 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
-                                  placeholder="https://…"
-                                  value={docUrlDraft[ag.id] ?? ag.document_url ?? ""}
-                                  onChange={(e) =>
-                                    setDocUrlDraft((prev) => ({ ...prev, [ag.id]: e.target.value }))
-                                  }
-                                />
-                                <Button size="sm" variant="secondary" disabled={savingMsa === ag.id} onClick={() => saveDocumentUrl(ag)}>
-                                  Save
-                                </Button>
-                              </div>
-                              {ag.document_url ? (
-                                <a
-                                  href={ag.document_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-                                >
-                                  <FileText className="w-3.5 h-3.5" /> Open document
-                                </a>
-                              ) : null}
-                            </div>
-
-                            {ag.signed_at ? (
-                              <p className="font-mono text-[10px] text-foreground-muted">
-                                Signed {new Date(ag.signed_at).toLocaleDateString()}
-                              </p>
-                            ) : null}
-
-                            <div className="flex flex-wrap gap-2">
-                              {ag.status === "pending" && (
-                                <Button size="sm" variant="outline" disabled={savingMsa === ag.id} onClick={() => patchMsa(ag.id, { status: "sent" })}>
-                                  Mark sent
-                                </Button>
-                              )}
-                              {ag.status === "sent" && (
-                                <Button size="sm" variant="outline" disabled={savingMsa === ag.id} onClick={() => patchMsa(ag.id, { status: "signed" })}>
-                                  Mark signed
-                                </Button>
-                              )}
-                              {ag.status !== "expired" && ag.status !== "pending" && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="text-foreground-muted"
-                                  disabled={savingMsa === ag.id}
-                                  onClick={() => patchMsa(ag.id, { status: "expired" })}
-                                >
-                                  Mark expired
-                                </Button>
-                              )}
-                              {ag.status === "expired" && (
-                                <Button size="sm" variant="outline" disabled={savingMsa === ag.id} onClick={() => patchMsa(ag.id, { status: "pending" })}>
-                                  Reset to pending
-                                </Button>
-                              )}
-                            </div>
-                          </>
-                        )}
-                      </GlassCard>
-                    )
-                  })}
-                </div>
-              )}
-            </section>
-
             <section className="space-y-4">
               <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Payment milestones</h2>
               {detailProjectGroups.length === 0 ? (
@@ -1492,8 +1328,10 @@ export default function AgencyMsaPage() {
                             {synthesisPreview[g.project_id] === "error" ? (
                               <p className="text-xs text-red-400">Could not generate payment synthesis. Try again.</p>
                             ) : null}
-                            {Array.isArray(synthesisPreview[g.project_id]) &&
-                            synthesisPreview[g.project_id].length > 0 ? (
+                            {(() => {
+                              const projectSynthesis = synthesisPreview[g.project_id]
+                              if (!Array.isArray(projectSynthesis) || projectSynthesis.length === 0) return null
+                              return (
                               <div className="space-y-3">
                                 <div className="overflow-x-auto rounded-lg border border-accent/30">
                                   <table className="w-full text-sm min-w-[900px]">
@@ -1508,7 +1346,7 @@ export default function AgencyMsaPage() {
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {synthesisPreview[g.project_id].map((row, idx) => (
+                                      {projectSynthesis.map((row: PaymentSynthesisRecommendation, idx: number) => (
                                         <tr key={`${g.project_id}-syn-${idx}`} className="border-b border-border/30 last:border-0">
                                           <td className="py-3 px-3">{row.partner_name}</td>
                                           <td className="py-3 px-3 font-medium">{row.title}</td>
@@ -1629,7 +1467,8 @@ export default function AgencyMsaPage() {
                                   </Button>
                                 )}
                               </div>
-                            ) : null}
+                              )
+                            })()}
                             {synthesisSuccessByProject[g.project_id] ? (
                               <p className="text-xs text-emerald-300">{synthesisSuccessByProject[g.project_id]}</p>
                             ) : null}

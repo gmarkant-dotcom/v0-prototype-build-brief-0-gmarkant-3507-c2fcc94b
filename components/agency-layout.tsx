@@ -28,7 +28,7 @@ const navSections = [
       { number: "03", title: "Onboarding", aiPowered: false, href: "/agency/onboarding" },
       { number: "04", title: "Active Engagements", aiPowered: false, href: "/agency/project" },
       { number: "05", title: "Utilization", aiPowered: true, href: "/agency/utilization" },
-      { number: "06", title: "MSA + Payments", aiPowered: true, href: "/agency/msa" },
+      { number: "06", title: "Cash Flow + Payments", aiPowered: true, href: "/agency/msa" },
     ]
   },
   {
