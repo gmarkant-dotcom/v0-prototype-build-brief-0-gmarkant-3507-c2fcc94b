@@ -61,6 +61,7 @@ type ProjectMilestoneGroup = {
   project_name: string
   client_name: string | null
   client_budget: number | null
+  client_budget_range?: string | null
   total_milestones_amount: number
   total_paid: number
   total_outstanding: number
@@ -130,6 +131,13 @@ function formatMoney(amount: number, currency: string): string {
   } catch {
     return `${amount.toLocaleString("en-US")} ${currency}`
   }
+}
+
+function formatBudgetDisplay(group: ProjectMilestoneGroup): string {
+  const raw = (group.client_budget_range || "").trim()
+  if (raw) return raw
+  if (group.client_budget != null) return formatMoney(group.client_budget, "USD")
+  return "N/A"
 }
 
 function normalizeName(v: string): string {
@@ -817,7 +825,12 @@ export default function AgencyMsaPage() {
                                       <td className="py-3 px-3">
                                         <Button
                                           size="sm"
-                                          variant={isReceived ? "secondary" : "outline"}
+                                          variant="outline"
+                                          className={
+                                            isReceived
+                                              ? "border-border bg-white/5 text-foreground-muted hover:bg-white/10"
+                                              : "border-[#0C3535] bg-[#0C3535] text-white hover:bg-[#0C3535]/90 hover:text-white"
+                                          }
                                           disabled={updatingCashFlowId === entry.id}
                                           onClick={() =>
                                             patchClientCashFlowStatus(entry.id, isReceived ? "expected" : "received")
@@ -975,6 +988,10 @@ export default function AgencyMsaPage() {
                               {g.client_name ? (
                                 <div className="text-sm text-foreground-muted">{g.client_name}</div>
                               ) : null}
+                              <div className="text-xs text-foreground-muted mt-1">
+                                <span className="font-mono uppercase tracking-wider">Client Budget:</span>{" "}
+                                <span className="text-foreground">{formatBudgetDisplay(g)}</span>
+                              </div>
                             </div>
                             <div className="flex flex-wrap gap-3 font-mono text-[10px] text-foreground-muted">
                               <span>

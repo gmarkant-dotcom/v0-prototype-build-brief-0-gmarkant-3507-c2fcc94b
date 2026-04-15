@@ -336,6 +336,12 @@ export async function GET() {
           .trim() || "Untitled project"
       const client_name = (raw.client_name as string | null) ?? null
       const client_budget = parseClientBudget(raw.budget_range)
+      const client_budget_range =
+        typeof raw.budget_range === "string"
+          ? raw.budget_range.trim() || null
+          : raw.budget_range != null
+            ? String(raw.budget_range)
+            : null
 
       const ms = milestonesByProject.get(pid) || []
       const total_milestones_amount = ms.reduce((sum, x) => sum + Number(x.amount ?? 0), 0)
@@ -350,6 +356,7 @@ export async function GET() {
         project_name,
         client_name,
         client_budget,
+        client_budget_range,
         total_milestones_amount,
         total_paid,
         total_outstanding,
