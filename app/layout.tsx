@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Barlow_Condensed, IBM_Plex_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { SentryInit } from '@/components/sentry-init'
 import './globals.css'
 
 const inter = Inter({ 
@@ -75,6 +76,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${barlowCondensed.variable} ${ibmPlexMono.variable}`}>
       <body className="font-sans antialiased min-h-screen">
+        <SentryInit />
         {children}
         <Analytics />
       </body>
