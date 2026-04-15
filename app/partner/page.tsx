@@ -4,6 +4,12 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
@@ -208,29 +214,16 @@ export default function PartnerDashboardPage() {
         } = await supabase.auth.getUser()
         if (!user || cancelled) return
 
-        let profileData:
-          | {
-              capabilities?: unknown
-              credentials?: unknown
-              reel_url?: string | null
-            }
-          | null = null
-
-        const profileQuery = await supabase
-          .from("profiles")
-          .select("capabilities, credentials, reel_url")
-          .eq("id", user.id)
-          .maybeSingle()
-
-        if (!profileQuery.error) {
-          profileData = profileQuery.data as typeof profileData
-        } else {
-          const fallback = await supabase
-            .from("profiles")
-            .select("credentials, reel_url")
-            .eq("id", user.id)
-            .maybeSingle()
-          profileData = fallback.data as typeof profileData
+        const profileQuery = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
+        const profileData = (profileQuery.data || {}) as {
+          capabilities?: unknown
+          credentials?: unknown
+          reel_url?: string | null
+          legal_entity_name?: string | null
+          legal_entity_type?: string | null
+          legal_ein?: string | null
+          legal_address?: string | null
+          legal_state_of_incorporation?: string | null
         }
 
         const partnershipsRes = await fetch("/api/partnerships", { credentials: "same-origin" })
@@ -238,12 +231,9 @@ export default function PartnerDashboardPage() {
           partnerships?: Array<{
             id?: string
             status?: string | null
-            nda_confirmed_at?: string | null
           }>
         }
-        const partnerships = Array.isArray(partnershipsPayload.partnerships)
-          ? partnershipsPayload.partnerships
-          : []
+        const partnerships = Array.isArray(partnershipsPayload.partnerships) ? partnershipsPayload.partnerships : []
         const activePartnership = partnerships.find((p) => String(p.status || "").toLowerCase() === "active")
 
         let paymentInfoComplete = false
@@ -269,10 +259,16 @@ export default function PartnerDashboardPage() {
           )
         }
 
-        const capabilities = Array.isArray(profileData?.capabilities) ? profileData?.capabilities : []
-        const credentials = Array.isArray(profileData?.credentials) ? profileData?.credentials : []
-        const reel = String(profileData?.reel_url || "").trim()
-        const legalComplete = partnerships.some((p) => Boolean(p.nda_confirmed_at))
+        const capabilities = Array.isArray(profileData.capabilities) ? profileData.capabilities : []
+        const credentials = Array.isArray(profileData.credentials) ? profileData.credentials : []
+        const reel = String(profileData.reel_url || "").trim()
+        const legalComplete = Boolean(
+          String(profileData.legal_entity_name || "").trim() &&
+            String(profileData.legal_entity_type || "").trim() &&
+            String(profileData.legal_ein || "").trim() &&
+            String(profileData.legal_address || "").trim() &&
+            String(profileData.legal_state_of_incorporation || "").trim(),
+        )
 
         if (!cancelled) {
           setProfileChecklist({
@@ -401,6 +397,14 @@ export default function PartnerDashboardPage() {
     legal: profileChecklist.legal ? 100 : 0,
     payments: profileChecklist.payments ? 100 : 0,
   }
+  const profileChecklistCount = 5
+  const profileChecklistCompleted = [
+    profileChecklist.capabilities,
+    profileChecklist.credentials,
+    profileChecklist.reel,
+    profileChecklist.legal,
+    profileChecklist.payments,
+  ].filter(Boolean).length
   const totalCompletion = Math.round(
     Object.values(profileCompletion).reduce((a, b) => a + b, 0) / Object.keys(profileCompletion).length
   )
@@ -700,57 +704,41 @@ export default function PartnerDashboardPage() {
         
         {/* Profile Completion Alert */}
         {totalCompletion < 100 && (
-          <div className="bg-[#0C3535]/5 border border-[#0C3535]/20 rounded-xl p-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h3 className="font-display font-bold text-lg text-[#0C3535]">Complete Your Profile</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Finish setting up your profile to receive more RFP opportunities.
-                </p>
-              </div>
-              <Link href="/partner/profile">
-                <Button className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90">
-                  Complete Profile →
-                </Button>
-              </Link>
-            </div>
-            <div className="space-y-3 mt-6">
-              {[
-                { key: "capabilities", label: "Capabilities", done: profileChecklist.capabilities },
-                { key: "credentials", label: "Credentials & Portfolio", done: profileChecklist.credentials },
-                { key: "reel", label: "Reel & Work Examples", done: profileChecklist.reel },
-                { key: "legal", label: "Legal & Compliance", done: profileChecklist.legal },
-                { key: "payments", label: "Payment Info", done: profileChecklist.payments },
-              ].map((item) => (
-                <div key={item.key} className="flex items-center justify-between p-3 rounded-lg border border-[#0C3535]/15 bg-white/70">
-                  <span className="font-mono text-xs text-gray-700">{item.label}</span>
-                  <span
-                    className={cn(
-                      "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase",
-                      item.done ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700",
-                    )}
-                  >
-                    {item.done ? "Complete" : "Pending"}
+          <div className="bg-[#0C3535]/5 border border-[#0C3535]/20 rounded-xl px-4 py-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-display font-bold text-base text-[#0C3535]">Complete Your Profile</h3>
+                  <span className="font-mono text-[10px] text-gray-600 uppercase tracking-wider shrink-0">
+                    {profileChecklistCompleted} of {profileChecklistCount} complete
                   </span>
                 </div>
-              ))}
-            </div>
+                <div className="mt-2 h-2 bg-white/80 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#0C3535] rounded-full transition-all"
+                    style={{ width: `${totalCompletion}%` }}
+                  />
+                </div>
+              </div>
 
-            <div className="space-y-2 mt-5">
-              <Button
-                asChild
-                variant="outline"
-                className="w-full border-[#0C3535]/30 text-gray-900 hover:bg-[#0C3535]/5"
-              >
-                <Link href="/partner/legal">Set Up Legal</Link>
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className="w-full border-[#0C3535]/30 text-gray-900 hover:bg-[#0C3535]/5"
-              >
-                <Link href="/partner/payments">Set Up Payment Info</Link>
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90 shrink-0">
+                    Complete Profile →
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link href="/partner/profile">Company Profile & Capabilities</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/partner/legal">Legal & Compliance</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/partner/payments">Payment Setup</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         )}

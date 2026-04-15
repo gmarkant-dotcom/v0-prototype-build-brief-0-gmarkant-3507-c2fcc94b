@@ -74,7 +74,10 @@ export default function PartnerLegalPage() {
   const requiredDocuments = isDemo ? demoRequiredDocuments : emptyDocuments
   
   const [documents, setDocuments] = useState(requiredDocuments)
+  const [profileId, setProfileId] = useState("")
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null)
+  const [savingEntityInfo, setSavingEntityInfo] = useState(false)
+  const [entityInfoMsg, setEntityInfoMsg] = useState<string | null>(null)
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
   const [entityInfo, setEntityInfo] = useState(isDemo ? {
     legalName: "Sample Production Studio LLC",
@@ -106,6 +109,27 @@ export default function PartnerLegalPage() {
       const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
       if (profile?.role !== "partner") {
         router.push("/partner")
+        return
+      }
+
+      const { data } = await supabase
+        .from("profiles")
+        .select(
+          "id, legal_entity_name, legal_entity_type, legal_ein, legal_address, legal_state_of_incorporation",
+        )
+        .eq("id", user.id)
+        .maybeSingle()
+      setProfileId(data?.id || user.id)
+      if (data) {
+        setEntityInfo((prev) => ({
+          ...prev,
+          legalName: (data as { legal_entity_name?: string | null }).legal_entity_name || "",
+          entityType: (data as { legal_entity_type?: string | null }).legal_entity_type || "",
+          ein: (data as { legal_ein?: string | null }).legal_ein || "",
+          address: (data as { legal_address?: string | null }).legal_address || "",
+          stateOfIncorporation:
+            (data as { legal_state_of_incorporation?: string | null }).legal_state_of_incorporation || "",
+        }))
       }
     }
     ensurePartnerAuth()
@@ -159,6 +183,43 @@ export default function PartnerLegalPage() {
     const file = e.target.files?.[0]
     if (file) {
       handleFileUpload(docId, file)
+    }
+  }
+
+  const saveEntityInfo = async () => {
+    setEntityInfoMsg(null)
+    if (isDemo) {
+      setEntityInfoMsg("Demo mode - entity information is not persisted.")
+      return
+    }
+    setSavingEntityInfo(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/auth/login?redirect=%2Fpartner%2Flegal")
+        return
+      }
+      const target = profileId || user.id
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          legal_entity_name: entityInfo.legalName.trim() || null,
+          legal_entity_type: entityInfo.entityType.trim() || null,
+          legal_ein: entityInfo.ein.trim() || null,
+          legal_address: entityInfo.address.trim() || null,
+          legal_state_of_incorporation: entityInfo.stateOfIncorporation.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", target)
+      if (error) throw error
+      setEntityInfoMsg("Entity information saved.")
+    } catch (error) {
+      setEntityInfoMsg(error instanceof Error ? error.message : "Failed to save entity information.")
+    } finally {
+      setSavingEntityInfo(false)
     }
   }
   
@@ -279,10 +340,16 @@ export default function PartnerLegalPage() {
           </div>
           
           <div className="flex justify-end mt-6">
-            <Button className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
+            <Button
+              onClick={saveEntityInfo}
+              disabled={savingEntityInfo}
+              className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+            >
+              {savingEntityInfo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Save Entity Info
             </Button>
           </div>
+          {entityInfoMsg ? <p className="text-xs text-gray-600 mt-3">{entityInfoMsg}</p> : null}
         </div>
         
         {/* Required Documents */}
