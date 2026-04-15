@@ -718,6 +718,7 @@ export default function PartnerProfilePage() {
                 onClick={addCustomCapability}
                 variant="outline"
                 className="border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/5"
+                style={{ color: "inherit" }}
               >
                 + Add
               </Button>
@@ -740,6 +741,7 @@ export default function PartnerProfilePage() {
             <Button
               variant="outline" 
               className="border-gray-300 text-[#0C3535] hover:bg-[#0C3535]/5"
+              style={{ color: "inherit" }}
               onClick={() => setShowAddProject(true)}
             >
               + Add Project
@@ -796,7 +798,11 @@ export default function PartnerProfilePage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button onClick={addProject} className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90">
+                <Button
+                  onClick={addProject}
+                  className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+                  style={{ color: "inherit" }}
+                >
                   Add Project
                 </Button>
                 <Button
@@ -919,6 +925,7 @@ export default function PartnerProfilePage() {
                     onClick={() => reelInputRef.current?.click()}
                     disabled={isUploadingReel}
                     className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    style={{ color: "inherit" }}
                   >
                     {isUploadingReel ? (
                       <>
@@ -966,6 +973,7 @@ export default function PartnerProfilePage() {
                   onClick={() => capabilitiesInputRef.current?.click()}
                   disabled={isUploadingCapabilitiesOverview}
                   className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                  style={{ color: "inherit" }}
                 >
                   {isUploadingCapabilitiesOverview ? (
                     <>
@@ -991,6 +999,7 @@ export default function PartnerProfilePage() {
                   type="button"
                   variant="outline"
                   className="border-gray-300 text-[#0C3535] hover:bg-[#0C3535]/5"
+                  style={{ color: "inherit" }}
                   onClick={() => setShowAddWorkExample(true)}
                 >
                   + Add Work Example
@@ -1033,6 +1042,7 @@ export default function PartnerProfilePage() {
                         onClick={() => newWorkExampleInputRef.current?.click()}
                         disabled={uploadingWorkExampleId === "__new__"}
                         className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                        style={{ color: "inherit" }}
                       >
                         {uploadingWorkExampleId === "__new__" ? (
                           <>
@@ -1052,6 +1062,7 @@ export default function PartnerProfilePage() {
                         type="button"
                         onClick={addWorkExample}
                         className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+                        style={{ color: "inherit" }}
                       >
                         Add Work Example
                       </Button>
@@ -1120,6 +1131,7 @@ export default function PartnerProfilePage() {
                           variant="outline"
                           className="border-gray-300 text-gray-700 hover:bg-gray-50"
                           disabled={uploadingWorkExampleId === example.id}
+                          style={{ color: "inherit" }}
                           onClick={() =>
                             (document.getElementById(`work-example-file-${example.id}`) as HTMLInputElement | null)?.click()
                           }

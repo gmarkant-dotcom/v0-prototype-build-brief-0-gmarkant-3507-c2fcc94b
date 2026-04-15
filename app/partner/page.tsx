@@ -397,16 +397,44 @@ export default function PartnerDashboardPage() {
     legal: profileChecklist.legal ? 100 : 0,
     payments: profileChecklist.payments ? 100 : 0,
   }
-  const profileChecklistCount = 5
-  const profileChecklistCompleted = [
-    profileChecklist.capabilities,
-    profileChecklist.credentials,
-    profileChecklist.reel,
-    profileChecklist.legal,
-    profileChecklist.payments,
-  ].filter(Boolean).length
   const totalCompletion = Math.round(
     Object.values(profileCompletion).reduce((a, b) => a + b, 0) / Object.keys(profileCompletion).length
+  )
+  const profileCompletionBar = totalCompletion < 100 && (
+    <div className="bg-[#0C3535]/5 border border-[#0C3535]/20 rounded-xl px-4 py-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-display font-bold text-base text-[#0C3535]">Profile {totalCompletion}% Complete</h3>
+          </div>
+          <div className="mt-2 h-2 bg-white/80 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#0C3535] rounded-full transition-all"
+              style={{ width: `${totalCompletion}%` }}
+            />
+          </div>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90 shrink-0">
+              Complete Profile →
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link href="/partner/profile">Company Profile & Capabilities</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/partner/legal">Legal & Compliance</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/partner/payments">Payment Setup</Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
   )
   const openRFPs = isDemo ? demoOpenRFPs : []
   const activeProjects: DashboardActiveProject[] = isDemo ? demoActiveProjects : fetchedActiveProjects
@@ -418,6 +446,7 @@ export default function PartnerDashboardPage() {
     return (
       <PartnerLayout>
         <div className="space-y-8">
+          {profileCompletionBar}
           {executiveSummaryCards}
           <div className="flex items-start justify-between">
             <div>
@@ -448,6 +477,7 @@ export default function PartnerDashboardPage() {
   return (
     <PartnerLayout>
       <div className="space-y-8">
+        {profileCompletionBar}
         {executiveSummaryCards}
 
         {/* Welcome Header */}
@@ -698,47 +728,6 @@ export default function PartnerDashboardPage() {
                   </div>
                 )
               })}
-            </div>
-          </div>
-        )}
-        
-        {/* Profile Completion Alert */}
-        {totalCompletion < 100 && (
-          <div className="bg-[#0C3535]/5 border border-[#0C3535]/20 rounded-xl px-4 py-3">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-display font-bold text-base text-[#0C3535]">Complete Your Profile</h3>
-                  <span className="font-mono text-[10px] text-gray-600 uppercase tracking-wider shrink-0">
-                    {profileChecklistCompleted} of {profileChecklistCount} complete
-                  </span>
-                </div>
-                <div className="mt-2 h-2 bg-white/80 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-[#0C3535] rounded-full transition-all"
-                    style={{ width: `${totalCompletion}%` }}
-                  />
-                </div>
-              </div>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90 shrink-0">
-                    Complete Profile →
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem asChild>
-                    <Link href="/partner/profile">Company Profile & Capabilities</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/partner/legal">Legal & Compliance</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/partner/payments">Payment Setup</Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
             </div>
           </div>
         )}
