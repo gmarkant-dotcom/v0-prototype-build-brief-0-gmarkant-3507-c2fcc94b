@@ -156,7 +156,6 @@ export async function POST(req: Request) {
       const { data: milestones, error: mErr } = await supabase
         .from("payment_milestones")
         .select("id, project_id, partnership_id, response_id, title, amount, currency, due_date, status")
-        .eq("agency_id", user.id)
         .eq("project_id", project_id)
         .order("due_date", { ascending: true })
       if (mErr) {
