@@ -150,14 +150,14 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                 {userMenuOpen && (
                   <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl overflow-hidden z-50">
                     <button
-                      onClick={() => navigateFromMenu("/partner/settings/user")}
+                      onClick={() => navigateFromMenu("/partner/profile")}
                       className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
                     >
                       <Settings className="w-4 h-4 text-gray-500" />
                       <span className="text-sm">User Profile</span>
                     </button>
                     <button
-                      onClick={() => navigateFromMenu("/partner/profile")}
+                      onClick={() => navigateFromMenu("/partner/settings/user")}
                       className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
                     >
                       <User className="w-4 h-4 text-gray-500" />
