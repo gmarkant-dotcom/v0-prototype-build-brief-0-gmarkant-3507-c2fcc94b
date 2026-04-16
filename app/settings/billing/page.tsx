@@ -24,7 +24,7 @@ const plans = [
     price: "$699",
     period: "/month",
     description: "For growing agencies",
-    features: ["Up to 30 active partners", "Up to 200 projects/year", "Full AI suite", "Priority support", "Best-Practice Consultations", "Custom branding"],
+    features: ["Up to 30 active partners", "Up to 200 projects/year", "Full AI suite", "Priority support", "Best-Practice Consultations"],
     popular: true,
   },
   {
