@@ -11,6 +11,7 @@ import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
 import { mapDbProjectToMaster } from "@/lib/project-mapper"
 import { budgetStatusLabel, workflowStatusLabel } from "@/lib/partner-status"
+import { useFetch } from "@/hooks/useFetch"
 import {
   Search,
   Filter,
@@ -172,24 +173,25 @@ function DashboardContent() {
     total_client_budget: number | null
     total_partner_spend_usd: number
   } | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   
   const isDemo = isDemoMode()
-  
-  // Fetch real projects from database in production mode
+  const { data: projectsDataResponse, isLoading } = useFetch(isDemo ? "" : "/api/projects")
+
   useEffect(() => {
-    if (!isDemo) {
-      fetchProjects()
-    } else {
-      setIsLoading(false)
-    }
-  }, [isDemo])
-  
-  const fetchProjects = async () => {
+    if (isDemo) return
+    if (!projectsDataResponse) return
     try {
-      const response = await fetch('/api/projects')
-      if (response.ok) {
-        const data = await response.json()
+      const data = projectsDataResponse as {
+        projects?: Record<string, unknown>[]
+        partner_status_alert_total?: unknown
+        agency_dashboard_stats?: {
+          total_unique_clients?: unknown
+          total_active_engagements?: unknown
+          total_awarded_engagements?: unknown
+          total_client_budget?: unknown
+          total_partner_spend_usd?: unknown
+        }
+      }
         const rawList = (data.projects || []) as Record<string, unknown>[]
         if (rawList.length > 0) {
           console.log('[dashboard] raw /api/projects first row keys', Object.keys(rawList[0]))
@@ -300,15 +302,11 @@ function DashboardContent() {
               }
             : null
         )
-      } else {
-        setAgencyDashboardStats(null)
-      }
     } catch (error) {
       console.error('Error fetching projects:', error)
       setAgencyDashboardStats(null)
     }
-    setIsLoading(false)
-  }
+  }, [isDemo, projectsDataResponse])
   
   // Use demo data or real projects from database
   const projects = isDemo ? demoMasterProjects : realProjects
@@ -405,7 +403,6 @@ function DashboardContent() {
         description: "",
       })
       router.push("/agency")
-      await fetchProjects()
     } catch {
       setCreateProjectError("Project creation failed. Please try again.")
     }

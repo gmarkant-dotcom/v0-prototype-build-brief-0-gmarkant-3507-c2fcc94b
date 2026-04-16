@@ -16,6 +16,7 @@ import { isDemoMode } from "@/lib/demo-data"
 import { EmptyState } from "@/components/empty-state"
 import { LeadAgencyFilter } from "@/components/lead-agency-filter"
 import { isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
+import { useFetch } from "@/hooks/useFetch"
 import { 
   Calendar, 
   Mail, 
@@ -197,25 +198,8 @@ export default function PartnerProjectsPage() {
   
   const [selectedProject, setSelectedProject] = useState<Project | null>(projects[0] || null)
   const [activeTab, setActiveTab] = useState<"essentials" | "payments" | "onboarding" | "deliverables">("essentials")
-  const [apiProjects, setApiProjects] = useState<ProductionProjectListItem[]>([])
-  const [apiLoading, setApiLoading] = useState(false)
-
-  useEffect(() => {
-    if (isDemo) return
-    let cancelled = false
-    setApiLoading(true)
-    fetch("/api/projects")
-      .then((r) => (r.ok ? r.json() : { projects: [] }))
-      .then((d) => {
-        if (!cancelled) setApiProjects(d.projects || [])
-      })
-      .finally(() => {
-        if (!cancelled) setApiLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isDemo])
+  const { data: apiProjectsData, isLoading: apiLoading } = useFetch(isDemo ? "" : "/api/projects")
+  const apiProjects = ((apiProjectsData as { projects?: ProductionProjectListItem[] } | undefined)?.projects || [])
 
   if (!isDemo) {
     return (

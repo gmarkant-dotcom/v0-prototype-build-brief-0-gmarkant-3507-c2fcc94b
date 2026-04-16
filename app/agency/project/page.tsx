@@ -10,6 +10,7 @@ import { isDemoMode } from "@/lib/demo-data"
 import { formatEngagementBudget, formatEngagementTimeline } from "@/lib/active-engagement-parse"
 import { normalizeMeetingUrlForHref } from "@/lib/utils"
 import { useSelectedProject } from "@/contexts/selected-project-context"
+import { useFetch } from "@/hooks/useFetch"
 import {
   budgetStatusLabel,
   workflowStatusLabel,
@@ -258,35 +259,37 @@ function ActiveEngagementsInner() {
     if (!selectedProject?.id) {
       setProjectsData([])
       setError(null)
-      setLoading(false)
       return
     }
-
-    let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const q = new URLSearchParams({ projectId: selectedProject.id })
-        const res = await fetch(`/api/agency/active-engagements?${q.toString()}`, {
-          credentials: "same-origin",
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          if (!cancelled) setError((data as { error?: string }).error || "Failed to load")
-          return
-        }
-        if (!cancelled) setProjectsData((data as { projects?: ProjectGroup[] }).projects || [])
-      } catch {
-        if (!cancelled) setError("Failed to load")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
   }, [isDemo, selectedProject?.id, selectedProject?.name])
+
+  const engagementUrl = !isDemo && selectedProject?.id
+    ? `/api/agency/active-engagements?${new URLSearchParams({ projectId: selectedProject.id }).toString()}`
+    : ""
+  const {
+    data: engagementsResponse,
+    error: engagementsError,
+    isLoading: swrLoading,
+  } = useFetch(engagementUrl)
+
+  useEffect(() => {
+    if (isDemo) return
+    if (!selectedProject?.id) return
+    setLoading(swrLoading)
+    if (engagementsError) {
+      setError("Failed to load")
+      return
+    }
+    if (!engagementsResponse) return
+    const data = engagementsResponse as { projects?: ProjectGroup[]; error?: string }
+    if (typeof data.error === "string" && data.error) {
+      setError(data.error || "Failed to load")
+      setProjectsData([])
+      return
+    }
+    setError(null)
+    setProjectsData(data.projects || [])
+  }, [isDemo, selectedProject?.id, engagementsResponse, engagementsError, swrLoading])
 
   const partnerDisplayName = (p: PartnerEngagementRow["partner"]) =>
     p.companyName?.trim() || p.fullName?.trim() || "Partner"
