@@ -108,6 +108,13 @@ const demoTemplates = [
   { id: "2", name: "Electric Animal SOW Template v2", type: "sow", format: "docx" },
 ]
 
+const MASTER_BRIEF_LOADING_MESSAGES = [
+  "Analyzing brief...",
+  "Structuring scope items...",
+  "Mapping deliverables...",
+  "Finalizing...",
+]
+
 function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
   const { selectedProject } = useSelectedProject()
@@ -238,6 +245,7 @@ function AgencyRFPContent() {
     timeline: string
   } | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [masterBriefLoadingMessageIndex, setMasterBriefLoadingMessageIndex] = useState(0)
   const [generateMasterBriefError, setGenerateMasterBriefError] = useState<string | null>(null)
   
   // Step 3: Allocate Scope
@@ -525,6 +533,19 @@ function AgencyRFPContent() {
       setIsGeneratingAiTemplate(false)
     }
   }
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setMasterBriefLoadingMessageIndex(0)
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setMasterBriefLoadingMessageIndex((prev) => (prev + 1) % MASTER_BRIEF_LOADING_MESSAGES.length)
+    }, 2500)
+
+    return () => window.clearInterval(intervalId)
+  }, [isGenerating])
   
   // Allocate scope item
   const allocateScope = (itemId: string, allocation: "internal" | "outsource") => {
@@ -1354,7 +1375,7 @@ function AgencyRFPContent() {
               >
                 {isGenerating ? (
                   <span className="flex items-center gap-2">
-                    <span className="animate-spin">◌</span> Analyzing Brief...
+                    <span className="animate-spin">◌</span> {MASTER_BRIEF_LOADING_MESSAGES[masterBriefLoadingMessageIndex]}
                   </span>
                 ) : (
                   <span className="flex items-center gap-2">
@@ -1362,6 +1383,11 @@ function AgencyRFPContent() {
                   </span>
                 )}
               </Button>
+              {isGenerating && (
+                <p className="font-mono text-[10px] text-foreground-muted text-right max-w-md">
+                  {MASTER_BRIEF_LOADING_MESSAGES[masterBriefLoadingMessageIndex]}
+                </p>
+              )}
               {generateMasterBriefError && (
                 <div className="w-full max-w-lg ml-auto p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200 text-right">
                   {generateMasterBriefError}

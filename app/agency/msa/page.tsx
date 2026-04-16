@@ -113,6 +113,13 @@ type SynthesisConflictPrompt = {
   decisions: Record<string, "replace" | "keep">
 }
 
+const AI_SCHEDULE_LOADING_MESSAGES = [
+  "Reviewing engagement terms...",
+  "Building payment schedule...",
+  "Calculating milestones...",
+  "Finalizing...",
+]
+
 function formatMoney(amount: number, currency: string): string {
   if (!Number.isFinite(amount)) return "—"
   try {
@@ -207,6 +214,7 @@ export function AgencyMsaContent() {
   const [projectGroups, setProjectGroups] = useState<ProjectMilestoneGroup[]>([])
   const [aiPreview, setAiPreview] = useState<Record<string, AiSuggestion[] | "loading" | "error">>({})
   const [aiLoadingId, setAiLoadingId] = useState<string | null>(null)
+  const [aiScheduleLoadingMessageIndex, setAiScheduleLoadingMessageIndex] = useState(0)
   const [addingMilestone, setAddingMilestone] = useState<string | null>(null)
   const [addingCashFlowProject, setAddingCashFlowProject] = useState<string | null>(null)
   const [updatingCashFlowId, setUpdatingCashFlowId] = useState<string | null>(null)
@@ -351,6 +359,19 @@ export function AgencyMsaContent() {
       setAiLoadingId(null)
     }
   }
+
+  useEffect(() => {
+    if (!aiLoadingId) {
+      setAiScheduleLoadingMessageIndex(0)
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      setAiScheduleLoadingMessageIndex((prev) => (prev + 1) % AI_SCHEDULE_LOADING_MESSAGES.length)
+    }, 2500)
+
+    return () => window.clearInterval(intervalId)
+  }, [aiLoadingId])
 
   const addMilestoneFromSuggestion = async (
     projectId: string,
@@ -1607,7 +1628,8 @@ export function AgencyMsaContent() {
                                     </div>
                                     {preview === "loading" && (
                                       <p className="text-xs text-foreground-muted flex items-center gap-2">
-                                        <Loader2 className="w-3 h-3 animate-spin" /> Generating suggestions…
+                                        <Loader2 className="w-3 h-3 animate-spin" />{" "}
+                                        {AI_SCHEDULE_LOADING_MESSAGES[aiScheduleLoadingMessageIndex]}
                                       </p>
                                     )}
                                     {preview === "error" && (
