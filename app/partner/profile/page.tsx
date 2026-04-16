@@ -57,6 +57,35 @@ type WorkExampleItem = {
   file_url: string
 }
 
+type ActivePartnershipOption = {
+  partnership_id: string
+  agency_name: string
+}
+
+type PartnershipContextForm = {
+  bio: string
+  reel_url: string
+  capabilities_tags_input: string
+  credentials_notes: string
+  deposit_percent: string
+  net_days: string
+  schedule_preference: string
+  payment_notes: string
+}
+
+function emptyPartnershipContextForm(): PartnershipContextForm {
+  return {
+    bio: "",
+    reel_url: "",
+    capabilities_tags_input: "",
+    credentials_notes: "",
+    deposit_percent: "",
+    net_days: "",
+    schedule_preference: "",
+    payment_notes: "",
+  }
+}
+
 export default function PartnerProfilePage() {
   const router = useRouter()
   const isDemo = isDemoMode()
@@ -130,6 +159,11 @@ export default function PartnerProfilePage() {
     file_url: "",
   })
   const [uploadingWorkExampleId, setUploadingWorkExampleId] = useState<string | null>(null)
+  const [activePartnershipOptions, setActivePartnershipOptions] = useState<ActivePartnershipOption[]>([])
+  const [partnershipContextById, setPartnershipContextById] = useState<Record<string, PartnershipContextForm>>({})
+  const [selectedPartnershipId, setSelectedPartnershipId] = useState("")
+  const [contextSaving, setContextSaving] = useState(false)
+  const [contextSaved, setContextSaved] = useState(false)
   const reelInputRef = useRef<HTMLInputElement>(null)
   const capabilitiesInputRef = useRef<HTMLInputElement>(null)
   const newWorkExampleInputRef = useRef<HTMLInputElement>(null)
@@ -207,10 +241,112 @@ export default function PartnerProfilePage() {
         if (savedTeamSize) setFormData((prev) => ({ ...prev, teamSize: savedTeamSize }))
         if (savedYearFounded) setFormData((prev) => ({ ...prev, yearFounded: savedYearFounded }))
       }
+
+      const { data: activePartnerships } = await supabase
+        .from("partnerships")
+        .select("id, agency_id")
+        .eq("partner_id", user.id)
+        .eq("status", "active")
+
+      const partnershipRows = Array.isArray(activePartnerships) ? activePartnerships : []
+      const agencyIds = Array.from(
+        new Set(partnershipRows.map((row) => String(row.agency_id || "")).filter(Boolean))
+      )
+
+      let agencyNameById: Record<string, string> = {}
+      if (agencyIds.length > 0) {
+        const { data: agencyProfiles } = await supabase
+          .from("profiles")
+          .select("id, company_name, full_name")
+          .in("id", agencyIds)
+
+        agencyNameById = Object.fromEntries(
+          (agencyProfiles || []).map((profile) => [
+            String(profile.id),
+            String(profile.company_name || profile.full_name || "Lead Agency"),
+          ])
+        )
+      }
+
+      const partnershipOptions = partnershipRows.map((row) => ({
+        partnership_id: String(row.id),
+        agency_name: agencyNameById[String(row.agency_id || "")] || "Lead Agency",
+      }))
+      setActivePartnershipOptions(partnershipOptions)
+      setSelectedPartnershipId((prev) => prev || partnershipOptions[0]?.partnership_id || "")
+
+      const partnershipIds = partnershipOptions.map((row) => row.partnership_id)
+      if (partnershipIds.length > 0) {
+        const { data: contextRows } = await supabase
+          .from("partnership_profile_context")
+          .select("partnership_id, bio, reel_url, capabilities, credentials, payment_terms")
+          .eq("user_id", user.id)
+          .in("partnership_id", partnershipIds)
+
+        const contextById = Object.fromEntries(
+          (contextRows || []).map((row) => {
+            const capabilitiesValue =
+              row && typeof row === "object" && "capabilities" in row ? (row.capabilities as unknown) : null
+            const credentialsValue =
+              row && typeof row === "object" && "credentials" in row ? (row.credentials as unknown) : null
+            const paymentTermsValue =
+              row && typeof row === "object" && "payment_terms" in row ? (row.payment_terms as unknown) : null
+
+            const tags =
+              capabilitiesValue && typeof capabilitiesValue === "object" && !Array.isArray(capabilitiesValue)
+                ? Array.isArray((capabilitiesValue as { tags?: unknown }).tags)
+                  ? ((capabilitiesValue as { tags?: unknown[] }).tags || []).map((tag) => String(tag).trim()).filter(Boolean)
+                  : []
+                : []
+
+            const credentialsNotes =
+              credentialsValue && typeof credentialsValue === "object" && !Array.isArray(credentialsValue)
+                ? String((credentialsValue as { notes?: unknown }).notes || "")
+                : ""
+
+            const paymentTerms =
+              paymentTermsValue && typeof paymentTermsValue === "object" && !Array.isArray(paymentTermsValue)
+                ? (paymentTermsValue as {
+                    deposit_percent?: unknown
+                    net_days?: unknown
+                    schedule_preference?: unknown
+                    notes?: unknown
+                  })
+                : {}
+
+            return [
+              String(row.partnership_id),
+              {
+                bio: String(row.bio || ""),
+                reel_url: String(row.reel_url || ""),
+                capabilities_tags_input: tags.join(", "),
+                credentials_notes: credentialsNotes,
+                deposit_percent:
+                  paymentTerms.deposit_percent == null || paymentTerms.deposit_percent === ""
+                    ? ""
+                    : String(paymentTerms.deposit_percent),
+                net_days:
+                  paymentTerms.net_days == null || paymentTerms.net_days === ""
+                    ? ""
+                    : String(paymentTerms.net_days),
+                schedule_preference: String(paymentTerms.schedule_preference || ""),
+                payment_notes: String(paymentTerms.notes || ""),
+              } satisfies PartnershipContextForm,
+            ]
+          })
+        ) as Record<string, PartnershipContextForm>
+
+        setPartnershipContextById(contextById)
+      }
       setLoading(false)
     }
     ensurePartnerAuth()
   }, [isDemo, router])
+
+  const selectedPartnershipContext =
+    selectedPartnershipId && partnershipContextById[selectedPartnershipId]
+      ? partnershipContextById[selectedPartnershipId]
+      : emptyPartnershipContextForm()
 
   const toggleDiscoverability = async (checked: boolean) => {
     setDiscoverabilityMsg(null)
@@ -408,6 +544,74 @@ export default function PartnerProfilePage() {
       setMessage(error instanceof Error ? error.message : "Failed to save profile.")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const updateSelectedPartnershipContext = (patch: Partial<PartnershipContextForm>) => {
+    if (!selectedPartnershipId) return
+    setPartnershipContextById((prev) => ({
+      ...prev,
+      [selectedPartnershipId]: {
+        ...(prev[selectedPartnershipId] || emptyPartnershipContextForm()),
+        ...patch,
+      },
+    }))
+  }
+
+  const handleSavePartnershipContext = async () => {
+    if (!selectedPartnershipId) return
+    setContextSaving(true)
+    setContextSaved(false)
+    setMessage(null)
+
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push("/auth/login?redirect=%2Fpartner%2Fprofile")
+        return
+      }
+
+      const context = partnershipContextById[selectedPartnershipId] || emptyPartnershipContextForm()
+      const tags = context.capabilities_tags_input
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+
+      const depositPercent = context.deposit_percent.trim()
+      const netDays = context.net_days.trim()
+
+      const { error } = await supabase.from("partnership_profile_context").upsert(
+        {
+          partnership_id: selectedPartnershipId,
+          user_id: user.id,
+          bio: context.bio.trim() || null,
+          reel_url: context.reel_url.trim() || null,
+          capabilities: { tags },
+          credentials: { notes: context.credentials_notes.trim() },
+          payment_terms: {
+            deposit_percent: depositPercent === "" ? null : Number(depositPercent),
+            net_days: netDays === "" ? null : Number(netDays),
+            schedule_preference: context.schedule_preference.trim() || "",
+            notes: context.payment_notes.trim() || "",
+          },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "partnership_id,user_id" }
+      )
+
+      if (error) throw error
+
+      setContextSaved(true)
+      setTimeout(() => setContextSaved(false), 2000)
+    } catch (error) {
+      console.error("[partner/profile] partnership context save failure", error)
+      setMessage(error instanceof Error ? error.message : "Failed to save partnership context.")
+    } finally {
+      setContextSaving(false)
     }
   }
   
@@ -658,6 +862,160 @@ export default function PartnerProfilePage() {
               />
             </div>
           </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <div>
+              <h2 className="font-display font-bold text-lg text-[#0C3535]">Partnership Context</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Tailor your profile details for each active lead agency partnership.
+              </p>
+            </div>
+            <Button
+              type="button"
+              onClick={handleSavePartnershipContext}
+              disabled={!selectedPartnershipId || contextSaving}
+              className={cn(
+                "min-w-[120px] bg-[#0C3535] text-white hover:bg-[#0C3535]/90",
+                contextSaved && "bg-green-600 hover:bg-green-600"
+              )}
+              style={{ color: "inherit" }}
+            >
+              {contextSaving ? "Saving..." : contextSaved ? "Saved ✓" : "Save Context"}
+            </Button>
+          </div>
+
+          {activePartnershipOptions.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+              No active partner partnerships found.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <div>
+                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  Partnership
+                </label>
+                <select
+                  value={selectedPartnershipId}
+                  onChange={(e) => {
+                    setContextSaved(false)
+                    setSelectedPartnershipId(e.target.value)
+                  }}
+                  className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                >
+                  {activePartnershipOptions.map((option) => (
+                    <option key={option.partnership_id} value={option.partnership_id}>
+                      {option.agency_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  Bio
+                </label>
+                <Textarea
+                  value={selectedPartnershipContext.bio}
+                  onChange={(e) => updateSelectedPartnershipContext({ bio: e.target.value })}
+                  className="min-h-[120px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  placeholder="Describe how you'd like to present yourself for this specific partnership."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Reel URL
+                  </label>
+                  <Input
+                    value={selectedPartnershipContext.reel_url}
+                    onChange={(e) => updateSelectedPartnershipContext({ reel_url: e.target.value })}
+                    placeholder="https://vimeo.com/partnership-specific-reel"
+                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    Capabilities Tags
+                  </label>
+                  <Input
+                    value={selectedPartnershipContext.capabilities_tags_input}
+                    onChange={(e) => updateSelectedPartnershipContext({ capabilities_tags_input: e.target.value })}
+                    placeholder="Production, Motion Design, Creator Content"
+                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-2">Enter comma-separated tags.</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  Credentials Notes
+                </label>
+                <Textarea
+                  value={selectedPartnershipContext.credentials_notes}
+                  onChange={(e) => updateSelectedPartnershipContext({ credentials_notes: e.target.value })}
+                  className="min-h-[100px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  placeholder="Plain-text credentials notes for this partnership."
+                />
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-display font-bold text-base text-[#0C3535]">Payment Terms</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                      Deposit Percent
+                    </label>
+                    <Input
+                      type="number"
+                      value={selectedPartnershipContext.deposit_percent}
+                      onChange={(e) => updateSelectedPartnershipContext({ deposit_percent: e.target.value })}
+                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                      Net Days
+                    </label>
+                    <Input
+                      type="number"
+                      value={selectedPartnershipContext.net_days}
+                      onChange={(e) => updateSelectedPartnershipContext({ net_days: e.target.value })}
+                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                      Schedule Preference
+                    </label>
+                    <Input
+                      value={selectedPartnershipContext.schedule_preference}
+                      onChange={(e) => updateSelectedPartnershipContext({ schedule_preference: e.target.value })}
+                      placeholder="Milestone-based, Net 30, etc."
+                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                      Notes
+                    </label>
+                    <Input
+                      value={selectedPartnershipContext.payment_notes}
+                      onChange={(e) => updateSelectedPartnershipContext({ payment_notes: e.target.value })}
+                      placeholder="Additional payment notes"
+                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         
         {/* Capabilities */}

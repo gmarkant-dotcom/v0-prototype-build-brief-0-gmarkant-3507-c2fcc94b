@@ -10,6 +10,7 @@ import { Settings, LogOut, User, ChevronDown, Globe, ArrowUpRight } from "lucide
 import { LigamentLogo } from "./ligament-logo"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { LeadAgencyFilterProvider } from "@/contexts/lead-agency-filter-context"
+import { RoleToggle } from "./role-toggle"
 
 const navItems = [
   { icon: "◇", title: "Dashboard", href: "/partner" },
@@ -88,110 +89,115 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
     <div className="min-h-screen bg-[#FAFAFA]">
       {/* Header */}
       <header className="bg-[#0C3535] text-white sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/">
-              <LigamentLogo size="sm" variant="primary" />
-            </Link>
-            
-            {/* Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href || 
-                  (item.href !== "/partner" && pathname?.startsWith(item.href))
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
-                      isActive
-                        ? "bg-white/10 text-[#C8F53C]"
-                        : "text-white/70 hover:text-white hover:bg-white/5"
-                    )}
-                  >
-                    <span>{item.icon}</span>
-                    <span>{item.title}</span>
-                  </Link>
-                )
-              })}
-            </nav>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            {isDemo && (
-              <Link 
-                href="/agency" 
-                className="font-mono text-[10px] text-white/60 hover:text-[#C8F53C] transition-colors"
-              >
-                Switch to Lead Agency View →
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-8">
+              <Link href="/">
+                <LigamentLogo size="sm" variant="primary" />
               </Link>
-            )}
-            <div className="relative">
-              <button 
-                onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors"
-              >
-                <div className="text-right hidden sm:block">
-                  <div className="font-display font-bold text-sm">{userName}</div>
-                  <div className="font-mono text-[10px] text-[#C8F53C]">Partner Account</div>
-                </div>
-                <div className="w-9 h-9 rounded-full bg-[#C8F53C]/20 flex items-center justify-center">
-                  <span className="font-mono text-xs text-[#C8F53C]">{userInitials}</span>
-                </div>
-                <ChevronDown className={cn(
-                  "w-4 h-4 text-white/60 transition-transform",
-                  userMenuOpen && "rotate-180"
-                )} />
-              </button>
               
-              {userMenuOpen && (
-                <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl overflow-hidden z-50">
-                  <button
-                    onClick={() => navigateFromMenu("/partner/settings/user")}
-                    className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
-                  >
-                    <Settings className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">User Profile</span>
-                  </button>
-                  <button
-                    onClick={() => navigateFromMenu("/partner/profile")}
-                    className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
-                  >
-                    <User className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">Company Profile & Capabilities</span>
-                  </button>
-                  <button
-                    onClick={() => navigateFromMenu("/partner/marketplace")}
-                    className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
-                  >
-                    <Globe className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm">Marketplace</span>
-                  </button>
-                  <div className="border-t border-gray-200">
-                    <button
-                      onClick={() => navigateFromMenu("/pricing")}
-                      className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+              {/* Navigation */}
+              <nav className="hidden md:flex items-center gap-1">
+                {navItems.map((item) => {
+                  const isActive = pathname === item.href || 
+                    (item.href !== "/partner" && pathname?.startsWith(item.href))
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
+                        isActive
+                          ? "bg-white/10 text-[#C8F53C]"
+                          : "text-white/70 hover:text-white hover:bg-white/5"
+                      )}
                     >
-                      <ArrowUpRight className="w-4 h-4 mt-0.5 text-gray-500" />
-                      <span className="text-sm">
-                        <span className="block">Become a Lead Agency</span>
-                        <span className="block text-xs text-gray-500">Unlock full platform access.</span>
-                      </span>
-                    </button>
-                  </div>
-                  <div className="border-t border-gray-200">
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition-colors text-red-600"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span className="text-sm">Sign Out</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+                      <span>{item.icon}</span>
+                      <span>{item.title}</span>
+                    </Link>
+                  )
+                })}
+              </nav>
             </div>
+            
+            <div className="flex items-center gap-4">
+              {isDemo && (
+                <Link 
+                  href="/agency" 
+                  className="font-mono text-[10px] text-white/60 hover:text-[#C8F53C] transition-colors"
+                >
+                  Switch to Lead Agency View →
+                </Link>
+              )}
+              <div className="relative">
+                <button 
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <div className="text-right hidden sm:block">
+                    <div className="font-display font-bold text-sm">{userName}</div>
+                    <div className="font-mono text-[10px] text-[#C8F53C]">Partner Account</div>
+                  </div>
+                  <div className="w-9 h-9 rounded-full bg-[#C8F53C]/20 flex items-center justify-center">
+                    <span className="font-mono text-xs text-[#C8F53C]">{userInitials}</span>
+                  </div>
+                  <ChevronDown className={cn(
+                    "w-4 h-4 text-white/60 transition-transform",
+                    userMenuOpen && "rotate-180"
+                  )} />
+                </button>
+                
+                {userMenuOpen && (
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl overflow-hidden z-50">
+                    <button
+                      onClick={() => navigateFromMenu("/partner/settings/user")}
+                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                    >
+                      <Settings className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm">User Profile</span>
+                    </button>
+                    <button
+                      onClick={() => navigateFromMenu("/partner/profile")}
+                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                    >
+                      <User className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm">Company Profile & Capabilities</span>
+                    </button>
+                    <button
+                      onClick={() => navigateFromMenu("/partner/marketplace")}
+                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                    >
+                      <Globe className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm">Marketplace</span>
+                    </button>
+                    <div className="border-t border-gray-200">
+                      <button
+                        onClick={() => navigateFromMenu("/pricing")}
+                        className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                      >
+                        <ArrowUpRight className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <span className="text-sm">
+                          <span className="block">Become a Lead Agency</span>
+                          <span className="block text-xs text-gray-500">Unlock full platform access.</span>
+                        </span>
+                      </button>
+                    </div>
+                    <div className="border-t border-gray-200">
+                      <button
+                        onClick={handleSignOut}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition-colors text-red-600"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span className="text-sm">Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 max-w-[220px]">
+            <RoleToggle />
           </div>
         </div>
       </header>

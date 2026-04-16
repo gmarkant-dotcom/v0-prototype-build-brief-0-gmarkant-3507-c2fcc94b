@@ -12,6 +12,7 @@ import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditC
 import { SelectedProjectProvider, useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
+import { RoleToggle } from "@/components/role-toggle"
 
 const navSections = [
   {
@@ -135,6 +136,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           <div className="mt-2 font-mono text-[10px] text-accent bg-accent/10 px-2 py-1 rounded inline-block">
             Lead Agency
           </div>
+          <RoleToggle />
         </div>
         
         {/* Navigation */}
