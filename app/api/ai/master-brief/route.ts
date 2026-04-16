@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
@@ -153,6 +154,7 @@ ${briefText}`
 
     return NextResponse.json({ masterBrief: parsed })
   } catch (error) {
+    Sentry.captureException(error)
     console.error("master-brief error:", error)
     const msg = error instanceof Error ? error.message : String(error)
     const missingKey =

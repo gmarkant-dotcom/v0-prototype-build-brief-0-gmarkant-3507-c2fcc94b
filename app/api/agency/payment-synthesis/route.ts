@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 import { streamText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 
@@ -373,6 +374,7 @@ Prioritize: paying partners after the agency receives client funds, flagging any
       },
     })
   } catch (error) {
+    Sentry.captureException(error)
     console.error("Payment synthesis error:", error)
     console.error("[api/agency/payment-synthesis]", error)
     const msg = error instanceof Error ? error.message : String(error)

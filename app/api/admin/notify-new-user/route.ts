@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 import { Resend } from "resend"
 import { generateGrantAccessToken } from "@/lib/grant-access-token"
 
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    Sentry.captureException(error)
     console.error("[api/admin/notify-new-user] failure", error)
     return NextResponse.json({ error: "Failed to notify about new user" }, { status: 500 })
   }

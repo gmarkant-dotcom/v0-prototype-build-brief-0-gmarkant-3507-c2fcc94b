@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 import { streamText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 
@@ -143,6 +144,7 @@ ${briefText}`
 
     return result.toTextStreamResponse()
   } catch (error) {
+    Sentry.captureException(error)
     console.error("[rfp-output-template] error:", error)
     const msg = error instanceof Error ? error.message : String(error)
     const missingKey =

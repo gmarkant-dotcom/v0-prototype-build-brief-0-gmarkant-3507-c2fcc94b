@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import * as Sentry from "@sentry/nextjs"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
@@ -262,6 +263,7 @@ Total of suggested amounts should not exceed the implied awarded budget unless t
 
     return NextResponse.json({ milestones: parsed.milestones }, { headers: noStore })
   } catch (error) {
+    Sentry.captureException(error)
     console.error("[api/agency/msa/ai-schedule]", error)
     const msg = error instanceof Error ? error.message : String(error)
     const missingKey =

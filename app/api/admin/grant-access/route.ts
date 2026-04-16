@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
+import * as Sentry from "@sentry/nextjs"
 import { verifyGrantAccessToken } from "@/lib/grant-access-token"
 
 function escapeHtml(value: string): string {
@@ -100,7 +101,8 @@ export async function GET(req: Request) {
     <p style="font-size: 16px; margin: 0;">${safeEmail}</p>
   </body>
 </html>`)
-  } catch {
+  } catch (error) {
+    Sentry.captureException(error)
     return invalidLinkResponse()
   }
 }
