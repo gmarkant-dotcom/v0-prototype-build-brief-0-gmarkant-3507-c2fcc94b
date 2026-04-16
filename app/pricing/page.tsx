@@ -23,10 +23,11 @@ const tiers = [
     price: "$8,000 / year",
     description: "For growing agencies running multiple active projects on a / year plan.",
     features: [
-      "Up to 50 active partners",
-      "Unlimited projects",
+      "Up to 30 active partners",
+      "Up to 200 projects/year",
       "Full AI suite",
       "Priority support",
+      "Best-Practice Consultations",
       "Custom branding",
     ],
     highlighted: true,
