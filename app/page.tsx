@@ -139,7 +139,7 @@ export default function HomePage() {
             </h1>
             <p className="text-lg text-foreground-muted max-w-xl mb-8 leading-relaxed">
               The AI-powered vendor orchestration engine for independent agencies. 
-              Assemble, manage, align, and pay external vendor partners — while presenting 
+              Assemble, manage, align, and pay external vendor partners while presenting 
               them to clients as one unified, branded team.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
@@ -182,7 +182,7 @@ export default function HomePage() {
                 </h3>
                 <p className="text-foreground-muted mb-6">
                   Build a roster of trusted vendors. Broadcast RFPs to your bookmarked partners. 
-                  Review bids, onboard teams, and manage payments — all from one dashboard.
+                  Review bids, onboard teams, and manage payments, all from one dashboard.
                 </p>
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   {agencyFeatures.map((feature) => (
@@ -209,7 +209,7 @@ export default function HomePage() {
                 </h3>
                 <p className="text-foreground-muted mb-6">
                   Join agency networks. Get discovered for the right projects. 
-                  Submit bids, complete onboarding, and track your payments — all in one place.
+                  Submit bids, complete onboarding, and track your payments, all in one place.
                 </p>
                 <div className="grid grid-cols-2 gap-4 mb-6">
                   {partnerFeatures.map((feature) => (
@@ -319,7 +319,7 @@ export default function HomePage() {
                 Ready to orchestrate?
               </h2>
               <p className="text-foreground-muted max-w-xl mx-auto mb-8">
-                Whether you&apos;re a lead agency looking to scale, or a partner looking for opportunities — 
+                Whether you&apos;re a lead agency looking to scale, or a partner looking for opportunities. 
                 LIGAMENT connects both sides of the equation.
               </p>
 <div className="flex flex-col sm:flex-row gap-4 justify-center">
