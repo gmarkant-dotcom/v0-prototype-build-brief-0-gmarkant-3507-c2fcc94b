@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { LigamentLogo } from "@/components/ligament-logo"
 import { Check } from "lucide-react"
 
 const tiers = [
@@ -78,6 +79,14 @@ const roiRows = [
 export default function PricingPage() {
   return (
     <div className="min-h-screen bg-[#081F1F] text-white">
+      <header className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
+        <Link href="/">
+          <LigamentLogo size="md" variant="primary" />
+        </Link>
+        <Link href="/" className="text-sm text-white/80 hover:text-white transition-colors">
+          Back to Home
+        </Link>
+      </header>
       <main className="max-w-6xl mx-auto px-6 py-20">
         <div className="text-center mb-14">
           <h1 className="font-display font-black text-5xl mb-4">Become a Lead Agency</h1>
