@@ -7,22 +7,26 @@ import { Check } from "lucide-react"
 
 const tiers = [
   {
+    id: "solo",
+    name: "Solo",
+    price: "$1,800 / year",
+    description: "For independent consultants or collectives beginning to scale.",
+    features: ["1 lead agency user seat", "Up to 24 projects/year", "Basic AI tools", "Email support"],
+  },
+  {
     id: "core",
     name: "Core",
+    price: "$3,600 / year",
     description: "For smaller teams getting started with vendor orchestration.",
-    features: [
-      "Up to 10 active partners",
-      "Up to 60 projects/year",
-      "Basic AI tools",
-      "Email support",
-    ],
+    features: ["4 lead agency user seats", "Up to 60 projects/year", "Basic AI tools", "Email support"],
   },
   {
     id: "studio",
     name: "Studio",
+    price: "$7,200 / year",
     description: "For growing agencies running multiple active projects.",
     features: [
-      "Up to 30 active partners",
+      "8 lead agency user seats",
       "Up to 200 projects/year",
       "Full AI suite",
       "Priority support",
@@ -95,7 +99,13 @@ export default function PricingPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mb-6 rounded-xl border border-[#C8F53C]/30 bg-[#C8F53C]/12 px-6 py-3 text-center">
+          <p className="text-sm font-semibold tracking-wide text-[#EAF8B2]">
+            Founding Member Pricing - Locked In Through July 1, 2026
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {tiers.map((tier) => (
             <div
               key={tier.name}

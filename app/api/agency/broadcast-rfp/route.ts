@@ -125,20 +125,23 @@ export async function POST(request: NextRequest) {
               await resend.emails.send({
                 from: "Ligament <notifications@withligament.com>",
                 to: partnerEmail,
-                subject: `${agencyDisplay} shared an RFP with NDA required`,
+                subject: `${agencyDisplay} shared a confidential RFP with you on Ligament`,
                 html: `
                   <p style="font-family:system-ui,sans-serif">Hi ${partnerName},</p>
                   <p style="font-family:system-ui,sans-serif">
-                    <strong>${agencyDisplay}</strong> shared an RFP item with you: <strong>${scopeItemName}</strong>.
+                    <strong>${agencyDisplay}</strong> has shared an RFP that requires a signed NDA before you can
+                    view the full details.
                   </p>
                   <p style="font-family:system-ui,sans-serif">
-                    Please sign the NDA before reviewing the RFP details.
+                    Please log in to your Ligament partner portal to review the NDA and confirm your agreement to
+                    proceed.
                   </p>
                   <p style="font-family:system-ui,sans-serif">
-                    <a href="${ndaLink}" style="font-weight:700;color:#0C3535">Sign NDA</a>
+                    <a href="${ndaLink}" style="font-weight:700;color:#0C3535">View RFP</a>
                   </p>
                   <p style="font-family:system-ui,sans-serif">
-                    After signing, open your inbox on Ligament.
+                    The Ligament Team<br />
+                    <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
                   </p>
                 `,
               })
@@ -173,17 +176,23 @@ export async function POST(request: NextRequest) {
             await resend.emails.send({
               from: "Ligament <notifications@withligament.com>",
               to: email,
-              subject: `${agencyDisplay} shared an RFP with NDA required`,
+              subject: `${agencyDisplay} shared a confidential RFP with you on Ligament`,
               html: `
                 <p style="font-family:system-ui,sans-serif">Hi ${nr?.name || "there"},</p>
                 <p style="font-family:system-ui,sans-serif">
-                  <strong>${agencyDisplay}</strong> shared an RFP item with you: <strong>${scopeItemName}</strong>.
+                  <strong>${agencyDisplay}</strong> has shared an RFP that requires a signed NDA before you can
+                  view the full details.
                 </p>
                 <p style="font-family:system-ui,sans-serif">
-                  Please sign the NDA before reviewing the RFP details.
+                  Please log in to your Ligament partner portal to review the NDA and confirm your agreement to
+                  proceed.
                 </p>
                 <p style="font-family:system-ui,sans-serif">
-                  <a href="${ndaLink}" style="font-weight:700;color:#0C3535">Sign NDA</a>
+                  <a href="${ndaLink}" style="font-weight:700;color:#0C3535">View RFP</a>
+                </p>
+                <p style="font-family:system-ui,sans-serif">
+                  The Ligament Team<br />
+                  <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
                 </p>
               `,
             })

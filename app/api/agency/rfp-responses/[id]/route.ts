@@ -313,11 +313,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         })
       }
 
-      const projectName =
-        (awardContext.inbox.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
-      const scopeItemName = awardContext.inbox.scope_item_name || "Scope item"
-      const partnerName = partner?.company_name || partner?.full_name || partner?.email || "Partner"
+      const rawProjectName =
+        (awardContext.inbox.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || ""
+      const rawScopeItemName = awardContext.inbox.scope_item_name?.trim?.() || ""
+      const projectName = rawProjectName || "Project"
+      const scopeItemName = rawScopeItemName || "Scope item"
       const leadAgencyName = profile.company_name || profile.full_name || "Lead agency"
+      const awardSubject =
+        rawScopeItemName && rawProjectName
+          ? `You've been awarded ${scopeItemName} - ${projectName}`
+          : "You've been selected for this project"
       const resendApiKey = process.env.RESEND_API_KEY
       if (resendApiKey && partner?.email) {
         try {
@@ -326,13 +331,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             from: "Ligament <notifications@withligament.com>",
             to: "hello@withligament.com",
             cc: partner.email,
-            subject: "You've been awarded the project",
+            subject: awardSubject,
             html: `
-            <p><strong>${partnerName}</strong> has been awarded.</p>
-            <p><strong>Project:</strong> ${projectName}</p>
-            <p><strong>Scope Item:</strong> ${scopeItemName}</p>
-            <p><strong>Lead Agency:</strong> ${leadAgencyName}</p>
-            <p><a href="https://withligament.com/partner/rfps">View your RFP inbox</a></p>
+            <p>Congratulations, ${leadAgencyName} has selected your bid for ${scopeItemName}.</p>
+            <p>
+              You are officially on board for ${projectName}. Expect onboarding materials from ${leadAgencyName}
+              shortly with next steps, kickoff details, and project documents.
+            </p>
+            <p><a href="https://withligament.com/partner/rfps">View Project</a></p>
+            <p>The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
           `,
           })
         } catch (emailErr) {
@@ -374,11 +381,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           code: inboxRes.error.code,
         })
       }
-      const projectName =
-        (inbox?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
-      const scopeItemName = inbox?.scope_item_name || "Scope item"
+      const rawProjectName =
+        (inbox?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || ""
+      const rawScopeItemName = inbox?.scope_item_name?.trim?.() || ""
+      const projectName = rawProjectName || "Project"
+      const scopeItemName = rawScopeItemName || "Scope item"
       const partnerName = partner?.company_name || partner?.full_name || partner?.email || "Partner"
       const leadAgencyName = profile.company_name || profile.full_name || "Lead agency"
+      const declineSubject = rawScopeItemName
+        ? `Update on your bid for ${scopeItemName}`
+        : "Update on your recent bid submission"
       const resendApiKey = process.env.RESEND_API_KEY
       if (resendApiKey && partner?.email) {
         try {
@@ -387,15 +399,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             from: "Ligament <notifications@withligament.com>",
             to: partner.email,
             cc: "hello@withligament.com",
-            subject: "Update on your bid submission",
+            subject: declineSubject,
             html: `
             <p>Hi ${partnerName},</p>
-            <p>There is an update on your bid submission.</p>
-            <p><strong>Project:</strong> ${projectName}</p>
-            <p><strong>Scope Item:</strong> ${scopeItemName}</p>
-            <p><strong>Lead Agency:</strong> ${leadAgencyName}</p>
+            <p>
+              Thank you for submitting your bid. After careful review, ${leadAgencyName} has decided to move
+              forward with another partner for this scope.
+            </p>
+            <p>
+              We appreciate your time and the quality of your submission. We hope to work together on a future
+              project.
+            </p>
             ${declineReason ? `<p><strong>Reason:</strong> ${declineReason}</p>` : ""}
-            <p><a href="https://withligament.com/partner/rfps">View your RFP inbox</a></p>
+            <p><a href="https://withligament.com/partner/rfps">View Update</a></p>
+            <p>The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
           `,
           })
         } catch (emailErr) {

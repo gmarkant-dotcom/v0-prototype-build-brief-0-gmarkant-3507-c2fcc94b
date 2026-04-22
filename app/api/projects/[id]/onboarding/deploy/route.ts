@@ -132,7 +132,6 @@ export async function POST(
     const base = siteBaseUrl()
     const projectTitle = project.title || 'Project'
     const onboardingUrl = `${base}/partner/onboarding?project=${projectId}`
-    const projectUrl = `${base}/partner/projects/${projectId}`
 
     await createNotification({
       supabase,
@@ -146,17 +145,19 @@ export async function POST(
 
     await sendTransactionalEmail({
       to: partner.email,
-      subject: `${agencyName} sent onboarding materials — ${projectTitle}`,
+      subject: `Your onboarding package is ready - ${projectTitle}`,
       html: `
         <div style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535;max-width:560px">
-          <p><strong>${agencyName}</strong> deployed an onboarding packet for <strong>${projectTitle}</strong>.</p>
+          <p><strong>${agencyName}</strong> has sent your onboarding package for <strong>${projectTitle}</strong>.</p>
+          <p>
+            Inside you will find kickoff details, project documents, and next steps. Log in to your partner portal
+            to review everything and get started.
+          </p>
           ${customMessage ? `<p style="border-left:3px solid #C8F53C;padding-left:12px;color:#333">${escapeHtml(customMessage)}</p>` : ''}
           <p>
-            <a href="${projectUrl}" style="display:inline-block;background:#0C3535;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Open project hub</a>
+            <a href="${onboardingUrl}" style="display:inline-block;background:#0C3535;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">View Onboarding Package</a>
           </p>
-          <p style="font-size:13px;color:#666">
-            <a href="${onboardingUrl}" style="color:#0C3535">Onboarding workspace →</a>
-          </p>
+          <p style="font-size:13px;color:#666">The Ligament Team<br /><a href="https://withligament.com" style="color:#0C3535">withligament.com</a></p>
         </div>
       `,
     })

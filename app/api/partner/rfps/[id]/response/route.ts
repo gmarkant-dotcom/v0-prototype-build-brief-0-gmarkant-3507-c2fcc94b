@@ -298,19 +298,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const projectName =
             (inboxDetail?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
           const scopeItemName = inboxDetail?.scope_item_name || "Scope item"
-          const leadAgencyName = agencyProfile.company_name || agencyProfile.full_name || "Lead agency"
+          const bidUpdateSubject = scopeItemName
+            ? `${partner_display_name} updated their bid on ${scopeItemName}`
+            : `${partner_display_name} resubmitted a bid`
           const resend = new Resend(resendApiKey)
           await resend.emails.send({
             from: "Ligament <notifications@withligament.com>",
             to: "hello@withligament.com",
             cc: agencyProfile.email,
-            subject: "Partner has resubmitted their bid",
+            subject: bidUpdateSubject,
             html: `
-              <p>A partner has updated and re-submitted a bid.</p>
-              <p><strong>Project:</strong> ${projectName}</p>
-              <p><strong>Scope Item:</strong> ${scopeItemName}</p>
-              <p><strong>Partner:</strong> ${partner_display_name}</p>
-              <p><strong>Lead Agency:</strong> ${leadAgencyName}</p>
+              <p>${partner_display_name} has submitted a revised bid for ${scopeItemName} on ${projectName}.</p>
+              <p>Log in to review the updated submission and respond.</p>
+              <p><a href="https://withligament.com/agency/bids">Review Bid</a></p>
+              <p>The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
             `,
           })
         }

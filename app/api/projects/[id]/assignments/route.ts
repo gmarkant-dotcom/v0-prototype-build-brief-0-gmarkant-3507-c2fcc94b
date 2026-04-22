@@ -178,14 +178,18 @@ export async function POST(
       const base = siteBaseUrl()
       await sendTransactionalEmail({
         to: partnerEmail,
-        subject: `${agencyName} sent you an RFP: ${projectName}`,
+        subject: `New RFP from ${agencyName}: ${projectName}`,
         html: `
           <p style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535">
-            <strong>${agencyName}</strong> has added you to project <strong>${projectName}</strong> on Ligament.
+            ${agencyName} has sent you an RFP for ${projectName} on Ligament.
+          </p>
+          <p style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535">
+            Review the scope, timeline, and budget details, then submit your bid directly through the platform.
           </p>
           <p style="font-family:system-ui,sans-serif">
-            <a href="${base}/partner/rfps" style="color:#0C3535;font-weight:700">Open RFPs →</a>
+            <a href="${base}/partner/rfps" style="color:#0C3535;font-weight:700">View RFP</a>
           </p>
+          <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
         `,
       })
     }
@@ -281,11 +285,22 @@ export async function PATCH(
         .single()
 
       if (agencyUser?.email) {
+        const responseSubject =
+          status === 'accepted'
+            ? `${partnerName} accepted the RFP for ${projectTitle}`
+            : `${partnerName} declined the RFP for ${projectTitle}`
+        const responseBody =
+          status === 'accepted'
+            ? `<p style="font-family:system-ui,sans-serif">${partnerName} has accepted the RFP and confirmed their interest in ${projectTitle}.</p>
+            <p style="font-family:system-ui,sans-serif">You can now expect a bid submission from them in the platform.</p>`
+            : `<p style="font-family:system-ui,sans-serif">${partnerName} has declined the RFP for ${projectTitle}.</p>
+            <p style="font-family:system-ui,sans-serif">You may want to broadcast this scope to additional partners or reach out directly through the platform.</p>`
         await sendTransactionalEmail({
           to: agencyUser.email,
-          subject: `${partnerName} ${status === 'accepted' ? 'accepted' : 'declined'} the RFP — ${projectTitle}`,
-          html: `<p style="font-family:system-ui,sans-serif">${partnerName} has <strong>${status}</strong> the invitation for "${projectTitle}".</p>
-            <p><a href="${siteBaseUrl()}/agency/bids">Review in Bid Management →</a></p>`,
+          subject: responseSubject,
+          html: `${responseBody}
+            <p><a href="${siteBaseUrl()}/agency/bids">View Assignment</a></p>
+            <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>`,
         })
       }
 
@@ -361,10 +376,11 @@ export async function PATCH(
         if (partnerRow?.email) {
           await sendTransactionalEmail({
             to: partnerRow.email,
-            subject: `You were awarded: ${projectTitle}`,
-            html: `<p style="font-family:system-ui,sans-serif">Congratulations — <strong>${agencyName}</strong> awarded <strong>${projectTitle}</strong> to you.</p>
-              <p><a href="${siteBaseUrl()}/partner/projects">Open Active Projects →</a></p>
-              <p style="color:#666;font-size:13px">Schedule your kickoff with the lead agency contact in the project hub.</p>`,
+            subject: `You've been awarded ${projectTitle}`,
+            html: `<p style="font-family:system-ui,sans-serif">Congratulations, you have been selected for ${projectTitle}.</p>
+              <p style="font-family:system-ui,sans-serif">Log in to your Ligament partner portal to view the full award details and prepare for onboarding.</p>
+              <p><a href="${siteBaseUrl()}/partner/projects">View Award</a></p>
+              <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>`,
           })
         }
       }

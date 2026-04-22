@@ -338,13 +338,12 @@ export async function POST(
     const partnerEmail = partnerProfile?.email
     const agencyName = profile.company_name || profile.full_name || "Your lead agency"
     const projectTitle = project.name || "Project"
+    const packageSubject = projectTitle
+      ? `Your onboarding documents are ready - ${projectTitle}`
+      : "Your onboarding documents are ready"
     const base = siteBaseUrl()
     const onboardingUrl = `${base}/partner/onboarding`
 
-    const docListHtml =
-      docs.length > 0
-        ? docs.map((d) => `<li>${escapeHtml(d.label.trim())}</li>`).join("")
-        : "<li><em>No documents attached to this package.</em></li>"
     let kickoffHtml = ""
     if (kt === "calendly" && finalKickoffUrl) {
       kickoffHtml = `<p><strong>Kickoff:</strong> <a href="${escapeHtml(finalKickoffUrl)}">Schedule here</a></p>`
@@ -355,17 +354,17 @@ export async function POST(
     if (partnerEmail) {
       await sendTransactionalEmail({
         to: partnerEmail,
-        subject: "Your onboarding documents are ready",
+        subject: packageSubject,
         html: `
         <div style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535;max-width:560px">
-          <p><strong>${escapeHtml(agencyName)}</strong> shared an onboarding package for <strong>${escapeHtml(projectTitle)}</strong>.</p>
+          <p>Your onboarding documents for <strong>${escapeHtml(projectTitle)}</strong> are now available in your Ligament partner portal.</p>
+          <p>Review the materials and reach out to ${escapeHtml(agencyName)} with any questions before your project kickoff.</p>
           ${customMessage ? `<p style="border-left:3px solid #C8F53C;padding-left:12px">${escapeHtml(customMessage)}</p>` : ""}
-          <p><strong>Documents</strong></p>
-          <ul>${docListHtml}</ul>
-          ${kickoffHtml}
+          ${kickoffHtml ? `<div>${kickoffHtml}</div>` : ""}
           <p>
-            <a href="${onboardingUrl}" style="display:inline-block;background:#0C3535;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Open onboarding</a>
+            <a href="${onboardingUrl}" style="display:inline-block;background:#0C3535;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">View Documents</a>
           </p>
+          <p style="font-size:13px;color:#666">The Ligament Team<br /><a href="https://withligament.com" style="color:#0C3535">withligament.com</a></p>
         </div>
       `,
       })

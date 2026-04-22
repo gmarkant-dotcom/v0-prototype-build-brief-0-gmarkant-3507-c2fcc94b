@@ -333,7 +333,7 @@ export async function POST(request: NextRequest) {
           await resend.emails.send({
             from: 'Ligament <notifications@withligament.com>',
             to: partnerEmail.trim(),
-            subject: `${agencyName} has re-invited you to partner on Ligament`,
+            subject: `${agencyName} has re-invited you to their partner network on Ligament`,
             html: `
               <!DOCTYPE html>
               <html>
@@ -343,39 +343,21 @@ export async function POST(request: NextRequest) {
               </head>
               <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #081F1F;">
                 <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-                  <div style="text-align: center; margin-bottom: 32px;">
-                    <div style="display: inline-block; background: #C8F53C; padding: 12px 24px; border-radius: 8px;">
-                      <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; color: #0C3535; letter-spacing: 0.05em; text-transform: uppercase;">LIGAMENT</span>
-                    </div>
-                  </div>
-                  
                   <div style="background: #0C3535; border-radius: 16px; padding: 40px; border: 1px solid rgba(255,255,255,0.12);">
-                    <div style="margin-bottom: 24px;">
-                      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #C8F53C; background: rgba(200,245,60,0.1); padding: 6px 12px; border-radius: 4px; border: 1px solid rgba(200,245,60,0.3);">New Invitation</span>
-                    </div>
-                    
-                    <h1 style="color: #FFFFFF; font-family: 'Barlow Condensed', sans-serif; font-size: 28px; margin: 0 0 16px 0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">
-                      You&apos;ve Been Re-Invited
-                    </h1>
-                    
                     <p style="color: #9BB8B8; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
-                      <strong style="color: #FFFFFF;">${agencyName}</strong> would like to invite you again to join their partner network on Ligament.
+                      <strong style="color: #FFFFFF;">${agencyName}</strong> would like to reconnect with you on Ligament and has sent a new partnership invitation.
                     </p>
-                    
                     ${message ? `
                     <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 20px; margin: 0 0 24px 0; border-left: 3px solid #C8F53C;">
                       <p style="color: #9BB8B8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px 0; font-family: 'IBM Plex Mono', monospace;">Personal Message</p>
                       <p style="color: #E8E8E8; font-size: 14px; line-height: 1.6; margin: 0;">"${message}"</p>
                     </div>
                     ` : ''}
-                    
                     <a href="${acceptUrl}" style="display: inline-block; background: #C8F53C; color: #0C3535; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">
                       ${partner ? 'View Invitation' : 'Accept Invitation'}
                     </a>
-                  </div>
-                  
-                  <div style="text-align: center; margin-top: 32px;">
-                    <p style="color: #9BB8B8; font-size: 11px; font-family: 'IBM Plex Mono', monospace; margin: 0;">
+                    <p style="color: #9BB8B8; font-size: 13px; margin: 24px 0 0;">
+                      The Ligament Team<br />
                       <a href="${siteUrl}" style="color: #C8F53C; text-decoration: none;">withligament.com</a>
                     </p>
                   </div>
@@ -453,7 +435,7 @@ export async function POST(request: NextRequest) {
         await resend.emails.send({
           from: 'Ligament <notifications@withligament.com>',
           to: partnerEmail.trim(),
-          subject: `${agencyName} has invited you to partner on Ligament`,
+          subject: `${agencyName} has invited you to join their partner network on Ligament`,
           html: `
             <!DOCTYPE html>
             <html>
@@ -463,28 +445,13 @@ export async function POST(request: NextRequest) {
             </head>
             <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #081F1F;">
               <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-                <!-- Header with Logo -->
-                <div style="text-align: center; margin-bottom: 32px;">
-                  <div style="display: inline-block; background: #C8F53C; padding: 12px 24px; border-radius: 8px;">
-                    <span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; color: #0C3535; letter-spacing: 0.05em; text-transform: uppercase;">LIGAMENT</span>
-                  </div>
-                </div>
-                
-                <!-- Main Card -->
                 <div style="background: #0C3535; border-radius: 16px; padding: 40px; border: 1px solid rgba(255,255,255,0.12);">
-                  <!-- Badge -->
-                  <div style="margin-bottom: 24px;">
-                    <span style="font-family: 'IBM Plex Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #C8F53C; background: rgba(200,245,60,0.1); padding: 6px 12px; border-radius: 4px; border: 1px solid rgba(200,245,60,0.3);">Partnership Invitation</span>
-                  </div>
-                  
-                  <h1 style="color: #FFFFFF; font-family: 'Barlow Condensed', sans-serif; font-size: 28px; margin: 0 0 16px 0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;">
-                    You&apos;ve Been Invited
-                  </h1>
-                  
                   <p style="color: #9BB8B8; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
-                    <strong style="color: #FFFFFF;">${agencyName}</strong> would like to add you as a partner agency on Ligament, the agency collaboration platform.
+                    <strong style="color: #FFFFFF;">${agencyName}</strong> has selected you as a potential partner on Ligament, a platform for vendor orchestration between creative and production agencies.
                   </p>
-                  
+                  <p style="color: #9BB8B8; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
+                    Joining their network means you will be considered for scoped project opportunities they broadcast directly to their trusted partners.
+                  </p>
                   ${message ? `
                   <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 20px; margin: 0 0 24px 0; border-left: 3px solid #C8F53C;">
                     <p style="color: #9BB8B8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px 0; font-family: 'IBM Plex Mono', monospace;">Personal Message</p>
@@ -493,36 +460,11 @@ export async function POST(request: NextRequest) {
                     </p>
                   </div>
                   ` : ''}
-                  
-                  <p style="color: #9BB8B8; font-size: 14px; line-height: 1.6; margin: 0 0 32px 0;">
-                    ${partner 
-                      ? 'Log in to your Ligament account to review and accept this partnership invitation.'
-                      : 'Create your free Ligament account to accept this invitation and start collaborating on projects together.'}
-                  </p>
-                  
-                  <!-- CTA Button -->
                   <a href="${acceptUrl}" style="display: inline-block; background: #C8F53C; color: #0C3535; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">
                     ${partner ? 'View Invitation' : 'Accept Invitation'}
                   </a>
-                  
-                  <!-- Divider -->
-                  <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 32px 0 24px 0;"></div>
-                  
-                  <!-- What is Ligament -->
-                  <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 16px;">
-                    <p style="color: #9BB8B8; font-size: 12px; line-height: 1.6; margin: 0;">
-                      <strong style="color: #E8E8E8;">What is Ligament?</strong><br>
-                      Ligament connects lead agencies with specialized partners for seamless project collaboration. Share briefs, manage workflows, and deliver exceptional work together.
-                    </p>
-                  </div>
-                </div>
-                
-                <!-- Footer -->
-                <div style="text-align: center; margin-top: 32px;">
-                  <p style="color: #9BB8B8; font-size: 11px; font-family: 'IBM Plex Mono', monospace; margin: 0 0 8px 0;">
-                    If you didn&apos;t expect this invitation, you can safely ignore this email.
-                  </p>
-                  <p style="color: #9BB8B8; font-size: 11px; font-family: 'IBM Plex Mono', monospace; margin: 0;">
+                  <p style="color: #9BB8B8; font-size: 13px; margin: 24px 0 0;">
+                    The Ligament Team<br />
                     <a href="${siteUrl}" style="color: #C8F53C; text-decoration: none;">withligament.com</a>
                   </p>
                 </div>
@@ -668,8 +610,10 @@ export async function PATCH(request: NextRequest) {
           await sendTransactionalEmail({
             to: agencyProfile.email,
             subject: `${partnerName} accepted your partnership invitation`,
-            html: `<p style="font-family:system-ui,sans-serif"><strong>${partnerName}</strong> accepted your invitation to collaborate on Ligament.</p>
-              <p><a href="${siteBaseUrl()}/agency/pool">Partner pool →</a></p>`,
+            html: `<p style="font-family:system-ui,sans-serif">${partnerName} has accepted your invitation and joined your partner network on Ligament.</p>
+              <p style="font-family:system-ui,sans-serif">They are now available to receive RFP broadcasts from your agency.</p>
+              <p><a href="${siteBaseUrl()}/agency/pool">View Partner</a></p>
+              <p style="font-family:system-ui,sans-serif">The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>`,
           })
         }
         
