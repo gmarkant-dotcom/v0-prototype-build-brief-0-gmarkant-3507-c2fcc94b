@@ -173,6 +173,7 @@ export default function AgencyProfileSettingsPage() {
 
     if (document.getElementById("google-maps-script")) {
       initAutocomplete()
+      setTimeout(initAutocomplete, 500)
       return
     }
 
@@ -181,7 +182,10 @@ export default function AgencyProfileSettingsPage() {
     script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`
     script.async = true
     script.defer = true
-    script.onload = () => initAutocomplete()
+    script.onload = () => {
+      initAutocomplete()
+      setTimeout(initAutocomplete, 500)
+    }
     document.head.appendChild(script)
 
     return () => {
