@@ -101,7 +101,7 @@ export default function PricingPage() {
 
         <div className="mb-6 rounded-xl border border-[#C8F53C]/30 bg-[#C8F53C]/12 px-6 py-3 text-center">
           <p className="text-sm font-semibold tracking-wide text-[#EAF8B2]">
-            Founding Member Pricing - Locked In Through July 1, 2026
+            Founding Member Annual Pricing - Available Until July 1, 2026
           </p>
         </div>
 
