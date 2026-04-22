@@ -358,11 +358,12 @@ export default function PartnerProfilePage() {
       const place = autocomplete.getPlace()
       const components = place.address_components || []
       const city =
-        components.find(
-          (c: any) => c.types.includes("locality") || c.types.includes("administrative_area_level_1"),
-        )?.long_name || ""
-      const country = components.find((c: any) => c.types.includes("country"))?.long_name || ""
-      const formatted = [city, country].filter(Boolean).join(", ")
+        components.find((c: any) => c.types.includes("locality"))?.long_name?.trim() || ""
+      const state =
+        components.find((c: any) => c.types.includes("administrative_area_level_1"))?.long_name?.trim() || ""
+      const country = components.find((c: any) => c.types.includes("country"))?.long_name?.trim() || ""
+      const parts = [city, state, country].filter(Boolean)
+      const formatted = parts.join(", ")
       if (formatted) {
         setFormData((p) => ({ ...p, location: formatted }))
         if (locationInputRef.current) {

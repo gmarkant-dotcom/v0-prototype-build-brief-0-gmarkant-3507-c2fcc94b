@@ -49,7 +49,6 @@ type ProfileState = {
   company_website: string
   bio: string
   location: string
-  website: string
   agency_type: string
   avatar_url: string
   meeting_url: string
@@ -81,7 +80,6 @@ export default function AgencyProfileSettingsPage() {
     company_website: "",
     bio: "",
     location: "",
-    website: "",
     agency_type: "",
     avatar_url: "",
     meeting_url: "",
@@ -103,7 +101,7 @@ export default function AgencyProfileSettingsPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, website, agency_type, avatar_url, meeting_url, payment_terms, payment_terms_custom"
+          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, agency_type, avatar_url, meeting_url, payment_terms, payment_terms_custom"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -119,7 +117,6 @@ export default function AgencyProfileSettingsPage() {
         company_website: (profile as { company_website?: string | null }).company_website || "",
         bio: profile.bio || "",
         location: profile.location || "",
-        website: profile.website || "",
         agency_type: profile.agency_type || "",
         avatar_url: profile.avatar_url || "",
         meeting_url: profile.meeting_url || "",
@@ -153,11 +150,12 @@ export default function AgencyProfileSettingsPage() {
       const place = autocomplete.getPlace()
       const components = place.address_components || []
       const city =
-        components.find(
-          (c: any) => c.types.includes("locality") || c.types.includes("administrative_area_level_1"),
-        )?.long_name || ""
-      const country = components.find((c: any) => c.types.includes("country"))?.long_name || ""
-      const formatted = [city, country].filter(Boolean).join(", ")
+        components.find((c: any) => c.types.includes("locality"))?.long_name?.trim() || ""
+      const state =
+        components.find((c: any) => c.types.includes("administrative_area_level_1"))?.long_name?.trim() || ""
+      const country = components.find((c: any) => c.types.includes("country"))?.long_name?.trim() || ""
+      const parts = [city, state, country].filter(Boolean)
+      const formatted = parts.join(", ")
       if (formatted) {
         setForm((p) => ({ ...p, location: formatted }))
         if (locationInputRef.current) {
@@ -213,7 +211,6 @@ export default function AgencyProfileSettingsPage() {
         company_website: form.company_website || null,
         bio: form.bio,
         location: form.location,
-        website: form.website,
         agency_type: form.agency_type,
         avatar_url: form.avatar_url || null,
         meeting_url: form.meeting_url || null,
@@ -449,15 +446,6 @@ export default function AgencyProfileSettingsPage() {
                 placeholder="Start typing a city..."
                 autoComplete="off"
                 className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              />
-            </div>
-            <div>
-              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Website URL</label>
-              <Input
-                value={form.website}
-                onChange={(e) => setForm((p) => ({ ...p, website: e.target.value }))}
-                placeholder="https://example.com"
-                className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
           </div>
