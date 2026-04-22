@@ -148,9 +148,10 @@ export default function AgencyProfileSettingsPage() {
 
     let placeChangedListener: google.maps.MapsEventListener | null = null
     let isDisposed = false
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
 
     const setupAutocomplete = () => {
-      if (!locationInputRef.current) return
+      if (!locationInputRef.current || autocompleteRef.current) return
       try {
         const autocomplete = new google.maps.places.Autocomplete(locationInputRef.current, {
           types: ["(cities)"],
@@ -167,10 +168,31 @@ export default function AgencyProfileSettingsPage() {
           const country = countryComponent?.long_name?.trim()
           const formattedLocation = city && country ? `${city}, ${country}` : city || country || ""
           if (!formattedLocation) return
+          if (locationInputRef.current) {
+            locationInputRef.current.value = formattedLocation
+          }
           setForm((p) => ({ ...p, location: formattedLocation }))
         })
       } catch (err) {
         console.error("Google Places failed to load:", err)
+      }
+    }
+
+    const trySetupAfterPaint = () => {
+      if (isDisposed) return
+      setupAutocomplete()
+      if (!autocompleteRef.current && locationInputRef.current) {
+        requestAnimationFrame(() => {
+          if (isDisposed) return
+          setupAutocomplete()
+          if (!autocompleteRef.current && locationInputRef.current) {
+            retryTimer = window.setTimeout(() => {
+              retryTimer = null
+              if (isDisposed) return
+              setupAutocomplete()
+            }, 150)
+          }
+        })
       }
     }
 
@@ -179,7 +201,7 @@ export default function AgencyProfileSettingsPage() {
         setOptions({ key: apiKey, v: "weekly" })
         await importLibrary("places")
         if (isDisposed) return
-        setupAutocomplete()
+        trySetupAfterPaint()
       } catch (err) {
         console.error("Google Places failed to load:", err)
       }
@@ -189,6 +211,10 @@ export default function AgencyProfileSettingsPage() {
 
     return () => {
       isDisposed = true
+      if (retryTimer != null) {
+        window.clearTimeout(retryTimer)
+        retryTimer = null
+      }
       placeChangedListener?.remove()
       autocompleteRef.current = null
     }
@@ -437,16 +463,28 @@ export default function AgencyProfileSettingsPage() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Location</label>
-              <input
-                ref={locationInputRef}
-                value={form.location}
-                onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                placeholder="Start typing a city..."
-                className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
-              />
-            </div>
+            <form
+              className="contents"
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault()
+              }}
+            >
+              <div>
+                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Location</label>
+                <input
+                  key={`${form.id || "pending"}-location`}
+                  ref={locationInputRef}
+                  type="text"
+                  name="agency_profile_location"
+                  autoComplete="off"
+                  defaultValue={form.location}
+                  onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
+                  placeholder="Start typing a city..."
+                  className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
+                />
+              </div>
+            </form>
             <div>
               <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Website URL</label>
               <Input
