@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { Loader } from "@googlemaps/js-api-loader"
 import { PartnerChrome } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -133,7 +134,6 @@ export default function PartnerProfilePage() {
     primaryDiscipline: disciplines[0],
     bio: "",
     location: "",
-    website: "",
     selectedCapabilities: [] as string[],
     teamSize: "",
     yearFounded: "",
@@ -165,6 +165,8 @@ export default function PartnerProfilePage() {
   const [selectedPartnershipId, setSelectedPartnershipId] = useState("")
   const [contextSaving, setContextSaving] = useState(false)
   const [contextSaved, setContextSaved] = useState(false)
+  const locationInputRef = useRef<HTMLInputElement>(null)
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
   const reelInputRef = useRef<HTMLInputElement>(null)
   const capabilitiesInputRef = useRef<HTMLInputElement>(null)
   const newWorkExampleInputRef = useRef<HTMLInputElement>(null)
@@ -187,7 +189,7 @@ export default function PartnerProfilePage() {
       const { data } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, website, agency_type, avatar_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
+          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, agency_type, avatar_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -203,7 +205,6 @@ export default function PartnerProfilePage() {
           data?.agency_type?.trim() ? data.agency_type : prev.primaryDiscipline,
         bio: data?.bio || "",
         location: data?.location || "",
-        website: data?.website || "",
         selectedCapabilities: Array.isArray((data as { capabilities?: unknown } | null)?.capabilities)
           ? ((data as { capabilities?: unknown[] }).capabilities?.map((x) => String(x)) || [])
           : [],
@@ -344,6 +345,52 @@ export default function PartnerProfilePage() {
     }
     ensurePartnerAuth()
   }, [isDemo, router])
+
+  useEffect(() => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()
+    if (!apiKey) return
+
+    let placeChangedListener: google.maps.MapsEventListener | null = null
+    let isDisposed = false
+
+    const loader = new Loader({
+      apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
+      version: "weekly",
+      libraries: ["places"],
+    })
+
+    loader
+      .load()
+      .then(() => {
+        if (isDisposed || !locationInputRef.current) return
+        const autocomplete = new google.maps.places.Autocomplete(locationInputRef.current, {
+          types: ["(cities)"],
+        })
+        autocompleteRef.current = autocomplete
+        placeChangedListener = autocomplete.addListener("place_changed", () => {
+          const place = autocomplete.getPlace()
+          const components = place.address_components || []
+          const cityComponent =
+            components.find((component) => component.types.includes("locality")) ||
+            components.find((component) => component.types.includes("administrative_area_level_1"))
+          const countryComponent = components.find((component) => component.types.includes("country"))
+          const city = cityComponent?.long_name?.trim()
+          const country = countryComponent?.long_name?.trim()
+          const formattedLocation = city && country ? `${city}, ${country}` : city || country || ""
+          if (!formattedLocation) return
+          setFormData((prev) => ({ ...prev, location: formattedLocation }))
+        })
+      })
+      .catch(() => {
+        // Allow manual typing if Google Places fails to load.
+      })
+
+    return () => {
+      isDisposed = true
+      placeChangedListener?.remove()
+      autocompleteRef.current = null
+    }
+  }, [])
 
   const selectedPartnershipContext =
     selectedPartnershipId && partnershipContextById[selectedPartnershipId]
@@ -522,7 +569,6 @@ export default function PartnerProfilePage() {
             agency_type: formData.primaryDiscipline,
             bio: formData.bio,
             location: formData.location,
-            website: formData.website,
             capabilities: formData.selectedCapabilities,
             reel_url: reelUrl || null,
             capabilities_overview_url: capabilitiesOverviewUrl || null,
@@ -818,22 +864,12 @@ export default function PartnerProfilePage() {
               <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
                 Location
               </label>
-              <Input
+              <input
+                ref={locationInputRef}
                 value={formData.location}
                 onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-              />
-            </div>
-            
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Website
-              </label>
-              <Input
-                type="url"
-                value={formData.website}
-                onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                placeholder="Start typing a city..."
+                className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
             

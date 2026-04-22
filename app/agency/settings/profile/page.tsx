@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { Loader } from "@googlemaps/js-api-loader"
 import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -62,6 +63,8 @@ export default function AgencyProfileSettingsPage() {
   const router = useRouter()
   const isDemo = isDemoMode()
   const fileRef = useRef<HTMLInputElement>(null)
+  const locationInputRef = useRef<HTMLInputElement>(null)
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -137,6 +140,52 @@ export default function AgencyProfileSettingsPage() {
     }
     load()
   }, [router])
+
+  useEffect(() => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()
+    if (!apiKey) return
+
+    let placeChangedListener: google.maps.MapsEventListener | null = null
+    let isDisposed = false
+
+    const loader = new Loader({
+      apiKey,
+      version: "weekly",
+      libraries: ["places"],
+    })
+
+    loader
+      .load()
+      .then(() => {
+        if (isDisposed || !locationInputRef.current) return
+        const autocomplete = new google.maps.places.Autocomplete(locationInputRef.current, {
+          types: ["(cities)"],
+        })
+        autocompleteRef.current = autocomplete
+        placeChangedListener = autocomplete.addListener("place_changed", () => {
+          const place = autocomplete.getPlace()
+          const components = place.address_components || []
+          const cityComponent =
+            components.find((component) => component.types.includes("locality")) ||
+            components.find((component) => component.types.includes("administrative_area_level_1"))
+          const countryComponent = components.find((component) => component.types.includes("country"))
+          const city = cityComponent?.long_name?.trim()
+          const country = countryComponent?.long_name?.trim()
+          const formattedLocation = city && country ? `${city}, ${country}` : city || country || ""
+          if (!formattedLocation) return
+          setForm((p) => ({ ...p, location: formattedLocation }))
+        })
+      })
+      .catch(() => {
+        // Allow manual typing if Google Places fails to load.
+      })
+
+    return () => {
+      isDisposed = true
+      placeChangedListener?.remove()
+      autocompleteRef.current = null
+    }
+  }, [])
 
   const saveProfile = async () => {
     setSaving(true)
@@ -383,10 +432,12 @@ export default function AgencyProfileSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Location</label>
-              <Input
+              <input
+                ref={locationInputRef}
                 value={form.location}
                 onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+                placeholder="Start typing a city..."
+                className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
             <div>
