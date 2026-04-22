@@ -1,7 +1,8 @@
 "use client"
 
+/// <reference types="google.maps" />
 import { useState, useRef, useEffect } from "react"
-import { Loader } from "@googlemaps/js-api-loader"
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader"
 import { PartnerChrome } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -347,22 +348,15 @@ export default function PartnerProfilePage() {
   }, [isDemo, router])
 
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()
-    if (!apiKey) return
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    if (!apiKey || loading) return
 
     let placeChangedListener: google.maps.MapsEventListener | null = null
     let isDisposed = false
 
-    const loader = new Loader({
-      apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
-      version: "weekly",
-      libraries: ["places"],
-    })
-
-    loader
-      .load()
-      .then(() => {
-        if (isDisposed || !locationInputRef.current) return
+    const setupAutocomplete = () => {
+      if (!locationInputRef.current) return
+      try {
         const autocomplete = new google.maps.places.Autocomplete(locationInputRef.current, {
           types: ["(cities)"],
         })
@@ -380,17 +374,30 @@ export default function PartnerProfilePage() {
           if (!formattedLocation) return
           setFormData((prev) => ({ ...prev, location: formattedLocation }))
         })
-      })
-      .catch(() => {
-        // Allow manual typing if Google Places fails to load.
-      })
+      } catch (err) {
+        console.error("Google Places failed to load:", err)
+      }
+    }
+
+    const initAutocomplete = async () => {
+      try {
+        setOptions({ key: apiKey, v: "weekly" })
+        await importLibrary("places")
+        if (isDisposed) return
+        setupAutocomplete()
+      } catch (err) {
+        console.error("Google Places failed to load:", err)
+      }
+    }
+
+    void initAutocomplete()
 
     return () => {
       isDisposed = true
       placeChangedListener?.remove()
       autocompleteRef.current = null
     }
-  }, [])
+  }, [loading])
 
   const selectedPartnershipContext =
     selectedPartnershipId && partnershipContextById[selectedPartnershipId]

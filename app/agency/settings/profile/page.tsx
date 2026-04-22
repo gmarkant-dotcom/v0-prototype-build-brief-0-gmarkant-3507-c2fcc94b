@@ -1,8 +1,9 @@
 "use client"
 
+/// <reference types="google.maps" />
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader } from "@googlemaps/js-api-loader"
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader"
 import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -142,21 +143,15 @@ export default function AgencyProfileSettingsPage() {
   }, [router])
 
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()
-    if (!apiKey) return
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    if (!apiKey || loading) return
 
     let placeChangedListener: google.maps.MapsEventListener | null = null
     let isDisposed = false
 
-    const loader = new Loader({
-      apiKey,
-      version: "weekly",
-      libraries: ["places"],
-    })
-
-    try {
-      loader.load().then(() => {
-        if (isDisposed || !locationInputRef.current) return
+    const setupAutocomplete = () => {
+      if (!locationInputRef.current) return
+      try {
         const autocomplete = new google.maps.places.Autocomplete(locationInputRef.current, {
           types: ["(cities)"],
         })
@@ -174,17 +169,30 @@ export default function AgencyProfileSettingsPage() {
           if (!formattedLocation) return
           setForm((p) => ({ ...p, location: formattedLocation }))
         })
-      })
-    } catch (err) {
-      console.error("Google Places failed to load:", err)
+      } catch (err) {
+        console.error("Google Places failed to load:", err)
+      }
     }
+
+    const initAutocomplete = async () => {
+      try {
+        setOptions({ key: apiKey, v: "weekly" })
+        await importLibrary("places")
+        if (isDisposed) return
+        setupAutocomplete()
+      } catch (err) {
+        console.error("Google Places failed to load:", err)
+      }
+    }
+
+    void initAutocomplete()
 
     return () => {
       isDisposed = true
       placeChangedListener?.remove()
       autocompleteRef.current = null
     }
-  }, [])
+  }, [loading])
 
   const saveProfile = async () => {
     setSaving(true)
