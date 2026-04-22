@@ -1,9 +1,7 @@
 "use client"
 
-/// <reference types="google.maps" />
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { importLibrary, setOptions } from "@googlemaps/js-api-loader"
 import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,7 +63,7 @@ export default function AgencyProfileSettingsPage() {
   const isDemo = isDemoMode()
   const fileRef = useRef<HTMLInputElement>(null)
   const locationInputRef = useRef<HTMLInputElement>(null)
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null)
+  const autocompleteRef = useRef<any>(null)
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -142,80 +140,55 @@ export default function AgencyProfileSettingsPage() {
     load()
   }, [router])
 
+  const initAutocomplete = () => {
+    if (!locationInputRef.current || autocompleteRef.current) return
+    if (!window.google?.maps?.places) return
+
+    const autocomplete = new window.google.maps.places.Autocomplete(locationInputRef.current, {
+      types: ["(cities)"],
+    })
+    autocompleteRef.current = autocomplete
+
+    autocomplete.addListener("place_changed", () => {
+      const place = autocomplete.getPlace()
+      const components = place.address_components || []
+      const city =
+        components.find(
+          (c: any) => c.types.includes("locality") || c.types.includes("administrative_area_level_1"),
+        )?.long_name || ""
+      const country = components.find((c: any) => c.types.includes("country"))?.long_name || ""
+      const formatted = [city, country].filter(Boolean).join(", ")
+      if (formatted) {
+        setForm((p) => ({ ...p, location: formatted }))
+        if (locationInputRef.current) {
+          locationInputRef.current.value = formatted
+        }
+      }
+    })
+  }
+
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-    if (!apiKey || loading) return
+    if (!apiKey) return
 
-    let placeChangedListener: google.maps.MapsEventListener | null = null
-    let isDisposed = false
-    let retryTimer: ReturnType<typeof setTimeout> | null = null
-
-    const setupAutocomplete = () => {
-      if (!locationInputRef.current || autocompleteRef.current) return
-      try {
-        const autocomplete = new google.maps.places.Autocomplete(locationInputRef.current, {
-          types: ["(cities)"],
-        })
-        autocompleteRef.current = autocomplete
-        placeChangedListener = autocomplete.addListener("place_changed", () => {
-          const place = autocomplete.getPlace()
-          const components = place.address_components || []
-          const cityComponent =
-            components.find((component) => component.types.includes("locality")) ||
-            components.find((component) => component.types.includes("administrative_area_level_1"))
-          const countryComponent = components.find((component) => component.types.includes("country"))
-          const city = cityComponent?.long_name?.trim()
-          const country = countryComponent?.long_name?.trim()
-          const formattedLocation = city && country ? `${city}, ${country}` : city || country || ""
-          if (!formattedLocation) return
-          if (locationInputRef.current) {
-            locationInputRef.current.value = formattedLocation
-          }
-          setForm((p) => ({ ...p, location: formattedLocation }))
-        })
-      } catch (err) {
-        console.error("Google Places failed to load:", err)
-      }
+    if (document.getElementById("google-maps-script")) {
+      initAutocomplete()
+      return
     }
 
-    const trySetupAfterPaint = () => {
-      if (isDisposed) return
-      setupAutocomplete()
-      if (!autocompleteRef.current && locationInputRef.current) {
-        requestAnimationFrame(() => {
-          if (isDisposed) return
-          setupAutocomplete()
-          if (!autocompleteRef.current && locationInputRef.current) {
-            retryTimer = window.setTimeout(() => {
-              retryTimer = null
-              if (isDisposed) return
-              setupAutocomplete()
-            }, 150)
-          }
-        })
-      }
-    }
-
-    const initAutocomplete = async () => {
-      try {
-        setOptions({ key: apiKey, v: "weekly" })
-        await importLibrary("places")
-        if (isDisposed) return
-        trySetupAfterPaint()
-      } catch (err) {
-        console.error("Google Places failed to load:", err)
-      }
-    }
-
-    void initAutocomplete()
+    const script = document.createElement("script")
+    script.id = "google-maps-script"
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`
+    script.async = true
+    script.defer = true
+    script.onload = () => initAutocomplete()
+    document.head.appendChild(script)
 
     return () => {
-      isDisposed = true
-      if (retryTimer != null) {
-        window.clearTimeout(retryTimer)
-        retryTimer = null
+      const ac = autocompleteRef.current
+      if (ac && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(ac)
       }
-      placeChangedListener?.remove()
       autocompleteRef.current = null
     }
   }, [loading])
@@ -463,28 +436,17 @@ export default function AgencyProfileSettingsPage() {
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <form
-              className="contents"
-              noValidate
-              onSubmit={(e) => {
-                e.preventDefault()
-              }}
-            >
-              <div>
-                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Location</label>
-                <input
-                  key={`${form.id || "pending"}-location`}
-                  ref={locationInputRef}
-                  type="text"
-                  name="agency_profile_location"
-                  autoComplete="off"
-                  defaultValue={form.location}
-                  onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-                  placeholder="Start typing a city..."
-                  className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
-                />
-              </div>
-            </form>
+            <div>
+              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Location</label>
+              <input
+                ref={locationInputRef}
+                defaultValue={form.location || ""}
+                onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
+                placeholder="Start typing a city..."
+                autoComplete="off"
+                className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
             <div>
               <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Website URL</label>
               <Input
