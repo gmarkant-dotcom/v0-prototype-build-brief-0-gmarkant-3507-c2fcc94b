@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import * as Sentry from "@sentry/nextjs"
 import { Resend } from "resend"
 import { generateGrantAccessToken } from "@/lib/grant-access-token"
+import { createClient } from "@/lib/supabase/server"
 
 function escapeHtml(value: string): string {
   return value
@@ -45,6 +46,12 @@ export async function POST(req: Request) {
       typeof body?.record?.created_at === "string" && body.record.created_at.trim()
         ? body.record.created_at.trim()
         : "Not provided"
+    const supabase = await createClient()
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_name, company_website")
+      .eq("id", id)
+      .maybeSingle()
 
     const resend = new Resend(resendApiKey)
     const { error } = await resend.emails.send({
@@ -60,6 +67,8 @@ export async function POST(req: Request) {
             </p>
             <p style="font-size: 16px; line-height: 1.6; margin: 0 0 8px;"><strong>User:</strong> ${escapeHtml(email)}</p>
             <p style="font-size: 16px; line-height: 1.6; margin: 0 0 8px;"><strong>ID:</strong> ${escapeHtml(id)}</p>
+            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 8px;"><strong>Company:</strong> ${escapeHtml(profile?.company_name || "Not provided")}</p>
+            <p style="font-size: 16px; line-height: 1.6; margin: 0 0 8px;"><strong>Website:</strong> ${escapeHtml(profile?.company_website || "Not provided")}</p>
             <p style="font-size: 16px; line-height: 1.6; margin: 0 0 20px;"><strong>Signed up:</strong> ${escapeHtml(signedUpAt)}</p>
             <a
               href="${grantUrl}"

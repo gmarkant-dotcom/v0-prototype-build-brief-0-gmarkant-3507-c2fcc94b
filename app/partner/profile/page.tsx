@@ -128,6 +128,7 @@ export default function PartnerProfilePage() {
   }
   const [formData, setFormData] = useState({
     companyName: "",
+    companyWebsite: "",
     type: "",
     primaryDiscipline: disciplines[0],
     bio: "",
@@ -186,7 +187,7 @@ export default function PartnerProfilePage() {
       const { data } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, is_discoverable, bio, location, website, agency_type, avatar_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
+          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, website, agency_type, avatar_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -197,6 +198,7 @@ export default function PartnerProfilePage() {
       setFormData((prev) => ({
         ...prev,
         companyName: data?.company_name || data?.full_name || "",
+        companyWebsite: (data as { company_website?: string | null } | null)?.company_website || "",
         primaryDiscipline:
           data?.agency_type?.trim() ? data.agency_type : prev.primaryDiscipline,
         bio: data?.bio || "",
@@ -516,6 +518,7 @@ export default function PartnerProfilePage() {
           .from("profiles")
           .update({
             company_name: formData.companyName,
+            company_website: formData.companyWebsite || null,
             agency_type: formData.primaryDiscipline,
             bio: formData.bio,
             location: formData.location,
@@ -718,6 +721,19 @@ export default function PartnerProfilePage() {
               <Input
                 value={formData.companyName}
                 onChange={(e) => setFormData(prev => ({ ...prev, companyName: e.target.value }))}
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+              />
+            </div>
+
+            <div>
+              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                Company Website
+              </label>
+              <Input
+                type="text"
+                value={formData.companyWebsite}
+                onChange={(e) => setFormData(prev => ({ ...prev, companyWebsite: e.target.value }))}
+                placeholder="https://youragency.com"
                 className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>

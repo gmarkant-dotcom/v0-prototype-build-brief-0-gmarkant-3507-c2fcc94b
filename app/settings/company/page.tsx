@@ -113,15 +113,15 @@ export default function CompanySettingsPage() {
 
             <div>
               <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
-                Website
+                Company Website
               </label>
               <div className="relative">
                 <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted" />
                 <Input
-                  type="url"
+                  type="text"
                   value={profile?.company_website || ""}
                   onChange={(e) => setProfile(p => p ? { ...p, company_website: e.target.value } : null)}
-                  placeholder="https://yourcompany.com"
+                  placeholder="https://youragency.com"
                   className="bg-white/5 border-border/30 text-foreground pl-10 placeholder:text-foreground-muted/50"
                 />
               </div>
