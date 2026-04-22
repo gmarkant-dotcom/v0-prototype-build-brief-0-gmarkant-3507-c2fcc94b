@@ -154,9 +154,8 @@ export default function AgencyProfileSettingsPage() {
       libraries: ["places"],
     })
 
-    loader
-      .load()
-      .then(() => {
+    try {
+      loader.load().then(() => {
         if (isDisposed || !locationInputRef.current) return
         const autocomplete = new google.maps.places.Autocomplete(locationInputRef.current, {
           types: ["(cities)"],
@@ -176,9 +175,9 @@ export default function AgencyProfileSettingsPage() {
           setForm((p) => ({ ...p, location: formattedLocation }))
         })
       })
-      .catch(() => {
-        // Allow manual typing if Google Places fails to load.
-      })
+    } catch (err) {
+      console.error("Google Places failed to load:", err)
+    }
 
     return () => {
       isDisposed = true
