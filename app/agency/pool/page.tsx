@@ -1047,7 +1047,7 @@ export default function PartnerPoolPage() {
                       "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors",
                       selectedType === type
                         ? "border-accent bg-accent/10 text-accent"
-                        : "border-border text-foreground-muted hover:border-white/30"
+                        : "border-border text-foreground/90 hover:border-white/30"
                     )}
                   >
                     {type}
@@ -1062,7 +1062,7 @@ export default function PartnerPoolPage() {
                 "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
                 showBookmarkedOnly
                   ? "border-accent bg-accent/10 text-accent"
-                  : "border-border text-foreground-muted hover:border-white/30"
+                  : "border-border text-foreground/90 hover:border-white/30"
               )}
             >
               <Star className="w-3 h-3" /> Bookmarked
@@ -1080,7 +1080,7 @@ export default function PartnerPoolPage() {
                   "font-mono text-[10px] px-2 py-1 rounded border transition-colors flex items-center gap-1",
                   selectedStatus === filter
                     ? filter === "Blacklisted" ? "border-red-500 bg-red-500/10 text-red-400" : "border-accent bg-accent/10 text-accent"
-                    : "border-border text-foreground-muted hover:border-white/30"
+                    : "border-border text-foreground/90 hover:border-white/30"
                 )}
               >
                 {filter === "Blacklisted" && <Ban className="w-3 h-3" />}
@@ -1100,7 +1100,7 @@ export default function PartnerPoolPage() {
                   "font-mono text-[10px] px-2 py-1 rounded border transition-colors flex items-center gap-1",
                   selectedLegal === filter
                     ? "border-accent bg-accent/10 text-accent"
-                    : "border-border text-foreground-muted hover:border-white/30"
+                    : "border-border text-foreground/90 hover:border-white/30"
                 )}
               >
                 {(filter === "NDA Signed" || filter === "MSA Approved") && <Shield className="w-3 h-3" />}
@@ -1120,7 +1120,7 @@ export default function PartnerPoolPage() {
                   "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
                   selectedDiscipline === discipline
                     ? "border-accent bg-accent/10 text-accent"
-                    : "border-border text-foreground-muted hover:border-white/30"
+                    : "border-border text-foreground/90 hover:border-white/30"
                 )}
               >
                 {discipline}
@@ -1407,7 +1407,7 @@ export default function PartnerPoolPage() {
                     e.stopPropagation()
                     handleEditPartner(partner)
                   }}
-                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-white/5 text-foreground-muted hover:text-accent hover:bg-accent/10"
+                  className="w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-white/5 text-foreground/90 hover:text-accent hover:bg-accent/10"
                   title="Edit partner"
                 >
                   <Pencil className="w-3.5 h-3.5" />
@@ -1421,7 +1421,7 @@ export default function PartnerPoolPage() {
                     "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
                     partner.bookmarked
                       ? "bg-accent/20 text-accent"
-                      : "bg-white/5 text-foreground-muted hover:text-accent"
+                      : "bg-white/5 text-foreground/90 hover:text-accent"
                   )}
                   title="Bookmark partner"
                 >
@@ -1886,7 +1886,7 @@ export default function PartnerPoolPage() {
                   <Button
                     variant="outline"
                     onClick={() => setShowInviteModal(false)}
-                    className="flex-1 border-border text-foreground-muted hover:bg-white/5"
+                    className="flex-1 border-border text-foreground hover:bg-white/5"
                   >
                     Cancel
                   </Button>
@@ -2353,7 +2353,7 @@ function AddEditPartnerModal({
             <Button
               variant="outline"
               onClick={onClose}
-              className="flex-1 border-border text-foreground-muted hover:bg-white/5"
+              className="flex-1 border-border text-foreground hover:bg-white/5"
             >
               Cancel
             </Button>

@@ -335,7 +335,7 @@ export default function PartnerProjectsPage() {
                     </span>
                     <span className={cn(
                       "font-mono text-[10px]",
-                      selectedProject?.id === project.id ? "text-white/60" : "text-gray-500"
+                      selectedProject?.id === project.id ? "text-white/90" : "text-gray-600"
                     )}>
                       {project.progress}% complete
                     </span>
@@ -348,7 +348,7 @@ export default function PartnerProjectsPage() {
                   </h3>
                   <div className={cn(
                     "font-mono text-[10px] mt-1",
-                    selectedProject?.id === project.id ? "text-white/60" : "text-gray-500"
+                    selectedProject?.id === project.id ? "text-white/90" : "text-gray-600"
                   )}>
                     for {project.agency}
                   </div>

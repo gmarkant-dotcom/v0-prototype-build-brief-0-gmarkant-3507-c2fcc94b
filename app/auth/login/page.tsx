@@ -191,7 +191,7 @@ function LoginContent() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground/90 hover:text-foreground"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -226,20 +226,20 @@ function LoginContent() {
 
         {/* Footer links */}
         <div className="mt-6 text-center space-y-3">
-          <Link href="/" className="text-sm text-foreground-muted hover:text-foreground">
+          <Link href="/" className="text-sm text-foreground/90 hover:text-foreground">
             Back to Home
           </Link>
           <div className="flex items-center justify-center gap-3">
             <Link 
               href="/legal/terms" 
-              className="text-[11px] text-foreground-muted/60 hover:text-foreground-muted transition-colors"
+              className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
             >
               Terms of Service
             </Link>
             <span className="text-foreground-muted/30">|</span>
             <Link 
               href="/legal/privacy" 
-              className="text-[11px] text-foreground-muted/60 hover:text-foreground-muted transition-colors"
+              className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
             >
               Privacy Policy
             </Link>

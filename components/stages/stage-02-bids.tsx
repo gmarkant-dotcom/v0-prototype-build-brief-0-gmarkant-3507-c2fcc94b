@@ -1549,7 +1549,7 @@ export function Stage02Bids() {
                                   "flex-1 px-3 py-2 rounded-lg font-mono text-[10px] border transition-colors",
                                   feedbackType === opt.value
                                     ? "bg-accent/20 border-accent/50 text-accent"
-                                    : "bg-white/5 border-border/30 text-foreground-muted hover:border-border/50"
+                                    : "bg-white/5 border-border/30 text-foreground/90 hover:border-border/50"
                                 )}
                               >
                                 {opt.label}
@@ -1571,7 +1571,7 @@ export function Stage02Bids() {
                                   "px-3 py-2 rounded-lg font-mono text-[10px] border transition-colors capitalize",
                                   feedbackCategory === cat
                                     ? "bg-accent/20 border-accent/50 text-accent"
-                                    : "bg-white/5 border-border/30 text-foreground-muted hover:border-border/50"
+                                    : "bg-white/5 border-border/30 text-foreground/90 hover:border-border/50"
                                 )}
                               >
                                 {cat}
@@ -1606,7 +1606,7 @@ export function Stage02Bids() {
                             setShowFeedbackForm(false)
                             setFeedbackMessage("")
                           }}
-                          className="text-foreground-muted"
+                          className="text-foreground hover:text-foreground"
                         >
                           Cancel
                         </Button>
@@ -1630,7 +1630,7 @@ export function Stage02Bids() {
               <Button
                 variant="ghost"
                 onClick={() => setShowSubmissionDetail(false)}
-                className="text-foreground-muted"
+                className="text-foreground hover:text-foreground"
               >
                 Close
               </Button>

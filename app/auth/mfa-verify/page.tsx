@@ -205,7 +205,7 @@ function MfaVerifyContent() {
 
         {/* Footer links */}
         <div className="mt-6 text-center">
-          <Link href="/" className="text-sm text-foreground-muted hover:text-foreground">
+          <Link href="/" className="text-sm text-foreground/90 hover:text-foreground">
             Back to Home
           </Link>
         </div>

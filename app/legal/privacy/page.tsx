@@ -18,7 +18,7 @@ export default function PrivacyPolicyPage() {
           </Link>
           <Link 
             href="/"
-            className="flex items-center gap-2 text-sm text-foreground-muted hover:text-foreground transition-colors"
+            className="flex items-center gap-2 text-sm text-foreground/90 hover:text-foreground transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Home

@@ -282,7 +282,7 @@ export default function AdminUsersPage() {
                         "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
                         user.is_paid 
                           ? "bg-[#C8F53C]/10 text-[#C8F53C] hover:bg-[#C8F53C]/20" 
-                          : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60"
+                          : "bg-white/5 text-white/85 hover:bg-white/10 hover:text-white"
                       )}
                     >
                       {user.is_paid ? (
@@ -306,7 +306,7 @@ export default function AdminUsersPage() {
                         "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
                         user.demo_access 
                           ? "bg-amber-500/10 text-amber-400 hover:bg-amber-500/20" 
-                          : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/60"
+                          : "bg-white/5 text-white/85 hover:bg-white/10 hover:text-white"
                       )}
                     >
                       {user.demo_access ? (

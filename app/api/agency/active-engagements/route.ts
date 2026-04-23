@@ -220,7 +220,23 @@ export async function GET(request: NextRequest) {
             notes: string | null
             created_at: string
           } | null,
-          alert_summaries: [] as { status: string; budget_status: string; notes_preview: string }[],
+          alert_summaries: [] as {
+            id: string
+            status: string
+            budget_status: string
+            completion_pct: number
+            notes_preview: string
+            notes: string | null
+            created_at: string
+          }[],
+          /** Latest partner status row (any resolution), for agency status column tooltip */
+          latest_partner_update: null as {
+            status: string
+            budget_status: string
+            completion_pct: number
+            notes: string | null
+            created_at: string
+          } | null,
         }
       }
       const latest = updates[0]
@@ -241,10 +257,21 @@ export async function GET(request: NextRequest) {
             }
           : null,
         alert_summaries: unresolvedAlerts.map((u) => ({
+          id: u.id,
           status: u.status,
           budget_status: u.budget_status,
+          completion_pct: u.completion_pct,
           notes_preview: notesPreview60(u.notes),
+          notes: u.notes,
+          created_at: u.created_at,
         })),
+        latest_partner_update: {
+          status: latest.status,
+          budget_status: latest.budget_status,
+          completion_pct: latest.completion_pct,
+          notes: latest.notes,
+          created_at: latest.created_at,
+        },
       }
     }
     const partnerIds = [
@@ -356,7 +383,22 @@ export async function GET(request: NextRequest) {
         notes: string | null
         created_at: string
       } | null
-      alert_summaries: { status: string; budget_status: string; notes_preview: string }[]
+      alert_summaries: {
+        id: string
+        status: string
+        budget_status: string
+        completion_pct: number
+        notes_preview: string
+        notes: string | null
+        created_at: string
+      }[]
+      latest_partner_update: {
+        status: string
+        budget_status: string
+        completion_pct: number
+        notes: string | null
+        created_at: string
+      } | null
     }
 
     const byProject = new Map<string, PartnerRow[]>()
@@ -405,6 +447,7 @@ export async function GET(request: NextRequest) {
         alert_count: statusSummary.alert_count,
         latest_alert: statusSummary.latest_alert,
         alert_summaries: statusSummary.alert_summaries,
+        latest_partner_update: statusSummary.latest_partner_update,
       }
 
       const cur = byProject.get(projId) || []

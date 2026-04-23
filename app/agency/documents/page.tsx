@@ -314,7 +314,7 @@ export default function DocumentsPage() {
                   "font-mono text-xs px-4 py-2 rounded-lg border transition-colors",
                   activeTab === tab.id
                     ? "border-accent bg-accent/10 text-accent"
-                    : "border-border text-foreground-muted hover:border-white/30"
+                    : "border-border text-foreground/90 hover:border-white/30"
                 )}
               >
                 {tab.label}
@@ -670,7 +670,7 @@ export default function DocumentsPage() {
                           "font-mono text-[10px] px-3 py-2 rounded-lg border transition-colors",
                           uploadType === type
                             ? "border-accent bg-accent/10 text-accent"
-                            : "border-border text-foreground-muted hover:border-white/30"
+                            : "border-border text-foreground/90 hover:border-white/30"
                         )}
                       >
                         {typeLabels[type]}

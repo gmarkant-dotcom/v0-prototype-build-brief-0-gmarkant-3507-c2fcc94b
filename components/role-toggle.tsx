@@ -108,7 +108,7 @@ export function RoleToggle() {
                 "rounded-lg px-3 py-2 text-center font-mono text-[11px] uppercase tracking-wider transition-colors",
                 isActive
                   ? "bg-accent text-accent-foreground"
-                  : "text-foreground-muted hover:bg-white/5 hover:text-foreground",
+                  : "text-foreground/90 hover:bg-white/5 hover:text-foreground",
                 savingRole && !isActive && "opacity-60"
               )}
             >

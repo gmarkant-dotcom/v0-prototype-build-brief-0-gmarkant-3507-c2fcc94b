@@ -102,7 +102,7 @@ export default function HomePage() {
           <div className="flex items-center gap-4">
             <Link 
               href="/pricing"
-              className="font-mono text-xs text-foreground-muted hover:text-foreground transition-colors"
+              className="font-mono text-xs text-foreground/90 hover:text-foreground transition-colors"
             >
               Pricing
             </Link>

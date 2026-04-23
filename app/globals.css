@@ -17,7 +17,8 @@
   /* Text Colors */
   --foreground: #FFFFFF;
   --foreground-secondary: #E8E8E8;
-  --foreground-muted: #9BB8B8;
+  /* Muted body text: keep at or above #CCCCCC on dark teal for WCAG-friendly contrast */
+  --foreground-muted: #CCCCCC;
   
   /* Accent */
   --accent: #C8F53C;
@@ -34,7 +35,7 @@
   --secondary: #1A5252;
   --secondary-foreground: #FFFFFF;
   --muted: #1A5252;
-  --muted-foreground: #9BB8B8;
+  --muted-foreground: #CCCCCC;
   --popover: rgba(4, 20, 20, 0.95);
   --popover-foreground: #FFFFFF;
   --input: rgba(255, 255, 255, 0.1);
