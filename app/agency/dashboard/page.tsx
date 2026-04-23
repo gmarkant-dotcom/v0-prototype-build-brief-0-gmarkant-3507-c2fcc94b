@@ -150,7 +150,8 @@ function formatUsdWhole(amount: number): string {
 
 function DashboardContent() {
   const router = useRouter()
-  const { refreshProjects, addProject, setSelectedProject } = useSelectedProject()
+  const { refreshProjects, addProject, setSelectedProject, projects: contextProjects, isLoadingProjects } =
+    useSelectedProject()
   const { checkFeatureAccess } = usePaidUser()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "all">("all")
@@ -164,7 +165,7 @@ function DashboardContent() {
     description: ""
   })
   const [createProjectError, setCreateProjectError] = useState<string | null>(null)
-  const [realProjects, setRealProjects] = useState<MasterProject[]>([])
+  const [createProjectWarning, setCreateProjectWarning] = useState<string | null>(null)
   const [partnerAlertAggregate, setPartnerAlertAggregate] = useState(0)
   const [agencyDashboardStats, setAgencyDashboardStats] = useState<{
     total_unique_clients: number
@@ -176,6 +177,18 @@ function DashboardContent() {
   
   const isDemo = isDemoMode()
   const { data: projectsDataResponse, isLoading } = useFetch(isDemo ? "" : "/api/projects")
+  const projectsMetaById = useMemo(() => {
+    if (isDemo || !projectsDataResponse) return {} as Record<string, Record<string, unknown>>
+    const data = projectsDataResponse as { projects?: Record<string, unknown>[] }
+    const rawList = (data.projects || []) as Record<string, unknown>[]
+    const byId: Record<string, Record<string, unknown>> = {}
+    for (const row of rawList) {
+      const id = String(row.id || "")
+      if (!id) continue
+      byId[id] = row
+    }
+    return byId
+  }, [isDemo, projectsDataResponse])
 
   useEffect(() => {
     if (isDemo) return
@@ -201,75 +214,18 @@ function DashboardContent() {
             partner_status_alert_preview: rawList[0].partner_status_alert_preview,
           })
         }
-        const mapped = rawList.map(
-          (p: {
-            id: string
-            title?: string
-            name?: string
-            client_name?: string | null
-            status?: string | null
-            budget_range?: string | null
-            start_date?: string | null
-            end_date?: string | null
-            project_assignments?: { status: string }[]
-            dashboard_workflow_stage?: string
-            dashboard_workflow_label?: string
-            partner_status_alert_count?: unknown
-            partnerStatusAlertCount?: unknown
-            partner_status_alert_preview?: MasterProject["partnerStatusAlertPreview"]
-          }) => {
-            const m = mapDbProjectToMaster(p)
-            const bids = p.project_assignments || []
-            const pendingBids = bids.filter(
-              (a) => a.status === 'invited' || a.status === 'accepted'
-            ).length
-            const wfKey = (p.dashboard_workflow_stage || 'setup') as DashboardWorkflowStageKey
-            const wfLabel = p.dashboard_workflow_label || workflowStageConfig[wfKey]?.label || 'Setup'
-            const rawAlert =
-              p.partner_status_alert_count ?? p.partnerStatusAlertCount
-            const partnerAlertNum =
-              typeof rawAlert === 'number' && Number.isFinite(rawAlert)
-                ? rawAlert
-                : Number.parseInt(String(rawAlert ?? ''), 10)
-            const partnerStatusAlertCount = Number.isFinite(partnerAlertNum) ? partnerAlertNum : 0
-            return {
-              id: m.id,
-              name: m.name,
-              client: m.client,
-              status: m.status,
-              budget: 0,
-              spent: 0,
-              startDate: p.start_date
-                ? new Date(p.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                : 'TBD',
-              endDate: p.end_date
-                ? new Date(p.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                : 'TBD',
-              partnerCount: bids.length,
-              activeRfps: (p.status || '').toLowerCase() === 'open' ? 1 : 0,
-              pendingBids,
-              alerts:
-                partnerStatusAlertCount > 0
-                  ? (Array.from({ length: partnerStatusAlertCount }, () => ({})) as ProjectAlert[])
-                  : [],
-              progress: 0,
-              lastActivity: 'Recently',
-              stage:
-                m.status === 'active'
-                  ? 'Production'
-                  : m.status === 'completed'
-                    ? 'Closed'
-                    : 'Setup',
-              workflowStageKey: wfKey in workflowStageConfig ? wfKey : 'setup',
-              workflowStageLabel: wfLabel,
-              partnerStatusAlertCount,
-              partnerStatusAlertPreview: p.partner_status_alert_preview ?? null,
-            }
+        const mapped = rawList.map((p) => {
+          const rawAlert = p.partner_status_alert_count ?? p.partnerStatusAlertCount
+          const partnerAlertNum =
+            typeof rawAlert === "number" && Number.isFinite(rawAlert)
+              ? rawAlert
+              : Number.parseInt(String(rawAlert ?? ""), 10)
+          return {
+            partnerStatusAlertCount: Number.isFinite(partnerAlertNum) ? partnerAlertNum : 0,
           }
-        )
-        setRealProjects(mapped)
+        })
         const summed = mapped.reduce(
-          (acc: number, pr: MasterProject) => acc + (pr.partnerStatusAlertCount ?? 0),
+          (acc: number, pr: { partnerStatusAlertCount: number }) => acc + (pr.partnerStatusAlertCount || 0),
           0
         )
         const fromApi = Number((data as { partner_status_alert_total?: unknown }).partner_status_alert_total)
@@ -308,8 +264,52 @@ function DashboardContent() {
     }
   }, [isDemo, projectsDataResponse])
   
-  // Use demo data or real projects from database
-  const projects = isDemo ? demoMasterProjects : realProjects
+  // Use demo data or context projects (single source of truth) merged with API-only dashboard metadata.
+  const projects = isDemo
+    ? demoMasterProjects
+    : contextProjects.map((project) => {
+        const row = projectsMetaById[project.id] || {}
+        const assignments = Array.isArray(row.project_assignments)
+          ? (row.project_assignments as { status?: string }[])
+          : []
+        const pendingBids = assignments.filter((a) => a.status === "invited" || a.status === "accepted").length
+        const wfKey = (row.dashboard_workflow_stage || "setup") as DashboardWorkflowStageKey
+        const wfLabel = String(row.dashboard_workflow_label || workflowStageConfig[wfKey]?.label || "Setup")
+        const rawAlert = row.partner_status_alert_count ?? row.partnerStatusAlertCount
+        const partnerAlertNum =
+          typeof rawAlert === "number" && Number.isFinite(rawAlert)
+            ? rawAlert
+            : Number.parseInt(String(rawAlert ?? ""), 10)
+        const partnerStatusAlertCount = Number.isFinite(partnerAlertNum) ? partnerAlertNum : 0
+        return {
+          id: project.id,
+          name: project.name,
+          client: project.client,
+          status: project.status,
+          budget: 0,
+          spent: 0,
+          startDate: row.start_date
+            ? new Date(String(row.start_date)).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+            : "TBD",
+          endDate: row.end_date
+            ? new Date(String(row.end_date)).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+            : "TBD",
+          partnerCount: assignments.length,
+          activeRfps: String(row.status || "").toLowerCase() === "open" ? 1 : 0,
+          pendingBids,
+          alerts:
+            partnerStatusAlertCount > 0
+              ? (Array.from({ length: partnerStatusAlertCount }, () => ({})) as ProjectAlert[])
+              : [],
+          progress: 0,
+          lastActivity: "Recently",
+          stage: project.status === "active" ? "Production" : project.status === "completed" ? "Closed" : "Setup",
+          workflowStageKey: wfKey in workflowStageConfig ? wfKey : "setup",
+          workflowStageLabel: wfLabel,
+          partnerStatusAlertCount,
+          partnerStatusAlertPreview: (row.partner_status_alert_preview as MasterProject["partnerStatusAlertPreview"]) ?? null,
+        } satisfies MasterProject
+      })
   
   const filteredProjects = projects.filter(project => {
     const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -350,6 +350,7 @@ function DashboardContent() {
   const handleCreateProject = async () => {
     if (!checkFeatureAccess("project creation")) return
     setCreateProjectError(null)
+    setCreateProjectWarning(null)
 
     if (isDemo) {
       const createdProject = addProject({
@@ -390,7 +391,11 @@ function DashboardContent() {
         setCreateProjectError((payload?.error || "Project creation failed. Please try again.") + statusHint)
         return
       }
-      const { project } = await res.json()
+      const payload = await res.json()
+      const project = payload.project
+      if (payload?.warning) {
+        setCreateProjectWarning(String(payload.warning))
+      }
       await refreshProjects()
       setSelectedProject(mapDbProjectToMaster(project))
       setIsNewProjectOpen(false)
@@ -409,7 +414,7 @@ function DashboardContent() {
   }
   
   // Show empty state for production users with no projects (after loading)
-  if (!isDemo && !isLoading && projects.length === 0) {
+  if (!isDemo && !isLoadingProjects && !isLoading && projects.length === 0) {
     return (
       <div className="p-8 max-w-7xl">
         <div className="flex items-start justify-between mb-8">
@@ -460,6 +465,11 @@ function DashboardContent() {
               {createProjectError && (
                 <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
                   {createProjectError}
+                </div>
+              )}
+              {createProjectWarning && !createProjectError && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                  {createProjectWarning}
                 </div>
               )}
               <DialogFooter>
@@ -591,6 +601,11 @@ function DashboardContent() {
             {createProjectError && (
               <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
                 {createProjectError}
+              </div>
+            )}
+            {createProjectWarning && !createProjectError && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                {createProjectWarning}
               </div>
             )}
             <DialogFooter className="flex gap-3">

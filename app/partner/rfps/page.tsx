@@ -26,6 +26,7 @@ type RFP = {
   issuedBy: string
   meetingUrl?: string | null
   sentAt?: string | null
+  createdAt?: string | null
   responseDeadline?: string | null
   partnerIntent?: "will_respond" | "has_questions" | "requesting_call" | null
   viewedAt?: string | null
@@ -187,6 +188,7 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
     issuedBy: row.agency_company_name?.trim() || "Lead agency",
     meetingUrl: row.agency_meeting_url || null,
     sentAt: row.created_at || null,
+    createdAt: row.created_at || null,
     responseDeadline: row.response_deadline || null,
     partnerIntent: row.partner_intent || null,
     viewedAt: row.viewed_at || null,
@@ -204,7 +206,7 @@ export default function PartnerRFPsPage() {
   const [activeFilter, setActiveFilter] = useState<
     "all" | "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
   >("all")
-  const [inboxSortView, setInboxSortView] = useState<"all" | "new_unviewed" | "recently_received">("all")
+  const [viewFilter, setViewFilter] = useState<"all" | "unviewed" | "recent">("all")
   const statusFilters: Array<
     "all" | "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
   > = ["all", "submitted", "under_review", "shortlisted", "meeting_requested", "awarded", "declined"]
@@ -240,22 +242,21 @@ export default function PartnerRFPsPage() {
     }
   }, [isDemo])
 
-  const filteredRfps = useMemo(() => {
-    const statusFiltered = rfps.filter((rfp) => {
+  const displayedRfps = useMemo(() => {
+    let list = [...rfps]
+    if (viewFilter === "unviewed") {
+      list = list.filter((rfp) => !rfp.viewedAt)
+    }
+    list.sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return tb - ta
+    })
+    return list.filter((rfp) => {
       if (activeFilter === "all") return true
       return rfp.status === activeFilter
     })
-    return [...statusFiltered]
-      .filter((rfp) => {
-        if (inboxSortView === "new_unviewed") return !rfp.viewedAt
-        return true
-      })
-      .sort((a, b) => {
-        const ta = a.sentAt ? new Date(a.sentAt).getTime() : 0
-        const tb = b.sentAt ? new Date(b.sentAt).getTime() : 0
-        return tb - ta
-      })
-  }, [rfps, activeFilter, inboxSortView])
+  }, [rfps, viewFilter, activeFilter])
 
   return (
     <PartnerLayout>
@@ -293,13 +294,13 @@ export default function PartnerRFPsPage() {
         <div className="flex items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-wide text-gray-500">View</span>
           <select
-            value={inboxSortView}
-            onChange={(e) => setInboxSortView(e.target.value as "all" | "new_unviewed" | "recently_received")}
+            value={viewFilter}
+            onChange={(e) => setViewFilter(e.target.value as "all" | "unviewed" | "recent")}
             className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-[#0C3535]"
           >
             <option value="all">All RFPs</option>
-            <option value="new_unviewed">New — not yet viewed</option>
-            <option value="recently_received">Recently received</option>
+            <option value="unviewed">New — not yet viewed</option>
+            <option value="recent">Recently received</option>
           </select>
         </div>
         
@@ -313,7 +314,7 @@ export default function PartnerRFPsPage() {
             <div className="bg-white rounded-xl border border-red-200 p-8 text-center">
               <p className="text-red-700">{inboxError}</p>
             </div>
-          ) : filteredRfps.length === 0 ? (
+          ) : displayedRfps.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
               <p className="text-gray-500">
                 {rfps.length === 0
@@ -321,7 +322,7 @@ export default function PartnerRFPsPage() {
                   : "No RFPs match the selected filter."}
               </p>
             </div>
-          ) : filteredRfps.map((rfp) => (
+          ) : displayedRfps.map((rfp) => (
             <Link
               key={rfp.id}
               href={`/partner/rfps/${encodeURIComponent(rfp.id)}`}

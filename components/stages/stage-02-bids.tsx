@@ -505,7 +505,7 @@ export function Stage02Bids() {
   const isDemo = isDemoMode()
   const sampleBids = isDemo ? demoBids : []
   const { checkFeatureAccess } = usePaidUser()
-  const { selectedProject, isLoadingProjects } = useSelectedProject()
+  const { selectedProject, isLoadingProjects, projects } = useSelectedProject()
   
   const [selectedBid, setSelectedBid] = useState<string | null>(null)
   const [awardedVendors, setAwardedVendors] = useState<string[]>([])
@@ -565,7 +565,7 @@ export function Stage02Bids() {
           subtitle="Review partner proposals from broadcast RFPs. Submissions appear below from partner_rfp_responses. AI scoring and comparison cards are available in demo preview."
           aiPowered
         />
-        {isLoadingProjects ? (
+        {isLoadingProjects || (!selectedProject && projects.length > 0) ? (
           <GlassCard className="mt-6">
             <div className="flex items-center gap-3 text-foreground-muted">
               <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-foreground-muted/40 border-t-accent" />

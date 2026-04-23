@@ -82,6 +82,7 @@ export type MasterProject = {
   name: string
   client: string
   status: "active" | "onboarding" | "completed" | "on_hold"
+  createdAt?: string | null
 }
 
 // Demo Projects

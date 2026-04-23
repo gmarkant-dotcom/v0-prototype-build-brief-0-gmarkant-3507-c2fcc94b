@@ -478,6 +478,24 @@ export async function POST(request: NextRequest) {
     }
 
     const safeName = name.trim()
+    const activeStatusesForWarning = ["active", "open", "in_progress", "bidding", "onboarding"]
+    let duplicateNameWarning: string | null = null
+    const { data: existingNamedProjects, error: existingNamedProjectsError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("agency_id", user.id)
+      .ilike("name", safeName)
+      .in("status", activeStatusesForWarning)
+
+    if (existingNamedProjectsError) {
+      console.warn("[api/projects] duplicate-name warning check failed", {
+        message: existingNamedProjectsError.message,
+        code: existingNamedProjectsError.code,
+      })
+    } else if ((existingNamedProjects || []).length > 0) {
+      duplicateNameWarning =
+        "A project with this name already exists in your active projects. You can still create this one."
+    }
 
     // Create with a minimal payload first to avoid schema/type mismatch blockers.
     // Optional fields are applied in a second pass (best-effort).
@@ -532,7 +550,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: project.id })
-    return NextResponse.json({ project })
+    return NextResponse.json({ project, warning: duplicateNameWarning })
   } catch (error) {
     console.error('[api] failure', {
       route: '/api/projects',

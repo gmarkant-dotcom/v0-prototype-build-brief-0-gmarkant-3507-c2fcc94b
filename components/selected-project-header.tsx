@@ -10,9 +10,11 @@ interface SelectedProjectHeaderProps {
 }
 
 export function SelectedProjectHeader({ className }: SelectedProjectHeaderProps) {
-  const { selectedProject, isLoadingProjects } = useSelectedProject()
+  const { selectedProject, isLoadingProjects, projects } = useSelectedProject()
 
   if (isLoadingProjects) return null
+
+  if (!selectedProject && projects.length > 0) return null
 
   if (!selectedProject) {
     return (

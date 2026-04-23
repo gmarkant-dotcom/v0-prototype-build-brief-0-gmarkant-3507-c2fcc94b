@@ -18,12 +18,18 @@ type SelectedProjectContextType = {
 
 const SelectedProjectContext = createContext<SelectedProjectContextType | undefined>(undefined)
 
+function dedupeProjectsById(projects: MasterProject[]): MasterProject[] {
+  return Array.from(new Map(projects.map((project) => [project.id, project])).values())
+}
+
 export function SelectedProjectProvider({ children }: { children: ReactNode }) {
   const [selectedProject, setSelectedProjectState] = useState<MasterProject | null>(null)
   const [projects, setProjects] = useState<MasterProject[]>([])
   const [isDemo, setIsDemo] = useState(false)
   const [isLoadingProjects, setIsLoadingProjects] = useState(true)
   const requestCounterRef = useRef(0)
+  const hasLoadedProjectsRef = useRef(false)
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const getSavedProjectId = () =>
     typeof window !== "undefined" ? window.localStorage.getItem("selectedProjectId") : null
@@ -42,7 +48,9 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
   const refreshProjects = useCallback(async () => {
     if (isDemoMode()) return
     const requestId = ++requestCounterRef.current
-    setIsLoadingProjects(true)
+    if (!hasLoadedProjectsRef.current) {
+      setIsLoadingProjects(true)
+    }
     let mapped: MasterProject[] | null = null
     try {
       const retryDelays = [0, 200, 500]
@@ -53,7 +61,9 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
           if (!res.ok) continue
           const data = await res.json()
           const rows = data.projects || []
-          mapped = rows.map((p: Parameters<typeof mapDbProjectToMaster>[0]) => mapDbProjectToMaster(p))
+          mapped = dedupeProjectsById(
+            rows.map((p: Parameters<typeof mapDbProjectToMaster>[0]) => mapDbProjectToMaster(p))
+          )
           break
         } catch {
           // ignore and retry
@@ -64,6 +74,11 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
     } finally {
       if (requestId !== requestCounterRef.current) return
       if (mapped) {
+        if (retryTimerRef.current) {
+          clearTimeout(retryTimerRef.current)
+          retryTimerRef.current = null
+        }
+        hasLoadedProjectsRef.current = true
         setProjects(mapped)
         const savedId = getSavedProjectId()
         setSelectedProjectState((prev) => {
@@ -81,8 +96,16 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
           persistSelectedProjectId(nextSelection)
           return nextSelection
         })
+        setIsLoadingProjects(false)
+      } else {
+        console.warn("[selected-project-context] /api/projects fetch did not complete successfully")
+        if (!hasLoadedProjectsRef.current && !retryTimerRef.current) {
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null
+            void refreshProjects()
+          }, 1000)
+        }
       }
-      setIsLoadingProjects(false)
     }
   }, [])
 
@@ -91,7 +114,7 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
     setIsDemo(demo)
 
     if (demo) {
-      setProjects(demoProjects)
+      setProjects(dedupeProjectsById(demoProjects))
       const savedSelection = getSavedProjectId()
       if (savedSelection) {
         const project = demoProjects.find((p) => p.id === savedSelection)
@@ -113,7 +136,23 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
     }
 
     refreshProjects()
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = null
+      }
+    }
   }, [refreshProjects])
+
+  useEffect(() => {
+    if (isLoadingProjects) return
+    if (projects.length > 0 && !selectedProject) {
+      console.warn(
+        "[selected-project-context] selectedProject is null after loading despite available projects",
+        { projectCount: projects.length }
+      )
+    }
+  }, [isLoadingProjects, projects, selectedProject])
 
   const setSelectedProject = (project: MasterProject | null) => {
     setSelectedProjectState(project)
@@ -125,7 +164,7 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
       ...projectData,
       id: `project-${Date.now()}`,
     }
-    const updatedProjects = [newProject, ...projects]
+    const updatedProjects = dedupeProjectsById([newProject, ...projects])
     setProjects(updatedProjects)
     return newProject
   }

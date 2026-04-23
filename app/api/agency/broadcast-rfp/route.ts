@@ -18,6 +18,25 @@ type BroadcastItem = {
   newRecipients: { email: string; name: string; requireNda: boolean }[]
 }
 
+function normalizeManualRecipients(
+  raw: unknown
+): { email: string; name: string; requireNda: boolean }[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null
+      const obj = entry as { email?: unknown; name?: unknown; requireNda?: unknown }
+      const email = typeof obj.email === "string" ? obj.email.trim().toLowerCase() : ""
+      if (!email) return null
+      return {
+        email,
+        name: typeof obj.name === "string" ? obj.name.trim() : "",
+        requireNda: obj.requireNda !== false,
+      }
+    })
+    .filter((entry): entry is { email: string; name: string; requireNda: boolean } => Boolean(entry))
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -49,6 +68,10 @@ export async function POST(request: NextRequest) {
         ? body.ndaLink.trim()
         : "https://www.docusign.com/"
     const items = (Array.isArray(body.items) ? body.items : []) as BroadcastItem[]
+    const topLevelNewRecipientsByScope =
+      body.newRecipientsByScope && typeof body.newRecipientsByScope === "object"
+        ? (body.newRecipientsByScope as Record<string, unknown>)
+        : {}
     const responseDeadlineRaw =
       typeof body.response_deadline === "string" && body.response_deadline.trim().length > 0
         ? body.response_deadline.trim()
@@ -81,6 +104,10 @@ export async function POST(request: NextRequest) {
       recipientEmail: string
       recipientName: string
       scopeName: string
+    }[] = []
+    const ndaRequiredNewRecipientNotifications: {
+      recipientEmail: string
+      recipientName: string
     }[] = []
 
     for (const item of items) {
@@ -193,7 +220,12 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      for (const nr of item.newRecipients || []) {
+      const normalizedItemNewRecipients = normalizeManualRecipients(
+        Array.isArray(item.newRecipients) && item.newRecipients.length > 0
+          ? item.newRecipients
+          : topLevelNewRecipientsByScope[scopeItemId]
+      )
+      for (const nr of normalizedItemNewRecipients) {
         const email = (nr?.email || "").trim().toLowerCase()
         if (!email) continue
         const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -231,33 +263,10 @@ export async function POST(request: NextRequest) {
         }
 
         if (ndaRequired && nr?.requireNda) {
-          const resendApiKey = process.env.RESEND_API_KEY
-          if (resendApiKey) {
-            const resend = new Resend(resendApiKey)
-            await resend.emails.send({
-              from: "Ligament <notifications@withligament.com>",
-              to: email,
-              subject: `${agencyDisplay} shared a confidential RFP with you on Ligament`,
-              html: `
-                <p style="font-family:system-ui,sans-serif">Hi ${nr?.name || "there"},</p>
-                <p style="font-family:system-ui,sans-serif">
-                  <strong>${agencyDisplay}</strong> has shared an RFP that requires a signed NDA before you can
-                  view the full details.
-                </p>
-                <p style="font-family:system-ui,sans-serif">
-                  Please log in to your Ligament partner portal to review the NDA and confirm your agreement to
-                  proceed.
-                </p>
-                <p style="font-family:system-ui,sans-serif">
-                  <a href="${ndaLink}" style="font-weight:700;color:#0C3535">View RFP</a>
-                </p>
-                <p style="font-family:system-ui,sans-serif">
-                  The Ligament Team<br />
-                  <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
-                </p>
-              `,
-            })
-          }
+          ndaRequiredNewRecipientNotifications.push({
+            recipientEmail: email,
+            recipientName: nr?.name?.trim?.() || "there",
+          })
         }
       }
     }
@@ -311,31 +320,71 @@ export async function POST(request: NextRequest) {
 
     if (nonNdaNewRecipientNotifications.length > 0) {
       const resendApiKey = process.env.RESEND_API_KEY
-      if (resendApiKey) {
-        const resend = new Resend(resendApiKey)
-        for (const notification of nonNdaNewRecipientNotifications) {
-          await resend.emails.send({
-            from: "Ligament <notifications@withligament.com>",
-            to: notification.recipientEmail,
-            subject: `New RFP from ${agencyDisplay}: ${notification.scopeName}`,
-            html: `
-              <p style="font-family:system-ui,sans-serif">Hi ${notification.recipientName},</p>
-              <p style="font-family:system-ui,sans-serif">
-                ${agencyDisplay} has sent you an RFP for ${notification.scopeName} on Ligament.
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                Review the scope, timeline, and budget details, then submit your bid directly through the platform.
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                <a href="${baseUrl}/partner/rfps" style="font-weight:700;color:#0C3535">View RFP</a>
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                The Ligament Team<br />
-                <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
-              </p>
-            `,
-          })
-        }
+      if (!resendApiKey) {
+        return NextResponse.json(
+          { error: "RESEND_API_KEY is required to send manual recipient notifications." },
+          { status: 500 }
+        )
+      }
+      const resend = new Resend(resendApiKey)
+      for (const notification of nonNdaNewRecipientNotifications) {
+        await resend.emails.send({
+          from: "Ligament <notifications@withligament.com>",
+          to: notification.recipientEmail,
+          subject: `New RFP from ${agencyDisplay}: ${notification.scopeName}`,
+          html: `
+            <p style="font-family:system-ui,sans-serif">Hi ${notification.recipientName},</p>
+            <p style="font-family:system-ui,sans-serif">
+              ${agencyDisplay} has sent you an RFP for ${notification.scopeName} on Ligament.
+            </p>
+            <p style="font-family:system-ui,sans-serif">
+              Review the scope, timeline, and budget details, then submit your bid directly through the platform.
+            </p>
+            <p style="font-family:system-ui,sans-serif">
+              <a href="${baseUrl}/partner/rfps" style="font-weight:700;color:#0C3535">View RFP</a>
+            </p>
+            <p style="font-family:system-ui,sans-serif">
+              The Ligament Team<br />
+              <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
+            </p>
+          `,
+        })
+      }
+    }
+
+    if (ndaRequiredNewRecipientNotifications.length > 0) {
+      const resendApiKey = process.env.RESEND_API_KEY
+      if (!resendApiKey) {
+        return NextResponse.json(
+          { error: "RESEND_API_KEY is required to send NDA-required manual recipient notifications." },
+          { status: 500 }
+        )
+      }
+      const resend = new Resend(resendApiKey)
+      for (const notification of ndaRequiredNewRecipientNotifications) {
+        await resend.emails.send({
+          from: "Ligament <notifications@withligament.com>",
+          to: notification.recipientEmail,
+          subject: `${agencyDisplay} shared a confidential RFP with you on Ligament`,
+          html: `
+            <p style="font-family:system-ui,sans-serif">Hi ${notification.recipientName},</p>
+            <p style="font-family:system-ui,sans-serif">
+              <strong>${agencyDisplay}</strong> has shared an RFP that requires a signed NDA before you can
+              view the full details.
+            </p>
+            <p style="font-family:system-ui,sans-serif">
+              Please log in to your Ligament partner portal to review the NDA and confirm your agreement to
+              proceed.
+            </p>
+            <p style="font-family:system-ui,sans-serif">
+              <a href="${ndaLink}" style="font-weight:700;color:#0C3535">View RFP</a>
+            </p>
+            <p style="font-family:system-ui,sans-serif">
+              The Ligament Team<br />
+              <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
+            </p>
+          `,
+        })
       }
     }
 

@@ -10,6 +10,7 @@ export function mapDbProjectToMaster(p: {
   budget_range?: string | null
   start_date?: string | null
   end_date?: string | null
+  created_at?: string | null
 }): MasterProject {
   const raw = (p.status || "draft").toLowerCase()
   let status: MasterProject["status"] = "onboarding"
@@ -28,5 +29,6 @@ export function mapDbProjectToMaster(p: {
     name: (p.title || p.name || "Untitled project").trim(),
     client: (p.client_name || "").trim() || "Client TBD",
     status,
+    createdAt: p.created_at || null,
   }
 }

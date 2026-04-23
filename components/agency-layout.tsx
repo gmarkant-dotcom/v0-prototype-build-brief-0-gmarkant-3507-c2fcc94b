@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -56,6 +56,38 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   const [isDemo, setIsDemo] = useState(false)
   const [isOwner, setIsOwner] = useState(false) // Only greg@withligament.com can see admin
   const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
+  const uniqueProjects = useMemo(
+    () => Array.from(new Map(projects.map((project) => [project.id, project])).values()),
+    [projects]
+  )
+  const activeProjects = useMemo(
+    () => uniqueProjects.filter((project) => project.status === "active" || project.status === "onboarding"),
+    [uniqueProjects]
+  )
+  const onHoldProjects = useMemo(
+    () => uniqueProjects.filter((project) => project.status === "on_hold"),
+    [uniqueProjects]
+  )
+  const duplicateNameCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const project of uniqueProjects) {
+      const key = project.name.trim().toLowerCase()
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    return counts
+  }, [uniqueProjects])
+
+  const formatProjectName = (project: MasterProject) => {
+    const key = project.name.trim().toLowerCase()
+    if ((duplicateNameCounts.get(key) || 0) <= 1) return project.name
+    if (project.createdAt) {
+      const date = new Date(project.createdAt)
+      if (!Number.isNaN(date.getTime())) {
+        return `${project.name} (${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
+      }
+    }
+    return project.name
+  }
   
   // Check demo mode on mount
   useEffect(() => {
@@ -200,7 +232,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                   {selectedProject ? (
                     <>
                       <div className="font-display font-bold text-sm text-foreground truncate">
-                        {selectedProject.name}
+                        {formatProjectName(selectedProject)}
                       </div>
                       <div className="font-mono text-[10px] text-foreground-muted truncate">
                         {selectedProject.client}
@@ -231,7 +263,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                     </Link>
                   </div>
                   <div className="border-t border-border/50">
-                    {projects.filter(p => p.status === "active" || p.status === "onboarding").map((project) => (
+                    {activeProjects.map((project) => (
                       <button
                         key={project.id}
                         onClick={() => selectProjectAndNavigate(project)}
@@ -246,7 +278,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                         )} />
                         <div className="flex-1 min-w-0">
                           <div className="font-display font-bold text-sm text-foreground truncate">
-                            {project.name}
+                            {formatProjectName(project)}
                           </div>
                           <div className="font-mono text-[10px] text-foreground-muted truncate">
                             {project.client}
@@ -258,12 +290,12 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                       </button>
                     ))}
                   </div>
-                  {projects.filter(p => p.status === "on_hold").length > 0 && (
+                  {onHoldProjects.length > 0 && (
                     <>
                       <div className="px-4 py-1.5 bg-white/5 border-t border-border/50">
                         <span className="font-mono text-[9px] text-foreground-muted uppercase tracking-wider">On Hold</span>
                       </div>
-                      {projects.filter(p => p.status === "on_hold").map((project) => (
+                      {onHoldProjects.map((project) => (
                         <button
                           key={project.id}
                           onClick={() => selectProjectAndNavigate(project)}
@@ -275,7 +307,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                           <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="font-display font-bold text-sm text-foreground truncate">
-                              {project.name}
+                              {formatProjectName(project)}
                             </div>
                             <div className="font-mono text-[10px] text-foreground-muted truncate">
                               {project.client}
@@ -293,7 +325,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             </div>
             
             {/* Warning if on workflow page without project selected */}
-            {isWorkflowPage && !isLoadingProjects && !selectedProject && (
+            {isWorkflowPage && !isLoadingProjects && !selectedProject && uniqueProjects.length === 0 && (
               <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
                 <p className="font-mono text-[10px] text-yellow-400">
                   Select a project to view workflow details

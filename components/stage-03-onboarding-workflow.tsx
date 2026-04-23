@@ -473,6 +473,22 @@ export function Stage03OnboardingWorkflow() {
   }
 
   if (!selectedProject) {
+    if (projects.length > 0) {
+      return (
+        <div className="p-8 max-w-6xl">
+          <StageHeader
+            stageNumber="03"
+            title="Onboarding + Ways of Working"
+            subtitle="Build onboarding packages from your document library and send to assigned partners."
+            aiPowered={false}
+          />
+          <div className="flex items-center gap-2 text-foreground-muted py-12">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            Loading project…
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="p-8 max-w-6xl">
         <StageHeader

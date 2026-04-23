@@ -118,7 +118,7 @@ const MASTER_BRIEF_LOADING_MESSAGES = [
 
 function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
-  const { selectedProject, isLoadingProjects } = useSelectedProject()
+  const { selectedProject, isLoadingProjects, projects } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
   /** Must stay mounted when switching 1b tabs so "Upload file" can call .click() (input was inside `upload` branch only → ref null in AI mode). */
   const rfpTemplateFileInputRef = useRef<HTMLInputElement>(null)
@@ -680,11 +680,22 @@ function AgencyRFPContent() {
         responseDeadlineDate.trim().length > 0
           ? new Date(`${responseDeadlineDate.trim()}T23:59:59`).toISOString()
           : null
+      const normalizedNewRecipientsByScope = outsourcedItems.reduce(
+        (acc, item) => {
+          acc[item.id] = (newRecipients[item.id] || []).map((recipient) => ({
+            email: recipient.email.trim().toLowerCase(),
+            name: recipient.name?.trim?.() || "",
+            requireNda: recipient.requireNda !== false,
+          }))
+          return acc
+        },
+        {} as Record<string, NewRecipient[]>
+      )
       const items = outsourcedItems.map((item) => ({
         scopeItemId: item.id,
         scopeItem: item,
         partnerIds: selectedPartners[item.id] || [],
-        newRecipients: newRecipients[item.id] || [],
+        newRecipients: normalizedNewRecipientsByScope[item.id] || [],
       }))
       const res = await fetch("/api/agency/broadcast-rfp", {
         method: "POST",
@@ -695,6 +706,7 @@ function AgencyRFPContent() {
           ndaRequired: ndaSignatureRequired,
           ndaLink: ndaSignatureRequired ? ndaSigningLink.trim() : "",
           response_deadline: responseDeadline,
+          newRecipientsByScope: normalizedNewRecipientsByScope,
           items,
         }),
       })
@@ -1438,7 +1450,7 @@ function AgencyRFPContent() {
                 </div>
               )}
             </div>
-            {!isLoadingProjects && !selectedProject && (
+            {!isLoadingProjects && !selectedProject && projects.length === 0 && (
               <p className="mt-3 font-mono text-xs text-warning text-right">
                 Select a project in Current Project View before generating the master brief.
               </p>

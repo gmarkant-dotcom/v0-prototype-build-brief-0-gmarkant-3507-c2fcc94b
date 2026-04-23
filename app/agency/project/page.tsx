@@ -532,7 +532,7 @@ function ActiveEngagementsInner() {
         </p>
       </div>
 
-      {!isLoadingProjects && !selectedProject && (
+      {!isLoadingProjects && !selectedProject && projects.length === 0 && (
         <GlassCard className="p-8 text-center text-foreground-muted text-sm">
           Select a project to view its active engagements.
         </GlassCard>
