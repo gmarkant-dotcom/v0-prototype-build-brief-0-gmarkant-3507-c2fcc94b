@@ -177,7 +177,7 @@ export default function BillingSettingsPage() {
                 <div className="text-foreground-muted text-sm">Expires 12/26</div>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="border-border/50 text-foreground-muted hover:text-foreground">
+            <Button variant="outline" size="sm" className="border-border/50 text-foreground hover:text-foreground">
               Update
             </Button>
           </div>

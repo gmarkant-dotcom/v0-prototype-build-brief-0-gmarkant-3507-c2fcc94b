@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import {
   PARTNER_BUDGET_STATUSES,
   PARTNER_WORKFLOW_STATUSES,
@@ -62,7 +63,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, full_name, company_name, email")
+      .eq("id", user.id)
+      .single()
     if (profile?.role !== "partner") {
       return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
     }
@@ -108,7 +113,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, full_name, company_name, email")
+      .eq("id", user.id)
+      .single()
     if (profile?.role !== "partner") {
       return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
     }
@@ -195,6 +204,52 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     if (insErr) {
       console.error("[partner/status-update] POST insert", insErr)
       return NextResponse.json({ error: insErr.message || "Insert failed" }, { status: 500, headers: noStoreHeaders })
+    }
+
+    const partnerName =
+      profile.company_name?.trim() || profile.full_name?.trim() || profile.email?.trim() || "A partner"
+    try {
+      const { data: project } = await supabase
+        .from("projects")
+        .select("agency_id, title")
+        .eq("id", projectId)
+        .maybeSingle()
+      if (project?.agency_id) {
+        const { data: agencyProfile } = await supabase
+          .from("profiles")
+          .select("email")
+          .eq("id", project.agency_id)
+          .maybeSingle()
+        const recipientEmail = agencyProfile?.email?.trim()
+        if (recipientEmail) {
+          const projectName = project.title?.trim() || "Project"
+          const reviewUrl = `${siteBaseUrl()}/agency/dashboard`
+          const statusFlag = body.status.replace(/_/g, " ")
+          await sendTransactionalEmail({
+            to: recipientEmail,
+            subject: `${partnerName} submitted a status update on ${projectName}`,
+            html: `
+              <p style="font-family:system-ui,sans-serif">${partnerName} has submitted a project status update for ${projectName}.</p>
+              <p style="font-family:system-ui,sans-serif">
+                Completion: ${body.completion_pct}%<br />
+                Status: ${statusFlag}
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                Log in to review the update and respond.
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                <a href="${reviewUrl}" style="font-weight:700;color:#0C3535">Review Update</a>
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                The Ligament Team<br />
+                <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+              </p>
+            `,
+          })
+        }
+      }
+    } catch (emailError) {
+      console.error("[partner/status-update] notification email failed", emailError)
     }
 
     console.log("[api] success", { route: ROUTE, method: "POST", userId: user.id, projectId })

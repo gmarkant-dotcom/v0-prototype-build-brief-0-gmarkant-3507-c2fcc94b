@@ -60,14 +60,14 @@ function AuthErrorContent() {
               </Button>
             )}
             
-            <Button asChild className={(isExpiredLink || isPKCEError) ? "w-full border-border/50 text-foreground-muted hover:text-foreground" : "w-full bg-accent text-accent-foreground hover:bg-accent/90 font-mono"} variant={(isExpiredLink || isPKCEError) ? "outline" : "default"}>
+            <Button asChild className={(isExpiredLink || isPKCEError) ? "w-full border-border/50 text-foreground hover:text-foreground" : "w-full bg-accent text-accent-foreground hover:bg-accent/90 font-mono"} variant={(isExpiredLink || isPKCEError) ? "outline" : "default"}>
               <Link href="/auth/login">
                 {(isExpiredLink || isPKCEError) ? "Go to Login" : "Try Again"}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
             
-            <Button asChild variant="outline" className="w-full border-border/50 text-foreground-muted hover:text-foreground">
+            <Button asChild variant="outline" className="w-full border-border/50 text-foreground hover:text-foreground">
               <Link href="/">
                 Back to Home
               </Link>

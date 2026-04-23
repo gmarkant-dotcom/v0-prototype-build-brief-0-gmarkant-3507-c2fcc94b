@@ -76,10 +76,18 @@ export async function GET() {
       }
     }
     const mergedRows = rows.map((row) => {
+      const master = (row.master_rfp_json || {}) as Record<string, unknown>
+      const responseDeadline =
+        (typeof row.response_deadline === "string" && row.response_deadline) ||
+        (typeof master.response_deadline === "string" && master.response_deadline) ||
+        null
       const resp = responseByInboxId[row.id as string]
       const effectiveStatus = (resp?.status || row.status || "new") as string
       return {
         ...row,
+        created_at: (row.created_at as string | null) ?? null,
+        viewed_at: (row.viewed_at as string | null) ?? null,
+        response_deadline: responseDeadline,
         response_status: resp?.status || null,
         effective_status: effectiveStatus,
         agency_feedback: resp?.agency_feedback || null,

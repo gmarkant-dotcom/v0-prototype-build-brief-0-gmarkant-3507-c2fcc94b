@@ -117,7 +117,7 @@ const MASTER_BRIEF_LOADING_MESSAGES = [
 
 function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
-  const { selectedProject } = useSelectedProject()
+  const { selectedProject, isLoadingProjects } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
   /** Must stay mounted when switching 1b tabs so "Upload file" can call .click() (input was inside `upload` branch only → ref null in AI mode). */
   const rfpTemplateFileInputRef = useRef<HTMLInputElement>(null)
@@ -270,6 +270,7 @@ function AgencyRFPContent() {
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
   const [ndaSignatureRequired, setNdaSignatureRequired] = useState(false)
   const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
+  const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
   
   // Handle client brief file: server-side text extraction only (no blob preview — private store URLs are not iframe-safe)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -637,6 +638,10 @@ function AgencyRFPContent() {
     }
     setIsBroadcasting(true)
     try {
+      const responseDeadline =
+        responseDeadlineDate.trim().length > 0
+          ? new Date(`${responseDeadlineDate.trim()}T23:59:59`).toISOString()
+          : null
       const items = outsourcedItems.map((item) => ({
         scopeItemId: item.id,
         scopeItem: item,
@@ -651,6 +656,7 @@ function AgencyRFPContent() {
           masterRfp,
           ndaRequired: ndaSignatureRequired,
           ndaLink: ndaSignatureRequired ? ndaSigningLink.trim() : "",
+          response_deadline: responseDeadline,
           items,
         }),
       })
@@ -715,6 +721,7 @@ function AgencyRFPContent() {
     setAdditionalContext("")
     setNdaSignatureRequired(false)
     setNdaSigningLink("https://www.docusign.com/")
+    setResponseDeadlineDate("")
   }
 
   useEffect(() => {
@@ -1394,7 +1401,7 @@ function AgencyRFPContent() {
                 </div>
               )}
             </div>
-            {!selectedProject && (
+            {!isLoadingProjects && !selectedProject && (
               <p className="mt-3 font-mono text-xs text-warning text-right">
                 Select a project in Current Project View before generating the master brief.
               </p>
@@ -1971,6 +1978,21 @@ function AgencyRFPContent() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-6 p-4 rounded-lg border border-border bg-white/5 space-y-2">
+                <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                  Response Deadline
+                </label>
+                <Input
+                  type="date"
+                  value={responseDeadlineDate}
+                  onChange={(e) => setResponseDeadlineDate(e.target.value)}
+                  className="bg-white/5 border-border text-foreground"
+                />
+                <p className="font-mono text-[10px] text-foreground-muted">
+                  Optional. If set, partners will see “Respond by” in their inbox and RFP detail view.
+                </p>
               </div>
 
               <div className="mt-6 p-4 rounded-lg border border-border bg-white/5 space-y-3">

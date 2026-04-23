@@ -72,6 +72,9 @@ type InboxRow = {
   agency_meeting_url?: string | null
   status: string
   created_at: string
+  response_deadline?: string | null
+  partner_intent?: "will_respond" | "has_questions" | "requesting_call" | null
+  intent_set_at?: string | null
 }
 
 type AttachmentTag =
@@ -105,6 +108,7 @@ function externalLinkLabel(url: string): string {
 }
 
 type SavedAttachment = { type: string; label: string; url: string }
+type PartnerIntent = "will_respond" | "has_questions" | "requesting_call"
 
 type DraftAttachment = {
   id: string
@@ -262,6 +266,31 @@ function parsePaymentTerms(raw: unknown): {
   }
 }
 
+function partnerIntentLabel(intent: PartnerIntent): string {
+  if (intent === "will_respond") return "I plan to respond"
+  if (intent === "has_questions") return "I have questions"
+  return "Request a call"
+}
+
+function formatDeadlineDate(value?: string | null): string | null {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function isDeadlineWithin48Hours(value?: string | null): boolean {
+  if (!value) return false
+  const ts = new Date(value).getTime()
+  if (Number.isNaN(ts)) return false
+  const diff = ts - Date.now()
+  return diff > 0 && diff <= 48 * 60 * 60 * 1000
+}
+
 function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
   if (!json || typeof json !== "object") {
     return <p className="text-sm text-gray-500">No master RFP content available.</p>
@@ -407,6 +436,9 @@ export default function PartnerRfpDetailPage() {
   const [historyOpen, setHistoryOpen] = useState(true)
   const [changeNotes, setChangeNotes] = useState("")
   const [activeTab, setActiveTab] = useState<"status" | "rfp" | "bid">("bid")
+  const [partnerIntent, setPartnerIntent] = useState<PartnerIntent | null>(null)
+  const [isSavingIntent, setIsSavingIntent] = useState(false)
+  const [intentError, setIntentError] = useState<string | null>(null)
 
   const updateDraft = useCallback((draftId: string, patch: Partial<DraftAttachment>) => {
     setDraftAttachments((prev) => prev.map((d) => (d.id === draftId ? { ...d, ...patch } : d)))
@@ -435,6 +467,7 @@ export default function PartnerRfpDetailPage() {
         if (!res.ok) throw new Error((data?.error as string) || "Could not load RFP")
         if (!cancelled) {
           setInbox(data.inbox as InboxRow)
+          setPartnerIntent(((data.inbox as InboxRow)?.partner_intent as PartnerIntent | null) || null)
           const r = data.response as ResponseRow | null
           const versionRows = (data.versions || []) as ResponseVersion[]
           setVersions(versionRows)
@@ -735,12 +768,56 @@ export default function PartnerRfpDetailPage() {
   })
 
   const currentStatus = existing?.status || (inbox.status === "bid_submitted" ? "submitted" : inbox.status)
+  const showIntentSection = ["pending", "new", "under_review"].includes(currentStatus)
   const canEdit =
     isDemoDetail ||
     ["submitted", "under_review", "shortlisted", "meeting_requested", "draft", "new", "viewed", "bid_submitted", "feedback_received"].includes(
       currentStatus
     )
   const feedbackUpdatedAt = existing?.feedback_updated_at ? new Date(existing.feedback_updated_at).toLocaleString() : null
+  const responseDeadlineLabel = formatDeadlineDate(inbox.response_deadline)
+  const responseDeadlineSoon = isDeadlineWithin48Hours(inbox.response_deadline)
+
+  const updatePartnerIntent = async (nextIntent: PartnerIntent) => {
+    if (isDemoDetail) {
+      setPartnerIntent(nextIntent)
+      return
+    }
+    const prevIntent = partnerIntent
+    setIntentError(null)
+    setPartnerIntent(nextIntent)
+    setIsSavingIntent(true)
+    try {
+      const res = await fetch(`/api/partner/rfps/${id}/intent`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ partner_intent: nextIntent }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error((payload?.error as string) || "Failed to update intent")
+      }
+      const updatedInbox = payload?.inbox as { partner_intent?: PartnerIntent | null; intent_set_at?: string | null } | undefined
+      if (updatedInbox) {
+        setPartnerIntent(updatedInbox.partner_intent || null)
+        setInbox((prev) =>
+          prev
+            ? {
+                ...prev,
+                partner_intent: updatedInbox.partner_intent || null,
+                intent_set_at: updatedInbox.intent_set_at || null,
+              }
+            : prev
+        )
+      }
+    } catch (e) {
+      setPartnerIntent(prevIntent)
+      setIntentError(e instanceof Error ? e.message : "Failed to update intent")
+    } finally {
+      setIsSavingIntent(false)
+    }
+  }
 
   return (
     <PartnerChrome>
@@ -773,6 +850,18 @@ export default function PartnerRfpDetailPage() {
               {getBidStatusLabel(currentStatus, "partner")}
             </span>
           </div>
+          {responseDeadlineLabel && (
+            <div
+              className={cn(
+                "mb-4 rounded-lg border px-3 py-2 text-sm font-mono inline-flex items-center gap-2",
+                responseDeadlineSoon
+                  ? "border-amber-300 bg-amber-50 text-amber-900"
+                  : "border-gray-200 bg-gray-50 text-gray-700"
+              )}
+            >
+              Respond by {responseDeadlineLabel}
+            </div>
+          )}
           {inbox.scope_item_description && (
             <p className="text-sm text-gray-700 leading-relaxed border-t border-gray-100 pt-4">{inbox.scope_item_description}</p>
           )}
@@ -1021,6 +1110,43 @@ export default function PartnerRfpDetailPage() {
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-gray-200 p-6">
+          {showIntentSection && (
+            <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className="font-display font-bold text-sm text-[#0C3535]">Response intent</h3>
+                {partnerIntent && (
+                  <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wide">
+                    {partnerIntentLabel(partnerIntent as PartnerIntent)}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { id: "will_respond" as const, label: "I plan to respond" },
+                  { id: "has_questions" as const, label: "I have questions" },
+                  { id: "requesting_call" as const, label: "Request a call" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={cn(
+                      "rounded-md border px-3 py-1.5 text-xs font-mono transition-colors",
+                      partnerIntent === option.id
+                        ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
+                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                    )}
+                    onClick={() => void updatePartnerIntent(option.id)}
+                    disabled={isSavingIntent}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {intentError && (
+                <p className="mt-3 text-xs text-red-700">{intentError}</p>
+              )}
+            </div>
+          )}
           <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Your bid response</h2>
           <p className="text-sm text-gray-600 mb-6">
               Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, shortlisted, or meeting requested.

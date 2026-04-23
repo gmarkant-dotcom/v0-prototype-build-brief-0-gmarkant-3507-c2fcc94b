@@ -192,7 +192,7 @@ export function AgencyDocumentLibraryManager() {
         <div className="flex items-center justify-between gap-2">
           <div className="font-display font-bold text-foreground">{slot.title}</div>
           {row && (
-            <Button type="button" variant="ghost" size="sm" className="text-red-400" onClick={() => void remove(row.id)}>
+            <Button type="button" variant="ghost" size="sm" className="text-red-200 hover:text-red-100" onClick={() => void remove(row.id)}>
               <Trash2 className="w-4 h-4" />
             </Button>
           )}

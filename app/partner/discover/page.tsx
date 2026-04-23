@@ -418,7 +418,7 @@ export default function DiscoverAgenciesPage() {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setShowRequestModal(false)} className="text-gray-400 hover:text-gray-600">
+                <button onClick={() => setShowRequestModal(false)} className="text-gray-700 hover:text-gray-900">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -474,7 +474,7 @@ export default function DiscoverAgenciesPage() {
                     <p className="font-mono text-xs text-gray-500">Agency profile + collaboration history</p>
                   </div>
                 </div>
-                <button onClick={() => setShowAgencyProfileModal(false)} className="text-gray-400 hover:text-gray-600">
+                <button onClick={() => setShowAgencyProfileModal(false)} className="text-gray-700 hover:text-gray-900">
                   <X className="w-5 h-5" />
                 </button>
               </div>

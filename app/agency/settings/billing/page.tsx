@@ -219,7 +219,7 @@ export default function AgencyBillingSettingsPage() {
                       </span>
                     </td>
                     <td className="py-3 text-right">
-                      <Button variant="ghost" size="sm" className="text-foreground-muted hover:text-foreground">
+                      <Button variant="ghost" size="sm" className="text-foreground hover:text-foreground">
                         <Download className="w-3.5 h-3.5 mr-1.5" />
                         PDF
                       </Button>

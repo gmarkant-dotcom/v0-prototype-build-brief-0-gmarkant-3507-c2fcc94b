@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 
 /** Partner marks NDA or SOW as signed (or lead agency updates status). */
 export async function PATCH(
@@ -50,13 +51,13 @@ export async function PATCH(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, full_name, company_name, email')
       .eq('id', user.id)
       .single()
 
     const { data: projectRow } = await supabase
       .from('projects')
-      .select('agency_id')
+      .select('agency_id, title')
       .eq('id', projectId)
       .single()
 
@@ -85,6 +86,60 @@ export async function PATCH(
       .single()
 
     if (upErr) throw upErr
+
+    const counterpartUserId = isPartner ? projectRow?.agency_id || null : partnership?.partner_id || null
+    const partyName =
+      profile?.company_name?.trim() || profile?.full_name?.trim() || profile?.email?.trim() || 'A teammate'
+    const projectName = projectRow?.title?.trim() || 'Project'
+    try {
+      if (counterpartUserId) {
+        const { data: counterpartProfile } = await supabase
+          .from('profiles')
+          .select('email, role')
+          .eq('id', counterpartUserId)
+          .maybeSingle()
+        const recipientEmail = counterpartProfile?.email?.trim()
+        if (recipientEmail) {
+          const recipientIsAgency = counterpartProfile?.role === 'agency'
+          const viewPath = recipientIsAgency
+            ? `/agency/project?projectId=${encodeURIComponent(projectId)}`
+            : `/partner/projects/${projectId}`
+          const viewUrl = `${siteBaseUrl()}${viewPath}`
+
+          const emailByStatus: Record<'viewed' | 'signed' | 'declined', { subject: string; body: string }> = {
+            viewed: {
+              subject: `${partyName} viewed the agreement for ${projectName}`,
+              body: `${partyName} has viewed the agreement for ${projectName}. Log in to review the latest agreement status.`,
+            },
+            signed: {
+              subject: `${partyName} signed the agreement for ${projectName}`,
+              body: `${partyName} has signed the agreement for ${projectName}. Log in to view the signed document.`,
+            },
+            declined: {
+              subject: `${partyName} declined the agreement for ${projectName}`,
+              body: `${partyName} has declined to sign the agreement for ${projectName}. Log in to review and follow up.`,
+            },
+          }
+          const content = emailByStatus[status as 'viewed' | 'signed' | 'declined']
+          await sendTransactionalEmail({
+            to: recipientEmail,
+            subject: content.subject,
+            html: `
+              <p style="font-family:system-ui,sans-serif">${content.body}</p>
+              <p style="font-family:system-ui,sans-serif">
+                <a href="${viewUrl}" style="font-weight:700;color:#0C3535">View Agreement</a>
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                The Ligament Team<br />
+                <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+              </p>
+            `,
+          })
+        }
+      }
+    } catch (emailError) {
+      console.error('agreement PATCH notification failed:', emailError)
+    }
 
     return NextResponse.json({ agreement: updated })
   } catch (e) {

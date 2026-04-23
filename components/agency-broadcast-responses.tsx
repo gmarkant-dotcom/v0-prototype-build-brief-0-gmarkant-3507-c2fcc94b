@@ -34,6 +34,9 @@ type InboxSnippet = {
   scope_item_name?: string
   scope_item_description?: string | null
   created_at?: string
+  response_deadline?: string | null
+  partner_intent?: "will_respond" | "has_questions" | "requesting_call" | null
+  intent_set_at?: string | null
   master_rfp_json?: unknown
   status?: string
 } | null
@@ -61,6 +64,38 @@ function parseVersionTimelineObj(val: unknown): { duration?: number; unit?: stri
   } catch {
     return null
   }
+}
+
+function formatDeadlineDate(value?: string | null): string | null {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function isDeadlineWithin48Hours(value?: string | null): boolean {
+  if (!value) return false
+  const ts = new Date(value).getTime()
+  if (Number.isNaN(ts)) return false
+  const diff = ts - Date.now()
+  return diff > 0 && diff <= 48 * 60 * 60 * 1000
+}
+
+function getPartnerIntentBadge(
+  intent?: "will_respond" | "has_questions" | "requesting_call" | null
+): { label: string; className: string } | null {
+  if (!intent) return null
+  if (intent === "will_respond") {
+    return { label: "Plans to respond", className: "bg-green-900/30 text-green-100 border-green-400/40" }
+  }
+  if (intent === "has_questions") {
+    return { label: "Has questions", className: "bg-blue-900/30 text-blue-100 border-blue-400/40" }
+  }
+  return { label: "Requested call", className: "bg-purple-900/30 text-purple-100 border-purple-400/40" }
 }
 
 type ResponseVersion = {
@@ -271,6 +306,15 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                 year: "numeric",
               })
             : ""
+          const responseDeadline = formatDeadlineDate(r.inbox?.response_deadline)
+          const partnerIntentBadge = getPartnerIntentBadge(r.inbox?.partner_intent)
+          const received = r.created_at
+            ? new Date(r.created_at).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+            : ""
           return (
             <div key={r.id} className="rounded-lg border border-border bg-white/5 overflow-hidden">
               <button
@@ -284,8 +328,37 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                   <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <div className="font-display font-bold text-foreground truncate">{r.partner_display_name}</div>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="font-display font-bold text-foreground truncate">{r.partner_display_name}</div>
+                    {partnerIntentBadge && (
+                      <span
+                        className={cn(
+                          "font-mono text-[10px] px-1.5 py-0.5 rounded border shrink-0",
+                          partnerIntentBadge.className
+                        )}
+                      >
+                        {partnerIntentBadge.label}
+                      </span>
+                    )}
+                  </div>
                   <div className="font-mono text-[10px] text-foreground-muted truncate">{scopeName}</div>
+                  {received && (
+                    <div className="font-mono text-[10px] text-foreground-muted truncate">
+                      Bid received {received}
+                    </div>
+                  )}
+                  {responseDeadline && (
+                    <div
+                      className={cn(
+                        "font-mono text-[10px] truncate",
+                        isDeadlineWithin48Hours(r.inbox?.response_deadline)
+                          ? "text-amber-200"
+                          : "text-foreground-muted"
+                      )}
+                    >
+                      Response deadline {responseDeadline}
+                    </div>
+                  )}
                 </div>
                 <span
                   className={cn(
@@ -325,6 +398,18 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                       Broadcast line sent {sent}
                     </p>
                   )}
+                  {responseDeadline && (
+                    <p
+                      className={cn(
+                        "font-mono text-[10px]",
+                        isDeadlineWithin48Hours(r.inbox?.response_deadline)
+                          ? "text-amber-200"
+                          : "text-foreground-muted"
+                      )}
+                    >
+                      Response deadline {responseDeadline}
+                    </p>
+                  )}
                   <div>
                     <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
                     <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">{r.proposal_text}</p>
@@ -355,7 +440,7 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                                   "px-2 py-1 rounded-md border font-display text-xs",
                                   isSelected
                                     ? "bg-accent/20 border-accent text-foreground"
-                                    : "bg-white/5 border-border/60 text-foreground-muted hover:text-foreground"
+                                    : "bg-white/5 border-border/60 text-foreground/90 hover:text-foreground"
                                 )}
                               >
                                 V{v.version_number} {isCurrent ? "— Current" : `— ${new Date(v.submitted_at).toLocaleDateString()}`}
@@ -563,7 +648,7 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                                   {currentFeedback && (
                                     <button
                                       type="button"
-                                      className="text-xs text-foreground-muted hover:text-foreground"
+                                    className="text-xs text-foreground hover:text-accent"
                                       onClick={() => {
                                         setFeedbackEditingIds((prev) => ({ ...prev, [r.id]: false }))
                                         setFeedbackDrafts((prev) => ({ ...prev, [r.id]: currentFeedback }))
@@ -611,7 +696,7 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                             ? meetingHoverIds[r.id]
                               ? "bg-slate-600 hover:bg-slate-600/90 text-white"
                               : "bg-cyan-600 hover:bg-cyan-600/90 text-white"
-                            : "border-cyan-400/40 text-cyan-300"
+                            : "border-cyan-400/40 bg-cyan-900/30 text-cyan-100 hover:bg-cyan-900/45"
                         )}
                         onMouseEnter={() =>
                           r.status === "meeting_requested" && setMeetingHoverIds((prev) => ({ ...prev, [r.id]: true }))
@@ -645,7 +730,7 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                             ? shortlistHoverIds[r.id]
                               ? "bg-red-600 hover:bg-red-600/90 text-white"
                               : "bg-purple-600 hover:bg-purple-600/90 text-white"
-                            : "border-purple-400/40 text-purple-300"
+                            : "border-purple-400/40 bg-purple-900/30 text-purple-100 hover:bg-purple-900/45"
                         )}
                         onMouseEnter={() =>
                           r.status === "shortlisted" && setShortlistHoverIds((prev) => ({ ...prev, [r.id]: true }))
@@ -688,7 +773,7 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="border-red-400/40 text-red-300"
+                        className="border-red-400/40 bg-red-900/30 text-red-100 hover:bg-red-900/45"
                         onClick={() =>
                           patchResponse(r.id, { status: "declined", decline_reason: declineReasons[r.id] || "" })
                         }

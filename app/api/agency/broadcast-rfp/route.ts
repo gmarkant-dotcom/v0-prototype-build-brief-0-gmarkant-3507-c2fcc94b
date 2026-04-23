@@ -48,6 +48,14 @@ export async function POST(request: NextRequest) {
         ? body.ndaLink.trim()
         : "https://www.docusign.com/"
     const items = (Array.isArray(body.items) ? body.items : []) as BroadcastItem[]
+    const responseDeadlineRaw =
+      typeof body.response_deadline === "string" && body.response_deadline.trim().length > 0
+        ? body.response_deadline.trim()
+        : null
+    const responseDeadline =
+      responseDeadlineRaw && !Number.isNaN(new Date(responseDeadlineRaw).getTime())
+        ? new Date(responseDeadlineRaw).toISOString()
+        : null
 
     if (!masterRfp || typeof masterRfp !== "object") {
       return NextResponse.json({ error: "masterRfp is required" }, { status: 400 })
@@ -61,6 +69,11 @@ export async function POST(request: NextRequest) {
       profile.company_name?.trim() || profile.full_name?.trim() || "Lead agency"
 
     const rows: Record<string, unknown>[] = []
+    const nonNdaExistingPartnerNotifications: {
+      partnerEmail: string
+      partnerName: string
+      scopeName: string
+    }[] = []
 
     for (const item of items) {
       const si = item.scopeItem
@@ -108,15 +121,24 @@ export async function POST(request: NextRequest) {
           scope_item_description: scopeItemDescription || null,
           estimated_budget: estimatedBudget || null,
           timeline: timeline || null,
+          response_deadline: responseDeadline,
           master_rfp_json: masterRfp,
           agency_company_name: agencyDisplay,
           status: "new",
         })
 
+        const partnerEmail = partnership?.partner?.email || ""
+        const partnerName =
+          partnership?.partner?.company_name || partnership?.partner?.full_name || partnerEmail || "Partner"
+        if (!ndaRequired && partnerEmail) {
+          nonNdaExistingPartnerNotifications.push({
+            partnerEmail,
+            partnerName,
+            scopeName: scopeItemName,
+          })
+        }
+
         if (ndaRequired) {
-          const partnerEmail = partnership?.partner?.email || ""
-          const partnerName =
-            partnership?.partner?.company_name || partnership?.partner?.full_name || partnerEmail || "Partner"
           const needsNda = !partnership?.nda_confirmed_at
           if (needsNda && partnerEmail) {
             const resendApiKey = process.env.RESEND_API_KEY
@@ -164,6 +186,7 @@ export async function POST(request: NextRequest) {
           scope_item_description: scopeItemDescription || null,
           estimated_budget: estimatedBudget || null,
           timeline: timeline || null,
+          response_deadline: responseDeadline,
           master_rfp_json: masterRfp,
           agency_company_name: agencyDisplay,
           status: "new",
@@ -216,6 +239,36 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       )
+    }
+
+    if (!ndaRequired && nonNdaExistingPartnerNotifications.length > 0) {
+      const resendApiKey = process.env.RESEND_API_KEY
+      if (resendApiKey) {
+        const resend = new Resend(resendApiKey)
+        for (const notification of nonNdaExistingPartnerNotifications) {
+          await resend.emails.send({
+            from: "Ligament <notifications@withligament.com>",
+            to: notification.partnerEmail,
+            subject: `New RFP from ${agencyDisplay}: ${notification.scopeName}`,
+            html: `
+              <p style="font-family:system-ui,sans-serif">Hi ${notification.partnerName},</p>
+              <p style="font-family:system-ui,sans-serif">
+                ${agencyDisplay} has sent you an RFP for ${notification.scopeName} on Ligament.
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                Review the scope, timeline, and budget details, then submit your bid directly through the platform.
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                <a href="https://withligament.com/partner/rfps" style="font-weight:700;color:#0C3535">View RFP</a>
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                The Ligament Team<br />
+                <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+              </p>
+            `,
+          })
+        }
+      }
     }
 
     return NextResponse.json({ ok: true, count: rows.length })

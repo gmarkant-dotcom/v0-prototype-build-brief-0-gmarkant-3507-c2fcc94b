@@ -33,7 +33,7 @@ export function UpgradeRequiredModal({ isOpen, onClose, featureName }: UpgradeRe
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-foreground-muted hover:text-foreground">
+          <button onClick={onClose} className="text-foreground hover:text-accent">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -86,7 +86,7 @@ export function UpgradeRequiredModal({ isOpen, onClose, featureName }: UpgradeRe
             <Button
               variant="outline"
               onClick={onClose}
-              className="flex-1 border-border/50 text-foreground-muted"
+              className="flex-1 border-border/50 text-foreground hover:text-foreground"
             >
               Maybe Later
             </Button>

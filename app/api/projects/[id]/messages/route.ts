@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,10 +140,19 @@ export async function POST(
     // Verify access to project (RLS will handle this, but extra check)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, full_name, company_name, email')
       .eq('id', user.id)
       .single()
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
+
+    let counterpartUserId: string | null = null
+    let projectMeta: { title: string | null; agency_id: string | null } | null = null
+    const { data: projectForEmail } = await supabase
+      .from('projects')
+      .select('title, agency_id')
+      .eq('id', projectId)
+      .maybeSingle()
+    projectMeta = projectForEmail
 
     if (profile?.role === 'agency') {
       // Agency must own the project
@@ -159,13 +169,23 @@ export async function POST(
       if (assignmentId) {
         const { data: assignOnProject } = await supabase
           .from('project_assignments')
-          .select('id')
+          .select('id, partnerships!inner(partner_id)')
           .eq('id', assignmentId)
           .eq('project_id', projectId)
           .maybeSingle()
         if (!assignOnProject) {
           return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
         }
+        counterpartUserId = (assignOnProject.partnerships as { partner_id?: string } | null)?.partner_id || null
+      } else {
+        const { data: anyAssign } = await supabase
+          .from('project_assignments')
+          .select('id, partnerships!inner(partner_id)')
+          .eq('project_id', projectId)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        counterpartUserId = (anyAssign?.partnerships as { partner_id?: string } | null)?.partner_id || null
       }
     } else if (profile?.role === 'partner') {
       const { data: assignment } = await supabase
@@ -190,6 +210,7 @@ export async function POST(
           return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
         }
       }
+      counterpartUserId = projectMeta?.agency_id || null
     } else {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -213,6 +234,48 @@ export async function POST(
       .single()
 
     if (error) throw error
+
+    try {
+      if (counterpartUserId) {
+        const { data: counterpartProfile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', counterpartUserId)
+          .maybeSingle()
+        const recipientEmail = counterpartProfile?.email?.trim()
+        if (recipientEmail) {
+          const senderName =
+            profile?.company_name?.trim() || profile?.full_name?.trim() || profile?.email?.trim() || 'A teammate'
+          const projectName = projectMeta?.title?.trim() || 'Project'
+          const viewPath =
+            profile?.role === 'agency'
+              ? `/partner/projects/${projectId}`
+              : `/agency/project?projectId=${encodeURIComponent(projectId)}`
+          const viewUrl = `${siteBaseUrl()}${viewPath}`
+          await sendTransactionalEmail({
+            to: recipientEmail,
+            subject: `New message on ${projectName}`,
+            html: `
+              <p style="font-family:system-ui,sans-serif">
+                You have a new message on ${projectName} from ${senderName}.
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                Log in to view the conversation and reply.
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                <a href="${viewUrl}" style="font-weight:700;color:#0C3535">View Message</a>
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                The Ligament Team<br />
+                <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+              </p>
+            `,
+          })
+        }
+      }
+    } catch (emailError) {
+      console.error('[messages] notification email failed', emailError)
+    }
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: message?.id })
     return NextResponse.json({ message })

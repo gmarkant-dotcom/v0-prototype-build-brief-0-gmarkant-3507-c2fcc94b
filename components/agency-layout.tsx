@@ -55,7 +55,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   const [userInitials, setUserInitials] = useState("LA")
   const [isDemo, setIsDemo] = useState(false)
   const [isOwner, setIsOwner] = useState(false) // Only greg@withligament.com can see admin
-  const { selectedProject, setSelectedProject, projects } = useSelectedProject()
+  const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
   
   // Check demo mode on mount
   useEffect(() => {
@@ -293,7 +293,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             </div>
             
             {/* Warning if on workflow page without project selected */}
-            {isWorkflowPage && !selectedProject && (
+            {isWorkflowPage && !isLoadingProjects && !selectedProject && (
               <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
                 <p className="font-mono text-[10px] text-yellow-400">
                   Select a project to view workflow details

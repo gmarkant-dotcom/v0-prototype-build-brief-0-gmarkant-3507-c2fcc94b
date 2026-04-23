@@ -37,6 +37,7 @@ type Partnership = {
   partnerDisplayName?: string | null
   partnerAgencyType?: string | null
   partnerBio?: string | null
+  partnerCapabilities?: string[]
   msaSigned?: boolean
 }
 
@@ -117,6 +118,26 @@ function splitAgencyTypeValues(value: string | null | undefined): string[] {
     .filter(Boolean)
 }
 
+function extractCapabilityValues(raw: unknown): string[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) {
+    return raw.map((x) => String(x).trim()).filter(Boolean)
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(/[,;]+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+  if (typeof raw === "object") {
+    const maybeTags = (raw as { tags?: unknown }).tags
+    if (Array.isArray(maybeTags)) {
+      return maybeTags.map((x) => String(x).trim()).filter(Boolean)
+    }
+  }
+  return []
+}
+
 function agencyTypeMatchesFilter(selectedType: string, agencyType: string | null | undefined): boolean {
   if (selectedType === "All") return true
   const at = (agencyType || "").trim().toLowerCase()
@@ -132,14 +153,17 @@ function agencyTypeMatchesFilter(selectedType: string, agencyType: string | null
 function disciplineMatches(
   selectedDiscipline: string,
   agencyType: string | null | undefined,
-  bio: string | null | undefined,
-  extraTags: string[],
+  capabilities: unknown,
 ): boolean {
   if (selectedDiscipline === "All") return true
   const needle = selectedDiscipline.trim().toLowerCase()
   if (!needle) return true
   for (const token of splitAgencyTypeValues(agencyType)) {
     const x = token.toLowerCase()
+    if (x === needle || x.includes(needle) || needle.includes(x)) return true
+  }
+  for (const cap of extractCapabilityValues(capabilities)) {
+    const x = cap.toLowerCase()
     if (x === needle || x.includes(needle) || needle.includes(x)) return true
   }
   return false
@@ -364,12 +388,13 @@ export default function PartnerPoolPage() {
             display_name: string | null
             agency_type: string | null
             bio: string | null
+            capabilities: unknown
           }
         > = {}
         if (partnerIds.length > 0) {
           const { data: profs } = await supabase
             .from("profiles")
-            .select("id, company_name, full_name, display_name, agency_type, bio")
+            .select("id, company_name, full_name, display_name, agency_type, bio, capabilities")
             .in("id", partnerIds)
           for (const pr of profs || []) {
             profileById[pr.id as string] = {
@@ -378,6 +403,7 @@ export default function PartnerPoolPage() {
               display_name: pr.display_name as string | null,
               agency_type: pr.agency_type as string | null,
               bio: pr.bio as string | null,
+              capabilities: (pr as { capabilities?: unknown }).capabilities ?? null,
             }
           }
         }
@@ -397,6 +423,7 @@ export default function PartnerPoolPage() {
             partnerDisplayName: prof?.display_name ?? null,
             partnerAgencyType: prof?.agency_type ?? null,
             partnerBio: prof?.bio ?? null,
+            partnerCapabilities: extractCapabilityValues(prof?.capabilities),
             partnerName: row.partnerName || prof?.full_name || undefined,
             partnerCompany: row.partnerCompany || prof?.company_name || undefined,
             msaSigned: msaSignedIds.has(row.id),
@@ -823,7 +850,7 @@ export default function PartnerPoolPage() {
         if (!agencyTypeMatchesFilter(selectedType, at)) return false
         if (!demoInvitationMatchesStatus(inv, partner, selectedStatus)) return false
         if (!demoInvitationMatchesLegal(partner, selectedLegal)) return false
-        if (!disciplineMatches(selectedDiscipline, partner?.discipline ?? null, null, [])) return false
+        if (!disciplineMatches(selectedDiscipline, partner?.discipline ?? null, partner?.tags ?? [])) return false
         return true
       }
       const p = row.p
@@ -837,7 +864,7 @@ export default function PartnerPoolPage() {
       if (!agencyTypeMatchesFilter(selectedType, p.partnerAgencyType)) return false
       if (!partnershipMatchesStatusFilter(p, selectedStatus)) return false
       if (!partnershipMatchesLegalFilter(p, selectedLegal)) return false
-      if (!disciplineMatches(selectedDiscipline, p.partnerAgencyType, null, [])) return false
+      if (!disciplineMatches(selectedDiscipline, p.partnerAgencyType, p.partnerCapabilities ?? [])) return false
       return true
     })
   }, [
@@ -871,7 +898,7 @@ export default function PartnerPoolPage() {
       if (selectedLegal === "MSA Approved" && !p.msaApproved) return false
       if (selectedLegal === "No NDA" && p.ndaSigned) return false
       if (selectedLegal === "No MSA" && p.msaApproved) return false
-      if (!disciplineMatches(selectedDiscipline, p.discipline, null, [])) return false
+      if (!disciplineMatches(selectedDiscipline, p.discipline, p.tags || [])) return false
       if (showBookmarkedOnly && !p.bookmarked) return false
       return true
     })
@@ -906,10 +933,12 @@ export default function PartnerPoolPage() {
     if (isDemo) {
       for (const p of partners) {
         for (const part of splitAgencyTypeValues(p.discipline)) add(part)
+        for (const part of extractCapabilityValues(p.tags || [])) add(part)
       }
     } else {
       for (const p of partnerships) {
         for (const part of splitAgencyTypeValues(p.partnerAgencyType)) add(part)
+        for (const part of extractCapabilityValues(p.partnerCapabilities || [])) add(part)
       }
     }
 
@@ -1657,7 +1686,7 @@ export default function PartnerPoolPage() {
                     <p className={cn("font-mono text-sm", selectedPartner.status === "blacklisted" ? "text-red-400" : "text-accent")}>{selectedPartner.discipline}</p>
                   </div>
                 </div>
-                <button onClick={() => setSelectedPartner(null)} className="text-foreground-muted hover:text-foreground">
+                <button onClick={() => setSelectedPartner(null)} className="text-foreground hover:text-accent">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -1807,7 +1836,7 @@ export default function PartnerPoolPage() {
                     <p className="font-mono text-xs text-foreground-muted">Send an invitation to join your network</p>
                   </div>
                 </div>
-                <button onClick={() => setShowInviteModal(false)} className="text-foreground-muted hover:text-foreground">
+                <button onClick={() => setShowInviteModal(false)} className="text-foreground hover:text-accent">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -2041,7 +2070,7 @@ function AddEditPartnerModal({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-foreground-muted hover:text-foreground">
+          <button onClick={onClose} className="text-foreground hover:text-accent">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -2283,7 +2312,7 @@ function AddEditPartnerModal({
                 className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
               />
-              <Button variant="outline" onClick={addTag} className="border-border text-foreground-muted">
+              <Button variant="outline" onClick={addTag} className="border-border text-foreground hover:text-foreground">
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
@@ -2313,7 +2342,7 @@ function AddEditPartnerModal({
                 className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCredential())}
               />
-              <Button variant="outline" onClick={addCredential} className="border-border text-foreground-muted">
+              <Button variant="outline" onClick={addCredential} className="border-border text-foreground hover:text-foreground">
                 <Plus className="w-4 h-4" />
               </Button>
             </div>

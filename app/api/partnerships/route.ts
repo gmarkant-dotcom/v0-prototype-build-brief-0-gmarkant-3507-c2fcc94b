@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
         .select(`
           *,
           partner:profiles!partnerships_partner_id_fkey(
-            id, email, full_name, company_name
+            id, email, full_name, company_name, capabilities
           )
         `)
         .eq('agency_id', user.id)

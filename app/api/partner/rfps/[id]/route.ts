@@ -50,12 +50,33 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
+    let inboxWithViewed = inbox
+    if (!inbox.viewed_at) {
+      const { data: updatedInbox, error: viewedUpdateError } = await supabase
+        .from("partner_rfp_inbox")
+        .update({ viewed_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("partner_id", user.id)
+        .is("viewed_at", null)
+        .select("*")
+        .maybeSingle()
+
+      if (viewedUpdateError) {
+        console.error("[partner/rfps/[id]] viewed_at update failed:", viewedUpdateError)
+        return NextResponse.json({ error: "Failed to update viewed state" }, { status: 500 })
+      }
+
+      if (updatedInbox) {
+        inboxWithViewed = updatedInbox
+      }
+    }
+
     let agencyMeetingUrl: string | null = null
-    if (inbox.agency_id) {
+    if (inboxWithViewed.agency_id) {
       const { data: agencyProfile, error: agencyErr } = await supabase
         .from("profiles")
         .select("meeting_url")
-        .eq("id", inbox.agency_id)
+        .eq("id", inboxWithViewed.agency_id)
         .maybeSingle()
       if (!agencyErr) {
         agencyMeetingUrl = (agencyProfile?.meeting_url as string | null) || null
@@ -104,7 +125,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 
     return NextResponse.json(
-      { inbox: { ...inbox, agency_meeting_url: agencyMeetingUrl }, response: response ?? null, versions },
+      { inbox: { ...inboxWithViewed, agency_meeting_url: agencyMeetingUrl }, response: response ?? null, versions },
       {
         headers: {
           "Cache-Control": "private, no-store, no-cache, must-revalidate",

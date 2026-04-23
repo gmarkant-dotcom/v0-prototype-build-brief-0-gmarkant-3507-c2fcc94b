@@ -25,6 +25,10 @@ type RFP = {
   deadline: string
   issuedBy: string
   meetingUrl?: string | null
+  sentAt?: string | null
+  responseDeadline?: string | null
+  partnerIntent?: "will_respond" | "has_questions" | "requesting_call" | null
+  viewedAt?: string | null
   status:
     | "submitted"
     | "under_review"
@@ -37,6 +41,25 @@ type RFP = {
     | "bid_submitted"
     | "feedback_received"
     | "revision_submitted"
+}
+
+function formatTimelineDateLabel(value?: string | null): string | null {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
+function isDeadlineWithin48Hours(value?: string | null): boolean {
+  if (!value) return false
+  const ts = new Date(value).getTime()
+  if (Number.isNaN(ts)) return false
+  const diff = ts - Date.now()
+  return diff > 0 && diff <= 48 * 60 * 60 * 1000
 }
 
 // Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
@@ -107,6 +130,17 @@ type PartnerInboxRow = {
   agency_feedback?: string | null
   feedback_updated_at?: string | null
   agency_meeting_url?: string | null
+  created_at?: string | null
+  response_deadline?: string | null
+  partner_intent?: "will_respond" | "has_questions" | "requesting_call" | null
+  viewed_at?: string | null
+}
+
+function partnerIntentTag(intent?: "will_respond" | "has_questions" | "requesting_call" | null): string | null {
+  if (!intent) return null
+  if (intent === "will_respond") return "Plans to respond"
+  if (intent === "has_questions") return "Has questions"
+  return "Requested call"
 }
 
 function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
@@ -152,6 +186,10 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
     deadline: "TBD",
     issuedBy: row.agency_company_name?.trim() || "Lead agency",
     meetingUrl: row.agency_meeting_url || null,
+    sentAt: row.created_at || null,
+    responseDeadline: row.response_deadline || null,
+    partnerIntent: row.partner_intent || null,
+    viewedAt: row.viewed_at || null,
     status: st,
   }
 }
@@ -166,6 +204,10 @@ export default function PartnerRFPsPage() {
   const [activeFilter, setActiveFilter] = useState<
     "all" | "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
   >("all")
+  const [inboxSortView, setInboxSortView] = useState<"all" | "new_unviewed" | "recently_received">("all")
+  const statusFilters: Array<
+    "all" | "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
+  > = ["all", "submitted", "under_review", "shortlisted", "meeting_requested", "awarded", "declined"]
 
   useEffect(() => {
     if (isDemo) return
@@ -198,10 +240,21 @@ export default function PartnerRFPsPage() {
     }
   }, [isDemo])
 
-  const filteredRfps = rfps.filter((rfp) => {
+  const statusFilteredRfps = rfps.filter((rfp) => {
     if (activeFilter === "all") return true
     return rfp.status === activeFilter
   })
+
+  const filteredRfps = [...statusFilteredRfps]
+    .filter((rfp) => {
+      if (inboxSortView === "new_unviewed") return !rfp.viewedAt
+      return true
+    })
+    .sort((a, b) => {
+      const ta = a.sentAt ? new Date(a.sentAt).getTime() : 0
+      const tb = b.sentAt ? new Date(b.sentAt).getTime() : 0
+      return tb - ta
+    })
 
   return (
     <PartnerLayout>
@@ -218,7 +271,7 @@ export default function PartnerRFPsPage() {
         
         {/* Status Filter */}
         <div className="flex gap-2">
-          {(["all", "submitted", "under_review", "shortlisted", "meeting_requested", "awarded", "declined"] as const).map((filter) => (
+          {statusFilters.map((filter) => (
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
@@ -234,6 +287,19 @@ export default function PartnerRFPsPage() {
                 : `${getBidStatusLabel(filter, "partner")} (${rfps.filter((r) => r.status === filter).length})`}
             </button>
           ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-gray-500">View</span>
+          <select
+            value={inboxSortView}
+            onChange={(e) => setInboxSortView(e.target.value as "all" | "new_unviewed" | "recently_received")}
+            className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-[#0C3535]"
+          >
+            <option value="all">All RFPs</option>
+            <option value="new_unviewed">New — not yet viewed</option>
+            <option value="recently_received">Recently received</option>
+          </select>
         </div>
         
         <div className="grid gap-4">
@@ -296,7 +362,49 @@ export default function PartnerRFPsPage() {
                         {getBidStatusLabel(rfp.status, "partner")}
                       </span>
                     )}
-                    <span className="font-mono text-[10px] text-gray-500">Deadline: {rfp.deadline}</span>
+                    {(() => {
+                      const sentLabel = formatTimelineDateLabel(rfp.sentAt)
+                      const dueLabel = formatTimelineDateLabel(rfp.responseDeadline)
+                      if (!sentLabel && !dueLabel) {
+                        if (rfp.deadline && rfp.deadline !== "TBD") {
+                          return (
+                            <span className="font-mono text-[10px] text-gray-500">
+                              Deadline: {rfp.deadline}
+                            </span>
+                          )
+                        }
+                        return null
+                      }
+                      return (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {sentLabel && (
+                            <span className="font-mono text-[10px] text-gray-500">Sent {sentLabel}</span>
+                          )}
+                          {dueLabel && (
+                            <span
+                              className={cn(
+                                "font-mono text-[10px]",
+                                isDeadlineWithin48Hours(rfp.responseDeadline)
+                                  ? "text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded"
+                                  : "text-gray-500"
+                              )}
+                            >
+                              Respond by {dueLabel}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })()}
+                    {partnerIntentTag(rfp.partnerIntent) && (
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                        {partnerIntentTag(rfp.partnerIntent)}
+                      </span>
+                    )}
+                    {!rfp.viewedAt && (
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[#0C3535] text-white">
+                        NEW
+                      </span>
+                    )}
                   </div>
                   <h3 className="font-display font-bold text-xl text-[#0C3535] group-hover:underline">
                     {rfp.title}

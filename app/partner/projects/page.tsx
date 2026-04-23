@@ -188,7 +188,18 @@ type ProductionProjectListItem = {
   client_name: string | null
   status: string
   agency?: { company_name?: string | null; full_name?: string | null } | null
-  assignment?: { status: string }
+  assignment?: { status: string; invited_at?: string | null }
+}
+
+function formatListDate(value?: string | null): string | null {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })
 }
 
 export default function PartnerProjectsPage() {
@@ -238,6 +249,7 @@ export default function PartnerProjectsPage() {
                   (p.title || p.name || "").trim() || "Untitled project"
                 const agency =
                   p.agency?.company_name || p.agency?.full_name || "Lead agency"
+                const invitedAt = formatListDate(p.assignment?.invited_at)
                 return (
                   <Link
                     key={p.id}
@@ -250,6 +262,9 @@ export default function PartnerProjectsPage() {
                         <p className="font-mono text-xs text-gray-500 mt-1">{agency}</p>
                         {p.client_name && (
                           <p className="text-sm text-gray-600 mt-2">Client: {p.client_name}</p>
+                        )}
+                        {invitedAt && (
+                          <p className="font-mono text-xs text-gray-500 mt-2">Invited {invitedAt}</p>
                         )}
                       </div>
                       <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 capitalize shrink-0">

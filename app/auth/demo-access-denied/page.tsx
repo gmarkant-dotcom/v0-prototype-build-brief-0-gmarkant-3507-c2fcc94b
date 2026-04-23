@@ -41,7 +41,7 @@ export default function DemoAccessDeniedPage() {
               </a>
             </Button>
             
-            <Button asChild variant="outline" className="w-full border-border/50 text-foreground-muted hover:text-foreground">
+            <Button asChild variant="outline" className="w-full border-border/50 text-foreground hover:text-foreground">
               <Link href="https://withligament.com">
                 Go to Production Site
                 <ArrowRight className="w-4 h-4 ml-2" />

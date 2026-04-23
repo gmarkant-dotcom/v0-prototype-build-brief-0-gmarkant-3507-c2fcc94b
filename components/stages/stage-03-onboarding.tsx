@@ -818,7 +818,7 @@ export function Stage03Onboarding() {
                 <Button
                   variant="ghost"
                   onClick={() => setCurrentStep("select_documents")}
-                  className="text-foreground-muted"
+                  className="text-foreground hover:text-foreground"
                 >
                   Back to Document Selection
                 </Button>
@@ -918,10 +918,10 @@ export function Stage03Onboarding() {
                           <span className="text-sm text-foreground font-medium truncate">{doc.name}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm" className="text-foreground-muted h-7 px-2">
+                          <Button variant="ghost" size="sm" className="text-foreground hover:text-foreground h-7 px-2">
                             <Eye className="w-3 h-3 mr-1" /> Preview
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-foreground-muted h-7 px-2">
+                          <Button variant="ghost" size="sm" className="text-foreground hover:text-foreground h-7 px-2">
                             <Download className="w-3 h-3 mr-1" /> Download
                           </Button>
                         </div>
@@ -936,7 +936,7 @@ export function Stage03Onboarding() {
                 <Button
                   variant="ghost"
                   onClick={() => setCurrentStep("review_partner_status")}
-                  className="text-foreground-muted"
+                  className="text-foreground hover:text-foreground"
                 >
                   Back to Partner Review
                 </Button>
@@ -1045,7 +1045,7 @@ export function Stage03Onboarding() {
                 <Button
                   variant="ghost"
                   onClick={() => setCurrentStep("customize_packet")}
-                  className="text-foreground-muted"
+                  className="text-foreground hover:text-foreground"
                 >
                   Back to Customize
                 </Button>

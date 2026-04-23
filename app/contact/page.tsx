@@ -192,7 +192,7 @@ function ContactFormContent() {
         </div>
 
         <div className="mt-6">
-          <Button asChild variant="ghost" className="text-foreground-muted">
+          <Button asChild variant="ghost" className="text-foreground hover:text-foreground">
             <Link href="/">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to home

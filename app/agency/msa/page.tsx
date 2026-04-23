@@ -206,7 +206,7 @@ export function AgencyMsaContent() {
       </div>
     )
   }
-  const { selectedProject } = projectContext
+  const { selectedProject, isLoadingProjects } = projectContext
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [agreements, setAgreements] = useState<MsaAgreement[]>([])
@@ -1841,6 +1841,10 @@ export function AgencyMsaContent() {
             ) : selectedProject && !selectedProjectGroup ? (
               <GlassCard className="p-8 text-center text-foreground-muted text-sm">
                 No cash flow or payment records found for the currently selected project yet.
+              </GlassCard>
+            ) : isLoadingProjects ? (
+              <GlassCard className="p-8 text-center text-foreground-muted text-sm">
+                Loading project context.
               </GlassCard>
             ) : (
               <GlassCard className="p-8 text-center text-foreground-muted text-sm">

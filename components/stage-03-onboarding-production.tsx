@@ -36,7 +36,7 @@ const DOC_OPTIONS = [
 
 export function Stage03OnboardingProduction() {
   const { checkFeatureAccess } = usePaidUser()
-  const { selectedProject } = useSelectedProject()
+  const { selectedProject, isLoadingProjects } = useSelectedProject()
   const [assignments, setAssignments] = useState<AssignmentRow[]>([])
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
@@ -70,6 +70,23 @@ export function Stage03OnboardingProduction() {
       cancelled = true
     }
   }, [selectedProject?.id])
+
+  if (isLoadingProjects) {
+    return (
+      <div className="p-8 max-w-6xl">
+        <StageHeader
+          stageNumber="03"
+          title="Onboarding + Ways of Working"
+          subtitle="Deploy materials to awarded partners."
+          aiPowered={false}
+        />
+        <div className="flex items-center gap-2 text-foreground-muted py-12">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Loading project…
+        </div>
+      </div>
+    )
+  }
 
   if (!selectedProject) {
     return (

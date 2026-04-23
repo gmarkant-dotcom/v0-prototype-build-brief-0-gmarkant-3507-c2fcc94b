@@ -116,7 +116,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
                   </p>
                 </div>
               </div>
-              <button onClick={handleClose} className="text-foreground-muted hover:text-foreground">
+              <button onClick={handleClose} className="text-foreground hover:text-accent">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -179,7 +179,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
                   type="button"
                   variant="outline"
                   onClick={handleClose}
-                  className="flex-1 border-border/50 text-foreground-muted"
+                  className="flex-1 border-border/50 text-foreground hover:text-foreground"
                 >
                   Cancel
                 </Button>

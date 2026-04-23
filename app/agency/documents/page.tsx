@@ -375,7 +375,7 @@ export default function DocumentsPage() {
                     <Button variant="outline" size="sm" className="flex-1 text-xs border-border text-foreground hover:bg-white/5">
                       Preview
                     </Button>
-                    <Button size="sm" className="flex-1 text-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/30">
+                    <Button size="sm" className="flex-1 text-xs bg-purple-600 text-white hover:bg-purple-700">
                       Create Partner Brief
                     </Button>
                   </div>

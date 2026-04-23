@@ -95,7 +95,7 @@ export function Stage03OnboardingWorkflow() {
   const searchParams = useSearchParams()
   const qProjectId = searchParams.get("projectId")
   const missedProjectRefreshRef = useRef(false)
-  const { selectedProject, setSelectedProject, projects, refreshProjects } = useSelectedProject()
+  const { selectedProject, setSelectedProject, projects, refreshProjects, isLoadingProjects } = useSelectedProject()
   const [onboardingPartners, setOnboardingPartners] = useState<OnboardingPartnerRow[]>([])
   const [library, setLibrary] = useState<LibraryRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -453,6 +453,23 @@ export function Stage03OnboardingWorkflow() {
     } finally {
       setSending(false)
     }
+  }
+
+  if (isLoadingProjects) {
+    return (
+      <div className="p-8 max-w-6xl">
+        <StageHeader
+          stageNumber="03"
+          title="Onboarding + Ways of Working"
+          subtitle="Build onboarding packages from your document library and send to assigned partners."
+          aiPowered={false}
+        />
+        <div className="flex items-center gap-2 text-foreground-muted py-12">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Loading project…
+        </div>
+      </div>
+    )
   }
 
   if (!selectedProject) {

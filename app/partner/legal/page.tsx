@@ -391,10 +391,10 @@ export default function PartnerLegalPage() {
                   <div>
                     {doc.status === "complete" ? (
                       <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" className="text-gray-500 hover:text-[#0C3535]">
+                        <Button variant="ghost" size="sm" className="text-gray-800 hover:text-[#0C3535]">
                           View
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-gray-500 hover:text-[#0C3535]">
+                        <Button variant="ghost" size="sm" className="text-gray-800 hover:text-[#0C3535]">
                           Replace
                         </Button>
                       </div>

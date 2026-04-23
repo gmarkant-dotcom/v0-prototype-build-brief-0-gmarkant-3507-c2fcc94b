@@ -13,6 +13,7 @@ type SelectedProjectContextType = {
   addProject: (project: Omit<MasterProject, "id">) => MasterProject
   refreshProjects: () => Promise<void>
   isDemo: boolean
+  isLoadingProjects: boolean
 }
 
 const SelectedProjectContext = createContext<SelectedProjectContextType | undefined>(undefined)
@@ -21,9 +22,11 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
   const [selectedProject, setSelectedProjectState] = useState<MasterProject | null>(null)
   const [projects, setProjects] = useState<MasterProject[]>([])
   const [isDemo, setIsDemo] = useState(false)
+  const [isLoadingProjects, setIsLoadingProjects] = useState(true)
 
   const refreshProjects = useCallback(async () => {
     if (isDemoMode()) return
+    setIsLoadingProjects(true)
     try {
       const res = await fetch("/api/projects")
       if (!res.ok) return
@@ -34,17 +37,26 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
       )
       setProjects(mapped)
       const savedId = typeof window !== "undefined" ? localStorage.getItem("selectedProjectId") : null
+
+      let nextSelection: MasterProject | null = null
       if (savedId) {
-        const found = mapped.find((x) => x.id === savedId)
-        if (found) {
-          setSelectedProjectState(found)
-        } else if (mapped.length > 0) {
-          setSelectedProjectState(null)
-          localStorage.removeItem("selectedProjectId")
-        }
+        nextSelection = mapped.find((x) => x.id === savedId) || null
+      }
+      if (!nextSelection && mapped.length > 0) {
+        // Default to most recently updated/created project (first row from API ordering).
+        nextSelection = mapped[0]
+      }
+
+      setSelectedProjectState(nextSelection)
+      if (nextSelection) {
+        localStorage.setItem("selectedProjectId", nextSelection.id)
+      } else {
+        localStorage.removeItem("selectedProjectId")
       }
     } catch {
       // ignore
+    } finally {
+      setIsLoadingProjects(false)
     }
   }, [])
 
@@ -59,8 +71,18 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
         const project = demoProjects.find((p) => p.id === savedSelection)
         if (project) {
           setSelectedProjectState(project)
+          setIsLoadingProjects(false)
+          return
         }
       }
+      if (demoProjects.length > 0) {
+        setSelectedProjectState(demoProjects[0])
+        localStorage.setItem("selectedProjectId", demoProjects[0].id)
+      } else {
+        setSelectedProjectState(null)
+        localStorage.removeItem("selectedProjectId")
+      }
+      setIsLoadingProjects(false)
       return
     }
 
@@ -95,6 +117,7 @@ export function SelectedProjectProvider({ children }: { children: ReactNode }) {
         addProject,
         refreshProjects,
         isDemo,
+        isLoadingProjects,
       }}
     >
       {children}

@@ -405,7 +405,7 @@ export function Stage05Utilization() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="border-border text-foreground-muted hover:text-foreground font-mono text-xs"
+                  className="border-border text-foreground hover:text-foreground font-mono text-xs"
                 >
                   <Send className="w-3 h-3 mr-1.5" />
                   Message Partner
@@ -447,7 +447,7 @@ export function Stage05Utilization() {
           <GlassCard className="mb-4 border-accent/30">
             <div className="flex items-center justify-between mb-4">
               <span className="font-mono text-sm text-accent">New Scope Change Request (Agency Initiated)</span>
-              <button onClick={() => setShowNewScopeRequest(false)} className="text-foreground-muted hover:text-foreground">
+              <button onClick={() => setShowNewScopeRequest(false)} className="text-foreground hover:text-accent">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -527,7 +527,7 @@ export function Stage05Utilization() {
                 size="sm"
                 variant="outline"
                 onClick={() => setShowNewScopeRequest(false)}
-                className="border-border text-foreground-muted font-mono text-xs"
+                  className="border-border text-foreground hover:text-foreground font-mono text-xs"
               >
                 Cancel
               </Button>
@@ -590,7 +590,7 @@ export function Stage05Utilization() {
                 <div className="font-display font-bold text-2xl text-foreground">{selectedRequest.description}</div>
                 <div className="font-mono text-sm text-foreground-muted">{selectedRequest.vendor} | {selectedRequest.id}</div>
               </div>
-              <button onClick={() => setSelectedRequest(null)} className="text-foreground-muted hover:text-foreground">
+              <button onClick={() => setSelectedRequest(null)} className="text-foreground hover:text-accent">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -847,7 +847,7 @@ export function Stage05Utilization() {
                               "px-2 py-1 rounded-full font-mono text-[10px] border transition-colors",
                               tempFlag === flag 
                                 ? getOverageFlagStyle(flag)
-                                : "bg-white/5 border-border/30 text-foreground-muted hover:border-border/50"
+                                : "bg-white/5 border-border/30 text-foreground hover:border-border/50"
                             )}
                           >
                             {getOverageFlagLabel(flag)}
@@ -918,7 +918,7 @@ export function Stage05Utilization() {
                       size="sm"
                       variant="outline"
                       onClick={() => setEditingId(null)}
-                      className="border-border text-foreground-muted font-mono text-xs"
+                      className="border-border text-foreground hover:text-foreground font-mono text-xs"
                     >
                       Cancel
                     </Button>
@@ -928,7 +928,7 @@ export function Stage05Utilization() {
                     size="sm"
                     variant="outline"
                     onClick={() => startEditing(record)}
-                    className="border-border text-foreground-muted hover:text-foreground font-mono text-xs"
+                    className="border-border text-foreground hover:text-foreground font-mono text-xs"
                   >
                     Update Status
                   </Button>

@@ -134,9 +134,20 @@ function statusBadgeClass(status: string | null): string {
   return "bg-white/10 text-foreground-muted border-border/60"
 }
 
+function formatTableDate(value: string | null): string {
+  if (!value) return "—"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "—"
+  return parsed.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
+}
+
 function ActiveEngagementsInner() {
   const searchParams = useSearchParams()
-  const { selectedProject, setSelectedProject, projects } = useSelectedProject()
+  const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
   const isDemo = isDemoMode()
   const [projectsData, setProjectsData] = useState<ProjectGroup[]>([])
   const [loading, setLoading] = useState(false)
@@ -521,7 +532,7 @@ function ActiveEngagementsInner() {
         </p>
       </div>
 
-      {!selectedProject && (
+      {!isLoadingProjects && !selectedProject && (
         <GlassCard className="p-8 text-center text-foreground-muted text-sm">
           Select a project to view its active engagements.
         </GlassCard>
@@ -558,6 +569,7 @@ function ActiveEngagementsInner() {
                       <tr className="font-mono text-[10px] uppercase text-foreground-muted text-left border-b border-border/40">
                         <th className="py-2 pr-3 font-medium">Partner</th>
                         <th className="py-2 pr-3 font-medium">Status</th>
+                        <th className="py-2 pr-3 font-medium">Awarded</th>
                         <th className="py-2 pr-3 font-medium">Progress</th>
                         <th className="py-2 pr-3 font-medium">Scope</th>
                         <th className="py-2 pr-3 font-medium">Budget</th>
@@ -686,6 +698,9 @@ function ActiveEngagementsInner() {
                                   : "No updates"}
                               </span>
                             </button>
+                          </td>
+                          <td className="py-3 pr-3 text-foreground/90 whitespace-nowrap">
+                            {formatTableDate(row.awardedAt)}
                           </td>
                           <td className="py-3 pr-3 w-[100px]">
                             <div className="flex flex-col gap-1">

@@ -66,7 +66,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     if (!existing) return NextResponse.json({ error: "Response not found" }, { status: 404 })
 
-    const nextStatus = body.status ?? existing.status
+    const incomingAgencyFeedback =
+      typeof body.agency_feedback === "string" ? body.agency_feedback.trim() : ""
+    const existingAgencyFeedback = (existing.agency_feedback || "").trim()
+    const shouldSendAgencyFeedbackEmail =
+      incomingAgencyFeedback.length > 0 && incomingAgencyFeedback !== existingAgencyFeedback
+    const shouldAutoTransitionToUnderReview =
+      incomingAgencyFeedback.length > 0 &&
+      existing.status === "submitted" &&
+      (body.status === undefined || body.status === "submitted")
+
+    const nextStatus = shouldAutoTransitionToUnderReview
+      ? "under_review"
+      : body.status ?? existing.status
     if (!ALLOWED_STATUS.has(nextStatus)) {
       return NextResponse.json({ error: "Invalid status value" }, { status: 400 })
     }
@@ -232,6 +244,72 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         code: inboxStatusErr.code,
       })
       return NextResponse.json({ error: "Bid updated but inbox status sync failed." }, { status: 500 })
+    }
+
+    if (shouldSendAgencyFeedbackEmail) {
+      const [{ data: partner, error: partnerErr }, { data: inboxRow, error: inboxErr }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select("email")
+            .eq("id", existing.partner_id)
+            .maybeSingle(),
+          supabase
+            .from("partner_rfp_inbox")
+            .select("scope_item_name")
+            .eq("id", existing.inbox_item_id)
+            .eq("agency_id", user.id)
+            .maybeSingle(),
+        ])
+
+      if (partnerErr) {
+        console.error("[api] feedback email: partner profile select failed", {
+          route,
+          responseId: id,
+          partnerId: existing.partner_id,
+          message: partnerErr.message,
+          code: partnerErr.code,
+        })
+      }
+      if (inboxErr) {
+        console.error("[api] feedback email: inbox select failed", {
+          route,
+          responseId: id,
+          inbox_item_id: existing.inbox_item_id,
+          message: inboxErr.message,
+          code: inboxErr.code,
+        })
+      }
+
+      const scopeName = inboxRow?.scope_item_name?.trim?.() || ""
+      const agencyName = profile.company_name || profile.full_name || "Lead agency"
+      const feedbackSubject = scopeName
+        ? `Feedback received on your bid for ${scopeName}`
+        : "Feedback received on your recent bid submission"
+      const resendApiKey = process.env.RESEND_API_KEY
+      if (resendApiKey && partner?.email) {
+        try {
+          const resend = new Resend(resendApiKey)
+          await resend.emails.send({
+            from: "Ligament <notifications@withligament.com>",
+            to: partner.email,
+            cc: "hello@withligament.com",
+            subject: feedbackSubject,
+            html: `
+            <p>${agencyName} has reviewed your bid for ${scopeName || "this scope"} and left feedback for your consideration.</p>
+            <p>Log in to your Ligament partner portal to view the feedback and update your submission if needed.</p>
+            <p><a href="https://withligament.com/partner/rfps/${existing.inbox_item_id}">View Feedback</a></p>
+            <p>The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
+          `,
+          })
+        } catch (emailErr) {
+          console.error("[api] feedback email: Resend send failed", {
+            route,
+            responseId: id,
+            message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+          })
+        }
+      }
     }
 
     if (awardContext) {
