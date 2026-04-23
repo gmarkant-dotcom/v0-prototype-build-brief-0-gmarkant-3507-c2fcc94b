@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -15,6 +15,20 @@ import { cn } from "@/lib/utils"
 type UserRole = "agency" | "partner"
 
 export default function SignUpPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="animate-pulse text-foreground-muted">Loading...</div>
+        </div>
+      }
+    >
+      <SignUpContent />
+    </Suspense>
+  )
+}
+
+function SignUpContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const inviteToken = (searchParams.get("invite") || "").trim()
