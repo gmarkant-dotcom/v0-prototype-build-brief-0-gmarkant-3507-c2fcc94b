@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { Resend } from "resend"
+import { siteBaseUrl } from "@/lib/email"
 
 type ScopeItemPayload = {
   id: string
@@ -67,17 +68,30 @@ export async function POST(request: NextRequest) {
 
     const agencyDisplay =
       profile.company_name?.trim() || profile.full_name?.trim() || "Lead agency"
+    const baseUrl = siteBaseUrl()
 
     const rows: Record<string, unknown>[] = []
+    const seenRecipientKeys = new Set<string>()
     const nonNdaExistingPartnerNotifications: {
       partnerEmail: string
       partnerName: string
       scopeName: string
     }[] = []
+    const nonNdaNewRecipientNotifications: {
+      recipientEmail: string
+      recipientName: string
+      scopeName: string
+    }[] = []
 
     for (const item of items) {
       const si = item.scopeItem
-      if (!si?.id) continue
+      const scopeItemId =
+        (typeof si?.id === "string" && si.id.trim()) ||
+        (typeof item.scopeItemId === "string" && item.scopeItemId.trim()) ||
+        ""
+      if (!scopeItemId) {
+        return NextResponse.json({ error: "Each broadcast item requires scopeItem.id" }, { status: 400 })
+      }
 
       const scopeItemName = (si.name || "Scope").toString()
       const scopeItemDescription = (si.description || "").toString()
@@ -110,13 +124,17 @@ export async function POST(request: NextRequest) {
           )
         }
 
+        const partnerScopeKey = `partner:${scopeItemId}:${partnerId}`
+        if (seenRecipientKeys.has(partnerScopeKey)) continue
+        seenRecipientKeys.add(partnerScopeKey)
+
         rows.push({
           agency_id: user.id,
           partner_id: partnerId,
           recipient_email: null,
           partnership_id: partnership.id,
           project_id: projectId,
-          scope_item_id: si.id,
+          scope_item_id: scopeItemId,
           scope_item_name: scopeItemName,
           scope_item_description: scopeItemDescription || null,
           estimated_budget: estimatedBudget || null,
@@ -130,6 +148,9 @@ export async function POST(request: NextRequest) {
         const partnerEmail = partnership?.partner?.email || ""
         const partnerName =
           partnership?.partner?.company_name || partnership?.partner?.full_name || partnerEmail || "Partner"
+        if (partnerEmail) {
+          seenRecipientKeys.add(`email:${scopeItemId}:${partnerEmail.trim().toLowerCase()}`)
+        }
         if (!ndaRequired && partnerEmail) {
           nonNdaExistingPartnerNotifications.push({
             partnerEmail,
@@ -163,7 +184,7 @@ export async function POST(request: NextRequest) {
                   </p>
                   <p style="font-family:system-ui,sans-serif">
                     The Ligament Team<br />
-                    <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+                    <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
                   </p>
                 `,
               })
@@ -175,13 +196,21 @@ export async function POST(request: NextRequest) {
       for (const nr of item.newRecipients || []) {
         const email = (nr?.email || "").trim().toLowerCase()
         if (!email) continue
+        const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+        if (!isValidEmail) {
+          return NextResponse.json({ error: `Invalid recipient email: ${email}` }, { status: 400 })
+        }
+        const manualScopeKey = `email:${scopeItemId}:${email}`
+        if (seenRecipientKeys.has(manualScopeKey)) continue
+        seenRecipientKeys.add(manualScopeKey)
+
         rows.push({
           agency_id: user.id,
           partner_id: null,
           recipient_email: email,
           partnership_id: null,
           project_id: projectId,
-          scope_item_id: si.id,
+          scope_item_id: scopeItemId,
           scope_item_name: scopeItemName,
           scope_item_description: scopeItemDescription || null,
           estimated_budget: estimatedBudget || null,
@@ -191,6 +220,15 @@ export async function POST(request: NextRequest) {
           agency_company_name: agencyDisplay,
           status: "new",
         })
+
+        const recipientName = nr?.name?.trim?.() || email
+        if (!ndaRequired || !nr?.requireNda) {
+          nonNdaNewRecipientNotifications.push({
+            recipientEmail: email,
+            recipientName,
+            scopeName: scopeItemName,
+          })
+        }
 
         if (ndaRequired && nr?.requireNda) {
           const resendApiKey = process.env.RESEND_API_KEY
@@ -215,7 +253,7 @@ export async function POST(request: NextRequest) {
                 </p>
                 <p style="font-family:system-ui,sans-serif">
                   The Ligament Team<br />
-                  <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+                  <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
                 </p>
               `,
             })
@@ -259,11 +297,41 @@ export async function POST(request: NextRequest) {
                 Review the scope, timeline, and budget details, then submit your bid directly through the platform.
               </p>
               <p style="font-family:system-ui,sans-serif">
-                <a href="https://withligament.com/partner/rfps" style="font-weight:700;color:#0C3535">View RFP</a>
+                <a href="${baseUrl}/partner/rfps" style="font-weight:700;color:#0C3535">View RFP</a>
               </p>
               <p style="font-family:system-ui,sans-serif">
                 The Ligament Team<br />
-                <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+                <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
+              </p>
+            `,
+          })
+        }
+      }
+    }
+
+    if (nonNdaNewRecipientNotifications.length > 0) {
+      const resendApiKey = process.env.RESEND_API_KEY
+      if (resendApiKey) {
+        const resend = new Resend(resendApiKey)
+        for (const notification of nonNdaNewRecipientNotifications) {
+          await resend.emails.send({
+            from: "Ligament <notifications@withligament.com>",
+            to: notification.recipientEmail,
+            subject: `New RFP from ${agencyDisplay}: ${notification.scopeName}`,
+            html: `
+              <p style="font-family:system-ui,sans-serif">Hi ${notification.recipientName},</p>
+              <p style="font-family:system-ui,sans-serif">
+                ${agencyDisplay} has sent you an RFP for ${notification.scopeName} on Ligament.
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                Review the scope, timeline, and budget details, then submit your bid directly through the platform.
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                <a href="${baseUrl}/partner/rfps" style="font-weight:700;color:#0C3535">View RFP</a>
+              </p>
+              <p style="font-family:system-ui,sans-serif">
+                The Ligament Team<br />
+                <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
               </p>
             `,
           })

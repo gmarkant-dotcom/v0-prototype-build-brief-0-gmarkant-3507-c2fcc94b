@@ -109,7 +109,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                         "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
                         isActive
                           ? "bg-white/10 text-[#C8F53C]"
-                          : "text-white/70 hover:text-white hover:bg-white/5"
+                          : "text-white/90 hover:text-white hover:bg-white/5"
                       )}
                     >
                       <span>{item.icon}</span>
@@ -124,7 +124,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               {isDemo && (
                 <Link 
                   href="/agency" 
-                  className="font-mono text-[10px] text-white/60 hover:text-[#C8F53C] transition-colors"
+                  className="font-mono text-[10px] text-white/85 hover:text-[#C8F53C] transition-colors"
                 >
                   Switch to Lead Agency View →
                 </Link>

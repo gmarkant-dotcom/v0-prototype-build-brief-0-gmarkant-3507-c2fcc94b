@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
+import { siteBaseUrl } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -287,6 +288,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ? `Feedback received on your bid for ${scopeName}`
         : "Feedback received on your recent bid submission"
       const resendApiKey = process.env.RESEND_API_KEY
+      const baseUrl = siteBaseUrl()
       if (resendApiKey && partner?.email) {
         try {
           const resend = new Resend(resendApiKey)
@@ -298,8 +300,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             html: `
             <p>${agencyName} has reviewed your bid for ${scopeName || "this scope"} and left feedback for your consideration.</p>
             <p>Log in to your Ligament partner portal to view the feedback and update your submission if needed.</p>
-            <p><a href="https://withligament.com/partner/rfps/${existing.inbox_item_id}">View Feedback</a></p>
-            <p>The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
+            <p><a href="${baseUrl}/partner/rfps/${existing.inbox_item_id}">View Feedback</a></p>
+            <p>The Ligament Team<br /><a href="${baseUrl}">withligament.com</a></p>
           `,
           })
         } catch (emailErr) {
@@ -402,6 +404,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           ? `You've been awarded ${scopeItemName} - ${projectName}`
           : "You've been selected for this project"
       const resendApiKey = process.env.RESEND_API_KEY
+      const baseUrl = siteBaseUrl()
       if (resendApiKey && partner?.email) {
         try {
           const resend = new Resend(resendApiKey)
@@ -416,8 +419,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               You are officially on board for ${projectName}. Expect onboarding materials from ${leadAgencyName}
               shortly with next steps, kickoff details, and project documents.
             </p>
-            <p><a href="https://withligament.com/partner/rfps">View Project</a></p>
-            <p>The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
+            <p><a href="${baseUrl}/partner/rfps">View Project</a></p>
+            <p>The Ligament Team<br /><a href="${baseUrl}">withligament.com</a></p>
           `,
           })
         } catch (emailErr) {
@@ -470,6 +473,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ? `Update on your bid for ${scopeItemName}`
         : "Update on your recent bid submission"
       const resendApiKey = process.env.RESEND_API_KEY
+      const baseUrl = siteBaseUrl()
       if (resendApiKey && partner?.email) {
         try {
           const resend = new Resend(resendApiKey)
@@ -489,8 +493,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               project.
             </p>
             ${declineReason ? `<p><strong>Reason:</strong> ${declineReason}</p>` : ""}
-            <p><a href="https://withligament.com/partner/rfps">View Update</a></p>
-            <p>The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
+            <p><a href="${baseUrl}/partner/rfps">View Update</a></p>
+            <p>The Ligament Team<br /><a href="${baseUrl}">withligament.com</a></p>
           `,
           })
         } catch (emailErr) {

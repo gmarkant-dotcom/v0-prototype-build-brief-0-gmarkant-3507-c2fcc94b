@@ -32,7 +32,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required record fields" }, { status: 500 })
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+    const appUrlRaw = process.env.NEXT_PUBLIC_APP_URL || "https://www.withligament.com"
+    const appUrl = appUrlRaw
+      .replace(/\/$/, "")
+      .replace("https://withligament.com", "https://www.withligament.com")
     const resendApiKey = process.env.RESEND_API_KEY
 
     if (!appUrl || !resendApiKey) {
@@ -85,7 +88,7 @@ export async function POST(req: Request) {
             </p>
             <p style="font-size: 12px; line-height: 1.5; color: #6b7280; margin: 20px 0 0;">
               The Ligament Team<br />
-              <a href="https://withligament.com" style="color: #6b7280;">withligament.com</a>
+              <a href="https://www.withligament.com" style="color: #6b7280;">withligament.com</a>
             </p>
           </div>
         </div>

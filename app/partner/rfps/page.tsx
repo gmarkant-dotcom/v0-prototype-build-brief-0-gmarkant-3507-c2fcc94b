@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
 import { cn } from "@/lib/utils"
@@ -240,21 +240,22 @@ export default function PartnerRFPsPage() {
     }
   }, [isDemo])
 
-  const statusFilteredRfps = rfps.filter((rfp) => {
-    if (activeFilter === "all") return true
-    return rfp.status === activeFilter
-  })
-
-  const filteredRfps = [...statusFilteredRfps]
-    .filter((rfp) => {
-      if (inboxSortView === "new_unviewed") return !rfp.viewedAt
-      return true
+  const filteredRfps = useMemo(() => {
+    const statusFiltered = rfps.filter((rfp) => {
+      if (activeFilter === "all") return true
+      return rfp.status === activeFilter
     })
-    .sort((a, b) => {
-      const ta = a.sentAt ? new Date(a.sentAt).getTime() : 0
-      const tb = b.sentAt ? new Date(b.sentAt).getTime() : 0
-      return tb - ta
-    })
+    return [...statusFiltered]
+      .filter((rfp) => {
+        if (inboxSortView === "new_unviewed") return !rfp.viewedAt
+        return true
+      })
+      .sort((a, b) => {
+        const ta = a.sentAt ? new Date(a.sentAt).getTime() : 0
+        const tb = b.sentAt ? new Date(b.sentAt).getTime() : 0
+        return tb - ta
+      })
+  }, [rfps, activeFilter, inboxSortView])
 
   return (
     <PartnerLayout>
@@ -324,6 +325,15 @@ export default function PartnerRFPsPage() {
             <Link
               key={rfp.id}
               href={`/partner/rfps/${encodeURIComponent(rfp.id)}`}
+              onClick={() => {
+                setRfps((prev) =>
+                  prev.map((item) =>
+                    item.id === rfp.id && !item.viewedAt
+                      ? { ...item, viewedAt: new Date().toISOString() }
+                      : item
+                  )
+                )
+              }}
               className={cn(
                 "block bg-white rounded-xl border p-6 hover:border-[#0C3535]/40 transition-colors cursor-pointer group",
                 rfp.status === "feedback_received" ? "border-orange-200" : "border-gray-200",

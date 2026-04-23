@@ -3,6 +3,7 @@ import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
+import { siteBaseUrl } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -301,6 +302,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const bidUpdateSubject = scopeItemName
             ? `${partner_display_name} updated their bid on ${scopeItemName}`
             : `${partner_display_name} resubmitted a bid`
+          const baseUrl = siteBaseUrl()
           const resend = new Resend(resendApiKey)
           await resend.emails.send({
             from: "Ligament <notifications@withligament.com>",
@@ -310,8 +312,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             html: `
               <p>${partner_display_name} has submitted a revised bid for ${scopeItemName} on ${projectName}.</p>
               <p>Log in to review the updated submission and respond.</p>
-              <p><a href="https://withligament.com/agency/bids">Review Bid</a></p>
-              <p>The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
+              <p><a href="${baseUrl}/agency/bids">Review Bid</a></p>
+              <p>The Ligament Team<br /><a href="${baseUrl}">withligament.com</a></p>
             `,
           })
         }

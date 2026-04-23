@@ -100,7 +100,7 @@ export default function BillingSettingsPage() {
                 </div>
               </div>
             </div>
-            <span className="font-mono text-[10px] px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/30">
+            <span className="font-mono text-[10px] px-3 py-1 rounded-full bg-green-900/30 text-green-100 border border-green-400/40">
               Active
             </span>
           </div>

@@ -160,13 +160,13 @@ const demoScopeRequests: ScopeChangeRequest[] = [
 const getOverageFlagStyle = (flag: PartnerUtilizationInput["overageFlag"]) => {
   switch (flag) {
     case "none":
-      return "bg-green-500/10 text-green-400 border-green-500/30"
+      return "bg-green-900/30 text-green-100 border-green-400/40"
     case "at_risk":
-      return "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+      return "bg-yellow-900/30 text-yellow-100 border-yellow-400/40"
     case "overburn":
-      return "bg-red-500/10 text-red-400 border-red-500/30"
+      return "bg-red-900/30 text-red-100 border-red-400/40"
     case "scope_change":
-      return "bg-purple-500/10 text-purple-400 border-purple-500/30"
+      return "bg-purple-900/30 text-purple-100 border-purple-400/40"
   }
 }
 
@@ -186,15 +186,15 @@ const getOverageFlagLabel = (flag: PartnerUtilizationInput["overageFlag"]) => {
 const getStatusStyle = (status: ScopeChangeRequest["status"]) => {
   switch (status) {
     case "draft":
-      return "bg-gray-500/10 text-gray-400 border-gray-500/30"
+      return "bg-gray-800/40 text-gray-100 border-gray-400/40"
     case "submitted":
-      return "bg-blue-500/10 text-blue-400 border-blue-500/30"
+      return "bg-blue-900/30 text-blue-100 border-blue-400/40"
     case "under_review":
-      return "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+      return "bg-yellow-900/30 text-yellow-100 border-yellow-400/40"
     case "approved":
-      return "bg-green-500/10 text-green-400 border-green-500/30"
+      return "bg-green-900/30 text-green-100 border-green-400/40"
     case "rejected":
-      return "bg-red-500/10 text-red-400 border-red-500/30"
+      return "bg-red-900/30 text-red-100 border-red-400/40"
   }
 }
 
@@ -561,7 +561,7 @@ export function Stage05Utilization() {
                 </span>
                 <span className={cn(
                   "font-mono text-[10px] px-2 py-0.5 rounded border",
-                  request.initiatedBy === "partner" ? "bg-purple-500/10 text-purple-400 border-purple-500/30" : "bg-accent/10 text-accent border-accent/30"
+                  request.initiatedBy === "partner" ? "bg-purple-900/30 text-purple-100 border-purple-400/40" : "bg-accent/20 text-accent border-accent/40"
                 )}>
                   {request.initiatedBy === "partner" ? "Partner Initiated" : "Agency Initiated"}
                 </span>
@@ -617,7 +617,7 @@ export function Stage05Utilization() {
               <div className="p-4 bg-white/5 rounded-lg border border-border/30 text-center">
                 <div className={cn(
                   "font-mono text-sm px-2 py-1 rounded border inline-block",
-                  selectedRequest.initiatedBy === "partner" ? "bg-purple-500/10 text-purple-400 border-purple-500/30" : "bg-accent/10 text-accent border-accent/30"
+                  selectedRequest.initiatedBy === "partner" ? "bg-purple-900/30 text-purple-100 border-purple-400/40" : "bg-accent/20 text-accent border-accent/40"
                 )}>
                   {selectedRequest.initiatedBy === "partner" ? "Partner" : "Lead Agency"}
                 </div>
@@ -724,9 +724,9 @@ export function Stage05Utilization() {
                   </div>
                   <span className={cn(
                     "font-mono text-[9px] px-2 py-0.5 rounded-full border capitalize",
-                    record.paymentType === "fixed" && "bg-blue-500/10 text-blue-400 border-blue-500/30",
-                    record.paymentType === "hourly" && "bg-purple-500/10 text-purple-400 border-purple-500/30",
-                    record.paymentType === "retainer" && "bg-green-500/10 text-green-400 border-green-500/30",
+                    record.paymentType === "fixed" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
+                    record.paymentType === "hourly" && "bg-purple-900/30 text-purple-100 border-purple-400/40",
+                    record.paymentType === "retainer" && "bg-green-900/30 text-green-100 border-green-400/40",
                     record.paymentType === "milestone" && "bg-accent/10 text-accent border-accent/30"
                   )}>
                     {record.paymentType}

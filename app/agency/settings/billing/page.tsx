@@ -106,7 +106,7 @@ export default function AgencyBillingSettingsPage() {
                 <div className="text-foreground-muted">$699 · monthly · Renews Apr 1, 2026</div>
               </div>
             </div>
-            <span className="font-mono text-[10px] px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/30">
+            <span className="font-mono text-[10px] px-3 py-1 rounded-full bg-green-900/30 text-green-100 border border-green-400/40">
               Active
             </span>
           </div>
@@ -214,7 +214,7 @@ export default function AgencyBillingSettingsPage() {
                     <td className="py-3 text-foreground">{row.description}</td>
                     <td className="py-3 text-right text-foreground">{row.amount}</td>
                     <td className="py-3 text-right">
-                      <span className="font-mono text-[10px] px-2 py-1 rounded-full border border-green-500/30 bg-green-500/10 text-green-400">
+                      <span className="font-mono text-[10px] px-2 py-1 rounded-full border border-green-400/40 bg-green-900/30 text-green-100">
                         {row.status}
                       </span>
                     </td>

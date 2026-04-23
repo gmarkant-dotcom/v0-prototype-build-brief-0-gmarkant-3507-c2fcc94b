@@ -102,8 +102,8 @@ export async function PATCH(
         if (recipientEmail) {
           const recipientIsAgency = counterpartProfile?.role === 'agency'
           const viewPath = recipientIsAgency
-            ? `/agency/project?projectId=${encodeURIComponent(projectId)}`
-            : `/partner/projects/${projectId}`
+            ? `/agency/dashboard`
+            : `/partner/projects`
           const viewUrl = `${siteBaseUrl()}${viewPath}`
 
           const emailByStatus: Record<'viewed' | 'signed' | 'declined', { subject: string; body: string }> = {
@@ -131,7 +131,7 @@ export async function PATCH(
               </p>
               <p style="font-family:system-ui,sans-serif">
                 The Ligament Team<br />
-                <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+                <a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a>
               </p>
             `,
           })

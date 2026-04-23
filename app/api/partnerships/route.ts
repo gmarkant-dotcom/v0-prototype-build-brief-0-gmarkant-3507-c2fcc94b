@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { Resend } from 'resend'
+import { siteBaseUrl } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -324,11 +325,11 @@ export async function POST(request: NextRequest) {
         if (resendApiKey) {
           const { Resend } = await import('resend')
           const resend = new Resend(resendApiKey)
-          const siteUrl = 'https://withligament.com'
+          const siteUrl = siteBaseUrl()
           // If partner has an account, link to invitations page; otherwise link to signup
           const acceptUrl = existingPartnerId 
             ? `${siteUrl}/partner/invitations` 
-            : `${siteUrl}/signup?email=${encodeURIComponent(partnerEmail)}&invite=${reactivated.id}`
+            : `${siteUrl}/partner/invitations`
 
           await resend.emails.send({
             from: 'Ligament <notifications@withligament.com>',
@@ -427,10 +428,10 @@ export async function POST(request: NextRequest) {
       try {
         const resend = new Resend(resendApiKey)
         // Always use production URL for email links (not sandbox URLs)
-        const siteUrl = 'https://withligament.com'
+        const siteUrl = siteBaseUrl()
         const acceptUrl = partner 
           ? `${siteUrl}/partner/invitations` 
-          : `${siteUrl}/signup?email=${encodeURIComponent(partnerEmail)}&invite=${partnership.id}`
+          : `${siteUrl}/partner/invitations`
         
         await resend.emails.send({
           from: 'Ligament <notifications@withligament.com>',
@@ -613,7 +614,7 @@ export async function PATCH(request: NextRequest) {
             html: `<p style="font-family:system-ui,sans-serif">${partnerName} has accepted your invitation and joined your partner network on Ligament.</p>
               <p style="font-family:system-ui,sans-serif">They are now available to receive RFP broadcasts from your agency.</p>
               <p><a href="${siteBaseUrl()}/agency/pool">View Partner</a></p>
-              <p style="font-family:system-ui,sans-serif">The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>`,
+              <p style="font-family:system-ui,sans-serif">The Ligament Team<br /><a href="${siteBaseUrl()}">withligament.com</a></p>`,
           })
         }
         

@@ -485,11 +485,11 @@ const demoBids: Bid[] = [
 const getRecommendationStyle = (rec: Bid["recommendation"]) => {
   switch (rec) {
     case "advance":
-      return "bg-green-500/10 text-green-400 border-green-500/30"
+      return "bg-green-900/30 text-green-100 border-green-400/40"
     case "clarify":
-      return "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+      return "bg-yellow-900/30 text-yellow-100 border-yellow-400/40"
     case "decline":
-      return "bg-red-500/10 text-red-400 border-red-500/30"
+      return "bg-red-900/30 text-red-100 border-red-400/40"
   }
 }
 
@@ -505,7 +505,7 @@ export function Stage02Bids() {
   const isDemo = isDemoMode()
   const sampleBids = isDemo ? demoBids : []
   const { checkFeatureAccess } = usePaidUser()
-  const { selectedProject } = useSelectedProject()
+  const { selectedProject, isLoadingProjects } = useSelectedProject()
   
   const [selectedBid, setSelectedBid] = useState<string | null>(null)
   const [awardedVendors, setAwardedVendors] = useState<string[]>([])
@@ -565,7 +565,16 @@ export function Stage02Bids() {
           subtitle="Review partner proposals from broadcast RFPs. Submissions appear below from partner_rfp_responses. AI scoring and comparison cards are available in demo preview."
           aiPowered
         />
-        <AgencyBroadcastResponsesPanel projectId={selectedProject?.id ?? null} />
+        {isLoadingProjects ? (
+          <GlassCard className="mt-6">
+            <div className="flex items-center gap-3 text-foreground-muted">
+              <span className="inline-flex h-4 w-4 animate-spin rounded-full border-2 border-foreground-muted/40 border-t-accent" />
+              <span className="font-mono text-sm">Loading project…</span>
+            </div>
+          </GlassCard>
+        ) : (
+          <AgencyBroadcastResponsesPanel projectId={selectedProject?.id ?? null} />
+        )}
       </div>
     )
   }
@@ -673,9 +682,9 @@ export function Stage02Bids() {
               <div className="flex items-center gap-2 mb-3">
                 <span className={cn(
                   "font-mono text-[9px] px-2 py-0.5 rounded-full border capitalize",
-                  bid.submission.paymentTerms.type === "fixed" && "bg-blue-500/10 text-blue-400 border-blue-500/30",
-                  bid.submission.paymentTerms.type === "hourly" && "bg-purple-500/10 text-purple-400 border-purple-500/30",
-                  bid.submission.paymentTerms.type === "retainer" && "bg-green-500/10 text-green-400 border-green-500/30",
+                  bid.submission.paymentTerms.type === "fixed" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
+                  bid.submission.paymentTerms.type === "hourly" && "bg-purple-900/30 text-purple-100 border-purple-400/40",
+                  bid.submission.paymentTerms.type === "retainer" && "bg-green-900/30 text-green-100 border-green-400/40",
                   bid.submission.paymentTerms.type === "milestone" && "bg-accent/10 text-accent border-accent/30"
                 )}>
                   {bid.submission.paymentTerms.type}
@@ -690,7 +699,7 @@ export function Stage02Bids() {
                   Submitted {bid.submitted}
                 </div>
                 {bid.currentVersion > 1 && (
-                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-100 border border-blue-400/40">
                     V{bid.currentVersion}
                   </span>
                 )}
@@ -700,11 +709,11 @@ export function Stage02Bids() {
               {bid.status !== "pending_review" && (
                 <div className={cn(
                   "flex items-center gap-2 mb-3 font-mono text-[10px] px-2 py-1 rounded-lg",
-                  bid.status === "feedback_sent" && "bg-yellow-500/10 text-yellow-400",
-                  bid.status === "revision_requested" && "bg-orange-500/10 text-orange-400",
-                  bid.status === "revision_received" && "bg-blue-500/10 text-blue-400",
-                  bid.status === "shortlisted" && "bg-purple-500/10 text-purple-400",
-                  bid.status === "awarded" && "bg-green-500/10 text-green-400",
+                  bid.status === "feedback_sent" && "bg-yellow-900/30 text-yellow-100",
+                  bid.status === "revision_requested" && "bg-orange-900/30 text-orange-100",
+                  bid.status === "revision_received" && "bg-blue-900/30 text-blue-100",
+                  bid.status === "shortlisted" && "bg-purple-900/30 text-purple-100",
+                  bid.status === "awarded" && "bg-green-900/30 text-green-100",
                 )}>
                   {bid.status === "feedback_sent" && <><MessageSquare className="w-3 h-3" /> Feedback Sent</>}
                   {bid.status === "revision_requested" && <><AlertCircle className="w-3 h-3" /> Revision Requested</>}
@@ -988,7 +997,7 @@ export function Stage02Bids() {
                     "flex items-center gap-2 px-4 py-3 font-mono text-sm border-b-2 transition-colors",
                     submissionTab === tab.key 
                       ? "border-accent text-accent" 
-                      : "border-transparent text-foreground-muted hover:text-foreground"
+                      : "border-transparent text-foreground/80 hover:text-foreground"
                   )}
                 >
                   <tab.icon className="w-4 h-4" />
@@ -1253,9 +1262,9 @@ export function Stage02Bids() {
                     </div>
                     <span className={cn(
                       "font-mono text-sm px-3 py-1 rounded-full border capitalize",
-                      selectedBidData.submission.paymentTerms.type === "fixed" && "bg-blue-500/10 text-blue-400 border-blue-500/30",
-                      selectedBidData.submission.paymentTerms.type === "hourly" && "bg-purple-500/10 text-purple-400 border-purple-500/30",
-                      selectedBidData.submission.paymentTerms.type === "retainer" && "bg-green-500/10 text-green-400 border-green-500/30",
+                      selectedBidData.submission.paymentTerms.type === "fixed" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
+                      selectedBidData.submission.paymentTerms.type === "hourly" && "bg-purple-900/30 text-purple-100 border-purple-400/40",
+                      selectedBidData.submission.paymentTerms.type === "retainer" && "bg-green-900/30 text-green-100 border-green-400/40",
                       selectedBidData.submission.paymentTerms.type === "milestone" && "bg-accent/10 text-accent border-accent/30"
                     )}>
                       {selectedBidData.submission.paymentTerms.type === "milestone" ? "Milestone-Based" : selectedBidData.submission.paymentTerms.type}
@@ -1373,7 +1382,7 @@ export function Stage02Bids() {
                       variant="outline"
                       size="sm"
                       onClick={() => setShowVersionHistory(!showVersionHistory)}
-                      className="border-border/50 text-foreground-muted hover:text-foreground"
+                      className="border-border/50 text-foreground/80 hover:text-foreground"
                     >
                       <History className="w-4 h-4 mr-2" />
                       Version History ({selectedBidData.versions.length})
@@ -1443,9 +1452,9 @@ export function Stage02Bids() {
                                   <span className="font-medium text-foreground">{item.sentBy}</span>
                                   <span className={cn(
                                     "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize",
-                                    item.type === "question" && "bg-blue-500/10 text-blue-400",
-                                    item.type === "revision_request" && "bg-orange-500/10 text-orange-400",
-                                    item.type === "clarification" && "bg-yellow-500/10 text-yellow-400"
+                                    item.type === "question" && "bg-blue-900/30 text-blue-100",
+                                    item.type === "revision_request" && "bg-orange-900/30 text-orange-100",
+                                    item.type === "clarification" && "bg-yellow-900/30 text-yellow-100"
                                   )}>
                                     {item.type.replace("_", " ")}
                                   </span>
@@ -1469,7 +1478,7 @@ export function Stage02Bids() {
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="font-medium text-foreground">{selectedBidData.vendor}</span>
-                                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400">
+                                    <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-green-900/30 text-green-100">
                                       Responded
                                     </span>
                                   </div>

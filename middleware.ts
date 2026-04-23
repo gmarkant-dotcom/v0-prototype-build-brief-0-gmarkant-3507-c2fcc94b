@@ -95,7 +95,7 @@ export async function middleware(request: NextRequest) {
 
     if (isAdminRoute && !isAdmin) {
       const url = request.nextUrl.clone()
-      url.pathname = userRole === 'partner' ? '/partner' : '/agency'
+      url.pathname = userRole === 'partner' ? '/partner' : '/agency/dashboard'
       return NextResponse.redirect(url)
     }
 
@@ -107,7 +107,7 @@ export async function middleware(request: NextRequest) {
 
     if (isPartnerRoute && userRole === 'agency') {
       const url = request.nextUrl.clone()
-      url.pathname = '/agency'
+      url.pathname = '/agency/dashboard'
       return NextResponse.redirect(url)
     }
 

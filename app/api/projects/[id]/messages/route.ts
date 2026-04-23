@@ -249,8 +249,8 @@ export async function POST(
           const projectName = projectMeta?.title?.trim() || 'Project'
           const viewPath =
             profile?.role === 'agency'
-              ? `/partner/projects/${projectId}`
-              : `/agency/project?projectId=${encodeURIComponent(projectId)}`
+              ? `/partner/projects`
+              : `/agency/dashboard`
           const viewUrl = `${siteBaseUrl()}${viewPath}`
           await sendTransactionalEmail({
             to: recipientEmail,
@@ -267,7 +267,7 @@ export async function POST(
               </p>
               <p style="font-family:system-ui,sans-serif">
                 The Ligament Team<br />
-                <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+                <a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a>
               </p>
             `,
           })

@@ -29,8 +29,10 @@ export async function sendTransactionalEmail(opts: {
 }
 
 export function siteBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
-    "https://withligament.com"
-  )
+  const raw = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "https://www.withligament.com"
+  if (raw === "https://withligament.com") return "https://www.withligament.com"
+  if (raw.startsWith("https://withligament.com/")) {
+    return raw.replace("https://withligament.com/", "https://www.withligament.com/")
+  }
+  return raw
 }

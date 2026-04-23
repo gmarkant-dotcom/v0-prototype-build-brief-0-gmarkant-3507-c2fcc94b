@@ -145,9 +145,9 @@ const vendors: VendorStatus[] = [
 const getStatusStyle = (status: VendorStatus["status"]) => {
   switch (status) {
     case "on-track":
-      return "bg-green-500/10 text-green-400 border-green-500/30"
+      return "bg-green-900/30 text-green-100 border-green-400/40"
     case "at-risk":
-      return "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+      return "bg-yellow-900/30 text-yellow-100 border-yellow-400/40"
     case "complete":
       return "bg-accent/10 text-accent border-accent/30"
   }
@@ -282,7 +282,7 @@ export function Stage04Dashboard() {
               <div className="p-3 bg-white/5 rounded-lg border border-border/30">
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-mono text-[10px] text-foreground-muted">Current Phase</span>
-                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/30">Active</span>
+                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-green-900/30 text-green-100 border border-green-400/40">Active</span>
                 </div>
                 <div className="font-display font-bold text-foreground">Production</div>
                 <div className="text-sm text-foreground-muted">Week 4 of 6</div>
@@ -301,7 +301,7 @@ export function Stage04Dashboard() {
             <Button
               variant="outline"
               size="sm"
-              className="w-full border-border/50 text-foreground-muted hover:text-foreground hover:border-white/30"
+              className="w-full border-border/50 text-foreground/80 hover:text-foreground hover:border-white/30"
               asChild
             >
               <a href="#" target="_blank" rel="noopener noreferrer">
@@ -407,9 +407,9 @@ export function Stage04Dashboard() {
               <div className="flex items-center justify-between mb-2">
                 <span className={cn(
                   "font-mono text-[9px] px-2 py-0.5 rounded-full border capitalize",
-                  vendor.paymentTerms.type === "fixed" && "bg-blue-500/10 text-blue-400 border-blue-500/30",
-                  vendor.paymentTerms.type === "hourly" && "bg-purple-500/10 text-purple-400 border-purple-500/30",
-                  vendor.paymentTerms.type === "retainer" && "bg-green-500/10 text-green-400 border-green-500/30",
+                  vendor.paymentTerms.type === "fixed" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
+                  vendor.paymentTerms.type === "hourly" && "bg-purple-900/30 text-purple-100 border-purple-400/40",
+                  vendor.paymentTerms.type === "retainer" && "bg-green-900/30 text-green-100 border-green-400/40",
                   vendor.paymentTerms.type === "milestone" && "bg-accent/10 text-accent border-accent/30"
                 )}>
                   {vendor.paymentTerms.type}
@@ -427,8 +427,8 @@ export function Stage04Dashboard() {
                       <span className="font-mono text-foreground">${item.amount.toLocaleString()}</span>
                       <span className={cn(
                         "px-1.5 py-0.5 rounded text-[8px] font-mono",
-                        item.status === "paid" && "bg-green-500/10 text-green-400",
-                        item.status === "due" && "bg-yellow-500/10 text-yellow-400",
+                        item.status === "paid" && "bg-green-900/30 text-green-100",
+                        item.status === "due" && "bg-yellow-900/30 text-yellow-100",
                         item.status === "upcoming" && "bg-white/10 text-foreground-muted"
                       )}>
                         {item.status}
@@ -448,7 +448,7 @@ export function Stage04Dashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 font-mono text-[10px] border-border text-foreground-muted hover:text-foreground hover:border-white/30 bg-transparent"
+                className="flex-1 font-mono text-[10px] border-border text-foreground/80 hover:text-foreground hover:border-white/30 bg-transparent"
                 asChild
               >
                 <a href={vendor.tools.asana} target="_blank" rel="noopener noreferrer">
@@ -458,7 +458,7 @@ export function Stage04Dashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 font-mono text-[10px] border-border text-foreground-muted hover:text-foreground hover:border-white/30 bg-transparent"
+                className="flex-1 font-mono text-[10px] border-border text-foreground/80 hover:text-foreground hover:border-white/30 bg-transparent"
                 asChild
               >
                 <a href={vendor.tools.drive} target="_blank" rel="noopener noreferrer">
@@ -468,7 +468,7 @@ export function Stage04Dashboard() {
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 font-mono text-[10px] border-border text-foreground-muted hover:text-foreground hover:border-white/30 bg-transparent"
+                className="flex-1 font-mono text-[10px] border-border text-foreground/80 hover:text-foreground hover:border-white/30 bg-transparent"
                 asChild
               >
                 <a href={vendor.tools.slack} target="_blank" rel="noopener noreferrer">

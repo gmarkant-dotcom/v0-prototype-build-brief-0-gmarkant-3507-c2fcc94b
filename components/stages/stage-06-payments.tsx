@@ -78,11 +78,11 @@ const getStatusStyle = (status: string) => {
     case "paid":
     case "signed":
     case "received":
-      return "bg-green-500/10 text-green-400 border-green-500/30"
+      return "bg-green-900/30 text-green-100 border-green-400/40"
     case "pending":
     case "sent":
     case "invoiced":
-      return "bg-yellow-500/10 text-yellow-400 border-yellow-500/30"
+      return "bg-yellow-900/30 text-yellow-100 border-yellow-400/40"
     case "upcoming":
     case "draft":
     case "scheduled":
@@ -288,7 +288,7 @@ export function Stage06Payments() {
               "px-4 py-2 font-mono text-xs capitalize transition-colors border-b-2 -mb-px",
               activeTab === tab
                 ? "border-accent text-accent"
-                : "border-transparent text-foreground-muted hover:text-foreground"
+                : "border-transparent text-foreground/80 hover:text-foreground"
             )}
           >
             {tab}
@@ -317,7 +317,7 @@ export function Stage06Payments() {
               </div>
             </GlassCard>
             <GlassCard className="text-center py-4">
-              <div className="font-display font-bold text-2xl text-foreground-muted mb-1">
+              <div className="font-display font-bold text-2xl text-foreground/85 mb-1">
                 ${totalUpcoming.toLocaleString()}
               </div>
               <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
@@ -420,7 +420,7 @@ export function Stage06Payments() {
             
             <Button 
               variant="outline" 
-              className="w-full mt-4 font-mono text-xs border-border text-foreground-muted hover:text-foreground bg-transparent"
+              className="w-full mt-4 font-mono text-xs border-border text-foreground/80 hover:text-foreground bg-transparent"
             >
               Generate New MSA
             </Button>

@@ -33,6 +33,7 @@ type Partner = {
   id: string
   partnershipId?: string
   name: string
+  email?: string
   type: "agency" | "freelancer" | "production"
   discipline: string
   bookmarked: boolean
@@ -159,6 +160,7 @@ function AgencyRFPContent() {
             id: pr.id,
             partnershipId: p.id,
             name: label,
+            email: pr.email,
             type: "agency",
             discipline: sub,
             bookmarked: true,
@@ -259,10 +261,11 @@ function AgencyRFPContent() {
   // Step 5: Select Recipients
   const [selectedPartners, setSelectedPartners] = useState<Record<string, string[]>>({})
   const [newRecipients, setNewRecipients] = useState<Record<string, NewRecipient[]>>({})
-  const [newEmail, setNewEmail] = useState("")
-  const [newName, setNewName] = useState("")
-  const [requireNdaForNew, setRequireNdaForNew] = useState(true)
-  const [activeItemId, setActiveItemId] = useState<string | null>(null)
+  const [recipientDrafts, setRecipientDrafts] = useState<
+    Record<string, { email: string; name: string; requireNda: boolean }>
+  >({})
+  const [recipientAddErrors, setRecipientAddErrors] = useState<Record<string, string | null>>({})
+  const [recipientAddSuccess, setRecipientAddSuccess] = useState<Record<string, string | null>>({})
   
   // Step 6: Broadcast
   const [isBroadcasting, setIsBroadcasting] = useState(false)
@@ -589,14 +592,49 @@ function AgencyRFPContent() {
   
   // Add new recipient
   const addNewRecipient = (scopeItemId: string) => {
-    if (!newEmail.trim()) return
+    const draft = recipientDrafts[scopeItemId] || { email: "", name: "", requireNda: true }
+    const email = draft.email.trim().toLowerCase()
+    if (!email) return
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      setRecipientAddErrors((prev) => ({ ...prev, [scopeItemId]: "Enter a valid email address." }))
+      setRecipientAddSuccess((prev) => ({ ...prev, [scopeItemId]: null }))
+      return
+    }
+    const duplicateInManual = (newRecipients[scopeItemId] || []).some(
+      (r) => r.email.trim().toLowerCase() === email
+    )
+    if (duplicateInManual) {
+      setRecipientAddErrors((prev) => ({ ...prev, [scopeItemId]: "This email was already added." }))
+      setRecipientAddSuccess((prev) => ({ ...prev, [scopeItemId]: null }))
+      return
+    }
+    const selectedIds = selectedPartners[scopeItemId] || []
+    const duplicateInExistingPartner = selectedIds.some((partnerId) => {
+      const partner = existingPartners.find((p) => p.id === partnerId)
+      return (partner?.email || "").trim().toLowerCase() === email
+    })
+    if (duplicateInExistingPartner) {
+      setRecipientAddErrors((prev) => ({
+        ...prev,
+        [scopeItemId]: "This email already exists in selected partners for this scope.",
+      }))
+      setRecipientAddSuccess((prev) => ({ ...prev, [scopeItemId]: null }))
+      return
+    }
     setNewRecipients(prev => ({
       ...prev,
-      [scopeItemId]: [...(prev[scopeItemId] || []), { email: newEmail, name: newName, requireNda: requireNdaForNew }]
+      [scopeItemId]: [
+        ...(prev[scopeItemId] || []),
+        { email, name: draft.name.trim(), requireNda: draft.requireNda },
+      ],
     }))
-    setNewEmail("")
-    setNewName("")
-    setRequireNdaForNew(true)
+    setRecipientDrafts((prev) => ({
+      ...prev,
+      [scopeItemId]: { email: "", name: "", requireNda: true },
+    }))
+    setRecipientAddErrors((prev) => ({ ...prev, [scopeItemId]: null }))
+    setRecipientAddSuccess((prev) => ({ ...prev, [scopeItemId]: "Recipient added." }))
   }
   
   // Remove new recipient
@@ -714,10 +752,9 @@ function AgencyRFPContent() {
     setNewScopeDesc("")
     setSelectedPartners({})
     setNewRecipients({})
-    setNewEmail("")
-    setNewName("")
-    setRequireNdaForNew(true)
-    setActiveItemId(null)
+    setRecipientDrafts({})
+    setRecipientAddErrors({})
+    setRecipientAddSuccess({})
     setAdditionalContext("")
     setNdaSignatureRequired(false)
     setNdaSigningLink("https://www.docusign.com/")
@@ -1539,7 +1576,7 @@ function AgencyRFPContent() {
                           className={cn(
                             "flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-mono transition-all",
                             item.allocation === "internal"
-                              ? "border-blue-500 bg-blue-500/20 text-blue-300"
+                              ? "border-blue-500 bg-blue-900/30 text-blue-100"
                               : "border-border text-foreground-muted hover:border-blue-500/50 hover:text-blue-300"
                           )}
                         >
@@ -1771,7 +1808,7 @@ function AgencyRFPContent() {
                     {(newRecipients[item.id] || []).map((recipient, index) => (
                       <div key={index} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20">
                         <span className="font-mono text-xs text-foreground">{recipient.name || recipient.email}</span>
-                        <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">New</span>
+                        <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-100">New</span>
                         {recipient.requireNda && (
                           <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Required</span>
                         )}
@@ -1874,32 +1911,48 @@ function AgencyRFPContent() {
                     <div className="space-y-3 p-4 rounded-lg bg-white/5 border border-border">
                       <Input
                         placeholder="Contact name"
-                        value={activeItemId === item.id ? newName : ""}
-                        onChange={(e) => {
-                          setActiveItemId(item.id)
-                          setNewName(e.target.value)
-                        }}
-                        onFocus={() => setActiveItemId(item.id)}
+                        value={recipientDrafts[item.id]?.name || ""}
+                        onChange={(e) =>
+                          setRecipientDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: {
+                              email: prev[item.id]?.email || "",
+                              name: e.target.value,
+                              requireNda: prev[item.id]?.requireNda ?? true,
+                            },
+                          }))
+                        }
                         className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                       />
                       <Input
                         placeholder="Email address"
-                        value={activeItemId === item.id ? newEmail : ""}
-                        onChange={(e) => {
-                          setActiveItemId(item.id)
-                          setNewEmail(e.target.value)
-                        }}
-                        onFocus={() => setActiveItemId(item.id)}
+                        value={recipientDrafts[item.id]?.email || ""}
+                        onChange={(e) =>
+                          setRecipientDrafts((prev) => ({
+                            ...prev,
+                            [item.id]: {
+                              email: e.target.value,
+                              name: prev[item.id]?.name || "",
+                              requireNda: prev[item.id]?.requireNda ?? true,
+                            },
+                          }))
+                        }
                         className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                       />
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input 
                           type="checkbox" 
-                          checked={activeItemId === item.id ? requireNdaForNew : true}
-                          onChange={(e) => {
-                            setActiveItemId(item.id)
-                            setRequireNdaForNew(e.target.checked)
-                          }}
+                          checked={recipientDrafts[item.id]?.requireNda ?? true}
+                          onChange={(e) =>
+                            setRecipientDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: {
+                                email: prev[item.id]?.email || "",
+                                name: prev[item.id]?.name || "",
+                                requireNda: e.target.checked,
+                              },
+                            }))
+                          }
                           className="rounded border-border"
                         />
                         <span className="font-mono text-[10px] text-foreground-muted">
@@ -1909,11 +1962,17 @@ function AgencyRFPContent() {
                       <Button 
                         size="sm"
                         onClick={() => addNewRecipient(item.id)}
-                        disabled={!newEmail || activeItemId !== item.id}
+                        disabled={!(recipientDrafts[item.id]?.email || "").trim()}
                         className="w-full bg-accent/10 text-accent hover:bg-accent/20"
                       >
                         <Plus className="w-4 h-4 mr-1" /> Add New Contact
                       </Button>
+                      {recipientAddErrors[item.id] && (
+                        <p className="font-mono text-[10px] text-red-300">{recipientAddErrors[item.id]}</p>
+                      )}
+                      {recipientAddSuccess[item.id] && !recipientAddErrors[item.id] && (
+                        <p className="font-mono text-[10px] text-green-300">{recipientAddSuccess[item.id]}</p>
+                      )}
                     </div>
                   </div>
                 </div>

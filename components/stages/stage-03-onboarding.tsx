@@ -355,9 +355,9 @@ export function Stage03Onboarding() {
             {partner.name}
             <span className={cn(
               "ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase border",
-              partner.onboardingStatus === "complete" && "bg-green-500/10 text-green-400 border-green-500/30",
-              partner.onboardingStatus === "in_progress" && "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
-              partner.onboardingStatus === "documents_sent" && "bg-blue-500/10 text-blue-400 border-blue-500/30",
+              partner.onboardingStatus === "complete" && "bg-green-900/30 text-green-100 border-green-400/40",
+              partner.onboardingStatus === "in_progress" && "bg-yellow-900/30 text-yellow-100 border-yellow-400/40",
+              partner.onboardingStatus === "documents_sent" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
               partner.onboardingStatus === "not_started" && "bg-white/10 text-foreground-muted border-border"
             )}>
               {partner.onboardingStatus.replace("_", " ")}
@@ -379,7 +379,7 @@ export function Stage03Onboarding() {
                     currentStep === step.id
                       ? "bg-accent/20 text-accent border border-accent/30"
                       : index < currentStepIndex
-                      ? "bg-green-500/10 text-green-400 border border-green-500/30 cursor-pointer hover:bg-green-500/20"
+                      ? "bg-green-900/30 text-green-100 border border-green-400/40 cursor-pointer hover:bg-green-900/45"
                       : "bg-white/5 text-foreground-muted border border-border"
                   )}
                 >
@@ -460,7 +460,7 @@ export function Stage03Onboarding() {
                               </span>
                             )}
                             {doc.required && (
-                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30">
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-100 border border-red-400/40">
                                 Required
                               </span>
                             )}
@@ -474,12 +474,12 @@ export function Stage03Onboarding() {
                         {/* Partner status badge */}
                         <div className="shrink-0">
                           {partnerStatus === "signed" && (
-                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/30">
+                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-green-900/30 text-green-100 border border-green-400/40">
                               <CheckCircle className="w-3 h-3" /> Already Signed
                             </span>
                           )}
                           {partnerStatus === "outdated" && (
-                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
+                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-yellow-900/30 text-yellow-100 border border-yellow-400/40">
                               <AlertCircle className="w-3 h-3" /> Outdated Version
                             </span>
                           )}
@@ -538,7 +538,7 @@ export function Stage03Onboarding() {
                               </span>
                             )}
                             {doc.required && (
-                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/30">
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-100 border border-red-400/40">
                                 Required
                               </span>
                             )}
@@ -552,10 +552,10 @@ export function Stage03Onboarding() {
                         {/* Category badge */}
                         <span className={cn(
                           "shrink-0 font-mono text-[10px] px-2 py-1 rounded-full capitalize border",
-                          doc.category === "legal" && "bg-purple-500/10 text-purple-400 border-purple-500/30",
-                          doc.category === "brand" && "bg-blue-500/10 text-blue-400 border-blue-500/30",
-                          doc.category === "process" && "bg-cyan-500/10 text-cyan-400 border-cyan-500/30",
-                          doc.category === "scheduling" && "bg-green-500/10 text-green-400 border-green-500/30"
+                          doc.category === "legal" && "bg-purple-900/30 text-purple-100 border-purple-400/40",
+                          doc.category === "brand" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
+                          doc.category === "process" && "bg-cyan-900/30 text-cyan-100 border-cyan-400/40",
+                          doc.category === "scheduling" && "bg-green-900/30 text-green-100 border-green-400/40"
                         )}>
                           {doc.category}
                         </span>
@@ -706,10 +706,10 @@ export function Stage03Onboarding() {
                                 </div>
                                 <span className={cn(
                                   "font-mono text-[10px] px-2 py-0.5 rounded capitalize",
-                                  doc.category === "legal" && "bg-purple-500/10 text-purple-400",
-                                  doc.category === "brand" && "bg-blue-500/10 text-blue-400",
-                                  doc.category === "process" && "bg-cyan-500/10 text-cyan-400",
-                                  doc.category === "scheduling" && "bg-green-500/10 text-green-400"
+                                  doc.category === "legal" && "bg-purple-900/30 text-purple-100",
+                                  doc.category === "brand" && "bg-blue-900/30 text-blue-100",
+                                  doc.category === "process" && "bg-cyan-900/30 text-cyan-100",
+                                  doc.category === "scheduling" && "bg-green-900/30 text-green-100"
                                 )}>
                                   {doc.category}
                                 </span>
@@ -793,7 +793,7 @@ export function Stage03Onboarding() {
                             setUploadingDocType("insurance")
                             setShowUploadModal(true)
                           }}
-                          className="bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 font-mono text-xs"
+                          className="bg-yellow-900/35 text-yellow-100 hover:bg-yellow-900/45 font-mono text-xs"
                         >
                           <Upload className="w-3 h-3 mr-1" /> Request Upload
                         </Button>
@@ -1012,7 +1012,7 @@ export function Stage03Onboarding() {
                               <FileText className="w-4 h-4 text-accent" />
                               <span className="text-sm text-foreground">{doc.name}</span>
                               {doc.required && (
-                                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400">
+                                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-100">
                                   Required
                                 </span>
                               )}

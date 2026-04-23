@@ -252,7 +252,7 @@ Please include: relevant experience, proposed team, creative approach, timeline 
           </div>
           <button 
             onClick={() => setShowInviteNotification(false)}
-            className="text-foreground-muted hover:text-foreground transition-colors"
+            className="text-foreground/80 hover:text-foreground transition-colors"
           >
             &times;
           </button>
@@ -278,7 +278,7 @@ Please include: relevant experience, proposed team, creative approach, timeline 
                 <button
                   key={chip}
                   onClick={() => handleChipClick(chip)}
-                  className="font-mono text-[11px] px-3 py-1 rounded-full border border-border text-foreground-muted hover:border-accent hover:text-accent transition-colors"
+                  className="font-mono text-[11px] px-3 py-1 rounded-full border border-border text-foreground/80 hover:border-accent hover:text-accent transition-colors"
                 >
                   {chip}
                 </button>
@@ -457,7 +457,7 @@ Please include: relevant experience, proposed team, creative approach, timeline 
                 setInviteMessage("")
                 setInviteError(null)
               }}
-              className="border-border text-foreground-muted"
+              className="border-border text-foreground/80 hover:text-foreground"
             >
               Cancel
             </Button>

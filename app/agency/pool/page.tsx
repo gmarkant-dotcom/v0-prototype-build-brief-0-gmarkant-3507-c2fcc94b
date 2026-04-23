@@ -1573,7 +1573,7 @@ export default function PartnerPoolPage() {
                           </div>
                         </div>
                       </div>
-                      <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">
+                      <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-900/30 text-amber-100">
                         Pending
                       </span>
                     </div>
@@ -1600,7 +1600,7 @@ export default function PartnerPoolPage() {
                         </div>
                       </div>
                     </div>
-                    <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">
+                    <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-900/30 text-amber-100">
                       Pending
                     </span>
                   </div>

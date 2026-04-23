@@ -189,7 +189,7 @@ export async function POST(
           <p style="font-family:system-ui,sans-serif">
             <a href="${base}/partner/rfps" style="color:#0C3535;font-weight:700">View RFP</a>
           </p>
-          <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>
+          <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="${siteBaseUrl()}">withligament.com</a></p>
         `,
       })
     }
@@ -300,7 +300,7 @@ export async function PATCH(
           subject: responseSubject,
           html: `${responseBody}
             <p><a href="${siteBaseUrl()}/agency/bids">View Assignment</a></p>
-            <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>`,
+            <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="${siteBaseUrl()}">withligament.com</a></p>`,
         })
       }
 
@@ -380,7 +380,7 @@ export async function PATCH(
             html: `<p style="font-family:system-ui,sans-serif">Congratulations, you have been selected for ${projectTitle}.</p>
               <p style="font-family:system-ui,sans-serif">Log in to your Ligament partner portal to view the full award details and prepare for onboarding.</p>
               <p><a href="${siteBaseUrl()}/partner/projects">View Award</a></p>
-              <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="https://withligament.com">withligament.com</a></p>`,
+              <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="${siteBaseUrl()}">withligament.com</a></p>`,
           })
         }
       }

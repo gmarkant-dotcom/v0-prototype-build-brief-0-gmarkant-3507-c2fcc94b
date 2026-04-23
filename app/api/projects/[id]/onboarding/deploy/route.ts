@@ -157,7 +157,7 @@ export async function POST(
           <p>
             <a href="${onboardingUrl}" style="display:inline-block;background:#0C3535;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">View Onboarding Package</a>
           </p>
-          <p style="font-size:13px;color:#666">The Ligament Team<br /><a href="https://withligament.com" style="color:#0C3535">withligament.com</a></p>
+          <p style="font-size:13px;color:#666">The Ligament Team<br /><a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a></p>
         </div>
       `,
     })

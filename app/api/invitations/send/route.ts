@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     }
 
     // Generate invitation link
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://withligament.com"
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.withligament.com"
     const inviteLink = `${baseUrl}/auth/signup?invite=${invitation.id}&email=${encodeURIComponent(email)}`
 
     // Send invitation email via Supabase Auth

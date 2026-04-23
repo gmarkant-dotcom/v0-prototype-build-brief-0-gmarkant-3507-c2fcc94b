@@ -242,7 +242,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
               </p>
               <p style="font-family:system-ui,sans-serif">
                 The Ligament Team<br />
-                <a href="https://withligament.com" style="color:#0C3535">withligament.com</a>
+                <a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a>
               </p>
             `,
           })

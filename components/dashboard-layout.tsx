@@ -62,7 +62,7 @@ export function DashboardLayout({ children, activeStage }: DashboardLayoutProps)
                 >
                   <span className={cn(
                     "font-mono text-xs font-medium mt-0.5",
-                    isActive ? "text-accent" : "text-foreground-muted"
+                  isActive ? "text-accent" : "text-foreground/80"
                   )}>
                     {stage.number}
                   </span>
@@ -76,7 +76,7 @@ export function DashboardLayout({ children, activeStage }: DashboardLayoutProps)
                     {stage.aiPowered && (
                       <div className={cn(
                         "font-mono text-[10px] mt-1 flex items-center gap-1",
-                        isActive ? "text-accent" : "text-foreground-muted"
+                        isActive ? "text-accent" : "text-foreground/75"
                       )}>
                         <span className="ai-badge">✦</span> AI-powered
                       </div>
@@ -101,7 +101,7 @@ export function DashboardLayout({ children, activeStage }: DashboardLayoutProps)
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all",
                 pathname === "/ai-engine" || pathname?.startsWith("/ai-engine")
                   ? "bg-accent/10 text-accent border border-accent/30"
-                  : "text-foreground-muted hover:text-white hover:bg-white/5 border border-transparent"
+                  : "text-foreground/80 hover:text-white hover:bg-white/5 border border-transparent"
               )}
             >
               <span className="text-sm">✦</span>
@@ -113,7 +113,7 @@ export function DashboardLayout({ children, activeStage }: DashboardLayoutProps)
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all",
                 pathname === "/vendor" || pathname?.startsWith("/vendor")
                   ? "bg-accent/10 text-accent border border-accent/30"
-                  : "text-foreground-muted hover:text-white hover:bg-white/5 border border-transparent"
+                  : "text-foreground/80 hover:text-white hover:bg-white/5 border border-transparent"
               )}
             >
               <span className="text-sm">◈</span>
@@ -125,7 +125,7 @@ export function DashboardLayout({ children, activeStage }: DashboardLayoutProps)
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all",
                 pathname === "/pricing"
                   ? "bg-accent/10 text-accent border border-accent/30"
-                  : "text-foreground-muted hover:text-white hover:bg-white/5 border border-transparent"
+                  : "text-foreground/80 hover:text-white hover:bg-white/5 border border-transparent"
               )}
             >
               <span className="text-sm">◇</span>
