@@ -216,7 +216,6 @@ export default function PartnerRFPsPage() {
   const [inboxLoading, setInboxLoading] = useState(false)
   const [inboxError, setInboxError] = useState<string | null>(null)
   const [activeStatusFilter, setActiveStatusFilter] = useState<PartnerStatusFilterTab>("all")
-  const [viewFilter, setViewFilter] = useState<"all" | "unviewed" | "recent">("all")
   const statusFilters: PartnerStatusFilterTab[] = [
     "all",
     "new",
@@ -261,9 +260,6 @@ export default function PartnerRFPsPage() {
 
   const displayedRfps = useMemo(() => {
     let list = [...rfps]
-    if (viewFilter === "unviewed") {
-      list = list.filter((rfp) => !rfp.viewed_at)
-    }
     if (activeStatusFilter !== "all") {
       list = list.filter((rfp) => rfp.status === activeStatusFilter)
     }
@@ -273,7 +269,7 @@ export default function PartnerRFPsPage() {
       return tb - ta
     })
     return list
-  }, [rfps, viewFilter, activeStatusFilter])
+  }, [rfps, activeStatusFilter])
 
   return (
     <PartnerLayout>
@@ -308,19 +304,6 @@ export default function PartnerRFPsPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wide text-gray-500">View</span>
-          <select
-            value={viewFilter}
-            onChange={(e) => setViewFilter(e.target.value as "all" | "unviewed" | "recent")}
-            className="h-9 rounded-md border border-gray-300 bg-white px-3 text-sm text-[#0C3535]"
-          >
-            <option value="all">All RFPs</option>
-            <option value="unviewed">New — not yet viewed</option>
-            <option value="recent">Recently received</option>
-          </select>
-        </div>
-        
         <div className="grid gap-4">
           {inboxLoading ? (
             <div className="bg-white rounded-xl border border-gray-200 p-12 flex flex-col items-center justify-center gap-3 text-gray-600">
