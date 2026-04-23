@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { AgencyLayout } from "@/components/agency-layout"
 import { FileUpload } from "@/components/file-upload"
 import { StageHeader } from "@/components/stage-header"
@@ -235,23 +235,34 @@ export default function DocumentsPage() {
     setUploadModalOpen(false)
   }
 
-  const allDocuments = [...documents, ...uploadedDocs]
-  
-  const filteredDocs = allDocuments.filter(doc => {
-    if (searchQuery && !doc.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false
-    }
-    if (activeTab === "templates" && !doc.isTemplate) return false
-    if (activeTab === "master_briefs" && doc.type !== "master_brief") return false
-    if (activeTab === "partner_briefs" && doc.type !== "partner_brief_template") return false
-    if (activeTab === "requirements" && doc.type !== "requirements") return false
-    return true
-  })
-  
-  const templates = allDocuments.filter(d => d.isTemplate)
-  const masterBriefs = allDocuments.filter(d => d.type === "master_brief")
-  const partnerBriefs = allDocuments.filter(d => d.type === "partner_brief_template")
-  const requirements = allDocuments.filter(d => d.type === "requirements")
+  const allDocuments = useMemo(() => [...documents, ...uploadedDocs], [documents, uploadedDocs])
+
+  const filteredDocs = useMemo(() => {
+    return allDocuments.filter((doc) => {
+      if (searchQuery && !doc.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false
+      }
+      if (activeTab === "templates" && !doc.isTemplate) return false
+      if (activeTab === "master_briefs" && doc.type !== "master_brief") return false
+      if (activeTab === "partner_briefs" && doc.type !== "partner_brief_template") return false
+      if (activeTab === "requirements" && doc.type !== "requirements") return false
+      return true
+    })
+  }, [allDocuments, searchQuery, activeTab])
+
+  const templates = useMemo(() => allDocuments.filter((d) => d.isTemplate), [allDocuments])
+  const masterBriefs = useMemo(
+    () => allDocuments.filter((d) => d.type === "master_brief"),
+    [allDocuments]
+  )
+  const partnerBriefs = useMemo(
+    () => allDocuments.filter((d) => d.type === "partner_brief_template"),
+    [allDocuments]
+  )
+  const requirements = useMemo(
+    () => allDocuments.filter((d) => d.type === "requirements"),
+    [allDocuments]
+  )
   
   return (
     <AgencyLayout>

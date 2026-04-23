@@ -18,6 +18,50 @@ type BroadcastItem = {
   newRecipients: { email: string; name: string; requireNda: boolean }[]
 }
 
+function buildBrandedRfpNotificationHtml(params: {
+  recipientName: string
+  agencyDisplay: string
+  scopeName: string
+  baseUrl: string
+}): string {
+  const safeRecipientName = params.recipientName || "there"
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0;padding:0;background-color:#081F1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+      <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
+        <div style="background:#0C3535;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.12);">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#C8F53C;margin:0 0 16px 0;">
+            Ligament
+          </div>
+          <p style="color:#E8E8E8;font-size:16px;line-height:1.6;margin:0 0 16px 0;">Hi ${safeRecipientName},</p>
+          <p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 12px 0;">
+            <strong style="color:#FFFFFF;">${params.agencyDisplay}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${params.scopeName}</strong> on Ligament.
+          </p>
+          <p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 24px 0;">
+            Review the scope, timeline, and budget details, then submit your bid directly through the platform.
+          </p>
+          <a
+            href="${params.baseUrl}/partner/rfps"
+            style="display:inline-block;background:#C8F53C;color:#0C3535;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;"
+          >
+            View RFP
+          </a>
+          <p style="color:#9BB8B8;font-size:13px;margin:24px 0 0 0;">
+            The Ligament Team<br />
+            <a href="${params.baseUrl}" style="color:#C8F53C;text-decoration:none;">withligament.com</a>
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
+}
+
 function normalizeManualRecipients(
   raw: unknown
 ): { email: string; name: string; requireNda: boolean }[] {
@@ -175,10 +219,15 @@ export async function POST(request: NextRequest) {
         const partnerEmail = partnership?.partner?.email || ""
         const partnerName =
           partnership?.partner?.company_name || partnership?.partner?.full_name || partnerEmail || "Partner"
-        if (partnerEmail) {
+        if (!partnerEmail.trim()) {
+          console.warn("[broadcast-rfp] active partner has no email; skipping notification", {
+            partnerId,
+            scopeItemId,
+          })
+        } else {
           seenRecipientKeys.add(`email:${scopeItemId}:${partnerEmail.trim().toLowerCase()}`)
         }
-        if (!ndaRequired && partnerEmail) {
+        if (!ndaRequired && partnerEmail.trim()) {
           nonNdaExistingPartnerNotifications.push({
             partnerEmail,
             partnerName,
@@ -297,22 +346,12 @@ export async function POST(request: NextRequest) {
             from: "Ligament <notifications@withligament.com>",
             to: notification.partnerEmail,
             subject: `New RFP from ${agencyDisplay}: ${notification.scopeName}`,
-            html: `
-              <p style="font-family:system-ui,sans-serif">Hi ${notification.partnerName},</p>
-              <p style="font-family:system-ui,sans-serif">
-                ${agencyDisplay} has sent you an RFP for ${notification.scopeName} on Ligament.
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                Review the scope, timeline, and budget details, then submit your bid directly through the platform.
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                <a href="${baseUrl}/partner/rfps" style="font-weight:700;color:#0C3535">View RFP</a>
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                The Ligament Team<br />
-                <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
-              </p>
-            `,
+            html: buildBrandedRfpNotificationHtml({
+              recipientName: notification.partnerName,
+              agencyDisplay,
+              scopeName: notification.scopeName,
+              baseUrl,
+            }),
           })
         }
       }
@@ -332,22 +371,12 @@ export async function POST(request: NextRequest) {
           from: "Ligament <notifications@withligament.com>",
           to: notification.recipientEmail,
           subject: `New RFP from ${agencyDisplay}: ${notification.scopeName}`,
-          html: `
-            <p style="font-family:system-ui,sans-serif">Hi ${notification.recipientName},</p>
-            <p style="font-family:system-ui,sans-serif">
-              ${agencyDisplay} has sent you an RFP for ${notification.scopeName} on Ligament.
-            </p>
-            <p style="font-family:system-ui,sans-serif">
-              Review the scope, timeline, and budget details, then submit your bid directly through the platform.
-            </p>
-            <p style="font-family:system-ui,sans-serif">
-              <a href="${baseUrl}/partner/rfps" style="font-weight:700;color:#0C3535">View RFP</a>
-            </p>
-            <p style="font-family:system-ui,sans-serif">
-              The Ligament Team<br />
-              <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
-            </p>
-          `,
+          html: buildBrandedRfpNotificationHtml({
+            recipientName: notification.recipientName,
+            agencyDisplay,
+            scopeName: notification.scopeName,
+            baseUrl,
+          }),
         })
       }
     }

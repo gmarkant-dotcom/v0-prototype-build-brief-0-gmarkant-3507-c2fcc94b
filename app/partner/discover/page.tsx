@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { GlassCard } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
@@ -229,17 +229,19 @@ export default function DiscoverAgenciesPage() {
     setIsLoadingAgencyProfile(false)
   }
 
-  const filteredAgencies = agencies.filter(agency => {
-    const query = searchQuery.toLowerCase()
-    const displayName = agency.company_name || agency.full_name || agency.email || ""
-    return (
-      displayName.toLowerCase().includes(query) ||
-      agency.email?.toLowerCase().includes(query) ||
-      agency.location?.toLowerCase().includes(query)
-    )
-  })
+  const filteredAgencies = useMemo(() => {
+    return agencies.filter((agency) => {
+      const query = searchQuery.toLowerCase()
+      const displayName = agency.company_name || agency.full_name || agency.email || ""
+      return (
+        displayName.toLowerCase().includes(query) ||
+        agency.email?.toLowerCase().includes(query) ||
+        agency.location?.toLowerCase().includes(query)
+      )
+    })
+  }, [agencies, searchQuery])
 
-  const searchSuggestions = filteredAgencies.slice(0, 8)
+  const searchSuggestions = useMemo(() => filteredAgencies.slice(0, 8), [filteredAgencies])
 
   return (
     <PartnerLayout 

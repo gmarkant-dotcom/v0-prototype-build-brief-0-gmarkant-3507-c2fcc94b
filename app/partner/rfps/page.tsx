@@ -39,10 +39,20 @@ type RFP = {
     | "declined"
     | "new"
     | "viewed"
+    | "draft"
     | "bid_submitted"
     | "feedback_received"
     | "revision_submitted"
 }
+
+type PartnerStatusFilterTab =
+  | "all"
+  | "new"
+  | "changes_requested"
+  | "shortlisted"
+  | "meeting_requested"
+  | "awarded"
+  | "declined"
 
 function formatTimelineDateLabel(value?: string | null): string | null {
   if (!value) return null
@@ -144,6 +154,23 @@ function partnerIntentTag(intent?: "will_respond" | "has_questions" | "requestin
   return "Requested call"
 }
 
+function matchesPartnerStatusFilter(status: string, tab: PartnerStatusFilterTab): boolean {
+  if (tab === "all") return true
+  if (tab === "changes_requested") return status === "under_review"
+  if (tab === "new") {
+    return (
+      status === "submitted" ||
+      status === "bid_submitted" ||
+      status === "revision_submitted" ||
+      status === "new" ||
+      status === "viewed" ||
+      status === "feedback_received" ||
+      status === "draft"
+    )
+  }
+  return status === tab
+}
+
 function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
   const mj = (row.master_rfp_json || {}) as {
     projectName?: string
@@ -169,6 +196,7 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
     "meeting_requested",
     "awarded",
     "declined",
+    "draft",
     "new",
     "viewed",
     "bid_submitted",
@@ -203,13 +231,17 @@ export default function PartnerRFPsPage() {
   const [rfps, setRfps] = useState(initialRFPs)
   const [inboxLoading, setInboxLoading] = useState(false)
   const [inboxError, setInboxError] = useState<string | null>(null)
-  const [activeFilter, setActiveFilter] = useState<
-    "all" | "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
-  >("all")
+  const [activeStatusFilter, setActiveStatusFilter] = useState<PartnerStatusFilterTab>("all")
   const [viewFilter, setViewFilter] = useState<"all" | "unviewed" | "recent">("all")
-  const statusFilters: Array<
-    "all" | "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
-  > = ["all", "submitted", "under_review", "shortlisted", "meeting_requested", "awarded", "declined"]
+  const statusFilters: PartnerStatusFilterTab[] = [
+    "all",
+    "new",
+    "changes_requested",
+    "shortlisted",
+    "meeting_requested",
+    "awarded",
+    "declined",
+  ]
 
   useEffect(() => {
     if (isDemo) return
@@ -252,11 +284,8 @@ export default function PartnerRFPsPage() {
       const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
       return tb - ta
     })
-    return list.filter((rfp) => {
-      if (activeFilter === "all") return true
-      return rfp.status === activeFilter
-    })
-  }, [rfps, viewFilter, activeFilter])
+    return list.filter((rfp) => matchesPartnerStatusFilter(rfp.status, activeStatusFilter))
+  }, [rfps, viewFilter, activeStatusFilter])
 
   return (
     <PartnerLayout>
@@ -276,17 +305,17 @@ export default function PartnerRFPsPage() {
           {statusFilters.map((filter) => (
             <button
               key={filter}
-              onClick={() => setActiveFilter(filter)}
+              onClick={() => setActiveStatusFilter(filter)}
               className={cn(
                 "px-3 py-1.5 rounded-lg font-mono text-xs capitalize transition-colors",
-                activeFilter === filter 
+                activeStatusFilter === filter 
                   ? "bg-[#0C3535] text-white" 
                   : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               )}
             >
               {filter === "all"
                 ? `All RFPs (${rfps.length})`
-                : `${getBidStatusLabel(filter, "partner")} (${rfps.filter((r) => r.status === filter).length})`}
+                : `${getBidStatusLabel(filter === "changes_requested" ? "under_review" : filter, "partner")} (${rfps.filter((r) => matchesPartnerStatusFilter(r.status, filter)).length})`}
             </button>
           ))}
         </div>

@@ -311,12 +311,15 @@ function DashboardContent() {
         } satisfies MasterProject
       })
   
-  const filteredProjects = projects.filter(project => {
-    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          project.client.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === "all" || project.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+  const filteredProjects = useMemo(() => {
+    return projects.filter((project) => {
+      const matchesSearch =
+        project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        project.client.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesStatus = statusFilter === "all" || project.status === statusFilter
+      return matchesSearch && matchesStatus
+    })
+  }, [projects, searchQuery, statusFilter])
   
   const partnerAlertsForStat = isDemo
     ? projects.reduce((sum, p) => sum + (p.partnerStatusAlertCount ?? 0), 0)
