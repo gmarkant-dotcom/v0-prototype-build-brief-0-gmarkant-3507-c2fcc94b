@@ -403,7 +403,9 @@ function ActiveEngagementsInner() {
 
   const resolveAlert = useCallback(
     async (projectId: string, partnershipId: string, updateId: string, alertCount: number) => {
-      const patchProjectId = (selectedProject?.id ?? projectId).trim()
+      // Use the row's project id first: it must match the status update's project_id. Preferring
+      // selectedProject caused 404s when the sidebar selection changed before engagements refetched.
+      const patchProjectId = (projectId.trim() || selectedProject?.id?.trim() || "").trim()
       if (!patchProjectId || !updateId.trim()) {
         setResolveMessage({ type: "error", text: "Could not resolve alert, missing project or update." })
         return
@@ -495,9 +497,20 @@ function ActiveEngagementsInner() {
           const errText = await res.text().catch(() => "")
           console.warn("[active-engagements] PATCH resolve failed", res.status, errText)
           setProjectsData(snapshot)
+          let message = errText.trim()
+          if (message) {
+            try {
+              const parsed = JSON.parse(message) as { error?: unknown }
+              if (typeof parsed.error === "string" && parsed.error.trim()) {
+                message = parsed.error.trim()
+              }
+            } catch {
+              // keep raw body
+            }
+          }
           setResolveMessage({
             type: "error",
-            text: "Could not resolve alert. Please try again.",
+            text: message || `Could not resolve alert (${res.status}).`,
           })
           return
         }
@@ -506,9 +519,13 @@ function ActiveEngagementsInner() {
         if (engagementUrl) {
           await mutate(engagementUrl)
         }
-      } catch {
+      } catch (e) {
         setProjectsData(snapshot)
-        setResolveMessage({ type: "error", text: "Could not resolve alert. Please try again." })
+        const msg = e instanceof Error ? e.message.trim() : ""
+        setResolveMessage({
+          type: "error",
+          text: msg || "Could not resolve alert (network error).",
+        })
       } finally {
         setResolvingUpdateId(null)
       }
