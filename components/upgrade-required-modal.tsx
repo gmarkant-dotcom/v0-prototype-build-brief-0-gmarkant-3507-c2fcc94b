@@ -92,7 +92,7 @@ export function UpgradeRequiredModal({ isOpen, onClose, featureName }: UpgradeRe
             </Button>
             <Button
               asChild
-              className="flex-1 bg-accent text-background hover:bg-accent/90"
+              className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
             >
               <Link href="/pricing">
                 View Pricing

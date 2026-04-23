@@ -996,7 +996,7 @@ export default function PartnerPoolPage() {
             </Button>
             <Button 
               onClick={() => setShowInviteModal(true)}
-              className="bg-accent text-background hover:bg-accent/90 flex items-center gap-2"
+              className="bg-accent text-accent-foreground hover:bg-accent/90 flex items-center gap-2"
             >
               <UserPlus className="w-4 h-4" />
               Invite Partner
@@ -1516,7 +1516,7 @@ export default function PartnerPoolPage() {
                   setEditingPartner(null)
                   setShowAddPartnerModal(true)
                 }}
-                className="bg-accent text-background hover:bg-accent/90"
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Partners
@@ -1655,7 +1655,7 @@ export default function PartnerPoolPage() {
                       size="sm" 
                       onClick={() => handleApproveRequest(request.id)}
                       disabled={processingRequest === request.id}
-                      className="bg-accent text-background hover:bg-accent/90"
+                      className="bg-accent text-accent-foreground hover:bg-accent/90"
                     >
                       <CheckCircle className="w-4 h-4 mr-1" />
                       Approve
@@ -1773,7 +1773,7 @@ export default function PartnerPoolPage() {
                 </Button>
                 <Button
                   onClick={() => setSelectedPartner(null)}
-                  className="bg-accent text-background hover:bg-accent/90"
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
                 >
                   Close
                 </Button>
@@ -1893,7 +1893,7 @@ export default function PartnerPoolPage() {
                   <Button
                     onClick={handleInvitePartner}
                     disabled={!inviteEmail.trim() || isInviting}
-                    className="flex-1 bg-accent text-background hover:bg-accent/90"
+                    className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
                   >
                     {isInviting ? (
                       <>Sending...</>
@@ -1970,7 +1970,7 @@ export default function PartnerPoolPage() {
               <div className="flex justify-end">
                 <Button
                   onClick={() => setSuccessModal({ show: false, title: '', message: '' })}
-                  className="bg-accent text-background hover:bg-accent/90"
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
                 >
                   Got it
                 </Button>
@@ -2132,7 +2132,7 @@ function AddEditPartnerModal({
                       type="button"
                       size="sm"
                       onClick={addCustomDiscipline}
-                      className="bg-accent text-background hover:bg-accent/90"
+                      className="bg-accent text-accent-foreground hover:bg-accent/90"
                     >
                       Add
                     </Button>
@@ -2360,7 +2360,7 @@ function AddEditPartnerModal({
             <Button
               onClick={() => onSave(formData)}
               disabled={!formData.name?.trim()}
-              className="flex-1 bg-accent text-background hover:bg-accent/90"
+              className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
             >
               {partner?.id ? "Update Partner" : "Add Partner"}
             </Button>

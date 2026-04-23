@@ -524,7 +524,7 @@ export function Stage06Payments() {
                   </td>
                   <td className="text-center py-3 px-2">
                     {payment.status === "pending" && (
-                      <Button size="sm" className="font-mono text-[10px] h-6 px-2 bg-accent hover:bg-accent/90 text-background">
+                      <Button size="sm" className="font-mono text-[10px] h-6 px-2 bg-accent hover:bg-accent/90 text-accent-foreground">
                         Pay Now
                       </Button>
                     )}

@@ -116,6 +116,13 @@
   body {
     @apply bg-background text-foreground;
   }
+  /**
+   * Native <button> without utility classes inherits body foreground (light on dark).
+   * Prevents browser UA dark text on dark custom backgrounds when no text-* class is present.
+   */
+  button {
+    color: inherit;
+  }
 }
 
 /* Holographic Blob Animations */

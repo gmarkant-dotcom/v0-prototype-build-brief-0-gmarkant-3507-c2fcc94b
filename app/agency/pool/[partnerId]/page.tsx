@@ -210,7 +210,7 @@ export default function AgencyPartnerProfilePage() {
               Partner profile pages load from your live partner relationships. Switch out of demo mode to view a
               profile.
             </p>
-            <Button className="mt-6 bg-accent text-background" onClick={() => router.push("/agency/pool")}>
+            <Button className="mt-6 bg-accent text-accent-foreground" onClick={() => router.push("/agency/pool")}>
               Return to pool
             </Button>
           </GlassCard>
@@ -334,7 +334,7 @@ export default function AgencyPartnerProfilePage() {
                 )}
               </div>
               {meet && (
-                <Button asChild className="bg-accent text-background hover:bg-accent/90 w-fit">
+                <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 w-fit">
                   <a href={meet} target="_blank" rel="noopener noreferrer">
                     <Video className="w-4 h-4 mr-2" />
                     Meeting link
@@ -534,7 +534,7 @@ export default function AgencyPartnerProfilePage() {
                   type="button"
                   onClick={saveNotes}
                   disabled={savingNotes}
-                  className="bg-accent text-background hover:bg-accent/90"
+                  className="bg-accent text-accent-foreground hover:bg-accent/90"
                 >
                   {savingNotes ? "Saving…" : "Save notes"}
                 </Button>

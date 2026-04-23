@@ -96,7 +96,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
             <p className="text-foreground-muted mb-6">
               We&apos;ve notified {agencyName || "the agency"} about your request. You&apos;ll receive an email when they respond.
             </p>
-            <Button onClick={handleClose} className="bg-accent text-background hover:bg-accent/90">
+            <Button onClick={handleClose} className="bg-accent text-accent-foreground hover:bg-accent/90">
               Done
             </Button>
           </div>
@@ -186,7 +186,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
                 <Button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 bg-accent text-background hover:bg-accent/90"
+                  className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
                 >
                   {loading ? "Sending..." : "Send Request"}
                   <Send className="w-4 h-4 ml-2" />

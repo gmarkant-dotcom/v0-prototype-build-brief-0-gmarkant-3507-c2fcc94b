@@ -291,7 +291,7 @@ export default function PartnerInvitationsPage() {
                           type="button"
                           onClick={() => handleAccept(partnership.id)}
                           disabled={updating === partnership.id}
-                          className="bg-accent text-background hover:bg-accent/90 font-semibold"
+                          className="bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
                         >
                           <Check className="w-4 h-4 mr-2" />
                           Accept Partnership
