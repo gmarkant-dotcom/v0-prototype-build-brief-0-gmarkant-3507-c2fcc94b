@@ -106,6 +106,7 @@ Cursor must follow all of them without being reminded each time.
 - Use `formatDateTime()` from `lib/utils.ts` for all date+time display — format: "Apr 23, 2026 at 2:37 PM"
 - Use `formatDate()` for date-only display — format: "Apr 23, 2026"
 - Deduplication by ID must be applied to projects array at both context level and render level
+- Ligament's layout is always dark via :root CSS tokens but does NOT use the .dark class on <html> or <body>. Therefore dark:* Tailwind variants NEVER apply anywhere in this codebase. Never use dark:* utilities — use explicit color values or CSS token references instead.
 
 ### Auth / Middleware
 - `middleware.ts` must preserve query params (especially `invite`, `email`, `nda`, `next`) when redirecting unauthenticated users
