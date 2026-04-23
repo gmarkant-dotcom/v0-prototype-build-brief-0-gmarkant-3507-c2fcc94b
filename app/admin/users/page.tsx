@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -28,7 +28,6 @@ const OWNER_EMAIL = 'greg@withligament.com'
 export default function AdminUsersPage() {
   const router = useRouter()
   const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [isOwner, setIsOwner] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
@@ -63,7 +62,6 @@ export default function AdminUsersPage() {
 
       if (profiles) {
         setUsers(profiles)
-        setFilteredUsers(profiles)
       }
       setIsLoading(false)
     }
@@ -71,18 +69,16 @@ export default function AdminUsersPage() {
     checkOwnerAndFetchUsers()
   }, [router])
 
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = users.filter(user => 
-        user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-      setFilteredUsers(filtered)
-    } else {
-      setFilteredUsers(users)
-    }
-  }, [searchQuery, users])
+  const filteredUsers = useMemo(() => {
+    if (!searchQuery) return users
+    const query = searchQuery.toLowerCase()
+    return users.filter(
+      (user) =>
+        user.email?.toLowerCase().includes(query) ||
+        user.full_name?.toLowerCase().includes(query) ||
+        user.company_name?.toLowerCase().includes(query)
+    )
+  }, [users, searchQuery])
 
   const togglePaidStatus = async (userId: string, currentStatus: boolean) => {
     setUpdating(userId)

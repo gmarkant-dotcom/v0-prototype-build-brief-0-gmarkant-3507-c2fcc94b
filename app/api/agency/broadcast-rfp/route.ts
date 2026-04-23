@@ -18,6 +18,24 @@ type BroadcastItem = {
   newRecipients: { email: string; name: string; requireNda: boolean }[]
 }
 
+type PartnershipRow = {
+  id: string
+  nda_confirmed_at?: string | null
+  partner_email?: string | null
+  partner?:
+    | {
+        email?: string | null
+        full_name?: string | null
+        company_name?: string | null
+      }
+    | Array<{
+        email?: string | null
+        full_name?: string | null
+        company_name?: string | null
+      }>
+    | null
+}
+
 function buildBrandedRfpNotificationHtml(params: {
   recipientName: string
   agencyDisplay: string
@@ -79,6 +97,12 @@ function normalizeManualRecipients(
       }
     })
     .filter((entry): entry is { email: string; name: string; requireNda: boolean } => Boolean(entry))
+}
+
+function normalizePartnerProfile(raw: PartnershipRow["partner"]) {
+  if (!raw) return null
+  if (Array.isArray(raw)) return raw[0] || null
+  return raw
 }
 
 export async function POST(request: NextRequest) {
@@ -174,7 +198,9 @@ export async function POST(request: NextRequest) {
 
         const { data: partnership, error: pErr } = await supabase
           .from("partnerships")
-          .select("id, nda_confirmed_at, partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)")
+          .select(
+            "id, nda_confirmed_at, partner_email, partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)"
+          )
           .eq("agency_id", user.id)
           .eq("partner_id", partnerId)
           .eq("status", "active")
@@ -216,9 +242,19 @@ export async function POST(request: NextRequest) {
           status: "new",
         })
 
-        const partnerEmail = partnership?.partner?.email || ""
+        const normalizedPartner = normalizePartnerProfile((partnership as PartnershipRow).partner)
+        const partnerEmail = (
+          normalizedPartner?.email ||
+          (partnership as PartnershipRow).partner_email ||
+          ""
+        )
+          .trim()
+          .toLowerCase()
         const partnerName =
-          partnership?.partner?.company_name || partnership?.partner?.full_name || partnerEmail || "Partner"
+          normalizedPartner?.company_name ||
+          normalizedPartner?.full_name ||
+          partnerEmail ||
+          "Partner"
         if (!partnerEmail.trim()) {
           console.warn("[broadcast-rfp] active partner has no email; skipping notification", {
             partnerId,

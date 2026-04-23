@@ -26,10 +26,10 @@ type RFP = {
   issuedBy: string
   meetingUrl?: string | null
   sentAt?: string | null
-  createdAt?: string | null
+  created_at?: string | null
   responseDeadline?: string | null
   partnerIntent?: "will_respond" | "has_questions" | "requesting_call" | null
-  viewedAt?: string | null
+  viewed_at?: string | null
   status:
     | "submitted"
     | "under_review"
@@ -48,7 +48,8 @@ type RFP = {
 type PartnerStatusFilterTab =
   | "all"
   | "new"
-  | "changes_requested"
+  | "submitted"
+  | "under_review"
   | "shortlisted"
   | "meeting_requested"
   | "awarded"
@@ -154,23 +155,6 @@ function partnerIntentTag(intent?: "will_respond" | "has_questions" | "requestin
   return "Requested call"
 }
 
-function matchesPartnerStatusFilter(status: string, tab: PartnerStatusFilterTab): boolean {
-  if (tab === "all") return true
-  if (tab === "changes_requested") return status === "under_review"
-  if (tab === "new") {
-    return (
-      status === "submitted" ||
-      status === "bid_submitted" ||
-      status === "revision_submitted" ||
-      status === "new" ||
-      status === "viewed" ||
-      status === "feedback_received" ||
-      status === "draft"
-    )
-  }
-  return status === tab
-}
-
 function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
   const mj = (row.master_rfp_json || {}) as {
     projectName?: string
@@ -216,10 +200,10 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
     issuedBy: row.agency_company_name?.trim() || "Lead agency",
     meetingUrl: row.agency_meeting_url || null,
     sentAt: row.created_at || null,
-    createdAt: row.created_at || null,
+    created_at: row.created_at || null,
     responseDeadline: row.response_deadline || null,
     partnerIntent: row.partner_intent || null,
-    viewedAt: row.viewed_at || null,
+    viewed_at: row.viewed_at || null,
     status: st,
   }
 }
@@ -236,7 +220,8 @@ export default function PartnerRFPsPage() {
   const statusFilters: PartnerStatusFilterTab[] = [
     "all",
     "new",
-    "changes_requested",
+    "submitted",
+    "under_review",
     "shortlisted",
     "meeting_requested",
     "awarded",
@@ -277,14 +262,17 @@ export default function PartnerRFPsPage() {
   const displayedRfps = useMemo(() => {
     let list = [...rfps]
     if (viewFilter === "unviewed") {
-      list = list.filter((rfp) => !rfp.viewedAt)
+      list = list.filter((rfp) => !rfp.viewed_at)
+    }
+    if (activeStatusFilter !== "all") {
+      list = list.filter((rfp) => rfp.status === activeStatusFilter)
     }
     list.sort((a, b) => {
-      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
-      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0
       return tb - ta
     })
-    return list.filter((rfp) => matchesPartnerStatusFilter(rfp.status, activeStatusFilter))
+    return list
   }, [rfps, viewFilter, activeStatusFilter])
 
   return (
@@ -315,7 +303,7 @@ export default function PartnerRFPsPage() {
             >
               {filter === "all"
                 ? `All RFPs (${rfps.length})`
-                : `${getBidStatusLabel(filter === "changes_requested" ? "under_review" : filter, "partner")} (${rfps.filter((r) => matchesPartnerStatusFilter(r.status, filter)).length})`}
+                : `${getBidStatusLabel(filter, "partner")} (${rfps.filter((r) => r.status === filter).length})`}
             </button>
           ))}
         </div>
@@ -358,8 +346,8 @@ export default function PartnerRFPsPage() {
               onClick={() => {
                 setRfps((prev) =>
                   prev.map((item) =>
-                    item.id === rfp.id && !item.viewedAt
-                      ? { ...item, viewedAt: new Date().toISOString() }
+                    item.id === rfp.id && !item.viewed_at
+                      ? { ...item, viewed_at: new Date().toISOString() }
                       : item
                   )
                 )
@@ -440,7 +428,7 @@ export default function PartnerRFPsPage() {
                         {partnerIntentTag(rfp.partnerIntent)}
                       </span>
                     )}
-                    {!rfp.viewedAt && (
+                    {!rfp.viewed_at && (
                       <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-[#0C3535] text-white">
                         NEW
                       </span>
