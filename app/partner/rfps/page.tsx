@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { Suspense, useState, useEffect, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
@@ -213,7 +213,7 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
   }
 }
 
-export default function PartnerRFPsPage() {
+function PartnerRFPsContent() {
   const searchParams = useSearchParams()
   const inviteStatus = (searchParams.get("invite_status") || "").trim()
   const isDemo = isDemoMode()
@@ -367,7 +367,9 @@ export default function PartnerRFPsPage() {
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
-                          window.open(ensureAbsoluteUrl(rfp.meetingUrl || ""), "_blank", "noopener,noreferrer")
+                          if (typeof window !== "undefined") {
+                            window.open(ensureAbsoluteUrl(rfp.meetingUrl || ""), "_blank", "noopener,noreferrer")
+                          }
                         }}
                         className={cn(
                           "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase inline-flex items-center gap-1 hover:opacity-90",
@@ -453,5 +455,26 @@ export default function PartnerRFPsPage() {
         </div>
       </div>
     </PartnerLayout>
+  )
+}
+
+export default function PartnerRFPsPage() {
+  return (
+    <Suspense
+      fallback={
+        <PartnerLayout>
+          <div className="space-y-6">
+            <div className="grid gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-12 flex flex-col items-center justify-center gap-3 text-gray-600">
+                <Loader2 className="w-8 h-8 animate-spin text-[#0C3535]" />
+                <p className="font-mono text-sm">Loading RFPs…</p>
+              </div>
+            </div>
+          </div>
+        </PartnerLayout>
+      }
+    >
+      <PartnerRFPsContent />
+    </Suspense>
   )
 }
