@@ -107,6 +107,12 @@ function normalizePartnerProfile(raw: PartnershipRow["partner"]) {
 
 export async function POST(request: NextRequest) {
   try {
+    try {
+      console.log("BROADCAST PAYLOAD:", JSON.stringify(await request.clone().json(), null, 2))
+    } catch (payloadLogError) {
+      console.log("BROADCAST PAYLOAD: <unavailable>", payloadLogError)
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -312,13 +318,24 @@ export async function POST(request: NextRequest) {
       )
       for (const nr of normalizedItemNewRecipients) {
         const email = (nr?.email || "").trim().toLowerCase()
-        if (!email) continue
+        console.log("PROCESSING NEW RECIPIENT:", email)
+        if (!email) {
+          const reason = "empty_email"
+          console.log("SKIPPING RECIPIENT - reason:", reason, email)
+          continue
+        }
         const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
         if (!isValidEmail) {
+          const reason = "invalid_email"
+          console.log("SKIPPING RECIPIENT - reason:", reason, email)
           return NextResponse.json({ error: `Invalid recipient email: ${email}` }, { status: 400 })
         }
         const manualScopeKey = `email:${scopeItemId}:${email}`
-        if (seenRecipientKeys.has(manualScopeKey)) continue
+        if (seenRecipientKeys.has(manualScopeKey)) {
+          const reason = "duplicate_scope_email"
+          console.log("SKIPPING RECIPIENT - reason:", reason, email)
+          continue
+        }
         seenRecipientKeys.add(manualScopeKey)
 
         rows.push({
