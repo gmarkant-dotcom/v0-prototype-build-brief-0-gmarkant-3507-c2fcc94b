@@ -36,7 +36,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: inbox, error: inboxError } = await supabase
       .from("partner_rfp_inbox")
-      .select("id, partner_id, recipient_email, status")
+      .select("id, partner_id, recipient_email, status, nda_gate_enforced, nda_confirmed_at")
       .eq("id", id)
       .maybeSingle()
 
@@ -48,16 +48,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    if (
-      !partnerCanAccessPartnerRfpInbox(
-        {
-          partner_id: (inbox.partner_id as string | null) ?? null,
-          recipient_email: (inbox.recipient_email as string | null) ?? null,
-        },
-        user.id,
-        profile.email
-      )
-    ) {
+    const access = partnerCanAccessPartnerRfpInbox(
+      {
+        partner_id: (inbox.partner_id as string | null) ?? null,
+        recipient_email: (inbox.recipient_email as string | null) ?? null,
+        nda_gate_enforced: (inbox.nda_gate_enforced as boolean | null) ?? false,
+        nda_confirmed_at: (inbox.nda_confirmed_at as string | null) ?? null,
+      },
+      user.id,
+      profile.email
+    )
+
+    if (!access.allowed) {
+      if (access.reason === "nda_required") {
+        return NextResponse.json({ error: "nda_required", inboxItemId: id }, { status: 403 })
+      }
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 

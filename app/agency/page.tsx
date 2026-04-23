@@ -592,7 +592,7 @@ function AgencyRFPContent() {
   
   // Add new recipient
   const addNewRecipient = (scopeItemId: string) => {
-    const draft = recipientDrafts[scopeItemId] || { email: "", name: "", requireNda: true }
+    const draft = recipientDrafts[scopeItemId] || { email: "", name: "", requireNda: ndaSignatureRequired }
     const email = draft.email.trim().toLowerCase()
     if (!email) return
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -631,10 +631,10 @@ function AgencyRFPContent() {
     }))
     setRecipientDrafts((prev) => ({
       ...prev,
-      [scopeItemId]: { email: "", name: "", requireNda: true },
+      [scopeItemId]: { email: "", name: "", requireNda: ndaSignatureRequired },
     }))
     setRecipientAddErrors((prev) => ({ ...prev, [scopeItemId]: null }))
-    setRecipientAddSuccess((prev) => ({ ...prev, [scopeItemId]: "Recipient added." }))
+    setRecipientAddSuccess((prev) => ({ ...prev, [scopeItemId]: `Recipient added: ${email}` }))
   }
   
   // Remove new recipient
@@ -685,7 +685,7 @@ function AgencyRFPContent() {
           acc[item.id] = (newRecipients[item.id] || []).map((recipient) => ({
             email: recipient.email.trim().toLowerCase(),
             name: recipient.name?.trim?.() || "",
-            requireNda: recipient.requireNda !== false,
+            requireNda: ndaSignatureRequired ? recipient.requireNda !== false : false,
           }))
           return acc
         },
@@ -1819,9 +1819,11 @@ function AgencyRFPContent() {
                     })}
                     {(newRecipients[item.id] || []).map((recipient, index) => (
                       <div key={index} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20">
-                        <span className="font-mono text-xs text-foreground">{recipient.name || recipient.email}</span>
+                        <span className="font-mono text-xs text-foreground">
+                          {recipient.name ? `${recipient.name} · ${recipient.email}` : recipient.email}
+                        </span>
                         <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-100">New</span>
-                        {recipient.requireNda && (
+                        {ndaSignatureRequired && recipient.requireNda && (
                           <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Required</span>
                         )}
                         <button 
@@ -1930,7 +1932,7 @@ function AgencyRFPContent() {
                             [item.id]: {
                               email: prev[item.id]?.email || "",
                               name: e.target.value,
-                              requireNda: prev[item.id]?.requireNda ?? true,
+                              requireNda: prev[item.id]?.requireNda ?? ndaSignatureRequired,
                             },
                           }))
                         }
@@ -1945,32 +1947,38 @@ function AgencyRFPContent() {
                             [item.id]: {
                               email: e.target.value,
                               name: prev[item.id]?.name || "",
-                              requireNda: prev[item.id]?.requireNda ?? true,
+                              requireNda: prev[item.id]?.requireNda ?? ndaSignatureRequired,
                             },
                           }))
                         }
                         className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                       />
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={recipientDrafts[item.id]?.requireNda ?? true}
-                          onChange={(e) =>
-                            setRecipientDrafts((prev) => ({
-                              ...prev,
-                              [item.id]: {
-                                email: prev[item.id]?.email || "",
-                                name: prev[item.id]?.name || "",
-                                requireNda: e.target.checked,
-                              },
-                            }))
-                          }
-                          className="rounded border-border"
-                        />
-                        <span className="font-mono text-[10px] text-foreground-muted">
-                          Require NDA signature before viewing RFP
-                        </span>
-                      </label>
+                      {ndaSignatureRequired ? (
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={recipientDrafts[item.id]?.requireNda ?? true}
+                            onChange={(e) =>
+                              setRecipientDrafts((prev) => ({
+                                ...prev,
+                                [item.id]: {
+                                  email: prev[item.id]?.email || "",
+                                  name: prev[item.id]?.name || "",
+                                  requireNda: e.target.checked,
+                                },
+                              }))
+                            }
+                            className="rounded border-border"
+                          />
+                          <span className="font-mono text-[10px] text-foreground-muted">
+                            Require NDA signature before viewing RFP
+                          </span>
+                        </label>
+                      ) : (
+                        <p className="font-mono text-[10px] text-foreground-muted">
+                          NDA requirement is off for this broadcast.
+                        </p>
+                      )}
                       <Button 
                         size="sm"
                         onClick={() => addNewRecipient(item.id)}

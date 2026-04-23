@@ -41,6 +41,10 @@ export async function GET(request: Request) {
   const error = searchParams.get("error")
   const errorDescription = searchParams.get("error_description")
   const next = searchParams.get("next") ?? "/"
+  const invite = searchParams.get("invite")
+  const nda = searchParams.get("nda")
+  const scope = searchParams.get("scope")
+  const agency = searchParams.get("agency")
 
   // Handle error responses from Supabase (like expired OTP)
   if (error) {
@@ -67,9 +71,19 @@ export async function GET(request: Request) {
       // Sync profile and get role
       const role = await syncUserProfile(supabase, data.user)
       
+      if (invite) {
+        const claimUrl = new URL(`${origin}/api/partner/rfps/claim`)
+        claimUrl.searchParams.set("token", invite)
+        if (nda) claimUrl.searchParams.set("nda", nda)
+        if (scope) claimUrl.searchParams.set("scope", scope)
+        if (agency) claimUrl.searchParams.set("agency", agency)
+        if (next) claimUrl.searchParams.set("next", next)
+        return NextResponse.redirect(claimUrl.toString())
+      }
+
       // Sign out the user so they need to log in manually after confirmation
       await supabase.auth.signOut()
-      
+
       // Redirect to confirmation success page
       return NextResponse.redirect(`${origin}/auth/confirmed?role=${role}`)
     }
@@ -83,6 +97,16 @@ export async function GET(request: Request) {
       // Sync profile and get role
       const role = await syncUserProfile(supabase, data.user)
       
+      if (invite) {
+        const claimUrl = new URL(`${origin}/api/partner/rfps/claim`)
+        claimUrl.searchParams.set("token", invite)
+        if (nda) claimUrl.searchParams.set("nda", nda)
+        if (scope) claimUrl.searchParams.set("scope", scope)
+        if (agency) claimUrl.searchParams.set("agency", agency)
+        if (next) claimUrl.searchParams.set("next", next)
+        return NextResponse.redirect(claimUrl.toString())
+      }
+
       // If a specific next path was provided (e.g., password reset), use that
       if (next && next !== "/") {
         return NextResponse.redirect(`${origin}${next}`)

@@ -75,6 +75,8 @@ type InboxRow = {
   response_deadline?: string | null
   partner_intent?: "will_respond" | "has_questions" | "requesting_call" | null
   intent_set_at?: string | null
+  nda_gate_enforced?: boolean
+  nda_confirmed_at?: string | null
 }
 
 type AttachmentTag =
@@ -439,6 +441,9 @@ export default function PartnerRfpDetailPage() {
   const [partnerIntent, setPartnerIntent] = useState<PartnerIntent | null>(null)
   const [isSavingIntent, setIsSavingIntent] = useState(false)
   const [intentError, setIntentError] = useState<string | null>(null)
+  const [ndaGateBlocked, setNdaGateBlocked] = useState(false)
+  const [ndaNotifyBusy, setNdaNotifyBusy] = useState(false)
+  const [ndaNotifyMessage, setNdaNotifyMessage] = useState<string | null>(null)
 
   const updateDraft = useCallback((draftId: string, patch: Partial<DraftAttachment>) => {
     setDraftAttachments((prev) => prev.map((d) => (d.id === draftId ? { ...d, ...patch } : d)))
@@ -464,8 +469,32 @@ export default function PartnerRfpDetailPage() {
       try {
         const res = await fetch(`/api/partner/rfps/${id}`, { cache: "no-store", credentials: "same-origin" })
         const data = await res.json().catch(() => ({}))
+        if (res.status === 403 && data?.error === "nda_required") {
+          if (!cancelled) {
+            const blockedInbox = (data?.inbox || {}) as Partial<InboxRow>
+            setInbox({
+              id,
+              agency_id: "",
+              scope_item_id: "",
+              scope_item_name: blockedInbox.scope_item_name || "Confidential RFP",
+              scope_item_description: null,
+              estimated_budget: null,
+              timeline: null,
+              master_rfp_json: (blockedInbox.master_rfp_json || {}) as Record<string, unknown>,
+              agency_company_name: blockedInbox.agency_company_name || "Lead agency",
+              status: "new",
+              created_at: new Date().toISOString(),
+              nda_gate_enforced: true,
+              nda_confirmed_at: null,
+            })
+            setNdaGateBlocked(true)
+            setError(null)
+          }
+          return
+        }
         if (!res.ok) throw new Error((data?.error as string) || "Could not load RFP")
         if (!cancelled) {
+          setNdaGateBlocked(false)
           setInbox(data.inbox as InboxRow)
           setPartnerIntent(((data.inbox as InboxRow)?.partner_intent as PartnerIntent | null) || null)
           const r = data.response as ResponseRow | null
@@ -754,6 +783,60 @@ export default function PartnerRfpDetailPage() {
             ← Back to Open RFPs
           </Link>
           <div className="bg-white rounded-xl border border-red-200 p-8 text-red-800">{error || "Not found"}</div>
+        </div>
+      </PartnerChrome>
+    )
+  }
+
+  if (ndaGateBlocked && inbox) {
+    const ndaLink =
+      ((inbox.master_rfp_json || {}) as Record<string, unknown>)?.nda_link?.toString?.() || ""
+    return (
+      <PartnerChrome>
+        <div className="max-w-3xl mx-auto py-8 space-y-5">
+          <Link href="/partner/rfps" className="font-mono text-xs text-gray-500 hover:text-[#0C3535] inline-flex items-center gap-1">
+            ← Back to Open RFPs
+          </Link>
+          <div className="bg-white rounded-xl border border-amber-200 p-6">
+            <h1 className="font-display font-bold text-2xl text-[#0C3535]">This RFP requires a signed NDA</h1>
+            <p className="mt-3 text-sm text-gray-700">
+              Sign the NDA document and notify {inbox.agency_company_name || "the agency"} when complete. They will confirm and unlock your access.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button
+                type="button"
+                onClick={async () => {
+                  setNdaNotifyBusy(true)
+                  setNdaNotifyMessage(null)
+                  try {
+                    const res = await fetch(`/api/partner/rfps/${id}/nda-notify`, { method: "POST" })
+                    const payload = await res.json().catch(() => ({}))
+                    if (!res.ok) throw new Error(payload?.error || "Failed to notify agency")
+                    setNdaNotifyMessage("Agency notified. You'll receive an email when your access is confirmed.")
+                  } catch (notifyError) {
+                    setNdaNotifyMessage(
+                      notifyError instanceof Error ? notifyError.message : "Could not notify agency right now."
+                    )
+                  } finally {
+                    setNdaNotifyBusy(false)
+                  }
+                }}
+                disabled={ndaNotifyBusy}
+                className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+              >
+                {ndaNotifyBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                I have signed the NDA — notify the agency
+              </Button>
+              {ndaLink && (
+                <Button variant="outline" asChild>
+                  <a href={ndaLink} target="_blank" rel="noreferrer noopener">
+                    View NDA
+                  </a>
+                </Button>
+              )}
+            </div>
+            {ndaNotifyMessage && <p className="mt-4 text-sm text-gray-700">{ndaNotifyMessage}</p>}
+          </div>
         </div>
       </PartnerChrome>
     )

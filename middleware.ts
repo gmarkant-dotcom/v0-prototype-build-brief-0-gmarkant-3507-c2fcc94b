@@ -24,6 +24,25 @@ function isPublicPath(pathname: string): boolean {
   return publicPaths.some(p => pathname === p || pathname.startsWith(`${p}/`))
 }
 
+function buildAuthRedirect(request: NextRequest, targetPath: "/auth/login" | "/auth/sign-up") {
+  const url = request.nextUrl.clone()
+  const originalPath = `${request.nextUrl.pathname}${request.nextUrl.search}`
+  const originalParams = request.nextUrl.searchParams
+
+  url.pathname = targetPath
+  url.search = ""
+
+  const passthrough = ["invite", "email", "nda", "scope", "agency", "next"]
+  for (const key of passthrough) {
+    const value = originalParams.get(key)
+    if (value) url.searchParams.set(key, value)
+  }
+  if (!url.searchParams.get("next")) {
+    url.searchParams.set("next", originalPath)
+  }
+  return url
+}
+
 export async function middleware(request: NextRequest) {
   const isDemo = isDemoRequest(request)
   const pathname = request.nextUrl.pathname
@@ -40,8 +59,7 @@ export async function middleware(request: NextRequest) {
       
       // If no user logged in on demo site, redirect to login
       if (!user) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/auth/login'
+        const url = buildAuthRedirect(request, "/auth/login")
         url.searchParams.set('demo', 'true')
         return NextResponse.redirect(url)
       }
@@ -64,8 +82,7 @@ export async function middleware(request: NextRequest) {
       return supabaseResponse
     } catch (error) {
       // Auth error on demo - redirect to login
-      const url = request.nextUrl.clone()
-      url.pathname = '/auth/login'
+      const url = buildAuthRedirect(request, "/auth/login")
       return NextResponse.redirect(url)
     }
   }
@@ -79,8 +96,7 @@ export async function middleware(request: NextRequest) {
     const { user, supabase, supabaseResponse } = await createMiddlewareClient(request)
 
     if (!user) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/auth/login'
+      const url = buildAuthRedirect(request, "/auth/login")
       return NextResponse.redirect(url)
     }
 
@@ -114,8 +130,7 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   } catch (error) {
     console.error('Middleware auth error:', error)
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
+    const url = buildAuthRedirect(request, "/auth/login")
     return NextResponse.redirect(url)
   }
 }

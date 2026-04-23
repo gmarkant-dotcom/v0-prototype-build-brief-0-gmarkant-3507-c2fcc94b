@@ -552,18 +552,69 @@ export async function PATCH(request: NextRequest) {
       if (!isAgency) {
         return NextResponse.json({ error: 'Only agencies can confirm NDA status' }, { status: 403 })
       }
+      const now = new Date().toISOString()
       const { data: updated, error } = await supabase
         .from('partnerships')
         .update({
-          nda_confirmed_at: new Date().toISOString(),
+          nda_confirmed_at: now,
           nda_confirmed_by: user.id,
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         })
         .eq('id', partnershipId)
         .eq('agency_id', user.id)
         .select()
         .single()
       if (error) throw error
+
+      const { data: inboxRows } = await supabase
+        .from('partner_rfp_inbox')
+        .select('id, recipient_email, scope_item_name')
+        .eq('partnership_id', partnershipId)
+        .eq('nda_gate_enforced', true)
+        .is('nda_confirmed_at', null)
+
+      await supabase
+        .from('partner_rfp_inbox')
+        .update({ nda_confirmed_at: now, updated_at: now })
+        .eq('partnership_id', partnershipId)
+        .eq('nda_gate_enforced', true)
+        .is('nda_confirmed_at', null)
+
+      const partnerEmailFromInbox = (inboxRows || [])
+        .map((row) => (row.recipient_email || '').trim().toLowerCase())
+        .find(Boolean)
+      let partnerEmail = partnerEmailFromInbox || null
+      if (!partnerEmail && partnership.partner_id) {
+        const { data: partnerProfile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', partnership.partner_id)
+          .maybeSingle()
+        partnerEmail = (partnerProfile?.email || '').trim().toLowerCase() || null
+      }
+
+      if (partnerEmail) {
+        const resendApiKey = process.env.RESEND_API_KEY
+        if (resendApiKey) {
+          const resend = new Resend(resendApiKey)
+          const baseUrl = siteBaseUrl()
+          const { data: agencyProfile } = await supabase
+            .from('profiles')
+            .select('company_name, full_name')
+            .eq('id', user.id)
+            .maybeSingle()
+          const agencyLabel =
+            (agencyProfile?.company_name || agencyProfile?.full_name || 'Lead agency')
+          const scopeName = (inboxRows?.[0]?.scope_item_name as string | undefined) || 'this scope'
+          await resend.emails.send({
+            from: 'Ligament <notifications@withligament.com>',
+            to: partnerEmail,
+            subject: `Your NDA has been confirmed — ${scopeName} is now accessible`,
+            html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#081F1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"><div style="max-width:600px;margin:0 auto;padding:40px 20px;"><div style="background:#0C3535;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.12);"><p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 12px 0;"><strong style="color:#FFFFFF;">${agencyLabel}</strong> has confirmed your NDA for <strong style="color:#FFFFFF;">${scopeName}</strong>.</p><p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 24px 0;">You can now log in and view the full RFP details and submit your bid.</p><a href="${baseUrl}/partner/rfps" style="display:inline-block;background:#C8F53C;color:#0C3535;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;">View RFP</a><p style="color:#9BB8B8;font-size:13px;margin:24px 0 0;">The Ligament Team<br /><a href="${baseUrl}" style="color:#C8F53C;text-decoration:none;">withligament.com</a></p></div></div></body></html>`,
+          })
+        }
+      }
+
       return NextResponse.json({ partnership: updated })
     }
 

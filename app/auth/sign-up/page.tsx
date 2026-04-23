@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,13 @@ type UserRole = "agency" | "partner"
 
 export default function SignUpPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const inviteToken = (searchParams.get("invite") || "").trim()
+  const prefillEmail = (searchParams.get("email") || "").trim().toLowerCase()
+  const ndaRequired = searchParams.get("nda") === "required"
+  const scopeName = (searchParams.get("scope") || "").trim()
+  const agencyName = (searchParams.get("agency") || "").trim()
+  const hasInviteContext = inviteToken.length > 0
   
   const [step, setStep] = useState<1 | 2>(1)
   const [role, setRole] = useState<UserRole | null>(null)
@@ -29,6 +36,24 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [acceptedPrivacy, setAcceptedPrivacy] = useState(false)
+
+  useEffect(() => {
+    if (!hasInviteContext) return
+    setRole("partner")
+    setStep(2)
+  }, [hasInviteContext])
+
+  useEffect(() => {
+    if (prefillEmail) setEmail(prefillEmail)
+  }, [prefillEmail])
+
+  const inviteBannerText = useMemo(() => {
+    if (!hasInviteContext) return ""
+    if (agencyName && scopeName) {
+      return `${agencyName} has invited you to respond to an RFP for ${scopeName} on Ligament.`
+    }
+    return "You've been invited to respond to an RFP on Ligament."
+  }, [agencyName, hasInviteContext, scopeName])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,7 +79,14 @@ export default function SignUpPage() {
     const supabase = createClient()
     
     // Use the current origin for redirect - this ensures it always points to the live deployment
-    const redirectUrl = `${window.location.origin}/auth/callback`
+    const redirectUrlObj = new URL(`${window.location.origin}/auth/callback`)
+    if (inviteToken) {
+      redirectUrlObj.searchParams.set("invite", inviteToken)
+      if (ndaRequired) redirectUrlObj.searchParams.set("nda", "required")
+      if (scopeName) redirectUrlObj.searchParams.set("scope", scopeName)
+      if (agencyName) redirectUrlObj.searchParams.set("agency", agencyName)
+    }
+    const redirectUrl = redirectUrlObj.toString()
     
     const { error: signUpError } = await supabase.auth.signUp({
       email,
@@ -77,7 +109,35 @@ export default function SignUpPage() {
       return
     }
 
-    router.push("/auth/sign-up-success")
+    if (!inviteToken) {
+      router.push("/auth/sign-up-success")
+      return
+    }
+
+    try {
+      const claimRes = await fetch("/api/partner/rfps/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: inviteToken }),
+      })
+      const claimData = await claimRes.json().catch(() => ({}))
+      if (!claimRes.ok) {
+        router.push("/partner/rfps?invite_status=failed")
+        return
+      }
+
+      const inboxItemId = (claimData?.inboxItemId as string) || ""
+      if (!inboxItemId) {
+        router.push("/partner/rfps?invite_status=failed")
+        return
+      }
+      const nextPath = claimData?.ndaGateEnforced
+        ? `/partner/rfps/${encodeURIComponent(inboxItemId)}?nda=required`
+        : `/partner/rfps/${encodeURIComponent(inboxItemId)}`
+      router.push(nextPath)
+    } catch {
+      router.push("/partner/rfps?invite_status=failed")
+    }
   }
 
   return (
@@ -178,6 +238,16 @@ export default function SignUpPage() {
                 </p>
               </div>
 
+              {hasInviteContext && (
+                <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 p-3">
+                  <p className="text-sm text-foreground">{inviteBannerText}</p>
+                  {ndaRequired && (
+                    <p className="mt-2 text-xs text-foreground-muted">
+                      This RFP requires a signed NDA. You&apos;ll be guided through the NDA process after creating your account.
+                    </p>
+                  )}
+                </div>
+              )}
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div>
                   <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
@@ -217,6 +287,7 @@ export default function SignUpPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@company.com"
                     required
+                    readOnly={Boolean(prefillEmail)}
                     className="bg-white/5 border-border/30 text-foreground placeholder:text-foreground-muted/50"
                   />
                 </div>

@@ -13,7 +13,25 @@ import { Eye, EyeOff, ArrowRight } from "lucide-react"
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirect = searchParams.get("redirect") || ""
+  const redirect = searchParams.get("redirect") || searchParams.get("next") || ""
+  const inviteToken = (searchParams.get("invite") || "").trim()
+  const inviteScope = (searchParams.get("scope") || "").trim()
+  const inviteAgency = (searchParams.get("agency") || "").trim()
+  const inviteNdaRequired = searchParams.get("nda") === "required"
+  const signUpHref = (() => {
+    if (!inviteToken) return "/auth/sign-up"
+    const qp = new URLSearchParams()
+    qp.set("invite", inviteToken)
+    const email = searchParams.get("email")
+    const nda = searchParams.get("nda")
+    const scope = searchParams.get("scope")
+    const agency = searchParams.get("agency")
+    if (email) qp.set("email", email)
+    if (nda) qp.set("nda", nda)
+    if (scope) qp.set("scope", scope)
+    if (agency) qp.set("agency", agency)
+    return `/auth/sign-up?${qp.toString()}`
+  })()
   
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -69,6 +87,23 @@ function LoginContent() {
         // Profile table might not exist yet, continue with default role
       }
 
+      if (inviteToken) {
+        const claimRes = await fetch("/api/partner/rfps/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: inviteToken }),
+        })
+        const claimData = await claimRes.json().catch(() => ({}))
+        if (claimRes.ok && claimData?.inboxItemId) {
+          const nextPath = claimData?.ndaGateEnforced || inviteNdaRequired
+            ? `/partner/rfps/${encodeURIComponent(claimData.inboxItemId)}?nda=required`
+            : `/partner/rfps/${encodeURIComponent(claimData.inboxItemId)}`
+          router.push(nextPath)
+          router.refresh()
+          return
+        }
+      }
+
       // Redirect based on role or original destination
       if (redirect) {
         router.push(redirect)
@@ -107,6 +142,15 @@ function LoginContent() {
               Sign in to your LIGAMENT account
             </p>
           </div>
+          {inviteToken && (
+            <div className="mb-5 rounded-lg border border-accent/30 bg-accent/10 p-3">
+              <p className="text-sm text-foreground">
+                {(inviteAgency && inviteScope)
+                  ? `${inviteAgency} has sent you an RFP for ${inviteScope}. Log in to view it.`
+                  : "You have an RFP invite waiting. Log in to view it."}
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -173,7 +217,7 @@ function LoginContent() {
           <div className="mt-6 text-center">
             <p className="text-sm text-foreground-muted">
               Don't have an account?{" "}
-              <Link href="/auth/sign-up" className="text-accent hover:underline">
+              <Link href={signUpHref} className="text-accent hover:underline">
                 Create one
               </Link>
             </p>

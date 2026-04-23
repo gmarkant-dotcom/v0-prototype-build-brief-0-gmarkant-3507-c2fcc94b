@@ -82,7 +82,9 @@ export async function GET(request: Request) {
 
     let inboxQuery = supabase
       .from("partner_rfp_inbox")
-      .select("id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, partner_id, recipient_email")
+      .select(
+        "id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, partner_id, recipient_email, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at"
+      )
       .eq("agency_id", user.id)
       .order("created_at", { ascending: false })
     if (projectIdParam) inboxQuery = inboxQuery.eq("project_id", projectIdParam)

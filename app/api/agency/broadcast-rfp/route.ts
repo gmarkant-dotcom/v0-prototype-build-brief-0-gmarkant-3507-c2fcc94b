@@ -38,11 +38,19 @@ type PartnershipRow = {
 
 function buildBrandedRfpNotificationHtml(params: {
   recipientName: string
-  agencyDisplay: string
-  scopeName: string
+  heading: string
+  paragraphs: string[]
+  ctaLabel: string
+  ctaUrl: string
   baseUrl: string
 }): string {
   const safeRecipientName = params.recipientName || "there"
+  const bodyParagraphs = params.paragraphs
+    .map(
+      (line) =>
+        `<p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 12px 0;">${line}</p>`
+    )
+    .join("")
   return `
     <!DOCTYPE html>
     <html>
@@ -57,17 +65,13 @@ function buildBrandedRfpNotificationHtml(params: {
             Ligament
           </div>
           <p style="color:#E8E8E8;font-size:16px;line-height:1.6;margin:0 0 16px 0;">Hi ${safeRecipientName},</p>
-          <p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 12px 0;">
-            <strong style="color:#FFFFFF;">${params.agencyDisplay}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${params.scopeName}</strong> on Ligament.
-          </p>
-          <p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 24px 0;">
-            Review the scope, timeline, and budget details, then submit your bid directly through the platform.
-          </p>
+          <p style="color:#FFFFFF;font-size:18px;line-height:1.5;margin:0 0 14px 0;font-weight:600;">${params.heading}</p>
+          ${bodyParagraphs}
           <a
-            href="${params.baseUrl}/partner/rfps"
+            href="${params.ctaUrl}"
             style="display:inline-block;background:#C8F53C;color:#0C3535;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;"
           >
-            View RFP
+            ${params.ctaLabel}
           </a>
           <p style="color:#9BB8B8;font-size:13px;margin:24px 0 0 0;">
             The Ligament Team<br />
@@ -107,12 +111,6 @@ function normalizePartnerProfile(raw: PartnershipRow["partner"]) {
 
 export async function POST(request: NextRequest) {
   try {
-    try {
-      console.log("BROADCAST PAYLOAD:", JSON.stringify(await request.clone().json(), null, 2))
-    } catch (payloadLogError) {
-      console.log("BROADCAST PAYLOAD: <unavailable>", payloadLogError)
-    }
-
     const supabase = await createClient()
     const {
       data: { user },
@@ -140,7 +138,7 @@ export async function POST(request: NextRequest) {
     const ndaLink =
       typeof body.ndaLink === "string" && body.ndaLink.trim().length > 0
         ? body.ndaLink.trim()
-        : "https://www.docusign.com/"
+        : ""
     const items = (Array.isArray(body.items) ? body.items : []) as BroadcastItem[]
     const topLevelNewRecipientsByScope =
       body.newRecipientsByScope && typeof body.newRecipientsByScope === "object"
@@ -169,19 +167,20 @@ export async function POST(request: NextRequest) {
 
     const rows: Record<string, unknown>[] = []
     const seenRecipientKeys = new Set<string>()
-    const nonNdaExistingPartnerNotifications: {
+    const manualRecipientNotifications: {
+      recipientEmail: string
+      subject: string
+      recipientName: string
+      heading: string
+      paragraphs: string[]
+      ctaLabel: string
+      ctaUrl: string
+    }[] = []
+    const existingPartnerNotifications: {
       partnerEmail: string
       partnerName: string
       scopeName: string
-    }[] = []
-    const nonNdaNewRecipientNotifications: {
-      recipientEmail: string
-      recipientName: string
-      scopeName: string
-    }[] = []
-    const ndaRequiredNewRecipientNotifications: {
-      recipientEmail: string
-      recipientName: string
+      requiresNda: boolean
     }[] = []
 
     for (const item of items) {
@@ -231,7 +230,7 @@ export async function POST(request: NextRequest) {
         if (seenRecipientKeys.has(partnerScopeKey)) continue
         seenRecipientKeys.add(partnerScopeKey)
 
-        rows.push({
+        const row = {
           agency_id: user.id,
           partner_id: partnerId,
           recipient_email: null,
@@ -243,10 +242,11 @@ export async function POST(request: NextRequest) {
           estimated_budget: estimatedBudget || null,
           timeline: timeline || null,
           response_deadline: responseDeadline,
-          master_rfp_json: masterRfp,
+          master_rfp_json: { ...(masterRfp as Record<string, unknown>), nda_link: ndaLink || null },
           agency_company_name: agencyDisplay,
           status: "new",
-        })
+        }
+        rows.push(row)
 
         const normalizedPartner = normalizePartnerProfile((partnership as PartnershipRow).partner)
         const partnerEmail = (
@@ -269,45 +269,14 @@ export async function POST(request: NextRequest) {
         } else {
           seenRecipientKeys.add(`email:${scopeItemId}:${partnerEmail.trim().toLowerCase()}`)
         }
-        if (!ndaRequired && partnerEmail.trim()) {
-          nonNdaExistingPartnerNotifications.push({
+        const requiresNdaForExistingPartner = ndaRequired && ndaLink.length > 0 && !partnership?.nda_confirmed_at
+        if (partnerEmail.trim()) {
+          existingPartnerNotifications.push({
             partnerEmail,
             partnerName,
             scopeName: scopeItemName,
+            requiresNda: requiresNdaForExistingPartner,
           })
-        }
-
-        if (ndaRequired) {
-          const needsNda = !partnership?.nda_confirmed_at
-          if (needsNda && partnerEmail) {
-            const resendApiKey = process.env.RESEND_API_KEY
-            if (resendApiKey) {
-              const resend = new Resend(resendApiKey)
-              await resend.emails.send({
-                from: "Ligament <notifications@withligament.com>",
-                to: partnerEmail,
-                subject: `${agencyDisplay} shared a confidential RFP with you on Ligament`,
-                html: `
-                  <p style="font-family:system-ui,sans-serif">Hi ${partnerName},</p>
-                  <p style="font-family:system-ui,sans-serif">
-                    <strong>${agencyDisplay}</strong> has shared an RFP that requires a signed NDA before you can
-                    view the full details.
-                  </p>
-                  <p style="font-family:system-ui,sans-serif">
-                    Please log in to your Ligament partner portal to review the NDA and confirm your agreement to
-                    proceed.
-                  </p>
-                  <p style="font-family:system-ui,sans-serif">
-                    <a href="${ndaLink}" style="font-weight:700;color:#0C3535">View RFP</a>
-                  </p>
-                  <p style="font-family:system-ui,sans-serif">
-                    The Ligament Team<br />
-                    <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
-                  </p>
-                `,
-              })
-            }
-          }
         }
       }
 
@@ -318,31 +287,67 @@ export async function POST(request: NextRequest) {
       )
       for (const nr of normalizedItemNewRecipients) {
         const email = (nr?.email || "").trim().toLowerCase()
-        console.log("PROCESSING NEW RECIPIENT:", email)
         if (!email) {
-          const reason = "empty_email"
-          console.log("SKIPPING RECIPIENT - reason:", reason, email)
+          console.warn("[broadcast-rfp] manual recipient skipped: empty_email")
           continue
         }
         const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
         if (!isValidEmail) {
-          const reason = "invalid_email"
-          console.log("SKIPPING RECIPIENT - reason:", reason, email)
-          return NextResponse.json({ error: `Invalid recipient email: ${email}` }, { status: 400 })
+          console.error("[broadcast-rfp] manual recipient skipped: invalid_email", { email })
+          continue
         }
         const manualScopeKey = `email:${scopeItemId}:${email}`
         if (seenRecipientKeys.has(manualScopeKey)) {
-          const reason = "duplicate_scope_email"
-          console.log("SKIPPING RECIPIENT - reason:", reason, email)
+          console.warn("[broadcast-rfp] manual recipient skipped: duplicate_scope_email", {
+            email,
+            scopeItemId,
+          })
           continue
         }
         seenRecipientKeys.add(manualScopeKey)
 
+        const { data: existingProfile, error: existingProfileError } = await supabase
+          .from("profiles")
+          .select("id, email")
+          .ilike("email", email)
+          .maybeSingle<{ id: string; email: string | null }>()
+
+        if (existingProfileError) {
+          console.error("[broadcast-rfp] failed profile lookup for manual recipient", {
+            email,
+            message: existingProfileError.message,
+          })
+        }
+
+        const isExistingUser = Boolean(existingProfile?.id)
+        let partnershipForManual: PartnershipRow | null = null
+        if (isExistingUser) {
+          const { data: existingPartnership } = await supabase
+            .from("partnerships")
+            .select(
+              "id, nda_confirmed_at, partner_email, partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)"
+            )
+            .eq("agency_id", user.id)
+            .eq("partner_id", existingProfile!.id)
+            .in("status", ["active", "pending"])
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle<PartnershipRow>()
+          partnershipForManual = existingPartnership || null
+        }
+
+        const inviteToken = crypto.randomUUID()
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+        const ndaLinkPresent = ndaRequired && ndaLink.length > 0
+        const ndaAlreadySigned = Boolean(partnershipForManual?.nda_confirmed_at)
+        const ndaGateEnforced = Boolean(nr.requireNda === true && ndaLinkPresent && !ndaAlreadySigned)
+        const claimedAt = isExistingUser ? new Date().toISOString() : null
+
         rows.push({
           agency_id: user.id,
-          partner_id: null,
+          partner_id: isExistingUser ? existingProfile!.id : null,
           recipient_email: email,
-          partnership_id: null,
+          partnership_id: partnershipForManual?.id || null,
           project_id: projectId,
           scope_item_id: scopeItemId,
           scope_item_name: scopeItemName,
@@ -350,26 +355,81 @@ export async function POST(request: NextRequest) {
           estimated_budget: estimatedBudget || null,
           timeline: timeline || null,
           response_deadline: responseDeadline,
-          master_rfp_json: masterRfp,
+          master_rfp_json: { ...(masterRfp as Record<string, unknown>), nda_link: ndaLink || null },
           agency_company_name: agencyDisplay,
+          invite_token: inviteToken,
+          invite_token_expires_at: expiresAt,
+          claimed_at: claimedAt,
+          nda_gate_enforced: ndaGateEnforced,
+          nda_confirmed_at: ndaAlreadySigned ? new Date().toISOString() : null,
           status: "new",
         })
 
         const recipientName = nr?.name?.trim?.() || email
-        if (!ndaRequired || !nr?.requireNda) {
-          nonNdaNewRecipientNotifications.push({
+        const signUpInviteUrl = new URL("/auth/sign-up", baseUrl)
+        signUpInviteUrl.searchParams.set("invite", inviteToken)
+        signUpInviteUrl.searchParams.set("email", email)
+        signUpInviteUrl.searchParams.set("scope", scopeItemName)
+        signUpInviteUrl.searchParams.set("agency", agencyDisplay)
+        const existingInviteUrl = new URL("/partner/rfps", baseUrl)
+        existingInviteUrl.searchParams.set("invite", inviteToken)
+
+        if (!isExistingUser) {
+          const newUserSubject = ndaGateEnforced
+            ? `${agencyDisplay} invited you to respond to a confidential RFP on Ligament`
+            : `${agencyDisplay} invited you to respond to an RFP on Ligament`
+          if (ndaGateEnforced) {
+            signUpInviteUrl.searchParams.set("nda", "required")
+          }
+          manualRecipientNotifications.push({
             recipientEmail: email,
             recipientName,
-            scopeName: scopeItemName,
+            subject: newUserSubject,
+            heading: ndaGateEnforced ? "Confidential RFP invite" : "You are invited to an RFP",
+            paragraphs: ndaGateEnforced
+              ? [
+                  `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has sent you a confidential RFP for <strong style="color:#FFFFFF;">${scopeItemName}</strong>.`,
+                  "Create your account and complete the NDA to unlock access to the brief. Your invitation expires in 30 days.",
+                ]
+              : [
+                  `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${scopeItemName}</strong> and invited you to join Ligament to respond.`,
+                  "Create your free account to view the full brief and submit your bid. Your invitation expires in 30 days.",
+                ],
+            ctaLabel: ndaGateEnforced ? "Create Account & Sign NDA" : "Create Account & View RFP",
+            ctaUrl: signUpInviteUrl.toString(),
           })
+          continue
         }
 
-        if (ndaRequired && nr?.requireNda) {
-          ndaRequiredNewRecipientNotifications.push({
+        if (ndaGateEnforced) {
+          existingInviteUrl.searchParams.set("nda", "required")
+          manualRecipientNotifications.push({
             recipientEmail: email,
-            recipientName: nr?.name?.trim?.() || "there",
+            recipientName,
+            subject: `${agencyDisplay} requires an NDA to share this RFP with you`,
+            heading: "NDA required before access",
+            paragraphs: [
+              `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has a confidential RFP for <strong style="color:#FFFFFF;">${scopeItemName}</strong> ready for you on Ligament, but requires a signed NDA first.`,
+              "Log in and complete the NDA to unlock access.",
+            ],
+            ctaLabel: "Sign NDA & View RFP",
+            ctaUrl: existingInviteUrl.toString(),
           })
+          continue
         }
+
+        manualRecipientNotifications.push({
+          recipientEmail: email,
+          recipientName,
+          subject: `New RFP from ${agencyDisplay}: ${scopeItemName}`,
+          heading: "New RFP in your partner inbox",
+          paragraphs: [
+            `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${scopeItemName}</strong> on Ligament.`,
+            "Review the scope, timeline, and budget details, then submit your bid directly through the platform.",
+          ],
+          ctaLabel: "View RFP",
+          ctaUrl: `${baseUrl}/partner/rfps`,
+        })
       }
     }
 
@@ -390,87 +450,83 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!ndaRequired && nonNdaExistingPartnerNotifications.length > 0) {
-      const resendApiKey = process.env.RESEND_API_KEY
-      if (resendApiKey) {
-        const resend = new Resend(resendApiKey)
-        for (const notification of nonNdaExistingPartnerNotifications) {
-          await resend.emails.send({
-            from: "Ligament <notifications@withligament.com>",
-            to: notification.partnerEmail,
-            subject: `New RFP from ${agencyDisplay}: ${notification.scopeName}`,
-            html: buildBrandedRfpNotificationHtml({
-              recipientName: notification.partnerName,
-              agencyDisplay,
-              scopeName: notification.scopeName,
-              baseUrl,
-            }),
-          })
-        }
-      }
+    // TODO: Add scheduled Vercel cron job to mark expired unclaimed invite rows
+    // (invite_token_expires_at < now() and claimed_at is null) with status = 'expired'
+    // See: https://vercel.com/docs/cron-jobs
+
+    const resendApiKey = process.env.RESEND_API_KEY
+    const resend = resendApiKey ? new Resend(resendApiKey) : null
+    if (!resend) {
+      console.error("[broadcast-rfp] RESEND_API_KEY not configured; broadcast rows created without notifications")
+      return NextResponse.json({ ok: true, count: rows.length, emailsQueued: 0, emailConfigMissing: true })
     }
 
-    if (nonNdaNewRecipientNotifications.length > 0) {
-      const resendApiKey = process.env.RESEND_API_KEY
-      if (!resendApiKey) {
-        return NextResponse.json(
-          { error: "RESEND_API_KEY is required to send manual recipient notifications." },
-          { status: 500 }
-        )
-      }
-      const resend = new Resend(resendApiKey)
-      for (const notification of nonNdaNewRecipientNotifications) {
+    for (const notification of existingPartnerNotifications) {
+      try {
+        const subject = notification.requiresNda
+          ? `${agencyDisplay} requires an NDA to share this RFP with you`
+          : `New RFP from ${agencyDisplay}: ${notification.scopeName}`
+        const ctaUrl = notification.requiresNda
+          ? `${baseUrl}/partner/rfps?nda=required`
+          : `${baseUrl}/partner/rfps`
+        const paragraphs = notification.requiresNda
+          ? [
+              `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has a confidential RFP for <strong style="color:#FFFFFF;">${notification.scopeName}</strong> ready for you on Ligament, but requires a signed NDA first.`,
+              "Log in and complete the NDA to unlock access.",
+            ]
+          : [
+              `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${notification.scopeName}</strong> on Ligament.`,
+              "Review the scope, timeline, and budget details, then submit your bid directly through the platform.",
+            ]
         await resend.emails.send({
           from: "Ligament <notifications@withligament.com>",
-          to: notification.recipientEmail,
-          subject: `New RFP from ${agencyDisplay}: ${notification.scopeName}`,
+          to: notification.partnerEmail,
+          subject,
           html: buildBrandedRfpNotificationHtml({
-            recipientName: notification.recipientName,
-            agencyDisplay,
-            scopeName: notification.scopeName,
+            recipientName: notification.partnerName,
+            heading: notification.requiresNda ? "NDA required before access" : "New RFP in your partner inbox",
+            paragraphs,
+            ctaLabel: notification.requiresNda ? "Sign NDA & View RFP" : "View RFP",
+            ctaUrl,
             baseUrl,
           }),
         })
-      }
-    }
-
-    if (ndaRequiredNewRecipientNotifications.length > 0) {
-      const resendApiKey = process.env.RESEND_API_KEY
-      if (!resendApiKey) {
-        return NextResponse.json(
-          { error: "RESEND_API_KEY is required to send NDA-required manual recipient notifications." },
-          { status: 500 }
-        )
-      }
-      const resend = new Resend(resendApiKey)
-      for (const notification of ndaRequiredNewRecipientNotifications) {
-        await resend.emails.send({
-          from: "Ligament <notifications@withligament.com>",
-          to: notification.recipientEmail,
-          subject: `${agencyDisplay} shared a confidential RFP with you on Ligament`,
-          html: `
-            <p style="font-family:system-ui,sans-serif">Hi ${notification.recipientName},</p>
-            <p style="font-family:system-ui,sans-serif">
-              <strong>${agencyDisplay}</strong> has shared an RFP that requires a signed NDA before you can
-              view the full details.
-            </p>
-            <p style="font-family:system-ui,sans-serif">
-              Please log in to your Ligament partner portal to review the NDA and confirm your agreement to
-              proceed.
-            </p>
-            <p style="font-family:system-ui,sans-serif">
-              <a href="${ndaLink}" style="font-weight:700;color:#0C3535">View RFP</a>
-            </p>
-            <p style="font-family:system-ui,sans-serif">
-              The Ligament Team<br />
-              <a href="${baseUrl}" style="color:#0C3535">withligament.com</a>
-            </p>
-          `,
+      } catch (error) {
+        console.error("[broadcast-rfp] failed existing partner notification send", {
+          email: notification.partnerEmail,
+          error: error instanceof Error ? error.message : String(error),
         })
       }
     }
 
-    return NextResponse.json({ ok: true, count: rows.length })
+    for (const notification of manualRecipientNotifications) {
+      try {
+        await resend.emails.send({
+          from: "Ligament <notifications@withligament.com>",
+          to: notification.recipientEmail,
+          subject: notification.subject,
+          html: buildBrandedRfpNotificationHtml({
+            recipientName: notification.recipientName,
+            heading: notification.heading,
+            paragraphs: notification.paragraphs,
+            ctaLabel: notification.ctaLabel,
+            ctaUrl: notification.ctaUrl,
+            baseUrl,
+          }),
+        })
+      } catch (error) {
+        console.error("[broadcast-rfp] failed manual recipient notification send", {
+          email: notification.recipientEmail,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      count: rows.length,
+      emailsQueued: existingPartnerNotifications.length + manualRecipientNotifications.length,
+    })
   } catch (e) {
     console.error("broadcast-rfp:", e)
     return NextResponse.json({ error: "Broadcast failed" }, { status: 500 })

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
 import { cn } from "@/lib/utils"
@@ -30,6 +31,7 @@ type RFP = {
   responseDeadline?: string | null
   partnerIntent?: "will_respond" | "has_questions" | "requesting_call" | null
   viewed_at?: string | null
+  ndaRequired?: boolean
   status:
     | "submitted"
     | "under_review"
@@ -146,6 +148,8 @@ type PartnerInboxRow = {
   response_deadline?: string | null
   partner_intent?: "will_respond" | "has_questions" | "requesting_call" | null
   viewed_at?: string | null
+  nda_gate_enforced?: boolean | null
+  nda_confirmed_at?: string | null
 }
 
 function partnerIntentTag(intent?: "will_respond" | "has_questions" | "requesting_call" | null): string | null {
@@ -204,11 +208,14 @@ function mapInboxRowToRfp(row: PartnerInboxRow): RFP {
     responseDeadline: row.response_deadline || null,
     partnerIntent: row.partner_intent || null,
     viewed_at: row.viewed_at || null,
+    ndaRequired: row.nda_gate_enforced === true && !row.nda_confirmed_at,
     status: st,
   }
 }
 
 export default function PartnerRFPsPage() {
+  const searchParams = useSearchParams()
+  const inviteStatus = (searchParams.get("invite_status") || "").trim()
   const isDemo = isDemoMode()
   const initialRFPs = isDemo ? demoRFPs : []
   
@@ -305,6 +312,11 @@ export default function PartnerRFPsPage() {
         </div>
 
         <div className="grid gap-4">
+          {inviteStatus === "failed" && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              Your invite may have expired or already been claimed. You can still access active RFPs from this inbox.
+            </div>
+          )}
           {inboxLoading ? (
             <div className="bg-white rounded-xl border border-gray-200 p-12 flex flex-col items-center justify-center gap-3 text-gray-600">
               <Loader2 className="w-8 h-8 animate-spin text-[#0C3535]" />
@@ -345,7 +357,11 @@ export default function PartnerRFPsPage() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    {rfp.status === "meeting_requested" && rfp.meetingUrl ? (
+                    {rfp.ndaRequired ? (
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded-full uppercase inline-flex items-center gap-1 bg-amber-100 text-amber-800">
+                        NDA Required
+                      </span>
+                    ) : rfp.status === "meeting_requested" && rfp.meetingUrl ? (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -428,7 +444,9 @@ export default function PartnerRFPsPage() {
 
               <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                 <span className="font-mono text-[10px] text-gray-500">Issued by {rfp.issuedBy}</span>
-                <span className="font-mono text-xs text-[#0C3535] font-medium">Open RFP →</span>
+                <span className="font-mono text-xs text-[#0C3535] font-medium">
+                  {rfp.ndaRequired ? "Complete NDA →" : "Open RFP →"}
+                </span>
               </div>
             </Link>
           ))}

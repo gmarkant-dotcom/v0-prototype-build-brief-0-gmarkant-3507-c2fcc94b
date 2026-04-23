@@ -35,6 +35,11 @@ type InboxSnippet = {
   scope_item_description?: string | null
   created_at?: string
   response_deadline?: string | null
+  recipient_email?: string | null
+  claimed_at?: string | null
+  invite_token_expires_at?: string | null
+  nda_gate_enforced?: boolean | null
+  nda_confirmed_at?: string | null
   partner_intent?: "will_respond" | "has_questions" | "requesting_call" | null
   intent_set_at?: string | null
   master_rfp_json?: unknown
@@ -146,6 +151,8 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
   const [shortlistHoverIds, setShortlistHoverIds] = useState<Record<string, boolean>>({})
   const [meetingHoverIds, setMeetingHoverIds] = useState<Record<string, boolean>>({})
   const [selectedVersionByResponseId, setSelectedVersionByResponseId] = useState<Record<string, string>>({})
+  const [resendBusyInboxId, setResendBusyInboxId] = useState<string | null>(null)
+  const [resendStatus, setResendStatus] = useState<string | null>(null)
   const [awardDialog, setAwardDialog] = useState<{
     id: string
     partner: string
@@ -280,6 +287,20 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
     }
   }
 
+  const computeManualInviteStatus = (inbox: InboxSnippet, status: string): string | null => {
+    if (!inbox || !inbox.recipient_email) return null
+    if (status === "submitted" || status === "under_review" || status === "shortlisted" || status === "meeting_requested" || status === "awarded") {
+      return "Bid submitted"
+    }
+    const expiresAt = inbox.invite_token_expires_at ? new Date(inbox.invite_token_expires_at).getTime() : null
+    const isExpired = expiresAt !== null && !Number.isNaN(expiresAt) && expiresAt < Date.now()
+    if (inbox.nda_gate_enforced && !inbox.nda_confirmed_at) return "NDA pending"
+    if (inbox.nda_gate_enforced && inbox.nda_confirmed_at) return "NDA confirmed"
+    if (inbox.claimed_at) return "Account created"
+    if (isExpired) return "Invite expired"
+    return "Invite sent"
+  }
+
   return (
     <>
     <GlassCard className="mb-8">
@@ -299,6 +320,12 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
           const selectedVersionId = selectedVersionByResponseId[r.id] || versions[0]?.id || ""
           const selectedVersion = versions.find((v) => v.id === selectedVersionId) || versions[0] || null
           const scopeName = r.inbox?.scope_item_name || "Scoped line"
+          const manualInviteStatus = computeManualInviteStatus(r.inbox, r.status)
+          const canResendInvite =
+            !!r.inbox?.recipient_email &&
+            !r.inbox?.claimed_at &&
+            !!r.inbox?.invite_token_expires_at &&
+            new Date(r.inbox.invite_token_expires_at).getTime() < Date.now()
           const sent = r.inbox?.created_at
             ? new Date(r.inbox.created_at).toLocaleString("en-US", {
                 month: "short",
@@ -363,10 +390,14 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                 <span
                   className={cn(
                     "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase shrink-0",
-                    r.status === "awaiting_response" ? "bg-amber-500/20 text-amber-300" : getBidStatusColor(r.status)
+                    manualInviteStatus
+                      ? "bg-blue-900/30 text-blue-100"
+                      : r.status === "awaiting_response"
+                        ? "bg-amber-500/20 text-amber-300"
+                        : getBidStatusColor(r.status)
                   )}
                 >
-                  {r.status === "awaiting_response" ? "Awaiting response" : getBidStatusLabel(r.status, "agency")}
+                  {manualInviteStatus || (r.status === "awaiting_response" ? "Awaiting response" : getBidStatusLabel(r.status, "agency"))}
                 </span>
               </button>
               {expanded && (
@@ -397,6 +428,41 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                     <p className="font-mono text-[10px] text-foreground-muted">
                       Broadcast line sent {sent}
                     </p>
+                  )}
+                  {manualInviteStatus && (
+                    <p className="font-mono text-[10px] text-foreground-muted">Manual invite status: {manualInviteStatus}</p>
+                  )}
+                  {canResendInvite && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={resendBusyInboxId === r.inbox_item_id}
+                        className="border-border/60"
+                        onClick={async () => {
+                          setResendBusyInboxId(r.inbox_item_id)
+                          setResendStatus(null)
+                          try {
+                            const res = await fetch("/api/agency/broadcast-rfp/resend-invite", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ inboxItemId: r.inbox_item_id }),
+                            })
+                            const payload = await res.json().catch(() => ({}))
+                            if (!res.ok) throw new Error((payload?.error as string) || "Failed to resend invite")
+                            setResendStatus("Invite resent.")
+                          } catch (e) {
+                            setResendStatus(e instanceof Error ? e.message : "Resend failed")
+                          } finally {
+                            setResendBusyInboxId(null)
+                          }
+                        }}
+                      >
+                        {resendBusyInboxId === r.inbox_item_id ? "Resending..." : "Resend Invite"}
+                      </Button>
+                      {resendStatus && <span className="font-mono text-[10px] text-foreground-muted">{resendStatus}</span>}
+                    </div>
                   )}
                   {responseDeadline && (
                     <p

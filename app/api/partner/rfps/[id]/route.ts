@@ -37,16 +37,34 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    if (
-      !partnerCanAccessPartnerRfpInbox(
-        {
-          partner_id: (inbox.partner_id as string | null) ?? null,
-          recipient_email: (inbox.recipient_email as string | null) ?? null,
-        },
-        user.id,
-        profile?.email
-      )
-    ) {
+    const access = partnerCanAccessPartnerRfpInbox(
+      {
+        partner_id: (inbox.partner_id as string | null) ?? null,
+        recipient_email: (inbox.recipient_email as string | null) ?? null,
+        nda_gate_enforced: (inbox.nda_gate_enforced as boolean | null) ?? false,
+        nda_confirmed_at: (inbox.nda_confirmed_at as string | null) ?? null,
+      },
+      user.id,
+      profile?.email
+    )
+
+    if (!access.allowed) {
+      if (access.reason === "nda_required") {
+        const master = (inbox.master_rfp_json || {}) as Record<string, unknown>
+        return NextResponse.json(
+          {
+            error: "nda_required",
+            inboxItemId: id,
+            inbox: {
+              id: inbox.id,
+              agency_company_name: inbox.agency_company_name,
+              scope_item_name: inbox.scope_item_name,
+              master_rfp_json: { nda_link: master.nda_link || null },
+            },
+          },
+          { status: 403 }
+        )
+      }
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 

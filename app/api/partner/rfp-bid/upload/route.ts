@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     const { data: inboxRow, error: inboxLookupErr } = await supabase
       .from("partner_rfp_inbox")
-      .select("id, partner_id, recipient_email")
+      .select("id, partner_id, recipient_email, nda_gate_enforced, nda_confirmed_at")
       .eq("id", inboxId)
       .maybeSingle()
 
@@ -61,16 +61,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "RFP not found or access denied" }, { status: 404 })
     }
 
-    if (
-      !partnerCanAccessPartnerRfpInbox(
-        {
-          partner_id: (inboxRow.partner_id as string | null) ?? null,
-          recipient_email: (inboxRow.recipient_email as string | null) ?? null,
-        },
-        user.id,
-        profile?.email
-      )
-    ) {
+    const access = partnerCanAccessPartnerRfpInbox(
+      {
+        partner_id: (inboxRow.partner_id as string | null) ?? null,
+        recipient_email: (inboxRow.recipient_email as string | null) ?? null,
+        nda_gate_enforced: (inboxRow.nda_gate_enforced as boolean | null) ?? false,
+        nda_confirmed_at: (inboxRow.nda_confirmed_at as string | null) ?? null,
+      },
+      user.id,
+      profile?.email
+    )
+    if (!access.allowed) {
+      if (access.reason === "nda_required") {
+        return NextResponse.json({ error: "nda_required", inboxItemId: inboxId }, { status: 403 })
+      }
       return NextResponse.json({ error: "RFP not found or access denied" }, { status: 404 })
     }
 
