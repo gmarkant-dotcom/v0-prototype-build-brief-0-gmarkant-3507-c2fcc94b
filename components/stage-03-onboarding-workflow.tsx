@@ -23,7 +23,7 @@ import { EmptyState } from "@/components/empty-state"
 import { createClient } from "@/lib/supabase/client"
 import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
-import { Loader2, Send, Link2, Upload, Plus, Trash2 } from "lucide-react"
+import { Loader2, Send, Link2, Upload, Plus, Trash2, CheckCircle } from "lucide-react"
 
 type OnboardingPartnerRow = {
   assignmentId: string | null
@@ -109,8 +109,9 @@ export function Stage03OnboardingWorkflow() {
   const [customMessage, setCustomMessage] = useState("")
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
   const [uploadingAttach, setUploadingAttach] = useState<string | null>(null)
+  const attachFileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const [onboardingSentModalOpen, setOnboardingSentModalOpen] = useState(false)
   const [meetingUrlProfile, setMeetingUrlProfile] = useState<string | null>(null)
   const [agreements, setAgreements] = useState<MsaAgreement[]>([])
   const [docUrlDraft, setDocUrlDraft] = useState<Record<string, string>>({})
@@ -263,6 +264,18 @@ export function Stage03OnboardingWorkflow() {
     setSelectedLibIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
+  const triggerAttachFilePicker = (localId: string) => {
+    const open = () => {
+      const el =
+        attachFileInputRefs.current[localId] ??
+        (typeof document !== "undefined"
+          ? (document.getElementById(`onboarding-attach-file-${localId}`) as HTMLInputElement | null)
+          : null)
+      el?.click()
+    }
+    requestAnimationFrame(() => requestAnimationFrame(open))
+  }
+
   const uploadForAttach = async (localId: string, file: File) => {
     setUploadingAttach(localId)
     setError(null)
@@ -366,7 +379,6 @@ export function Stage03OnboardingWorkflow() {
 
   const handleSaveSend = async () => {
     setError(null)
-    setSuccess(null)
     if (!checkFeatureAccess("onboarding package send")) return
     if (!selectedProject?.id || !partnershipId) {
       setError("Select a partner assignment.")
@@ -438,7 +450,7 @@ export function Stage03OnboardingWorkflow() {
         setError(msg)
         return
       }
-      setSuccess("Onboarding package sent. Your partner was emailed and can open /partner/onboarding.")
+      setOnboardingSentModalOpen(true)
       setSelectedLibIds([])
       setProjectItems([])
       setCustomMessage("")
@@ -694,13 +706,18 @@ export function Stage03OnboardingWorkflow() {
                       size="sm"
                       variant={p.source === "file" ? "default" : "outline"}
                       className={p.source === "file" ? "bg-accent text-accent-foreground" : "border-border/60"}
-                      onClick={() =>
+                      onClick={() => {
                         setProjectItems((prev) =>
-                          prev.map((x) =>
-                            x.localId === p.localId ? { ...x, source: "file", urlInput: "", storedUrl: null } : x
-                          )
+                          prev.map((x) => {
+                            if (x.localId !== p.localId) return x
+                            if (x.source === "url") {
+                              return { ...x, source: "file", urlInput: "", storedUrl: null }
+                            }
+                            return { ...x, source: "file" }
+                          })
                         )
-                      }
+                        triggerAttachFilePicker(p.localId)
+                      }}
                     >
                       <Upload className="w-3.5 h-3.5 mr-1" />
                       Upload
@@ -718,11 +735,16 @@ export function Stage03OnboardingWorkflow() {
                       className="bg-white/5 border-border"
                     />
                   ) : (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input
+                        id={`onboarding-attach-file-${p.localId}`}
+                        ref={(el) => {
+                          attachFileInputRefs.current[p.localId] = el
+                        }}
                         type="file"
                         accept=".pdf,.docx"
-                        className="text-sm text-foreground-muted"
+                        className="sr-only"
+                        aria-label="Choose project document file"
                         disabled={uploadingAttach === p.localId}
                         onChange={(e) => {
                           const f = e.target.files?.[0]
@@ -730,8 +752,29 @@ export function Stage03OnboardingWorkflow() {
                           e.target.value = ""
                         }}
                       />
-                      {uploadingAttach === p.localId && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {p.storedUrl && <span className="text-xs text-green-400 font-mono">Uploaded</span>}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-border/60 text-foreground"
+                        disabled={uploadingAttach === p.localId}
+                        onClick={() => triggerAttachFilePicker(p.localId)}
+                      >
+                        {uploadingAttach === p.localId ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Upload className="w-3.5 h-3.5 mr-1" />
+                            Choose file
+                          </>
+                        )}
+                      </Button>
+                      {p.storedUrl && (
+                        <span className="text-xs text-emerald-300 font-mono inline-flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" aria-hidden />
+                          Uploaded
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -796,7 +839,6 @@ export function Stage03OnboardingWorkflow() {
               Save &amp; send
             </Button>
             {error && <p className="text-sm text-red-400 font-mono">{error}</p>}
-            {success && <p className="text-sm text-green-400 font-mono">{success}</p>}
           </GlassCard>
 
           {selectedPartnerRow ? (
@@ -898,7 +940,7 @@ export function Stage03OnboardingWorkflow() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-foreground-muted"
+                        className="text-foreground/90 hover:text-foreground"
                         disabled={savingMsa === selectedPartnerAgreement.id}
                         onClick={() => patchMsa(selectedPartnerAgreement.id, { status: "expired" })}
                       >
@@ -925,6 +967,42 @@ export function Stage03OnboardingWorkflow() {
           ) : null}
         </div>
       )}
+
+      {onboardingSentModalOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+          role="presentation"
+          onClick={() => setOnboardingSentModalOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="onboarding-sent-title"
+            className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/40">
+                <CheckCircle className="h-7 w-7 text-emerald-300" aria-hidden />
+              </div>
+            </div>
+            <h2 id="onboarding-sent-title" className="font-display text-center text-lg font-bold text-foreground">
+              Onboarding package sent
+            </h2>
+            <p className="mt-3 text-center text-sm text-foreground/90">
+              Your partner was emailed and can open <span className="font-mono text-foreground">/partner/onboarding</span> to
+              continue.
+            </p>
+            <Button
+              type="button"
+              className="mt-6 w-full bg-accent text-accent-foreground"
+              onClick={() => setOnboardingSentModalOpen(false)}
+            >
+              Got it
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -5,7 +5,7 @@ import {
   notifyProjectResponse,
   notifyProjectAwarded,
 } from '@/lib/notifications'
-import { sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -179,18 +179,13 @@ export async function POST(
       await sendTransactionalEmail({
         to: partnerEmail,
         subject: `New RFP from ${agencyName}: ${projectName}`,
-        html: `
-          <p style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535">
-            ${agencyName} has sent you an RFP for ${projectName} on Ligament.
-          </p>
-          <p style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535">
-            Review the scope, timeline, and budget details, then submit your bid directly through the platform.
-          </p>
-          <p style="font-family:system-ui,sans-serif">
-            <a href="${base}/partner/rfps" style="color:#0C3535;font-weight:700">View RFP</a>
-          </p>
-          <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="${siteBaseUrl()}">withligament.com</a></p>
-        `,
+        html: buildBrandedEmailHtml({
+          title: "New RFP in your inbox",
+          recipientName: partnerEmail,
+          body: `${agencyName} has sent you an RFP for ${projectName} on Ligament.\n\nReview the scope, timeline, and budget details, then submit your bid directly through the platform.`,
+          ctaText: "View RFP",
+          ctaUrl: `${base}/partner/rfps`,
+        }),
       })
     }
 
@@ -289,18 +284,24 @@ export async function PATCH(
           status === 'accepted'
             ? `${partnerName} accepted the RFP for ${projectTitle}`
             : `${partnerName} declined the RFP for ${projectTitle}`
-        const responseBody =
+        const responsePlain =
           status === 'accepted'
-            ? `<p style="font-family:system-ui,sans-serif">${partnerName} has accepted the RFP and confirmed their interest in ${projectTitle}.</p>
-            <p style="font-family:system-ui,sans-serif">You can now expect a bid submission from them in the platform.</p>`
-            : `<p style="font-family:system-ui,sans-serif">${partnerName} has declined the RFP for ${projectTitle}.</p>
-            <p style="font-family:system-ui,sans-serif">You may want to broadcast this scope to additional partners or reach out directly through the platform.</p>`
+            ? `${partnerName} has accepted the RFP and confirmed their interest in ${projectTitle}.\n\nYou can now expect a bid submission from them in the platform.`
+            : `${partnerName} has declined the RFP for ${projectTitle}.\n\nYou may want to broadcast this scope to additional partners or reach out directly through the platform.`
         await sendTransactionalEmail({
           to: agencyUser.email,
           subject: responseSubject,
-          html: `${responseBody}
-            <p><a href="${siteBaseUrl()}/agency/bids">View Assignment</a></p>
-            <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="${siteBaseUrl()}">withligament.com</a></p>`,
+          html: buildBrandedEmailHtml({
+            title: status === 'accepted' ? "Partner accepted RFP" : "Partner declined RFP",
+            recipientName:
+              agencyUser.company_name?.trim() ||
+              agencyUser.full_name?.trim() ||
+              agencyUser.email?.trim() ||
+              "there",
+            body: responsePlain,
+            ctaText: "View Assignment",
+            ctaUrl: `${siteBaseUrl()}/agency/bids`,
+          }),
         })
       }
 
@@ -369,18 +370,25 @@ export async function PATCH(
 
         const { data: partnerRow } = await supabase
           .from('profiles')
-          .select('email')
+          .select('email, full_name, company_name')
           .eq('id', assignment.partnership.partner_id)
           .single()
 
         if (partnerRow?.email) {
+          const partnerRecipient =
+            partnerRow.company_name?.trim() ||
+            partnerRow.full_name?.trim() ||
+            partnerRow.email.trim()
           await sendTransactionalEmail({
             to: partnerRow.email,
             subject: `You've been awarded ${projectTitle}`,
-            html: `<p style="font-family:system-ui,sans-serif">Congratulations, you have been selected for ${projectTitle}.</p>
-              <p style="font-family:system-ui,sans-serif">Log in to your Ligament partner portal to view the full award details and prepare for onboarding.</p>
-              <p><a href="${siteBaseUrl()}/partner/projects">View Award</a></p>
-              <p style="font-family:system-ui,sans-serif;color:#666;font-size:13px">The Ligament Team<br /><a href="${siteBaseUrl()}">withligament.com</a></p>`,
+            html: buildBrandedEmailHtml({
+              title: "You have been awarded",
+              recipientName: partnerRecipient,
+              body: `Congratulations, you have been selected for ${projectTitle}.\n\nLog in to your Ligament partner portal to view the full award details and prepare for onboarding.`,
+              ctaText: "View Award",
+              ctaUrl: `${siteBaseUrl()}/partner/projects`,
+            }),
           })
         }
       }

@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
-import { Resend } from "resend"
 import { type NextRequest, NextResponse } from "next/server"
+import { buildBrandedEmailHtml, sendTransactionalEmail } from "@/lib/email"
 
 /**
  * Public marketing lead capture. Uses service role only to insert into contact_submissions;
@@ -71,47 +71,36 @@ export async function POST(request: NextRequest) {
       console.log("[api/contact] supabase not configured, skipping database save")
     }
 
-    // Send email notification via Resend (non-blocking)
-    const resendApiKey = process.env.RESEND_API_KEY
-    if (resendApiKey) {
-      try {
-        const resend = new Resend(resendApiKey)
-        
-        const fromAddress = "Ligament <notifications@withligament.com>"
-        
-        const { error: emailError } = await resend.emails.send({
-          from: fromAddress,
-          to: "hello@withligament.com",
-          subject: `New Contact: ${normalizedName} - ${productLabels[selectedProduct] || selectedProduct}`,
-          html: `
-            <h2>New Contact Form Submission</h2>
-            <p><strong>Interested In:</strong> ${productLabels[selectedProduct] || selectedProduct}</p>
-            <hr />
-            <p><strong>Name:</strong> ${normalizedName}</p>
-            <p><strong>Title/Role:</strong> ${normalizedTitle}</p>
-            <p><strong>Email:</strong> <a href="mailto:${normalizedEmail}">${normalizedEmail}</a></p>
-            <p><strong>Phone:</strong> ${phone || "Not provided"}</p>
-            <p><strong>Company:</strong> ${companyName || "Not provided"}</p>
-            <p><strong>Company Type:</strong> ${normalizedCompanyType}</p>
-            <p><strong>Company Size:</strong> ${normalizedCompanySize}</p>
-            <p><strong>Message:</strong> ${message || "Not provided"}</p>
-            <hr />
-            <p style="color: #666; font-size: 12px;">Submitted at ${new Date().toLocaleString()}</p>
-          `,
-        })
-
-        if (emailError) {
-          console.log("[api/contact] resend failed", { message: emailError.message })
-        } else {
-          console.log("[api/contact] email sent")
-        }
-      } catch (emailErr) {
-        console.log("[api/contact] email sending exception", {
-          message: emailErr instanceof Error ? emailErr.message : String(emailErr),
-        })
-      }
-    } else {
-      console.log("[api/contact] resend not configured, skipping email")
+    // Send email notification (non-blocking)
+    try {
+      const interested = productLabels[selectedProduct] || selectedProduct
+      const contactBody = [
+        `Interested in: ${interested}`,
+        "",
+        `Name: ${normalizedName}`,
+        `Title or role: ${normalizedTitle}`,
+        `Email: ${normalizedEmail}`,
+        `Phone: ${phone || "Not provided"}`,
+        `Company: ${companyName || "Not provided"}`,
+        `Company type: ${normalizedCompanyType}`,
+        `Company size: ${normalizedCompanySize}`,
+        `Message: ${message || "Not provided"}`,
+        "",
+        `Submitted at: ${new Date().toLocaleString("en-US")}`,
+      ].join("\n")
+      await sendTransactionalEmail({
+        to: "hello@withligament.com",
+        subject: `New Contact: ${normalizedName} - ${interested}`,
+        html: buildBrandedEmailHtml({
+          title: "New contact form submission",
+          recipientName: "Ligament team",
+          body: contactBody,
+        }),
+      })
+    } catch (emailErr) {
+      console.log("[api/contact] email sending exception", {
+        message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+      })
     }
 
     console.log("[api/contact] success", { selectedProduct })

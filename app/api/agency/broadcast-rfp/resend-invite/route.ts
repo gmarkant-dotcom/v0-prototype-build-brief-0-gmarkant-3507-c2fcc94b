@@ -1,22 +1,7 @@
 import { NextResponse } from "next/server"
 import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
-import { siteBaseUrl } from "@/lib/email"
-
-function buildEmailHtml(params: {
-  recipientName: string
-  heading: string
-  paragraphs: string[]
-  ctaLabel: string
-  ctaUrl: string
-  baseUrl: string
-}) {
-  const safeRecipientName = params.recipientName || "there"
-  const bodyParagraphs = params.paragraphs
-    .map((line) => `<p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 12px 0;">${line}</p>`)
-    .join("")
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#081F1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"><div style="max-width:600px;margin:0 auto;padding:40px 20px;"><div style="background:#0C3535;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.12);"><div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#C8F53C;margin:0 0 16px 0;">Ligament</div><p style="color:#E8E8E8;font-size:16px;line-height:1.6;margin:0 0 16px 0;">Hi ${safeRecipientName},</p><p style="color:#FFFFFF;font-size:18px;line-height:1.5;margin:0 0 14px 0;font-weight:600;">${params.heading}</p>${bodyParagraphs}<a href="${params.ctaUrl}" style="display:inline-block;background:#C8F53C;color:#0C3535;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;">${params.ctaLabel}</a><p style="color:#9BB8B8;font-size:13px;margin:24px 0 0;">The Ligament Team<br /><a href="${params.baseUrl}" style="color:#C8F53C;text-decoration:none;">withligament.com</a></p></div></div></body></html>`
-}
+import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
 
 export async function POST(request: Request) {
   try {
@@ -122,11 +107,11 @@ export async function POST(request: Request) {
           heading: ndaRequired ? "Confidential RFP invite" : "You are invited to an RFP",
           paragraphs: ndaRequired
             ? [
-                `<strong style="color:#FFFFFF;">${agencyName}</strong> has sent you a confidential RFP for <strong style="color:#FFFFFF;">${scopeName}</strong>.`,
+                `${agencyName} has sent you a confidential RFP for ${scopeName}.`,
                 "Create your account and complete the NDA to unlock access to the brief. Your invitation expires in 30 days.",
               ]
             : [
-                `<strong style="color:#FFFFFF;">${agencyName}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${scopeName}</strong> and invited you to join Ligament to respond.`,
+                `${agencyName} has sent you an RFP for ${scopeName} and invited you to join Ligament to respond.`,
                 "Create your free account to view the full brief and submit your bid. Your invitation expires in 30 days.",
               ],
           ctaLabel: ndaRequired ? "Create Account & Sign NDA" : "Create Account & View RFP",
@@ -137,7 +122,7 @@ export async function POST(request: Request) {
             subject: `${agencyName} requires an NDA to share this RFP with you`,
             heading: "NDA required before access",
             paragraphs: [
-              `<strong style="color:#FFFFFF;">${agencyName}</strong> has a confidential RFP for <strong style="color:#FFFFFF;">${scopeName}</strong> ready for you on Ligament, but requires a signed NDA first.`,
+              `${agencyName} has a confidential RFP for ${scopeName} ready for you on Ligament, but requires a signed NDA first.`,
               "Log in and complete the NDA to unlock access.",
             ],
             ctaLabel: "Sign NDA & View RFP",
@@ -147,7 +132,7 @@ export async function POST(request: Request) {
             subject: `New RFP from ${agencyName}: ${scopeName}`,
             heading: "New RFP in your partner inbox",
             paragraphs: [
-              `<strong style="color:#FFFFFF;">${agencyName}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${scopeName}</strong> on Ligament.`,
+              `${agencyName} has sent you an RFP for ${scopeName} on Ligament.`,
               "Review the scope, timeline, and budget details, then submit your bid directly through the platform.",
             ],
             ctaLabel: "View RFP",
@@ -162,13 +147,12 @@ export async function POST(request: Request) {
       from: "Ligament <notifications@withligament.com>",
       to: recipientEmail,
       subject: emailPayload.subject,
-      html: buildEmailHtml({
+      html: buildBrandedEmailHtml({
+        title: emailPayload.heading,
         recipientName: recipientEmail,
-        heading: emailPayload.heading,
-        paragraphs: emailPayload.paragraphs,
-        ctaLabel: emailPayload.ctaLabel,
+        body: emailPayload.paragraphs.join("\n\n"),
+        ctaText: emailPayload.ctaLabel,
         ctaUrl: emailPayload.ctaUrl,
-        baseUrl,
       }),
     })
 

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
-import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
-import { siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -252,7 +251,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         await Promise.all([
           supabase
             .from("profiles")
-            .select("email")
+            .select("email, full_name, company_name")
             .eq("id", existing.partner_id)
             .maybeSingle(),
           supabase
@@ -287,22 +286,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const feedbackSubject = scopeName
         ? `Feedback received on your bid for ${scopeName}`
         : "Feedback received on your recent bid submission"
-      const resendApiKey = process.env.RESEND_API_KEY
       const baseUrl = siteBaseUrl()
-      if (resendApiKey && partner?.email) {
+      if (partner?.email) {
         try {
-          const resend = new Resend(resendApiKey)
-          await resend.emails.send({
-            from: "Ligament <notifications@withligament.com>",
+          const partnerRecipient =
+            partner.company_name?.trim() || partner.full_name?.trim() || partner.email.trim()
+          await sendTransactionalEmail({
             to: partner.email,
             cc: "hello@withligament.com",
             subject: feedbackSubject,
-            html: `
-            <p>${agencyName} has reviewed your bid for ${scopeName || "this scope"} and left feedback for your consideration.</p>
-            <p>Log in to your Ligament partner portal to view the feedback and update your submission if needed.</p>
-            <p><a href="${baseUrl}/partner/rfps/${existing.inbox_item_id}">View Feedback</a></p>
-            <p>The Ligament Team<br /><a href="${baseUrl}">withligament.com</a></p>
-          `,
+            html: buildBrandedEmailHtml({
+              title: "Feedback on your bid",
+              recipientName: partnerRecipient,
+              body: `${agencyName} has reviewed your bid for ${scopeName || "this scope"} and left feedback for your consideration.\n\nLog in to your Ligament partner portal to view the feedback and update your submission if needed.`,
+              ctaText: "View Feedback",
+              ctaUrl: `${baseUrl}/partner/rfps/${existing.inbox_item_id}`,
+            }),
           })
         } catch (emailErr) {
           console.error("[api] feedback email: Resend send failed", {
@@ -403,25 +402,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         rawScopeItemName && rawProjectName
           ? `You've been awarded ${scopeItemName} - ${projectName}`
           : "You've been selected for this project"
-      const resendApiKey = process.env.RESEND_API_KEY
       const baseUrl = siteBaseUrl()
-      if (resendApiKey && partner?.email) {
+      if (partner?.email) {
         try {
-          const resend = new Resend(resendApiKey)
-          await resend.emails.send({
-            from: "Ligament <notifications@withligament.com>",
-            to: "hello@withligament.com",
-            cc: partner.email,
+          const partnerRecipient =
+            partner.company_name?.trim() || partner.full_name?.trim() || partner.email.trim()
+          await sendTransactionalEmail({
+            to: partner.email,
+            cc: "hello@withligament.com",
             subject: awardSubject,
-            html: `
-            <p>Congratulations, ${leadAgencyName} has selected your bid for ${scopeItemName}.</p>
-            <p>
-              You are officially on board for ${projectName}. Expect onboarding materials from ${leadAgencyName}
-              shortly with next steps, kickoff details, and project documents.
-            </p>
-            <p><a href="${baseUrl}/partner/rfps">View Project</a></p>
-            <p>The Ligament Team<br /><a href="${baseUrl}">withligament.com</a></p>
-          `,
+            html: buildBrandedEmailHtml({
+              title: "You have been awarded",
+              recipientName: partnerRecipient,
+              body: `Congratulations, ${leadAgencyName} has selected your bid for ${scopeItemName}.\n\nYou are officially on board for ${projectName}. Expect onboarding materials from ${leadAgencyName} shortly with next steps, kickoff details, and project documents.`,
+              ctaText: "View Project",
+              ctaUrl: `${baseUrl}/partner/rfps`,
+            }),
           })
         } catch (emailErr) {
           console.error("[api] bid award: Resend send failed (award already recorded)", {
@@ -472,30 +468,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const declineSubject = rawScopeItemName
         ? `Update on your bid for ${scopeItemName}`
         : "Update on your recent bid submission"
-      const resendApiKey = process.env.RESEND_API_KEY
       const baseUrl = siteBaseUrl()
-      if (resendApiKey && partner?.email) {
+      if (partner?.email) {
         try {
-          const resend = new Resend(resendApiKey)
-          await resend.emails.send({
-            from: "Ligament <notifications@withligament.com>",
+          let declineBody = `Thank you for submitting your bid. After careful review, ${leadAgencyName} has decided to move forward with another partner for this scope.\n\nWe appreciate your time and the quality of your submission. We hope to work together on a future project.`
+          if (declineReason && String(declineReason).trim()) {
+            declineBody += `\n\nReason: ${String(declineReason).trim()}`
+          }
+          await sendTransactionalEmail({
             to: partner.email,
             cc: "hello@withligament.com",
             subject: declineSubject,
-            html: `
-            <p>Hi ${partnerName},</p>
-            <p>
-              Thank you for submitting your bid. After careful review, ${leadAgencyName} has decided to move
-              forward with another partner for this scope.
-            </p>
-            <p>
-              We appreciate your time and the quality of your submission. We hope to work together on a future
-              project.
-            </p>
-            ${declineReason ? `<p><strong>Reason:</strong> ${declineReason}</p>` : ""}
-            <p><a href="${baseUrl}/partner/rfps">View Update</a></p>
-            <p>The Ligament Team<br /><a href="${baseUrl}">withligament.com</a></p>
-          `,
+            html: buildBrandedEmailHtml({
+              title: "Update on your bid",
+              recipientName: partnerName,
+              body: declineBody,
+              ctaText: "View Update",
+              ctaUrl: `${baseUrl}/partner/rfps`,
+            }),
           })
         } catch (emailErr) {
           console.error("[api] decline: Resend send failed", {

@@ -229,7 +229,7 @@ export function AgencyDocumentLibraryManager() {
             className="bg-white/5 border-border h-9 text-sm"
           />
           <div className="flex flex-wrap gap-2 items-center">
-            <label className="inline-flex items-center gap-2 text-xs text-foreground-muted cursor-pointer">
+            <label className="inline-flex items-center gap-2 text-xs text-foreground/90 cursor-pointer">
               <Upload className="w-3.5 h-3.5" />
               <span>PDF / DOCX</span>
               <input

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server"
-import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
-import { siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -46,7 +45,12 @@ function normalizePaymentTerms(raw: unknown): PaymentTermsPayload {
       ? null
       : Number(source.deposit_required_pct)
   const deposit_required_pct =
-    Number.isFinite(parsedDeposit) && parsedDeposit >= 0 && parsedDeposit <= 100 ? parsedDeposit : null
+    parsedDeposit != null &&
+    Number.isFinite(parsedDeposit) &&
+    parsedDeposit >= 0 &&
+    parsedDeposit <= 100
+      ? parsedDeposit
+      : null
 
   const payment_schedule_preference = String(source.payment_schedule_preference ?? "")
     .trim()
@@ -298,8 +302,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.agency_id).maybeSingle(),
           supabase.from("partner_rfp_inbox").select("scope_item_name, master_rfp_json").eq("id", inboxId).maybeSingle(),
         ])
-        const resendApiKey = process.env.RESEND_API_KEY
-        if (resendApiKey && agencyProfile?.email) {
+        if (agencyProfile?.email) {
           const projectName =
             (inboxDetail?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
           const scopeItemName = inboxDetail?.scope_item_name || "Scope item"
@@ -307,18 +310,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             ? `${partner_display_name} updated their bid on ${scopeItemName}`
             : `${partner_display_name} resubmitted a bid`
           const baseUrl = siteBaseUrl()
-          const resend = new Resend(resendApiKey)
-          await resend.emails.send({
-            from: "Ligament <notifications@withligament.com>",
-            to: "hello@withligament.com",
-            cc: agencyProfile.email,
+          const agencyRecipient =
+            agencyProfile.company_name?.trim() ||
+            agencyProfile.full_name?.trim() ||
+            agencyProfile.email.trim()
+          await sendTransactionalEmail({
+            to: agencyProfile.email,
+            cc: "hello@withligament.com",
             subject: bidUpdateSubject,
-            html: `
-              <p>${partner_display_name} has submitted a revised bid for ${scopeItemName} on ${projectName}.</p>
-              <p>Log in to review the updated submission and respond.</p>
-              <p><a href="${baseUrl}/agency/bids">Review Bid</a></p>
-              <p>The Ligament Team<br /><a href="${baseUrl}">withligament.com</a></p>
-            `,
+            html: buildBrandedEmailHtml({
+              title: "Partner bid updated",
+              recipientName: agencyRecipient,
+              body: `${partner_display_name} has submitted a revised bid for ${scopeItemName} on ${projectName}.\n\nLog in to review the updated submission and respond.`,
+              ctaText: "Review Bid",
+              ctaUrl: `${baseUrl}/agency/bids`,
+            }),
           })
         }
       }

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { createNotification } from '@/lib/notifications'
 
 export async function POST(
@@ -73,7 +73,7 @@ export async function POST(
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
     }
 
-    const partnership = assignment.partnership as
+    const partnership = assignment.partnership as unknown as
       | { partner_id: string | null; partner: { id: string; email: string | null; full_name: string | null; company_name: string | null } | null }
       | null
 
@@ -143,23 +143,22 @@ export async function POST(
       data: { projectId, assignmentId, deploymentId: deployment.id },
     })
 
+    let deployBody = `${agencyName} has sent your onboarding package for ${projectTitle}.\n\nInside you will find kickoff details, project documents, and next steps. Log in to your partner portal to review everything and get started.`
+    if (customMessage && String(customMessage).trim()) {
+      deployBody += `\n\nMessage from ${agencyName}:\n${String(customMessage).trim()}`
+    }
+    const partnerRecipientName =
+      partner.company_name?.trim() || partner.full_name?.trim() || partner.email?.trim() || "there"
     await sendTransactionalEmail({
       to: partner.email,
       subject: `Your onboarding package is ready - ${projectTitle}`,
-      html: `
-        <div style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535;max-width:560px">
-          <p><strong>${agencyName}</strong> has sent your onboarding package for <strong>${projectTitle}</strong>.</p>
-          <p>
-            Inside you will find kickoff details, project documents, and next steps. Log in to your partner portal
-            to review everything and get started.
-          </p>
-          ${customMessage ? `<p style="border-left:3px solid #C8F53C;padding-left:12px;color:#333">${escapeHtml(customMessage)}</p>` : ''}
-          <p>
-            <a href="${onboardingUrl}" style="display:inline-block;background:#0C3535;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">View Onboarding Package</a>
-          </p>
-          <p style="font-size:13px;color:#666">The Ligament Team<br /><a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a></p>
-        </div>
-      `,
+      html: buildBrandedEmailHtml({
+        title: "Onboarding package ready",
+        recipientName: partnerRecipientName,
+        body: deployBody,
+        ctaText: "View Onboarding Package",
+        ctaUrl: onboardingUrl,
+      }),
     })
 
     return NextResponse.json({ success: true, deployment })
@@ -167,12 +166,4 @@ export async function POST(
     console.error('onboarding deploy:', e)
     return NextResponse.json({ error: 'Deploy failed' }, { status: 500 })
   }
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }

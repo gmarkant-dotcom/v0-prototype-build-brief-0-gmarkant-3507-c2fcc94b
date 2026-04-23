@@ -135,9 +135,9 @@ function DashboardAlertBannerContent() {
         </div>
         <button 
           onClick={() => setDismissed(true)}
-          className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+          className="p-2 hover:bg-white/10 rounded-lg transition-colors text-foreground"
         >
-          <X className="w-4 h-4 text-foreground-muted" />
+          <X className="w-4 h-4" />
         </button>
       </div>
       

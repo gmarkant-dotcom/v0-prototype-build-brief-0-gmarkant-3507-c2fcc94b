@@ -687,7 +687,7 @@ export function Stage05Utilization() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="border-border text-foreground-muted font-mono text-sm"
+                  className="border-border text-foreground font-mono text-sm"
                 >
                   <Edit3 className="w-4 h-4 mr-2" />
                   Edit Draft

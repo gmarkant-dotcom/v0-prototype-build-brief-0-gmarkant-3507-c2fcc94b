@@ -1242,7 +1242,7 @@ function AgencyRFPContent() {
                         ).map((row) => (
                           <label
                             key={row.label}
-                            className="flex items-start gap-2 cursor-pointer font-mono text-[11px] text-foreground-muted leading-snug"
+                            className="flex items-start gap-2 cursor-pointer font-mono text-[11px] text-foreground/90 leading-snug"
                           >
                             <Checkbox
                               checked={row.checked}

@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { Resend } from "resend"
-import { siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
 
 type ScopeItemPayload = {
   id: string
@@ -34,54 +34,6 @@ type PartnershipRow = {
         company_name?: string | null
       }>
     | null
-}
-
-function buildBrandedRfpNotificationHtml(params: {
-  recipientName: string
-  heading: string
-  paragraphs: string[]
-  ctaLabel: string
-  ctaUrl: string
-  baseUrl: string
-}): string {
-  const safeRecipientName = params.recipientName || "there"
-  const bodyParagraphs = params.paragraphs
-    .map(
-      (line) =>
-        `<p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 12px 0;">${line}</p>`
-    )
-    .join("")
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body style="margin:0;padding:0;background-color:#081F1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-      <div style="max-width:600px;margin:0 auto;padding:40px 20px;">
-        <div style="background:#0C3535;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.12);">
-          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#C8F53C;margin:0 0 16px 0;">
-            Ligament
-          </div>
-          <p style="color:#E8E8E8;font-size:16px;line-height:1.6;margin:0 0 16px 0;">Hi ${safeRecipientName},</p>
-          <p style="color:#FFFFFF;font-size:18px;line-height:1.5;margin:0 0 14px 0;font-weight:600;">${params.heading}</p>
-          ${bodyParagraphs}
-          <a
-            href="${params.ctaUrl}"
-            style="display:inline-block;background:#C8F53C;color:#0C3535;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;"
-          >
-            ${params.ctaLabel}
-          </a>
-          <p style="color:#9BB8B8;font-size:13px;margin:24px 0 0 0;">
-            The Ligament Team<br />
-            <a href="${params.baseUrl}" style="color:#C8F53C;text-decoration:none;">withligament.com</a>
-          </p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `
 }
 
 function normalizeManualRecipients(
@@ -388,11 +340,11 @@ export async function POST(request: NextRequest) {
             heading: ndaGateEnforced ? "Confidential RFP invite" : "You are invited to an RFP",
             paragraphs: ndaGateEnforced
               ? [
-                  `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has sent you a confidential RFP for <strong style="color:#FFFFFF;">${scopeItemName}</strong>.`,
+                  `${agencyDisplay} has sent you a confidential RFP for ${scopeItemName}.`,
                   "Create your account and complete the NDA to unlock access to the brief. Your invitation expires in 30 days.",
                 ]
               : [
-                  `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${scopeItemName}</strong> and invited you to join Ligament to respond.`,
+                  `${agencyDisplay} has sent you an RFP for ${scopeItemName} and invited you to join Ligament to respond.`,
                   "Create your free account to view the full brief and submit your bid. Your invitation expires in 30 days.",
                 ],
             ctaLabel: ndaGateEnforced ? "Create Account & Sign NDA" : "Create Account & View RFP",
@@ -409,7 +361,7 @@ export async function POST(request: NextRequest) {
             subject: `${agencyDisplay} requires an NDA to share this RFP with you`,
             heading: "NDA required before access",
             paragraphs: [
-              `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has a confidential RFP for <strong style="color:#FFFFFF;">${scopeItemName}</strong> ready for you on Ligament, but requires a signed NDA first.`,
+              `${agencyDisplay} has a confidential RFP for ${scopeItemName} ready for you on Ligament, but requires a signed NDA first.`,
               "Log in and complete the NDA to unlock access.",
             ],
             ctaLabel: "Sign NDA & View RFP",
@@ -424,7 +376,7 @@ export async function POST(request: NextRequest) {
           subject: `New RFP from ${agencyDisplay}: ${scopeItemName}`,
           heading: "New RFP in your partner inbox",
           paragraphs: [
-            `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${scopeItemName}</strong> on Ligament.`,
+            `${agencyDisplay} has sent you an RFP for ${scopeItemName} on Ligament.`,
             "Review the scope, timeline, and budget details, then submit your bid directly through the platform.",
           ],
           ctaLabel: "View RFP",
@@ -469,26 +421,19 @@ export async function POST(request: NextRequest) {
         const ctaUrl = notification.requiresNda
           ? `${baseUrl}/partner/rfps?nda=required`
           : `${baseUrl}/partner/rfps`
-        const paragraphs = notification.requiresNda
-          ? [
-              `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has a confidential RFP for <strong style="color:#FFFFFF;">${notification.scopeName}</strong> ready for you on Ligament, but requires a signed NDA first.`,
-              "Log in and complete the NDA to unlock access.",
-            ]
-          : [
-              `<strong style="color:#FFFFFF;">${agencyDisplay}</strong> has sent you an RFP for <strong style="color:#FFFFFF;">${notification.scopeName}</strong> on Ligament.`,
-              "Review the scope, timeline, and budget details, then submit your bid directly through the platform.",
-            ]
+        const body = notification.requiresNda
+          ? `${agencyDisplay} has a confidential RFP for ${notification.scopeName} ready for you on Ligament, but requires a signed NDA first.\n\nLog in and complete the NDA to unlock access.`
+          : `${agencyDisplay} has sent you an RFP for ${notification.scopeName} on Ligament.\n\nReview the scope, timeline, and budget details, then submit your bid directly through the platform.`
         await resend.emails.send({
           from: "Ligament <notifications@withligament.com>",
           to: notification.partnerEmail,
           subject,
-          html: buildBrandedRfpNotificationHtml({
+          html: buildBrandedEmailHtml({
+            title: notification.requiresNda ? "NDA required before access" : "New RFP in your partner inbox",
             recipientName: notification.partnerName,
-            heading: notification.requiresNda ? "NDA required before access" : "New RFP in your partner inbox",
-            paragraphs,
-            ctaLabel: notification.requiresNda ? "Sign NDA & View RFP" : "View RFP",
+            body,
+            ctaText: notification.requiresNda ? "Sign NDA & View RFP" : "View RFP",
             ctaUrl,
-            baseUrl,
           }),
         })
       } catch (error) {
@@ -505,13 +450,12 @@ export async function POST(request: NextRequest) {
           from: "Ligament <notifications@withligament.com>",
           to: notification.recipientEmail,
           subject: notification.subject,
-          html: buildBrandedRfpNotificationHtml({
+          html: buildBrandedEmailHtml({
+            title: notification.heading,
             recipientName: notification.recipientName,
-            heading: notification.heading,
-            paragraphs: notification.paragraphs,
-            ctaLabel: notification.ctaLabel,
+            body: notification.paragraphs.join("\n\n"),
+            ctaText: notification.ctaLabel,
             ctaUrl: notification.ctaUrl,
-            baseUrl,
           }),
         })
       } catch (error) {

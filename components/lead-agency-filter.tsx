@@ -155,10 +155,10 @@ export function LeadAgencyFilterCompact({ className }: { className?: string }) {
       {selectedAgencyId && (
         <button
           onClick={() => setSelectedAgencyId(null)}
-          className="p-1 hover:bg-white/10 rounded transition-colors"
+          className="p-1 hover:bg-white/10 rounded transition-colors text-foreground"
           title="Clear filter"
         >
-          <X className="w-3 h-3 text-foreground-muted" />
+          <X className="w-3 h-3" />
         </button>
       )}
     </div>

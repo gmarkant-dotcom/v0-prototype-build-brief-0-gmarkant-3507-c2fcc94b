@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -239,7 +239,7 @@ export async function POST(
       if (counterpartUserId) {
         const { data: counterpartProfile } = await supabase
           .from('profiles')
-          .select('email')
+          .select('email, company_name, full_name')
           .eq('id', counterpartUserId)
           .maybeSingle()
         const recipientEmail = counterpartProfile?.email?.trim()
@@ -252,24 +252,20 @@ export async function POST(
               ? `/partner/projects`
               : `/agency/dashboard`
           const viewUrl = `${siteBaseUrl()}${viewPath}`
+          const recipientDisplay =
+            counterpartProfile?.company_name?.trim() ||
+            counterpartProfile?.full_name?.trim() ||
+            recipientEmail
           await sendTransactionalEmail({
             to: recipientEmail,
             subject: `New message on ${projectName}`,
-            html: `
-              <p style="font-family:system-ui,sans-serif">
-                You have a new message on ${projectName} from ${senderName}.
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                Log in to view the conversation and reply.
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                <a href="${viewUrl}" style="font-weight:700;color:#0C3535">View Message</a>
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                The Ligament Team<br />
-                <a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a>
-              </p>
-            `,
+            html: buildBrandedEmailHtml({
+              title: "New project message",
+              recipientName: recipientDisplay,
+              body: `You have a new message on ${projectName} from ${senderName}.\n\nLog in to view the conversation and reply.`,
+              ctaText: "View Message",
+              ctaUrl: viewUrl,
+            }),
           })
         }
       }

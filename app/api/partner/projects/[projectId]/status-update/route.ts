@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import {
   PARTNER_BUDGET_STATUSES,
   PARTNER_WORKFLOW_STATUSES,
@@ -217,7 +217,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
       if (project?.agency_id) {
         const { data: agencyProfile } = await supabase
           .from("profiles")
-          .select("email")
+          .select("email, company_name, full_name")
           .eq("id", project.agency_id)
           .maybeSingle()
         const recipientEmail = agencyProfile?.email?.trim()
@@ -225,26 +225,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
           const projectName = project.title?.trim() || "Project"
           const reviewUrl = `${siteBaseUrl()}/agency/dashboard`
           const statusFlag = body.status.replace(/_/g, " ")
+          const agencyRecipient =
+            agencyProfile?.company_name?.trim() ||
+            agencyProfile?.full_name?.trim() ||
+            recipientEmail
           await sendTransactionalEmail({
             to: recipientEmail,
             subject: `${partnerName} submitted a status update on ${projectName}`,
-            html: `
-              <p style="font-family:system-ui,sans-serif">${partnerName} has submitted a project status update for ${projectName}.</p>
-              <p style="font-family:system-ui,sans-serif">
-                Completion: ${body.completion_pct}%<br />
-                Status: ${statusFlag}
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                Log in to review the update and respond.
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                <a href="${reviewUrl}" style="font-weight:700;color:#0C3535">Review Update</a>
-              </p>
-              <p style="font-family:system-ui,sans-serif">
-                The Ligament Team<br />
-                <a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a>
-              </p>
-            `,
+            html: buildBrandedEmailHtml({
+              title: "Partner status update",
+              recipientName: agencyRecipient,
+              body: `${partnerName} has submitted a project status update for ${projectName}.\n\nCompletion: ${body.completion_pct}%\nStatus: ${statusFlag}\n\nLog in to review the update and respond.`,
+              ctaText: "Review Update",
+              ctaUrl: reviewUrl,
+            }),
           })
         }
       }

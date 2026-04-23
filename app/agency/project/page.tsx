@@ -8,7 +8,7 @@ import { SelectedProjectHeader } from "@/components/selected-project-header"
 import { GlassCard } from "@/components/glass-card"
 import { isDemoMode } from "@/lib/demo-data"
 import { formatEngagementBudget, formatEngagementTimeline } from "@/lib/active-engagement-parse"
-import { normalizeMeetingUrlForHref } from "@/lib/utils"
+import { cn, formatDateTime, normalizeMeetingUrlForHref } from "@/lib/utils"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { useFetch } from "@/hooks/useFetch"
 import {
@@ -30,8 +30,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
-
 type OnboardingDoc = { label: string; url: string }
 
 type LatestAlert = {
@@ -56,6 +54,8 @@ type PanelStatusUpdate = {
   completion_pct: number
   notes: string | null
   created_at: string
+  /** Resolved from partnerships + profiles on the agency status-updates API */
+  partner_display_name?: string
 }
 
 type PartnerEngagementRow = {
@@ -104,7 +104,7 @@ const DEMO_ALERT_2: LatestAlert = {
   created_at: new Date(Date.now() - 86400000).toISOString(),
 }
 
-function demoPanelAlerts(): PanelStatusUpdate[] {
+function demoPanelAlerts(partnerLabel: string): PanelStatusUpdate[] {
   return [
     {
       id: "demo-status-alert-1",
@@ -113,6 +113,7 @@ function demoPanelAlerts(): PanelStatusUpdate[] {
       completion_pct: 45,
       notes: "Waiting on revised scope from client.",
       created_at: new Date().toISOString(),
+      partner_display_name: partnerLabel,
     },
     {
       id: DEMO_ALERT_2.id,
@@ -121,6 +122,7 @@ function demoPanelAlerts(): PanelStatusUpdate[] {
       completion_pct: DEMO_ALERT_2.completion_pct,
       notes: DEMO_ALERT_2.notes,
       created_at: DEMO_ALERT_2.created_at,
+      partner_display_name: partnerLabel,
     },
   ]
 }
@@ -158,6 +160,8 @@ function ActiveEngagementsInner() {
     projectId: string
     partnershipId: string
     partnerName: string
+    /** Title of the project group row (matches selected project in normal use) */
+    engagementProjectTitle: string
   } | null>(null)
   const [panelAlerts, setPanelAlerts] = useState<PanelStatusUpdate[]>([])
   const [panelLoading, setPanelLoading] = useState(false)
@@ -166,11 +170,18 @@ function ActiveEngagementsInner() {
     projectId: string
     partnershipId: string
     partnerName: string
+    engagementProjectTitle: string
   } | null>(null)
+
+  const selectedProjectIdRef = useRef<string | undefined>(undefined)
 
   useEffect(() => {
     alertSheetCtxRef.current = alertSheetCtx
   }, [alertSheetCtx])
+
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProject?.id
+  }, [selectedProject?.id])
 
   const qProjectId = searchParams.get("projectId")
   const highlightId = searchParams.get("highlight")
@@ -197,6 +208,8 @@ function ActiveEngagementsInner() {
   useEffect(() => {
     setPanelAlerts([])
     setAlertSheetCtx(null)
+    setAlertSheetOpen(false)
+    setPanelLoading(false)
   }, [selectedProject?.id])
 
   useEffect(() => {
@@ -318,13 +331,24 @@ function ActiveEngagementsInner() {
   }, [selectedProject?.id, isDemo])
 
   const openAlertPanel = useCallback(
-    async (projectId: string, partnershipId: string, partnerName: string) => {
-      setAlertSheetCtx({ projectId, partnershipId, partnerName })
+    async (
+      projectId: string,
+      partnershipId: string,
+      partnerName: string,
+      engagementProjectTitle: string
+    ) => {
+      const fetchForProjectId = projectId
+      setAlertSheetCtx({
+        projectId,
+        partnershipId,
+        partnerName,
+        engagementProjectTitle,
+      })
       setAlertSheetOpen(true)
       setPanelLoading(true)
       setPanelAlerts([])
       if (isDemo) {
-        setPanelAlerts(demoPanelAlerts())
+        setPanelAlerts(demoPanelAlerts(partnerName))
         setPanelLoading(false)
         return
       }
@@ -340,6 +364,9 @@ function ActiveEngagementsInner() {
         })
         const res = await fetch(path, { credentials: "same-origin" })
         const data = await res.json().catch(() => ({}))
+        if (selectedProjectIdRef.current !== fetchForProjectId) {
+          return
+        }
         if (res.ok) {
           const raw = (data as { updates?: Record<string, unknown>[] }).updates || []
           setPanelAlerts(
@@ -350,16 +377,20 @@ function ActiveEngagementsInner() {
               completion_pct: Number(r.completion_pct),
               notes: (r.notes as string | null) ?? null,
               created_at: String(r.created_at),
+              partner_display_name:
+                typeof r.partner_display_name === "string" ? r.partner_display_name : undefined,
             }))
           )
         } else {
           console.warn("[active-engagements] status-updates GET failed", res.status, data)
         }
       } finally {
-        setPanelLoading(false)
+        if (selectedProjectIdRef.current === fetchForProjectId) {
+          setPanelLoading(false)
+        }
       }
     },
-    [isDemo, selectedProject?.id]
+    [isDemo]
   )
 
   const openAlertsForRow = useCallback((proj: ProjectGroup, row: PartnerEngagementRow) => {
@@ -371,7 +402,7 @@ function ActiveEngagementsInner() {
       partnershipId: row.partnershipId,
       selectedSidebarProjectId: selectedProject?.id ?? null,
     })
-    void openAlertPanel(rowProjectId, row.partnershipId, name)
+    void openAlertPanel(rowProjectId, row.partnershipId, name, proj.title)
   }, [openAlertPanel, selectedProject?.id])
 
   const resolveFromPanel = useCallback(
@@ -807,9 +838,23 @@ function ActiveEngagementsInner() {
             <SheetTitle className="font-display text-xl text-foreground pr-8">
               Partner status alerts
             </SheetTitle>
-            <SheetDescription className="text-foreground-muted text-sm">
-              {alertSheetCtx?.partnerName}
-              {alertSheetCtx && selectedProject ? ` · ${selectedProject.name}` : null}
+            <SheetDescription className="text-foreground/90 text-sm space-y-2 text-left">
+              <span className="sr-only">
+                Partner {(panelAlerts[0]?.partner_display_name || alertSheetCtx?.partnerName || "Partner").trim()} for
+                project {(selectedProject?.name || alertSheetCtx?.engagementProjectTitle || "Project").trim()}.
+              </span>
+              <div>
+                <span className="font-mono text-[10px] uppercase text-foreground-muted">Partner</span>
+                <div className="font-medium text-foreground">
+                  {(panelAlerts[0]?.partner_display_name || alertSheetCtx?.partnerName || "Partner").trim()}
+                </div>
+              </div>
+              <div>
+                <span className="font-mono text-[10px] uppercase text-foreground-muted">Project</span>
+                <div className="font-medium text-foreground">
+                  {(selectedProject?.name || alertSheetCtx?.engagementProjectTitle || "Project").trim()}
+                </div>
+              </div>
             </SheetDescription>
           </SheetHeader>
           <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
@@ -826,8 +871,23 @@ function ActiveEngagementsInner() {
                   key={a.id}
                   className="rounded-lg border border-border/60 bg-white/5 p-4 space-y-3"
                 >
-                  <div className="font-mono text-[10px] text-foreground-muted">
-                    {new Date(a.created_at).toLocaleString()}
+                  <div className="grid gap-1 text-sm">
+                    <div>
+                      <span className="font-mono text-[10px] uppercase text-foreground-muted">Partner</span>
+                      <div className="text-foreground font-medium">
+                        {(a.partner_display_name || alertSheetCtx?.partnerName || "Partner").trim()}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="font-mono text-[10px] uppercase text-foreground-muted">Project</span>
+                      <div className="text-foreground font-medium">
+                        {(selectedProject?.name || alertSheetCtx?.engagementProjectTitle || "—").trim()}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="font-mono text-[10px] uppercase text-foreground-muted">Submitted</span>
+                      <div className="text-foreground/90">{formatDateTime(a.created_at)}</div>
+                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <span
@@ -838,12 +898,12 @@ function ActiveEngagementsInner() {
                     >
                       {workflowStatusLabel(a.status)}
                     </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-100">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 text-amber-100">
                       {budgetStatusLabel(a.budget_status)}
                     </span>
                   </div>
                   <div>
-                    <div className="flex justify-between text-xs text-foreground-muted mb-1">
+                    <div className="flex justify-between text-xs text-foreground mb-1">
                       <span>Completion</span>
                       <span>{a.completion_pct}%</span>
                     </div>
@@ -855,11 +915,20 @@ function ActiveEngagementsInner() {
                     </div>
                   </div>
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Notes</div>
+                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Partner notes</div>
                     <p className="text-sm text-foreground/90 whitespace-pre-wrap">
                       {(a.notes || "").trim() || "—"}
                     </p>
                   </div>
+                  {alertSheetCtx ? (
+                    <Link
+                      href={`/agency/project?projectId=${encodeURIComponent(alertSheetCtx.projectId)}`}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline"
+                    >
+                      View project
+                      <ExternalLink className="w-3.5 h-3.5" aria-hidden />
+                    </Link>
+                  ) : null}
                   <Button
                     type="button"
                     variant="outline"
@@ -874,7 +943,7 @@ function ActiveEngagementsInner() {
                         Resolving…
                       </span>
                     ) : (
-                      "Mark resolved"
+                      "Mark as Resolved"
                     )}
                   </Button>
                 </div>

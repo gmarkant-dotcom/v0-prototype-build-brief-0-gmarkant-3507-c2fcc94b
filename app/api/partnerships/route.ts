@@ -1,8 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
-import { Resend } from 'resend'
-import { siteBaseUrl } from '@/lib/email'
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -321,53 +320,23 @@ export async function POST(request: NextRequest) {
         }
         
         // Send email for re-invitation
-        const resendApiKey = process.env.RESEND_API_KEY
-        if (resendApiKey) {
-          const { Resend } = await import('resend')
-          const resend = new Resend(resendApiKey)
-          const siteUrl = siteBaseUrl()
-          // If partner has an account, link to invitations page; otherwise link to signup
-          const acceptUrl = existingPartnerId 
-            ? `${siteUrl}/partner/invitations` 
-            : `${siteUrl}/partner/invitations`
-
-          await resend.emails.send({
-            from: 'Ligament <notifications@withligament.com>',
-            to: partnerEmail.trim(),
-            subject: `${agencyName} has re-invited you to their partner network on Ligament`,
-            html: `
-              <!DOCTYPE html>
-              <html>
-              <head>
-                <meta charset="utf-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              </head>
-              <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #081F1F;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-                  <div style="background: #0C3535; border-radius: 16px; padding: 40px; border: 1px solid rgba(255,255,255,0.12);">
-                    <p style="color: #9BB8B8; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
-                      <strong style="color: #FFFFFF;">${agencyName}</strong> would like to reconnect with you on Ligament and has sent a new partnership invitation.
-                    </p>
-                    ${message ? `
-                    <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 20px; margin: 0 0 24px 0; border-left: 3px solid #C8F53C;">
-                      <p style="color: #9BB8B8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px 0; font-family: 'IBM Plex Mono', monospace;">Personal Message</p>
-                      <p style="color: #E8E8E8; font-size: 14px; line-height: 1.6; margin: 0;">"${message}"</p>
-                    </div>
-                    ` : ''}
-                    <a href="${acceptUrl}" style="display: inline-block; background: #C8F53C; color: #0C3535; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">
-                      ${partner ? 'View Invitation' : 'Accept Invitation'}
-                    </a>
-                    <p style="color: #9BB8B8; font-size: 13px; margin: 24px 0 0;">
-                      The Ligament Team<br />
-                      <a href="${siteUrl}" style="color: #C8F53C; text-decoration: none;">withligament.com</a>
-                    </p>
-                  </div>
-                </div>
-              </body>
-              </html>
-            `,
-          })
+        const siteUrl = siteBaseUrl()
+        const acceptUrl = `${siteUrl}/partner/invitations`
+        let reinviteBody = `${agencyName} would like to reconnect with you on Ligament and has sent a new partnership invitation.`
+        if (message && String(message).trim()) {
+          reinviteBody += `\n\nPersonal message:\n${String(message).trim()}`
         }
+        await sendTransactionalEmail({
+          to: partnerEmail.trim(),
+          subject: `${agencyName} has re-invited you to their partner network on Ligament`,
+          html: buildBrandedEmailHtml({
+            title: "Partnership re-invitation",
+            recipientName: partnerEmail.trim(),
+            body: reinviteBody,
+            ctaText: partner ? "View Invitation" : "Accept Invitation",
+            ctaUrl: acceptUrl,
+          }),
+        })
         
         return NextResponse.json({ 
           partnership: reactivated, 
@@ -423,61 +392,27 @@ export async function POST(request: NextRequest) {
     }
     
     // Send email invitation to partner (whether they have account or not)
-    const resendApiKey = process.env.RESEND_API_KEY
-    if (resendApiKey) {
-      try {
-        const resend = new Resend(resendApiKey)
-        // Always use production URL for email links (not sandbox URLs)
-        const siteUrl = siteBaseUrl()
-        const acceptUrl = partner 
-          ? `${siteUrl}/partner/invitations` 
-          : `${siteUrl}/partner/invitations`
-        
-        await resend.emails.send({
-          from: 'Ligament <notifications@withligament.com>',
-          to: partnerEmail.trim(),
-          subject: `${agencyName} has invited you to join their partner network on Ligament`,
-          html: `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            </head>
-            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #081F1F;">
-              <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
-                <div style="background: #0C3535; border-radius: 16px; padding: 40px; border: 1px solid rgba(255,255,255,0.12);">
-                  <p style="color: #9BB8B8; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
-                    <strong style="color: #FFFFFF;">${agencyName}</strong> has selected you as a potential partner on Ligament, a platform for vendor orchestration between creative and production agencies.
-                  </p>
-                  <p style="color: #9BB8B8; font-size: 16px; line-height: 1.7; margin: 0 0 24px 0;">
-                    Joining their network means you will be considered for scoped project opportunities they broadcast directly to their trusted partners.
-                  </p>
-                  ${message ? `
-                  <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 20px; margin: 0 0 24px 0; border-left: 3px solid #C8F53C;">
-                    <p style="color: #9BB8B8; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px 0; font-family: 'IBM Plex Mono', monospace;">Personal Message</p>
-                    <p style="color: #E8E8E8; font-size: 14px; line-height: 1.6; margin: 0;">
-                      "${message}"
-                    </p>
-                  </div>
-                  ` : ''}
-                  <a href="${acceptUrl}" style="display: inline-block; background: #C8F53C; color: #0C3535; text-decoration: none; padding: 16px 32px; border-radius: 8px; font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">
-                    ${partner ? 'View Invitation' : 'Accept Invitation'}
-                  </a>
-                  <p style="color: #9BB8B8; font-size: 13px; margin: 24px 0 0;">
-                    The Ligament Team<br />
-                    <a href="${siteUrl}" style="color: #C8F53C; text-decoration: none;">withligament.com</a>
-                  </p>
-                </div>
-              </div>
-            </body>
-            </html>
-          `,
-        })
-      } catch (emailErr) {
-        console.error('Error sending partnership invitation email:', emailErr)
-        // Don't fail the whole request if email fails
+    try {
+      const siteUrl = siteBaseUrl()
+      const acceptUrl = `${siteUrl}/partner/invitations`
+      let inviteBody = `${agencyName} has selected you as a potential partner on Ligament, a platform for vendor orchestration between creative and production agencies.\n\nJoining their network means you will be considered for scoped project opportunities they broadcast directly to their trusted partners.`
+      if (message && String(message).trim()) {
+        inviteBody += `\n\nPersonal message:\n${String(message).trim()}`
       }
+      await sendTransactionalEmail({
+        to: partnerEmail.trim(),
+        subject: `${agencyName} has invited you to join their partner network on Ligament`,
+        html: buildBrandedEmailHtml({
+          title: "Partnership invitation",
+          recipientName: partnerEmail.trim(),
+          body: inviteBody,
+          ctaText: partner ? "View Invitation" : "Accept Invitation",
+          ctaUrl: acceptUrl,
+        }),
+      })
+    } catch (emailErr) {
+      console.error('Error sending partnership invitation email:', emailErr)
+      // Don't fail the whole request if email fails
     }
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: partnership.id })
@@ -594,25 +529,26 @@ export async function PATCH(request: NextRequest) {
       }
 
       if (partnerEmail) {
-        const resendApiKey = process.env.RESEND_API_KEY
-        if (resendApiKey) {
-          const resend = new Resend(resendApiKey)
-          const baseUrl = siteBaseUrl()
-          const { data: agencyProfile } = await supabase
-            .from('profiles')
-            .select('company_name, full_name')
-            .eq('id', user.id)
-            .maybeSingle()
-          const agencyLabel =
-            (agencyProfile?.company_name || agencyProfile?.full_name || 'Lead agency')
-          const scopeName = (inboxRows?.[0]?.scope_item_name as string | undefined) || 'this scope'
-          await resend.emails.send({
-            from: 'Ligament <notifications@withligament.com>',
-            to: partnerEmail,
-            subject: `Your NDA has been confirmed — ${scopeName} is now accessible`,
-            html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#081F1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"><div style="max-width:600px;margin:0 auto;padding:40px 20px;"><div style="background:#0C3535;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.12);"><p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 12px 0;"><strong style="color:#FFFFFF;">${agencyLabel}</strong> has confirmed your NDA for <strong style="color:#FFFFFF;">${scopeName}</strong>.</p><p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 24px 0;">You can now log in and view the full RFP details and submit your bid.</p><a href="${baseUrl}/partner/rfps" style="display:inline-block;background:#C8F53C;color:#0C3535;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;">View RFP</a><p style="color:#9BB8B8;font-size:13px;margin:24px 0 0;">The Ligament Team<br /><a href="${baseUrl}" style="color:#C8F53C;text-decoration:none;">withligament.com</a></p></div></div></body></html>`,
-          })
-        }
+        const baseUrl = siteBaseUrl()
+        const { data: agencyProfile } = await supabase
+          .from('profiles')
+          .select('company_name, full_name')
+          .eq('id', user.id)
+          .maybeSingle()
+        const agencyLabel =
+          (agencyProfile?.company_name || agencyProfile?.full_name || 'Lead agency')
+        const scopeName = (inboxRows?.[0]?.scope_item_name as string | undefined) || 'this scope'
+        await sendTransactionalEmail({
+          to: partnerEmail,
+          subject: `Your NDA has been confirmed, ${scopeName} is now accessible`,
+          html: buildBrandedEmailHtml({
+            title: "NDA confirmed",
+            recipientName: partnerEmail,
+            body: `${agencyLabel} has confirmed your NDA for ${scopeName}.\n\nYou can now log in and view the full RFP details and submit your bid.`,
+            ctaText: "View RFP",
+            ctaUrl: `${baseUrl}/partner/rfps`,
+          }),
+        })
       }
 
       return NextResponse.json({ partnership: updated })
@@ -653,19 +589,25 @@ export async function PATCH(request: NextRequest) {
 
         const { data: agencyProfile } = await supabase
           .from('profiles')
-          .select('email')
+          .select('email, company_name, full_name')
           .eq('id', partnership.agency_id)
           .single()
 
         if (agencyProfile?.email) {
-          const { sendTransactionalEmail, siteBaseUrl } = await import('@/lib/email')
           await sendTransactionalEmail({
             to: agencyProfile.email,
             subject: `${partnerName} accepted your partnership invitation`,
-            html: `<p style="font-family:system-ui,sans-serif">${partnerName} has accepted your invitation and joined your partner network on Ligament.</p>
-              <p style="font-family:system-ui,sans-serif">They are now available to receive RFP broadcasts from your agency.</p>
-              <p><a href="${siteBaseUrl()}/agency/pool">View Partner</a></p>
-              <p style="font-family:system-ui,sans-serif">The Ligament Team<br /><a href="${siteBaseUrl()}">withligament.com</a></p>`,
+            html: buildBrandedEmailHtml({
+              title: "Partner accepted invitation",
+              recipientName:
+                agencyProfile.company_name?.trim() ||
+                agencyProfile.full_name?.trim() ||
+                agencyProfile.email?.trim() ||
+                "there",
+              body: `${partnerName} has accepted your invitation and joined your partner network on Ligament.\n\nThey are now available to receive RFP broadcasts from your agency.`,
+              ctaText: "View Partner",
+              ctaUrl: `${siteBaseUrl()}/agency/pool`,
+            }),
           })
         }
         

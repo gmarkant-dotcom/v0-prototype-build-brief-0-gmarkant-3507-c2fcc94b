@@ -434,6 +434,8 @@ export default function PartnerRfpDetailPage() {
   const [savingKind, setSavingKind] = useState<null | "draft" | "submitted">(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [bidSubmittedModalOpen, setBidSubmittedModalOpen] = useState(false)
+  const [bidSubmittedModalIsRevision, setBidSubmittedModalIsRevision] = useState(false)
   const [versions, setVersions] = useState<ResponseVersion[]>([])
   const [historyOpen, setHistoryOpen] = useState(true)
   const [changeNotes, setChangeNotes] = useState("")
@@ -612,7 +614,14 @@ export default function PartnerRfpDetailPage() {
     setSubmitError(null)
     setSuccessMsg(null)
     if (isDemoDetail) {
-      setSuccessMsg(status === "submitted" ? "Demo mode — response not saved." : "Demo mode — draft not saved.")
+      if (status === "submitted") {
+        const inboxStatus = inbox?.status ?? "new"
+        const pre = existing?.status || (inboxStatus === "bid_submitted" ? "submitted" : inboxStatus)
+        setBidSubmittedModalIsRevision(["under_review", "shortlisted", "meeting_requested"].includes(pre))
+        setBidSubmittedModalOpen(true)
+      } else {
+        setSuccessMsg("Demo mode — draft not saved.")
+      }
       return
     }
     const authOk = await ensurePartnerAuth()
@@ -709,13 +718,17 @@ export default function PartnerRfpDetailPage() {
         const att = Array.isArray(row.attachments) ? row.attachments : []
         setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
       }
-      setSuccessMsg(
-        status === "submitted"
-          ? ["under_review", "shortlisted", "meeting_requested"].includes(currentStatus)
-            ? "Your updated bid has been submitted."
-            : "Your response was submitted successfully. The lead agency will see it under RFP Broadcast → Partner responses."
-          : "Draft saved. You can return anytime to finish and submit."
-      )
+      if (status === "submitted") {
+        const inboxStatus = inbox?.status ?? "new"
+        const preSubmitStatus =
+          existing?.status || (inboxStatus === "bid_submitted" ? "submitted" : inboxStatus)
+        setBidSubmittedModalIsRevision(
+          ["under_review", "shortlisted", "meeting_requested"].includes(preSubmitStatus)
+        )
+        setBidSubmittedModalOpen(true)
+      } else {
+        setSuccessMsg("Draft saved. You can return anytime to finish and submit.")
+      }
       if (status === "submitted" && inbox) {
         setInbox({ ...inbox, status: "bid_submitted" })
         setExisting((prev) => (prev ? { ...prev, status: "submitted" } : prev))
@@ -1706,6 +1719,53 @@ export default function PartnerRfpDetailPage() {
           )}
         </div>
       </div>
+
+      {bidSubmittedModalOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+          onClick={() => setBidSubmittedModalOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bid-submitted-title"
+            className="w-full max-w-md rounded-xl border-2 border-green-300 bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 border border-green-300">
+                <CheckCircle className="h-8 w-8 text-green-700" aria-hidden />
+              </div>
+            </div>
+            <h2 id="bid-submitted-title" className="font-display text-center text-xl font-bold text-[#0C3535]">
+              Bid Submitted Successfully
+            </h2>
+            <p className="mt-3 text-center text-sm text-gray-800 leading-relaxed">
+              {bidSubmittedModalIsRevision ? (
+                "Your updated bid has been submitted."
+              ) : (
+                <>
+                  Your response was submitted successfully. The lead agency will see it under RFP Broadcast → Partner
+                  responses.
+                </>
+              )}
+            </p>
+            {isDemoDetail ? (
+              <p className="mt-2 text-center text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Demo mode — this response was not saved to the server.
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              className="mt-6 w-full bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+              onClick={() => setBidSubmittedModalOpen(false)}
+            >
+              Got it
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </PartnerChrome>
   )
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
-import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
-import { siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 
 function isSameEmail(a: string | null | undefined, b: string | null | undefined) {
   return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase()
@@ -69,7 +68,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const [{ data: agencyProfile }, { data: projectRow }] = await Promise.all([
       supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.agency_id).maybeSingle(),
       inbox.project_id
-        ? supabase.from("projects").select("id, name").eq("id", inbox.project_id).maybeSingle()
+        ? supabase.from("projects").select("id, title").eq("id", inbox.project_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ])
 
@@ -79,18 +78,28 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     const partnerName = profile?.company_name || profile?.full_name || profile?.email || "Partner"
     const scopeName = inbox.scope_item_name || "Scope"
-    const projectName = (projectRow as { name?: string } | null)?.name || "Project"
-    const resendApiKey = process.env.RESEND_API_KEY
-    if (!resendApiKey) return NextResponse.json({ error: "RESEND_API_KEY is not configured" }, { status: 500 })
+    const projectName = (projectRow as { title?: string } | null)?.title || "Project"
     const baseUrl = siteBaseUrl()
-    const resend = new Resend(resendApiKey)
-
-    await resend.emails.send({
-      from: "Ligament <notifications@withligament.com>",
-      to: agencyProfile.email,
-      subject: `${partnerName} has signed the NDA for ${scopeName}`,
-      html: `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#081F1F;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"><div style="max-width:600px;margin:0 auto;padding:40px 20px;"><div style="background:#0C3535;border-radius:16px;padding:32px;border:1px solid rgba(255,255,255,0.12);"><p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 12px 0;"><strong style="color:#FFFFFF;">${partnerName}</strong> has completed the NDA for <strong style="color:#FFFFFF;">${scopeName}</strong> on <strong style="color:#FFFFFF;">${projectName}</strong>.</p><p style="color:#9BB8B8;font-size:16px;line-height:1.7;margin:0 0 24px 0;">Log in to confirm the NDA and unlock their access to the RFP.</p><a href="${baseUrl}/agency/pool" style="display:inline-block;background:#C8F53C;color:#0C3535;text-decoration:none;padding:14px 24px;border-radius:10px;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;">Confirm NDA</a><p style="color:#9BB8B8;font-size:13px;margin:24px 0 0;">The Ligament Team<br /><a href="${baseUrl}" style="color:#C8F53C;text-decoration:none;">withligament.com</a></p></div></div></body></html>`,
-    })
+    const agencyRecipient =
+      agencyProfile.company_name?.trim() ||
+      agencyProfile.full_name?.trim() ||
+      agencyProfile.email.trim()
+    try {
+      await sendTransactionalEmail({
+        to: agencyProfile.email,
+        subject: `${partnerName} has signed the NDA for ${scopeName}`,
+        html: buildBrandedEmailHtml({
+          title: "NDA completed by partner",
+          recipientName: agencyRecipient,
+          body: `${partnerName} has completed the NDA for ${scopeName} on ${projectName}.\n\nLog in to confirm the NDA and unlock their access to the RFP.`,
+          ctaText: "Confirm NDA",
+          ctaUrl: `${baseUrl}/agency/pool`,
+        }),
+      })
+    } catch (emailErr) {
+      console.error("[nda-notify] email send failed", emailErr)
+      return NextResponse.json({ error: "Failed to send agency notification" }, { status: 500 })
+    }
 
     const now = new Date().toISOString()
     const { error: updateError } = await supabase

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -115,7 +115,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
     }
 
-    const { data: project } = await supabase.from("projects").select("id").eq("id", projectId).eq("agency_id", user.id).maybeSingle()
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id, title, agency_id")
+      .eq("id", projectId)
+      .eq("agency_id", user.id)
+      .maybeSingle()
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
     }
@@ -170,7 +175,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
         const partnerId = partnership?.partner_id
         if (partnerId) {
           const [{ data: partnerProfile }, { data: agencyProfile }] = await Promise.all([
-            supabase.from("profiles").select("email").eq("id", partnerId).maybeSingle(),
+            supabase.from("profiles").select("email, full_name, company_name").eq("id", partnerId).maybeSingle(),
             supabase
               .from("profiles")
               .select("full_name, company_name")
@@ -183,24 +188,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
               agencyProfile?.company_name?.trim() || agencyProfile?.full_name?.trim() || "Your lead agency"
             const projectName = project.title?.trim() || "Project"
             const viewUrl = `${siteBaseUrl()}/partner/projects`
+            const recipientName =
+              partnerProfile?.company_name?.trim() ||
+              partnerProfile?.full_name?.trim() ||
+              recipientEmail
+            const body = `${agencyName} has reviewed and resolved your status update for ${projectName}. Log in to view any notes or next steps.`
             await sendTransactionalEmail({
               to: recipientEmail,
               subject: `Your status update on ${projectName} has been reviewed`,
-              html: `
-                <p style="font-family:system-ui,sans-serif">
-                  ${agencyName} has reviewed and resolved your status update for ${projectName}.
-                </p>
-                <p style="font-family:system-ui,sans-serif">
-                  Log in to view any notes or next steps.
-                </p>
-                <p style="font-family:system-ui,sans-serif">
-                  <a href="${viewUrl}" style="font-weight:700;color:#0C3535">View Project</a>
-                </p>
-                <p style="font-family:system-ui,sans-serif">
-                  The Ligament Team<br />
-                  <a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a>
-                </p>
-              `,
+              html: buildBrandedEmailHtml({
+                title: "Status Update Reviewed",
+                recipientName,
+                body,
+                ctaText: "View Project",
+                ctaUrl: viewUrl,
+              }),
             })
           }
         }

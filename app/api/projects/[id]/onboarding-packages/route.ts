@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { createNotification } from "@/lib/notifications"
 import { normalizeMeetingUrlForHref } from "@/lib/utils"
 export const dynamic = "force-dynamic"
@@ -10,14 +10,6 @@ type DocPayload = {
   libraryDocumentId?: string | null
   label: string
   url: string
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
 }
 
 export async function GET(
@@ -344,29 +336,31 @@ export async function POST(
     const base = siteBaseUrl()
     const onboardingUrl = `${base}/partner/onboarding`
 
-    let kickoffHtml = ""
+    let onboardingBody = `Your onboarding documents for ${projectTitle} are now available in your Ligament partner portal.\n\nReview the materials and reach out to ${agencyName} with any questions before your project kickoff.`
+    if (customMessage && String(customMessage).trim()) {
+      onboardingBody += `\n\nMessage from ${agencyName}:\n${String(customMessage).trim()}`
+    }
     if (kt === "calendly" && finalKickoffUrl) {
-      kickoffHtml = `<p><strong>Kickoff:</strong> <a href="${escapeHtml(finalKickoffUrl)}">Schedule here</a></p>`
+      onboardingBody += `\n\nKickoff scheduling link:\n${finalKickoffUrl}`
     } else if (kt === "availability" && finalAvailability) {
-      kickoffHtml = `<p><strong>Agency availability:</strong><br/>${escapeHtml(finalAvailability)}</p>`
+      onboardingBody += `\n\nAgency availability:\n${finalAvailability}`
     }
 
     if (partnerEmail) {
+      const recipientName =
+        partnerProfile?.company_name?.trim() ||
+        partnerProfile?.full_name?.trim() ||
+        partnerEmail.trim()
       await sendTransactionalEmail({
         to: partnerEmail,
         subject: packageSubject,
-        html: `
-        <div style="font-family:system-ui,sans-serif;line-height:1.6;color:#0C3535;max-width:560px">
-          <p>Your onboarding documents for <strong>${escapeHtml(projectTitle)}</strong> are now available in your Ligament partner portal.</p>
-          <p>Review the materials and reach out to ${escapeHtml(agencyName)} with any questions before your project kickoff.</p>
-          ${customMessage ? `<p style="border-left:3px solid #C8F53C;padding-left:12px">${escapeHtml(customMessage)}</p>` : ""}
-          ${kickoffHtml ? `<div>${kickoffHtml}</div>` : ""}
-          <p>
-            <a href="${onboardingUrl}" style="display:inline-block;background:#0C3535;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">View Documents</a>
-          </p>
-          <p style="font-size:13px;color:#666">The Ligament Team<br /><a href="${siteBaseUrl()}" style="color:#0C3535">withligament.com</a></p>
-        </div>
-      `,
+        html: buildBrandedEmailHtml({
+          title: "Onboarding documents ready",
+          recipientName,
+          body: onboardingBody,
+          ctaText: "View Documents",
+          ctaUrl: onboardingUrl,
+        }),
       })
     }
 

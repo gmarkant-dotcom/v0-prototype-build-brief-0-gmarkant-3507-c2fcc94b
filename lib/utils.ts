@@ -12,3 +12,18 @@ export function normalizeMeetingUrlForHref(url: string | null | undefined): stri
   if (t.startsWith("http://") || t.startsWith("https://")) return t
   return `https://${t.replace(/^\/+/, "")}`
 }
+
+/** Consistent display for status-update timestamps and alert panels (en-US, 12h). */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "—"
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+}
