@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
+import { SupabaseClient, User } from "@supabase/supabase-js"
 
 // Helper function to sync user profile after auth
 async function syncUserProfile(supabase: any, user: any) {
@@ -33,14 +34,27 @@ async function syncUserProfile(supabase: any, user: any) {
   return role
 }
 
-async function claimPartnershipInvitations(supabase: any, user: any) {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("email")
-    .eq("id", user.id)
-    .maybeSingle()
+async function claimPartnershipInvitations(supabase: SupabaseClient, user: User) {
+  const loadProfileEmail = async (): Promise<string> => {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", user.id)
+      .maybeSingle()
+    return (profile?.email || "").trim().toLowerCase()
+  }
 
-  const email = (profile?.email || user.email || "").trim().toLowerCase()
+  let email = await loadProfileEmail()
+  if (!email) {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    email = await loadProfileEmail()
+  }
+  if (!email) {
+    email = (user?.email || "").trim().toLowerCase()
+    if (email) {
+      console.warn("claimPartnershipInvitations: profile not found, using auth email fallback")
+    }
+  }
   if (!email) return
 
   await supabase

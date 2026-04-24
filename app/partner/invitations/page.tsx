@@ -70,6 +70,33 @@ export default function PartnerInvitationsPage() {
     loadPartnerships()
   }, [])
 
+  useEffect(() => {
+    if (isDemo) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const claimRes = await fetch("/api/partner/partnerships/claim", {
+          method: "POST",
+          credentials: "same-origin",
+        })
+        if (claimRes.status === 401) return
+        if (!claimRes.ok) {
+          const body = await claimRes.text().catch(() => "")
+          console.error("[partner/invitations] claim failed", claimRes.status, body)
+          return
+        }
+        if (!cancelled) {
+          await loadPartnerships()
+        }
+      } catch (error) {
+        console.error("[partner/invitations] claim request error", error)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo])
+
   const loadPartnerships = async () => {
     if (isDemo) {
       setPartnerships(demoPartnerships)
