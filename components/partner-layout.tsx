@@ -12,6 +12,12 @@ import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { LeadAgencyFilterProvider } from "@/contexts/lead-agency-filter-context"
 import { RoleToggle } from "./role-toggle"
 
+declare global {
+  interface Window {
+    __ligamentRefreshAvatar?: () => void
+  }
+}
+
 const navItems = [
   { icon: "◇", title: "Dashboard", href: "/partner" },
   { icon: "✉", title: "Invitations", href: "/partner/invitations" },
@@ -42,39 +48,46 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
     setIsDemo(isDemoMode())
   }, [])
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          try {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("full_name, company_name, avatar_url")
-              .eq("id", user.id)
-              .single()
-            if (profile) {
-              setUserName(profile.company_name || profile.full_name || "Partner")
-              setAvatarUrl(profile.avatar_url || null)
-              setAvatarLoadError(false)
-              const initials = (profile.company_name || profile.full_name || "P")
-                .split(" ")
-                .map((n: string) => n[0])
-                .join("")
-                .toUpperCase()
-                .slice(0, 2)
-              setUserInitials(initials)
-            }
-          } catch {
-            // Profile table doesn't exist or query failed, use defaults
+  const loadUser = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("full_name, company_name, avatar_url")
+            .eq("id", user.id)
+            .single()
+          if (profile) {
+            setUserName(profile.company_name || profile.full_name || "Partner")
+            setAvatarUrl(profile.avatar_url || null)
+            window.__ligamentRefreshAvatar = () => loadUser()
+            setAvatarLoadError(false)
+            const initials = (profile.company_name || profile.full_name || "P")
+              .split(" ")
+              .map((n: string) => n[0])
+              .join("")
+              .toUpperCase()
+              .slice(0, 2)
+            setUserInitials(initials)
           }
+        } catch {
+          // Profile table doesn't exist or query failed, use defaults
         }
-      } catch {
-        // Auth query failed, use defaults
       }
+    } catch {
+      // Auth query failed, use defaults
     }
+  }
+
+  useEffect(() => {
     loadUser()
+  }, [])
+
+  useEffect(() => {
+    window.__ligamentRefreshAvatar = loadUser
+    return () => { delete window.__ligamentRefreshAvatar }
   }, [])
 
   const handleSignOut = async () => {

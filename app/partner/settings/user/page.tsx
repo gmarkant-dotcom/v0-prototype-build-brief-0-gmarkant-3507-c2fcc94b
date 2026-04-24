@@ -86,7 +86,6 @@ export default function PartnerUserProfilePage() {
     const payload = {
       full_name: fullName,
       display_name: displayName,
-      avatar_url: avatarUrl || null,
       notification_preferences: notificationPrefs,
       updated_at: new Date().toISOString(),
     }
@@ -173,6 +172,9 @@ export default function PartnerUserProfilePage() {
       setInitialFullName(nextFullName)
       setInitialDisplayName(nextDisplayName)
       setInitialAvatarUrl(avatarUrl.trim())
+      if (typeof window !== "undefined" && (window as any).__ligamentRefreshAvatar) {
+        ;(window as any).__ligamentRefreshAvatar()
+      }
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (error) {
@@ -247,9 +249,7 @@ export default function PartnerUserProfilePage() {
                   src={avatarUrl}
                   alt="Profile photo"
                   style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "2px solid #1a2e26" }}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none"
-                  }}
+                  onError={() => setAvatarUrl("")}
                 />
                 <span className="text-xs text-gray-600">Profile photo updated</span>
               </div>

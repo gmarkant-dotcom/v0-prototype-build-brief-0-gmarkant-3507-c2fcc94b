@@ -14,6 +14,12 @@ import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
 import { RoleToggle } from "@/components/role-toggle"
 
+declare global {
+  interface Window {
+    __ligamentRefreshAvatar?: () => void
+  }
+}
+
 const navSections = [
   {
     label: "Overview",
@@ -99,44 +105,51 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   const isWorkflowPage = pathname !== "/agency/dashboard" && 
     (pathname?.startsWith("/agency/") || pathname === "/agency")
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          // SECURITY: Only show admin link if user is the owner
-          // This is a hard-coded check that cannot be bypassed
-          const OWNER_EMAIL = 'greg@withligament.com'
-          setIsOwner(user.email === OWNER_EMAIL)
-          
-          try {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("full_name, company_name, avatar_url")
-              .eq("id", user.id)
-              .single()
-            if (profile) {
-              setUserName(profile.company_name || profile.full_name || "Lead Agency")
-              setAvatarUrl(profile.avatar_url || null)
-              setAvatarLoadError(false)
-              const initials = (profile.company_name || profile.full_name || "A")
-                .split(" ")
-                .map((n: string) => n[0])
-                .join("")
-                .toUpperCase()
-                .slice(0, 2)
-              setUserInitials(initials)
-            }
-          } catch {
-            // Profile table doesn't exist or query failed, use defaults
+  const loadUser = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        // SECURITY: Only show admin link if user is the owner
+        // This is a hard-coded check that cannot be bypassed
+        const OWNER_EMAIL = 'greg@withligament.com'
+        setIsOwner(user.email === OWNER_EMAIL)
+        
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("full_name, company_name, avatar_url")
+            .eq("id", user.id)
+            .single()
+          if (profile) {
+            setUserName(profile.company_name || profile.full_name || "Lead Agency")
+            setAvatarUrl(profile.avatar_url || null)
+            window.__ligamentRefreshAvatar = () => loadUser()
+            setAvatarLoadError(false)
+            const initials = (profile.company_name || profile.full_name || "A")
+              .split(" ")
+              .map((n: string) => n[0])
+              .join("")
+              .toUpperCase()
+              .slice(0, 2)
+            setUserInitials(initials)
           }
+        } catch {
+          // Profile table doesn't exist or query failed, use defaults
         }
-      } catch {
-        // Auth query failed, use defaults
       }
+    } catch {
+      // Auth query failed, use defaults
     }
+  }
+
+  useEffect(() => {
     loadUser()
+  }, [])
+
+  useEffect(() => {
+    window.__ligamentRefreshAvatar = loadUser
+    return () => { delete window.__ligamentRefreshAvatar }
   }, [])
 
   const handleSignOut = async () => {
