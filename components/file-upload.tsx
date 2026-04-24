@@ -14,11 +14,14 @@ interface UploadedFile {
 }
 
 interface FileUploadProps {
+  currentUrl?: string
   onUploadComplete?: (file: UploadedFile) => void
   onUploadError?: (error: string) => void
   folder?: string
   accept?: string
   maxSize?: number // in MB
+  maxSizeMB?: number
+  allowedTypes?: string[]
   className?: string
   variant?: "default" | "compact" | "dropzone"
   label?: string
@@ -26,22 +29,40 @@ interface FileUploadProps {
 }
 
 export function FileUpload({
+  currentUrl,
   onUploadComplete,
   onUploadError,
   folder = "documents",
   accept = ".pdf,.docx,.pptx",
   maxSize = 10,
+  maxSizeMB,
+  allowedTypes,
   className,
   variant = "default",
   label = "Upload File",
   description = "Drag and drop or click to browse",
 }: FileUploadProps) {
+  void currentUrl
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<"idle" | "uploading" | "success" | "error">("idle")
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const effectiveMaxSizeMB = maxSizeMB ?? maxSize
+
+  const formatAllowedTypesLabel = (types: string[]) => {
+    const labels = types.map((type) => {
+      if (type === "image/jpeg") return "JPEG"
+      if (type === "image/png") return "PNG"
+      if (type === "image/webp") return "WebP"
+      if (type === "image/gif") return "GIF"
+      return type
+    })
+    if (labels.length <= 1) return labels[0] || "specified file types"
+    if (labels.length === 2) return `${labels[0]} or ${labels[1]}`
+    return `${labels.slice(0, -1).join(", ")}, or ${labels[labels.length - 1]}`
+  }
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -70,11 +91,25 @@ export function FileUpload({
   }
 
   const handleFile = async (file: File) => {
+    if (Array.isArray(allowedTypes) && allowedTypes.length > 0) {
+      const isAllowed = allowedTypes.includes(file.type)
+      if (!isAllowed) {
+        const msg =
+          allowedTypes.every((type) => type.startsWith("image/"))
+            ? `Only ${formatAllowedTypesLabel(allowedTypes)} images are allowed`
+            : `Only ${formatAllowedTypesLabel(allowedTypes)} files are allowed`
+        setErrorMessage(msg)
+        setUploadProgress("error")
+        onUploadError?.(msg)
+        return
+      }
+    }
+
     // Validate file size
-    if (file.size > maxSize * 1024 * 1024) {
-      setErrorMessage(`File size must be less than ${maxSize}MB`)
+    if (file.size > effectiveMaxSizeMB * 1024 * 1024) {
+      setErrorMessage(`File size must be less than ${effectiveMaxSizeMB}MB`)
       setUploadProgress("error")
-      onUploadError?.(`File size must be less than ${maxSize}MB`)
+      onUploadError?.(`File size must be less than ${effectiveMaxSizeMB}MB`)
       return
     }
 
@@ -194,7 +229,7 @@ export function FileUpload({
             <div className="font-display font-bold text-foreground mb-1">{label}</div>
             <div className="font-mono text-xs text-foreground-muted mb-2">{description}</div>
             <div className="font-mono text-[10px] text-foreground-muted">
-              Max {maxSize}MB
+              Max {effectiveMaxSizeMB}MB
             </div>
           </>
         )}

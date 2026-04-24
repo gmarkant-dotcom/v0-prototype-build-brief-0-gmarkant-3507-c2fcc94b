@@ -23,6 +23,7 @@ export default function AgencyUserProfilePage() {
   const [initialFullName, setInitialFullName] = useState("")
   const [initialDisplayName, setInitialDisplayName] = useState("")
   const [avatarUrl, setAvatarUrl] = useState("")
+  const [initialAvatarUrl, setInitialAvatarUrl] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -58,7 +59,9 @@ export default function AgencyUserProfilePage() {
       setDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setInitialFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setInitialDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
-      setAvatarUrl((profile as any)?.avatar_url || "")
+      const loadedAvatarUrl = (profile as any)?.avatar_url || ""
+      setAvatarUrl(loadedAvatarUrl)
+      setInitialAvatarUrl(loadedAvatarUrl)
       const storedPrefs = localStorage.getItem(`agency-notification-prefs-${user.id}`)
       const dbPrefs = (profile as any)?.notification_preferences
       if (dbPrefs && typeof dbPrefs === "object") {
@@ -139,35 +142,46 @@ export default function AgencyUserProfilePage() {
     setConfirmPassword("")
   }
 
-  const saveNameChanges = async () => {
-    if (!userId) return
+  const saveProfileSettings = async () => {
     setSaving(true)
     setErrorMessage(null)
     setMessage(null)
-    const supabase = createClient()
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        full_name: fullName.trim(),
-        display_name: displayName.trim(),
-        updated_at: new Date().toISOString(),
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: fullName.trim(),
+          display_name: displayName.trim(),
+          avatar_url: avatarUrl.trim() || null,
+        }),
       })
-      .eq("id", userId)
-
-    if (error) {
-      setErrorMessage(error.message)
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to update settings.")
+      }
+      const nextProfile = payload?.profile
+      const nextFullName = String(nextProfile?.full_name || fullName).trim()
+      const nextDisplayName = String(nextProfile?.display_name || displayName).trim()
+      const nextAvatarUrl = String(nextProfile?.avatar_url || "")
+      setFullName(nextFullName)
+      setDisplayName(nextDisplayName)
+      setAvatarUrl(nextAvatarUrl)
+      setInitialFullName(nextFullName)
+      setInitialDisplayName(nextDisplayName)
+      setInitialAvatarUrl(nextAvatarUrl)
+      setMessage("Settings saved")
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to update settings.")
+    } finally {
       setSaving(false)
-      return
     }
-
-    setInitialFullName(fullName)
-    setInitialDisplayName(displayName)
-    setMessage("Name changes saved.")
-    setSaving(false)
   }
 
-  const hasNameChanges =
-    fullName.trim() !== initialFullName.trim() || displayName.trim() !== initialDisplayName.trim()
+  const hasSettingsChanges =
+    fullName.trim() !== initialFullName.trim() ||
+    displayName.trim() !== initialDisplayName.trim() ||
+    avatarUrl.trim() !== initialAvatarUrl.trim()
 
   if (loading) {
     return (
@@ -202,12 +216,15 @@ export default function AgencyUserProfilePage() {
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Email</label>
             <Input value={email} readOnly className="bg-gray-100 border-gray-200 text-gray-700" />
+            <p className="mt-1 text-xs text-foreground-muted">Read-only, email changes are managed through account auth.</p>
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Profile Photo</label>
             <FileUpload
               currentUrl={avatarUrl}
+              allowedTypes={["image/jpeg", "image/png", "image/webp", "image/gif"]}
               accept="image/jpeg,image/png,image/webp,image/gif"
+              maxSizeMB={5}
               onUploadComplete={(file) => {
                 const nextUrl = file?.url || ""
                 if (nextUrl) {
@@ -227,8 +244,8 @@ export default function AgencyUserProfilePage() {
           </div>
           <div className="flex justify-end">
             <Button
-              onClick={saveNameChanges}
-              disabled={saving || !hasNameChanges}
+              onClick={saveProfileSettings}
+              disabled={saving || !hasSettingsChanges}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
               {saving ? "Saving..." : "Save Changes"}
