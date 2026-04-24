@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,7 @@ import { FileUpload } from "@/components/file-upload"
 
 export default function PartnerUserProfilePage() {
   const router = useRouter()
+  const hasUploaded = useRef(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -61,7 +62,9 @@ export default function PartnerUserProfilePage() {
       setInitialFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setInitialDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
       const loadedAvatarUrl = (profile as any)?.avatar_url || ""
-      setAvatarUrl(loadedAvatarUrl)
+      if (!hasUploaded.current) {
+        setAvatarUrl(loadedAvatarUrl)
+      }
       setInitialAvatarUrl(loadedAvatarUrl)
       const storedPrefs = localStorage.getItem(`partner-notification-prefs-${user.id}`)
       const dbPrefs = (profile as any)?.notification_preferences
@@ -165,13 +168,11 @@ export default function PartnerUserProfilePage() {
       const nextProfile = payload?.profile
       const nextFullName = String(nextProfile?.full_name || fullName).trim()
       const nextDisplayName = String(nextProfile?.display_name || displayName).trim()
-      const nextAvatarUrl = String(nextProfile?.avatar_url || "")
       setFullName(nextFullName)
       setDisplayName(nextDisplayName)
-      setAvatarUrl(nextAvatarUrl)
       setInitialFullName(nextFullName)
       setInitialDisplayName(nextDisplayName)
-      setInitialAvatarUrl(nextAvatarUrl)
+      setInitialAvatarUrl(avatarUrl.trim())
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
     } catch (error) {
@@ -232,6 +233,7 @@ export default function PartnerUserProfilePage() {
                 console.log("[avatar upload] response:", file)
                 const nextUrl = file?.url || ""
                 if (nextUrl) {
+                  hasUploaded.current = true
                   setAvatarUrl(nextUrl)
                   setMessage("Profile photo uploaded.")
                   setErrorMessage(null)

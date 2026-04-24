@@ -19,6 +19,7 @@ export async function PATCH(req: Request) {
     }
 
     const body = (await req.json()) as PatchBody
+    const avatar_url = body.avatar_url
     const updates: Record<string, string | null> = {
       updated_at: new Date().toISOString(),
     }
@@ -29,8 +30,8 @@ export async function PATCH(req: Request) {
     if (typeof body.display_name === "string") {
       updates.display_name = body.display_name.trim()
     }
-    if (body.avatar_url === null || typeof body.avatar_url === "string") {
-      updates.avatar_url = body.avatar_url
+    if (avatar_url === null || typeof avatar_url === "string") {
+      updates.avatar_url = avatar_url
     }
 
     const { data, error } = await supabase
