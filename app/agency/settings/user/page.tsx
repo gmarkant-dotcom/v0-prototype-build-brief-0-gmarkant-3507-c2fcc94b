@@ -237,7 +237,7 @@ export default function AgencyUserProfilePage() {
                 if (nextUrl) {
                   hasUploaded.current = true
                   setAvatarUrl(nextUrl)
-                  setMessage("Profile photo uploaded.")
+                  setMessage(null)
                   setErrorMessage(null)
                 }
               }}
@@ -245,14 +245,24 @@ export default function AgencyUserProfilePage() {
             />
             {avatarUrl ? (
               <div className="mt-3 flex items-center gap-3">
-                <img
-                  src={avatarUrl}
-                  alt="Profile photo"
-                  crossOrigin="anonymous"
-                  style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "2px solid #1a2e26" }}
-                  onError={(e) => { e.currentTarget.style.visibility = "hidden" }}
-                />
-                <span className="text-xs text-foreground-muted">Profile photo updated</span>
+                <div style={{
+                  width: 64, height: 64, borderRadius: "50%",
+                  background: "#1a2e26", border: "2px solid #639922",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  flexShrink: 0
+                }}>
+                  <span style={{ color: "#639922", fontSize: 22, fontWeight: 600 }}>
+                    {(fullName || displayName || "U").charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <p style={{ color: "#639922", fontSize: 13, fontWeight: 500, margin: 0 }}>
+                    Photo uploaded
+                  </p>
+                  <p style={{ color: "var(--foreground-muted)", fontSize: 11, margin: "2px 0 0" }}>
+                    Save Changes to apply
+                  </p>
+                </div>
               </div>
             ) : null}
           </div>
