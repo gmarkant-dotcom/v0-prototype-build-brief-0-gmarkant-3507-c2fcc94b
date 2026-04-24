@@ -124,7 +124,6 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           if (profile) {
             setUserName(profile.company_name || profile.full_name || "Lead Agency")
             setAvatarUrl(profile.avatar_url || null)
-            window.__ligamentRefreshAvatar = () => loadUser()
             setAvatarLoadError(false)
             const initials = (profile.company_name || profile.full_name || "A")
               .split(" ")
@@ -426,6 +425,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                   <img
                     src={avatarUrl}
                     alt="Account avatar"
+                    crossOrigin="anonymous"
                     style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
                     onError={() => setAvatarLoadError(true)}
                   />

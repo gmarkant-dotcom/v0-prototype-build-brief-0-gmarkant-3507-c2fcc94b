@@ -248,8 +248,9 @@ export default function PartnerUserProfilePage() {
                 <img
                   src={avatarUrl}
                   alt="Profile photo"
+                  crossOrigin="anonymous"
                   style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "2px solid #1a2e26" }}
-                  onError={() => setAvatarUrl("")}
+                  onError={(e) => { e.currentTarget.style.visibility = "hidden" }}
                 />
                 <span className="text-xs text-gray-600">Profile photo updated</span>
               </div>

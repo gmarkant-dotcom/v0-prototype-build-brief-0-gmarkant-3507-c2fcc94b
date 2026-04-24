@@ -62,7 +62,6 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
           if (profile) {
             setUserName(profile.company_name || profile.full_name || "Partner")
             setAvatarUrl(profile.avatar_url || null)
-            window.__ligamentRefreshAvatar = () => loadUser()
             setAvatarLoadError(false)
             const initials = (profile.company_name || profile.full_name || "P")
               .split(" ")
@@ -160,6 +159,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                       <img
                         src={avatarUrl}
                         alt="Account avatar"
+                        crossOrigin="anonymous"
                         style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
                         onError={() => setAvatarLoadError(true)}
                       />
