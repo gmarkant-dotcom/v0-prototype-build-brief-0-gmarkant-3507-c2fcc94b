@@ -842,7 +842,7 @@ export default function PartnerProfilePage() {
                       setShowCustomDiscipline(false)
                       setCustomDisciplineInput("")
                     }}
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                    className="border-gray-300 text-gray-900 hover:bg-gray-50"
                   >
                     Cancel
                   </Button>
@@ -940,7 +940,6 @@ export default function PartnerProfilePage() {
                 "min-w-[120px] bg-[#0C3535] text-white hover:bg-[#0C3535]/90",
                 contextSaved && "bg-green-600 hover:bg-green-600"
               )}
-              style={{ color: "inherit" }}
             >
               {contextSaving ? "Saving..." : contextSaved ? "Saved ✓" : "Save Context"}
             </Button>
@@ -1096,7 +1095,7 @@ export default function PartnerProfilePage() {
                   "px-4 py-2 rounded-full font-mono text-xs transition-all border",
                   formData.selectedCapabilities.includes(cap)
                     ? "bg-[#0C3535] text-white border-[#0C3535]"
-                    : "bg-white text-foreground border-gray-200 hover:border-[#0C3535]/30"
+                    : "bg-white text-gray-900 border-gray-200 hover:border-[#0C3535]/30"
                 )}
               >
                 {formData.selectedCapabilities.includes(cap) && "✓ "}
@@ -1137,8 +1136,7 @@ export default function PartnerProfilePage() {
                 type="button"
                 onClick={addCustomCapability}
                 variant="outline"
-                className="border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/5"
-                style={{ color: "inherit" }}
+                className="border-[#0C3535] text-gray-900 hover:bg-[#0C3535]/5"
               >
                 + Add
               </Button>
@@ -1160,8 +1158,7 @@ export default function PartnerProfilePage() {
             </div>
             <Button
               variant="outline" 
-              className="border-gray-300 text-[#0C3535] hover:bg-[#0C3535]/5"
-              style={{ color: "inherit" }}
+              className="border-gray-300 text-gray-900 hover:bg-[#0C3535]/5"
               onClick={() => setShowAddProject(true)}
             >
               + Add Project
@@ -1221,14 +1218,13 @@ export default function PartnerProfilePage() {
                 <Button
                   onClick={addProject}
                   className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
-                  style={{ color: "inherit" }}
                 >
                   Add Project
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowAddProject(false)}
-                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                  className="border-gray-300 text-gray-900 hover:bg-gray-50"
                 >
                   Cancel
                 </Button>
@@ -1291,7 +1287,7 @@ export default function PartnerProfilePage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-[#0C3535] hover:text-[#0C3535] hover:bg-[#0C3535]/10"
+                    className="text-gray-900 hover:text-gray-900 hover:bg-[#0C3535]/10"
                       onClick={() => setEditingCredentialId((prev) => (prev === cred.id ? null : cred.id))}
                     >
                       {editingCredentialId === cred.id ? "Done" : "Edit"}
@@ -1344,8 +1340,7 @@ export default function PartnerProfilePage() {
                     variant="outline"
                     onClick={() => reelInputRef.current?.click()}
                     disabled={isUploadingReel}
-                    className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                    style={{ color: "inherit" }}
+                    className="border-gray-300 text-gray-900 hover:bg-gray-50"
                   >
                     {isUploadingReel ? (
                       <>
@@ -1392,8 +1387,7 @@ export default function PartnerProfilePage() {
                   variant="outline"
                   onClick={() => capabilitiesInputRef.current?.click()}
                   disabled={isUploadingCapabilitiesOverview}
-                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                  style={{ color: "inherit" }}
+                  className="border-gray-300 text-gray-900 hover:bg-gray-50"
                 >
                   {isUploadingCapabilitiesOverview ? (
                     <>
@@ -1418,8 +1412,7 @@ export default function PartnerProfilePage() {
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-gray-300 text-[#0C3535] hover:bg-[#0C3535]/5"
-                  style={{ color: "inherit" }}
+                  className="border-gray-300 text-gray-900 hover:bg-[#0C3535]/5"
                   onClick={() => setShowAddWorkExample(true)}
                 >
                   + Add Work Example
@@ -1461,8 +1454,7 @@ export default function PartnerProfilePage() {
                         variant="outline"
                         onClick={() => newWorkExampleInputRef.current?.click()}
                         disabled={uploadingWorkExampleId === "__new__"}
-                        className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                        style={{ color: "inherit" }}
+                        className="border-gray-300 text-gray-900 hover:bg-gray-50"
                       >
                         {uploadingWorkExampleId === "__new__" ? (
                           <>
@@ -1482,14 +1474,13 @@ export default function PartnerProfilePage() {
                         type="button"
                         onClick={addWorkExample}
                         className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
-                        style={{ color: "inherit" }}
                       >
                         Add Work Example
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                        className="border-gray-300 text-gray-900 hover:bg-gray-50"
                         onClick={() => setShowAddWorkExample(false)}
                       >
                         Cancel
@@ -1549,9 +1540,8 @@ export default function PartnerProfilePage() {
                         <Button
                           type="button"
                           variant="outline"
-                          className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                          className="border-gray-300 text-gray-900 hover:bg-gray-50"
                           disabled={uploadingWorkExampleId === example.id}
-                          style={{ color: "inherit" }}
                           onClick={() =>
                             (document.getElementById(`work-example-file-${example.id}`) as HTMLInputElement | null)?.click()
                           }
