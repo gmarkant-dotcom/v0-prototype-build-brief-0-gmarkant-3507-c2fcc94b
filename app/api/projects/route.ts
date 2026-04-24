@@ -478,13 +478,11 @@ export async function POST(request: NextRequest) {
     }
 
     const safeName = name.trim()
-    const activeStatusesForWarning = ["active", "open", "in_progress", "bidding", "onboarding"]
     const { data: existingNamedProjects, error: existingNamedProjectsError } = await supabase
       .from("projects")
       .select("id")
       .eq("agency_id", user.id)
       .ilike("name", safeName)
-      .in("status", activeStatusesForWarning)
 
     if (existingNamedProjectsError) {
       console.warn("[api/projects] duplicate-name warning check failed", {
