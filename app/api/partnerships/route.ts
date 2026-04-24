@@ -230,33 +230,71 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only agencies can invite partners' }, { status: 403 })
     }
 
-    const { partnerEmail, message } = await request.json()
+    const payload = (await request.json().catch(() => ({}))) as {
+      partnerId?: string
+      partnerEmail?: string
+      message?: string | null
+    }
+    const message = payload.message
+    const partnerId = typeof payload.partnerId === 'string' ? payload.partnerId.trim() : ''
+    const partnerEmail = typeof payload.partnerEmail === 'string' ? payload.partnerEmail.trim() : ''
 
-    if (!partnerEmail) {
-      return NextResponse.json({ error: 'Partner email required' }, { status: 400 })
+    if (!partnerId && !partnerEmail) {
+      return NextResponse.json({ error: 'Partner ID or partner email required' }, { status: 400 })
     }
 
-    // Find the partner by email (case-insensitive)
-    const { data: partner, error: partnerLookupErr } = await supabase
-      .from('profiles')
-      .select('id, email, role')
-      .ilike('email', partnerEmail.trim())
-      .maybeSingle()
+    let partner: { id: string; email: string | null; role: string | null } | null = null
 
-    if (partnerLookupErr) {
-      console.error('[api] POST /partnerships partner lookup by email failed', {
-        route,
-        userId: user.id,
-        partnerEmail: partnerEmail.trim(),
-        message: partnerLookupErr.message,
-        code: partnerLookupErr.code,
-      })
-      return NextResponse.json({ error: 'Failed to look up partner' }, { status: 500 })
+    if (partnerId) {
+      const { data: partnerById, error: partnerByIdErr } = await supabase
+        .from('profiles')
+        .select('id, email, role')
+        .eq('id', partnerId)
+        .maybeSingle()
+
+      if (partnerByIdErr) {
+        console.error('[api] POST /partnerships partner lookup by id failed', {
+          route,
+          userId: user.id,
+          partnerId,
+          message: partnerByIdErr.message,
+          code: partnerByIdErr.code,
+        })
+        return NextResponse.json({ error: 'Failed to look up partner' }, { status: 500 })
+      }
+      if (!partnerById) {
+        return NextResponse.json({ error: 'Partner not found' }, { status: 404 })
+      }
+      partner = partnerById
+    } else {
+      // Backward-compatible path: look up by email and resolve to profile.
+      const { data: partnerByEmail, error: partnerLookupErr } = await supabase
+        .from('profiles')
+        .select('id, email, role')
+        .ilike('email', partnerEmail)
+        .maybeSingle()
+
+      if (partnerLookupErr) {
+        console.error('[api] POST /partnerships partner lookup by email failed', {
+          route,
+          userId: user.id,
+          partnerEmail,
+          message: partnerLookupErr.message,
+          code: partnerLookupErr.code,
+        })
+        return NextResponse.json({ error: 'Failed to look up partner' }, { status: 500 })
+      }
+      partner = partnerByEmail
     }
 
     // Partner exists - verify they are a partner role
     if (partner && partner.role !== 'partner') {
       return NextResponse.json({ error: 'Can only invite partner agencies, not lead agencies' }, { status: 400 })
+    }
+
+    const normalizedPartnerEmail = (partner?.email || partnerEmail).trim().toLowerCase()
+    if (!normalizedPartnerEmail) {
+      return NextResponse.json({ error: 'Partner email required' }, { status: 400 })
     }
 
     // Check if partnership already exists (by partner_id or partner_email)
@@ -268,7 +306,7 @@ export async function POST(request: NextRequest) {
     if (partner) {
       existingQuery = existingQuery.eq('partner_id', partner.id)
     } else {
-      existingQuery = existingQuery.ilike('partner_email', partnerEmail.trim())
+      existingQuery = existingQuery.ilike('partner_email', normalizedPartnerEmail)
     }
     
     const { data: existing, error: existingErr } = await existingQuery.maybeSingle()
@@ -326,17 +364,21 @@ export async function POST(request: NextRequest) {
         if (message && String(message).trim()) {
           reinviteBody += `\n\nPersonal message:\n${String(message).trim()}`
         }
-        await sendTransactionalEmail({
-          to: partnerEmail.trim(),
-          subject: `${agencyName} has re-invited you to their partner network on Ligament`,
-          html: buildBrandedEmailHtml({
-            title: "Partnership re-invitation",
-            recipientName: partnerEmail.trim(),
-            body: reinviteBody,
-            ctaText: partner ? "View Invitation" : "Accept Invitation",
-            ctaUrl: acceptUrl,
-          }),
-        })
+        try {
+          await sendTransactionalEmail({
+            to: normalizedPartnerEmail,
+            subject: `${agencyName} has re-invited you to their partner network on Ligament`,
+            html: buildBrandedEmailHtml({
+              title: "Partnership re-invitation",
+              recipientName: normalizedPartnerEmail,
+              body: reinviteBody,
+              ctaText: partner ? "View Invitation" : "Accept Invitation",
+              ctaUrl: acceptUrl,
+            }),
+          })
+        } catch (emailErr) {
+          console.error('Error sending partnership re-invitation email:', emailErr)
+        }
         
         return NextResponse.json({ 
           partnership: reactivated, 
@@ -359,7 +401,7 @@ export async function POST(request: NextRequest) {
       invitation_message?: string
     } = {
       agency_id: user.id,
-      partner_email: partnerEmail.trim().toLowerCase(),
+      partner_email: normalizedPartnerEmail,
       status: 'pending',
       invitation_message: message || null,
     }
@@ -400,11 +442,11 @@ export async function POST(request: NextRequest) {
         inviteBody += `\n\nPersonal message:\n${String(message).trim()}`
       }
       await sendTransactionalEmail({
-        to: partnerEmail.trim(),
+        to: normalizedPartnerEmail,
         subject: `${agencyName} has invited you to join their partner network on Ligament`,
         html: buildBrandedEmailHtml({
           title: "Partnership invitation",
-          recipientName: partnerEmail.trim(),
+          recipientName: normalizedPartnerEmail,
           body: inviteBody,
           ctaText: partner ? "View Invitation" : "Accept Invitation",
           ctaUrl: acceptUrl,

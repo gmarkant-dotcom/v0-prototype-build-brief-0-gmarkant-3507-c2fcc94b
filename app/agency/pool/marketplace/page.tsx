@@ -58,7 +58,7 @@ export default function AgencyMarketplacePage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [partners, setPartners] = useState<PartnerProfile[]>([])
-  const [inviteEmail, setInviteEmail] = useState<string | null>(null)
+  const [invitePartnerId, setInvitePartnerId] = useState<string | null>(null)
   const [inviteMessage, setInviteMessage] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [banner, setBanner] = useState<string | null>(null)
@@ -93,13 +93,18 @@ export default function AgencyMarketplacePage() {
     })
   }, [partners, search])
 
+  const invitePartner = useMemo(
+    () => partners.find((p) => p.id === invitePartnerId) ?? null,
+    [partners, invitePartnerId]
+  )
+
   const inviteToPool = async () => {
-    if (!inviteEmail) return
+    if (!invitePartnerId) return
     setSubmitting(true)
     setBanner(null)
     if (isDemo) {
       setBanner("Demo mode - invitation simulated.")
-      setInviteEmail(null)
+      setInvitePartnerId(null)
       setInviteMessage("")
       setSubmitting(false)
       return
@@ -108,12 +113,12 @@ export default function AgencyMarketplacePage() {
       const res = await fetch("/api/partnerships", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partnerEmail: inviteEmail, message: inviteMessage || null }),
+        body: JSON.stringify({ partnerId: invitePartnerId, message: inviteMessage || null }),
       })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload?.error || "Failed to invite partner")
       setBanner("Invitation sent successfully.")
-      setInviteEmail(null)
+      setInvitePartnerId(null)
       setInviteMessage("")
     } catch (error) {
       setBanner(error instanceof Error ? error.message : "Failed to invite partner.")
@@ -174,8 +179,8 @@ export default function AgencyMarketplacePage() {
                   </div>
                   <Button
                     className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90"
-                    onClick={() => setInviteEmail(partner.email || null)}
-                    disabled={!partner.email}
+                    onClick={() => setInvitePartnerId(partner.id)}
+                    disabled={!partner.id}
                   >
                     <UserPlus className="w-4 h-4 mr-2" />
                     Invite to Pool
@@ -203,11 +208,13 @@ export default function AgencyMarketplacePage() {
         </div>
       </div>
 
-      {inviteEmail && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setInviteEmail(null)}>
+      {invitePartnerId && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setInvitePartnerId(null)}>
           <GlassCard className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="font-display font-bold text-xl text-foreground">Invite Partner to Pool</div>
-            <p className="font-mono text-xs text-foreground-muted mt-1">{inviteEmail}</p>
+            <p className="font-mono text-xs text-foreground-muted mt-1">
+              {invitePartner?.company_name || invitePartner?.full_name || "Partner Agency"}
+            </p>
             <Input
               value={inviteMessage}
               onChange={(e) => setInviteMessage(e.target.value)}
@@ -216,7 +223,7 @@ export default function AgencyMarketplacePage() {
             />
             {banner && <p className="text-xs text-foreground-muted mt-3">{banner}</p>}
             <div className="flex gap-3 mt-5">
-              <Button variant="outline" className="flex-1 border-border" onClick={() => setInviteEmail(null)}>
+              <Button variant="outline" className="flex-1 border-border" onClick={() => setInvitePartnerId(null)}>
                 Cancel
               </Button>
               <Button className="flex-1 bg-accent text-accent-foreground" onClick={inviteToPool} disabled={submitting}>
