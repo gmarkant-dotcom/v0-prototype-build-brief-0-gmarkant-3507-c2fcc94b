@@ -65,6 +65,7 @@ export default function AgencyMarketplacePage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [partners, setPartners] = useState<PartnerProfile[]>([])
+  const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set())
   const [invitePartnerId, setInvitePartnerId] = useState<string | null>(null)
   const [inviteMessage, setInviteMessage] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -78,10 +79,30 @@ export default function AgencyMarketplacePage() {
         return
       }
       try {
-        const res = await fetch("/api/marketplace/discoverable?role=partner", { cache: "no-store" })
-        const payload = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(payload?.error || "Failed to load discoverable partners")
+        const [discoverableResult, partnershipsResult] = await Promise.all([
+          fetch("/api/marketplace/discoverable?role=partner", { cache: "no-store" }),
+          fetch("/api/partnerships", { cache: "no-store" }),
+        ])
+
+        const payload = await discoverableResult.json().catch(() => ({}))
+        if (!discoverableResult.ok) throw new Error(payload?.error || "Failed to load discoverable partners")
         setPartners(payload?.profiles || [])
+
+        if (partnershipsResult.ok) {
+          const partnershipsPayload = await partnershipsResult.json().catch(() => ({}))
+          const nextConnectedIds = new Set<string>(
+            ((partnershipsPayload?.partnerships || []) as Array<{ partner_id?: string; partner?: { id?: string } }>)
+              .map((p) => p.partner_id || p.partner?.id)
+              .filter((id): id is string => Boolean(id))
+          )
+          setConnectedIds(nextConnectedIds)
+        } else {
+          const partnershipsError = await partnershipsResult.json().catch(() => ({}))
+          console.error(
+            "[marketplace] failed to load partnerships",
+            partnershipsError?.error || partnershipsResult.statusText
+          )
+        }
       } finally {
         setLoading(false)
       }
@@ -195,14 +216,20 @@ export default function AgencyMarketplacePage() {
                     )}
                     <p className="font-mono text-xs text-foreground-muted">{partner.agency_type || "—"}</p>
                   </div>
-                  <Button
-                    className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90"
-                    onClick={() => setInvitePartnerId(partner.id)}
-                    disabled={!partner.id}
-                  >
-                    <UserPlus className="w-4 h-4 mr-2" />
-                    Invite to Pool
-                  </Button>
+                  {connectedIds.has(partner.id) ? (
+                    <Button disabled className="mt-4 bg-white/10 text-foreground-muted cursor-default">
+                      Connected
+                    </Button>
+                  ) : (
+                    <Button
+                      className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90"
+                      onClick={() => setInvitePartnerId(partner.id)}
+                      disabled={!partner.id}
+                    >
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Invite to Pool
+                    </Button>
+                  )}
                 </GlassCard>
               ))}
             </div>
