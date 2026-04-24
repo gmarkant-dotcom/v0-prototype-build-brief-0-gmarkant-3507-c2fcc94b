@@ -20,6 +20,8 @@ export default function PartnerUserProfilePage() {
   const [email, setEmail] = useState("")
   const [fullName, setFullName] = useState("")
   const [displayName, setDisplayName] = useState("")
+  const [initialFullName, setInitialFullName] = useState("")
+  const [initialDisplayName, setInitialDisplayName] = useState("")
   const [avatarUrl, setAvatarUrl] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -54,6 +56,8 @@ export default function PartnerUserProfilePage() {
       setEmail(user.email || "")
       setFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
+      setInitialFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
+      setInitialDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setAvatarUrl((profile as any)?.avatar_url || "")
       const storedPrefs = localStorage.getItem(`partner-notification-prefs-${user.id}`)
       const dbPrefs = (profile as any)?.notification_preferences
@@ -135,6 +139,36 @@ export default function PartnerUserProfilePage() {
     setConfirmPassword("")
   }
 
+  const saveNameChanges = async () => {
+    if (!userId) return
+    setSaving(true)
+    setErrorMessage(null)
+    setMessage(null)
+    const supabase = createClient()
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        full_name: fullName.trim(),
+        display_name: displayName.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId)
+
+    if (error) {
+      setErrorMessage(error.message)
+      setSaving(false)
+      return
+    }
+
+    setInitialFullName(fullName)
+    setInitialDisplayName(displayName)
+    setMessage("Name changes saved.")
+    setSaving(false)
+  }
+
+  const hasNameChanges =
+    fullName.trim() !== initialFullName.trim() || displayName.trim() !== initialDisplayName.trim()
+
   if (loading) {
     return (
       <PartnerLayout>
@@ -171,7 +205,30 @@ export default function PartnerUserProfilePage() {
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Profile Photo</label>
-            <FileUpload currentUrl={avatarUrl} onUploadComplete={setAvatarUrl} folder="avatars" />
+            <FileUpload
+              currentUrl={avatarUrl}
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onUploadComplete={(file) => {
+                const nextUrl = file?.url || ""
+                if (nextUrl) {
+                  setAvatarUrl(nextUrl)
+                  setMessage("Profile photo uploaded.")
+                  setErrorMessage(null)
+                }
+              }}
+              folder="avatars"
+            />
+            {avatarUrl ? (
+              <div className="mt-3 flex items-center gap-3">
+                <img src={avatarUrl} alt="Profile avatar preview" className="w-10 h-10 rounded-full object-cover border border-gray-200" />
+                <span className="text-xs text-gray-600">Profile photo updated</span>
+              </div>
+            ) : null}
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={saveNameChanges} disabled={saving || !hasNameChanges} className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
           </div>
         </div>
 

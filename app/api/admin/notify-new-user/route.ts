@@ -53,13 +53,16 @@ export async function POST(req: Request) {
       "",
       `User: ${email}`,
       `ID: ${id}`,
-      `Company: ${profile?.company_name || "Not provided"}`,
-      `Website: ${profile?.company_website || "Not provided"}`,
+      `Company: ${profile?.company_name || "(set after onboarding)"}`,
+      "Website: (set after onboarding)",
       `Signed up: ${signedUpAt}`,
       "",
       "Review and grant access from the Ligament admin panel.",
       "",
       `If the button does not work, copy and paste this URL into your browser:\n${grantUrl}`,
+      "",
+      "The Ligament Team",
+      "withligament.com",
     ].join("\n")
 
     const sent = await sendTransactionalEmail({

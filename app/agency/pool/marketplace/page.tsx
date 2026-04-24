@@ -17,7 +17,7 @@ type PartnerProfile = {
   bio: string | null
   location: string | null
   email: string | null
-  website?: string | null
+  company_website?: string | null
   agency_type?: string | null
 }
 
@@ -29,7 +29,7 @@ const demoPartners: PartnerProfile[] = [
     bio: "Sports and documentary storytelling with nimble production teams.",
     location: "Los Angeles, CA",
     email: "contact@demo.withligament.com",
-    website: "demo.withligament.com",
+    company_website: "demo.withligament.com",
     agency_type: "Production",
   },
   {
@@ -39,7 +39,7 @@ const demoPartners: PartnerProfile[] = [
     bio: "Social-first creative and creator-led campaign production.",
     location: "Austin, TX",
     email: "contact@tandemsocial.com",
-    website: "tandemsocial.com",
+    company_website: "tandemsocial.com",
     agency_type: "Social",
   },
 ]
@@ -54,6 +54,13 @@ const externalHubs = [
 ]
 
 export default function AgencyMarketplacePage() {
+  const normalizeWebsiteUrl = (value: string | null | undefined) => {
+    if (!value) return null
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`
+  }
+
   const isDemo = isDemoMode()
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -174,7 +181,18 @@ export default function AgencyMarketplacePage() {
                   </p>
                   <div className="mt-3 space-y-1">
                     <p className="font-mono text-xs text-foreground-muted">{partner.location || "—"}</p>
-                    <p className="font-mono text-xs text-foreground-muted">{partner.website || "—"}</p>
+                    {partner.company_website && normalizeWebsiteUrl(partner.company_website) ? (
+                      <a
+                        href={normalizeWebsiteUrl(partner.company_website) as string}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs text-foreground hover:text-foreground underline"
+                      >
+                        {partner.company_website}
+                      </a>
+                    ) : (
+                      <p className="font-mono text-xs text-foreground-muted">-</p>
+                    )}
                     <p className="font-mono text-xs text-foreground-muted">{partner.agency_type || "—"}</p>
                   </div>
                   <Button

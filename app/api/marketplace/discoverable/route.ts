@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, role, company_name, full_name, bio, location, website, avatar_url, agency_type, email")
+      .select("id, role, company_name, full_name, bio, location, company_website, avatar_url, agency_type, email")
       .eq("role", role)
       .eq("is_discoverable", true)
       .order("company_name", { ascending: true })

@@ -1007,7 +1007,9 @@ export default function PartnerProfilePage() {
                     placeholder="Production, Motion Design, Creator Content"
                     className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                   />
-                  <p className="text-xs text-gray-400 mt-2">Enter comma-separated tags.</p>
+                  <p className="text-xs mt-2" style={{ color: "var(--foreground-muted)" }}>
+                    Enter comma-separated tags.
+                  </p>
                 </div>
               </div>
 
@@ -1094,7 +1096,7 @@ export default function PartnerProfilePage() {
                   "px-4 py-2 rounded-full font-mono text-xs transition-all border",
                   formData.selectedCapabilities.includes(cap)
                     ? "bg-[#0C3535] text-white border-[#0C3535]"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-[#0C3535]/30"
+                    : "bg-white text-foreground border-gray-200 hover:border-[#0C3535]/30"
                 )}
               >
                 {formData.selectedCapabilities.includes(cap) && "✓ "}
@@ -1141,7 +1143,7 @@ export default function PartnerProfilePage() {
                 + Add
               </Button>
             </div>
-            <p className="text-xs text-gray-400 mt-2">
+            <p className="text-xs mt-2" style={{ color: "var(--foreground-muted)" }}>
               Custom capabilities appear in purple. Click to remove.
             </p>
           </div>

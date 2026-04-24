@@ -69,9 +69,19 @@ export default function AgencyProfileSettingsPage() {
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [primaryDiscipline, setPrimaryDiscipline] = useState(disciplines[0])
+  const [showCustomDiscipline, setShowCustomDiscipline] = useState(false)
+  const [customDisciplineInput, setCustomDisciplineInput] = useState("")
+  const [customDisciplines, setCustomDisciplines] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("agencyCustomDisciplines")
+      return saved ? JSON.parse(saved) : []
+    }
+    return []
+  })
   const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([])
   const [customCapability, setCustomCapability] = useState("")
   const [customCapabilities, setCustomCapabilities] = useState<string[]>([])
+  const allDisciplines = [...disciplines, ...customDisciplines]
   const [form, setForm] = useState<ProfileState>({
     id: "",
     full_name: "",
@@ -285,6 +295,19 @@ export default function AgencyProfileSettingsPage() {
     setCustomCapability("")
   }
 
+  const addCustomDiscipline = () => {
+    const value = customDisciplineInput.trim()
+    if (!value || allDisciplines.includes(value)) return
+    const updated = [...customDisciplines, value]
+    setCustomDisciplines(updated)
+    if (typeof window !== "undefined") {
+      localStorage.setItem("agencyCustomDisciplines", JSON.stringify(updated))
+    }
+    setPrimaryDiscipline(value)
+    setCustomDisciplineInput("")
+    setShowCustomDiscipline(false)
+  }
+
   const removeCustomCapability = (cap: string) => {
     setCustomCapabilities((prev) => prev.filter((c) => c !== cap))
     setSelectedCapabilities((prev) => prev.filter((c) => c !== cap))
@@ -375,17 +398,57 @@ export default function AgencyProfileSettingsPage() {
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Primary Discipline</label>
-            <select
-              value={primaryDiscipline}
-              onChange={(e) => setPrimaryDiscipline(e.target.value)}
-              className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
-            >
-              {disciplines.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
+            {showCustomDiscipline ? (
+              <div className="flex gap-2">
+                <Input
+                  value={customDisciplineInput}
+                  onChange={(e) => setCustomDisciplineInput(e.target.value)}
+                  placeholder="Enter custom discipline"
+                  className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500 flex-1"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      addCustomDiscipline()
+                    }
+                  }}
+                  autoFocus
+                />
+                <Button type="button" size="sm" onClick={addCustomDiscipline} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                  Add
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setShowCustomDiscipline(false)
+                    setCustomDisciplineInput("")
+                  }}
+                  className="border-border text-foreground hover:bg-white/10"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <select
+                value={primaryDiscipline}
+                onChange={(e) => {
+                  if (e.target.value === "__custom__") {
+                    setShowCustomDiscipline(true)
+                    return
+                  }
+                  setPrimaryDiscipline(e.target.value)
+                }}
+                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+              >
+                {allDisciplines.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+                <option value="__custom__">+ Add Custom Discipline</option>
+              </select>
+            )}
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company Description / Bio</label>
