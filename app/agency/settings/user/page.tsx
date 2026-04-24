@@ -243,8 +243,8 @@ export default function AgencyUserProfilePage() {
               <div className="mt-3 flex items-center gap-3">
                 <img
                   src={avatarUrl}
-                  alt="Profile avatar preview"
-                  className="w-10 h-10 rounded-full object-cover border border-border"
+                  alt="Profile photo"
+                  style={{ width: 64, height: 64, borderRadius: "50%", objectFit: "cover", border: "2px solid #1a2e26" }}
                   onError={(e) => {
                     e.currentTarget.style.display = "none"
                   }}

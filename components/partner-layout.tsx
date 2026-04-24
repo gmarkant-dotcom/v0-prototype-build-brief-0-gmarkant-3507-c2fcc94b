@@ -34,6 +34,8 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [userName, setUserName] = useState("Partner")
   const [userInitials, setUserInitials] = useState("P")
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarLoadError, setAvatarLoadError] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
@@ -49,11 +51,13 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
           try {
             const { data: profile } = await supabase
               .from("profiles")
-              .select("full_name, company_name")
+              .select("full_name, company_name, avatar_url")
               .eq("id", user.id)
               .single()
             if (profile) {
               setUserName(profile.company_name || profile.full_name || "Partner")
+              setAvatarUrl(profile.avatar_url || null)
+              setAvatarLoadError(false)
               const initials = (profile.company_name || profile.full_name || "P")
                 .split(" ")
                 .map((n: string) => n[0])
@@ -139,7 +143,16 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                     <div className="font-mono text-[10px] text-[#C8F53C]">Partner Account</div>
                   </div>
                   <div className="w-9 h-9 rounded-full bg-[#C8F53C]/20 flex items-center justify-center">
-                    <span className="font-mono text-xs text-[#C8F53C]">{userInitials}</span>
+                    {avatarUrl && !avatarLoadError ? (
+                      <img
+                        src={avatarUrl}
+                        alt="Account avatar"
+                        style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
+                        onError={() => setAvatarLoadError(true)}
+                      />
+                    ) : (
+                      <span className="font-mono text-xs text-[#C8F53C]">{userInitials}</span>
+                    )}
                   </div>
                   <ChevronDown className={cn(
                     "w-4 h-4 text-white/60 transition-transform",

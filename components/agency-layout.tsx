@@ -53,6 +53,8 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   const [projectSelectorOpen, setProjectSelectorOpen] = useState(false)
   const [userName, setUserName] = useState("Lead Agency")
   const [userInitials, setUserInitials] = useState("LA")
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarLoadError, setAvatarLoadError] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
   const [isOwner, setIsOwner] = useState(false) // Only greg@withligament.com can see admin
   const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
@@ -111,11 +113,13 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           try {
             const { data: profile } = await supabase
               .from("profiles")
-              .select("full_name, company_name")
+              .select("full_name, company_name, avatar_url")
               .eq("id", user.id)
               .single()
             if (profile) {
               setUserName(profile.company_name || profile.full_name || "Lead Agency")
+              setAvatarUrl(profile.avatar_url || null)
+              setAvatarLoadError(false)
               const initials = (profile.company_name || profile.full_name || "A")
                 .split(" ")
                 .map((n: string) => n[0])
@@ -405,7 +409,16 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
               className="w-full flex items-center gap-3 p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
             >
               <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
-                <span className="font-mono text-xs text-accent">{userInitials}</span>
+                {avatarUrl && !avatarLoadError ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Account avatar"
+                    style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
+                    onError={() => setAvatarLoadError(true)}
+                  />
+                ) : (
+                  <span className="font-mono text-xs text-accent">{userInitials}</span>
+                )}
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <div className="font-display font-bold text-sm text-foreground truncate">{userName}</div>
