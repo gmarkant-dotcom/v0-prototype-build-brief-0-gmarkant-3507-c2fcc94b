@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { LigamentLogo } from "@/components/ligament-logo"
 import { Check } from "lucide-react"
@@ -32,7 +33,6 @@ const tiers = [
       "Priority support",
       "Best-Practice Consultations",
     ],
-    highlighted: true,
   },
   {
     id: "network",
@@ -81,6 +81,8 @@ const roiRows = [
 ]
 
 export default function PricingPage() {
+  const [selectedTier, setSelectedTier] = useState("studio")
+
   return (
     <div className="min-h-screen bg-[#081F1F] text-white">
       <header className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
@@ -105,12 +107,30 @@ export default function PricingPage() {
           </p>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+          <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-center">
+            <p className="font-display font-bold text-white">One source of truth</p>
+            <p className="text-white/70 text-sm mt-1">Briefs, bids, contracts, and payments in one place.</p>
+          </div>
+          <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-center">
+            <p className="font-display font-bold text-white">Pays for itself in Year 1</p>
+            <p className="text-white/70 text-sm mt-1">$7,440 in recovered labor value. Compounds from there.</p>
+          </div>
+          <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-center">
+            <p className="font-display font-bold text-white">Built for real agency ops</p>
+            <p className="text-white/70 text-sm mt-1">Structure that bends without breaking, across every vendor workflow.</p>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {tiers.map((tier) => (
             <div
               key={tier.name}
-              className={`rounded-2xl border p-8 ${
-                tier.highlighted ? "border-[#C8F53C] bg-[#0C3535]" : "border-white/20 bg-white/5"
+              onClick={() => setSelectedTier(tier.id)}
+              className={`rounded-2xl border p-6 cursor-pointer ${
+                selectedTier === tier.id
+                  ? "border-[#C8F53C] bg-[#0C3535]"
+                  : "border-white/20 bg-white/5 hover:border-white/40"
               }`}
             >
               <h2 className="font-display font-bold text-2xl">{tier.name}</h2>
