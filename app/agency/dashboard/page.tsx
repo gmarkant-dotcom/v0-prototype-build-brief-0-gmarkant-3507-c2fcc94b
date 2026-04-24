@@ -166,6 +166,7 @@ function DashboardContent() {
   })
   const [createProjectError, setCreateProjectError] = useState<string | null>(null)
   const [createProjectWarning, setCreateProjectWarning] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [partnerAlertAggregate, setPartnerAlertAggregate] = useState(0)
   const [agencyDashboardStats, setAgencyDashboardStats] = useState<{
     total_unique_clients: number
@@ -351,31 +352,33 @@ function DashboardContent() {
       }
 
   const handleCreateProject = async () => {
+    if (isSubmitting) return
     if (!checkFeatureAccess("project creation")) return
+    setIsSubmitting(true)
     setCreateProjectError(null)
     setCreateProjectWarning(null)
 
-    if (isDemo) {
-      const createdProject = addProject({
-        name: newProject.name,
-        client: newProject.client,
-        status: "onboarding",
-      })
-      setSelectedProject(createdProject)
-      setIsNewProjectOpen(false)
-      setNewProject({
-        name: "",
-        client: "",
-        budget: "",
-        startDate: "",
-        endDate: "",
-        description: "",
-      })
-      router.push("/agency")
-      return
-    }
-
     try {
+      if (isDemo) {
+        const createdProject = addProject({
+          name: newProject.name,
+          client: newProject.client,
+          status: "onboarding",
+        })
+        setSelectedProject(createdProject)
+        setIsNewProjectOpen(false)
+        setNewProject({
+          name: "",
+          client: "",
+          budget: "",
+          startDate: "",
+          endDate: "",
+          description: "",
+        })
+        router.push("/agency")
+        return
+      }
+
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -413,6 +416,8 @@ function DashboardContent() {
       router.push("/agency")
     } catch {
       setCreateProjectError("Project creation failed. Please try again.")
+    } finally {
+      setIsSubmitting(false)
     }
   }
   
@@ -482,9 +487,9 @@ function DashboardContent() {
                 <Button 
                   onClick={handleCreateProject}
                   className="bg-accent text-accent-foreground hover:bg-accent/90"
-                  disabled={!newProject.name || !newProject.client}
+                  disabled={!newProject.name || !newProject.client || isSubmitting}
                 >
-                  Create Project
+                  {isSubmitting ? "Creating..." : "Create Project"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -620,9 +625,9 @@ function DashboardContent() {
               <Button 
                 className="bg-accent text-accent-foreground hover:bg-accent/90 font-mono"
                 onClick={handleCreateProject}
-                disabled={!newProject.name || !newProject.client}
+                disabled={!newProject.name || !newProject.client || isSubmitting}
               >
-                Create Project
+                {isSubmitting ? "Creating..." : "Create Project"}
               </Button>
             </DialogFooter>
           </DialogContent>

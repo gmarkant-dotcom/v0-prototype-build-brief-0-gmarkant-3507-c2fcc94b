@@ -479,7 +479,6 @@ export async function POST(request: NextRequest) {
 
     const safeName = name.trim()
     const activeStatusesForWarning = ["active", "open", "in_progress", "bidding", "onboarding"]
-    let duplicateNameWarning: string | null = null
     const { data: existingNamedProjects, error: existingNamedProjectsError } = await supabase
       .from("projects")
       .select("id")
@@ -493,43 +492,13 @@ export async function POST(request: NextRequest) {
         code: existingNamedProjectsError.code,
       })
     } else if ((existingNamedProjects || []).length > 0) {
-      duplicateNameWarning =
-        "A project with this name already exists in your active projects. You can still create this one."
+      return NextResponse.json({ error: "A project with this name already exists" }, { status: 409 })
     }
 
-    // Create with a minimal payload first to avoid schema/type mismatch blockers.
-    // Optional fields are applied in a second pass (best-effort).
-    const attempts: Record<string, unknown>[] = [
-      { agency_id: user.id, name: safeName, status: 'draft' },
-      { agency_id: user.id, name: safeName },
-    ]
-
-    let project: any = null
-    let lastError: any = null
-    const attemptErrors: string[] = []
-    for (const payload of attempts) {
-      const { data, error } = await supabase
-        .from('projects')
-        .insert(payload)
-        .select()
-        .single()
-      if (!error && data) {
-        project = data
-        lastError = null
-        break
-      }
-      lastError = error
-      const msg = error?.message || error?.details || error?.hint
-      if (msg) attemptErrors.push(String(msg))
-    }
-
-    if (lastError || !project) {
-      const unique = [...new Set(attemptErrors)].slice(0, 3)
-      throw new Error(unique.join(' | ') || 'Project creation failed')
-    }
-
-    // Best-effort update of optional fields. Any mismatch is ignored so creation still succeeds.
-    const optionalFields: Record<string, unknown> = {
+    const insertPayload: Record<string, unknown> = {
+      agency_id: user.id,
+      name: safeName,
+      status: 'draft',
       client_name: clientName || null,
       description: description || null,
       budget_range: budgetRange || null,
@@ -537,20 +506,19 @@ export async function POST(request: NextRequest) {
       end_date: endDate || null,
     }
 
-    for (const [key, value] of Object.entries(optionalFields)) {
-      if (value === null || value === undefined || value === '') continue
-      const { error: updateError } = await supabase
-        .from('projects')
-        .update({ [key]: value })
-        .eq('id', project.id)
+    const { data: project, error: insertError } = await supabase
+      .from('projects')
+      .insert(insertPayload)
+      .select('*')
+      .single()
 
-      if (updateError) {
-        console.warn(`Optional field update skipped (${key}):`, updateError.message)
-      }
+    if (insertError || !project) {
+      const msg = insertError?.message || insertError?.details || insertError?.hint || 'Project creation failed'
+      throw new Error(String(msg))
     }
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: project.id })
-    return NextResponse.json({ project, warning: duplicateNameWarning })
+    return NextResponse.json({ project })
   } catch (error) {
     console.error('[api] failure', {
       route: '/api/projects',
