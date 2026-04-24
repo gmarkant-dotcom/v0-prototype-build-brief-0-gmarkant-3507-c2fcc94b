@@ -196,6 +196,7 @@ export async function POST(request: NextRequest) {
           response_deadline: responseDeadline,
           master_rfp_json: { ...(masterRfp as Record<string, unknown>), nda_link: ndaLink || null },
           agency_company_name: agencyDisplay,
+          nda_gate_enforced: false,
           status: "new",
         }
         rows.push(row)

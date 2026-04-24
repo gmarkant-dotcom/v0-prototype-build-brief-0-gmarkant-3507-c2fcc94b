@@ -32,11 +32,15 @@ function SignUpContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const inviteToken = (searchParams.get("invite") || "").trim()
+  const inviteType = (searchParams.get("invite_type") || "").trim().toLowerCase()
+  const nextPath = (searchParams.get("next") || "").trim()
   const prefillEmail = (searchParams.get("email") || "").trim().toLowerCase()
   const ndaRequired = searchParams.get("nda") === "required"
   const scopeName = (searchParams.get("scope") || "").trim()
   const agencyName = (searchParams.get("agency") || "").trim()
-  const hasInviteContext = inviteToken.length > 0
+  const hasRfpInviteContext = inviteToken.length > 0
+  const hasPartnershipInviteContext = inviteType === "partnership"
+  const hasInviteContext = hasRfpInviteContext || hasPartnershipInviteContext
   
   const [step, setStep] = useState<1 | 2>(1)
   const [role, setRole] = useState<UserRole | null>(null)
@@ -63,11 +67,14 @@ function SignUpContent() {
 
   const inviteBannerText = useMemo(() => {
     if (!hasInviteContext) return ""
+    if (hasPartnershipInviteContext) {
+      return "A lead agency has invited you to join their partner network on Ligament."
+    }
     if (agencyName && scopeName) {
       return `${agencyName} has invited you to respond to an RFP for ${scopeName} on Ligament.`
     }
     return "You've been invited to respond to an RFP on Ligament."
-  }, [agencyName, hasInviteContext, scopeName])
+  }, [agencyName, hasInviteContext, hasPartnershipInviteContext, scopeName])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -99,6 +106,12 @@ function SignUpContent() {
       if (ndaRequired) redirectUrlObj.searchParams.set("nda", "required")
       if (scopeName) redirectUrlObj.searchParams.set("scope", scopeName)
       if (agencyName) redirectUrlObj.searchParams.set("agency", agencyName)
+    }
+    if (hasPartnershipInviteContext) {
+      redirectUrlObj.searchParams.set("invite_type", "partnership")
+    }
+    if (nextPath) {
+      redirectUrlObj.searchParams.set("next", nextPath)
     }
     const redirectUrl = redirectUrlObj.toString()
     

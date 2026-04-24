@@ -357,9 +357,11 @@ export async function POST(request: NextRequest) {
           await notifyPartnershipInvitation(supabase, existingPartnerId, agencyName, reactivated.id)
         }
         
-        // Send email for re-invitation
+    // Send email for re-invitation
         const siteUrl = siteBaseUrl()
-        const acceptUrl = `${siteUrl}/partner/invitations`
+        const acceptUrl = partner
+          ? `${siteUrl}/partner/invitations`
+          : `${siteUrl}/auth/sign-up?invite_type=partnership&email=${encodeURIComponent(normalizedPartnerEmail)}&next=${encodeURIComponent("/partner/invitations")}`
         let reinviteBody = `${agencyName} would like to reconnect with you on Ligament and has sent a new partnership invitation.`
         if (message && String(message).trim()) {
           reinviteBody += `\n\nPersonal message:\n${String(message).trim()}`
@@ -436,7 +438,9 @@ export async function POST(request: NextRequest) {
     // Send email invitation to partner (whether they have account or not)
     try {
       const siteUrl = siteBaseUrl()
-      const acceptUrl = `${siteUrl}/partner/invitations`
+      const acceptUrl = partner
+        ? `${siteUrl}/partner/invitations`
+        : `${siteUrl}/auth/sign-up?invite_type=partnership&email=${encodeURIComponent(normalizedPartnerEmail)}&next=${encodeURIComponent("/partner/invitations")}`
       let inviteBody = `${agencyName} has selected you as a potential partner on Ligament, a platform for vendor orchestration between creative and production agencies.\n\nJoining their network means you will be considered for scoped project opportunities they broadcast directly to their trusted partners.`
       if (message && String(message).trim()) {
         inviteBody += `\n\nPersonal message:\n${String(message).trim()}`

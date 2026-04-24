@@ -33,6 +33,24 @@ async function syncUserProfile(supabase: any, user: any) {
   return role
 }
 
+async function claimPartnershipInvitations(supabase: any, user: any) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("email")
+    .eq("id", user.id)
+    .maybeSingle()
+
+  const email = (profile?.email || user.email || "").trim().toLowerCase()
+  if (!email) return
+
+  await supabase
+    .from("partnerships")
+    .update({ partner_id: user.id, updated_at: new Date().toISOString() })
+    .is("partner_id", null)
+    .in("status", ["pending", "active"])
+    .ilike("partner_email", email)
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get("code")
@@ -42,6 +60,7 @@ export async function GET(request: Request) {
   const errorDescription = searchParams.get("error_description")
   const next = searchParams.get("next") ?? "/"
   const invite = searchParams.get("invite")
+  const inviteType = (searchParams.get("invite_type") || "").trim().toLowerCase()
   const nda = searchParams.get("nda")
   const scope = searchParams.get("scope")
   const agency = searchParams.get("agency")
@@ -70,6 +89,12 @@ export async function GET(request: Request) {
     if (data.user) {
       // Sync profile and get role
       const role = await syncUserProfile(supabase, data.user)
+
+      if (inviteType === "partnership") {
+        await claimPartnershipInvitations(supabase, data.user)
+        const destination = next && next !== "/" ? next : "/partner/invitations"
+        return NextResponse.redirect(`${origin}${destination}`)
+      }
       
       if (invite) {
         const claimUrl = new URL(`${origin}/api/partner/rfps/claim`)
@@ -96,6 +121,12 @@ export async function GET(request: Request) {
     if (!sessionError && data.user) {
       // Sync profile and get role
       const role = await syncUserProfile(supabase, data.user)
+
+      if (inviteType === "partnership") {
+        await claimPartnershipInvitations(supabase, data.user)
+        const destination = next && next !== "/" ? next : "/partner/invitations"
+        return NextResponse.redirect(`${origin}${destination}`)
+      }
       
       if (invite) {
         const claimUrl = new URL(`${origin}/api/partner/rfps/claim`)
