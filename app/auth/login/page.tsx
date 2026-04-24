@@ -108,7 +108,7 @@ function LoginContent() {
       if (redirect) {
         router.push(redirect)
       } else if (userRole === "agency") {
-        router.push("/agency")
+        router.push("/agency/dashboard")
       } else {
         router.push("/partner")
       }
