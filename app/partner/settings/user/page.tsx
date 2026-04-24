@@ -13,6 +13,7 @@ export default function PartnerUserProfilePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
   const [passwordSaving, setPasswordSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -144,6 +145,7 @@ export default function PartnerUserProfilePage() {
 
   const saveProfileSettings = async () => {
     setSaving(true)
+    setSaveSuccess(false)
     setErrorMessage(null)
     setMessage(null)
     try {
@@ -170,7 +172,8 @@ export default function PartnerUserProfilePage() {
       setInitialFullName(nextFullName)
       setInitialDisplayName(nextDisplayName)
       setInitialAvatarUrl(nextAvatarUrl)
-      setMessage("Settings saved")
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to update settings.")
     } finally {
@@ -226,6 +229,7 @@ export default function PartnerUserProfilePage() {
               accept="image/jpeg,image/png,image/webp,image/gif"
               maxSizeMB={5}
               onUploadComplete={(file) => {
+                console.log("[avatar upload] response:", file)
                 const nextUrl = file?.url || ""
                 if (nextUrl) {
                   setAvatarUrl(nextUrl)
@@ -237,15 +241,27 @@ export default function PartnerUserProfilePage() {
             />
             {avatarUrl ? (
               <div className="mt-3 flex items-center gap-3">
-                <img src={avatarUrl} alt="Profile avatar preview" className="w-10 h-10 rounded-full object-cover border border-gray-200" />
+                <img
+                  src={avatarUrl}
+                  alt="Profile avatar preview"
+                  className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none"
+                  }}
+                />
                 <span className="text-xs text-gray-600">Profile photo updated</span>
               </div>
             ) : null}
           </div>
-          <div className="flex justify-end">
+          <div className="flex flex-col items-end">
             <Button onClick={saveProfileSettings} disabled={saving || !hasSettingsChanges} className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
               {saving ? "Saving..." : "Save Changes"}
             </Button>
+            {saveSuccess && (
+              <p style={{ color: "#639922", fontSize: "14px", marginTop: "8px" }}>
+                Settings saved
+              </p>
+            )}
           </div>
         </div>
 
