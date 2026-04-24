@@ -52,9 +52,8 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now()
     const filename = `${folder}/${user.id}/${timestamp}-${file.name}`
 
-    const isPublicAssetFolder = folder === "avatars"
     const blob = await put(filename, file, {
-      access: isPublicAssetFolder ? "public" : "private",
+      access: 'private',
     })
 
     console.log('[api] success', {
