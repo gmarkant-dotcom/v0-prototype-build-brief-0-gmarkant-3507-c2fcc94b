@@ -30,6 +30,7 @@ async function claimPendingPartnershipInvites(userId: string): Promise<
     .in("status", ["pending", "active"])
     .ilike("partner_email", email)
     .select("id")
+  console.log("[claim] update result:", data, error)
 
   if (error) {
     return { ok: false, status: 500, error: "Failed to claim partnership invitations" }
@@ -46,8 +47,10 @@ export async function POST() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+  const userId = user.id
+  console.log("[claim] auth userId:", userId)
 
-  const result = await claimPendingPartnershipInvites(user.id)
+  const result = await claimPendingPartnershipInvites(userId)
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status })
   }

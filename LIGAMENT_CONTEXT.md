@@ -31,7 +31,7 @@ bid management, onboarding, active engagements, and cash flow.
 
 ## Migrations Applied
 
-**Current state: 001–044**
+**Current state: 001–045**
 
 | Migration | Description |
 |-----------|-------------|
@@ -42,6 +42,7 @@ bid management, onboarding, active engagements, and cash flow.
 | 042 | partner_intent and intent_set_at on partner_rfp_inbox |
 | 043 | viewed_at on partner_rfp_inbox |
 | 044 | invite_token, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at, agency_nda_notified_at on partner_rfp_inbox |
+| 045 | RLS policy — partners can claim partnership by email |
 
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
