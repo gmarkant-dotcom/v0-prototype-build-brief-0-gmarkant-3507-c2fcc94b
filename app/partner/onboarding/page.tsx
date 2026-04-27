@@ -6,9 +6,6 @@ import { Button } from "@/components/ui/button"
 import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
 import { LeadAgencyFilter } from "@/components/lead-agency-filter"
 import { isDemoMode } from "@/lib/demo-data"
-import { EmptyState } from "@/components/empty-state"
-import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { 
   FileText, 
   Download, 
@@ -199,7 +196,6 @@ function apiClientName(project: ApiOnboardingPackage["project"]): string | null 
 
 export default function PartnerOnboardingPage() {
   const isDemo = isDemoMode()
-  const router = useRouter()
   const onboardingPackets = isDemo ? demoOnboardingPackets : []
   const [packets, setPackets] = useState(onboardingPackets)
   const [apiPackages, setApiPackages] = useState<ApiOnboardingPackage[]>([])
@@ -213,25 +209,6 @@ export default function PartnerOnboardingPage() {
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({})
-
-  useEffect(() => {
-    if (isDemo) return
-    const ensurePartnerAuth = async () => {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        router.push("/auth/login?redirect=%2Fpartner%2Fonboarding")
-        return
-      }
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-      if (profile?.role !== "partner") {
-        router.push("/partner")
-      }
-    }
-    ensurePartnerAuth()
-  }, [isDemo, router])
 
   useEffect(() => {
     if (isDemo) return
