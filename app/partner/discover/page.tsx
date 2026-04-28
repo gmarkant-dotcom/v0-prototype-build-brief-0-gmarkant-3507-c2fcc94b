@@ -245,8 +245,6 @@ export default function DiscoverAgenciesPage() {
 
   return (
     <PartnerLayout 
-      title="Discover Agencies" 
-      subtitle="Browse discoverable lead agencies and request access."
     >
       <div className="space-y-6">
         {/* Search */}

@@ -35,13 +35,13 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await get(url, { access: "private" })
-    if (!result?.body) return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (!result?.stream) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
     const name = (row.label as string).replace(/[^\w.\- ()]+/g, "_").slice(0, 200) || "document"
 
-    return new NextResponse(result.body as unknown as BodyInit, {
+    return new NextResponse(result.stream as unknown as BodyInit, {
       headers: {
-        "Content-Type": result.contentType || "application/octet-stream",
+        "Content-Type": result.blob?.contentType || "application/octet-stream",
         "Content-Disposition": `attachment; filename="${name}"`,
         "Cache-Control": "private, no-store",
       },

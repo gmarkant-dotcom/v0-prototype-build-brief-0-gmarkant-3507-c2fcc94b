@@ -426,12 +426,12 @@ export function Stage05Utilization() {
       {/* Scope Change Requests Section */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <GlassCardHeader className="mb-0">
+          <div className="mb-0">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-accent" />
               <span>Scope Change Requests</span>
             </div>
-          </GlassCardHeader>
+          </div>
           <Button
             size="sm"
             onClick={() => setShowNewScopeRequest(true)}
@@ -699,12 +699,12 @@ export function Stage05Utilization() {
       )}
       
       {/* Partner Input Cards */}
-      <GlassCardHeader className="mb-4">
+      <div className="mb-4">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-accent" />
           <span>Partner Utilization Reports</span>
         </div>
-      </GlassCardHeader>
+      </div>
 
       <div className="space-y-4">
         {utilization.map((record) => {

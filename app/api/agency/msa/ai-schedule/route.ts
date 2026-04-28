@@ -245,8 +245,6 @@ Total of suggested amounts should not exceed the implied awarded budget unless t
       model: "anthropic/claude-sonnet-4-20250514" as any,
       output: Output.object({
         schema: scheduleOutSchema,
-        schemaName: "PaymentMilestoneSchedule",
-        schemaDescription: "Suggested payment milestones for an awarded partner scope",
       }),
       prompt,
       temperature: 0.3,

@@ -263,7 +263,7 @@ export async function GET(request: NextRequest) {
       })
       console.log(
         '[api/projects] partner_status_alert_count per project',
-        (projects as { id: string; partner_status_alert_count?: number }[]).map((row) => ({
+        (projects as unknown as { id: string; partner_status_alert_count?: number }[]).map((row) => ({
           id: row.id,
           partner_status_alert_count: row.partner_status_alert_count ?? 0,
         }))

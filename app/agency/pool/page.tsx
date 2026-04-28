@@ -727,7 +727,7 @@ export default function PartnerPoolPage() {
         .eq('id', invitationId)
       
       if (!error) {
-        await loadInvitations()
+        await loadPartnerships()
       }
     } catch (error) {
       console.error('Error confirming partner:', error)
@@ -752,7 +752,7 @@ export default function PartnerPoolPage() {
     location: "New York, NY",
     email: "",
     website: "",
-    rate: "$150-200/hr",
+    rate: "$$$",
     experience: "10+ years of experience in video production for sports and entertainment brands.",
     rating: 4.8,
     status: "active",
@@ -763,9 +763,8 @@ export default function PartnerPoolPage() {
     tags: ["Sports", "Entertainment", "Branded Content"],
     credentials: ["Emmy Award Winner", "DGA Member"],
     pastProjects: [],
-    availability: { status: "available", nextAvailable: null, notes: "" },
+    availability: { notes: "" },
     notes: [],
-    projectRatings: []
   }
   
   // In production, start with one editable sample partner so users can see all fields
@@ -784,7 +783,7 @@ export default function PartnerPoolPage() {
       location: partnerData.location || "",
       email: partnerData.email || "",
       website: partnerData.website || "",
-      rate: partnerData.rate || "",
+      rate: (partnerData.rate as "$" | "$$" | "$$$" | undefined) || "$",
       experience: partnerData.experience || "",
       rating: partnerData.rating || 0,
       status: "active",
@@ -795,9 +794,8 @@ export default function PartnerPoolPage() {
       tags: partnerData.tags || [],
       credentials: partnerData.credentials || [],
       pastProjects: [],
-      availability: { status: "available", nextAvailable: null, notes: "" },
+      availability: { notes: "" },
       notes: [],
-      projectRatings: []
     }
     setPartners(prev => [...prev, newPartner])
     setShowAddPartnerModal(false)
@@ -953,7 +951,7 @@ export default function PartnerPoolPage() {
 
   if (!isLoaded) {
     return (
-      <AgencyLayout title="Partner Pool">
+      <AgencyLayout>
         <div className="flex items-center justify-center h-64">
           <div className="text-foreground-muted">Loading...</div>
         </div>
@@ -2004,7 +2002,7 @@ function AddEditPartnerModal({
     location: partner?.location || "",
     email: partner?.email || "",
     website: partner?.website || "",
-    rate: partner?.rate || "",
+      rate: (partner?.rate as "$" | "$$" | "$$$" | undefined) || "$",
     experience: partner?.experience || "",
     rating: partner?.rating || 0,
     ndaSigned: partner?.ndaSigned || false,
@@ -2229,7 +2227,7 @@ function AddEditPartnerModal({
                 </label>
                 <Input
                   value={formData.rate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, rate: e.target.value }))}
+                  onChange={(e) => setFormData(prev => ({ ...prev, rate: e.target.value as "$" | "$$" | "$$$" }))}
                   placeholder="$100-150/hr"
                   className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 />

@@ -232,8 +232,6 @@ export default function PartnerInvitationsPage() {
 
   return (
     <PartnerLayout 
-      title="Agency Invitations" 
-      subtitle="Manage invitations from lead agencies to join their partner network"
     >
       <div className="space-y-8">
         {/* Stats */}

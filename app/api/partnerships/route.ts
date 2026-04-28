@@ -405,7 +405,7 @@ export async function POST(request: NextRequest) {
       agency_id: user.id,
       partner_email: normalizedPartnerEmail,
       status: 'pending',
-      invitation_message: message || null,
+      invitation_message: message || undefined,
     }
     
     // If partner exists, also set partner_id

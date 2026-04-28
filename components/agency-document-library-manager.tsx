@@ -93,7 +93,7 @@ export function AgencyDocumentLibraryManager() {
   const setForm = (key: string, patch: Partial<{ label: string; url: string }>) => {
     setForms((prev) => ({
       ...prev,
-      [key]: { label: "", url: "", ...prev[key], ...patch },
+      [key]: { ...prev[key], ...patch },
     }))
   }
 

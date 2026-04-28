@@ -86,10 +86,10 @@ export async function GET(request: NextRequest) {
     const filename =
       safeDispositionFilename((docRow.label as string) || displayFilenameFromBlobUrl(url) || "document")
 
-    return new NextResponse(result.body as unknown as BodyInit, {
+    return new NextResponse(result.stream as unknown as BodyInit, {
       status: 200,
       headers: {
-        "Content-Type": result.contentType || "application/octet-stream",
+        "Content-Type": result.blob?.contentType || "application/octet-stream",
         "Content-Disposition": `attachment; filename="${filename}"`,
         ETag: result.blob.etag,
         "Cache-Control": "private, no-store",

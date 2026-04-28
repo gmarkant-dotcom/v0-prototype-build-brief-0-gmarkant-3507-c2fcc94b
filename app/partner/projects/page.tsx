@@ -882,7 +882,7 @@ export default function PartnerProjectsPage() {
                             {Icon ? (
                               <Icon className="w-5 h-5 text-[#0C3535]" />
                             ) : (
-                              <span className="text-lg">{link.icon}</span>
+                              <span className="text-lg">{typeof link.icon === "string" ? link.icon : null}</span>
                             )}
                             <span className="font-mono text-xs text-[#0C3535]">{link.name}</span>
                           </a>

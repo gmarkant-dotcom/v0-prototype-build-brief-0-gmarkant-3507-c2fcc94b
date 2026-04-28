@@ -214,12 +214,12 @@ export function Stage04Dashboard() {
 
       {/* Project Essentials Section */}
       <div className="mb-8">
-        <GlassCardHeader className="mb-4">
+        <div className="mb-4">
           <div className="flex items-center gap-2">
             <Link2 className="w-4 h-4 text-accent" />
             <span>Project Essentials</span>
           </div>
-        </GlassCardHeader>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Lead Point Person */}

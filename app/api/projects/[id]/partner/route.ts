@@ -72,7 +72,7 @@ export async function GET(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const project = assignment.project as {
+    const project = (assignment.project as unknown) as {
       id: string
       title: string
       agency_id: string

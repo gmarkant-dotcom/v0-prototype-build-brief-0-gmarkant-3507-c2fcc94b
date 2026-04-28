@@ -115,6 +115,10 @@ export default function AgencyProfileSettingsPage() {
         )
         .eq("id", user.id)
         .maybeSingle()
+      if (!profile) {
+        setLoading(false)
+        return
+      }
       setForm({
         id: profile.id,
         full_name: profile.full_name || "",

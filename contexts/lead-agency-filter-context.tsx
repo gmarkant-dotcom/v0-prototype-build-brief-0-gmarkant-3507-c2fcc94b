@@ -11,9 +11,10 @@ export type LeadAgencyConnection = {
   agencyName: string
   agencyEmail?: string
   agencyLocation: string
-  status: "pending" | "active" | "suspended" | "terminated"
+  status: "pending" | "active" | "suspended" | "terminated" | "confirmed" | "accepted" | "declined"
   invitedAt: string
   acceptedAt?: string
+  confirmedAt?: string
   invitationMessage?: string
 }
 

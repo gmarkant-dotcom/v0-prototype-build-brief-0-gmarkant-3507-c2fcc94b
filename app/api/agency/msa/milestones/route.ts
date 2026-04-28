@@ -204,14 +204,14 @@ export async function GET() {
       ...new Set(
         milestoneRows
           .map((m) => (m.partnership_id != null ? String(m.partnership_id) : null))
-          .filter((v): v is string => Boolean(v))
+          .filter((v: unknown): v is string => Boolean(v))
       ),
     ]
     const milestoneResponseIds = [
       ...new Set(
         milestoneRows
           .map((m) => (m.response_id != null ? String(m.response_id) : null))
-          .filter((v): v is string => Boolean(v))
+          .filter((v: unknown): v is string => Boolean(v))
       ),
     ]
 
@@ -227,7 +227,7 @@ export async function GET() {
         ...new Set(
           (partnershipRows || [])
             .map((r) => (r.partner_id != null ? String(r.partner_id) : null))
-            .filter((v): v is string => Boolean(v))
+            .filter((v: unknown): v is string => Boolean(v))
         ),
       ]
       const profileById = new Map<
@@ -598,8 +598,8 @@ export async function DELETE(req: Request) {
     const body = await req.json().catch(() => ({}))
     const idsRaw = Array.isArray(body.ids) ? body.ids : []
     const ids = idsRaw
-      .map((v) => (typeof v === "string" ? v.trim() : ""))
-      .filter((v): v is string => Boolean(v))
+      .map((v: unknown) => (typeof v === "string" ? v.trim() : ""))
+      .filter((v: unknown): v is string => Boolean(v))
     if (ids.length === 0) {
       return NextResponse.json({ error: "ids are required" }, { status: 400, headers: noStore })
     }

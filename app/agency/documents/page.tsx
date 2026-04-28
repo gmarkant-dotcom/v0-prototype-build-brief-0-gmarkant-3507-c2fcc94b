@@ -568,7 +568,7 @@ export default function DocumentsPage() {
         )}
         
         {/* Client Briefs Section */}
-        {(activeTab === "all" || activeTab === "briefs") && (
+        {(activeTab === "all" || activeTab === "master_briefs") && (
           <div>
             <h3 className="font-display font-bold text-lg text-foreground mb-4">Client Briefs</h3>
             <div className="space-y-3">

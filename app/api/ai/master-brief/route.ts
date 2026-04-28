@@ -128,9 +128,6 @@ ${briefText}`
       model: "anthropic/claude-sonnet-4-20250514" as any,
       output: Output.object({
         schema: masterBriefSchema,
-        schemaName: "MasterBrief",
-        schemaDescription:
-          "Agency master RFP brief: project summary, objectives, budget/timeline strings, and scope line items",
       }),
       prompt,
       temperature: 0.25,
