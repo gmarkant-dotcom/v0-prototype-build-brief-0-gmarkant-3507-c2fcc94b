@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
-import { CreditCard, Check, ArrowRight, Download } from "lucide-react"
+import { CreditCard, Check, ArrowRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const plans = [
@@ -40,13 +40,7 @@ const plans = [
 export default function AgencyBillingSettingsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [currentPlan] = useState("studio")
-
-  const billingHistory = [
-    { id: "inv-001", date: "2026-03-01", description: "Studio plan - monthly", amount: "$699.00", status: "Paid" },
-    { id: "inv-002", date: "2026-02-01", description: "Studio plan - monthly", amount: "$699.00", status: "Paid" },
-    { id: "inv-003", date: "2026-01-01", description: "Studio plan - monthly", amount: "$699.00", status: "Paid" },
-  ]
+  const currentPlan = "studio"
 
   useEffect(() => {
     const loadUser = async () => {
@@ -60,16 +54,6 @@ export default function AgencyBillingSettingsPage() {
         return
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single()
-
-      if (profile?.role !== "agency") {
-        router.push("/partner")
-        return
-      }
       setLoading(false)
     }
     loadUser()
@@ -95,20 +79,19 @@ export default function AgencyBillingSettingsPage() {
           <p className="text-foreground-muted">Manage your subscription, plan tier, and payment method.</p>
         </div>
 
-        <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
-                <CreditCard className="w-6 h-6 text-accent" />
-              </div>
-              <div>
-                <div className="font-display font-bold text-lg text-foreground">Studio Plan</div>
-                <div className="text-foreground-muted">$699 · monthly · Renews Apr 1, 2026</div>
-              </div>
+        <div className="bg-accent/5 border border-accent/20 rounded-xl p-6">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center shrink-0">
+              <CreditCard className="w-6 h-6 text-accent" />
             </div>
-            <span className="font-mono text-[10px] px-3 py-1 rounded-full bg-green-900/30 text-green-100 border border-green-400/40">
-              Active
-            </span>
+            <div>
+              <div className="font-display font-bold text-lg text-foreground mb-1">Billing managed by Ligament</div>
+              <p className="text-foreground-muted text-sm leading-relaxed">
+                Your subscription and invoices are managed directly by the Ligament team during this early access period. 
+                To upgrade, downgrade, or ask about your current plan, contact us at{" "}
+                <a href="mailto:hello@withligament.com" className="text-accent underline">hello@withligament.com</a>.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -168,22 +151,6 @@ export default function AgencyBillingSettingsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-xl p-6">
-            <h3 className="font-display font-bold text-lg text-foreground mb-3">Payment Method</h3>
-            <div className="flex items-center justify-between rounded-lg border border-border/40 p-4">
-              <div className="flex items-center gap-3">
-                <CreditCard className="w-5 h-5 text-accent" />
-                <div>
-                  <div className="text-foreground font-medium">Visa ending in 4242</div>
-                  <div className="text-xs text-foreground-muted">Expires 08/28</div>
-                </div>
-              </div>
-              <Button variant="outline" className="border-border/50 text-foreground">
-                Update Payment Method
-              </Button>
-            </div>
-          </div>
-
-          <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-xl p-6">
             <h3 className="font-display font-bold text-lg text-foreground mb-3">Cancel Plan</h3>
             <p className="text-foreground-muted text-sm mb-4">
               To cancel your current subscription, contact support and we will assist you.
@@ -195,40 +162,12 @@ export default function AgencyBillingSettingsPage() {
         </div>
 
         <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-xl p-6">
-          <h3 className="font-display font-bold text-lg text-foreground mb-4">Billing History</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border/40">
-                  <th className="text-left py-2 text-foreground-muted font-mono text-[10px] uppercase">Date</th>
-                  <th className="text-left py-2 text-foreground-muted font-mono text-[10px] uppercase">Description</th>
-                  <th className="text-right py-2 text-foreground-muted font-mono text-[10px] uppercase">Amount</th>
-                  <th className="text-right py-2 text-foreground-muted font-mono text-[10px] uppercase">Status</th>
-                  <th className="text-right py-2 text-foreground-muted font-mono text-[10px] uppercase">Invoice</th>
-                </tr>
-              </thead>
-              <tbody>
-                {billingHistory.map((row) => (
-                  <tr key={row.id} className="border-b border-border/20">
-                    <td className="py-3 text-foreground">{row.date}</td>
-                    <td className="py-3 text-foreground">{row.description}</td>
-                    <td className="py-3 text-right text-foreground">{row.amount}</td>
-                    <td className="py-3 text-right">
-                      <span className="font-mono text-[10px] px-2 py-1 rounded-full border border-green-400/40 bg-green-900/30 text-green-100">
-                        {row.status}
-                      </span>
-                    </td>
-                    <td className="py-3 text-right">
-                      <Button variant="ghost" size="sm" className="text-foreground hover:text-foreground">
-                        <Download className="w-3.5 h-3.5 mr-1.5" />
-                        PDF
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <h3 className="font-display font-bold text-lg text-foreground mb-3">Billing History</h3>
+          <p className="text-foreground-muted text-sm">
+            Invoices and payment history are sent directly to your account email. Contact{" "}
+            <a href="mailto:hello@withligament.com" className="text-accent underline">hello@withligament.com</a>{" "}
+            for copies of past invoices.
+          </p>
         </div>
       </div>
     </AgencyShell>

@@ -115,10 +115,6 @@ export default function AgencyProfileSettingsPage() {
         )
         .eq("id", user.id)
         .maybeSingle()
-      if (profile?.role !== "agency") {
-        router.push("/agency")
-        return
-      }
       setForm({
         id: profile.id,
         full_name: profile.full_name || "",
