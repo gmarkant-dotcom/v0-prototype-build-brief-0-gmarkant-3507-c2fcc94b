@@ -123,7 +123,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             .single()
           if (profile) {
             setUserName(profile.company_name || profile.full_name || "Lead Agency")
-            setAvatarUrl(profile.avatar_url || null)
+            setAvatarUrl(profile.avatar_url ? "/api/avatar" : null)
             setAvatarLoadError(false)
             const initials = (profile.company_name || profile.full_name || "A")
               .split(" ")
