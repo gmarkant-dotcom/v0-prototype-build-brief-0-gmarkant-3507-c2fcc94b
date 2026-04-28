@@ -275,6 +275,23 @@ function AgencyRFPContent() {
   const [ndaSignatureRequired, setNdaSignatureRequired] = useState(false)
   const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
   const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
+
+  const DRAFT_KEY = (projectId: string) => `ligament-rfp-draft-${projectId}`
+
+  const saveDraft = (projectId: string, state: Record<string, unknown>) => {
+    try {
+      localStorage.setItem(DRAFT_KEY(projectId), JSON.stringify(state))
+    } catch {}
+  }
+
+  const loadDraft = (projectId: string): Record<string, unknown> | null => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY(projectId))
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  }
   
   // Handle client brief file: server-side text extraction only (no blob preview — private store URLs are not iframe-safe)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -775,12 +792,95 @@ function AgencyRFPContent() {
     setNdaSignatureRequired(false)
     setNdaSigningLink("https://www.docusign.com/")
     setResponseDeadlineDate("")
+    if (selectedProject?.id) {
+      try { localStorage.removeItem(DRAFT_KEY(selectedProject.id)) } catch {}
+    }
   }
 
   useEffect(() => {
-    // Project switch should reset local RFP workflow state to avoid stale data.
-    resetFlow()
+    if (!selectedProject?.id) {
+      resetFlow()
+      return
+    }
+    const draft = loadDraft(selectedProject.id)
+    if (!draft) {
+      resetFlow()
+      return
+    }
+    // Restore persisted draft state
+    if (typeof draft.currentStep === "number") setCurrentStep(draft.currentStep as 1|2|3|4|5|6)
+    if (draft.uploadMethod !== undefined) setUploadMethod(draft.uploadMethod as UploadMethod)
+    if (typeof draft.pastedContent === "string") setPastedContent(draft.pastedContent)
+    if (typeof draft.googleLink === "string") setGoogleLink(draft.googleLink)
+    if (typeof draft.briefFileName === "string") setBriefFileName(draft.briefFileName)
+    if (typeof draft.briefSourceText === "string") setBriefSourceText(draft.briefSourceText)
+    if (typeof draft.briefAugmentText === "string") setBriefAugmentText(draft.briefAugmentText)
+    if (draft.briefUploaded !== undefined) setBriefUploaded(Boolean(draft.briefUploaded))
+    if (typeof draft.rfpTemplateMode === "string") setRfpTemplateMode(draft.rfpTemplateMode as "upload"|"ai")
+    if (typeof draft.aiTemplateStyle === "string") setAiTemplateStyle(draft.aiTemplateStyle as "formal"|"lean"|"creative")
+    if (typeof draft.aiOutputFormat === "string") setAiOutputFormat(draft.aiOutputFormat as "section"|"modular")
+    if (draft.aiScrubBrand !== undefined) setAiScrubBrand(Boolean(draft.aiScrubBrand))
+    if (draft.aiScrubBudget !== undefined) setAiScrubBudget(Boolean(draft.aiScrubBudget))
+    if (draft.aiScrubStrategy !== undefined) setAiScrubStrategy(Boolean(draft.aiScrubStrategy))
+    if (draft.aiScrubTimeline !== undefined) setAiScrubTimeline(Boolean(draft.aiScrubTimeline))
+    if (typeof draft.templateSourceText === "string") setTemplateSourceText(draft.templateSourceText)
+    if (draft.selectedRfpTemplate !== undefined) setSelectedRfpTemplate(draft.selectedRfpTemplate as string|null)
+    if (draft.uploadedRfpTemplate !== undefined) setUploadedRfpTemplate(draft.uploadedRfpTemplate as {name:string;url:string}|null)
+    if (draft.masterRfp !== undefined) setMasterRfp(draft.masterRfp as typeof masterRfp)
+    if (Array.isArray(draft.scopeItems)) setScopeItems(draft.scopeItems as ScopeItem[])
+    if (typeof draft.additionalContext === "string") setAdditionalContext(draft.additionalContext)
   }, [selectedProject?.id])
+
+  useEffect(() => {
+    if (!selectedProject?.id || isDemo) return
+    saveDraft(selectedProject.id, {
+      currentStep,
+      uploadMethod,
+      pastedContent,
+      googleLink,
+      briefFileName,
+      briefSourceText,
+      briefAugmentText,
+      briefUploaded,
+      rfpTemplateMode,
+      aiTemplateStyle,
+      aiOutputFormat,
+      aiScrubBrand,
+      aiScrubBudget,
+      aiScrubStrategy,
+      aiScrubTimeline,
+      templateSourceText,
+      selectedRfpTemplate,
+      uploadedRfpTemplate,
+      masterRfp,
+      scopeItems,
+      additionalContext,
+    })
+  }, [
+    selectedProject?.id,
+    currentStep,
+    uploadMethod,
+    pastedContent,
+    googleLink,
+    briefFileName,
+    briefSourceText,
+    briefAugmentText,
+    briefUploaded,
+    rfpTemplateMode,
+    aiTemplateStyle,
+    aiOutputFormat,
+    aiScrubBrand,
+    aiScrubBudget,
+    aiScrubStrategy,
+    aiScrubTimeline,
+    templateSourceText,
+    selectedRfpTemplate,
+    uploadedRfpTemplate,
+    masterRfp,
+    scopeItems,
+    additionalContext,
+    isDemo,
+  ])
   
   const outsourcedItems = scopeItems.filter(item => item.allocation === "outsource")
   const internalItems = scopeItems.filter(item => item.allocation === "internal")
