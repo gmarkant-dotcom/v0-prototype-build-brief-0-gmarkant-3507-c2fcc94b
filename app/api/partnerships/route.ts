@@ -681,7 +681,36 @@ export async function PATCH(request: NextRequest) {
         // Notify agency that partner declined
         const { notifyPartnershipDeclined } = await import('@/lib/notifications')
         await notifyPartnershipDeclined(supabase, partnership.agency_id, partnerName, partnershipId)
-        
+
+        // Send email to agency notifying them of the decline
+        try {
+          const { data: agencyProfile } = await supabase
+            .from('profiles')
+            .select('email, company_name, full_name')
+            .eq('id', partnership.agency_id)
+            .single()
+
+          if (agencyProfile?.email) {
+            await sendTransactionalEmail({
+              to: agencyProfile.email,
+              subject: `${partnerName} declined your partnership invitation`,
+              html: buildBrandedEmailHtml({
+                title: "Partnership invitation declined",
+                recipientName:
+                  agencyProfile.company_name?.trim() ||
+                  agencyProfile.full_name?.trim() ||
+                  agencyProfile.email?.trim() ||
+                  "there",
+                body: `${partnerName} has declined your partnership invitation on Ligament.\n\nYou can invite other partners from your partner pool or discover new ones in the marketplace.`,
+                ctaText: "View Partner Pool",
+                ctaUrl: `${siteBaseUrl()}/agency/pool`,
+              }),
+            })
+          }
+        } catch (emailErr) {
+          console.error('Error sending partnership declined email:', emailErr)
+        }
+
         return NextResponse.json({ partnership: updated })
       }
     }
