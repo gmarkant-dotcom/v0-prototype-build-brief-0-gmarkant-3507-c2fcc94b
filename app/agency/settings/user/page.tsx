@@ -51,10 +51,6 @@ export default function AgencyUserProfilePage() {
         .select("id, role, full_name, display_name, avatar_url, notification_preferences")
         .eq("id", user.id)
         .maybeSingle()
-      if (profile?.role !== "agency") {
-        router.push("/agency")
-        return
-      }
       setUserId(user.id)
       setEmail(user.email || "")
       setFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
@@ -66,7 +62,7 @@ export default function AgencyUserProfilePage() {
         setAvatarUrl(loadedAvatarUrl)
       }
       setInitialAvatarUrl(loadedAvatarUrl)
-      const storedPrefs = localStorage.getItem(`agency-notification-prefs-${user.id}`)
+      const storedPrefs = localStorage.getItem(`notification-prefs-${user.id}`)
       const dbPrefs = (profile as any)?.notification_preferences
       if (dbPrefs && typeof dbPrefs === "object") {
         setNotificationPrefs((prev) => ({ ...prev, ...dbPrefs }))
@@ -101,7 +97,7 @@ export default function AgencyUserProfilePage() {
         return
       }
     }
-    localStorage.setItem(`agency-notification-prefs-${userId}`, JSON.stringify(notificationPrefs))
+    localStorage.setItem(`notification-prefs-${userId}`, JSON.stringify(notificationPrefs))
     setMessage("Account information and notification preferences saved.")
     setSaving(false)
   }
