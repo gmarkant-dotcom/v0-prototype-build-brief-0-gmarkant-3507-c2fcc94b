@@ -7,6 +7,10 @@ const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate",
 } as const
 
+const revalidateHeaders = {
+  "Cache-Control": "private, max-age=0, stale-while-revalidate=30",
+} as const
+
 const ROUTE = "/api/partner/summary"
 
 export async function GET() {
@@ -76,7 +80,7 @@ export async function GET() {
     }
 
     console.log("[api] success", { route: ROUTE, method: "GET", userId: user.id, ...payload })
-    return NextResponse.json(payload, { headers: noStoreHeaders })
+    return NextResponse.json(payload, { headers: revalidateHeaders })
   } catch (e) {
     console.error("[partner/summary] unhandled", e)
     return NextResponse.json({ error: "Failed" }, { status: 500, headers: noStoreHeaders })

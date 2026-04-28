@@ -169,25 +169,26 @@ export async function GET(request: NextRequest) {
       const inboxProjectIds = new Set<string>()
       const bidProjectIds = new Set<string>()
       if (agencyProjectIds.length > 0) {
-        const { data: inboxRows } = await supabase
-          .from('partner_rfp_inbox')
-          .select('project_id')
-          .eq('agency_id', user.id)
-          .in('project_id', agencyProjectIds)
+        const [inboxResult, responseResult] = await Promise.all([
+          supabase
+            .from('partner_rfp_inbox')
+            .select('project_id')
+            .eq('agency_id', user.id)
+            .in('project_id', agencyProjectIds),
+          supabase
+            .from('partner_rfp_responses')
+            .select('status, partner_rfp_inbox(project_id)')
+            .eq('agency_id', user.id)
+            .neq('status', 'draft'),
+        ])
 
-        for (const r of inboxRows || []) {
+        for (const r of inboxResult.data || []) {
           const pid = r.project_id as string | null
           if (pid) inboxProjectIds.add(pid)
         }
 
-        const { data: responseRows } = await supabase
-          .from('partner_rfp_responses')
-          .select('status, partner_rfp_inbox(project_id)')
-          .eq('agency_id', user.id)
-          .neq('status', 'draft')
-
         const idSet = new Set(agencyProjectIds)
-        for (const resp of responseRows || []) {
+        for (const resp of responseResult.data || []) {
           const inbox = resp.partner_rfp_inbox as
             | { project_id?: string | null }
             | { project_id?: string | null }[]
@@ -283,20 +284,29 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      let total_partner_spend_usd = 0
+      const [engagementResult, spendResult] = await Promise.all([
+        supabase
+          .from('partner_rfp_responses')
+          .select('partner_rfp_inbox(project_id)')
+          .eq('agency_id', user.id)
+          .eq('status', 'awarded'),
+        supabase
+          .from('partner_rfp_responses')
+          .select('budget_proposal')
+          .eq('agency_id', user.id)
+          .eq('status', 'awarded'),
+      ])
+
+      // Process engagement stats from engagementResult
       let total_awarded_engagements = 0
       let total_active_engagements = 0
       const agencyProjectIdSet = new Set(agencyProjectIds)
-      const { data: engagementRespRows, error: engErr } = await supabase
-        .from('partner_rfp_responses')
-        .select('partner_rfp_inbox(project_id)')
-        .eq('agency_id', user.id)
-        .eq('status', 'awarded')
-
-      if (engErr) {
-        logSupabaseError('agency GET awarded partner_rfp_responses for engagement stats', engErr)
+      if (engagementResult.error) {
+        logSupabaseError('agency GET awarded partner_rfp_responses for engagement stats', engagementResult.error)
       } else {
         const projectIdPerResponse: string[] = []
-        for (const r of engagementRespRows || []) {
+        for (const r of engagementResult.data || []) {
           const pid = inboxEmbedProjectId((r as { partner_rfp_inbox?: unknown }).partner_rfp_inbox)
           if (!pid || !agencyProjectIdSet.has(pid)) continue
           projectIdPerResponse.push(pid)
@@ -326,16 +336,11 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      let total_partner_spend_usd = 0
-      const { data: spendRows, error: spendErr } = await supabase
-        .from('partner_rfp_responses')
-        .select('budget_proposal')
-        .eq('agency_id', user.id)
-        .eq('status', 'awarded')
-      if (spendErr) {
-        logSupabaseError('agency GET awarded partner_rfp_responses for dashboard spend', spendErr)
+      // Process spend from spendResult
+      if (spendResult.error) {
+        logSupabaseError('agency GET awarded partner_rfp_responses for dashboard spend', spendResult.error)
       } else {
-        for (const r of spendRows || []) {
+        for (const r of spendResult.data || []) {
           const parsed = parsePartnerBudgetProposal((r as { budget_proposal?: unknown }).budget_proposal)
           if (parsed) total_partner_spend_usd += parsed.amount
         }

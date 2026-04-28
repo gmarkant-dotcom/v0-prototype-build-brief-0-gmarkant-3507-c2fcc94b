@@ -9,6 +9,10 @@ const noStoreHeaders = {
   'Cache-Control': 'private, no-store, no-cache, must-revalidate',
 } as const
 
+const revalidateHeaders = {
+  "Cache-Control": "private, max-age=0, stale-while-revalidate=30",
+} as const
+
 // GET - List partnerships for current user
 export async function GET(request: NextRequest) {
   try {
@@ -186,7 +190,7 @@ export async function GET(request: NextRequest) {
       role: profile?.role ?? null,
       rowCount: Array.isArray(partnerships) ? partnerships.length : 0,
     })
-    return NextResponse.json({ partnerships }, { headers: noStoreHeaders })
+    return NextResponse.json({ partnerships }, { headers: revalidateHeaders })
   } catch (error) {
     console.error('[api] failure', {
       route: '/api/partnerships',

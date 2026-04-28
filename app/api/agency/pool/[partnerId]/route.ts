@@ -14,6 +14,10 @@ const noStore = {
   Expires: "0",
 } as const
 
+const revalidateHeaders = {
+  "Cache-Control": "private, max-age=0, stale-while-revalidate=30",
+} as const
+
 type BudgetJson = { amount?: number; currency?: string }
 
 function parseAwardedBudget(raw: unknown): { amount: number; currency: string } | null {
@@ -221,7 +225,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
         },
         engagement_history,
       },
-      { headers: noStore }
+      { headers: revalidateHeaders }
     )
   } catch (e) {
     console.error("[api/agency/pool/partner] unexpected", e)

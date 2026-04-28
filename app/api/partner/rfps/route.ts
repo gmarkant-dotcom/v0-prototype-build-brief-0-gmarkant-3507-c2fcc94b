@@ -11,6 +11,10 @@ const noStoreHeaders = {
   Expires: "0",
 } as const
 
+const revalidateHeaders = {
+  "Cache-Control": "private, max-age=0, stale-while-revalidate=30",
+} as const
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -95,7 +99,7 @@ export async function GET() {
         agency_meeting_url: agencyMeetingUrlById[row.agency_id as string] || null,
       }
     })
-    return NextResponse.json({ rfps: mergedRows }, { headers: noStoreHeaders })
+    return NextResponse.json({ rfps: mergedRows }, { headers: revalidateHeaders })
   } catch (e) {
     console.error("[partner/rfps] GET exception:", e)
     return NextResponse.json({ error: "Failed to load RFPs" }, { status: 500, headers: noStoreHeaders })

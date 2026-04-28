@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useState, useEffect, useMemo } from "react"
+import { useFetch } from "@/hooks/useFetch"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
@@ -220,7 +221,6 @@ function PartnerRFPsContent() {
   const initialRFPs = isDemo ? demoRFPs : []
   
   const [rfps, setRfps] = useState(initialRFPs)
-  const [inboxLoading, setInboxLoading] = useState(false)
   const [inboxError, setInboxError] = useState<string | null>(null)
   const [activeStatusFilter, setActiveStatusFilter] = useState<PartnerStatusFilterTab>("all")
   const statusFilters: PartnerStatusFilterTab[] = [
@@ -234,36 +234,20 @@ function PartnerRFPsContent() {
     "declined",
   ]
 
+  const { data: rfpApiData, isLoading: inboxLoading, error: inboxFetchError } = useFetch(
+    isDemo ? "" : "/api/partner/rfps"
+  )
+
   useEffect(() => {
-    if (isDemo) return
-    let cancelled = false
-    ;(async () => {
-      setInboxLoading(true)
-      setInboxError(null)
-      try {
-        const res = await fetch("/api/partner/rfps", {
-          cache: "no-store",
-          credentials: "same-origin",
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error((data?.error as string) || "Could not load RFPs")
-        const rows = (data.rfps || []) as PartnerInboxRow[]
-        if (!cancelled) {
-          setRfps(rows.map(mapInboxRowToRfp))
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setInboxError(e instanceof Error ? e.message : "Could not load RFPs")
-          setRfps([])
-        }
-      } finally {
-        if (!cancelled) setInboxLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
+    if (isDemo || inboxLoading) return
+    if (inboxFetchError) {
+      setInboxError("Could not load RFPs")
+      setRfps([])
+      return
     }
-  }, [isDemo])
+    const rows = ((rfpApiData as { rfps?: PartnerInboxRow[] })?.rfps || []) as PartnerInboxRow[]
+    setRfps(rows.map(mapInboxRowToRfp))
+  }, [isDemo, rfpApiData, inboxLoading, inboxFetchError])
 
   const displayedRfps = useMemo(() => {
     let list = [...rfps]
