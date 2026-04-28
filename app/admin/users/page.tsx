@@ -19,6 +19,7 @@ type User = {
   is_paid: boolean
   is_admin: boolean
   demo_access: boolean
+  secondary_role: string | null
   created_at: string
 }
 
@@ -109,6 +110,22 @@ export default function AdminUsersPage() {
     if (!error) {
       setUsers(users.map(u => 
         u.id === userId ? { ...u, demo_access: !currentStatus } : u
+      ))
+    }
+    setUpdating(null)
+  }
+
+  const grantAgencyAccess = async (userId: string, currentSecondaryRole: string | null) => {
+    setUpdating(userId)
+    const supabase = createClient()
+    const newSecondaryRole = currentSecondaryRole === 'agency' ? null : 'agency'
+    const { error } = await supabase
+      .from('profiles')
+      .update({ secondary_role: newSecondaryRole })
+      .eq('id', userId)
+    if (!error) {
+      setUsers(users.map(u =>
+        u.id === userId ? { ...u, secondary_role: newSecondaryRole } : u
       ))
     }
     setUpdating(null)
@@ -246,6 +263,7 @@ export default function AdminUsersPage() {
                 <th className="text-left px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Joined</th>
                 <th className="text-center px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Paid Status</th>
                 <th className="text-center px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Demo Access</th>
+                <th className="text-center px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Agency Access</th>
               </tr>
             </thead>
             <tbody>
@@ -321,6 +339,32 @@ export default function AdminUsersPage() {
                         </>
                       )}
                     </button>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {user.role === 'partner' && (
+                      <button
+                        onClick={() => grantAgencyAccess(user.id, user.secondary_role)}
+                        disabled={updating === user.id}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                          user.secondary_role === 'agency'
+                            ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+                            : "bg-white/5 text-white/85 hover:bg-white/10 hover:text-white"
+                        )}
+                      >
+                        {user.secondary_role === 'agency' ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            Granted
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-3.5 h-3.5" />
+                            Grant
+                          </>
+                        )}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

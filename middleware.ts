@@ -104,26 +104,29 @@ export async function middleware(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, is_admin')
+      .select('role, active_role, secondary_role, is_admin')
       .eq('id', user.id)
       .single()
 
-    const userRole = (user.user_metadata?.role as string | undefined) || (profile?.role as string | undefined)
+    // active_role is the current portal the user is operating in.
+    // Fall back to role for users created before migration 047.
+    const activeRole = (profile?.active_role as string | undefined) || (profile?.role as string | undefined) || (user.user_metadata?.role as string | undefined)
     const isAdmin = !!profile?.is_admin
 
     if (isAdminRoute && !isAdmin) {
       const url = request.nextUrl.clone()
-      url.pathname = userRole === 'partner' ? '/partner' : '/agency/dashboard'
+      url.pathname = activeRole === 'partner' ? '/partner' : '/agency/dashboard'
       return NextResponse.redirect(url)
     }
 
-    if (isAgencyRoute && userRole === 'partner') {
+    // Allow dual-role users to access both portals based on active_role
+    if (isAgencyRoute && activeRole === 'partner') {
       const url = request.nextUrl.clone()
       url.pathname = '/partner'
       return NextResponse.redirect(url)
     }
 
-    if (isPartnerRoute && userRole === 'agency') {
+    if (isPartnerRoute && activeRole === 'agency') {
       const url = request.nextUrl.clone()
       url.pathname = '/agency/dashboard'
       return NextResponse.redirect(url)
