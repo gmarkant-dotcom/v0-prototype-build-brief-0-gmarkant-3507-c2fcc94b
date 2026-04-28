@@ -235,6 +235,7 @@ function AgencyRFPContent() {
   const [aiOutputFormat, setAiOutputFormat] = useState<"section" | "modular">("section")
   const [isGeneratingAiTemplate, setIsGeneratingAiTemplate] = useState(false)
   const [aiTemplateError, setAiTemplateError] = useState<string | null>(null)
+  const [aiTemplateGenerated, setAiTemplateGenerated] = useState(false)
   
   // Step 2: Master RFP (AI generated)
   const [masterRfp, setMasterRfp] = useState<{
@@ -466,6 +467,7 @@ function AgencyRFPContent() {
       setAiTemplateError("Subscription required for AI features, or enable demo mode.")
       return
     }
+    setAiTemplateGenerated(false)
     setIsGeneratingAiTemplate(true)
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 125_000)
@@ -522,6 +524,7 @@ function AgencyRFPContent() {
       if (!text.trim()) {
         throw new Error("AI returned an empty template. Check server logs and ANTHROPIC_API_KEY on Vercel.")
       }
+      setAiTemplateGenerated(true)
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") {
         setAiTemplateError(
@@ -731,6 +734,7 @@ function AgencyRFPContent() {
     setBroadcastError(null)
     setRfpTemplateMode("upload")
     setAiTemplateError(null)
+    setAiTemplateGenerated(false)
     setIsGeneratingAiTemplate(false)
     setBriefUploaded(false)
     setBriefFileName("")
@@ -1312,9 +1316,19 @@ function AgencyRFPContent() {
                       </div>
                     )}
                     {selectedRfpTemplate === "ai" && templateSourceText.trim() && (
-                      <p className="font-mono text-[10px] text-foreground-muted">
-                        AI format loaded — {templateSourceText.length.toLocaleString()} characters (used as Master RFP structure guide)
-                      </p>
+                      <div className={cn(
+                        "rounded-lg border px-3 py-2 flex items-center gap-2",
+                        aiTemplateGenerated
+                          ? "border-success/40 bg-success/10"
+                          : "border-border bg-white/5"
+                      )}>
+                        {aiTemplateGenerated && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
+                        <p className="font-mono text-[10px] text-foreground-muted">
+                          {aiTemplateGenerated
+                            ? `Template ready — ${templateSourceText.length.toLocaleString()} characters loaded`
+                            : `AI format loading — ${templateSourceText.length.toLocaleString()} characters so far`}
+                        </p>
+                      </div>
                     )}
                   </div>
                   )}
