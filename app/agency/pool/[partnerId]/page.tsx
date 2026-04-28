@@ -67,8 +67,14 @@ function websiteHref(url: string | null | undefined): string | null {
   return `https://${u}`
 }
 
+type NotesLogEntry = {
+  text: string
+  timestamp: string
+}
+
 type PartnershipNotesShape = {
   notes?: string
+  notes_log?: NotesLogEntry[]
   overall_rating?: number | null
   would_work_again?: boolean | null
   blacklisted?: boolean
@@ -447,6 +453,29 @@ export default function AgencyPartnerProfilePage() {
                 className="mt-1.5 bg-white/5 border-border text-foreground"
                 placeholder="Internal notes about this partner…"
               />
+              {Array.isArray(notesState.notes_log) && notesState.notes_log.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <div className="font-mono text-[9px] text-foreground-muted uppercase tracking-wider">
+                    Notes history ({notesState.notes_log.length})
+                  </div>
+                  <div className="max-h-[200px] overflow-y-auto space-y-2 pr-1">
+                    {[...notesState.notes_log].reverse().map((entry, idx) => (
+                      <div key={idx} className="rounded-lg border border-border/50 bg-white/5 p-3">
+                        <div className="font-mono text-[9px] text-foreground-muted mb-1">
+                          {new Date(entry.timestamp).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </div>
+                        <p className="text-sm text-foreground whitespace-pre-wrap">{entry.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>

@@ -9,8 +9,14 @@ const noStore = {
   Expires: "0",
 } as const
 
+type NotesLogEntry = {
+  text: string
+  timestamp: string
+}
+
 type PartnershipNotesShape = {
   notes?: string
+  notes_log?: NotesLogEntry[]
   overall_rating?: number | null
   would_work_again?: boolean | null
   blacklisted?: boolean
@@ -140,6 +146,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
 
     const prev = normalizeNotes(row.partnership_notes)
     const next = mergeNotes(prev, patch)
+
+    // Append to timestamped log if notes text changed and is non-empty
+    if (patch.notes !== undefined && patch.notes.trim()) {
+      const prevLog = Array.isArray(prev.notes_log) ? prev.notes_log : []
+      const lastEntry = prevLog[prevLog.length - 1]
+      const isDuplicate = lastEntry && lastEntry.text.trim() === patch.notes.trim()
+      if (!isDuplicate) {
+        next.notes_log = [
+          ...prevLog,
+          { text: patch.notes.trim(), timestamp: new Date().toISOString() },
+        ]
+      } else {
+        next.notes_log = prevLog
+      }
+    } else {
+      next.notes_log = Array.isArray(prev.notes_log) ? prev.notes_log : []
+    }
 
     const { error: upErr } = await supabase
       .from("partnerships")

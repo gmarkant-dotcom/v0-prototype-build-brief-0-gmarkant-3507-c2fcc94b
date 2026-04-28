@@ -744,7 +744,7 @@ function DashboardContent() {
           return (
             <Link 
               key={project.id} 
-              href="/agency/project"
+              href={`/agency/projects/${project.id}`}
               className="block glass rounded-xl p-6 hover:bg-white/10 transition-all group"
             >
               <div className="flex items-start gap-6">
