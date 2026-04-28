@@ -115,7 +115,7 @@ function SignUpContent() {
     }
     const redirectUrl = redirectUrlObj.toString()
     
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -132,6 +132,13 @@ function SignUpContent() {
 
     if (signUpError) {
       setError(signUpError.message)
+      setLoading(false)
+      return
+    }
+
+    // Supabase silently succeeds when email already exists — detect via empty identities
+    if (signUpData?.user && signUpData.user.identities?.length === 0) {
+      setError("An account with this email already exists. Please sign in instead.")
       setLoading(false)
       return
     }
@@ -434,7 +441,17 @@ function SignUpContent() {
 
                 {error && (
                   <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
-                    {error}
+                    {error.includes("already exists") ? (
+                      <>
+                        An account with this email already exists.{" "}
+                        <Link href="/auth/login" className="underline text-accent">
+                          Sign in instead
+                        </Link>
+                        .
+                      </>
+                    ) : (
+                      error
+                    )}
                   </div>
                 )}
 
