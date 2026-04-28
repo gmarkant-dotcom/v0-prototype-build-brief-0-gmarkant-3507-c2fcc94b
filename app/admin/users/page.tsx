@@ -117,16 +117,23 @@ export default function AdminUsersPage() {
 
   const grantAgencyAccess = async (userId: string, currentSecondaryRole: string | null) => {
     setUpdating(userId)
-    const supabase = createClient()
-    const newSecondaryRole = currentSecondaryRole === 'agency' ? null : 'agency'
-    const { error } = await supabase
-      .from('profiles')
-      .update({ secondary_role: newSecondaryRole })
-      .eq('id', userId)
-    if (!error) {
-      setUsers(users.map(u =>
-        u.id === userId ? { ...u, secondary_role: newSecondaryRole } : u
-      ))
+    const grant = currentSecondaryRole !== 'agency'
+    try {
+      const res = await fetch('/api/admin/grant-agency-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, grant }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setUsers(users.map(u =>
+          u.id === userId ? { ...u, secondary_role: grant ? 'agency' : null } : u
+        ))
+      } else {
+        console.error('[admin] grant-agency-access failed:', data)
+      }
+    } catch (e) {
+      console.error('[admin] grant-agency-access error:', e)
     }
     setUpdating(null)
   }
