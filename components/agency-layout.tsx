@@ -118,12 +118,12 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
         try {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("full_name, company_name, avatar_url")
+            .select("full_name, company_name, avatar_url, company_logo_url")
             .eq("id", user.id)
             .single()
           if (profile) {
             setUserName(profile.company_name || profile.full_name || "Lead Agency")
-            setAvatarUrl(profile.avatar_url || null)
+            setAvatarUrl(profile.avatar_url || profile.company_logo_url || null)
             setAvatarLoadError(false)
             const initials = (profile.company_name || profile.full_name || "A")
               .split(" ")

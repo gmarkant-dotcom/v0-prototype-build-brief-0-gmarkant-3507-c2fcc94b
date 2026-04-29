@@ -51,6 +51,7 @@ type ProfileState = {
   location: string
   agency_type: string
   avatar_url: string
+  company_logo_url: string
   meeting_url: string
   is_discoverable: boolean
   payment_terms: string
@@ -92,6 +93,7 @@ export default function AgencyProfileSettingsPage() {
     location: "",
     agency_type: "",
     avatar_url: "",
+    company_logo_url: "",
     meeting_url: "",
     is_discoverable: false,
     payment_terms: "net_30",
@@ -111,7 +113,7 @@ export default function AgencyProfileSettingsPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, agency_type, avatar_url, meeting_url, payment_terms, payment_terms_custom"
+          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, agency_type, avatar_url, company_logo_url, meeting_url, payment_terms, payment_terms_custom"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -129,6 +131,7 @@ export default function AgencyProfileSettingsPage() {
         location: profile.location || "",
         agency_type: profile.agency_type || "",
         avatar_url: profile.avatar_url || "",
+        company_logo_url: (profile as { company_logo_url?: string | null }).company_logo_url || "",
         meeting_url: profile.meeting_url || "",
         is_discoverable: !!profile.is_discoverable,
         payment_terms: (profile as { payment_terms?: string | null }).payment_terms || "net_30",
@@ -222,7 +225,7 @@ export default function AgencyProfileSettingsPage() {
         bio: form.bio,
         location: form.location,
         agency_type: form.agency_type,
-        avatar_url: form.avatar_url || null,
+        company_logo_url: form.company_logo_url || null,
         meeting_url: form.meeting_url || null,
         is_discoverable: form.is_discoverable,
         payment_terms: form.payment_terms || "net_30",
@@ -266,7 +269,7 @@ export default function AgencyProfileSettingsPage() {
       const res = await fetch("/api/upload", { method: "POST", body: fd })
       const payload = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(payload?.error || "Failed to upload logo")
-      setForm((prev) => ({ ...prev, avatar_url: payload.url || prev.avatar_url }))
+      setForm((prev) => ({ ...prev, company_logo_url: payload.url || prev.company_logo_url }))
       setMessage("Logo uploaded.")
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Failed to upload logo.")
@@ -336,8 +339,8 @@ export default function AgencyProfileSettingsPage() {
           </div>
           <div className="flex items-center gap-5">
             <div className="w-20 h-20 rounded-full bg-accent/15 overflow-hidden flex items-center justify-center">
-              {form.avatar_url ? (
-                <img src={form.avatar_url} alt="Agency logo" className="w-full h-full object-cover" />
+              {form.company_logo_url ? (
+                <img src={form.company_logo_url} alt="Agency logo" className="w-full h-full object-cover" />
               ) : (
                 <span className="font-display font-bold text-xl text-accent">
                   {(form.company_name || "A")
