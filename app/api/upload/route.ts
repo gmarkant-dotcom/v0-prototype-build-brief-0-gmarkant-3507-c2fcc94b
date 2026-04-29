@@ -52,8 +52,9 @@ export async function POST(request: NextRequest) {
     const timestamp = Date.now()
     const filename = `${folder}/${user.id}/${timestamp}-${file.name}`
 
+    const isAvatar = folder === 'avatars' || folder === 'logos'
     const blob = await put(filename, file, {
-      access: 'private',
+      access: isAvatar ? 'public' : 'private',
     })
 
     console.log('[api] success', {
