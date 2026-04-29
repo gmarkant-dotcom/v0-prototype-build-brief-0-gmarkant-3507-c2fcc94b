@@ -287,7 +287,12 @@ function DashboardContent() {
           name: project.name,
           client: project.client,
           status: project.status,
-          budget: 0,
+          budget: (() => {
+            const raw = String(row.budget_range ?? "").replace(/[$,\s]/g, "").trim()
+            if (!raw) return 0
+            const n = parseFloat(raw)
+            return Number.isFinite(n) ? n : 0
+          })(),
           spent: 0,
           startDate: row.start_date
             ? new Date(String(row.start_date)).toLocaleDateString("en-US", { month: "short", year: "numeric" })
