@@ -345,7 +345,19 @@ export default function AgencyMarketplacePage() {
             <div className="rounded-lg border border-border p-4">
               <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">Contact</div>
               <div className="text-sm text-foreground font-medium">{selectedPartner.full_name || selectedPartner.company_name || "Not provided"}</div>
-              <div className="text-sm text-foreground-muted mt-1">{selectedPartner.email || "No contact email available"}</div>
+                  {selectedPartner.email ? (
+                    <div className="text-sm text-foreground-muted mt-1">{selectedPartner.email}</div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setSelectedPartner(null)
+                        setInvitePartnerId(selectedPartner.id)
+                      }}
+                      className="text-sm text-accent hover:underline mt-1 text-left"
+                    >
+                      Request collaboration access to view contact info →
+                    </button>
+                  )}
             </div>
           </div>
         </div>

@@ -550,7 +550,20 @@ export default function DiscoverAgenciesPage() {
                 <div className="rounded-lg border border-gray-200 p-4">
                   <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Contact</div>
                   <div className="text-sm text-gray-900 font-medium">{selectedAgency.full_name || selectedAgency.company_name || "Not provided"}</div>
-                  <div className="text-sm text-gray-600 mt-1">{selectedAgency.email || "No contact email available"}</div>
+                  {selectedAgency.email ? (
+                    <div className="text-sm text-gray-600 mt-1">{selectedAgency.email}</div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setShowAgencyProfileModal(false)
+                        setSelectedAgency(selectedAgency)
+                        setShowRequestModal(true)
+                      }}
+                      className="text-sm text-blue-600 hover:underline mt-1 text-left"
+                    >
+                      Request collaboration access to view contact info →
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
