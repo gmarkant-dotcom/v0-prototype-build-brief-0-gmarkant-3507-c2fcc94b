@@ -481,7 +481,7 @@ export default function DiscoverAgenciesPage() {
         {/* Agency Profile Modal */}
         {showAgencyProfileModal && selectedAgency && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAgencyProfileModal(false)}>
-            <GlassCard className="w-full max-w-2xl bg-white" onClick={e => e.stopPropagation()}>
+            <div className="w-full max-w-2xl bg-white rounded-2xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center overflow-hidden">
@@ -553,7 +553,7 @@ export default function DiscoverAgenciesPage() {
                   <div className="text-sm text-gray-600 mt-1">{selectedAgency.email || "No contact email available"}</div>
                 </div>
               </div>
-            </GlassCard>
+            </div>
           </div>
         )}
       </div>
