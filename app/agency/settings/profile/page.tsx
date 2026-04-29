@@ -47,6 +47,7 @@ type ProfileState = {
   email: string
   company_name: string
   company_website: string
+  company_linkedin_url: string
   bio: string
   location: string
   agency_type: string
@@ -89,6 +90,7 @@ export default function AgencyProfileSettingsPage() {
     email: "",
     company_name: "",
     company_website: "",
+    company_linkedin_url: "",
     bio: "",
     location: "",
     agency_type: "",
@@ -113,7 +115,7 @@ export default function AgencyProfileSettingsPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, agency_type, avatar_url, company_logo_url, meeting_url, payment_terms, payment_terms_custom"
+          "id, role, email, full_name, company_name, company_website, company_linkedin_url, is_discoverable, bio, location, agency_type, avatar_url, company_logo_url, meeting_url, payment_terms, payment_terms_custom"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -127,6 +129,7 @@ export default function AgencyProfileSettingsPage() {
         email: user.email || "",
         company_name: profile.company_name || profile.full_name || "",
         company_website: (profile as { company_website?: string | null }).company_website || "",
+        company_linkedin_url: (profile as any).company_linkedin_url || "",
         bio: profile.bio || "",
         location: profile.location || "",
         agency_type: profile.agency_type || "",
@@ -222,6 +225,7 @@ export default function AgencyProfileSettingsPage() {
       .update({
         company_name: form.company_name || form.full_name || null,
         company_website: form.company_website || null,
+        company_linkedin_url: form.company_linkedin_url || null,
         bio: form.bio,
         location: form.location,
         agency_type: form.agency_type,
@@ -388,6 +392,16 @@ export default function AgencyProfileSettingsPage() {
               onChange={(e) => setForm((p) => ({ ...p, company_website: e.target.value }))}
               placeholder="https://youragency.com"
               className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+            />
+          </div>
+          <div>
+            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company LinkedIn URL</label>
+            <Input
+              type="url"
+              value={form.company_linkedin_url}
+              onChange={(e) => setForm((p) => ({ ...p, company_linkedin_url: e.target.value }))}
+              placeholder="https://linkedin.com/company/your-company"
+              className="bg-white/5 border-border text-foreground"
             />
           </div>
           <div>

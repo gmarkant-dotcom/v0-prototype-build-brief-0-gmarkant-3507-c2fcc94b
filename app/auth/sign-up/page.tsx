@@ -49,6 +49,7 @@ function SignUpContent() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [fullName, setFullName] = useState("")
   const [companyName, setCompanyName] = useState("")
+  const [companyLinkedin, setCompanyLinkedin] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -123,6 +124,7 @@ function SignUpContent() {
         data: {
           full_name: fullName,
           company_name: companyName,
+          company_linkedin_url: companyLinkedin,
           role: role,
           terms_accepted_at: new Date().toISOString(),
           privacy_accepted_at: new Date().toISOString(),
@@ -306,6 +308,19 @@ function SignUpContent() {
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     placeholder="Your organization"
+                    required
+                    className="bg-white/5 border-border/30 text-foreground placeholder:text-foreground-muted/50"
+                  />
+                </div>
+                <div>
+                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                    Company LinkedIn URL <span className="text-red-400">*</span>
+                  </label>
+                  <Input
+                    type="url"
+                    value={companyLinkedin}
+                    onChange={(e) => setCompanyLinkedin(e.target.value)}
+                    placeholder="https://linkedin.com/company/your-company"
                     required
                     className="bg-white/5 border-border/30 text-foreground placeholder:text-foreground-muted/50"
                   />

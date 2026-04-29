@@ -25,6 +25,7 @@ export default function AgencyUserProfilePage() {
   const [initialFullName, setInitialFullName] = useState("")
   const [initialDisplayName, setInitialDisplayName] = useState("")
   const [avatarUrl, setAvatarUrl] = useState("")
+  const [personalLinkedin, setPersonalLinkedin] = useState("")
   const [initialAvatarUrl, setInitialAvatarUrl] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -48,7 +49,7 @@ export default function AgencyUserProfilePage() {
       }
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, role, full_name, display_name, avatar_url, notification_preferences")
+        .select("id, role, full_name, display_name, avatar_url, personal_linkedin_url, notification_preferences")
         .eq("id", user.id)
         .maybeSingle()
       setUserId(user.id)
@@ -58,6 +59,7 @@ export default function AgencyUserProfilePage() {
       setInitialFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setInitialDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
       const loadedAvatarUrl = (profile as any)?.avatar_url || ""
+      setPersonalLinkedin((profile as any)?.personal_linkedin_url || "")
       if (!hasUploaded.current) {
         setAvatarUrl(loadedAvatarUrl)
       }
@@ -154,6 +156,7 @@ export default function AgencyUserProfilePage() {
           full_name: fullName.trim(),
           display_name: displayName.trim(),
           avatar_url: avatarUrl.trim() || null,
+          personal_linkedin_url: personalLinkedin.trim() || null,
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -259,6 +262,16 @@ export default function AgencyUserProfilePage() {
                 </div>
               </div>
             ) : null}
+          </div>
+          <div>
+            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Personal LinkedIn URL <span className="text-foreground-muted">(optional)</span></label>
+            <Input
+              type="url"
+              value={personalLinkedin}
+              onChange={(e) => setPersonalLinkedin(e.target.value)}
+              placeholder="https://linkedin.com/in/your-name"
+              className="bg-white/5 border-border text-foreground"
+            />
           </div>
           <div className="flex flex-col items-end">
             <Button

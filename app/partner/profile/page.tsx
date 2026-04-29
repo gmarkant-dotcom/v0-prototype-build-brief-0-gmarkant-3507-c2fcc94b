@@ -129,6 +129,7 @@ export default function PartnerProfilePage() {
   const [formData, setFormData] = useState({
     companyName: "",
     companyWebsite: "",
+    companyLinkedin: "",
     type: "",
     primaryDiscipline: disciplines[0],
     bio: "",
@@ -188,7 +189,7 @@ export default function PartnerProfilePage() {
       const { data } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, is_discoverable, bio, location, agency_type, avatar_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
+          "id, role, email, full_name, company_name, company_website, company_linkedin_url, is_discoverable, bio, location, agency_type, avatar_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -200,6 +201,7 @@ export default function PartnerProfilePage() {
         ...prev,
         companyName: data?.company_name || data?.full_name || "",
         companyWebsite: (data as { company_website?: string | null } | null)?.company_website || "",
+        companyLinkedin: (data as any)?.company_linkedin_url || "",
         primaryDiscipline:
           data?.agency_type?.trim() ? data.agency_type : prev.primaryDiscipline,
         bio: data?.bio || "",
@@ -573,6 +575,7 @@ export default function PartnerProfilePage() {
           .update({
             company_name: formData.companyName,
             company_website: formData.companyWebsite || null,
+            company_linkedin_url: formData.companyLinkedin || null,
             agency_type: formData.primaryDiscipline,
             bio: formData.bio,
             location: formData.location,
@@ -788,6 +791,16 @@ export default function PartnerProfilePage() {
                 onChange={(e) => setFormData(prev => ({ ...prev, companyWebsite: e.target.value }))}
                 placeholder="https://youragency.com"
                 className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+              />
+            </div>
+            <div>
+              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company LinkedIn URL</label>
+              <Input
+                type="url"
+                value={formData.companyLinkedin ?? ""}
+                onChange={(e) => setFormData((p) => ({ ...p, companyLinkedin: e.target.value }))}
+                placeholder="https://linkedin.com/company/your-company"
+                className="bg-white/5 border-border text-foreground"
               />
             </div>
             
