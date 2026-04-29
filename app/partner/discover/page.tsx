@@ -15,6 +15,9 @@ interface Agency {
   company_name: string
   full_name: string
   company_logo_url?: string
+  company_linkedin_url?: string
+  reel_url?: string
+  capabilities?: unknown
   email?: string
   location?: string
   website?: string
@@ -386,17 +389,27 @@ export default function DiscoverAgenciesPage() {
                             Request Declined
                           </span>
                         ) : (
-                          <Button
-                            onClick={() => {
-                              setSelectedAgency(agency)
-                              setShowRequestModal(true)
-                            }}
-                            variant="outline"
-                            className="border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10"
-                          >
-                            <Send className="w-4 h-4 mr-1.5" />
-                            Request Access
-                          </Button>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              type="button"
+                              onClick={() => openAgencyProfile(agency)}
+                              variant="outline"
+                              className="h-8 px-3 border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10 text-xs"
+                            >
+                              View Profile
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                setSelectedAgency(agency)
+                                setShowRequestModal(true)
+                              }}
+                              variant="outline"
+                              className="border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10"
+                            >
+                              <Send className="w-4 h-4 mr-1.5" />
+                              Request Access
+                            </Button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -553,6 +566,35 @@ export default function DiscoverAgenciesPage() {
                       <div className="text-sm text-gray-700">{selectedAgency.invitationMessage}</div>
                     </div>
                   )}
+                </div>
+                <div className="rounded-lg border border-gray-200 p-4 space-y-3">
+                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Company Profile</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    {selectedAgency.company_linkedin_url && (
+                      <a href={selectedAgency.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline">
+                        LinkedIn Profile
+                      </a>
+                    )}
+                    {selectedAgency.reel_url && (
+                      <a href={selectedAgency.reel_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline">
+                        View Reel
+                      </a>
+                    )}
+                  </div>
+                  {(() => {
+                    const caps = selectedAgency.capabilities
+                    if (!Array.isArray(caps) || caps.length === 0) return null
+                    return (
+                      <div>
+                        <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Capabilities</div>
+                        <div className="flex flex-wrap gap-1">
+                          {(caps as string[]).map((cap: string, i: number) => (
+                            <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">{cap}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 <div className="rounded-lg border border-gray-200 p-4">

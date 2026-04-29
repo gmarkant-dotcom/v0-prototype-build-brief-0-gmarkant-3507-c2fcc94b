@@ -314,7 +314,7 @@ function SignUpContent() {
                 </div>
                 <div>
                   <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
-                    Company LinkedIn URL <span className="text-red-400">*</span>
+                    Company LinkedIn URL
                   </label>
                   <Input
                     type="url"

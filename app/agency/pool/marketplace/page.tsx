@@ -8,7 +8,7 @@ import { GlassCard } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { isDemoMode } from "@/lib/demo-data"
-import { ArrowLeft, ExternalLink, Search, UserPlus } from "lucide-react"
+import { ArrowLeft, Building2, ExternalLink, Search, UserPlus, X } from "lucide-react"
 
 type PartnerProfile = {
   id: string
@@ -18,7 +18,11 @@ type PartnerProfile = {
   location: string | null
   email: string | null
   company_website?: string | null
+  company_linkedin_url?: string | null
+  company_logo_url?: string | null
   agency_type?: string | null
+  reel_url?: string | null
+  capabilities?: unknown
 }
 
 const demoPartners: PartnerProfile[] = [
@@ -70,6 +74,7 @@ export default function AgencyMarketplacePage() {
   const [inviteMessage, setInviteMessage] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [banner, setBanner] = useState<string | null>(null)
+  const [selectedPartner, setSelectedPartner] = useState<any>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -216,20 +221,31 @@ export default function AgencyMarketplacePage() {
                     )}
                     <p className="font-mono text-xs text-foreground-muted">{partner.agency_type || "—"}</p>
                   </div>
-                  {connectedIds.has(partner.id) ? (
-                    <Button disabled className="mt-4 bg-white/10 text-foreground-muted cursor-default">
-                      Connected
-                    </Button>
-                  ) : (
+                  <div className="mt-4 flex items-center gap-2 flex-wrap">
                     <Button
-                      className="mt-4 bg-accent text-accent-foreground hover:bg-accent/90"
-                      onClick={() => setInvitePartnerId(partner.id)}
-                      disabled={!partner.id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedPartner(partner)}
+                      className="border-border text-foreground-muted hover:bg-white/10 text-xs"
                     >
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      Invite to Pool
+                      View Profile
                     </Button>
-                  )}
+                    {connectedIds.has(partner.id) ? (
+                      <Button disabled className="bg-white/10 text-foreground-muted cursor-default">
+                        Connected
+                      </Button>
+                    ) : (
+                      <Button
+                        className="bg-accent text-accent-foreground hover:bg-accent/90"
+                        onClick={() => setInvitePartnerId(partner.id)}
+                        disabled={!partner.id}
+                      >
+                        <UserPlus className="w-4 h-4 mr-2" />
+                        Invite to Pool
+                      </Button>
+                    )}
+                  </div>
                 </GlassCard>
               ))}
             </div>
@@ -276,6 +292,52 @@ export default function AgencyMarketplacePage() {
               </Button>
             </div>
           </GlassCard>
+        </div>
+      )}
+      {selectedPartner && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedPartner(null)}>
+          <div className="w-full max-w-2xl bg-card border border-border rounded-xl p-6 space-y-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
+                  {selectedPartner.company_logo_url ? (
+                    <img src={selectedPartner.company_logo_url} alt={selectedPartner.company_name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Building2 className="w-6 h-6 text-foreground-muted" />
+                  )}
+                </div>
+                <div>
+                  <h2 className="font-display font-bold text-xl text-foreground">{selectedPartner.company_name || selectedPartner.full_name || "Partner"}</h2>
+                  <p className="font-mono text-xs text-foreground-muted">{selectedPartner.agency_type || "Partner Agency"}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedPartner(null)} className="text-foreground-muted hover:text-foreground">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {selectedPartner.bio && <p className="text-sm text-foreground-muted">{selectedPartner.bio}</p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              {selectedPartner.company_linkedin_url && (
+                <a href={selectedPartner.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">LinkedIn Profile</a>
+              )}
+              {selectedPartner.company_website && (
+                <a href={selectedPartner.company_website} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Company Website</a>
+              )}
+              {selectedPartner.reel_url && (
+                <a href={selectedPartner.reel_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">View Reel</a>
+              )}
+            </div>
+            {selectedPartner.capabilities && Array.isArray(selectedPartner.capabilities) && selectedPartner.capabilities.length > 0 && (
+              <div>
+                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">Capabilities</div>
+                <div className="flex flex-wrap gap-1">
+                  {selectedPartner.capabilities.map((cap: string, i: number) => (
+                    <span key={i} className="px-2 py-0.5 rounded-full bg-white/10 text-foreground-muted text-xs">{cap}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </AgencyLayout>
