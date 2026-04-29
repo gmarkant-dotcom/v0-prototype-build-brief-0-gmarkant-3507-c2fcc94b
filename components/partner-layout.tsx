@@ -61,7 +61,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
             .single()
           if (profile) {
             setUserName(profile.company_name || profile.full_name || "Partner")
-            setAvatarUrl(profile.avatar_url ? "/api/avatar" : null)
+            setAvatarUrl(profile.avatar_url || null)
             setAvatarLoadError(false)
             const initials = (profile.company_name || profile.full_name || "P")
               .split(" ")
