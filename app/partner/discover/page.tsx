@@ -425,7 +425,7 @@ export default function DiscoverAgenciesPage() {
         {/* Request Access Modal */}
         {showRequestModal && selectedAgency && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowRequestModal(false)}>
-            <GlassCard className="w-full max-w-md bg-white" onClick={e => e.stopPropagation()}>
+            <div className="w-full max-w-md bg-white rounded-2xl p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center">
@@ -474,7 +474,7 @@ export default function DiscoverAgenciesPage() {
                   </Button>
                 </div>
               </div>
-            </GlassCard>
+            </div>
           </div>
         )}
 
