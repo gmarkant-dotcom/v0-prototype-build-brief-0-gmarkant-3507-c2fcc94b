@@ -27,6 +27,7 @@ export default function AgencyUserProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState("")
   const [personalLinkedin, setPersonalLinkedin] = useState("")
   const [initialAvatarUrl, setInitialAvatarUrl] = useState("")
+  const [initialPersonalLinkedin, setInitialPersonalLinkedin] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -60,6 +61,7 @@ export default function AgencyUserProfilePage() {
       setInitialDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
       const loadedAvatarUrl = (profile as any)?.avatar_url || ""
       setPersonalLinkedin((profile as any)?.personal_linkedin_url || "")
+      setInitialPersonalLinkedin((profile as any)?.personal_linkedin_url || "")
       if (!hasUploaded.current) {
         setAvatarUrl(loadedAvatarUrl)
       }
@@ -186,7 +188,8 @@ export default function AgencyUserProfilePage() {
   const hasSettingsChanges =
     fullName.trim() !== initialFullName.trim() ||
     displayName.trim() !== initialDisplayName.trim() ||
-    avatarUrl.trim() !== initialAvatarUrl.trim()
+    avatarUrl.trim() !== initialAvatarUrl.trim() ||
+    personalLinkedin.trim() !== initialPersonalLinkedin.trim()
 
   if (loading) {
     return (
