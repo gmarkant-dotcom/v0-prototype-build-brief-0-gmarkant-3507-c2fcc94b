@@ -495,7 +495,7 @@ export default function DiscoverAgenciesPage() {
                     <h2 className="font-display font-bold text-xl text-gray-900">
                       {selectedAgency.company_name || selectedAgency.full_name || selectedAgency.email || "Agency"}
                     </h2>
-                    <p className="font-mono text-xs text-gray-500">{selectedAgency.agency_type || "Agency"}</p>
+                    <p className="font-mono text-xs text-gray-500">{selectedAgency.agency_type || "Agency"}{selectedAgency.location ? ` · ${selectedAgency.location}` : ""}</p>
                   </div>
                 </div>
                 <button onClick={() => setShowAgencyProfileModal(false)} className="text-gray-700 hover:text-gray-900">
@@ -504,20 +504,6 @@ export default function DiscoverAgenciesPage() {
               </div>
 
               <div className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0">
-                    {selectedAgency.company_logo_url ? (
-                      <img src={selectedAgency.company_logo_url} alt={selectedAgency.company_name || "Agency"} className="w-full h-full object-cover" />
-                    ) : (
-                      <Building2 className="w-8 h-8 text-[#0C3535]" />
-                    )}
-                  </div>
-                  <div>
-                    <div className="text-sm text-gray-500">{selectedAgency.agency_type || "—"}</div>
-                    <div className="text-sm text-gray-500">{selectedAgency.location || "—"}</div>
-                  </div>
-                </div>
-
                 {selectedAgency.bio && (
                   <p className="text-sm text-gray-700">{selectedAgency.bio}</p>
                 )}
