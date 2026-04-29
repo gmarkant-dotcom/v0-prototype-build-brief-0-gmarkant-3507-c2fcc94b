@@ -46,14 +46,16 @@ function ProjectDetailContent() {
   useEffect(() => {
     if (!id) return
     setLoading(true)
-    fetch(`/api/projects/${id}`)
+    fetch(`/api/projects`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.project) {
-          setProject(data.project)
-          setForm(data.project)
+        const list = data.projects || []
+        const found = list.find((p: Record<string, unknown>) => p.id === id)
+        if (found) {
+          setProject(found as Project)
+          setForm(found as Project)
         } else {
-          setError(data.error || "Project not found")
+          setError("Project not found")
         }
       })
       .catch(() => setError("Failed to load project"))
