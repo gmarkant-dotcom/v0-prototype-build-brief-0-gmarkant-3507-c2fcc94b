@@ -67,10 +67,11 @@ function ProjectDetailContent() {
     setSaving(true)
     setSaveError(null)
     try {
-      const res = await fetch(`/api/projects/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('projects')
+        .update({
           name: form.name,
           client_name: form.client_name,
           status: form.status,
@@ -78,19 +79,20 @@ function ProjectDetailContent() {
           budget_range: form.budget_range,
           start_date: form.start_date || null,
           end_date: form.end_date || null,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setSaveError(data.error || "Save failed")
+        })
+        .eq('id', id)
+        .select('*')
+        .single()
+      if (error || !data) {
+        setSaveError(error?.message || 'Save failed')
         return
       }
-      setProject(data.project)
-      setForm(data.project)
+      setProject(data as Project)
+      setForm(data as Project)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch {
-      setSaveError("Save failed")
+      setSaveError('Save failed')
     } finally {
       setSaving(false)
     }
