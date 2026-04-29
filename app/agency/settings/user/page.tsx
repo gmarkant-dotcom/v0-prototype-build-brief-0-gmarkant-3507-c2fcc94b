@@ -244,12 +244,10 @@ export default function AgencyUserProfilePage() {
                 <div style={{
                   width: 64, height: 64, borderRadius: "50%",
                   background: "#1a2e26", border: "2px solid #639922",
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  overflow: "hidden",
                   flexShrink: 0
                 }}>
-                  <span style={{ color: "#639922", fontSize: 22, fontWeight: 600 }}>
-                    {(fullName || displayName || "U").charAt(0).toUpperCase()}
-                  </span>
+                  <img src={avatarUrl} alt="Profile photo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </div>
                 <div>
                   <p style={{ color: "#639922", fontSize: 13, fontWeight: 500, margin: 0 }}>

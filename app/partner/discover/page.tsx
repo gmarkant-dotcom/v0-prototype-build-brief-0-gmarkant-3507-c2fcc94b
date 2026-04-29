@@ -14,6 +14,7 @@ interface Agency {
   id: string
   company_name: string
   full_name: string
+  company_logo_url?: string
   email?: string
   location?: string
   website?: string
@@ -308,8 +309,12 @@ export default function DiscoverAgenciesPage() {
               return (
                 <GlassCard key={agency.id} className="p-6 hover:shadow-md transition-shadow">
                   <div className="flex items-start gap-4">
-                    <div className="w-14 h-14 rounded-xl bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0">
-                      <Building2 className="w-7 h-7 text-[#0C3535]" />
+                    <div className="w-14 h-14 rounded-xl bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                      {agency.company_logo_url ? (
+                        <img src={agency.company_logo_url} alt={agency.company_name || "Agency"} className="w-full h-full object-cover rounded-xl" />
+                      ) : (
+                        <Building2 className="w-7 h-7 text-[#0C3535]" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-display font-bold text-lg text-gray-900">
