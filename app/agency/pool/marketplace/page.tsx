@@ -296,7 +296,7 @@ export default function AgencyMarketplacePage() {
       )}
       {selectedPartner && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedPartner(null)}>
-          <div className="w-full max-w-2xl bg-card border border-border rounded-xl p-6 space-y-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-2xl bg-card border border-border rounded-xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -309,34 +309,44 @@ export default function AgencyMarketplacePage() {
                 <div>
                   <h2 className="font-display font-bold text-xl text-foreground">{selectedPartner.company_name || selectedPartner.full_name || "Partner"}</h2>
                   <p className="font-mono text-xs text-foreground-muted">{selectedPartner.agency_type || "Partner Agency"}</p>
+                  {selectedPartner.location && <p className="font-mono text-xs text-foreground-muted">{selectedPartner.location}</p>}
                 </div>
               </div>
               <button onClick={() => setSelectedPartner(null)} className="text-foreground-muted hover:text-foreground">
                 <X className="w-5 h-5" />
               </button>
             </div>
+
             {selectedPartner.bio && <p className="text-sm text-foreground-muted">{selectedPartner.bio}</p>}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+
+            <div className="flex flex-wrap gap-3 text-sm">
+              {selectedPartner.company_website && (
+                <a href={selectedPartner.company_website.startsWith("http") ? selectedPartner.company_website : "https://" + selectedPartner.company_website} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Company Website</a>
+              )}
               {selectedPartner.company_linkedin_url && (
                 <a href={selectedPartner.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">LinkedIn Profile</a>
-              )}
-              {selectedPartner.company_website && (
-                <a href={selectedPartner.company_website} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Company Website</a>
               )}
               {selectedPartner.reel_url && (
                 <a href={selectedPartner.reel_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">View Reel</a>
               )}
             </div>
-            {selectedPartner.capabilities && Array.isArray(selectedPartner.capabilities) && selectedPartner.capabilities.length > 0 && (
+
+            {selectedPartner.capabilities && Array.isArray(selectedPartner.capabilities) && (selectedPartner.capabilities as string[]).length > 0 && (
               <div>
                 <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">Capabilities</div>
                 <div className="flex flex-wrap gap-1">
-                  {selectedPartner.capabilities.map((cap: string, i: number) => (
+                  {(selectedPartner.capabilities as string[]).map((cap: string, i: number) => (
                     <span key={i} className="px-2 py-0.5 rounded-full bg-white/10 text-foreground-muted text-xs">{cap}</span>
                   ))}
                 </div>
               </div>
             )}
+
+            <div className="rounded-lg border border-border p-4">
+              <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">Contact</div>
+              <div className="text-sm text-foreground font-medium">{selectedPartner.full_name || selectedPartner.company_name || "Not provided"}</div>
+              <div className="text-sm text-foreground-muted mt-1">{selectedPartner.email || "No contact email available"}</div>
+            </div>
           </div>
         </div>
       )}

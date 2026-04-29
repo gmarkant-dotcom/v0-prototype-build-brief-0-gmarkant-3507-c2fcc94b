@@ -14,10 +14,12 @@ interface Agency {
   id: string
   company_name: string
   full_name: string
+  company_website?: string
   company_logo_url?: string
   company_linkedin_url?: string
   reel_url?: string
   capabilities?: unknown
+  work_examples?: unknown
   email?: string
   location?: string
   website?: string
@@ -497,135 +499,68 @@ export default function DiscoverAgenciesPage() {
                 </button>
               </div>
 
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                    <div className="font-display text-xl font-bold text-[#0C3535]">{agencyProfileProjects.length}</div>
-                    <div className="font-mono text-[10px] uppercase text-gray-500">Shared Projects</div>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                    <div className="font-display text-xl font-bold text-[#0C3535]">
-                      {agencyProfileProjects.filter((p) => p.assignmentStatus === "invited").length}
-                    </div>
-                    <div className="font-mono text-[10px] uppercase text-gray-500">Open RFPs</div>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                    <div className="font-display text-xl font-bold text-[#0C3535]">
-                      {agencyProfileProjects.filter((p) => p.assignmentStatus === "accepted").length}
-                    </div>
-                    <div className="font-mono text-[10px] uppercase text-gray-500">Bids Accepted</div>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                    <div className="font-display text-xl font-bold text-[#0C3535]">
-                      {agencyProfileProjects.filter((p) => p.assignmentStatus === "awarded").length}
-                    </div>
-                    <div className="font-mono text-[10px] uppercase text-gray-500">Awarded</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="rounded-lg border border-gray-200 p-4">
-                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Contact Person</div>
-                    <div className="text-sm text-gray-900 font-medium">
-                      {selectedAgency.full_name || selectedAgency.company_name || "Not provided"}
-                    </div>
-                    <div className="text-sm text-gray-600 mt-1">
-                      {selectedAgency.email || "No contact email available"}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 p-4">
-                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Agency Details</div>
-                    <div className="text-sm text-gray-700">{selectedAgency.location || "Location not provided"}</div>
-                    <div className="text-sm text-gray-700 mt-1">{selectedAgency.website || "Website not provided"}</div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-3">Relationship Overview</div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                    <div>
-                      <div className="text-gray-500">Status</div>
-                      <div className="text-gray-900 capitalize">{selectedAgency.relationshipStatus || "active"}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Invited</div>
-                      <div className="text-gray-900">
-                        {selectedAgency.invitedAt ? new Date(selectedAgency.invitedAt).toLocaleDateString() : "Unknown"}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-gray-500">Connected Since</div>
-                      <div className="text-gray-900">
-                        {selectedAgency.acceptedAt ? new Date(selectedAgency.acceptedAt).toLocaleDateString() : "Pending"}
-                      </div>
-                    </div>
-                  </div>
-                  {selectedAgency.invitationMessage && (
-                    <div className="mt-3 rounded-md bg-gray-50 border border-gray-100 p-3">
-                      <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-1">Lead Agency Intro</div>
-                      <div className="text-sm text-gray-700">{selectedAgency.invitationMessage}</div>
-                    </div>
-                  )}
-                </div>
-                <div className="rounded-lg border border-gray-200 p-4 space-y-3">
-                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Company Profile</div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    {selectedAgency.company_linkedin_url && (
-                      <a href={selectedAgency.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline">
-                        LinkedIn Profile
-                      </a>
-                    )}
-                    {selectedAgency.reel_url && (
-                      <a href={selectedAgency.reel_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-blue-600 hover:underline">
-                        View Reel
-                      </a>
+              <div className="space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-16 h-16 rounded-xl overflow-hidden bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0">
+                    {selectedAgency.company_logo_url ? (
+                      <img src={selectedAgency.company_logo_url} alt={selectedAgency.company_name || "Agency"} className="w-full h-full object-cover" />
+                    ) : (
+                      <Building2 className="w-8 h-8 text-[#0C3535]" />
                     )}
                   </div>
-                  {(() => {
-                    const caps = selectedAgency.capabilities
-                    if (!Array.isArray(caps) || caps.length === 0) return null
-                    return (
-                      <div>
-                        <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Capabilities</div>
-                        <div className="flex flex-wrap gap-1">
-                          {(caps as string[]).map((cap: string, i: number) => (
-                            <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">{cap}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })()}
+                  <div>
+                    <div className="text-sm text-gray-500">{selectedAgency.agency_type || "—"}</div>
+                    <div className="text-sm text-gray-500">{selectedAgency.location || "—"}</div>
+                  </div>
                 </div>
 
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-3">
-                    Past Projects Worked Together
-                  </div>
-                  {isLoadingAgencyProfile ? (
-                    <div className="text-sm text-gray-500">Loading shared projects...</div>
-                  ) : agencyProfileProjects.length === 0 ? (
-                    <div className="text-sm text-gray-500">No shared projects found yet.</div>
-                  ) : (
-                    <div className="space-y-2">
-                      {agencyProfileProjects.map((project) => (
-                        <div key={project.id} className="flex items-center justify-between rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">{project.title}</div>
-                            <div className="text-xs text-gray-600">{project.clientName}</div>
-                            {project.updated_at && (
-                              <div className="text-xs text-gray-500">Updated {new Date(project.updated_at).toLocaleDateString()}</div>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <div className="text-xs text-gray-600 capitalize">{project.status || "active"}</div>
-                            {project.assignmentStatus && (
-                              <div className="text-[10px] text-gray-500 uppercase">{project.assignmentStatus}</div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                {selectedAgency.bio && (
+                  <p className="text-sm text-gray-700">{selectedAgency.bio}</p>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {(selectedAgency.website || selectedAgency.company_website) && (
+                    <a
+                      href={(() => { const w = selectedAgency.website || selectedAgency.company_website || ""; return w.startsWith("http") ? w : "https://" + w })()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      Company Website
+                    </a>
                   )}
+                  {selectedAgency.company_linkedin_url && (
+                    <a href={selectedAgency.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline">
+                      LinkedIn Profile
+                    </a>
+                  )}
+                  {selectedAgency.reel_url && (
+                    <a href={selectedAgency.reel_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline">
+                      View Reel
+                    </a>
+                  )}
+                </div>
+
+                {(() => {
+                  const caps = selectedAgency.capabilities
+                  if (!Array.isArray(caps) || caps.length === 0) return null
+                  return (
+                    <div>
+                      <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Capabilities</div>
+                      <div className="flex flex-wrap gap-1">
+                        {(caps as string[]).map((cap: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">{cap}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                <div className="rounded-lg border border-gray-200 p-4">
+                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Contact</div>
+                  <div className="text-sm text-gray-900 font-medium">{selectedAgency.full_name || selectedAgency.company_name || "Not provided"}</div>
+                  <div className="text-sm text-gray-600 mt-1">{selectedAgency.email || "No contact email available"}</div>
                 </div>
               </div>
             </GlassCard>
