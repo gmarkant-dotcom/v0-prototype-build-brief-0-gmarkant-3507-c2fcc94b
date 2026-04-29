@@ -27,9 +27,14 @@ async function syncUserProfile(supabase: any, user: any) {
       is_admin: false,
       demo_access: false,
     })
-  } else if (!existingProfile.role) {
-    // Update role if not set
-    await supabase.from('profiles').update({ role }).eq('id', user.id)
+  } else {
+    // Update role if not set, and always sync company_linkedin_url if present
+    const updatePayload: Record<string, unknown> = {}
+    if (!existingProfile.role) updatePayload.role = role
+    if (metadata.company_linkedin_url) updatePayload.company_linkedin_url = metadata.company_linkedin_url
+    if (Object.keys(updatePayload).length > 0) {
+      await supabase.from('profiles').update(updatePayload).eq('id', user.id)
+    }
   }
   
   return role
