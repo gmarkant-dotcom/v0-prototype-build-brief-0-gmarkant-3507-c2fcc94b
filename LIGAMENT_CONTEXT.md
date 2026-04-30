@@ -31,7 +31,7 @@ bid management, onboarding, active engagements, and cash flow.
 
 ## Migrations Applied
 
-**Current state: 001–045**
+**Current state: 001–044**
 
 | Migration | Description |
 |-----------|-------------|
@@ -42,7 +42,6 @@ bid management, onboarding, active engagements, and cash flow.
 | 042 | partner_intent and intent_set_at on partner_rfp_inbox |
 | 043 | viewed_at on partner_rfp_inbox |
 | 044 | invite_token, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at, agency_nda_notified_at on partner_rfp_inbox |
-| 045 | RLS policy — partners can claim partnership by email |
 
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
@@ -107,7 +106,6 @@ Cursor must follow all of them without being reminded each time.
 - Use `formatDateTime()` from `lib/utils.ts` for all date+time display — format: "Apr 23, 2026 at 2:37 PM"
 - Use `formatDate()` for date-only display — format: "Apr 23, 2026"
 - Deduplication by ID must be applied to projects array at both context level and render level
-- Ligament's layout is always dark via :root CSS tokens but does NOT use the .dark class on <html> or <body>. Therefore dark:* Tailwind variants NEVER apply anywhere in this codebase. Never use dark:* utilities — use explicit color values or CSS token references instead.
 
 ### Auth / Middleware
 - `middleware.ts` must preserve query params (especially `invite`, `email`, `nda`, `next`) when redirecting unauthenticated users
