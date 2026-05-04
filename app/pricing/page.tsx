@@ -12,14 +12,14 @@ const tiers = [
     name: "Solo",
     price: "$1,800 / year",
     description: "For independent consultants or collectives beginning to scale.",
-    features: ["1 lead agency user seat", "Up to 24 projects/year", "Basic AI tools", "Email support"],
+    features: ["1 lead agency user seat", "Up to 6 partner agency collaborations", "Email support"],
   },
   {
     id: "core",
     name: "Core",
     price: "$3,600 / year",
     description: "For smaller teams getting started with vendor orchestration.",
-    features: ["4 lead agency user seats", "Up to 60 projects/year", "Basic AI tools", "Email support"],
+    features: ["4 lead agency user seats", "Up to 12 partner agency collaborations", "Full visibility into all public partner agency profiles", "Basic AI tools", "Email support"],
   },
   {
     id: "studio",
@@ -28,7 +28,8 @@ const tiers = [
     description: "For growing agencies running multiple active projects.",
     features: [
       "8 lead agency user seats",
-      "Up to 200 projects/year",
+      "Up to 24 partner agency collaborations",
+      "Full visibility into all public partner agency profiles",
       "Full AI suite",
       "Priority support",
       "Best-Practice Consultations",
@@ -40,7 +41,8 @@ const tiers = [
     price: "Custom",
     description: "For enterprise teams needing white-label and API access.",
     features: [
-      "Unlimited partners & projects",
+      "Unlimited partner agency collaborations",
+      "Full visibility into all public partner agency profiles",
       "White-label infrastructure",
       "API access",
       "Dedicated success manager",
