@@ -103,27 +103,6 @@ export default function PricingPage() {
           </p>
         </div>
 
-        <div className="mb-6 rounded-xl border border-[#C8F53C]/30 bg-[#C8F53C]/12 px-6 py-3 text-center">
-          <p className="text-sm font-semibold tracking-wide text-[#EAF8B2]">
-            Founding Member Annual Pricing - Available Until July 1, 2026
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-          <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-center">
-            <p className="font-display font-bold text-white">One source of truth</p>
-            <p className="text-white/70 text-sm mt-1">Briefs, bids, contracts, and payments in one place.</p>
-          </div>
-          <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-center">
-            <p className="font-display font-bold text-white">Pays for itself in Year 1</p>
-            <p className="text-white/70 text-sm mt-1">$7,440 in recovered labor value. Compounds from there.</p>
-          </div>
-          <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-center">
-            <p className="font-display font-bold text-white">Built for real agency ops</p>
-            <p className="text-white/70 text-sm mt-1">Structure that bends without breaking, across every vendor workflow.</p>
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           {tiers.map((tier) => (
             <div
