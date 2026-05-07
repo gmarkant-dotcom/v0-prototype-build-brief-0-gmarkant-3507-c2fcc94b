@@ -133,9 +133,9 @@ export default function HomePage() {
               <span className="ai-badge">✦</span> Best Practice Vendor Orchestration for Independent Creative Agencies
             </div>
             <h1 className="font-display font-black text-6xl md:text-7xl text-foreground leading-[0.9] mb-6">
-              One team.<br />
-              Built to order.<br />
-              <span className="text-accent">Invisibly.</span>
+              From brief<br />
+              to signed SOW,<br />
+              <span className="text-accent">Without the Chaos.</span>
             </h1>
             <p className="text-lg text-foreground-muted max-w-xl mb-8 leading-relaxed">
               Identify, mobilize, and manage your preferred production vendors for every scope.
