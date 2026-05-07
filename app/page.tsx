@@ -130,7 +130,7 @@ export default function HomePage() {
         <section className="max-w-6xl mx-auto px-6 pt-24 pb-20">
           <div className="max-w-3xl">
             <div className="font-mono text-xs text-accent tracking-wider uppercase mb-6 flex items-center gap-3">
-              <span className="ai-badge">✦</span> AI-Powered Vendor Orchestration
+              <span className="ai-badge">✦</span> Best Practice Vendor Orchestration for Independent Creative Agencies
             </div>
             <h1 className="font-display font-black text-6xl md:text-7xl text-foreground leading-[0.9] mb-6">
               One team.<br />
