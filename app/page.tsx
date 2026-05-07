@@ -344,7 +344,7 @@ export default function HomePage() {
             <div>
               <LigamentLogo size="md" variant="primary" className="mb-4" />
               <p className="text-sm text-foreground-muted max-w-xs">
-                The AI-powered vendor orchestration engine for independent agencies.
+                Best Practice Vendor Orchestration for Independent Creative Agencies
               </p>
             </div>
             
