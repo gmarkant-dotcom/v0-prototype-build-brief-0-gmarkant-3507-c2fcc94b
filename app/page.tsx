@@ -138,9 +138,7 @@ export default function HomePage() {
               <span className="text-accent">Invisibly.</span>
             </h1>
             <p className="text-lg text-foreground-muted max-w-xl mb-8 leading-relaxed">
-              The AI-powered vendor orchestration engine for independent agencies. 
-              Assemble, manage, align, and pay external vendor partners while presenting 
-              them to clients as one unified, branded team.
+              Identify, mobilize, and manage your preferred production vendors for every scope.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold text-lg px-8 py-6">
