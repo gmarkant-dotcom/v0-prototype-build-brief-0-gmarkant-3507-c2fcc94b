@@ -138,7 +138,7 @@ export default function HomePage() {
               <span className="text-accent">Without the Chaos.</span>
             </h1>
             <p className="text-lg text-foreground-muted max-w-xl mb-8 leading-relaxed">
-              Identify, mobilize, and manage your preferred production vendors for every scope. Centralize contextual intelligence across every engagement to make smarter decisions, faster.
+              Identify, mobilize, and manage your preferred production vendors for every scope. Organize engagements to make smarter decisions, faster.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold text-lg px-8 py-6">
