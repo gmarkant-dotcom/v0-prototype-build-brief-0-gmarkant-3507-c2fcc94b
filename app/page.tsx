@@ -149,7 +149,7 @@ export default function HomePage() {
                 variant="outline" 
                 className="border-border text-foreground hover:bg-white/10 font-display font-bold text-lg px-8 py-6 bg-transparent"
               >
-                <Link href="/auth/login">I&apos;m a Partner</Link>
+                <Link href="/auth/login">I&apos;m a Partner Vendor</Link>
               </Button>
             </div>
           </div>
@@ -203,7 +203,7 @@ export default function HomePage() {
               <GlassCard className="p-8">
                 <div className="font-mono text-[10px] text-foreground-muted mb-3">For External Resources</div>
                 <h3 className="font-display font-bold text-3xl text-foreground mb-4">
-                  Partner Portal
+                  Partner Vendor Portal
                 </h3>
                 <p className="text-foreground-muted mb-6">
                   Join agency networks. Get discovered for the right projects. 
@@ -222,7 +222,7 @@ export default function HomePage() {
                   ))}
                 </div>
                 <Button asChild variant="outline" className="w-full border-border text-foreground hover:bg-white/10 font-display font-bold bg-transparent">
-                  <Link href="/auth/login">Enter Partner Portal →</Link>
+                  <Link href="/auth/login">Enter Partner Vendor Portal →</Link>
                 </Button>
               </GlassCard>
             </div>
@@ -317,7 +317,7 @@ export default function HomePage() {
                 Ready to orchestrate?
               </h2>
               <p className="text-foreground-muted max-w-xl mx-auto mb-8">
-                Whether you&apos;re a lead agency looking to scale, or a partner looking for opportunities. 
+                Whether you&apos;re a lead agency looking to scale, or a partner vendor looking for opportunities. 
                 LIGAMENT connects both sides of the equation.
               </p>
 <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -329,7 +329,7 @@ export default function HomePage() {
                 variant="outline" 
                 className="border-border text-foreground hover:bg-white/10 font-display font-bold px-8 bg-transparent"
               >
-                <Link href="/auth/login">I&apos;m a Partner</Link>
+                <Link href="/auth/login">I&apos;m a Partner Vendor</Link>
               </Button>
             </div>
             </GlassCard>
@@ -371,11 +371,11 @@ export default function HomePage() {
               
               <div>
                 <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-4">
-                  Partners
+                  Partner Vendors
                 </div>
                 <div className="space-y-2">
                   <Link href="/partner" className="block text-sm text-foreground-secondary hover:text-foreground transition-colors">
-                    Partner Portal
+                    Partner Vendor Portal
                   </Link>
                   <Link href="/partner/rfps" className="block text-sm text-foreground-secondary hover:text-foreground transition-colors">
                     Open RFPs
