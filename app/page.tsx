@@ -167,7 +167,7 @@ export default function HomePage() {
               </h2>
               <p className="text-foreground-muted max-w-2xl mx-auto">
                 Lead agencies manage their vendor pool and orchestrate projects. 
-                Partner resources showcase capabilities, respond to RFPs, and get paid.
+                Partner vendors showcase capabilities, respond to RFPs, and facilitate payment.
               </p>
             </div>
             
