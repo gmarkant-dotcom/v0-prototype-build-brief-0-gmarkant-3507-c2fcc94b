@@ -317,7 +317,7 @@ export default function HomePage() {
                 Ready to orchestrate?
               </h2>
               <p className="text-foreground-muted max-w-xl mx-auto mb-8">
-                Whether you&apos;re a lead agency looking to scale, or a partner vendor looking for opportunities. 
+                Whether you&apos;re a lead agency looking to scale or a partner vendor looking for opportunities, 
                 LIGAMENT connects both sides of the equation.
               </p>
 <div className="flex flex-col sm:flex-row gap-4 justify-center">
