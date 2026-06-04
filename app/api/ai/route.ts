@@ -1,4 +1,5 @@
 import { streamText, convertToModelMessages, UIMessage } from 'ai'
+import { anthropic } from '@ai-sdk/anthropic'
 import { createClient } from '@/lib/supabase/server'
 
 export const maxDuration = 60
@@ -189,7 +190,7 @@ export async function POST(req: Request) {
   const systemPrompt = SYSTEM_PROMPTS[tool] || SYSTEM_PROMPTS.rfp
   
   const result = streamText({
-    model: 'anthropic/claude-sonnet-4-20250514',
+    model: anthropic('claude-sonnet-4-20250514'),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     abortSignal: req.signal,

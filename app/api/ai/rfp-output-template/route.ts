@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import * as Sentry from "@sentry/nextjs"
 import { streamText } from "ai"
+import { anthropic } from "@ai-sdk/anthropic"
 import { createClient } from "@/lib/supabase/server"
 
 export const maxDuration = 120
@@ -135,7 +136,7 @@ CLIENT BRIEF (for context — respect scrubbing rules only when illustrating pla
 ${briefText}`
 
     const result = streamText({
-      model: "anthropic/claude-sonnet-4-20250514" as any,
+      model: anthropic("claude-sonnet-4-20250514"),
       prompt,
       temperature: 0.35,
       maxOutputTokens: 8192,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import * as Sentry from "@sentry/nextjs"
 import { generateText, Output } from "ai"
+import { anthropic } from "@ai-sdk/anthropic"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 
@@ -125,7 +126,7 @@ CLIENT BRIEF:
 ${briefText}`
 
     const result = await generateText({
-      model: "anthropic/claude-sonnet-4-20250514" as any,
+      model: anthropic("claude-sonnet-4-20250514"),
       output: Output.object({
         schema: masterBriefSchema,
       }),
