@@ -18,6 +18,7 @@ type AgencyProfile = {
   location: string | null
   website?: string | null
   avatar_url?: string | null
+  company_logo_url?: string | null
   agency_type?: string | null
 }
 
@@ -160,7 +161,11 @@ export default function PartnerMarketplacePage() {
                 <GlassCard key={agency.id} className="p-6">
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-12 rounded-lg bg-[#0C3535]/10 flex items-center justify-center">
-                      <Building2 className="w-6 h-6 text-[#0C3535]" />
+                      {agency.company_logo_url ? (
+                        <img src={agency.company_logo_url} alt={agency.company_name || "Agency"} className="w-full h-full object-cover rounded-xl" />
+                      ) : (
+                        <Building2 className="w-6 h-6 text-[#0C3535]" />
+                      )}
                     </div>
                     <div className="flex-1">
                       <h2 className="font-display font-bold text-lg text-gray-900">

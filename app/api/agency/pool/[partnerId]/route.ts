@@ -96,7 +96,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
     let prof = await supabase
       .from("profiles")
       .select(
-        "id, full_name, company_name, display_name, email, bio, location, website, agency_type, avatar_url, meeting_url, rate_info"
+        "id, full_name, company_name, display_name, email, bio, location, website, agency_type, avatar_url, company_logo_url, meeting_url, rate_info"
       )
       .eq("id", partnerId)
       .maybeSingle()
@@ -104,7 +104,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
     if (prof.error && isMissingRateInfoColumnError(prof.error)) {
       prof = await supabase
         .from("profiles")
-        .select("id, full_name, company_name, display_name, email, bio, location, website, agency_type, avatar_url, meeting_url")
+        .select("id, full_name, company_name, display_name, email, bio, location, website, agency_type, avatar_url, company_logo_url, meeting_url")
         .eq("id", partnerId)
         .maybeSingle()
     }
@@ -125,6 +125,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       website: string | null
       agency_type: string | null
       avatar_url: string | null
+      company_logo_url?: string | null
       meeting_url: string | null
       rate_info?: unknown
     }
@@ -219,6 +220,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
           website: row.website,
           agency_type: row.agency_type,
           avatar_url: row.avatar_url,
+          company_logo_url: row.company_logo_url ?? null,
           meeting_url: row.meeting_url,
           rate_info,
           tags: [] as string[],

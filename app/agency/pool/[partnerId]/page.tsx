@@ -101,6 +101,7 @@ type ProfilePayload = {
     website: string | null
     agency_type: string | null
     avatar_url: string | null
+    company_logo_url?: string | null
     meeting_url: string | null
     rate_info: PartnerRateInfoPayload
     tags: string[]
@@ -280,10 +281,10 @@ export default function AgencyPartnerProfilePage() {
         <GlassCard className="p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-start gap-6">
             <div className="shrink-0">
-              {p.avatar_url ? (
+              {(p.company_logo_url || p.avatar_url) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={p.avatar_url}
+                  src={p.company_logo_url || p.avatar_url || undefined}
                   alt=""
                   className="w-20 h-20 rounded-xl object-cover border border-border"
                 />
