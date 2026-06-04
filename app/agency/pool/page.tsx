@@ -38,6 +38,7 @@ type Partnership = {
   partnerAgencyType?: string | null
   partnerBio?: string | null
   partnerCapabilities?: string[]
+  partnerLogoUrl?: string | null
   msaSigned?: boolean
 }
 
@@ -389,12 +390,13 @@ export default function PartnerPoolPage() {
             agency_type: string | null
             bio: string | null
             capabilities: unknown
+            company_logo_url: string | null
           }
         > = {}
         if (partnerIds.length > 0) {
           const { data: profs } = await supabase
             .from("profiles")
-            .select("id, company_name, full_name, display_name, agency_type, bio, capabilities")
+            .select("id, company_name, full_name, display_name, agency_type, bio, capabilities, company_logo_url")
             .in("id", partnerIds)
           for (const pr of profs || []) {
             profileById[pr.id as string] = {
@@ -404,6 +406,7 @@ export default function PartnerPoolPage() {
               agency_type: pr.agency_type as string | null,
               bio: pr.bio as string | null,
               capabilities: (pr as { capabilities?: unknown }).capabilities ?? null,
+              company_logo_url: (pr as { company_logo_url?: string | null }).company_logo_url ?? null,
             }
           }
         }
@@ -424,6 +427,7 @@ export default function PartnerPoolPage() {
             partnerAgencyType: prof?.agency_type ?? null,
             partnerBio: prof?.bio ?? null,
             partnerCapabilities: extractCapabilityValues(prof?.capabilities),
+            partnerLogoUrl: prof?.company_logo_url ?? null,
             partnerName: row.partnerName || prof?.full_name || undefined,
             partnerCompany: row.partnerCompany || prof?.company_name || undefined,
             msaSigned: msaSignedIds.has(row.id),
@@ -1279,22 +1283,28 @@ export default function PartnerPoolPage() {
                       <div className="flex items-center gap-3 min-w-0">
                         <div
                           className={cn(
-                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                            bl
-                              ? "bg-red-500/20"
-                              : pending
-                                ? "bg-amber-500/20"
-                                : isActive
-                                  ? "bg-green-500/20"
-                                  : "bg-white/10",
+                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0 overflow-hidden",
+                            !p.partnerLogoUrl
+                              ? bl
+                                ? "bg-red-500/20"
+                                : pending
+                                  ? "bg-amber-500/20"
+                                  : isActive
+                                    ? "bg-green-500/20"
+                                    : "bg-white/10"
+                              : "bg-white/10",
                           )}
                         >
-                          <Building2
-                            className={cn(
-                              "w-4 h-4",
-                              bl ? "text-red-400" : pending ? "text-amber-400" : isActive ? "text-green-400" : "text-foreground-muted",
-                            )}
-                          />
+                          {p.partnerLogoUrl ? (
+                            <img src={p.partnerLogoUrl} alt={p.partnerCompany || p.partnerName || "Partner"} className="w-full h-full object-cover" />
+                          ) : (
+                            <Building2
+                              className={cn(
+                                "w-4 h-4",
+                                bl ? "text-red-400" : pending ? "text-amber-400" : isActive ? "text-green-400" : "text-foreground-muted",
+                              )}
+                            />
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="font-medium text-foreground truncate">{title}</div>

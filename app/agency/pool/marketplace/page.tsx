@@ -199,10 +199,19 @@ export default function AgencyMarketplacePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filtered.map((partner) => (
                 <GlassCard key={partner.id} className="p-5">
-                  <div className="font-display font-bold text-lg text-foreground">
-                    {partner.company_name || partner.full_name || "Partner Agency"}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
+                      {partner.company_logo_url ? (
+                        <img src={partner.company_logo_url} alt={partner.company_name || "Partner"} className="w-full h-full object-cover" />
+                      ) : (
+                        <Building2 className="w-5 h-5 text-foreground-muted" />
+                      )}
+                    </div>
+                    <div className="font-display font-bold text-lg text-foreground leading-tight">
+                      {partner.company_name || partner.full_name || "Partner Agency"}
+                    </div>
                   </div>
-                  <p className="text-sm text-foreground-muted mt-1 line-clamp-2">
+                  <p className="text-sm text-foreground-muted line-clamp-2">
                     {partner.bio || "Discoverable partner agency on Ligament Marketplace."}
                   </p>
                   <div className="mt-3 space-y-1">
