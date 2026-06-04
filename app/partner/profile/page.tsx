@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
-import { Loader2, Upload } from "lucide-react"
+import { Camera, Loader2, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
@@ -148,6 +148,9 @@ export default function PartnerProfilePage() {
     year: new Date().getFullYear().toString(),
     relevant_context: "",
   })
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [companyLogoUrl, setCompanyLogoUrl] = useState("")
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [isUploadingReel, setIsUploadingReel] = useState(false)
   const [reelUrl, setReelUrl] = useState("")
   const [isUploadingCapabilitiesOverview, setIsUploadingCapabilitiesOverview] = useState(false)
@@ -189,7 +192,7 @@ export default function PartnerProfilePage() {
       const { data } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, company_linkedin_url, is_discoverable, bio, location, agency_type, avatar_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
+          "id, role, email, full_name, company_name, company_website, company_linkedin_url, is_discoverable, bio, location, agency_type, company_logo_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -214,6 +217,7 @@ export default function PartnerProfilePage() {
         ? ((data as { capabilities?: unknown[] }).capabilities?.map((x) => String(x)) || [])
         : []
       setCustomCapabilities(loadedCaps.filter((x) => !capabilities.includes(x)))
+      setCompanyLogoUrl((data as { company_logo_url?: string | null } | null)?.company_logo_url || "")
       setReelUrl((data as { reel_url?: string | null } | null)?.reel_url || "")
       setCapabilitiesOverviewUrl((data as { capabilities_overview_url?: string | null } | null)?.capabilities_overview_url || "")
       const savedCredentialsFromDb = ((data as { credentials?: unknown } | null)?.credentials || []) as Array<Partial<CredentialItem>>
@@ -463,6 +467,27 @@ export default function PartnerProfilePage() {
     }
   }
 
+  const uploadLogo = async (file: File) => {
+    setUploadingLogo(true)
+    setUploadError(null)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      fd.append("folder", "partner-logos")
+      const res = await fetch("/api/upload", { method: "POST", body: fd })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload?.error || "Failed to upload logo")
+      setCompanyLogoUrl(payload.url || "")
+      if (typeof window !== "undefined" && (window as any).__ligamentRefreshAvatar) {
+        ;(window as any).__ligamentRefreshAvatar()
+      }
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "Upload failed. Please try again.")
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
   const uploadProfileAsset = async (file: File, folder: string): Promise<string> => {
     const uploadData = new FormData()
     uploadData.append("file", file)
@@ -576,6 +601,7 @@ export default function PartnerProfilePage() {
             company_name: formData.companyName,
             company_website: formData.companyWebsite || null,
             company_linkedin_url: formData.companyLinkedin || null,
+            company_logo_url: companyLogoUrl || null,
             agency_type: formData.primaryDiscipline,
             bio: formData.bio,
             location: formData.location,
@@ -768,7 +794,41 @@ export default function PartnerProfilePage() {
         {/* Basic Info */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Company Profile & Basic Information</h2>
-          
+
+          <div className="flex items-center gap-5 mb-6">
+            <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
+              {companyLogoUrl ? (
+                <img src={companyLogoUrl} alt="Company logo" className="w-full h-full object-cover" />
+              ) : (
+                <span className="font-display font-bold text-xl text-[#0C3535]">
+                  {(formData.companyName || "P").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <input
+                type="file"
+                ref={fileRef}
+                className="sr-only"
+                accept=".png,.jpg,.jpeg,.webp"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) uploadLogo(file)
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="border-gray-300 text-gray-900 hover:bg-[#0C3535]/5 w-fit"
+                onClick={() => fileRef.current?.click()}
+              >
+                {uploadingLogo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Camera className="w-4 h-4 mr-2" />}
+                Upload Logo
+              </Button>
+              <p className="text-xs text-gray-500">PNG, JPG, or WebP. Shown in your sidebar and on your public profile.</p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">

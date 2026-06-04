@@ -1,17 +1,15 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AgencyShell } from "@/components/agency-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { createClient } from "@/lib/supabase/client"
-import { FileUpload } from "@/components/file-upload"
 
 export default function AgencyUserProfilePage() {
   const router = useRouter()
-  const hasUploaded = useRef(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -24,9 +22,7 @@ export default function AgencyUserProfilePage() {
   const [displayName, setDisplayName] = useState("")
   const [initialFullName, setInitialFullName] = useState("")
   const [initialDisplayName, setInitialDisplayName] = useState("")
-  const [avatarUrl, setAvatarUrl] = useState("")
   const [personalLinkedin, setPersonalLinkedin] = useState("")
-  const [initialAvatarUrl, setInitialAvatarUrl] = useState("")
   const [initialPersonalLinkedin, setInitialPersonalLinkedin] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -50,7 +46,7 @@ export default function AgencyUserProfilePage() {
       }
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, role, full_name, display_name, avatar_url, personal_linkedin_url, notification_preferences")
+        .select("id, role, full_name, display_name, personal_linkedin_url, notification_preferences")
         .eq("id", user.id)
         .maybeSingle()
       setUserId(user.id)
@@ -59,13 +55,8 @@ export default function AgencyUserProfilePage() {
       setDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setInitialFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setInitialDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
-      const loadedAvatarUrl = (profile as any)?.avatar_url || ""
       setPersonalLinkedin((profile as any)?.personal_linkedin_url || "")
       setInitialPersonalLinkedin((profile as any)?.personal_linkedin_url || "")
-      if (!hasUploaded.current) {
-        setAvatarUrl(loadedAvatarUrl)
-      }
-      setInitialAvatarUrl(loadedAvatarUrl)
       const storedPrefs = localStorage.getItem(`notification-prefs-${user.id}`)
       const dbPrefs = (profile as any)?.notification_preferences
       if (dbPrefs && typeof dbPrefs === "object") {
@@ -157,7 +148,6 @@ export default function AgencyUserProfilePage() {
         body: JSON.stringify({
           full_name: fullName.trim(),
           display_name: displayName.trim(),
-          avatar_url: avatarUrl.trim() || null,
           personal_linkedin_url: personalLinkedin.trim() || null,
         }),
       })
@@ -172,7 +162,6 @@ export default function AgencyUserProfilePage() {
       setDisplayName(nextDisplayName)
       setInitialFullName(nextFullName)
       setInitialDisplayName(nextDisplayName)
-      setInitialAvatarUrl(avatarUrl.trim())
       if (typeof window !== "undefined" && (window as any).__ligamentRefreshAvatar) {
         ;(window as any).__ligamentRefreshAvatar()
       }
@@ -188,7 +177,6 @@ export default function AgencyUserProfilePage() {
   const hasSettingsChanges =
     fullName.trim() !== initialFullName.trim() ||
     displayName.trim() !== initialDisplayName.trim() ||
-    avatarUrl.trim() !== initialAvatarUrl.trim() ||
     personalLinkedin.trim() !== initialPersonalLinkedin.trim()
 
   if (loading) {
@@ -225,46 +213,6 @@ export default function AgencyUserProfilePage() {
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Email</label>
             <Input value={email} readOnly className="bg-gray-100 border-gray-200 text-gray-700" />
             <p className="mt-1 text-xs text-foreground-muted">Read-only, email changes are managed through account auth.</p>
-          </div>
-          <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Profile Photo</label>
-            <FileUpload
-              currentUrl={avatarUrl}
-              allowedTypes={["image/jpeg", "image/png", "image/webp", "image/gif"]}
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              maxSizeMB={5}
-              onUploadComplete={(file) => {
-                console.log("[avatar upload] response:", file)
-                const nextUrl = file?.url || ""
-                if (nextUrl) {
-                  hasUploaded.current = true
-                  setAvatarUrl(nextUrl)
-                  setMessage(null)
-                  setErrorMessage(null)
-                }
-              }}
-              folder="avatars"
-            />
-            {avatarUrl ? (
-              <div className="mt-3 flex items-center gap-3">
-                <div style={{
-                  width: 64, height: 64, borderRadius: "50%",
-                  background: "#1a2e26", border: "2px solid #639922",
-                  overflow: "hidden",
-                  flexShrink: 0
-                }}>
-                  <img src={avatarUrl} alt="Profile photo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                </div>
-                <div>
-                  <p style={{ color: "#639922", fontSize: 13, fontWeight: 500, margin: 0 }}>
-                    Photo uploaded
-                  </p>
-                  <p style={{ color: "var(--foreground-muted)", fontSize: 11, margin: "2px 0 0" }}>
-                    Save Changes to apply
-                  </p>
-                </div>
-              </div>
-            ) : null}
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Personal LinkedIn URL <span className="text-foreground-muted">(optional)</span></label>
