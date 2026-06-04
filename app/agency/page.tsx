@@ -18,7 +18,7 @@ import { FileUpload } from "@/components/file-upload"
 import { readTextStream } from "@/lib/read-text-stream"
 
 // Types
-type UploadMethod = "pdf" | "docx" | "pptx" | "google" | "paste" | null
+type UploadMethod = "file" | "google" | "paste" | null
 
 type ScopeItem = {
   id: string
@@ -962,26 +962,24 @@ function AgencyRFPContent() {
               />
               
               {/* Upload Options */}
-              <div className="grid grid-cols-5 gap-3 mt-6">
+              <div className="flex gap-3 mt-6">
                 {[
-                  { method: "pdf" as const, label: "PDF", color: "text-red-400", icon: FileText },
-                  { method: "docx" as const, label: "Word", color: "text-blue-400", icon: FileText },
-                  { method: "pptx" as const, label: "PowerPoint", color: "text-orange-400", icon: FileText },
-                  { method: "google" as const, label: "Google Link", color: "text-green-400", icon: Link2 },
-                  { method: "paste" as const, label: "Paste Text", color: "text-accent", icon: Type },
-                ].map(({ method, label, color, icon: Icon }) => (
+                  { method: "file" as const, label: "Upload File", icon: Upload },
+                  { method: "google" as const, label: "Google Link", icon: Link2 },
+                  { method: "paste" as const, label: "Paste Text", icon: Type },
+                ].map(({ method, label, icon: Icon }) => (
                   <button
                     key={method}
                     onClick={() => setUploadMethod(method)}
                     className={cn(
-                      "flex flex-col items-center gap-2 p-4 rounded-lg border transition-all",
+                      "flex items-center gap-2 px-4 py-3 rounded-lg border transition-all font-mono text-xs font-bold",
                       uploadMethod === method
-                        ? "border-accent bg-accent/10"
-                        : "border-border hover:border-white/30 bg-white/5"
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-border hover:border-white/30 bg-white/5 text-foreground-muted"
                     )}
                   >
-                    <Icon className={cn("w-6 h-6", color)} />
-                    <span className={cn("font-mono text-xs font-bold", color)}>{label}</span>
+                    <Icon className="w-4 h-4" />
+                    {label}
                   </button>
                 ))}
               </div>
@@ -989,12 +987,12 @@ function AgencyRFPContent() {
               {/* Upload Area based on method */}
               {uploadMethod && !briefUploaded && (
                 <div className="mt-6">
-                  {(uploadMethod === "pdf" || uploadMethod === "docx" || uploadMethod === "pptx") && (
+                  {uploadMethod === "file" && (
                     <label className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-accent/50 transition-colors cursor-pointer relative block">
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept={uploadMethod === "pdf" ? ".pdf" : uploadMethod === "docx" ? ".doc,.docx" : ".ppt,.pptx"}
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.pages,.key"
                         onChange={handleFileChange}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       />
@@ -1002,9 +1000,9 @@ function AgencyRFPContent() {
                         <Upload className="w-8 h-8 text-accent" />
                       </div>
                       <div className="font-display font-bold text-foreground mb-1">
-                        Drop your {uploadMethod.toUpperCase()} file here
+                        Drop your file here
                       </div>
-                      <div className="font-mono text-[10px] text-foreground-muted">or click to browse (max 50MB)</div>
+                      <div className="font-mono text-[10px] text-foreground-muted">PDF, Word, PowerPoint, or text — click to browse (max 50MB)</div>
                     </label>
                   )}
                   
