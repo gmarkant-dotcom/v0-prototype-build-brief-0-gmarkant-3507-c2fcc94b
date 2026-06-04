@@ -236,7 +236,7 @@ export default function AgencyMarketplacePage() {
                       variant="outline"
                       size="sm"
                       onClick={() => setSelectedPartner(partner)}
-                      className="border-border text-foreground-muted hover:bg-white/10 text-xs"
+                      className="border-border text-foreground hover:bg-white/10 text-xs"
                     >
                       View Profile
                     </Button>

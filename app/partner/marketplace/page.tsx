@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
-import { GlassCard } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
@@ -145,20 +144,20 @@ export default function PartnerMarketplacePage() {
         </div>
 
         {loading ? (
-          <GlassCard className="p-8 text-center text-gray-500">Loading marketplace...</GlassCard>
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">Loading marketplace...</div>
         ) : filtered.length === 0 ? (
-          <GlassCard className="p-10 text-center">
+          <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
             <div className="font-display font-bold text-lg text-gray-900">No discoverable agencies right now</div>
             <p className="text-sm text-gray-500 mt-2">
               Agencies can opt in to Marketplace visibility from their account settings.
             </p>
-          </GlassCard>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filtered.map((agency) => {
               const status = requestStatus(agency.id)
               return (
-                <GlassCard key={agency.id} className="p-6">
+                <div key={agency.id} className="bg-white rounded-xl border border-gray-200 p-6">
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-12 rounded-lg bg-[#0C3535]/10 flex items-center justify-center">
                       {agency.company_logo_url ? (
@@ -197,7 +196,7 @@ export default function PartnerMarketplacePage() {
                       </div>
                     </div>
                   </div>
-                </GlassCard>
+                </div>
               )
             })}
           </div>

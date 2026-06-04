@@ -160,7 +160,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                         src={avatarUrl}
                         alt="Account avatar"
                         crossOrigin="anonymous"
-                        style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }}
+                        className="w-8 h-8 rounded-full object-cover"
                         onError={() => setAvatarLoadError(true)}
                       />
                     ) : (

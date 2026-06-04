@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
-import { GlassCard } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -295,7 +294,7 @@ export default function DiscoverAgenciesPage() {
             <div className="text-gray-500">Loading agencies...</div>
           </div>
         ) : filteredAgencies.length === 0 ? (
-          <GlassCard className="p-12 text-center">
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
             <div className="w-16 h-16 rounded-full bg-[#0C3535]/10 flex items-center justify-center mx-auto mb-4">
               <Building2 className="w-8 h-8 text-[#0C3535]" />
             </div>
@@ -305,14 +304,14 @@ export default function DiscoverAgenciesPage() {
             <p className="text-gray-500 max-w-md mx-auto">
               {searchQuery ? "No agencies match your search. Try different keywords." : "No lead agencies are currently accepting partner requests."}
             </p>
-          </GlassCard>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredAgencies.map((agency) => {
               const request = getRequestStatus(agency.id)
               
               return (
-                <GlassCard key={agency.id} className="p-6 hover:shadow-md transition-shadow">
+                <div key={agency.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
                   <div className="flex items-start gap-4">
                     <div className="w-14 h-14 rounded-xl bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
                       {agency.company_logo_url ? (
@@ -416,7 +415,7 @@ export default function DiscoverAgenciesPage() {
                       </div>
                     </div>
                   </div>
-                </GlassCard>
+                </div>
               )
             })}
           </div>

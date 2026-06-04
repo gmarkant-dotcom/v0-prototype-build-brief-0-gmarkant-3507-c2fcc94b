@@ -854,13 +854,13 @@ export default function PartnerProfilePage() {
               />
             </div>
             <div>
-              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company LinkedIn URL</label>
+              <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Company LinkedIn URL</label>
               <Input
                 type="url"
                 value={formData.companyLinkedin ?? ""}
                 onChange={(e) => setFormData((p) => ({ ...p, companyLinkedin: e.target.value }))}
                 placeholder="https://linkedin.com/company/your-company"
-                className="bg-white/5 border-border text-foreground"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
               />
             </div>
             
@@ -1079,7 +1079,7 @@ export default function PartnerProfilePage() {
                     placeholder="Production, Motion Design, Creator Content"
                     className="border-gray-200 text-gray-900 placeholder:text-gray-500"
                   />
-                  <p className="text-xs mt-2" style={{ color: "var(--foreground-muted)" }}>
+                  <p className="text-xs mt-2 text-gray-500">
                     Enter comma-separated tags.
                   </p>
                 </div>
@@ -1180,7 +1180,7 @@ export default function PartnerProfilePage() {
               <button
                 key={cap}
                 onClick={() => removeCustomCapability(cap)}
-                className="px-4 py-2 rounded-full font-mono text-xs transition-all border bg-purple-600 text-white border-purple-600 hover:bg-purple-700"
+                className="px-4 py-2 rounded-full font-mono text-xs transition-all border bg-[#0C3535]/80 text-white border-[#0C3535] hover:bg-[#0C3535]"
               >
                 ✓ {cap} ×
               </button>
@@ -1214,8 +1214,8 @@ export default function PartnerProfilePage() {
                 + Add
               </Button>
             </div>
-            <p className="text-xs mt-2" style={{ color: "var(--foreground-muted)" }}>
-              Custom capabilities appear in purple. Click to remove.
+            <p className="text-xs mt-2 text-gray-500">
+              Custom capabilities are highlighted. Click to remove.
             </p>
           </div>
         </div>

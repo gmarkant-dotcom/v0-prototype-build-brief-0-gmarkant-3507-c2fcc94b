@@ -212,13 +212,13 @@ export default function PartnerUserProfilePage() {
             <p className="mt-1 text-xs text-gray-600">Read-only, email changes are managed through account auth.</p>
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Personal LinkedIn URL <span className="text-foreground-muted">(optional)</span></label>
+            <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Personal LinkedIn URL <span className="text-gray-400">(optional)</span></label>
             <Input
               type="url"
               value={personalLinkedin}
               onChange={(e) => setPersonalLinkedin(e.target.value)}
               placeholder="https://linkedin.com/in/your-name"
-              className="bg-white/5 border-border text-foreground"
+              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
             />
           </div>
           <div className="flex flex-col items-end">
@@ -226,7 +226,7 @@ export default function PartnerUserProfilePage() {
               {saving ? "Saving..." : "Save Changes"}
             </Button>
             {saveSuccess && (
-              <p style={{ color: "#639922", fontSize: "14px", marginTop: "8px" }}>
+              <p className="text-sm mt-2 text-green-700">
                 Settings saved
               </p>
             )}

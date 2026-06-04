@@ -199,19 +199,19 @@ export default function AgencyUserProfilePage() {
           <h2 className="font-display font-bold text-lg text-foreground">Account Information</h2>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Full Name</label>
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-white border-gray-200 text-gray-900" />
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-white/5 border-border text-foreground" />
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Display Name</label>
             <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="bg-white border-gray-200 text-gray-900"
+              className="bg-white/5 border-border text-foreground"
             />
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Email</label>
-            <Input value={email} readOnly className="bg-gray-100 border-gray-200 text-gray-700" />
+            <Input value={email} readOnly className="bg-white/10 border-border/50 text-foreground/60 cursor-not-allowed" />
             <p className="mt-1 text-xs text-foreground-muted">Read-only, email changes are managed through account auth.</p>
           </div>
           <div>
@@ -233,7 +233,7 @@ export default function AgencyUserProfilePage() {
               {saving ? "Saving..." : "Save Changes"}
             </Button>
             {saveSuccess && (
-              <p style={{ color: "#639922", fontSize: "14px", marginTop: "8px" }}>
+              <p className="text-sm mt-2 text-accent">
                 Settings saved
               </p>
             )}
@@ -248,7 +248,7 @@ export default function AgencyUserProfilePage() {
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
           <div>
@@ -258,7 +258,7 @@ export default function AgencyUserProfilePage() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Minimum 8 characters"
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
           <div>
@@ -268,7 +268,7 @@ export default function AgencyUserProfilePage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Re-enter new password"
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
           <div className="flex justify-end">

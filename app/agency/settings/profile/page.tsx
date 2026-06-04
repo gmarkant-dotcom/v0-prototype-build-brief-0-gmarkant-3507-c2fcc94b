@@ -334,11 +334,11 @@ export default function AgencyProfileSettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Account Full Name</label>
-              <Input value={form.full_name} readOnly className="bg-gray-100 border-gray-200 text-gray-700" />
+              <Input value={form.full_name} readOnly className="bg-white/10 border-border/50 text-foreground/60 cursor-not-allowed" />
             </div>
             <div>
               <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Account Email</label>
-              <Input value={form.email} readOnly className="bg-gray-100 border-gray-200 text-gray-700" />
+              <Input value={form.email} readOnly className="bg-white/10 border-border/50 text-foreground/60 cursor-not-allowed" />
             </div>
           </div>
           <div className="flex items-center gap-5">
@@ -381,7 +381,7 @@ export default function AgencyProfileSettingsPage() {
             <Input
               value={form.company_name}
               onChange={(e) => setForm((p) => ({ ...p, company_name: e.target.value }))}
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
           <div>
@@ -391,7 +391,7 @@ export default function AgencyProfileSettingsPage() {
               value={form.company_website}
               onChange={(e) => setForm((p) => ({ ...p, company_website: e.target.value }))}
               placeholder="https://youragency.com"
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
           <div>
@@ -410,7 +410,7 @@ export default function AgencyProfileSettingsPage() {
               value={form.agency_type}
               onChange={(e) => setForm((p) => ({ ...p, agency_type: e.target.value }))}
               placeholder="e.g. Sports Marketing, Production, Brand Strategy"
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
           <div>
@@ -421,7 +421,7 @@ export default function AgencyProfileSettingsPage() {
                   value={customDisciplineInput}
                   onChange={(e) => setCustomDisciplineInput(e.target.value)}
                   placeholder="Enter custom discipline"
-                  className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500 flex-1"
+                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 flex-1"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
@@ -456,7 +456,7 @@ export default function AgencyProfileSettingsPage() {
                   }
                   setPrimaryDiscipline(e.target.value)
                 }}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                className="w-full h-10 px-3 rounded-md border border-border bg-white/5 text-sm text-foreground"
               >
                 {allDisciplines.map((d) => (
                   <option key={d} value={d}>
@@ -472,7 +472,7 @@ export default function AgencyProfileSettingsPage() {
             <Textarea
               value={form.bio}
               onChange={(e) => setForm((p) => ({ ...p, bio: e.target.value }))}
-              className="min-h-[120px] bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="min-h-[120px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
           <div>
@@ -485,8 +485,8 @@ export default function AgencyProfileSettingsPage() {
                   onClick={() => toggleCapability(cap)}
                   className={
                     selectedCapabilities.includes(cap)
-                      ? "px-3 py-1.5 rounded-full text-xs border bg-[#0C3535] text-white border-[#0C3535]"
-                      : "px-3 py-1.5 rounded-full text-xs border bg-white text-gray-700 border-gray-200 hover:border-[#0C3535]/40"
+                      ? "px-3 py-1.5 rounded-full text-xs border bg-accent text-accent-foreground border-accent"
+                      : "px-3 py-1.5 rounded-full text-xs border bg-white/5 text-foreground border-border hover:border-accent/50"
                   }
                 >
                   {selectedCapabilities.includes(cap) ? "✓ " : ""}
@@ -509,7 +509,7 @@ export default function AgencyProfileSettingsPage() {
                 value={customCapability}
                 onChange={(e) => setCustomCapability(e.target.value)}
                 placeholder="Add custom capability"
-                className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
               />
               <Button type="button" variant="outline" className="border-border text-foreground" onClick={addCustomCapability}>
                 Add
@@ -525,7 +525,7 @@ export default function AgencyProfileSettingsPage() {
                 onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
                 placeholder="Start typing a city..."
                 autoComplete="off"
-                className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex h-10 w-full rounded-md border border-border bg-white/5 px-3 py-2 text-sm text-foreground placeholder:text-foreground-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
           </div>
@@ -539,7 +539,7 @@ export default function AgencyProfileSettingsPage() {
             <select
               value={form.payment_terms}
               onChange={(e) => setForm((p) => ({ ...p, payment_terms: e.target.value }))}
-              className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+              className="w-full h-10 px-3 rounded-md border border-border bg-white/5 text-sm text-foreground"
             >
               <option value="net_15">Net 15</option>
               <option value="net_30">Net 30</option>
@@ -551,7 +551,7 @@ export default function AgencyProfileSettingsPage() {
                 value={form.payment_terms_custom}
                 onChange={(e) => setForm((p) => ({ ...p, payment_terms_custom: e.target.value }))}
                 placeholder="Describe your standard payment terms"
-                className="mt-2 bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="mt-2 bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
               />
             ) : null}
           </div>
@@ -561,7 +561,7 @@ export default function AgencyProfileSettingsPage() {
               value={form.meeting_url}
               onChange={(e) => setForm((p) => ({ ...p, meeting_url: e.target.value }))}
               placeholder="https://calendly.com/your-team/intro"
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
             <p className="text-xs text-foreground-muted mt-1">
               Paste your Calendly or scheduling link here — partners will see this when you request a meeting.
