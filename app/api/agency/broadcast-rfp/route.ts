@@ -414,54 +414,88 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, count: rows.length, emailsQueued: 0, emailConfigMissing: true })
     }
 
-    for (const notification of existingPartnerNotifications) {
+    // Batch existing partner notifications - one email per recipient listing all scope items
+    const existingByEmail = new Map<string, typeof existingPartnerNotifications>()
+    for (const n of existingPartnerNotifications) {
+      const key = n.partnerEmail.trim().toLowerCase()
+      if (!existingByEmail.has(key)) existingByEmail.set(key, [])
+      existingByEmail.get(key)!.push(n)
+    }
+    for (const [, notifications] of existingByEmail) {
       try {
-        const subject = notification.requiresNda
-          ? `${agencyDisplay} requires an NDA to share this RFP with you`
-          : `New RFP from ${agencyDisplay}: ${notification.scopeName}`
-        const ctaUrl = notification.requiresNda
-          ? `${baseUrl}/partner/rfps?nda=required`
-          : `${baseUrl}/partner/rfps`
-        const body = notification.requiresNda
-          ? `${agencyDisplay} has a confidential RFP for ${notification.scopeName} ready for you on Ligament, but requires a signed NDA first.\n\nLog in and complete the NDA to unlock access.`
-          : `${agencyDisplay} has sent you an RFP for ${notification.scopeName} on Ligament.\n\nReview the scope, timeline, and budget details, then submit your bid directly through the platform.`
+        const first = notifications[0]
+        const anyNda = notifications.some(n => n.requiresNda)
+        const ctaUrl = anyNda ? `${baseUrl}/partner/rfps?nda=required` : `${baseUrl}/partner/rfps`
+        const subject = notifications.length === 1
+          ? (anyNda ? `${agencyDisplay} requires an NDA to share this RFP with you` : `New RFP from ${agencyDisplay}: ${first.scopeName}`)
+          : `${agencyDisplay} has sent you ${notifications.length} RFPs on Ligament`
+        const scopeLines = notifications.map(n =>
+          n.requiresNda ? `- ${n.scopeName} (NDA required)` : `- ${n.scopeName}`
+        ).join("\n")
+        const ndaNote = anyNda ? "\n\nOne or more RFPs require a signed NDA before access. Log in and complete the NDA to unlock access." : ""
+        const body = notifications.length === 1
+          ? (anyNda
+              ? `${agencyDisplay} has a confidential RFP for ${first.scopeName} ready for you on Ligament, but requires a signed NDA first.\n\nLog in and complete the NDA to unlock access.`
+              : `${agencyDisplay} has sent you an RFP for ${first.scopeName} on Ligament.\n\nReview the scope, timeline, and budget details, then submit your bid directly through the platform.`)
+          : `${agencyDisplay} has sent you the following RFPs on Ligament:\n\n${scopeLines}${ndaNote}\n\nLog in to review each brief and submit your bids.`
         await resend.emails.send({
           from: "Ligament <notifications@withligament.com>",
-          to: notification.partnerEmail,
+          to: first.partnerEmail,
           subject,
           html: buildBrandedEmailHtml({
-            title: notification.requiresNda ? "NDA required before access" : "New RFP in your partner inbox",
-            recipientName: notification.partnerName,
+            title: anyNda ? "NDA required before access" : "New RFPs in your partner inbox",
+            recipientName: first.partnerName,
             body,
-            ctaText: notification.requiresNda ? "Sign NDA & View RFP" : "View RFP",
+            ctaText: anyNda ? "Sign NDA & View RFPs" : "View RFPs",
             ctaUrl,
           }),
         })
       } catch (error) {
-        console.error("[broadcast-rfp] failed existing partner notification send", {
-          email: notification.partnerEmail,
+        console.error("[broadcast-rfp] failed existing partner batched notification", {
+          email: notifications[0].partnerEmail,
           error: error instanceof Error ? error.message : String(error),
         })
       }
     }
 
-    for (const notification of manualRecipientNotifications) {
+    // Batch manual recipient notifications - one email per recipient listing all scope items
+    const manualByEmail = new Map<string, typeof manualRecipientNotifications>()
+    for (const n of manualRecipientNotifications) {
+      const key = n.recipientEmail.trim().toLowerCase()
+      if (!manualByEmail.has(key)) manualByEmail.set(key, [])
+      manualByEmail.get(key)!.push(n)
+    }
+    for (const [, notifications] of manualByEmail) {
       try {
+        const first = notifications[0]
+        const anyNda = notifications.some(n => n.subject.includes("NDA") || n.heading.includes("NDA"))
+        const subject = notifications.length === 1
+          ? first.subject
+          : `${agencyDisplay} has sent you ${notifications.length} RFPs on Ligament`
+        const scopeLines = notifications.map(n => {
+          const scopeMatch = n.paragraphs[0]?.match(/for (.+?) (?:ready|on Ligament|and invited)/)
+          const scopeName = scopeMatch ? scopeMatch[1] : ""
+          return scopeName ? (n.subject.includes("NDA") ? `- ${scopeName} (NDA required)` : `- ${scopeName}`) : null
+        }).filter(Boolean).join("\n")
+        const body = notifications.length === 1
+          ? first.paragraphs.join("\n\n")
+          : `${agencyDisplay} has sent you the following RFPs on Ligament:\n\n${scopeLines}${anyNda ? "\n\nOne or more RFPs require a signed NDA before access." : ""}\n\nLog in to review each brief and submit your bids.`
+        const ctaUrl = anyNda ? first.ctaUrl : `${baseUrl}/partner/rfps`
         await resend.emails.send({
           from: "Ligament <notifications@withligament.com>",
-          to: notification.recipientEmail,
-          subject: notification.subject,
+          to: first.recipientEmail,
+          subject,
           html: buildBrandedEmailHtml({
-            title: notification.heading,
-            recipientName: notification.recipientName,
-            body: notification.paragraphs.join("\n\n"),
-            ctaText: notification.ctaLabel,
-            ctaUrl: notification.ctaUrl,
+            title: notifications.length === 1 ? first.heading : (anyNda ? "NDA required before access" : "New RFPs in your partner inbox"),
+            recipientName: first.recipientName,
+            body,
+            ctaText: anyNda ? "Sign NDA & View RFPs" : "View RFPs",
+            ctaUrl,
           }),
         })
       } catch (error) {
-        console.error("[broadcast-rfp] failed manual recipient notification send", {
-          email: notification.recipientEmail,
+        console.error("[broadcast-rfp] failed manual recipient batched notification", {
+          email: notifications[0].recipientEmail,
           error: error instanceof Error ? error.message : String(error),
         })
       }
