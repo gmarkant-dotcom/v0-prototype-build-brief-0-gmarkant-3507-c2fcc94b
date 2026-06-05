@@ -21,22 +21,20 @@ type Project = {
   end_date: string | null
 }
 
-const STATUS_OPTIONS = ["draft", "active", "completed"]
+const STATUS_OPTIONS = ["draft", "onboarding", "active", "on_hold", "completed"]
 
-// Map any DB value to a constraint-allowed value (only draft | active | completed allowed)
+// Map legacy/alternate DB spellings to canonical STATUS_OPTIONS values
 const STATUS_LEGACY_MAP: Record<string, string> = {
   in_progress: "active",
   "in progress": "active",
+  open: "active",
+  bidding: "active",
+  paused: "on_hold",
+  "on hold": "on_hold",
+  cancelled: "draft",
   planning: "draft",
   complete: "completed",
   finished: "completed",
-  paused: "active",
-  on_hold: "active",
-  "on hold": "active",
-  onboarding: "draft",
-  open: "active",
-  bidding: "active",
-  cancelled: "draft",
 }
 
 function normalizeStatus(status: unknown): string {
@@ -213,7 +211,7 @@ function ProjectDetailContent() {
                     : "bg-white/5 text-foreground border border-border/40 hover:bg-white/10"
                 )}
               >
-                {{ draft: "Draft", active: "Active", completed: "Completed" }[s] ?? s}
+                {s.replace(/_/g, " ")}
               </button>
             ))}
           </div>
