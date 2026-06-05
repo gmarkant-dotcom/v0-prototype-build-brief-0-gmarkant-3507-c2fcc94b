@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { cn } from "@/lib/utils"
+import { CurrencyInput } from "@/components/ui/currency-input"
 import { isDemoMode, demoMasterProjects } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
@@ -565,11 +566,11 @@ function DashboardContent() {
                   <Label htmlFor="budget" className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
                     Budget
                   </Label>
-                  <Input
+                  <CurrencyInput
                     id="budget"
                     placeholder="$150,000"
                     value={newProject.budget}
-                    onChange={(e) => setNewProject(prev => ({ ...prev, budget: e.target.value }))}
+                    onChange={(raw) => setNewProject(prev => ({ ...prev, budget: raw }))}
                     className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                   />
                 </div>
