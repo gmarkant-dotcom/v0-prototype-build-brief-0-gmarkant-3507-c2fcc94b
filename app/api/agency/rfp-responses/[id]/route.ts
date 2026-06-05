@@ -345,8 +345,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         )
       }
 
-      // Move project out of pre-award states once work is awarded. DB uses `in_progress` for live work
-      // (CHECK on projects.status); it maps to UI "active" in mapDbProjectToMaster — not a literal `active` row value.
+      // Move project out of pre-award states once work is awarded.
+      // (CHECK on projects.status allows "active"; constraint does not allow "in_progress")
       const preAwardStatuses = new Set(["draft", "onboarding"])
       const { data: projRow, error: projLoadErr } = await supabase
         .from("projects")
@@ -364,7 +364,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       } else if (projRow && preAwardStatuses.has(String(projRow.status || "").toLowerCase())) {
         const { error: projUpdErr } = await supabase
           .from("projects")
-          .update({ status: "in_progress", updated_at: now })
+          .update({ status: "active", updated_at: now })
           .eq("id", awardContext.projectId)
           .eq("agency_id", user.id)
         if (projUpdErr) {
