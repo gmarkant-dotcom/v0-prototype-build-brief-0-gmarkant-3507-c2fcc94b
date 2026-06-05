@@ -202,7 +202,7 @@ function InlineProjectSelector({ selectedProject, projects, isLoadingProjects, o
 
 function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
-  const { selectedProject, isLoadingProjects, projects } = useSelectedProject()
+  const { selectedProject, setSelectedProject, isLoadingProjects, projects } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
   /** Must stay mounted when switching 1b tabs so "Upload file" can call .click() (input was inside `upload` branch only → ref null in AI mode). */
   const rfpTemplateFileInputRef = useRef<HTMLInputElement>(null)
