@@ -207,7 +207,6 @@ function GroupSection({
           <div className="flex gap-1 flex-wrap px-4 pt-3 pb-2 overflow-x-auto">
             {BID_STATUSES.map(({ key, label: tabLabel }) => {
               const count = counts[key] ?? 0
-              if (key !== "all" && count === 0) return null
               return (
                 <button
                   key={key}
