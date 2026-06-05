@@ -5,7 +5,9 @@ import { SupabaseClient, User } from "@supabase/supabase-js"
 // Helper function to sync user profile after auth
 async function syncUserProfile(supabase: any, user: any) {
   const metadata = user.user_metadata || {}
-  const role = metadata.role || 'partner'
+  // Force partner role when the user arrived via an RFP invite or partnership invite
+  const hasInviteContext = !!(metadata.invite || metadata.invite_token || metadata.invite_type)
+  const role = hasInviteContext ? 'partner' : (metadata.role || 'partner')
   
   // Check if profile exists
   const { data: existingProfile } = await supabase
