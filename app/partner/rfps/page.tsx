@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useMemo, useEffect, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useState, useMemo } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn } from "@/lib/utils"
@@ -254,37 +255,9 @@ function GroupSection({
 function PartnerRFPsContent() {
   const searchParams = useSearchParams()
   const inviteStatus = (searchParams.get("invite_status") || "").trim()
-  const inviteToken = (searchParams.get("invite") || "").trim()
-  const ndaParam = searchParams.get("nda")
 
   const [search, setSearch] = useState("")
   const [groupBy, setGroupBy] = useState<GroupBy>("agency")
-
-  // Auto-claim invite token for already-logged-in partners arriving via email CTA
-  useEffect(() => {
-    if (!inviteToken) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch("/api/partner/rfps/claim", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token: inviteToken }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (cancelled) return
-        if (res.ok && data?.inboxItemId) {
-          const path = (data?.ndaGateEnforced || ndaParam === "required")
-            ? 
-            : 
-          if (typeof window !== "undefined") window.location.replace(path)
-        }
-        // If claim fails (expired/already claimed), stay on list page — partner can find their RFP
-      } catch {}
-    })()
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inviteToken])
 
   const { data, isLoading, error } = useFetch<{ rfps: PartnerInboxRow[] }>("/api/partner/rfps")
   const allRows: PartnerInboxRow[] = data?.rfps ?? []
