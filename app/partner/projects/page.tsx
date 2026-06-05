@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/button"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+type GroupBy = "agency" | "client"
+
 type PartnerProject = {
   project_id: string
   project_name: string
@@ -29,9 +31,9 @@ type PartnerProject = {
   awarded_at: string | null
 }
 
-type AgencyGroup = {
-  agencyName: string
-  agencyId: string | null
+type Group = {
+  label: string
+  groupId: string | null
   projects: PartnerProject[]
 }
 
@@ -145,7 +147,7 @@ function ProjectCard({ project }: { project: PartnerProject }) {
   )
 }
 
-function AgencySection({ group, defaultOpen }: { group: AgencyGroup; defaultOpen: boolean }) {
+function GroupSection({ group, defaultOpen, groupBy }: { group: Group; defaultOpen: boolean; groupBy: GroupBy }) {
   const [open, setOpen] = useState(defaultOpen)
   const totalBudget = group.projects.reduce((s, p) => s + parseBudgetNumber(p.budget_range), 0)
   const count = group.projects.length
@@ -161,7 +163,7 @@ function AgencySection({ group, defaultOpen }: { group: AgencyGroup; defaultOpen
           <Building2 className="w-5 h-5 text-[#0C3535]" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-display font-bold text-xl text-[#0C3535]">{group.agencyName}</div>
+          <div className="font-display font-bold text-xl text-[#0C3535]">{group.label}</div>
           <div className="flex items-center gap-3 mt-0.5 font-mono text-[11px] text-gray-500">
             <span className="flex items-center gap-1">
               <Users className="w-3 h-3" />
@@ -198,13 +200,14 @@ type StatusFilter = typeof STATUS_FILTERS[number]
 
 export default function PartnerProjectsPage() {
   const [search, setSearch] = useState("")
+  const [groupBy, setGroupBy] = useState<GroupBy>("agency")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
 
   const { data, isLoading, error } = useFetch<{ projects: PartnerProject[] }>(
     "/api/partner/projects"
   )
 
-  const agencyGroups = useMemo<AgencyGroup[]>(() => {
+  const agencyGroups = useMemo<Group[]>(() => {
     const all = data?.projects ?? []
     const q = search.trim().toLowerCase()
 
@@ -217,17 +220,20 @@ export default function PartnerProjectsPage() {
       return true
     })
 
-    // Group by agency
-    const map = new Map<string, { agencyId: string | null; projects: PartnerProject[] }>()
+    // Group by agency or client
+    const map = new Map<string, { groupId: string | null; projects: PartnerProject[] }>()
     for (const p of filtered) {
-      const key = p.agency_name || "Lead Agency"
-      if (!map.has(key)) map.set(key, { agencyId: p.agency_id, projects: [] })
+      const key = groupBy === "client"
+        ? ((p.client_name || "").trim() || "—")
+        : (p.agency_name || "Lead Agency")
+      const id = groupBy === "client" ? null : p.agency_id
+      if (!map.has(key)) map.set(key, { groupId: id, projects: [] })
       map.get(key)!.projects.push(p)
     }
 
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([agencyName, val]) => ({ agencyName, agencyId: val.agencyId, projects: val.projects }))
+      .map(([label, val]) => ({ label, groupId: val.groupId, projects: val.projects }))
   }, [data, search, statusFilter])
 
   const totalEngagements = agencyGroups.reduce((s, g) => s + g.projects.length, 0)
@@ -241,7 +247,7 @@ export default function PartnerProjectsPage() {
           <p className="text-gray-600 mt-1">
             {isLoading
               ? "Loading…"
-              : `${totalEngagements} engagement${totalEngagements !== 1 ? "s" : ""} across ${agencyGroups.length} agency${agencyGroups.length !== 1 ? " partners" : ""}`
+              : `${totalEngagements} engagement${totalEngagements !== 1 ? "s" : ""} across ${agencyGroups.length} ${groupBy === "client" ? "client" : "agency partner"}${agencyGroups.length !== 1 ? "s" : ""}`
             }
           </p>
         </div>
@@ -251,11 +257,31 @@ export default function PartnerProjectsPage() {
           <div className="relative flex-1 min-w-[220px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
-              placeholder="Search projects or agencies..."
+              placeholder="Search projects, agencies, or clients..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
             />
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Group by</span>
+            <div className="flex rounded-lg overflow-hidden border border-gray-200">
+              {(["agency", "client"] as GroupBy[]).map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setGroupBy(g)}
+                  className={cn(
+                    "px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                    groupBy === g
+                      ? "bg-[#0C3535] text-white"
+                      : "bg-white text-gray-500 hover:bg-gray-50"
+                  )}
+                >
+                  {g === "agency" ? "Agency" : "Client"}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-gray-400" />
@@ -308,7 +334,7 @@ export default function PartnerProjectsPage() {
         {!isLoading && agencyGroups.length > 0 && (
           <div className="space-y-4">
             {agencyGroups.map((group, i) => (
-              <AgencySection key={group.agencyName} group={group} defaultOpen={i === 0} />
+              <GroupSection key={group.label} group={group} defaultOpen={i === 0} groupBy={groupBy} />
             ))}
           </div>
         )}
