@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
-import { useSelectedProject } from "@/contexts/selected-project-context"
+import { useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, Check, Send, Shield, FileCheck, Loader2, Sparkles } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
@@ -118,10 +118,10 @@ const MASTER_BRIEF_LOADING_MESSAGES = [
 // ── Inline project selector for broadcast page ────────────────────────────────
 
 type InlineProjectSelectorProps = {
-  selectedProject: import("@/contexts/selected-project-context").MasterProject | null
-  projects: import("@/contexts/selected-project-context").MasterProject[]
+  selectedProject: MasterProject | null
+  projects: MasterProject[]
   isLoadingProjects: boolean
-  onSelect: (project: import("@/contexts/selected-project-context").MasterProject) => void
+  onSelect: (project: MasterProject) => void
 }
 
 function InlineProjectSelector({ selectedProject, projects, isLoadingProjects, onSelect }: InlineProjectSelectorProps) {
