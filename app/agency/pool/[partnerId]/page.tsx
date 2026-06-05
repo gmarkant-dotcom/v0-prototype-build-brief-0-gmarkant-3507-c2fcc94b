@@ -89,7 +89,7 @@ function initials(company: string | null | undefined, full: string | null | unde
 }
 
 type ProfilePayload = {
-  partnership: { id: string; status: string; nda_confirmed_at: string | null }
+  partnership: { id: string; status: string; nda_confirmed_at: string | null; msa_confirmed_at?: string | null }
   partner: {
     id: string
     full_name: string | null
@@ -264,6 +264,7 @@ export default function AgencyPartnerProfilePage() {
   const web = websiteHref(p.website)
   const meet = websiteHref(p.meeting_url)
   const ndaOk = !!profile.partnership.nda_confirmed_at
+  const msaOk = !!profile.partnership.msa_confirmed_at
   const ri = p.rate_info
 
   return (
@@ -310,6 +311,15 @@ export default function AgencyPartnerProfilePage() {
                 >
                   <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
                   {ndaOk ? "NDA signed" : "NDA pending"}
+                </span>
+                <span
+                  className={cn(
+                    "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider",
+                    msaOk ? "bg-sky-500/15 text-sky-400 border border-sky-500/30" : "bg-white/10 text-foreground-muted border border-border"
+                  )}
+                >
+                  <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
+                  {msaOk ? "MSA signed" : "MSA pending"}
                 </span>
               </div>
               {subTitle && <p className="text-foreground-muted text-sm">{subTitle}</p>}
