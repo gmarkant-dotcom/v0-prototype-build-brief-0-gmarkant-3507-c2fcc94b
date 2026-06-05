@@ -33,13 +33,13 @@ type Partnership = {
   invitationMessage?: string
   /** Agency-private JSON from DB; used for blacklisted flag in pool stats */
   partnership_notes?: unknown
-  /** Enriched client-side (profiles + msa_agreements); not from GET /api/partnerships shape */
+  /** Enriched client-side from profiles; msaConfirmedAt comes directly from partnerships row */
   partnerDisplayName?: string | null
   partnerAgencyType?: string | null
   partnerBio?: string | null
   partnerCapabilities?: string[]
   partnerLogoUrl?: string | null
-  msaSigned?: boolean
+  msaConfirmedAt?: string | null
 }
 
 // Legacy Partner invitation type (for backward compatibility)
@@ -196,7 +196,7 @@ function partnershipMatchesStatusFilter(p: Partnership, selectedStatus: string):
 function partnershipMatchesLegalFilter(p: Partnership, selectedLegal: string): boolean {
   if (selectedLegal === "All") return true
   const nda = Boolean(p.ndaConfirmedAt)
-  const msa = Boolean(p.msaSigned)
+  const msa = Boolean(p.msaConfirmedAt)
   if (selectedLegal === "NDA Signed") return nda
   if (selectedLegal === "MSA Approved") return msa
   if (selectedLegal === "No NDA") return !nda
@@ -274,6 +274,7 @@ export default function PartnerPoolPage() {
   const [accessRequests, setAccessRequests] = useState<AccessRequest[]>([])
   const [processingRequest, setProcessingRequest] = useState<string | null>(null)
   const [confirmingNdaFor, setConfirmingNdaFor] = useState<string | null>(null)
+  const [confirmingMsaFor, setConfirmingMsaFor] = useState<string | null>(null)
   
   // Delete confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -365,6 +366,7 @@ export default function PartnerPoolPage() {
         acceptedAt: p.accepted_at as string | undefined,
         ndaConfirmedAt: (p.nda_confirmed_at as string | null) ?? null,
         ndaConfirmedBy: (p.nda_confirmed_by as string | null) ?? null,
+        msaConfirmedAt: (p.msa_confirmed_at as string | null) ?? null,
         invitationMessage: p.invitation_message as string | undefined,
         partnership_notes: p.partnership_notes,
       }))
@@ -410,15 +412,6 @@ export default function PartnerPoolPage() {
             }
           }
         }
-        const { data: msaRows } = await supabase
-          .from("msa_agreements")
-          .select("partnership_id, status")
-          .eq("agency_id", user.id)
-        const msaSignedIds = new Set(
-          (msaRows || [])
-            .filter((r) => (r.status as string) === "signed")
-            .map((r) => r.partnership_id as string),
-        )
         loaded = loaded.map((row) => {
           const prof = row.partnerId ? profileById[row.partnerId] : undefined
           return {
@@ -430,11 +423,11 @@ export default function PartnerPoolPage() {
             partnerLogoUrl: prof?.company_logo_url ?? null,
             partnerName: row.partnerName || prof?.full_name || undefined,
             partnerCompany: row.partnerCompany || prof?.company_name || undefined,
-            msaSigned: msaSignedIds.has(row.id),
+            // msaConfirmedAt already set from API response
           }
         })
       } else {
-        loaded = loaded.map((row) => ({ ...row, msaSigned: false }))
+        loaded = loaded.map((row) => ({ ...row }))
       }
       setPartnerships(loaded)
     } catch (error) {
@@ -619,6 +612,29 @@ export default function PartnerPoolPage() {
       console.error('Error confirming NDA:', error)
     } finally {
       setConfirmingNdaFor(null)
+    }
+  }
+
+  const handleConfirmMsaSigned = async (partnershipId: string) => {
+    if (isDemo) return
+    setConfirmingMsaFor(partnershipId)
+    try {
+      const response = await fetch('/api/partnerships', {
+        method: 'PATCH',
+        credentials: "same-origin",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnershipId, action: 'confirm_msa' }),
+      })
+      if (response.ok) {
+        await loadPartnerships()
+      } else {
+        const data = await response.json().catch(() => ({}))
+        alert((data?.error as string) || 'Failed to confirm MSA')
+      }
+    } catch (error) {
+      console.error('Error confirming MSA:', error)
+    } finally {
+      setConfirmingMsaFor(null)
     }
   }
 
@@ -1322,7 +1338,7 @@ export default function PartnerPoolPage() {
                             ) : (
                               <span className="text-amber-300">NDA pending</span>
                             )}
-                            {p.msaSigned ? (
+                            {p.msaConfirmedAt ? (
                               <span className="text-green-400 ml-2">MSA signed</span>
                             ) : (
                               <span className="text-foreground-muted ml-2">MSA open</span>
@@ -1349,6 +1365,17 @@ export default function PartnerPoolPage() {
                             className="h-7 border-green-500/40 text-green-300 hover:bg-green-500/10"
                           >
                             {confirmingNdaFor === p.id ? "Saving..." : "Confirm NDA Signed"}
+                          </Button>
+                        )}
+                        {isActive && !p.msaConfirmedAt && !bl && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={confirmingMsaFor === p.id}
+                            onClick={() => handleConfirmMsaSigned(p.id)}
+                            className="h-7 border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+                          >
+                            {confirmingMsaFor === p.id ? "Saving..." : "Confirm MSA Signed"}
                           </Button>
                         )}
                         <span
