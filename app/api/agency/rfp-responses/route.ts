@@ -83,7 +83,7 @@ export async function GET(request: Request) {
     let inboxQuery = supabase
       .from("partner_rfp_inbox")
       .select(
-        "id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, partner_id, recipient_email, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at"
+        "id, project_id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, partner_id, recipient_email, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at"
       )
       .eq("agency_id", user.id)
       .order("created_at", { ascending: false })
@@ -122,15 +122,46 @@ export async function GET(request: Request) {
       )
     }
 
-    const inboxById = Object.fromEntries((allInboxes || []).map((i) => [i.id as string, i as Record<string, unknown>]))
+    const projectIdsFromInbox = [...new Set((allInboxes || []).map((i) => (i.project_id as string | null)).filter(Boolean))] as string[]
+    const projectMetaById: Record<string, { project_name: string; client_name: string | null }> = {}
+    if (projectIdsFromInbox.length > 0) {
+      const { data: projRows } = await supabase
+        .from('projects')
+        .select('id, name, client_name')
+        .in('id', projectIdsFromInbox)
+      for (const pr of projRows || []) {
+        projectMetaById[pr.id as string] = {
+          project_name: ((pr.name as string | null) || '').trim() || 'Untitled project',
+          client_name: (pr.client_name as string | null) ?? null,
+        }
+      }
+    }
+    const inboxById = Object.fromEntries((allInboxes || []).map((i) => {
+      const pid = (i.project_id as string | null) ?? null
+      const meta = pid ? projectMetaById[pid] : null
+      return [i.id as string, {
+        ...(i as Record<string, unknown>),
+        project_name: meta?.project_name ?? null,
+        client_name: meta?.client_name ?? null,
+      }]
+    }))
     console.log("[api] success", { route, method: "GET", userId: user.id, role: profile.role, responseCount: list.length, inboxCount: inboxIds.length })
 
-    const merged = list.map((r) => ({
-      ...r,
-      response_id: r.id,
-      response_exists: true,
-      inbox: inboxById[r.inbox_item_id as string] ?? null,
-    }))
+    const merged = list.map((r) => {
+      const inboxRow = inboxById[r.inbox_item_id as string] ?? null
+      const pid = inboxRow ? (inboxRow as Record<string,unknown>).partner_id as string | null : null
+      const pr = pid ? profileById[pid] : null
+      const displayName = pr?.company_name || pr?.full_name || pr?.email || (r.partner_id ? profileById[r.partner_id as string]?.company_name || profileById[r.partner_id as string]?.full_name || profileById[r.partner_id as string]?.email : null) || 'Partner'
+      return {
+        ...r,
+        response_id: r.id,
+        response_exists: true,
+        partner_display_name: (r as Record<string,unknown>).partner_display_name as string || displayName,
+        project_name: inboxRow ? (inboxRow as Record<string,unknown>).project_name as string | null : null,
+        client_name: inboxRow ? (inboxRow as Record<string,unknown>).client_name as string | null : null,
+        inbox: inboxRow,
+      }
+    })
 
     const responseIds = merged.map((r) => r.id).filter(Boolean)
     let versionsByResponseId: Record<string, unknown[]> = {}
@@ -190,6 +221,8 @@ export async function GET(request: Request) {
           response_exists: false,
           inbox_item_id: i.id,
           partner_display_name: displayName,
+          project_name: (inboxById[i.id as string] as Record<string,unknown>)?.project_name as string | null ?? null,
+          client_name: (inboxById[i.id as string] as Record<string,unknown>)?.client_name as string | null ?? null,
           proposal_text: "Awaiting partner response.",
           budget_proposal: "",
           timeline_proposal: "",
