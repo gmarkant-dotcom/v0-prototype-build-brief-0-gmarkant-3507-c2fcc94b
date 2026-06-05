@@ -225,8 +225,8 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             </div>
           </div>
           
-          {/* Project Selector */}
-          <div className="mb-4 px-3">
+          {/* Project Selector — hidden; inline selector used on broadcast page */}
+          <div className="mb-4 px-3 hidden">
             <div className="font-mono text-[10px] text-foreground-muted/60 uppercase tracking-wider mb-2">
               Current Project View
             </div>
