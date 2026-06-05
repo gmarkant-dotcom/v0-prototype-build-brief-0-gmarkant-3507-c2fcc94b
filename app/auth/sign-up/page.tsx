@@ -125,7 +125,7 @@ function SignUpContent() {
           full_name: fullName,
           company_name: companyName,
           company_linkedin_url: companyLinkedin,
-          role: role,
+          role: (hasRfpInviteContext || hasPartnershipInviteContext) ? 'partner' : role,
           terms_accepted_at: new Date().toISOString(),
           privacy_accepted_at: new Date().toISOString(),
         },
