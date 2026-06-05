@@ -48,6 +48,7 @@ type ProfileState = {
   company_name: string
   company_website: string
   company_linkedin_url: string
+  default_nda_url: string
   bio: string
   location: string
   agency_type: string
@@ -91,6 +92,7 @@ export default function AgencyProfileSettingsPage() {
     company_name: "",
     company_website: "",
     company_linkedin_url: "",
+    default_nda_url: "",
     bio: "",
     location: "",
     agency_type: "",
@@ -115,7 +117,7 @@ export default function AgencyProfileSettingsPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, company_linkedin_url, is_discoverable, bio, location, agency_type, avatar_url, company_logo_url, meeting_url, payment_terms, payment_terms_custom"
+          "id, role, email, full_name, company_name, company_website, company_linkedin_url, default_nda_url, is_discoverable, bio, location, agency_type, avatar_url, company_logo_url, meeting_url, payment_terms, payment_terms_custom"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -130,6 +132,7 @@ export default function AgencyProfileSettingsPage() {
         company_name: profile.company_name || profile.full_name || "",
         company_website: (profile as { company_website?: string | null }).company_website || "",
         company_linkedin_url: (profile as any).company_linkedin_url || "",
+        default_nda_url: (profile as any).default_nda_url || "",
         bio: profile.bio || "",
         location: profile.location || "",
         agency_type: profile.agency_type || "",
@@ -226,6 +229,7 @@ export default function AgencyProfileSettingsPage() {
         company_name: form.company_name || form.full_name || null,
         company_website: form.company_website || null,
         company_linkedin_url: form.company_linkedin_url || null,
+        default_nda_url: form.default_nda_url || null,
         bio: form.bio,
         location: form.location,
         agency_type: form.agency_type,
@@ -403,6 +407,19 @@ export default function AgencyProfileSettingsPage() {
               placeholder="https://linkedin.com/company/your-company"
               className="bg-white/5 border-border text-foreground"
             />
+          </div>
+          <div>
+            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Default NDA URL</label>
+            <Input
+              type="url"
+              value={form.default_nda_url}
+              onChange={(e) => setForm((p) => ({ ...p, default_nda_url: e.target.value }))}
+              placeholder="https://app.docusign.com/templates/..."
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+            />
+            <p className="text-xs text-foreground-muted mt-1">
+              Saved as the default NDA signing link when you require an NDA on an RFP broadcast. You can override it per broadcast.
+            </p>
           </div>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Agency Type / Specialization</label>
