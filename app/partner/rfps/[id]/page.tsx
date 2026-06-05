@@ -1277,17 +1277,13 @@ export default function PartnerRfpDetailPage() {
               <div>
                 <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Budget proposal *</label>
                 <div className="flex flex-wrap gap-2 items-center">
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="any"
+                  <CurrencyInput
                     value={budgetAmount}
-                    onChange={(e) => {
-                      setBudgetAmount(e.target.value)
+                    onChange={(raw) => {
+                      setBudgetAmount(raw)
                       if (budgetLegacyHint) setBudgetLegacyHint(null)
                     }}
-                    placeholder="Amount"
+                    placeholder="$0"
                     className={cn(inputClass, "min-w-[120px] flex-1 sm:max-w-[200px]")}
                     disabled={!canEdit}
                   />
