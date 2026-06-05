@@ -101,6 +101,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
+    // Fetch client_name from the linked project (LEFT JOIN pattern)
+    let clientName: string | null = null
+    const projectId = (inboxWithViewed.project_id as string | null) ?? null
+    if (projectId) {
+      const { data: projectRow } = await supabase
+        .from("projects")
+        .select("client_name")
+        .eq("id", projectId)
+        .maybeSingle()
+      clientName = (projectRow?.client_name as string | null) ?? null
+    }
+
     let response: unknown = null
     const respQ = await supabase
       .from("partner_rfp_responses")
@@ -143,7 +155,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 
     return NextResponse.json(
-      { inbox: { ...inboxWithViewed, agency_meeting_url: agencyMeetingUrl }, response: response ?? null, versions },
+      { inbox: { ...inboxWithViewed, agency_meeting_url: agencyMeetingUrl, client_name: clientName }, response: response ?? null, versions },
       {
         headers: {
           "Cache-Control": "private, no-store, no-cache, must-revalidate",
