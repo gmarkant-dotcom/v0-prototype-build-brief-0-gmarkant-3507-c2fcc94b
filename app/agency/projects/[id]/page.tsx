@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { CurrencyInput } from "@/components/ui/currency-input"
 
 type Project = {
   id: string
@@ -233,9 +234,9 @@ function ProjectDetailContent() {
           <Label className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
             Budget
           </Label>
-          <Input
+          <CurrencyInput
             value={form.budget_range ?? ""}
-            onChange={(e) => setForm((f) => ({ ...f, budget_range: e.target.value }))}
+            onChange={(raw) => setForm((f) => ({ ...f, budget_range: raw }))}
             className="bg-white/5 border-border text-foreground"
             placeholder="e.g. $150,000"
           />
