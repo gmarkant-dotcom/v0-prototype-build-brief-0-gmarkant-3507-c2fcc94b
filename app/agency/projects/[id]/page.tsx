@@ -23,6 +23,23 @@ type Project = {
 
 const STATUS_OPTIONS = ["draft", "onboarding", "active", "on_hold", "completed"]
 
+// Map legacy status values to current STATUS_OPTIONS
+const STATUS_LEGACY_MAP: Record<string, string> = {
+  in_progress: "active",
+  "in progress": "active",
+  planning: "draft",
+  complete: "completed",
+  finished: "completed",
+  paused: "on_hold",
+  "on hold": "on_hold",
+}
+
+function normalizeStatus(status: unknown): string {
+  if (typeof status !== "string" || !status) return "draft"
+  if (STATUS_OPTIONS.includes(status)) return status
+  return STATUS_LEGACY_MAP[status.toLowerCase()] ?? status
+}
+
 function toDateInput(val: string | null): string {
   if (!val) return ""
   const d = new Date(val)
@@ -52,8 +69,12 @@ function ProjectDetailContent() {
         const list = data.projects || []
         const found = list.find((p: Record<string, unknown>) => p.id === id)
         if (found) {
-          setProject(found as Project)
-          setForm(found as Project)
+          const normalized = {
+            ...found,
+            status: normalizeStatus(found.status),
+          } as Project
+          setProject(normalized)
+          setForm(normalized)
         } else {
           setError("Project not found")
         }
@@ -67,10 +88,10 @@ function ProjectDetailContent() {
     setSaving(true)
     setSaveError(null)
     try {
-      const { createClient } = await import('@/lib/supabase/client')
+      const { createClient } = await import("@/lib/supabase/client")
       const supabase = createClient()
       const { data, error } = await supabase
-        .from('projects')
+        .from("projects")
         .update({
           name: form.name,
           client_name: form.client_name,
@@ -80,19 +101,23 @@ function ProjectDetailContent() {
           start_date: form.start_date || null,
           end_date: form.end_date || null,
         })
-        .eq('id', id)
-        .select('*')
+        .eq("id", id)
+        .select("*")
         .single()
       if (error || !data) {
-        setSaveError(error?.message || 'Save failed')
+        setSaveError(error?.message || "Save failed")
         return
       }
-      setProject(data as Project)
-      setForm(data as Project)
+      const normalized = {
+        ...(data as Record<string, unknown>),
+        status: normalizeStatus((data as Record<string, unknown>).status),
+      } as Project
+      setProject(normalized)
+      setForm(normalized)
       setSaved(true)
-      setTimeout(() => setSaved(false), 2500)
+      setTimeout(() => setSaved(false), 3000)
     } catch {
-      setSaveError('Save failed')
+      setSaveError("Save failed")
     } finally {
       setSaving(false)
     }
@@ -102,7 +127,7 @@ function ProjectDetailContent() {
     return (
       <div className="p-8 flex items-center gap-2 text-foreground-muted">
         <Loader2 className="w-5 h-5 animate-spin" />
-        Loading project…
+        Loading project...
       </div>
     )
   }
@@ -131,7 +156,7 @@ function ProjectDetailContent() {
         <Button
           variant="outline"
           size="sm"
-          className="border-border text-foreground-muted hover:bg-white/5"
+          className="border-border text-foreground hover:bg-white/5"
           onClick={() => router.push("/agency/dashboard")}
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
@@ -142,7 +167,7 @@ function ProjectDetailContent() {
         </h1>
       </div>
 
-      <div className="glass rounded-xl p-8 space-y-6">
+      <div className="bg-white/5 border border-border/40 rounded-xl p-8 space-y-6">
         <div className="space-y-2">
           <Label className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
             Project Name
@@ -174,15 +199,16 @@ function ProjectDetailContent() {
             {STATUS_OPTIONS.map((s) => (
               <button
                 key={s}
+                type="button"
                 onClick={() => setForm((f) => ({ ...f, status: s }))}
                 className={cn(
                   "px-3 py-1.5 rounded-lg font-mono text-[10px] uppercase tracking-wider transition-colors",
                   form.status === s
                     ? "bg-accent text-accent-foreground"
-                    : "bg-white/5 text-foreground-muted hover:bg-white/10"
+                    : "bg-white/5 text-foreground border border-border/40 hover:bg-white/10"
                 )}
               >
-                {s.replace("_", " ")}
+                {s.replace(/_/g, " ")}
               </button>
             ))}
           </div>
@@ -196,7 +222,7 @@ function ProjectDetailContent() {
             value={form.description ?? ""}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             className="bg-white/5 border-border text-foreground min-h-[100px]"
-            placeholder="Project scope and objectives…"
+            placeholder="Project scope and objectives..."
           />
         </div>
 
@@ -243,7 +269,7 @@ function ProjectDetailContent() {
           </div>
         )}
 
-        <div className="pt-2">
+        <div className="pt-2 flex items-center gap-4">
           <Button
             onClick={handleSave}
             disabled={saving}
@@ -257,7 +283,7 @@ function ProjectDetailContent() {
             ) : saving ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Saving…
+                Saving...
               </>
             ) : (
               <>
@@ -266,6 +292,9 @@ function ProjectDetailContent() {
               </>
             )}
           </Button>
+          {saved && (
+            <span className="text-sm text-accent font-mono">Changes saved successfully</span>
+          )}
         </div>
       </div>
     </div>
