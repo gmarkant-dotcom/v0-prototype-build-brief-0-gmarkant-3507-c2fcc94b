@@ -604,6 +604,58 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ partnership: updated })
     }
 
+    if (action === 'confirm_msa') {
+      if (!isAgency) {
+        return NextResponse.json({ error: 'Only agencies can confirm MSA status' }, { status: 403 })
+      }
+      const now = new Date().toISOString()
+      const { data: updated, error } = await supabase
+        .from('partnerships')
+        .update({
+          msa_confirmed_at: now,
+          msa_confirmed_by: user.id,
+          updated_at: now,
+        })
+        .eq('id', partnershipId)
+        .eq('agency_id', user.id)
+        .select()
+        .single()
+      if (error) throw error
+
+      let partnerEmail: string | null = null
+      if (partnership.partner_id) {
+        const { data: partnerProfile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', partnership.partner_id)
+          .maybeSingle()
+        partnerEmail = (partnerProfile?.email || '').trim().toLowerCase() || null
+      }
+
+      if (partnerEmail) {
+        const baseUrl = siteBaseUrl()
+        const { data: agencyProfile } = await supabase
+          .from('profiles')
+          .select('company_name, full_name')
+          .eq('id', user.id)
+          .maybeSingle()
+        const agencyLabel = (agencyProfile?.company_name || agencyProfile?.full_name || 'Lead agency')
+        await sendTransactionalEmail({
+          to: partnerEmail,
+          subject: `${agencyLabel} has confirmed your MSA`,
+          html: buildBrandedEmailHtml({
+            title: "MSA confirmed",
+            recipientName: partnerEmail,
+            body: `${agencyLabel} has confirmed your MSA on Ligament. Your partnership agreement is now on file.`,
+            ctaText: "View Partnership",
+            ctaUrl: `${baseUrl}/partner`,
+          }),
+        })
+      }
+
+      return NextResponse.json({ partnership: updated })
+    }
+
     if (!status) {
       return NextResponse.json({ error: 'Status required' }, { status: 400 })
     }
