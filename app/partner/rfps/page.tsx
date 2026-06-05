@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
 import { useFetch } from "@/hooks/useFetch"
@@ -253,7 +253,6 @@ function GroupSection({
 
 function PartnerRFPsContent() {
   const searchParams = useSearchParams()
-  const router = useRouter()
   const inviteStatus = (searchParams.get("invite_status") || "").trim()
   const inviteToken = (searchParams.get("invite") || "").trim()
   const ndaParam = searchParams.get("nda")
@@ -278,7 +277,7 @@ function PartnerRFPsContent() {
           const path = (data?.ndaGateEnforced || ndaParam === "required")
             ? 
             : 
-          router.replace(path)
+          if (typeof window !== "undefined") window.location.replace(path)
         }
         // If claim fails (expired/already claimed), stay on list page — partner can find their RFP
       } catch {}
