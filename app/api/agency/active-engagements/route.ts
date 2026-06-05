@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
 
     const { data: projectRows, error: projErr } = await supabase
       .from("projects")
-      .select("id, name, client_name, budget_range, start_date, end_date, status, dashboard_workflow_stage, dashboard_workflow_label")
+      .select("id, name, client_name, budget_range, start_date, end_date, status")
       .eq("agency_id", user.id)
 
     if (projErr) {
@@ -127,15 +127,13 @@ export async function GET(request: NextRequest) {
       startDate: string | null
       endDate: string | null
       status: string | null
-      dashboardWorkflowStage: string | null
-      dashboardWorkflowLabel: string | null
     }
     const projectMetaById = new Map<string, ProjectMeta>()
     for (const p of projectRows || []) {
       const row = p as {
         id: string; name?: string | null; client_name?: string | null
         budget_range?: string | null; start_date?: string | null; end_date?: string | null
-        status?: string | null; dashboard_workflow_stage?: string | null; dashboard_workflow_label?: string | null
+        status?: string | null
       }
       if (projectIdFilter && row.id !== projectIdFilter) continue
       projectMetaById.set(row.id, {
@@ -145,8 +143,6 @@ export async function GET(request: NextRequest) {
         startDate: row.start_date ?? null,
         endDate: row.end_date ?? null,
         status: row.status ?? null,
-        dashboardWorkflowStage: row.dashboard_workflow_stage ?? null,
-        dashboardWorkflowLabel: row.dashboard_workflow_label ?? null,
       })
     }
     // keep backward-compat alias
@@ -508,6 +504,19 @@ export async function GET(request: NextRequest) {
 
     const projects = Array.from(byProject.entries()).map(([pid, partners]) => {
       const meta = projectMetaById.get(pid)
+      const st = (meta?.status || "").toLowerCase()
+      const workflowStage =
+        st === "active" || st === "in_progress" ? "active_engagements" :
+        st === "onboarding" ? "onboarding" :
+        st === "completed" ? "completed" :
+        st === "on_hold" ? "active_engagements" :
+        "setup"
+      const workflowLabel =
+        st === "active" || st === "in_progress" ? "Active Engagements" :
+        st === "onboarding" ? "Onboarding" :
+        st === "completed" ? "Completed" :
+        st === "on_hold" ? "On Hold" :
+        "Setup"
       return {
         id: pid,
         title: meta?.title || "Untitled project",
@@ -516,8 +525,8 @@ export async function GET(request: NextRequest) {
         startDate: meta?.startDate ?? null,
         endDate: meta?.endDate ?? null,
         status: meta?.status ?? null,
-        dashboardWorkflowStage: meta?.dashboardWorkflowStage ?? null,
-        dashboardWorkflowLabel: meta?.dashboardWorkflowLabel ?? null,
+        dashboardWorkflowStage: workflowStage,
+        dashboardWorkflowLabel: workflowLabel,
         partners,
       }
     })
