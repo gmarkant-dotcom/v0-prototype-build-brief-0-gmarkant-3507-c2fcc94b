@@ -160,10 +160,8 @@ function ProjectCard({ project }: { project: ApiProject }) {
             )}
           </div>
 
-          {/* Meta row */}
+          {/* Meta row — client_name is already the group header, omit here */}
           <div className="flex items-center gap-3 text-sm text-foreground-muted mb-4 flex-wrap">
-            {project.client_name && <span>{project.client_name}</span>}
-            {project.client_name && <span className="text-foreground-muted/40">|</span>}
             <span>{dateRange}</span>
             <span className="text-foreground-muted/40">|</span>
             <span className="text-foreground-muted/70">Stage: {wfLabel}</span>
