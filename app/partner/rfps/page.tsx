@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Suspense } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn } from "@/lib/utils"
