@@ -63,6 +63,19 @@ export async function GET() {
         (agencies || []).map((a) => [a.id as string, (a.meeting_url as string | null) || null])
       )
     }
+    // LEFT JOIN: get client_name from projects (rows without project_id stay in list with null)
+    const projectIds = [...new Set(rows.map((r) => r.project_id as string | null).filter((id): id is string => typeof id === "string" && id.length > 0))]
+    let clientNameByProjectId: Record<string, string | null> = {}
+    if (projectIds.length > 0) {
+      const { data: projectRows } = await supabase
+        .from("projects")
+        .select("id, client_name")
+        .in("id", projectIds)
+      clientNameByProjectId = Object.fromEntries(
+        (projectRows || []).map((p) => [p.id as string, (p.client_name as string | null) ?? null])
+      )
+    }
+
     const inboxIds = rows.map((r) => r.id).filter(Boolean)
     let responseByInboxId: Record<string, { status?: string; agency_feedback?: string | null; feedback_updated_at?: string | null }> = {}
     if (inboxIds.length > 0) {
@@ -97,6 +110,7 @@ export async function GET() {
         agency_feedback: resp?.agency_feedback || null,
         feedback_updated_at: resp?.feedback_updated_at || null,
         agency_meeting_url: agencyMeetingUrlById[row.agency_id as string] || null,
+        client_name: clientNameByProjectId[(row.project_id as string | null) ?? ""] ?? null,
       }
     })
     return NextResponse.json({ rfps: mergedRows }, { headers: revalidateHeaders })
