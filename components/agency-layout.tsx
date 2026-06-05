@@ -8,7 +8,7 @@ import { HolographicBlobs } from "./holographic-blobs"
 import { LigamentLogo } from "./ligament-logo"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditCard } from "lucide-react"
+import { Settings, LogOut, User, ChevronDown, Check, Shield, CreditCard } from "lucide-react"
 import { SelectedProjectProvider, useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
@@ -56,46 +56,13 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [projectSelectorOpen, setProjectSelectorOpen] = useState(false)
   const [userName, setUserName] = useState("Lead Agency")
   const [userInitials, setUserInitials] = useState("LA")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarLoadError, setAvatarLoadError] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
   const [isOwner, setIsOwner] = useState(false) // Only greg@withligament.com can see admin
-  const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
-  const uniqueProjects = useMemo(
-    () => Array.from(new Map(projects.map((project) => [project.id, project])).values()),
-    [projects]
-  )
-  const activeProjects = useMemo(
-    () => uniqueProjects.filter((project) => project.status === "active" || project.status === "onboarding"),
-    [uniqueProjects]
-  )
-  const onHoldProjects = useMemo(
-    () => uniqueProjects.filter((project) => project.status === "on_hold"),
-    [uniqueProjects]
-  )
-  const duplicateNameCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const project of uniqueProjects) {
-      const key = project.name.trim().toLowerCase()
-      counts.set(key, (counts.get(key) || 0) + 1)
-    }
-    return counts
-  }, [uniqueProjects])
 
-  const formatProjectName = (project: MasterProject) => {
-    const key = project.name.trim().toLowerCase()
-    if ((duplicateNameCounts.get(key) || 0) <= 1) return project.name
-    if (project.createdAt) {
-      const date = new Date(project.createdAt)
-      if (!Number.isNaN(date.getTime())) {
-        return `${project.name} (${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
-      }
-    }
-    return project.name
-  }
   
   // Check demo mode on mount
   useEffect(() => {
@@ -158,17 +125,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
     router.refresh()
   }
 
-  /** Keep the current workflow route; only replace `projectId` in the query string. */
-  const selectProjectAndNavigate = (project: MasterProject) => {
-    setSelectedProject(project)
-    setProjectSelectorOpen(false)
-    const path = pathname || "/agency"
-    const sp = new URLSearchParams(
-      typeof window !== "undefined" ? window.location.search.slice(1) : ""
-    )
-    sp.set("projectId", project.id)
-    router.push(`${path}?${sp.toString()}`)
-  }
+  
 
   return (
     <div className="min-h-screen relative">
@@ -225,129 +182,6 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             </div>
           </div>
           
-          {/* Project Selector */}
-          <div className="mb-4 px-3">
-            <div className="font-mono text-[10px] text-foreground-muted/60 uppercase tracking-wider mb-2">
-              Current Project View
-            </div>
-            <div className="relative">
-              <button
-                onClick={() => setProjectSelectorOpen(!projectSelectorOpen)}
-                className={cn(
-                  "w-full flex items-center gap-2 p-2.5 rounded-lg border transition-all text-left",
-                  selectedProject 
-                    ? "bg-accent/10 border-accent/30 hover:border-accent/50"
-                    : "bg-white/5 border-border hover:border-accent/30"
-                )}
-              >
-                <FolderOpen className={cn(
-                  "w-4 h-4 shrink-0",
-                  selectedProject ? "text-accent" : "text-foreground-muted"
-                )} />
-                <div className="flex-1 min-w-0">
-                  {selectedProject ? (
-                    <>
-                      <div className="font-display font-bold text-sm text-foreground truncate">
-                        {formatProjectName(selectedProject)}
-                      </div>
-                      <div className="font-mono text-[10px] text-foreground-muted truncate">
-                        {selectedProject.client}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="font-display text-sm text-foreground-muted">
-                      Select a project...
-                    </div>
-                  )}
-                </div>
-                <ChevronDown className={cn(
-                  "w-4 h-4 text-foreground-muted transition-transform shrink-0",
-                  projectSelectorOpen && "rotate-180"
-                )} />
-              </button>
-              
-              {projectSelectorOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-lg shadow-xl overflow-hidden z-50 max-h-[300px] overflow-y-auto">
-                  <div className="p-2">
-                    <Link
-                      href="/agency/dashboard"
-                      onClick={() => setProjectSelectorOpen(false)}
-                      className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors text-foreground-muted text-sm"
-                    >
-                      <span className="text-xs">◉</span>
-                      View All Projects
-                    </Link>
-                  </div>
-                  <div className="border-t border-border/50">
-                    {activeProjects.map((project) => (
-                      <button
-                        key={project.id}
-                        onClick={() => selectProjectAndNavigate(project)}
-                        className={cn(
-                          "w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left",
-                          selectedProject?.id === project.id && "bg-accent/10"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-2 h-2 rounded-full shrink-0",
-                          project.status === "active" ? "bg-green-400" : "bg-yellow-400"
-                        )} />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-display font-bold text-sm text-foreground truncate">
-                            {formatProjectName(project)}
-                          </div>
-                          <div className="font-mono text-[10px] text-foreground-muted truncate">
-                            {project.client}
-                          </div>
-                        </div>
-                        {selectedProject?.id === project.id && (
-                          <Check className="w-4 h-4 text-accent shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  {onHoldProjects.length > 0 && (
-                    <>
-                      <div className="px-4 py-1.5 bg-white/5 border-t border-border/50">
-                        <span className="font-mono text-[9px] text-foreground-muted uppercase tracking-wider">On Hold</span>
-                      </div>
-                      {onHoldProjects.map((project) => (
-                        <button
-                          key={project.id}
-                          onClick={() => selectProjectAndNavigate(project)}
-                          className={cn(
-                            "w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left opacity-60",
-                            selectedProject?.id === project.id && "bg-accent/10 opacity-100"
-                          )}
-                        >
-                          <div className="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-display font-bold text-sm text-foreground truncate">
-                              {formatProjectName(project)}
-                            </div>
-                            <div className="font-mono text-[10px] text-foreground-muted truncate">
-                              {project.client}
-                            </div>
-                          </div>
-                          {selectedProject?.id === project.id && (
-                            <Check className="w-4 h-4 text-accent shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            {/* Warning if on workflow page without project selected */}
-            {isWorkflowPage && !isLoadingProjects && !selectedProject && uniqueProjects.length === 0 && (
-              <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                <p className="font-mono text-[10px] text-yellow-400">
-                  Select a project to view workflow details
-                </p>
-              </div>
-            )}
           </div>
           
           {/* Workflow and Resources Sections */}
