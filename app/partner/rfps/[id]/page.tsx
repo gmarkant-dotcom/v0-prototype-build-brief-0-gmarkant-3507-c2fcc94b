@@ -7,6 +7,7 @@ import { PartnerChrome } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
+import { CurrencyInput } from "@/components/ui/currency-input"
 import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { isDemoMode } from "@/lib/demo-data"
@@ -77,6 +78,7 @@ type InboxRow = {
   intent_set_at?: string | null
   nda_gate_enforced?: boolean
   nda_confirmed_at?: string | null
+  client_name?: string | null
 }
 
 type AttachmentTag =
@@ -932,6 +934,12 @@ export default function PartnerRfpDetailPage() {
                   <Building2 className="w-4 h-4" />
                   {inbox.agency_company_name}
                 </span>
+                {inbox.client_name && (
+                  <>
+                    <span className="text-gray-400">·</span>
+                    <span className="text-gray-600">Client: {inbox.client_name}</span>
+                  </>
+                )}
                 <span className="text-gray-400">·</span>
                 <span>Sent {sentAt}</span>
               </p>
