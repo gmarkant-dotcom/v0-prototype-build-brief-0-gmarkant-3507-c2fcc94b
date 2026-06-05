@@ -1,9 +1,8 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { useFetch } from "@/hooks/useFetch"
