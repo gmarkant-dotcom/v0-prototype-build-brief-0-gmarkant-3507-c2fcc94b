@@ -200,6 +200,28 @@ function AgencyRFPContent() {
     }
   }, [isDemo])
 
+  // Fetch agency profile for default NDA URL
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { createClient } = await import("@/lib/supabase/client")
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("default_nda_url")
+          .eq("id", user.id)
+          .maybeSingle()
+        if (!cancelled && profile) {
+          setDefaultNdaUrl((profile as { default_nda_url?: string | null }).default_nda_url || "")
+        }
+      } catch {}
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   // Step state (1-6)
   const [currentStep, setCurrentStep] = useState(1)
   
@@ -274,6 +296,7 @@ function AgencyRFPContent() {
   const [broadcastError, setBroadcastError] = useState<string | null>(null)
   const [ndaSignatureRequired, setNdaSignatureRequired] = useState(false)
   const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
+  const [defaultNdaUrl, setDefaultNdaUrl] = useState("")
   const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
 
   const DRAFT_KEY = (projectId: string) => `ligament-rfp-draft-${projectId}`
@@ -2190,7 +2213,12 @@ function AgencyRFPContent() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <Checkbox
                     checked={ndaSignatureRequired}
-                    onCheckedChange={(v) => setNdaSignatureRequired(v === true)}
+                    onCheckedChange={(v) => {
+                      setNdaSignatureRequired(v === true)
+                      if (v === true && defaultNdaUrl && (!ndaSigningLink.trim() || ndaSigningLink === "https://www.docusign.com/")) {
+                        setNdaSigningLink(defaultNdaUrl)
+                      }
+                    }}
                     className="border-border"
                   />
                   <span className="font-mono text-xs text-foreground">NDA Signature Required</span>
