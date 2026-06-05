@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, Suspense } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn } from "@/lib/utils"
@@ -256,8 +255,39 @@ function PartnerRFPsContent() {
   const searchParams = useSearchParams()
   const inviteStatus = (searchParams.get("invite_status") || "").trim()
 
+  const inviteToken = (searchParams.get("invite") || "").trim()
+  const ndaParam = searchParams.get("nda")
+
   const [search, setSearch] = useState("")
   const [groupBy, setGroupBy] = useState<GroupBy>("agency")
+
+  // Auto-claim invite token for already-logged-in partners arriving via email CTA
+  useEffect(() => {
+    if (!inviteToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch("/api/partner/rfps/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: inviteToken }),
+        })
+        const data: { inboxItemId?: string; ndaGateEnforced?: boolean } = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (res.ok && data?.inboxItemId) {
+          const id = encodeURIComponent(data.inboxItemId)
+          const path = (data?.ndaGateEnforced || ndaParam === "required")
+            ? "/partner/rfps/" + id + "?nda=required"
+            : "/partner/rfps/" + id
+          if (typeof window !== "undefined") window.location.replace(path)
+        }
+      } catch {
+        // Claim failed — stay on list page
+      }
+    })()
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteToken])
 
   const { data, isLoading, error } = useFetch<{ rfps: PartnerInboxRow[] }>("/api/partner/rfps")
   const allRows: PartnerInboxRow[] = data?.rfps ?? []
