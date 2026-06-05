@@ -77,7 +77,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
 
     const { data: partnership, error: pErr } = await supabase
       .from("partnerships")
-      .select("id, status, nda_confirmed_at")
+      .select("id, status, nda_confirmed_at, msa_confirmed_at")
       .eq("agency_id", user.id)
       .eq("partner_id", partnerId)
       .eq("status", "active")
@@ -208,6 +208,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
           id: partnershipId,
           status: partnership.status as string,
           nda_confirmed_at: (partnership.nda_confirmed_at as string | null) ?? null,
+          msa_confirmed_at: (partnership.msa_confirmed_at as string | null) ?? null,
         },
         partner: {
           id: row.id,
