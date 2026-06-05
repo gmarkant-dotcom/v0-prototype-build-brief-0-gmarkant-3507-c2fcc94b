@@ -29,7 +29,7 @@ bid management, onboarding, active engagements, and cash flow.
 
 ---
 
-## Migrations Applied (001-049)
+## Migrations Applied (001-050)
 
 | Migration | Description |
 |-----------|-------------|
@@ -45,6 +45,7 @@ bid management, onboarding, active engagements, and cash flow.
 | 047 | Added secondary_role text, active_role text to profiles. Backfilled active_role = role |
 | 048 | Added company_logo_url text to profiles |
 | 049 | Added company_linkedin_url text, personal_linkedin_url text to profiles |
+| 050 | Added default_nda_url text to profiles |
 
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
