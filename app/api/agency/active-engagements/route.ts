@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
 
     const { data: projectRows, error: projErr } = await supabase
       .from("projects")
-      .select("id, name")
+      .select("id, name, client_name, budget_range, start_date, end_date, status, dashboard_workflow_stage, dashboard_workflow_label")
       .eq("agency_id", user.id)
 
     if (projErr) {
@@ -120,12 +120,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ projects: [] }, { headers: noStoreHeaders })
     }
 
-    const titleByProjectId = new Map<string, string>()
-    for (const p of projectRows || []) {
-      const row = p as { id: string; name?: string | null }
-      if (projectIdFilter && row.id !== projectIdFilter) continue
-      titleByProjectId.set(row.id, (row.name || "").trim() || "Untitled project")
+    type ProjectMeta = {
+      title: string
+      clientName: string | null
+      budgetRange: string | null
+      startDate: string | null
+      endDate: string | null
+      status: string | null
+      dashboardWorkflowStage: string | null
+      dashboardWorkflowLabel: string | null
     }
+    const projectMetaById = new Map<string, ProjectMeta>()
+    for (const p of projectRows || []) {
+      const row = p as {
+        id: string; name?: string | null; client_name?: string | null
+        budget_range?: string | null; start_date?: string | null; end_date?: string | null
+        status?: string | null; dashboard_workflow_stage?: string | null; dashboard_workflow_label?: string | null
+      }
+      if (projectIdFilter && row.id !== projectIdFilter) continue
+      projectMetaById.set(row.id, {
+        title: (row.name || "").trim() || "Untitled project",
+        clientName: row.client_name ?? null,
+        budgetRange: row.budget_range ?? null,
+        startDate: row.start_date ?? null,
+        endDate: row.end_date ?? null,
+        status: row.status ?? null,
+        dashboardWorkflowStage: row.dashboard_workflow_stage ?? null,
+        dashboardWorkflowLabel: row.dashboard_workflow_label ?? null,
+      })
+    }
+    // keep backward-compat alias
+    const titleByProjectId = new Map<string, string>()
+    for (const [id, meta] of projectMetaById) titleByProjectId.set(id, meta.title)
 
     const { data: assignments, error: asgErr } = await supabase
       .from("project_assignments")
@@ -480,11 +506,21 @@ export async function GET(request: NextRequest) {
       byProject.set(projId, cur)
     }
 
-    const projects = Array.from(byProject.entries()).map(([pid, partners]) => ({
-      id: pid,
-      title: titleByProjectId.get(pid) || "Untitled project",
-      partners,
-    }))
+    const projects = Array.from(byProject.entries()).map(([pid, partners]) => {
+      const meta = projectMetaById.get(pid)
+      return {
+        id: pid,
+        title: meta?.title || "Untitled project",
+        clientName: meta?.clientName ?? null,
+        budgetRange: meta?.budgetRange ?? null,
+        startDate: meta?.startDate ?? null,
+        endDate: meta?.endDate ?? null,
+        status: meta?.status ?? null,
+        dashboardWorkflowStage: meta?.dashboardWorkflowStage ?? null,
+        dashboardWorkflowLabel: meta?.dashboardWorkflowLabel ?? null,
+        partners,
+      }
+    })
 
     projects.sort((x, y) => x.title.localeCompare(y.title))
 
