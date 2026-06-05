@@ -28,6 +28,7 @@ type PartnerInboxRow = {
   viewed_at?: string | null
   nda_gate_enforced?: boolean | null
   nda_confirmed_at?: string | null
+  client_name?: string | null
 }
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -45,7 +46,7 @@ const RFP_STATUSES = [
 
 type RFPStatusKey = (typeof RFP_STATUSES)[number]["key"]
 
-type GroupBy = "agency" | "status"
+type GroupBy = "agency" | "client" | "status"
 
 const STATUS_BADGE: Record<string, { bg: string; border: string; text: string; label: string }> = {
   new:               { bg: "bg-gray-100",        border: "border-gray-200",        text: "text-gray-500",   label: "New" },
@@ -249,6 +250,62 @@ function GroupSection({
   )
 }
 
+// ── Flat status view (used when groupBy==="status") ─────────────────────────
+
+function FlatStatusView({ allRows }: { allRows: PartnerInboxRow[] }) {
+  const [activeStatus, setActiveStatus] = useState<RFPStatusKey>("all")
+
+  const counts = useMemo(() => {
+    const map: Record<string, number> = { all: allRows.length }
+    for (const r of allRows) {
+      const tab = normaliseForTab(rowStatus(r))
+      map[tab] = (map[tab] || 0) + 1
+    }
+    return map
+  }, [allRows])
+
+  const filtered = useMemo(
+    () => activeStatus === "all"
+      ? allRows
+      : allRows.filter(r => normaliseForTab(rowStatus(r)) === activeStatus),
+    [allRows, activeStatus]
+  )
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="flex gap-1 flex-wrap px-4 pt-4 pb-3 border-b border-gray-100">
+        {RFP_STATUSES.map(({ key, label: tabLabel }) => {
+          const count = key === "all" ? allRows.length : (counts[key] ?? 0)
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveStatus(key)}
+              className={cn(
+                "shrink-0 px-2.5 py-1 rounded-lg font-mono text-[10px] transition-colors whitespace-nowrap",
+                activeStatus === key
+                  ? "bg-[#0C3535] text-white"
+                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              )}
+            >
+              {tabLabel} ({count})
+            </button>
+          )
+        })}
+      </div>
+      <div className="p-4 space-y-2">
+        {filtered.length === 0 ? (
+          <p className="text-sm text-gray-500 py-4 text-center">No RFPs match this filter.</p>
+        ) : (
+          filtered.map(row => (
+            <RFPCard key={row.id} row={row} showAgency={true} />
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 function PartnerRFPsContent() {
@@ -296,7 +353,7 @@ function PartnerRFPsContent() {
     const q = search.trim().toLowerCase()
     const filtered = q
       ? allRows.filter(r => {
-          const hay = [r.agency_company_name, r.scope_item_name].join(" ").toLowerCase()
+          const hay = [r.agency_company_name, r.scope_item_name, r.client_name].join(" ").toLowerCase()
           return hay.includes(q)
         })
       : allRows
@@ -305,7 +362,9 @@ function PartnerRFPsContent() {
     for (const r of filtered) {
       const key = groupBy === "agency"
         ? (r.agency_company_name || "Unknown Agency").trim()
-        : (RFP_STATUSES.find(s => s.key === normaliseForTab(rowStatus(r)))?.label ?? "New")
+        : groupBy === "client"
+          ? ((r.client_name || "").trim() || "—")
+          : (RFP_STATUSES.find(s => s.key === normaliseForTab(rowStatus(r)))?.label ?? "New")
       const list = map.get(key) ?? []
       list.push(r)
       map.set(key, list)
@@ -328,7 +387,7 @@ function PartnerRFPsContent() {
           <p className="text-gray-600 mt-1">
             {isLoading
               ? "Loading…"
-              : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "agency" ? "agency" : "status"}${totalGroups !== 1 ? "es" : ""}`
+              : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "agency" ? "agency partner" : groupBy === "client" ? "client" : "status"}${totalGroups !== 1 ? "s" : ""}`
             }
           </p>
         </div>
@@ -353,7 +412,7 @@ function PartnerRFPsContent() {
           <div className="flex items-center gap-2 shrink-0">
             <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Group by</span>
             <div className="flex rounded-lg overflow-hidden border border-gray-200">
-              {(["agency", "status"] as GroupBy[]).map(g => (
+              {(["agency", "client", "status"] as GroupBy[]).map(g => (
                 <button
                   key={g}
                   type="button"
@@ -365,7 +424,7 @@ function PartnerRFPsContent() {
                       : "bg-white text-gray-500 hover:bg-gray-50"
                   )}
                 >
-                  {g === "agency" ? "Agency" : "Status"}
+                  {g === "agency" ? "Agency" : g === "client" ? "Client" : "Status"}
                 </button>
               ))}
             </div>
@@ -394,7 +453,7 @@ function PartnerRFPsContent() {
             </p>
           </div>
         )}
-        {!isLoading && groups.length > 0 && (
+        {!isLoading && groups.length > 0 && groupBy !== "status" && (
           <div className="space-y-4">
             {groups.map((g, i) => (
               <GroupSection
@@ -406,6 +465,9 @@ function PartnerRFPsContent() {
               />
             ))}
           </div>
+        )}
+        {!isLoading && groups.length > 0 && groupBy === "status" && (
+          <FlatStatusView allRows={groups.flatMap(g => g.rows)} />
         )}
       </div>
     </PartnerLayout>
