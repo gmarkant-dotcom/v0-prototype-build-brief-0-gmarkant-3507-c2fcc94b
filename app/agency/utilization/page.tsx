@@ -178,7 +178,7 @@ function TimeframeCell({ pct }: { pct: number | null }) {
   )
 }
 
-function AgencyUtilizationPageInner({ filterProjectId }: { filterProjectId?: string | null } = {}) {
+function AgencyUtilizationPageInner({ filterProjectId, skipLayout = false }: { filterProjectId?: string | null; skipLayout?: boolean } = {}) {
   const searchParams = useSearchParams()
   const urlProjectId = searchParams.get("projectId")
 
@@ -237,15 +237,16 @@ function AgencyUtilizationPageInner({ filterProjectId }: { filterProjectId?: str
     return () => window.clearTimeout(t)
   }, [loading, urlProjectId, projects])
 
-  return (
-    <AgencyLayout>
-      <div className="p-8 max-w-6xl mx-auto space-y-8">
+  const innerContent = (
+    <div className={skipLayout ? "space-y-6" : "p-8 max-w-6xl mx-auto space-y-8"}>
+      {!skipLayout && (
         <div>
           <h1 className="font-display font-black text-3xl text-foreground tracking-tight">Utilization</h1>
           <p className="text-foreground-muted mt-2 text-sm max-w-2xl">
             Read-only view of client budget vs awarded bid amounts across your projects (awarded responses only).
           </p>
         </div>
+      )}
 
         {loading && (
           <div className="flex items-center gap-2 text-foreground-muted py-16">
@@ -466,15 +467,16 @@ function AgencyUtilizationPageInner({ filterProjectId }: { filterProjectId?: str
             </Accordion>
           </div>
         )}
-      </div>
-    </AgencyLayout>
+    </div>
   )
+  if (skipLayout) return innerContent
+  return <AgencyLayout>{innerContent}</AgencyLayout>
 }
 
 
 /** Embeddable version — no AgencyLayout wrapper. optionally filtered to one project. */
 export function UtilizationContent({ filterProjectId }: { filterProjectId?: string | null } = {}) {
-  return <AgencyUtilizationPageInner filterProjectId={filterProjectId} />
+  return <AgencyUtilizationPageInner filterProjectId={filterProjectId} skipLayout />
 }
 
 export default function AgencyUtilizationPage() {
