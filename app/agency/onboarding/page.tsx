@@ -9,21 +9,23 @@ function OnboardingContent() {
   const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
 
   return (
-    <AgencyLayout>
-      <div className="p-8">
-        <InlineProjectSelector
-          selectedProject={selectedProject}
-          projects={projects}
-          isLoadingProjects={isLoadingProjects}
-          onSelect={setSelectedProject}
-          label="Onboarding for project"
-        />
-        <Stage03Onboarding />
-      </div>
-    </AgencyLayout>
+    <div className="p-8">
+      <InlineProjectSelector
+        selectedProject={selectedProject}
+        projects={projects}
+        isLoadingProjects={isLoadingProjects}
+        onSelect={setSelectedProject}
+        label="Onboarding for project"
+      />
+      <Stage03Onboarding />
+    </div>
   )
 }
 
 export default function AgencyOnboardingPage() {
-  return <OnboardingContent />
+  return (
+    <AgencyLayout>
+      <OnboardingContent />
+    </AgencyLayout>
+  )
 }
