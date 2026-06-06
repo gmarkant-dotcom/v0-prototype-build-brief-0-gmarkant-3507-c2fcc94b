@@ -194,7 +194,7 @@ export default function AgencyMsaPage() {
   )
 }
 
-export function AgencyMsaContent() {
+export function AgencyMsaContent({ hideProjectHeader = false }: { hideProjectHeader?: boolean } = {}) {
   const projectContext = useSelectedProjectSafe()
   if (!projectContext) {
     return (
@@ -963,7 +963,7 @@ export function AgencyMsaContent() {
 
   return (
       <div className="p-8 max-w-6xl mx-auto space-y-10">
-        <SelectedProjectHeader />
+        {!hideProjectHeader && <SelectedProjectHeader />}
         <div>
           <h1 className="font-display font-black text-3xl text-foreground tracking-tight">Cash Flow &amp; Payments</h1>
           <p className="text-foreground-muted mt-2 text-sm max-w-2xl">
