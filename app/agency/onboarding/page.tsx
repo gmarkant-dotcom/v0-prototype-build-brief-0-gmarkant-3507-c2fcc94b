@@ -2,15 +2,28 @@
 
 import { AgencyLayout } from "@/components/agency-layout"
 import { Stage03Onboarding } from "@/components/stages/stage-03-onboarding"
-import { SelectedProjectHeader } from "@/components/selected-project-header"
+import { InlineProjectSelector } from "@/components/agency-project-selector"
+import { useSelectedProject } from "@/contexts/selected-project-context"
 
-export default function AgencyOnboardingPage() {
+function OnboardingContent() {
+  const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
+
   return (
     <AgencyLayout>
       <div className="p-8">
-        <SelectedProjectHeader />
+        <InlineProjectSelector
+          selectedProject={selectedProject}
+          projects={projects}
+          isLoadingProjects={isLoadingProjects}
+          onSelect={setSelectedProject}
+          label="Onboarding for project"
+        />
         <Stage03Onboarding />
       </div>
     </AgencyLayout>
   )
+}
+
+export default function AgencyOnboardingPage() {
+  return <OnboardingContent />
 }
