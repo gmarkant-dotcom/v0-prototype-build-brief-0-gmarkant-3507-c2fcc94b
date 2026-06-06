@@ -178,7 +178,7 @@ function TimeframeCell({ pct }: { pct: number | null }) {
   )
 }
 
-function AgencyUtilizationPageInner() {
+function AgencyUtilizationPageInner({ filterProjectId }: { filterProjectId?: string | null } = {}) {
   const searchParams = useSearchParams()
   const urlProjectId = searchParams.get("projectId")
 
@@ -378,7 +378,7 @@ function AgencyUtilizationPageInner() {
               onValueChange={setOpenAccordion}
               className="space-y-3"
             >
-              {projects.map((p) => {
+              {(filterProjectId ? projects.filter(p => p.project_id === filterProjectId) : projects).map((p) => {
                 const margin =
                   p.client_budget != null ? p.client_budget - p.total_awarded : null
                 const timeframePct = timeframeCompletionPct(p.start_date ?? null, p.end_date ?? null)
@@ -469,6 +469,12 @@ function AgencyUtilizationPageInner() {
       </div>
     </AgencyLayout>
   )
+}
+
+
+/** Embeddable version — no AgencyLayout wrapper. optionally filtered to one project. */
+export function UtilizationContent({ filterProjectId }: { filterProjectId?: string | null } = {}) {
+  return <AgencyUtilizationPageInner filterProjectId={filterProjectId} />
 }
 
 export default function AgencyUtilizationPage() {
