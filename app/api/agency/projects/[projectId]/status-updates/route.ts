@@ -217,3 +217,68 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
     return NextResponse.json({ error: "Failed" }, { status: 500, headers: noStoreHeaders })
   }
 }
+
+export async function POST(req: Request, { params }: { params: Promise<{ projectId: string }> }) {
+  try {
+    const { projectId } = await params
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
+
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    if (profile?.role !== "agency") return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
+
+    const { data: project } = await supabase
+      .from("projects").select("id, agency_id").eq("id", projectId).eq("agency_id", user.id).maybeSingle()
+    if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
+
+    const body = (await req.json().catch(() => ({}))) as {
+      partnershipId?: string
+      projectAssignmentId?: string
+      status?: string
+      completionPct?: number
+      note?: string
+    }
+
+    if (!body.partnershipId || !body.status) {
+      return NextResponse.json({ error: "partnershipId and status required" }, { status: 400, headers: noStoreHeaders })
+    }
+
+    const validStatuses = ["on_track", "at_risk", "delayed", "blocked", "complete"]
+    if (!validStatuses.includes(body.status)) {
+      return NextResponse.json({ error: "Invalid status value" }, { status: 400, headers: noStoreHeaders })
+    }
+
+    const now = new Date().toISOString()
+    const notes = body.note?.trim()
+      ? "[Agency override] " + body.note.trim()
+      : "[Agency override]"
+
+    const { data: inserted, error } = await supabase
+      .from("partner_status_updates")
+      .insert({
+        project_id: projectId,
+        partnership_id: body.partnershipId,
+        project_assignment_id: body.projectAssignmentId || null,
+        status: body.status,
+        budget_status: "on_track",
+        completion_pct: typeof body.completionPct === "number" ? Math.min(100, Math.max(0, body.completionPct)) : 0,
+        notes,
+        is_resolved: false,
+        created_at: now,
+        updated_at: now,
+      })
+      .select("*")
+      .maybeSingle()
+
+    if (error) {
+      console.error("[agency/status-updates] POST override", error)
+      return NextResponse.json({ error: "Failed to save override" }, { status: 500, headers: noStoreHeaders })
+    }
+
+    return NextResponse.json({ update: inserted }, { headers: noStoreHeaders })
+  } catch (e) {
+    console.error("[agency/status-updates] POST unhandled", e)
+    return NextResponse.json({ error: "Failed" }, { status: 500, headers: noStoreHeaders })
+  }
+}
