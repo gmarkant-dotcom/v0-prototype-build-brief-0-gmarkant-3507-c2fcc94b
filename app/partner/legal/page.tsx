@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
-import { LeadAgencyFilter } from "@/components/lead-agency-filter"
 import { Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -106,8 +105,9 @@ export default function PartnerLegalPage() {
         router.push("/auth/login?redirect=%2Fpartner%2Flegal")
         return
       }
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-      if (profile?.role !== "partner") {
+      const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).maybeSingle()
+      const isPartner = profile?.role === "partner" || profile?.active_role === "partner"
+      if (!isPartner) {
         router.push("/partner")
         return
       }
@@ -234,7 +234,6 @@ export default function PartnerLegalPage() {
             </p>
           </div>
           <div className="flex items-start gap-4">
-            <LeadAgencyFilter />
             <div className="text-right">
               <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Compliance</div>
               <div className={cn(
