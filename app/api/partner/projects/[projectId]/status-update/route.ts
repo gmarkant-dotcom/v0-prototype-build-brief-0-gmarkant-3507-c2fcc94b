@@ -65,10 +65,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, full_name, company_name, email")
+      .select("role, active_role, full_name, company_name, email")
       .eq("id", user.id)
       .single()
-    if (profile?.role !== "partner") {
+    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
     }
 
@@ -115,10 +115,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, full_name, company_name, email")
+      .select("role, active_role, full_name, company_name, email")
       .eq("id", user.id)
       .single()
-    if (profile?.role !== "partner") {
+    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
     }
 
