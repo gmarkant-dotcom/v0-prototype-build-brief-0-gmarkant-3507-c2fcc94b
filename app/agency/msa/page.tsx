@@ -178,6 +178,14 @@ function msaStatusBadge(status: string) {
   return cn(base, "border-border bg-white/5 text-foreground-muted")
 }
 
+
+const MSA_STATUS_LABEL: Record<string, string> = {
+  signed: "MSA Signed",
+  sent: "MSA Sent",
+  pending: "MSA Pending",
+  expired: "MSA Expired",
+}
+
 function milestoneStatusBadge(status: string) {
   const s = status.toLowerCase()
   const base = "font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border"
@@ -1003,7 +1011,7 @@ export function AgencyMsaContent({ hideProjectHeader = false }: { hideProjectHea
                       </p>
                     </div>
                     <span className={msaStatusBadge(getProjectMsaSummaryStatus(selectedProjectGroup))}>
-                      {getProjectMsaSummaryStatus(selectedProjectGroup)}
+                      {MSA_STATUS_LABEL[getProjectMsaSummaryStatus(selectedProjectGroup)] ?? getProjectMsaSummaryStatus(selectedProjectGroup)}
                     </span>
                   </div>
                   <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
