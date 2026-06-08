@@ -237,11 +237,18 @@ export default function DiscoverAgenciesPage() {
   const filteredAgencies = useMemo(() => {
     return agencies.filter((agency) => {
       const query = searchQuery.toLowerCase()
+      if (!query) return true
       const displayName = agency.company_name || agency.full_name || agency.email || ""
+      const caps = Array.isArray(agency.capabilities)
+        ? agency.capabilities.some((c: unknown) => typeof c === "string" && c.toLowerCase().includes(query))
+        : false
       return (
         displayName.toLowerCase().includes(query) ||
         agency.email?.toLowerCase().includes(query) ||
-        agency.location?.toLowerCase().includes(query)
+        (agency.location || "").toLowerCase().includes(query) ||
+        (agency.bio || "").toLowerCase().includes(query) ||
+        (agency.agency_type || "").toLowerCase().includes(query) ||
+        caps
       )
     })
   }, [agencies, searchQuery])
