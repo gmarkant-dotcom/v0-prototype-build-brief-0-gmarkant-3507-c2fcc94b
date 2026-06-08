@@ -1,7 +1,16 @@
 "use client"
 
-import { useEffect } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { Building2, Check, ChevronDown } from "lucide-react"
+import { PartnerLayout } from "@/components/partner-layout"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { cn } from "@/lib/utils"
+import { isDemoMode } from "@/lib/demo-data"
+
 
 // Redirect to Active Projects where payments are now managed
 export function PaymentSetupRedirect() {
@@ -11,15 +20,6 @@ export function PaymentSetupRedirect() {
 }
 
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Building2, Check, ChevronDown } from "lucide-react"
-import { PartnerLayout } from "@/components/partner-layout"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { cn } from "@/lib/utils"
-import { isDemoMode } from "@/lib/demo-data"
 
 type MilestoneRow = {
   id: string
