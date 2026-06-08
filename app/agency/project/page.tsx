@@ -7,7 +7,6 @@ import { useSelectedProject } from "@/contexts/selected-project-context"
 import { GlassCard } from "@/components/glass-card"
 import { cn } from "@/lib/utils"
 import { useFetch } from "@/hooks/useFetch"
-import { UtilizationContent } from "@/app/agency/utilization/page"
 import { AgencyMsaContent } from "@/app/agency/msa/page"
 import {
   AlertTriangle, CheckCircle, Loader2, Users, Shield,
@@ -57,7 +56,7 @@ type ProjectEngagement = {
 }
 
 type GroupBy = "client" | "partner"
-type SlideTab = "status" | "utilization" | "cashflow"
+type SlideTab = "status" | "cashflow"
 
 // ── Status config ──────────────────────────────────────────────────────────────
 
@@ -209,12 +208,23 @@ function OverrideForm({ row, projectId, onSaved }: {
   const handleSave = useCallback(async () => {
     setSaving(true); setErr(null)
     try {
-      const res = await fetch(`/api/agency/projects/${projectId}/status-updates`, {
-        method: "POST", credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partnershipId: row.partnershipId, projectAssignmentId: row.assignmentId, status, completionPct: pct, note }),
+      const { createClient } = await import("@/lib/supabase/client")
+      const supabase = createClient()
+      const now = new Date().toISOString()
+      const notes = note?.trim() ? "[Agency override] " + note.trim() : "[Agency override]"
+      const { error } = await supabase.from("partner_status_updates").insert({
+        project_id: projectId,
+        partnership_id: row.partnershipId,
+        project_assignment_id: row.assignmentId || null,
+        status,
+        budget_status: "on_track",
+        completion_pct: Math.min(100, Math.max(0, pct)),
+        notes,
+        is_resolved: false,
+        created_at: now,
+        updated_at: now,
       })
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d?.error || "Failed"); return }
+      if (error) { setErr(error.message || "Failed to save override"); return }
       setOpen(false); setNote(""); onSaved()
     } catch { setErr("Failed to save") }
     finally { setSaving(false) }
@@ -266,9 +276,10 @@ function OverrideForm({ row, projectId, onSaved }: {
 
 // ── Slide-over panel ───────────────────────────────────────────────────────────
 
-function SlideOverPanel({ row, projectId, resolving, onResolve, onRefresh, onClose }: {
+function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, onRefresh, onClose }: {
   row: PartnerRow
   projectId: string
+  currentProject: ProjectEngagement | null
   resolving: string | null
   onResolve: (alertId: string) => void
   onRefresh: () => void
@@ -282,7 +293,6 @@ function SlideOverPanel({ row, projectId, resolving, onResolve, onRefresh, onClo
 
   const tabs: { key: SlideTab; label: string }[] = [
     { key: "status", label: "Status & Alerts" },
-    { key: "utilization", label: "Utilization" },
     { key: "cashflow", label: "Cash Flow" },
   ]
 
@@ -320,6 +330,49 @@ function SlideOverPanel({ row, projectId, resolving, onResolve, onRefresh, onClo
         <div className="flex-1 overflow-y-auto">
           {tab === "status" && (
             <div className="p-6 space-y-6">
+                            {/* Scope Overview */}
+              {currentProject && (
+                <div className="space-y-2">
+                  <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Scope Overview</label>
+                  <div className="rounded-lg border border-border/40 bg-white/5 p-3">
+                    {row.scopeItemName && (
+                      <p className="font-mono text-[10px] text-foreground-muted mb-2">{row.scopeItemName}</p>
+                    )}
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <div className="font-mono text-[9px] text-foreground-muted uppercase mb-1">Completion</div>
+                        <div className="font-display font-bold text-base text-foreground">{row.completion_pct}%</div>
+                      </div>
+                      <div>
+                        <div className="font-mono text-[9px] text-foreground-muted uppercase mb-1">Awarded</div>
+                        <div className="font-display font-bold text-base text-accent">
+                          {(() => {
+                            const amt = parseBudgetAmount(row.budgetProposal)
+                            const cur = parseBudgetCurrency(row.budgetProposal)
+                            return amt != null ? formatMoney(amt, cur) : "—"
+                          })()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-mono text-[9px] text-foreground-muted uppercase mb-1">Timeframe</div>
+                        <div className="font-display font-bold text-base text-foreground">
+                          {(() => {
+                            const s = currentProject.startDate
+                            const e = currentProject.endDate
+                            if (!s || !e) return "—"
+                            const span = new Date(e).getTime() - new Date(s).getTime()
+                            if (span <= 0) return "—"
+                            const today = new Date(); today.setHours(0,0,0,0)
+                            const pct = Math.round(Math.min(100, Math.max(0, (today.getTime() - new Date(s).getTime()) / span * 100)))
+                            return `${pct}%`
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Current status */}
               <div className="space-y-3">
                 <div className="flex items-center gap-3 flex-wrap">
@@ -394,20 +447,7 @@ function SlideOverPanel({ row, projectId, resolving, onResolve, onRefresh, onClo
             </div>
           )}
 
-          {tab === "utilization" && (
-            <div className="p-6">
-              <Suspense fallback={
-                <div className="flex items-center gap-2 text-foreground-muted py-8">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="font-mono text-sm">Loading utilization…</span>
-                </div>
-              }>
-                <UtilizationContent filterProjectId={projectId} />
-              </Suspense>
-            </div>
-          )}
-
-          {tab === "cashflow" && (
+{tab === "cashflow" && (
             <div className="p-6">
               <AgencyMsaContent hideProjectHeader />
             </div>
@@ -685,6 +725,7 @@ function ActiveEngagementsContent() {
         <SlideOverPanel
           row={activeRow}
           projectId={projectId}
+          currentProject={currentProject}
           resolving={resolving}
           onResolve={handleResolve}
           onRefresh={refresh}
