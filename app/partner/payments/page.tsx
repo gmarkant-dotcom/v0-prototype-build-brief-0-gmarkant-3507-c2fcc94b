@@ -249,7 +249,7 @@ function milestonesForEngagement(milestones: MilestoneRow[], eng: PartnerEngagem
   })
 }
 
-export default function PartnerPaymentsPage() {
+function PartnerPaymentsPageLegacy() {
   const isDemo = isDemoMode()
 
   const [activePartnerships, setActivePartnerships] = useState<PartnershipApiRow[]>([])
@@ -913,3 +913,5 @@ export default function PartnerPaymentsPage() {
     </PartnerLayout>
   )
 }
+
+export default PaymentSetupRedirect
