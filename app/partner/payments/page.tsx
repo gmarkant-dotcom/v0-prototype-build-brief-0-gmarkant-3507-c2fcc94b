@@ -1,5 +1,16 @@
 "use client"
 
+import { useEffect } from "react"
+import { useRouter } from "next/navigation"
+
+// Redirect to Active Projects where payments are now managed
+export function PaymentSetupRedirect() {
+  const router = useRouter()
+  useEffect(() => { router.replace("/partner/projects") }, [router])
+  return null
+}
+
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Building2, Check, ChevronDown } from "lucide-react"
 import { PartnerLayout } from "@/components/partner-layout"
