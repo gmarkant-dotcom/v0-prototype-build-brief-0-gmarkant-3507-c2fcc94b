@@ -224,7 +224,7 @@ export default function PartnerProjectsPage() {
     const map = new Map<string, { groupId: string | null; projects: PartnerProject[] }>()
     for (const p of filtered) {
       const key = groupBy === "client"
-        ? ((p.client_name || "").trim() || "—")
+        ? ((p.client_name || "").trim() || "No Client")
         : (p.agency_name || "Lead Agency")
       const id = groupBy === "client" ? null : p.agency_id
       if (!map.has(key)) map.set(key, { groupId: id, projects: [] })
