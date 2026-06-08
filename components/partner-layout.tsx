@@ -26,7 +26,6 @@ const navItems = [
   { icon: "□", title: "Onboarding", href: "/partner/onboarding" },
   { icon: "▣", title: "Active Projects", href: "/partner/projects" },
   { icon: "◎", title: "Legal & Compliance", href: "/partner/legal" },
-  { icon: "$", title: "Payment Setup", href: "/partner/payments" },
 ]
 
 interface PartnerLayoutProps {
