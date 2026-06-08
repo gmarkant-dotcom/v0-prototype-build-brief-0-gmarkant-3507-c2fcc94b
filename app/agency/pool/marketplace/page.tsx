@@ -122,7 +122,11 @@ export default function AgencyMarketplacePage() {
       const name = (p.company_name || p.full_name || "").toLowerCase()
       const location = (p.location || "").toLowerCase()
       const bio = (p.bio || "").toLowerCase()
-      return name.includes(q) || location.includes(q) || bio.includes(q)
+      const agencyType = (p.agency_type || "").toLowerCase()
+      const caps = Array.isArray(p.capabilities)
+        ? (p.capabilities as unknown[]).some((c) => typeof c === "string" && c.toLowerCase().includes(q))
+        : false
+      return name.includes(q) || location.includes(q) || bio.includes(q) || agencyType.includes(q) || caps
     })
   }, [partners, search])
 
