@@ -55,14 +55,11 @@ export default function AdminUsersPage() {
       // The is_admin database flag is optional (for future multi-admin support)
       setIsOwner(true)
 
-      // Fetch all users
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (profiles) {
-        setUsers(profiles)
+      // Fetch all users via server-side route (bypasses RLS to return all profiles)
+      const res = await fetch('/api/admin/users', { credentials: 'same-origin' })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setUsers(data.users || [])
       }
       setIsLoading(false)
     }
