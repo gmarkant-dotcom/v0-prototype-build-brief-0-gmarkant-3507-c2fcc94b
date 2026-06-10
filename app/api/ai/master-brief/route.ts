@@ -51,7 +51,7 @@ export async function POST(req: Request) {
       isDemo ||
       profile?.is_admin ||
       profile?.role === "partner" ||
-      (profile?.role === "agency" && (profile?.is_paid || profile?.is_admin))
+      (profile?.role === "agency" && profile?.is_paid !== false)
 
     if (!allowed) {
       return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403 })
