@@ -180,7 +180,7 @@ export async function POST(req: Request) {
     profile?.is_admin ||
     profile?.role === 'partner' ||
       profile?.is_admin ||
-      (profile?.role === 'agency' && profile?.is_paid !== false))
+      (profile?.role === 'agency' && profile?.is_paid !== false)
 
   if (!allowed) {
     return new Response(JSON.stringify({ error: 'Subscription required for AI features' }), { status: 403 })
