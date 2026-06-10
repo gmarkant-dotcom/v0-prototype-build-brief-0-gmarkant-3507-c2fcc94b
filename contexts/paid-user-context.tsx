@@ -79,7 +79,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
           .eq('id', user.id)
           .single()
 
-        setIsPaid(profile?.is_paid || false)
+        setIsPaid(profile?.is_paid !== false)
         setIsAdmin(profile?.is_admin || false)
         setRole(profile?.role as UserRole || null)
         setLinkedAgencyId(profile?.linked_agency_id || null)
