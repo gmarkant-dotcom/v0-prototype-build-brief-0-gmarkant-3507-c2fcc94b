@@ -25,7 +25,8 @@ async function syncUserProfile(supabase: any, user: any) {
       company_name: metadata.company_name || '',
       company_linkedin_url: metadata.company_linkedin_url || null,
       role: role,
-      is_paid: false,
+      active_role: role,
+      is_paid: true,
       is_admin: false,
       demo_access: false,
     })
