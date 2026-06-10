@@ -34,14 +34,14 @@ export function AgencySubscriptionGate({ children }: { children: ReactNode }) {
           <LigamentLogo size="md" variant="primary" />
         </Link>
         <p className="font-mono text-[10px] uppercase tracking-wider text-[#C8F53C]/80 mb-2">
-          Subscription required
+          Access restricted
         </p>
         <h1 className="font-display font-black text-2xl text-white mb-3">
-          Your account is not yet active
+          Platform access has been restricted
         </h1>
         <p className="text-white/60 text-sm leading-relaxed mb-8">
-          Lead agency features are turned off until your organization is marked as paid.
-          If you believe this is a mistake, contact your Ligament administrator.
+          Access to this account has been restricted by an administrator.
+          If you believe this is a mistake, please contact your Ligament administrator.
         </p>
         <button
           type="button"
