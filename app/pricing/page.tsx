@@ -101,6 +101,9 @@ export default function PricingPage() {
           <p className="text-white/70 max-w-2xl mx-auto">
             Unlock full platform access with plans designed for modern agency operations.
           </p>
+          <p className="text-white/50 max-w-2xl mx-auto mt-2 text-sm italic">
+            There is no fee for partner agency users to access the platform.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
