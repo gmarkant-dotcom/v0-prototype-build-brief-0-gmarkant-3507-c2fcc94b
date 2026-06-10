@@ -154,6 +154,7 @@ export default function AdminUsersPage() {
   }
 
   const paidCount = users.filter(u => u.is_paid).length
+  const restrictedCount = users.filter(u => u.role === "agency" && !u.is_paid).length
   const demoCount = users.filter(u => u.demo_access).length
   const agencyCount = users.filter(u => u.role === 'agency').length
   const partnerCount = users.filter(u => u.role === 'partner').length
@@ -300,28 +301,33 @@ export default function AdminUsersPage() {
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => togglePaidStatus(user.id, user.is_paid)}
-                      disabled={updating === user.id}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                        user.is_paid 
-                          ? "bg-[#C8F53C]/10 text-[#C8F53C] hover:bg-[#C8F53C]/20" 
-                          : "bg-white/5 text-white/85 hover:bg-white/10 hover:text-white"
-                      )}
-                    >
-                      {user.is_paid ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          Paid
-                        </>
-                      ) : (
-                        <>
-                          <X className="w-3.5 h-3.5" />
-                          Free
-                        </>
-                      )}
-                    </button>
+                    {user.role === 'agency' ? (
+                      <button
+                        onClick={() => togglePaidStatus(user.id, user.is_paid)}
+                        disabled={updating === user.id}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                          user.is_paid
+                            ? "bg-[#C8F53C]/10 text-[#C8F53C] hover:bg-red-500/20 hover:text-red-300"
+                            : "bg-red-500/10 text-red-400 hover:bg-[#C8F53C]/10 hover:text-[#C8F53C]"
+                        )}
+                        title={user.is_paid ? "Click to restrict access" : "Click to restore access"}
+                      >
+                        {user.is_paid ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            Active
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-3.5 h-3.5" />
+                            Restricted
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-white/30 font-mono">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button
