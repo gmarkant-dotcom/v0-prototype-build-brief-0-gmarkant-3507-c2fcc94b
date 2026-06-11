@@ -341,7 +341,9 @@ export default function DiscoverAgenciesPage() {
                       </h3>
                       
                       <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">{agency.agency_type || "—"}</span>
+                        {agency.agency_type && (
+                          <span className="flex items-center gap-1">{agency.agency_type}</span>
+                        )}
                         {agency.location && (
                           <span className="flex items-center gap-1">
                             <MapPin className="w-3 h-3" />
@@ -353,9 +355,7 @@ export default function DiscoverAgenciesPage() {
                             <Globe className="w-3 h-3" />
                             {agency.website}
                           </span>
-                        ) : (
-                          <span className="flex items-center gap-1">—</span>
-                        )}
+                        ) : null}
                         {agency.partner_count && (
                           <span className="flex items-center gap-1">
                             <Users className="w-3 h-3" />
@@ -391,10 +391,20 @@ export default function DiscoverAgenciesPage() {
                             </Button>
                           </div>
                         ) : request?.status === "approved" ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-medium">
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            In Network
-                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-medium">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              In Network
+                            </span>
+                            <Button
+                              type="button"
+                              onClick={() => openAgencyProfile(agency)}
+                              variant="outline"
+                              className="h-8 px-3 border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10 text-xs"
+                            >
+                              View Profile
+                            </Button>
+                          </div>
                         ) : request?.status === "pending" ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-medium">
                             <Clock className="w-3.5 h-3.5" />
