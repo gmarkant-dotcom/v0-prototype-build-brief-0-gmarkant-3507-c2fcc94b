@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Building2, Search, Send, CheckCircle, Clock, MapPin, Globe, Users, X } from "lucide-react"
+import { Building2, Search, Send, CheckCircle, Clock, MapPin, Globe, Users, X, Zap } from "lucide-react"
 
 interface Agency {
   id: string
@@ -31,6 +31,7 @@ interface Agency {
   invitedAt?: string
   acceptedAt?: string
   invitationMessage?: string
+  vouch_count?: number
 }
 
 interface AccessRequest {
@@ -329,7 +330,14 @@ export default function DiscoverAgenciesPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-display font-bold text-lg text-gray-900">
+                        <span className="flex items-center gap-2 flex-wrap">
                         {agency.company_name || agency.full_name || agency.email || "Agency"}
+                        {(agency.vouch_count ?? 0) >= 3 && (
+                          <span className="flex items-center gap-0.5 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                            <Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" />
+                          </span>
+                        )}
+                      </span>
                       </h3>
                       
                       <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-500">
