@@ -261,29 +261,31 @@ export default function PartnerMarketplacePage() {
                 <p className="text-sm text-gray-700">{selectedAgency.bio}</p>
               )}
 
-              <div className="flex flex-wrap gap-3 text-sm">
-                {(selectedAgency.website || selectedAgency.company_website) && (
-                  <a
-                    href={(() => { const w = selectedAgency.website || selectedAgency.company_website || ""; return w.startsWith("http") ? w : "https://" + w })()}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 text-blue-600 hover:underline"
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                    Company Website
-                  </a>
-                )}
-                {selectedAgency.company_linkedin_url && (
-                  <a href={selectedAgency.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                    LinkedIn Profile
-                  </a>
-                )}
-                {selectedAgency.reel_url && (
-                  <a href={selectedAgency.reel_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                    View Reel
-                  </a>
-                )}
-              </div>
+              {(selectedAgency.website || selectedAgency.company_website || selectedAgency.company_linkedin_url || selectedAgency.reel_url) && (
+                <div className="flex flex-wrap gap-3 text-sm">
+                  {(selectedAgency.website || selectedAgency.company_website) && (
+                    <a
+                      href={(() => { const w = selectedAgency.website || selectedAgency.company_website || ""; return w.startsWith("http") ? w : "https://" + w })()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 text-blue-600 hover:underline"
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      Company Website
+                    </a>
+                  )}
+                  {selectedAgency.company_linkedin_url && (
+                    <a href={selectedAgency.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      LinkedIn Profile
+                    </a>
+                  )}
+                  {selectedAgency.reel_url && (
+                    <a href={selectedAgency.reel_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      View Reel
+                    </a>
+                  )}
+                </div>
+              )}
 
               {(() => {
                 const caps = selectedAgency.capabilities
