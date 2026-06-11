@@ -8,7 +8,7 @@ import { GlassCard } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { isDemoMode } from "@/lib/demo-data"
-import { ArrowLeft, Building2, ExternalLink, Search, UserPlus, X } from "lucide-react"
+import { ArrowLeft, Building2, ExternalLink, Search, UserPlus, X, Zap } from "lucide-react"
 
 type PartnerProfile = {
   id: string
@@ -23,6 +23,7 @@ type PartnerProfile = {
   agency_type?: string | null
   reel_url?: string | null
   capabilities?: unknown
+  vouch_count?: number
 }
 
 const demoPartners: PartnerProfile[] = [
@@ -211,8 +212,15 @@ export default function AgencyMarketplacePage() {
                         <Building2 className="w-5 h-5 text-foreground-muted" />
                       )}
                     </div>
-                    <div className="font-display font-bold text-lg text-foreground leading-tight">
-                      {partner.company_name || partner.full_name || "Partner Agency"}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="font-display font-bold text-lg text-foreground leading-tight">
+                        {partner.company_name || partner.full_name || "Partner Agency"}
+                      </div>
+                      {(partner.vouch_count ?? 0) >= 3 && (
+                        <span className="flex items-center gap-0.5 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                          <Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" />
+                        </span>
+                      )}
                     </div>
                   </div>
                   <p className="text-sm text-foreground-muted line-clamp-2">
@@ -320,7 +328,15 @@ export default function AgencyMarketplacePage() {
                   )}
                 </div>
                 <div>
+                  <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-display font-bold text-xl text-foreground">{selectedPartner.company_name || selectedPartner.full_name || "Partner"}</h2>
+                  {(selectedPartner.vouch_count ?? 0) >= 3 && (
+                    <span className="flex items-center gap-0.5 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                      <Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" />
+                      Triple-Vouched
+                    </span>
+                  )}
+                </div>
                   <p className="font-mono text-xs text-foreground-muted">{selectedPartner.agency_type || "Partner Agency"}</p>
                   {selectedPartner.location && <p className="font-mono text-xs text-foreground-muted">{selectedPartner.location}</p>}
                 </div>
