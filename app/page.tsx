@@ -100,6 +100,12 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <LigamentLogo size="sm" variant="primary" />
           <div className="flex items-center gap-4">
+            <Link
+              href="/faq"
+              className="font-mono text-xs text-foreground/90 hover:text-foreground transition-colors"
+            >
+              FAQ
+            </Link>
             <Link 
               href="/pricing"
               className="font-mono text-xs text-foreground/90 hover:text-foreground transition-colors"
