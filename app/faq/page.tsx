@@ -13,7 +13,7 @@ type FAQ = { q: string; a: string }
 const generalFAQs: FAQ[] = [
   {
     q: "What is Ligament?",
-    a: "Ligament is a platform that helps creative and production agencies manage their external partner network — from finding vendors, to running RFPs, to tracking active projects and payments, all in one place.",
+    a: "Ligament is a platform that helps creative and production agencies manage their external partner network - from finding vendors, to running RFPs, to tracking active projects and payments, all in one place.",
   },
   {
     q: "Who is Ligament for?",
@@ -21,7 +21,7 @@ const generalFAQs: FAQ[] = [
   },
   {
     q: "Can my agency be both a lead agency and a partner agency?",
-    a: "Yes. Many agencies operate as both — hiring partners for some projects while being hired as a partner on others. Ligament supports a dual-role toggle so you can switch between portals.",
+    a: "Yes. Many agencies operate as both, hiring partners for some projects while being hired as a partner on others. Ligament supports a dual-role toggle so you can switch between portals.",
   },
   {
     q: "Is there a cost to join?",
@@ -48,7 +48,7 @@ const leadFAQs: FAQ[] = [
   },
   {
     q: "What is Active Engagements?",
-    a: "Once a partner is awarded, Active Engagements is your command center for that project — showing partner-submitted status updates, completion percentages, alerts, utilization details, and cash flow/payment milestones, all in one slide-over view per partner.",
+    a: "Once a partner is awarded, Active Engagements is your command center for that project showing partner-submitted status updates, completion percentages, alerts, utilization details, and cash flow/payment milestones, all in one slide-over view per partner.",
   },
   {
     q: "Can I override a partner's status update?",
@@ -60,7 +60,7 @@ const leadFAQs: FAQ[] = [
   },
   {
     q: "What does \"vouching\" mean?",
-    a: "You can vouch for partner agencies you trust based on direct experience. When a partner receives vouches from 3 or more lead agencies, they earn a \"Triple-Vouched\" badge — a credibility signal visible across the platform. Vouches are anonymous to the partner.",
+    a: "You can vouch for partner agencies you trust based on direct experience. When a partner receives vouches from 3 or more lead agencies, they earn a \"Triple-Vouched\" badge, a credibility signal visible across the platform. Vouches are anonymous to the partner.",
   },
   {
     q: "What is \"MSA Approved\" status?",
@@ -99,11 +99,11 @@ const partnerFAQs: FAQ[] = [
   },
   {
     q: "What does \"Triple-Vouched\" mean for me?",
-    a: "If 3 or more lead agencies have vouched for your agency based on past work, you'll display a \"Triple-Vouched\" badge on your profile — a trust signal to other lead agencies browsing the marketplace. You won't see who vouched for you, only your total count.",
+    a: "If 3 or more lead agencies have vouched for your agency based on past work, you'll display a \"Triple-Vouched\" badge on your profile, a trust signal to other lead agencies browsing the marketplace. You won't see who vouched for you, only your total count.",
   },
   {
     q: "Can I be a lead agency too?",
-    a: "Yes — use \"Switch to Lead Agency\" to access the lead agency portal and manage your own partner network.",
+    a: "Yes, use \"Switch to Lead Agency\" to access the lead agency portal and manage your own partner network.",
   },
 ]
 
@@ -158,7 +158,7 @@ export default function FAQPage() {
         <div className="text-center mb-12">
           <h1 className="font-display font-black text-5xl mb-4">Frequently Asked Questions</h1>
           <p className="text-white/70 max-w-xl mx-auto">
-            Everything you need to know about Ligament — for agencies on both sides of the partnership.
+            Everything you need to know about Ligament, for agencies on both sides of the partnership.
           </p>
         </div>
 
