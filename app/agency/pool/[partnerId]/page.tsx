@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
+import { createClient } from "@/lib/supabase/client"
 import type { PartnerRateInfoPayload } from "@/lib/partner-rate-info-read"
 import {
   ArrowLeft,
@@ -20,6 +21,7 @@ import {
   Shield,
   Star,
   Video,
+  Zap,
 } from "lucide-react"
 import {
   Dialog,
@@ -131,6 +133,12 @@ export default function AgencyPartnerProfilePage() {
   const [notesSaved, setNotesSaved] = useState(false)
   const [blacklistDialogOpen, setBlacklistDialogOpen] = useState(false)
 
+  // Vouch state
+  const [vouchCount, setVouchCount] = useState(0)
+  const [hasVouched, setHasVouched] = useState(false)
+  const [vouchLoading, setVouchLoading] = useState(false)
+  const [vouchSaving, setVouchSaving] = useState(false)
+
   const load = useCallback(async () => {
     if (!partnerId || isDemo) {
       setLoading(false)
@@ -168,6 +176,59 @@ export default function AgencyPartnerProfilePage() {
   useEffect(() => {
     load()
   }, [load])
+
+  // Fetch vouch count + own vouch status using browser client
+  useEffect(() => {
+    if (!partnerId || isDemo) return
+    let cancelled = false
+    ;(async () => {
+      setVouchLoading(true)
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+
+        // Count only — never expose list of vouchers
+        const { count } = await supabase
+          .from("partner_vouches")
+          .select("*", { count: "exact", head: true })
+          .eq("vouched_partner_id", partnerId)
+        if (!cancelled) setVouchCount(count ?? 0)
+
+        // Check own vouch status
+        const { data: ownVouch } = await supabase
+          .from("partner_vouches")
+          .select("id")
+          .eq("voucher_agency_id", user.id)
+          .eq("vouched_partner_id", partnerId)
+          .maybeSingle()
+        if (!cancelled) setHasVouched(!!ownVouch)
+      } catch {}
+      finally { if (!cancelled) setVouchLoading(false) }
+    })()
+    return () => { cancelled = true }
+  }, [partnerId, isDemo])
+
+  const handleVouchToggle = async () => {
+    if (isDemo || vouchSaving || vouchLoading) return
+    setVouchSaving(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      if (hasVouched) {
+        await supabase.from("partner_vouches").delete()
+          .eq("voucher_agency_id", user.id).eq("vouched_partner_id", partnerId)
+        setHasVouched(false)
+        setVouchCount(c => Math.max(0, c - 1))
+      } else {
+        await supabase.from("partner_vouches").insert({ voucher_agency_id: user.id, vouched_partner_id: partnerId })
+        setHasVouched(true)
+        setVouchCount(c => c + 1)
+      }
+    } catch {}
+    finally { setVouchSaving(false) }
+  }
 
   const saveNotes = async () => {
     if (!partnerId || isDemo) return
@@ -321,6 +382,34 @@ export default function AgencyPartnerProfilePage() {
                   <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
                   {msaOk ? "MSA signed" : "MSA pending"}
                 </span>
+                {vouchCount >= 3 && (
+                  <span className="flex items-center gap-0.5 font-mono text-[10px] px-2 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                    <Zap className="w-3 h-3" /><Zap className="w-3 h-3" /><Zap className="w-3 h-3" />
+                    Triple-Vouched
+                  </span>
+                )}
+              </div>
+              {/* Vouch section — lead agency sees own status + total count (never voucher list) */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handleVouchToggle}
+                  disabled={vouchSaving || vouchLoading}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 font-mono text-[10px] px-3 py-1.5 rounded-lg border transition-colors",
+                    hasVouched
+                      ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/40 hover:bg-yellow-500/25"
+                      : "bg-white/5 text-foreground-muted border-border hover:bg-white/10 hover:text-foreground"
+                  )}
+                >
+                  <Zap className="w-3 h-3" />
+                  {vouchSaving ? "Saving…" : hasVouched ? "Vouching ✓" : "I'll vouch for them"}
+                </button>
+                {!vouchLoading && (
+                  <span className="font-mono text-[10px] text-foreground-muted">
+                    Vouched by {vouchCount} {vouchCount === 1 ? "agency" : "agencies"}
+                  </span>
+                )}
               </div>
               {subTitle && <p className="text-foreground-muted text-sm">{subTitle}</p>}
               {p.email && (
