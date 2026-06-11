@@ -98,54 +98,54 @@ export default function DiscoverAgenciesPage() {
   const [agencyProfileProjects, setAgencyProfileProjects] = useState<SharedProject[]>([])
   const [isLoadingAgencyProfile, setIsLoadingAgencyProfile] = useState(false)
 
-  useEffect(() => {
-    loadAgencies()
-    loadMyRequests()
-  }, [])
+  // Cache user ID after initial auth check so subsequent actions (request access) don't
+  // create a new client and trigger a second auth-token lock acquisition concurrently.
+  const [cachedUserId, setCachedUserId] = useState<string | null>(null)
 
-  const loadAgencies = async () => {
-    if (isDemo) {
-      setAgencies(demoAgencies)
-      setIsLoading(false)
-      return
-    }
-
+  const loadMyRequests = async (supabase: ReturnType<typeof createClient>, userId: string) => {
     try {
-      const res = await fetch("/api/marketplace/discoverable?role=agency", { cache: "no-store" })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(payload?.error || "Failed to load discoverable agencies")
-      const rows = (payload?.profiles || []) as Agency[]
-      setAgencies(rows.map((row) => ({ ...row, collaborated: false })))
-    } catch (error) {
-      console.error("Error:", error)
-    }
-    setIsLoading(false)
-  }
-
-  const loadMyRequests = async () => {
-    if (isDemo) {
-      setMyRequests([{ id: "demo-req-1", agency_id: "demo-agency-2", status: "approved" }])
-      return
-    }
-
-    try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) return
-
       const { data, error } = await supabase
         .from("partner_access_requests")
         .select("id, agency_id, status")
-        .eq("partner_id", user.id)
-
-      if (!error) {
-        setMyRequests(data || [])
-      }
+        .eq("partner_id", userId)
+      if (!error) setMyRequests(data || [])
     } catch (error) {
-      console.error("Error:", error)
+      console.error("Error loading requests:", error)
     }
   }
+
+  useEffect(() => {
+    const load = async () => {
+      if (isDemo) {
+        setAgencies(demoAgencies)
+        setMyRequests([{ id: "demo-req-1", agency_id: "demo-agency-2", status: "approved" }])
+        setIsLoading(false)
+        return
+      }
+
+      // Single client + single auth call for both fetches — prevents concurrent lock contention
+      const supabase = createClient()
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) { setIsLoading(false); return }
+        setCachedUserId(user.id)
+
+        const [agencyRes] = await Promise.all([
+          fetch("/api/marketplace/discoverable?role=agency", { cache: "no-store" }),
+          loadMyRequests(supabase, user.id),
+        ])
+
+        const payload = await agencyRes.json().catch(() => ({}))
+        if (!agencyRes.ok) throw new Error(payload?.error || "Failed to load discoverable agencies")
+        const rows = (payload?.profiles || []) as Agency[]
+        setAgencies(rows.map((row) => ({ ...row, collaborated: false })))
+      } catch (error) {
+        console.error("Error:", error)
+      }
+      setIsLoading(false)
+    }
+    load()
+  }, [isDemo])
 
   const handleRequestAccess = async () => {
     if (!selectedAgency) return
@@ -164,22 +164,22 @@ export default function DiscoverAgenciesPage() {
 
     setRequestingAgency(selectedAgency.id)
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      if (!user) return
+      // Reuse cached user ID — no second auth call needed
+      const userId = cachedUserId
+      if (!userId) return
 
+      const supabase = createClient()
       const { error } = await supabase
         .from("partner_access_requests")
         .insert({
-          partner_id: user.id,
+          partner_id: userId,
           agency_id: selectedAgency.id,
           request_message: requestMessage || null,
           status: "pending"
         })
 
       if (!error) {
-        await loadMyRequests()
+        await loadMyRequests(supabase, userId)
         setShowRequestModal(false)
         setSelectedAgency(null)
         setRequestMessage("")
