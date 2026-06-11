@@ -519,7 +519,12 @@ export default function DiscoverAgenciesPage() {
                     <h2 className="font-display font-bold text-xl text-gray-900">
                       {selectedAgency.company_name || selectedAgency.full_name || selectedAgency.email || "Agency"}
                     </h2>
-                    <p className="font-mono text-xs text-gray-500">{selectedAgency.agency_type || "Agency"}{selectedAgency.location ? ` · ${selectedAgency.location}` : ""}</p>
+                    {selectedAgency.agency_type && (
+                      <p className="font-mono text-xs text-gray-500 mt-0.5">{selectedAgency.agency_type}</p>
+                    )}
+                    {selectedAgency.location && (
+                      <p className="font-mono text-xs text-gray-500">{selectedAgency.location}</p>
+                    )}
                   </div>
                 </div>
                 <button onClick={() => setShowAgencyProfileModal(false)} className="text-gray-700 hover:text-gray-900">
@@ -532,29 +537,31 @@ export default function DiscoverAgenciesPage() {
                   <p className="text-sm text-gray-700">{selectedAgency.bio}</p>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {(selectedAgency.website || selectedAgency.company_website) && (
-                    <a
-                      href={(() => { const w = selectedAgency.website || selectedAgency.company_website || ""; return w.startsWith("http") ? w : "https://" + w })()}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline"
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      Company Website
-                    </a>
-                  )}
-                  {selectedAgency.company_linkedin_url && (
-                    <a href={selectedAgency.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline">
-                      LinkedIn Profile
-                    </a>
-                  )}
-                  {selectedAgency.reel_url && (
-                    <a href={selectedAgency.reel_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline">
-                      View Reel
-                    </a>
-                  )}
-                </div>
+                {(selectedAgency.website || selectedAgency.company_website || selectedAgency.company_linkedin_url || selectedAgency.reel_url) && (
+                  <div className="flex flex-wrap gap-3 text-sm">
+                    {(selectedAgency.website || selectedAgency.company_website) && (
+                      <a
+                        href={(() => { const w = selectedAgency.website || selectedAgency.company_website || ""; return w.startsWith("http") ? w : "https://" + w })()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-blue-600 hover:underline"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        Company Website
+                      </a>
+                    )}
+                    {selectedAgency.company_linkedin_url && (
+                      <a href={selectedAgency.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        LinkedIn Profile
+                      </a>
+                    )}
+                    {selectedAgency.reel_url && (
+                      <a href={selectedAgency.reel_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        View Reel
+                      </a>
+                    )}
+                  </div>
+                )}
 
                 {(() => {
                   const caps = selectedAgency.capabilities
