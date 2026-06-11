@@ -57,6 +57,9 @@ export default function PartnerMarketplacePage() {
   const [requests, setRequests] = useState<AccessRequest[]>([])
   const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [selectedAgency, setSelectedAgency] = useState<AgencyProfile | null>(null)
+  // Cache user ID after first auth check so requestConnection can reuse it without
+  // creating a second client and triggering a second auth-token lock acquisition.
+  const [cachedUserId, setCachedUserId] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -67,6 +70,7 @@ export default function PartnerMarketplacePage() {
         return
       }
       try {
+        // Single client instance — one auth lock acquisition for the whole load sequence
         const supabase = createClient()
         const {
           data: { user },
@@ -75,6 +79,7 @@ export default function PartnerMarketplacePage() {
           setLoading(false)
           return
         }
+        setCachedUserId(user.id)
 
         const [discoverableRes, myReqRes] = await Promise.all([
           fetch("/api/marketplace/discoverable?role=agency", { cache: "no-store" }),
@@ -113,15 +118,14 @@ export default function PartnerMarketplacePage() {
     }
     setSubmittingId(agencyId)
     try {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
+      // Reuse cached user ID — avoids a second auth-token lock acquisition
+      const userId = cachedUserId
+      if (!userId) return
       const status = requestStatus(agencyId)
       if (status) return
+      const supabase = createClient()
       const { error } = await supabase.from("partner_access_requests").insert({
-        partner_id: user.id,
+        partner_id: userId,
         agency_id: agencyId,
         status: "pending",
       })
