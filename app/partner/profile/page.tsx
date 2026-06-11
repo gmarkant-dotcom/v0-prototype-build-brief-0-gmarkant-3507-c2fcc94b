@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
-import { Camera, Loader2, Upload } from "lucide-react"
+import { Camera, Loader2, Upload, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
@@ -100,6 +100,8 @@ export default function PartnerProfilePage() {
   const [discoverable, setDiscoverable] = useState(false)
   const [discoverabilitySaving, setDiscoverabilitySaving] = useState(false)
   const [discoverabilityMsg, setDiscoverabilityMsg] = useState<string | null>(null)
+  const [vouchCount, setVouchCount] = useState(0)
+  const [vouchLoading, setVouchLoading] = useState(false)
   const [customCapability, setCustomCapability] = useState("")
   const [customCapabilities, setCustomCapabilities] = useState<string[]>([])
   const [showCustomDiscipline, setShowCustomDiscipline] = useState(false)
@@ -200,6 +202,15 @@ export default function PartnerProfilePage() {
       setAccountFullName(data?.full_name || "")
       setProfileId(data?.id || user.id)
       setDiscoverable(!!data?.is_discoverable)
+
+      // Fetch own vouch count (aggregate only — partner never sees who vouched)
+      setVouchLoading(true)
+      const { count: vc } = await supabase
+        .from("partner_vouches")
+        .select("*", { count: "exact", head: true })
+        .eq("vouched_partner_id", user.id)
+      setVouchCount(vc ?? 0)
+      setVouchLoading(false)
       setFormData((prev) => ({
         ...prev,
         companyName: data?.company_name || data?.full_name || "",
@@ -766,6 +777,34 @@ export default function PartnerProfilePage() {
           </button>
         </div>
 
+        {/* Vouch status — count only, never reveals who vouched (by design) */}
+        {!vouchLoading && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
+            <div className="flex-1">
+              <div className="font-display font-bold text-base text-[#0C3535] flex items-center gap-2 flex-wrap">
+                {vouchCount >= 3 ? (
+                  <>
+                    <span className="flex items-center gap-0.5">
+                      <Zap className="w-4 h-4 text-yellow-500" />
+                      <Zap className="w-4 h-4 text-yellow-500" />
+                      <Zap className="w-4 h-4 text-yellow-500" />
+                    </span>
+                    Triple-Vouched
+                  </>
+                ) : (
+                  "Community Vouching"
+                )}
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                {vouchCount >= 3
+                  ? `${vouchCount} lead agencies have vouched for your work.`
+                  : vouchCount === 0
+                  ? "No lead agencies have vouched for you yet."
+                  : `${vouchCount} lead ${vouchCount === 1 ? "agency has" : "agencies have"} vouched for your work.`}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
