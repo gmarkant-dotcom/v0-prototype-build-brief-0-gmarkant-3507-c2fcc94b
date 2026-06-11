@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Building2, Globe, Search, Send, X } from "lucide-react"
+import { Building2, Globe, Search, Send, X, Zap } from "lucide-react"
 
 type AgencyProfile = {
   id: string
@@ -24,6 +24,7 @@ type AgencyProfile = {
   avatar_url?: string | null
   company_logo_url?: string | null
   agency_type?: string | null
+  vouch_count?: number
 }
 
 type AccessRequest = {
@@ -231,12 +232,23 @@ export default function PartnerMarketplacePage() {
                   )}
                 </div>
                 <div>
-                  <h2 className="font-display font-bold text-xl text-gray-900">
-                    {selectedAgency.company_name || selectedAgency.full_name || "Agency"}
-                  </h2>
-                  <p className="font-mono text-xs text-gray-500">
-                    {selectedAgency.agency_type || "Agency"}{selectedAgency.location ? ` · ${selectedAgency.location}` : ""}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-display font-bold text-xl text-gray-900">
+                      {selectedAgency.company_name || selectedAgency.full_name || "Agency"}
+                    </h2>
+                    {(selectedAgency.vouch_count ?? 0) >= 3 && (
+                      <span className="flex items-center gap-0.5 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                        <Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" />
+                        Triple-Vouched
+                      </span>
+                    )}
+                  </div>
+                  {selectedAgency.agency_type && (
+                    <p className="font-mono text-xs text-gray-500 mt-0.5">{selectedAgency.agency_type}</p>
+                  )}
+                  {selectedAgency.location && (
+                    <p className="font-mono text-xs text-gray-500">{selectedAgency.location}</p>
+                  )}
                 </div>
               </div>
               <button onClick={() => setSelectedAgency(null)} className="text-gray-700 hover:text-gray-900 shrink-0">
