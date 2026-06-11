@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Building2, Search, Send } from "lucide-react"
+import { Building2, Globe, Search, Send, X } from "lucide-react"
 
 type AgencyProfile = {
   id: string
@@ -15,7 +15,12 @@ type AgencyProfile = {
   full_name: string | null
   bio: string | null
   location: string | null
+  email?: string | null
   website?: string | null
+  company_website?: string | null
+  company_linkedin_url?: string | null
+  reel_url?: string | null
+  capabilities?: unknown
   avatar_url?: string | null
   company_logo_url?: string | null
   agency_type?: string | null
@@ -50,6 +55,7 @@ export default function PartnerMarketplacePage() {
   const [agencies, setAgencies] = useState<AgencyProfile[]>([])
   const [requests, setRequests] = useState<AccessRequest[]>([])
   const [submittingId, setSubmittingId] = useState<string | null>(null)
+  const [selectedAgency, setSelectedAgency] = useState<AgencyProfile | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -178,7 +184,16 @@ export default function PartnerMarketplacePage() {
                       <p className="text-sm text-gray-600 mt-2 line-clamp-2">
                         {agency.bio || "Discoverable lead agency on Ligament Marketplace."}
                       </p>
-                      <div className="mt-4">
+                      <div className="mt-4 flex items-center gap-2 flex-wrap">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedAgency(agency)}
+                          className="border-gray-200 text-gray-700 hover:bg-gray-50 text-xs"
+                        >
+                          View Profile
+                        </Button>
                         {status === "approved" ? (
                           <span className="inline-flex text-xs px-3 py-1.5 rounded-lg bg-green-100 text-green-700">Connected</span>
                         ) : status === "pending" ? (
@@ -202,6 +217,98 @@ export default function PartnerMarketplacePage() {
           </div>
         )}
       </div>
+      {/* Agency Profile Modal */}
+      {selectedAgency && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedAgency(null)}>
+          <div className="w-full max-w-2xl bg-white rounded-2xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center overflow-hidden shrink-0">
+                  {selectedAgency.company_logo_url ? (
+                    <img src={selectedAgency.company_logo_url} alt={selectedAgency.company_name || "Agency"} className="w-full h-full object-cover" />
+                  ) : (
+                    <Building2 className="w-5 h-5 text-[#0C3535]" />
+                  )}
+                </div>
+                <div>
+                  <h2 className="font-display font-bold text-xl text-gray-900">
+                    {selectedAgency.company_name || selectedAgency.full_name || "Agency"}
+                  </h2>
+                  <p className="font-mono text-xs text-gray-500">
+                    {selectedAgency.agency_type || "Agency"}{selectedAgency.location ? ` · ${selectedAgency.location}` : ""}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedAgency(null)} className="text-gray-700 hover:text-gray-900 shrink-0">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {selectedAgency.bio && (
+                <p className="text-sm text-gray-700">{selectedAgency.bio}</p>
+              )}
+
+              <div className="flex flex-wrap gap-3 text-sm">
+                {(selectedAgency.website || selectedAgency.company_website) && (
+                  <a
+                    href={(() => { const w = selectedAgency.website || selectedAgency.company_website || ""; return w.startsWith("http") ? w : "https://" + w })()}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-blue-600 hover:underline"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                    Company Website
+                  </a>
+                )}
+                {selectedAgency.company_linkedin_url && (
+                  <a href={selectedAgency.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    LinkedIn Profile
+                  </a>
+                )}
+                {selectedAgency.reel_url && (
+                  <a href={selectedAgency.reel_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    View Reel
+                  </a>
+                )}
+              </div>
+
+              {(() => {
+                const caps = selectedAgency.capabilities
+                if (!Array.isArray(caps) || caps.length === 0) return null
+                return (
+                  <div>
+                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Capabilities</div>
+                    <div className="flex flex-wrap gap-1">
+                      {(caps as string[]).map((cap: string, i: number) => (
+                        <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">{cap}</span>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
+              <div className="rounded-lg border border-gray-200 p-4">
+                <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Contact</div>
+                <div className="text-sm text-gray-900 font-medium">{selectedAgency.full_name || selectedAgency.company_name || "Not provided"}</div>
+                {selectedAgency.email ? (
+                  <div className="text-sm text-gray-600 mt-1">{selectedAgency.email}</div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      requestConnection(selectedAgency.id)
+                      setSelectedAgency(null)
+                    }}
+                    className="text-sm text-blue-600 hover:underline mt-1 text-left"
+                  >
+                    Request collaboration access to view contact info &rarr;
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </PartnerLayout>
   )
 }
