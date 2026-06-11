@@ -39,9 +39,28 @@ export async function GET(req: NextRequest) {
     })
 
     // Do not expose other users' emails to logged-in viewers (directory is opt-in, email is not public).
-    const profiles = (data ?? []).map((row) =>
+    const maskedProfiles = (data ?? []).map((row) =>
       row.id === user.id ? row : { ...row, email: null as string | null }
     )
+
+    // Fetch vouch counts (aggregate only — never expose individual voucher identities)
+    const profileIds = maskedProfiles.map((p) => p.id as string)
+    const vouchCountByPartnerId = new Map<string, number>()
+    if (profileIds.length > 0) {
+      const { data: vouchRows } = await supabase
+        .from("partner_vouches")
+        .select("vouched_partner_id")
+        .in("vouched_partner_id", profileIds)
+      for (const v of vouchRows ?? []) {
+        const pid = v.vouched_partner_id as string
+        vouchCountByPartnerId.set(pid, (vouchCountByPartnerId.get(pid) ?? 0) + 1)
+      }
+    }
+
+    const profiles = maskedProfiles.map((p) => ({
+      ...p,
+      vouch_count: vouchCountByPartnerId.get(p.id as string) ?? 0,
+    }))
 
     return NextResponse.json(
       { profiles },
