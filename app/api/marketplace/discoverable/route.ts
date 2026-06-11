@@ -38,10 +38,27 @@ export async function GET(req: NextRequest) {
       discoverableCount: data?.length ?? 0,
     })
 
-    // Do not expose other users' emails to logged-in viewers (directory is opt-in, email is not public).
-    const maskedProfiles = (data ?? []).map((row) =>
-      row.id === user.id ? row : { ...row, email: null as string | null }
-    )
+    // Check for active partnerships — bidirectional: viewer may be agency or partner
+    // Only fetch partner_id/agency_id, never expose full list to either party
+    const { data: activePartnerships } = await supabase
+      .from("partnerships")
+      .select("agency_id, partner_id")
+      .or(`agency_id.eq.${user.id},partner_id.eq.${user.id}`)
+      .eq("status", "active")
+
+    // Build set of profile IDs the viewer has an active partnership with
+    const activePartnerIds = new Set<string>()
+    for (const p of activePartnerships ?? []) {
+      const otherId = (p.agency_id === user.id ? p.partner_id : p.agency_id) as string | null
+      if (otherId) activePartnerIds.add(otherId)
+    }
+
+    // Unmask email for self + anyone with an active partnership (bidirectional)
+    const maskedProfiles = (data ?? []).map((row) => {
+      const isOwn = row.id === user.id
+      const hasPartnership = activePartnerIds.has(row.id as string)
+      return isOwn || hasPartnership ? row : { ...row, email: null as string | null }
+    })
 
     // Fetch vouch counts (aggregate only — never expose individual voucher identities)
     const profileIds = maskedProfiles.map((p) => p.id as string)
