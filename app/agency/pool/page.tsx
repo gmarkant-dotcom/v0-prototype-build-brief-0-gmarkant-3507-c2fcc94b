@@ -254,6 +254,7 @@ export default function PartnerPoolPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedDiscipline, setSelectedDiscipline] = useState("All")
   const [selectedType, setSelectedType] = useState("All")
+  const [poolTab, setPoolTab] = useState<"network" | "invitations">("network")
   const [selectedLegal, setSelectedLegal] = useState("All")
   const [selectedStatus, setSelectedStatus] = useState("All")
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false)
@@ -939,6 +940,14 @@ export default function PartnerPoolPage() {
     [filteredNetworkRows],
   )
 
+  const filteredActiveNetworkRows = useMemo(
+    () =>
+      filteredNetworkRows.filter((r) =>
+        r.mode === "demo" ? r.inv.status !== "pending" : r.p.status !== "pending",
+      ),
+    [filteredNetworkRows],
+  )
+
   const dynamicDisciplineFilters = useMemo(() => {
     const seen = new Map<string, string>()
     const add = (raw: string) => {
@@ -1167,22 +1176,52 @@ export default function PartnerPoolPage() {
 
         {hasNetworkSource && (
           <div className="mb-8 rounded-lg border border-border bg-white/[0.03] p-4">
-            <div className="flex items-center gap-3 mb-1">
-              <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center shrink-0">
-                <Building2 className="w-5 h-5 text-accent" />
-              </div>
-              <div>
-                <h3 className="font-display font-bold text-foreground">Partner network</h3>
-                <p className="text-sm text-foreground-muted">
-                  Active partnerships, pending invites, and status for your roster.
-                </p>
-              </div>
+            {/* Tab toggle: Partner Network / Invitations Awaiting Response */}
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setPoolTab("network")}
+                className={cn(
+                  "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+                  poolTab === "network"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-foreground/90 hover:border-white/30"
+                )}
+              >
+                <Building2 className="w-3 h-3" />
+                Partner Network
+              </button>
+              <button
+                type="button"
+                onClick={() => setPoolTab("invitations")}
+                className={cn(
+                  "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+                  poolTab === "invitations"
+                    ? "border-amber-500 bg-amber-500/10 text-amber-300"
+                    : "border-border text-foreground/90 hover:border-white/30"
+                )}
+              >
+                <Clock className="w-3 h-3" />
+                Invitations Awaiting Response
+                {filteredPendingNetworkRows.length > 0 && (
+                  <span className={cn(
+                    "ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold",
+                    poolTab === "invitations"
+                      ? "bg-amber-500/30 text-amber-200"
+                      : "bg-amber-500/20 text-amber-400"
+                  )}>
+                    {filteredPendingNetworkRows.length}
+                  </span>
+                )}
+              </button>
             </div>
-            {filteredNetworkRows.length === 0 ? (
-              <p className="mt-4 text-sm text-foreground-muted">No partners match your filters.</p>
-            ) : (
-              <div className="mt-4 space-y-2">
-                {filteredNetworkRows.map((row) => {
+            {poolTab === "network" && (
+              <>
+                {filteredActiveNetworkRows.length === 0 ? (
+                  <p className="mt-2 text-sm text-foreground-muted">No active partners match your filters.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredActiveNetworkRows.map((row) => {
                   if (row.mode === "demo") {
                     const { inv, partner } = row
                     const bl = partner?.status === "blacklisted"
@@ -1400,6 +1439,54 @@ export default function PartnerPoolPage() {
                 })}
               </div>
             )}
+              </>
+            )}
+            {poolTab === "invitations" && (
+              <div className="space-y-2 mt-1">
+                {filteredPendingNetworkRows.length === 0 ? (
+                  <p className="mt-2 text-sm text-foreground-muted">No pending invitations match your filters.</p>
+                ) : (
+                  filteredPendingNetworkRows.map((row) => {
+                    if (row.mode === "demo") {
+                      const inv = row.inv
+                      return (
+                        <div key={inv.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                              <Mail className="w-4 h-4 text-amber-400" />
+                            </div>
+                            <div>
+                              <div className="font-medium text-foreground">{inv.partnerName || inv.partnerEmail}</div>
+                              <div className="font-mono text-[10px] text-foreground-muted">
+                                Invited {new Date(inv.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              </div>
+                            </div>
+                          </div>
+                          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-900/30 text-amber-100">Pending</span>
+                        </div>
+                      )
+                    }
+                    const p = row.p
+                    return (
+                      <div key={p.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
+                            <Mail className="w-4 h-4 text-amber-400" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-foreground">{p.partnerCompany || p.partnerName || p.partnerEmail}</div>
+                            <div className="font-mono text-[10px] text-foreground-muted">
+                              Invited {new Date(p.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-900/30 text-amber-100">Pending</span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1568,82 +1655,6 @@ export default function PartnerPoolPage() {
           </GlassCard>
         ) : null}
 
-        {/* Pending Confirmations Alert */}
-        {filteredPendingNetworkRows.length > 0 && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-400" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-display font-bold text-foreground">
-                  {filteredPendingNetworkRows.length} Invitation{filteredPendingNetworkRows.length > 1 ? "s" : ""} Awaiting Response
-                </h3>
-                <p className="text-sm text-foreground-muted">
-                  Waiting for these partners to accept your invitation.
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 space-y-2">
-              {filteredPendingNetworkRows.map((row) => {
-                if (row.mode === "demo") {
-                  const inv = row.inv
-                  return (
-                    <div key={inv.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                          <Mail className="w-4 h-4 text-amber-400" />
-                        </div>
-                        <div>
-                          <div className="font-medium text-foreground">
-                            {inv.partnerName || inv.partnerEmail}
-                          </div>
-                          <div className="font-mono text-[10px] text-foreground-muted">
-                            Invited on{" "}
-                            {new Date(inv.invitedAt).toLocaleDateString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-900/30 text-amber-100">
-                        Pending
-                      </span>
-                    </div>
-                  )
-                }
-                const p = row.p
-                return (
-                  <div key={p.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                        <Mail className="w-4 h-4 text-amber-400" />
-                      </div>
-                      <div>
-                        <div className="font-medium text-foreground">
-                          {p.partnerCompany || p.partnerName || p.partnerEmail}
-                        </div>
-                        <div className="font-mono text-[10px] text-foreground-muted">
-                          Invited on{" "}
-                          {new Date(p.invitedAt).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-900/30 text-amber-100">
-                      Pending
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
 
         {/* Access Requests Alert */}
         {accessRequests.length > 0 && (
