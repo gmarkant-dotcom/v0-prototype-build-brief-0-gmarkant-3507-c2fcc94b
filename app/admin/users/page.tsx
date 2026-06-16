@@ -112,24 +112,23 @@ export default function AdminUsersPage() {
     setUpdating(null)
   }
 
-  const grantAgencyAccess = async (userId: string, currentSecondaryRole: string | null) => {
+  const grantAgencyAccess = async (userId: string, currentIsPaid: boolean) => {
     setUpdating(userId)
-    const grant = currentSecondaryRole !== 'agency'
     try {
       const supabase = createClient()
       const { error } = await supabase
         .from('profiles')
-        .update({ secondary_role: grant ? 'agency' : null })
+        .update({ is_paid: true })
         .eq('id', userId)
       if (error) {
-        console.error('[admin] grant-agency-access error:', error.message)
+        console.error('[admin] grant-access error:', error.message)
       } else {
         setUsers(users.map(u =>
-          u.id === userId ? { ...u, secondary_role: grant ? 'agency' : null } : u
+          u.id === userId ? { ...u, is_paid: true } : u
         ))
       }
     } catch (e) {
-      console.error('[admin] grant-agency-access error:', e)
+      console.error('[admin] grant-access error:', e)
     }
     setUpdating(null)
   }
@@ -351,16 +350,16 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3 text-center">
                     {user.role === 'partner' && (
                       <button
-                        onClick={() => grantAgencyAccess(user.id, user.secondary_role)}
-                        disabled={updating === user.id}
+                        onClick={() => grantAgencyAccess(user.id, user.is_paid)}
+                        disabled={updating === user.id || user.is_paid}
                         className={cn(
                           "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                          user.secondary_role === 'agency'
-                            ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+                          user.is_paid
+                            ? "bg-blue-500/10 text-blue-400 cursor-default"
                             : "bg-white/5 text-white/85 hover:bg-white/10 hover:text-white"
                         )}
                       >
-                        {user.secondary_role === 'agency' ? (
+                        {user.is_paid ? (
                           <>
                             <Check className="w-3.5 h-3.5" />
                             Granted
