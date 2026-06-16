@@ -116,25 +116,23 @@ export default function AdminUsersPage() {
     setUpdating(userId)
     const grant = currentSecondaryRole !== 'agency'
     try {
-      const res = await fetch('/api/admin/grant-agency-access', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, grant }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok) {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('profiles')
+        .update({ secondary_role: grant ? 'agency' : null })
+        .eq('id', userId)
+      if (error) {
+        console.error('[admin] grant-agency-access error:', error.message)
+      } else {
         setUsers(users.map(u =>
           u.id === userId ? { ...u, secondary_role: grant ? 'agency' : null } : u
         ))
-      } else {
-        console.error('[admin] grant-agency-access failed:', data)
       }
     } catch (e) {
       console.error('[admin] grant-agency-access error:', e)
     }
     setUpdating(null)
   }
-
   // Admin status is managed directly in database by owner only
   // No UI toggle - this prevents accidental admin escalation
 
