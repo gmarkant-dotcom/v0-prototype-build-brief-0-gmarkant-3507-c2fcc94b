@@ -70,15 +70,23 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
 
     const checkPaidStatus = async () => {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+      // Diagnostic logging - remove after debugging
+      if (authError) console.error("[PaidUserContext] auth.getUser error:", authError)
+      if (!user) {
+        console.error("[PaidUserContext] no user returned from auth.getUser - is_paid will stay false")
+      }
 
       if (user) {
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('is_paid, is_admin, role, linked_agency_id')
           .eq('id', user.id)
           .single()
 
+        if (profileError) console.error("[PaidUserContext] profiles query error:", profileError)
+        console.error("[PaidUserContext] profile fetched:", { is_paid: profile?.is_paid, is_admin: profile?.is_admin, role: profile?.role, userId: user.id.slice(0,8) })
         setIsPaid(profile?.is_paid !== false)
         setIsAdmin(profile?.is_admin || false)
         setRole(profile?.role as UserRole || null)
