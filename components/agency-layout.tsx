@@ -30,6 +30,7 @@ const navSections = [
   {
     label: "Project Workflow",
     items: [
+      { number: "00", title: "Creative Brief Interpretation", aiPowered: true, href: "/agency/brief" },
       { number: "01", title: "RFP Broadcast", aiPowered: false, href: "/agency" },
       { number: "02", title: "Bid Management", aiPowered: false, href: "/agency/bids" },
       { number: "03", title: "Onboarding", aiPowered: false, href: "/agency/onboarding" },
