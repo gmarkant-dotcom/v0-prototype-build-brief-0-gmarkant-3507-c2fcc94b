@@ -27,6 +27,9 @@ export function AgencySubscriptionGate({ children }: { children: ReactNode }) {
     return <>{children}</>
   }
 
+  // Diagnostic: log why gate is blocking - remove after debugging
+  console.error("[AgencySubscriptionGate] BLOCKING", { isPaid, isAdmin, isDemo, isLoading })
+
   return (
     <div className="min-h-screen bg-[#081F1F] flex flex-col items-center justify-center p-8">
       <div className="max-w-lg w-full rounded-2xl border border-white/10 bg-[#0C3535]/80 p-10 text-center">
