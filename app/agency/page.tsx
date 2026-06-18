@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, Suspense, Component, type ReactNode } from "react"
 import { useSearchParams } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { StageHeader } from "@/components/stage-header"
@@ -223,6 +223,25 @@ function AgencyRFPContent() {
     return () => { cancelled = true }
   }, [])
 
+
+  // Step 00 interpretation integration
+  const searchParams = useSearchParams()
+  const [briefSource, setBriefSource] = useState<"step00" | "new">("new")
+  const [interpretations, setInterpretations] = useState<Array<{
+    id: string
+    brief_title: string | null
+    created_at: string
+    brief_summary: string | null
+    brief_text: string | null
+    brief_file_url: string | null
+    budget_result: { total_low?: number; total_high?: number } | null
+    timeline_result: { total_weeks_min?: number; total_weeks_max?: number } | null
+    directors_result: { recommendations?: Array<{ name: string; company: string; fit_reason: string }> } | null
+  }>>([])
+  const [interpretationsLoading, setInterpretationsLoading] = useState(false)
+  const [selectedInterpretationId, setSelectedInterpretationId] = useState<string | null>(null)
+  const selectedInterpretation = interpretations.find(i => i.id === selectedInterpretationId) ?? null
+
   // Load Step 00 interpretations
   useEffect(() => {
     if (isDemo) return
@@ -346,23 +365,6 @@ function AgencyRFPContent() {
   // Step 5: Select Recipients
   const [selectedPartners, setSelectedPartners] = useState<Record<string, string[]>>({})
 
-  // Step 00 interpretation integration
-  const searchParams = useSearchParams()
-  const [briefSource, setBriefSource] = useState<"step00" | "new">("new")
-  const [interpretations, setInterpretations] = useState<Array<{
-    id: string
-    brief_title: string | null
-    created_at: string
-    brief_summary: string | null
-    brief_text: string | null
-    brief_file_url: string | null
-    budget_result: { total_low?: number; total_high?: number } | null
-    timeline_result: { total_weeks_min?: number; total_weeks_max?: number } | null
-    directors_result: { recommendations?: Array<{ name: string; company: string; fit_reason: string }> } | null
-  }>>([])
-  const [interpretationsLoading, setInterpretationsLoading] = useState(false)
-  const [selectedInterpretationId, setSelectedInterpretationId] = useState<string | null>(null)
-  const selectedInterpretation = interpretations.find(i => i.id === selectedInterpretationId) ?? null
   const [newRecipients, setNewRecipients] = useState<Record<string, NewRecipient[]>>({})
   const [recipientDrafts, setRecipientDrafts] = useState<
     Record<string, { email: string; name: string; requireNda: boolean }>
@@ -2523,10 +2525,45 @@ function AgencyRFPContent() {
   )
 }
 
+
+class RFPErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-8 max-w-2xl">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6">
+            <div className="font-display font-bold text-lg text-foreground mb-2">Something went wrong</div>
+            <p className="text-sm text-foreground-muted mb-4">
+              An error occurred while loading the RFP Broadcast page. Refresh to try again.
+            </p>
+            <button
+              type="button"
+              onClick={() => this.setState({ error: null })}
+              className="font-mono text-xs px-4 py-2 rounded-lg bg-white/10 text-foreground hover:bg-white/15 transition-colors"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function AgencyRFPPage() {
   return (
     <AgencyLayout>
-      <AgencyRFPContent />
+      <RFPErrorBoundary>
+        <Suspense fallback={null}>
+          <AgencyRFPContent />
+        </Suspense>
+      </RFPErrorBoundary>
     </AgencyLayout>
   )
 }
