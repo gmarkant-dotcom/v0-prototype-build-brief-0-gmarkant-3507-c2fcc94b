@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { StageHeader } from "@/components/stage-header"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
@@ -12,7 +13,7 @@ import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { InlineProjectSelector } from "@/components/agency-project-selector"
-import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, ChevronDown, Check, Send, Shield, FileCheck, Loader2, Sparkles } from "lucide-react"
+import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, ChevronDown, Check, Send, Shield, FileCheck, Loader2, Sparkles, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
 import { readTextStream } from "@/lib/read-text-stream"
@@ -222,6 +223,67 @@ function AgencyRFPContent() {
     return () => { cancelled = true }
   }, [])
 
+  // Load Step 00 interpretations
+  useEffect(() => {
+    if (isDemo) return
+    let cancelled = false
+    setInterpretationsLoading(true)
+    ;(async () => {
+      try {
+        const { createClient } = await import("@/lib/supabase/client")
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || cancelled) return
+        const { data } = await supabase
+          .from("brief_interpretations")
+          .select("id, brief_title, created_at, brief_summary, brief_text, brief_file_url, budget_result, timeline_result, directors_result")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(20)
+        if (!cancelled && data && data.length > 0) {
+          setInterpretations(data as typeof interpretations)
+          // Auto-select from URL param
+          const urlId = searchParams?.get("interpretation_id")
+          if (urlId) {
+            const match = data.find((r: { id: string }) => r.id === urlId)
+            if (match) {
+              setSelectedInterpretationId(urlId)
+              setBriefSource("step00")
+            }
+          }
+        }
+      } catch {}
+      if (!cancelled) setInterpretationsLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [isDemo, searchParams])
+
+  // Apply Step 00 interpretation when selected
+  useEffect(() => {
+    if (briefSource !== "step00" || !selectedInterpretation) return
+    // Populate briefSourceText from interpretation
+    if (selectedInterpretation.brief_text) {
+      setBriefSourceText(selectedInterpretation.brief_text)
+      setBriefUploaded(true)
+      setBriefFileName(selectedInterpretation.brief_title || "Brief from Step 00")
+    }
+    // Build a partial masterRfp from interpretation data
+    const budgetStr = selectedInterpretation.budget_result?.total_low != null && selectedInterpretation.budget_result?.total_high != null
+      ? `$${selectedInterpretation.budget_result.total_low.toLocaleString()} - $${selectedInterpretation.budget_result.total_high.toLocaleString()}`
+      : ""
+    const timelineStr = selectedInterpretation.timeline_result?.total_weeks_min != null && selectedInterpretation.timeline_result?.total_weeks_max != null
+      ? `${selectedInterpretation.timeline_result.total_weeks_min}-${selectedInterpretation.timeline_result.total_weeks_max} weeks`
+      : ""
+    if (selectedInterpretation.brief_summary || budgetStr || timelineStr) {
+      setMasterRfp(prev => prev ? {
+        ...prev,
+        overview: selectedInterpretation.brief_summary || prev.overview,
+        totalBudget: budgetStr || prev.totalBudget,
+        timeline: timelineStr || prev.timeline,
+      } : null)
+    }
+  }, [briefSource, selectedInterpretation])
+
   // Step state (1-6)
   const [currentStep, setCurrentStep] = useState(1)
   
@@ -283,6 +345,24 @@ function AgencyRFPContent() {
   
   // Step 5: Select Recipients
   const [selectedPartners, setSelectedPartners] = useState<Record<string, string[]>>({})
+
+  // Step 00 interpretation integration
+  const searchParams = useSearchParams()
+  const [briefSource, setBriefSource] = useState<"step00" | "new">("new")
+  const [interpretations, setInterpretations] = useState<Array<{
+    id: string
+    brief_title: string | null
+    created_at: string
+    brief_summary: string | null
+    brief_text: string | null
+    brief_file_url: string | null
+    budget_result: { total_low?: number; total_high?: number } | null
+    timeline_result: { total_weeks_min?: number; total_weeks_max?: number } | null
+    directors_result: { recommendations?: Array<{ name: string; company: string; fit_reason: string }> } | null
+  }>>([])
+  const [interpretationsLoading, setInterpretationsLoading] = useState(false)
+  const [selectedInterpretationId, setSelectedInterpretationId] = useState<string | null>(null)
+  const selectedInterpretation = interpretations.find(i => i.id === selectedInterpretationId) ?? null
   const [newRecipients, setNewRecipients] = useState<Record<string, NewRecipient[]>>({})
   const [recipientDrafts, setRecipientDrafts] = useState<
     Record<string, { email: string; name: string; requireNda: boolean }>
@@ -985,6 +1065,71 @@ function AgencyRFPContent() {
         {/* STEP 1: Upload Brief */}
         {currentStep === 1 && (
           <div className="space-y-6">
+            {/* Brief Source Selector - only shown when Step 00 interpretations exist */}
+            {!interpretationsLoading && interpretations.length > 0 && (
+              <GlassCard>
+                <GlassCardHeader
+                  label="Brief Source"
+                  title="Where is your brief coming from?"
+                  description="Use a brief you already interpreted in Step 00, or upload a new one."
+                />
+                <div className="mt-4 space-y-3">
+                  {(["step00", "new"] as const).map((src) => (
+                    <label key={src} className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="briefSource"
+                        value={src}
+                        checked={briefSource === src}
+                        onChange={() => setBriefSource(src)}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <div className="font-display font-bold text-sm text-foreground">
+                          {src === "step00" ? "Use brief from Step 00" : "Upload a new brief"}
+                        </div>
+                        {src === "step00" && briefSource === "step00" && (
+                          <div className="mt-2">
+                            <select
+                              value={selectedInterpretationId ?? ""}
+                              onChange={(e) => setSelectedInterpretationId(e.target.value || null)}
+                              className="w-full rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/50"
+                            >
+                              <option value="">Select an interpretation...</option>
+                              {interpretations.map((interp) => (
+                                <option key={interp.id} value={interp.id}>
+                                  {interp.brief_title || "Untitled"} - {new Date(interp.created_at).toLocaleDateString()}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {briefSource === "step00" && selectedInterpretation?.brief_summary && (
+                  <div className="mt-4 p-3 rounded-lg bg-accent/5 border border-accent/20">
+                    <div className="font-mono text-[10px] text-accent uppercase tracking-wider mb-1">Auto-populated from Step 00</div>
+                    <p className="text-sm text-foreground-muted">{selectedInterpretation.brief_summary}</p>
+                    <div className="flex gap-4 mt-2">
+                      {selectedInterpretation.budget_result?.total_low != null && (
+                        <span className="font-mono text-[10px] text-foreground-muted">
+                          Budget: ${selectedInterpretation.budget_result.total_low.toLocaleString()} - ${(selectedInterpretation.budget_result.total_high ?? 0).toLocaleString()}
+                        </span>
+                      )}
+                      {selectedInterpretation.timeline_result?.total_weeks_min != null && (
+                        <span className="font-mono text-[10px] text-foreground-muted">
+                          Timeline: {selectedInterpretation.timeline_result.total_weeks_min}-{selectedInterpretation.timeline_result.total_weeks_max} weeks
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </GlassCard>
+            )}
+
+            {briefSource === "new" && (
             <GlassCard>
               <GlassCardHeader
                 label="Step 1a"
@@ -1163,6 +1308,7 @@ function AgencyRFPContent() {
                 )}
               </div>
             </GlassCard>
+            )}
             
             {/* Output format template + SOW (RFP format drives Generate Master RFP) */}
             <GlassCard>
@@ -1916,7 +2062,31 @@ function AgencyRFPContent() {
               />
             </GlassCard>
             
-            {outsourcedItems.map((item) => (
+            {/* Step 00 Directors Shortlist - reference only, no selection */}
+            {briefSource === "step00" && selectedInterpretation?.directors_result?.recommendations && selectedInterpretation.directors_result.recommendations.length > 0 && (
+              <GlassCard>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">From Step 00 Shortlist</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <p className="text-xs text-foreground-muted mb-4">Directors and production companies recommended for this brief. Use as a reference when inviting new contacts below.</p>
+                <div className="space-y-3">
+                  {selectedInterpretation.directors_result.recommendations.map((rec, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-white/5 border border-border">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-display font-bold text-sm text-foreground">{rec.name}</div>
+                        <div className="font-mono text-[10px] text-foreground-muted">{rec.company}</div>
+                        <p className="text-xs text-foreground-muted mt-1.5 leading-relaxed">{rec.fit_reason}</p>
+                      </div>
+                      <span className="font-mono text-[9px] px-2 py-1 rounded-full border border-border text-foreground-muted whitespace-nowrap shrink-0">Not yet on Ligament</span>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+                        {outsourcedItems.map((item) => (
               <GlassCard key={item.id}>
                 <div className="flex items-start justify-between mb-4">
                   <div>
