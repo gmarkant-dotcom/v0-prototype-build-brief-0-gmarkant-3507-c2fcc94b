@@ -399,11 +399,25 @@ export default function BriefInterpretationPage() {
     setIsInterpreting(true)
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      // getSession() reads the local session AND refreshes an expired token before
+      // returning. This guarantees the access_token sent with the INSERT is fresh,
+      // so auth.uid() is non-null on the DB side and the RLS with-check passes.
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
       if (!user) { router.push("/auth/login"); return }
+
+      // Diagnostic: visible in browser DevTools console
+      console.log("[brief/interpret] auth state", {
+        userId: user.id,
+        email: user.email,
+        hasToken: !!session?.access_token,
+        expiresAt: session?.expires_at,
+      })
 
       const briefTitle = deriveBriefTitle(briefFileName || null, effectiveBriefText)
       const selectedAnalyses = (Object.keys(checks) as AnalysisType[]).filter((k) => checks[k])
+
+      console.log("[brief/interpret] inserting row", { user_id: user.id, briefTitle, analyses: selectedAnalyses })
 
       const { data: row, error: insertError } = await supabase
         .from("brief_interpretations")
