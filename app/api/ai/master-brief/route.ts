@@ -126,7 +126,7 @@ CLIENT BRIEF:
 ${briefText}`
 
     const result = await generateText({
-      model: anthropic("claude-sonnet-4-20250514"),
+      model: anthropic("claude-sonnet-4-6"),
       output: Output.object({
         schema: masterBriefSchema,
       }),
