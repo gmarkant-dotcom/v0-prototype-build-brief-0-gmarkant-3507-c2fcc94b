@@ -443,7 +443,7 @@ export default function BriefInterpretationPage() {
       <div className="p-8 max-w-3xl space-y-6">
         <StageHeader
           stageNumber="00"
-          title="Creative Brief Interpretation"
+          title="Creative Treatment Analysis"
           subtitle="Upload or paste a client brief. Ligament extracts timeline, budget, comparable campaigns, and director recommendations to accelerate your RFP setup."
           aiPowered
         />
