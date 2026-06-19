@@ -137,7 +137,7 @@ CLIENT BRIEF (for context — respect scrubbing rules only when illustrating pla
 ${briefText}`
 
     const result = streamText({
-      model: anthropic("claude-sonnet-4-20250514"),
+      model: anthropic("claude-sonnet-4-6"),
       prompt,
       temperature: 0.35,
       maxOutputTokens: 8192,
