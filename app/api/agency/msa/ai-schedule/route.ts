@@ -242,7 +242,7 @@ Return a JSON object with key "milestones": an array of 3–8 payment milestones
 Total of suggested amounts should not exceed the implied awarded budget unless the brief clearly allows; align dates with the proposed timeline and payment terms above.`
 
     const result = await generateText({
-      model: "anthropic/claude-sonnet-4-20250514" as any,
+      model: "anthropic/claude-sonnet-4-6" as any,
       output: Output.object({
         schema: scheduleOutSchema,
       }),
