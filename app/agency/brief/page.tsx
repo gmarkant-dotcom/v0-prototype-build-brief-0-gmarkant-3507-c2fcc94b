@@ -1,33 +1,37 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { StageHeader } from "@/components/stage-header"
+import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { createClient } from "@/lib/supabase/client"
 import {
   AlertCircle,
   CheckSquare,
   ChevronDown,
   ChevronUp,
-  FileText,
+  FileCheck,
+  Link2,
   Loader2,
   RefreshCw,
   Square,
+  Type,
   Upload,
   X,
 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 
+type UploadMethod = null | "file" | "google" | "paste"
 type AnalysisType = "timeline" | "budget" | "campaigns" | "directors"
-
 type AnalysisStatus =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "success"; data: unknown }
   | { status: "error"; message: string }
-
 type AnalysesState = Record<AnalysisType, AnalysisStatus>
 
 const ANALYSIS_LABELS: Record<AnalysisType, string> = {
@@ -51,56 +55,40 @@ const ANALYSIS_COLUMNS: Record<AnalysisType, string> = {
   directors: "directors_result",
 }
 
-async function extractTextFromPdf(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer()
-  const pdfjsLib = await import("pdfjs-dist")
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise
-  const parts: string[] = []
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i)
-    const content = await page.getTextContent()
-    parts.push(
-      content.items
-        .map((item: unknown) => (typeof item === "object" && item !== null && "str" in item ? (item as { str: string }).str : ""))
-        .join(" ")
-    )
-  }
-  return parts.join("\n").trim()
-}
-
-async function extractTextFromDocx(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer()
-  const mammoth = await import("mammoth")
-  const result = await mammoth.extractRawText({ arrayBuffer: buffer })
-  return result.value.trim()
-}
-
-function deriveBriefTitle(filename: string | null, pastedText: string): string {
+function deriveBriefTitle(filename: string | null, text: string): string {
   if (filename) {
     const name = filename.replace(/\.[^.]+$/, "")
     return name.length > 60 ? name.slice(0, 60).replace(/\s+\S*$/, "") : name
   }
-  const trimmed = pastedText.trim()
-  if (trimmed.length <= 60) return trimmed
-  const truncated = trimmed.slice(0, 60)
-  const lastSpace = truncated.lastIndexOf(" ")
-  return lastSpace > 30 ? truncated.slice(0, lastSpace) : truncated
+  const trimmed = text.trim()
+  if (trimmed.length <= 60) return trimmed || "Untitled Brief"
+  const cut = trimmed.slice(0, 60)
+  const lastSpace = cut.lastIndexOf(" ")
+  return lastSpace > 30 ? cut.slice(0, lastSpace) : cut
 }
 
-// --- Result card renderers ---
+// ─── Result card sub-components ────────────────────────────────────────────
 
-function TimelineCard({ data, justification }: { data: unknown; justification: string }) {
+function JustificationBlock({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="border-l-2 border-accent/40 pl-3 mt-4">
+      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-1">{label}</div>
+      <p className="text-xs text-foreground-muted leading-relaxed">{text}</p>
+    </div>
+  )
+}
+
+function TimelineCard({ data }: { data: unknown }) {
   const d = data as {
     total_weeks_min: number
     total_weeks_max: number
     phases: { name: string; weeks_min: number; weeks_max: number; description: string }[]
+    justification: string
   }
   return (
     <div className="space-y-4">
       <div className="text-3xl font-display font-black text-accent">
-        {d.total_weeks_min}
-        {d.total_weeks_min !== d.total_weeks_max ? `-${d.total_weeks_max}` : ""} weeks
+        {d.total_weeks_min}{d.total_weeks_min !== d.total_weeks_max ? `-${d.total_weeks_max}` : ""} weeks
       </div>
       <div className="space-y-2">
         {d.phases.map((phase, i) => (
@@ -115,17 +103,17 @@ function TimelineCard({ data, justification }: { data: unknown; justification: s
           </div>
         ))}
       </div>
-      <JustificationBlock label="Why this estimate" text={justification} />
+      <JustificationBlock label="Why this estimate" text={d.justification} />
     </div>
   )
 }
 
-function BudgetCard({ data, justification }: { data: unknown; justification: string }) {
+function BudgetCard({ data }: { data: unknown }) {
   const d = data as {
     total_low: number
     total_high: number
-    currency: string
     line_items: { label: string; low: number; high: number }[]
+    justification: string
   }
   const fmt = (n: number) => `$${n.toLocaleString()}`
   return (
@@ -158,35 +146,24 @@ function BudgetCard({ data, justification }: { data: unknown; justification: str
           })}
         </tbody>
       </table>
-      <JustificationBlock label="Why this estimate" text={justification} />
+      <JustificationBlock label="Why this estimate" text={d.justification} />
     </div>
   )
 }
 
 function CampaignsCard({ data }: { data: unknown }) {
   const d = data as {
-    campaigns: {
-      title: string
-      brand: string
-      year: number
-      director: string
-      production_company: string
-      relevance: string
-    }[]
+    campaigns: { title: string; brand: string; year: number; director: string; production_company: string; relevance: string }[]
   }
   return (
     <div className="space-y-3">
       {d.campaigns.map((c, i) => (
         <div key={i} className="p-3 rounded-lg bg-white/5 border border-border">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <div className="font-display font-bold text-sm text-foreground">{c.title}</div>
-              <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
-                {c.brand} &middot; {c.year} &middot; Dir. {c.director}
-              </div>
-              <div className="font-mono text-[10px] text-foreground-muted">{c.production_company}</div>
-            </div>
+          <div className="font-display font-bold text-sm text-foreground">{c.title}</div>
+          <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+            {c.brand} &middot; {c.year} &middot; Dir. {c.director}
           </div>
+          <div className="font-mono text-[10px] text-foreground-muted">{c.production_company}</div>
           <p className="text-xs text-foreground-muted mt-2 leading-relaxed border-l-2 border-accent/30 pl-2">{c.relevance}</p>
         </div>
       ))}
@@ -196,13 +173,7 @@ function CampaignsCard({ data }: { data: unknown }) {
 
 function DirectorsCard({ data }: { data: unknown }) {
   const d = data as {
-    recommendations: {
-      name: string
-      company: string
-      known_for: string
-      notable_credits: string
-      fit_reason: string
-    }[]
+    recommendations: { name: string; company: string; known_for: string; notable_credits: string; fit_reason: string }[]
   }
   return (
     <div className="space-y-3">
@@ -219,15 +190,6 @@ function DirectorsCard({ data }: { data: unknown }) {
   )
 }
 
-function JustificationBlock({ label, text }: { label: string; text: string }) {
-  return (
-    <div className="border-l-2 border-accent/40 pl-3 mt-3">
-      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-1">{label}</div>
-      <p className="text-xs text-foreground-muted leading-relaxed">{text}</p>
-    </div>
-  )
-}
-
 function AnalysisResultCard({
   type,
   state,
@@ -238,9 +200,7 @@ function AnalysisResultCard({
   onRetry: () => void
 }) {
   const [expanded, setExpanded] = useState(true)
-
   if (state.status === "idle") return null
-
   return (
     <div className="rounded-xl border border-border bg-white/[0.03]">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -248,59 +208,35 @@ function AnalysisResultCard({
         <div className="flex items-center gap-2">
           {state.status === "success" && (
             <>
-              <button
-                type="button"
-                onClick={onRetry}
-                className="p-1.5 rounded-md text-foreground-muted hover:text-foreground hover:bg-white/10 transition-colors"
-                title="Re-run analysis"
-              >
+              <button type="button" onClick={onRetry} className="p-1.5 rounded-md text-foreground-muted hover:text-foreground hover:bg-white/10 transition-colors" title="Re-run">
                 <RefreshCw className="w-4 h-4" />
               </button>
-              <button
-                type="button"
-                onClick={() => setExpanded((e) => !e)}
-                className="p-1.5 rounded-md text-foreground-muted hover:text-foreground hover:bg-white/10 transition-colors"
-              >
+              <button type="button" onClick={() => setExpanded((e) => !e)} className="p-1.5 rounded-md text-foreground-muted hover:text-foreground hover:bg-white/10 transition-colors">
                 {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
             </>
           )}
         </div>
       </div>
-
       {state.status === "loading" && (
         <div className="flex items-center gap-3 px-5 py-6 text-foreground-muted">
           <Loader2 className="w-4 h-4 animate-spin shrink-0" />
           <span className="text-sm">{LOADING_MESSAGES[type]}</span>
         </div>
       )}
-
       {state.status === "error" && (
         <div className="px-5 py-4">
           <div className="flex items-center gap-2 text-red-400 mb-3">
             <AlertCircle className="w-4 h-4" />
             <span className="text-sm">{state.message}</span>
           </div>
-          <Button size="sm" variant="outline" onClick={onRetry} className="border-border text-foreground">
-            Retry
-          </Button>
+          <Button size="sm" variant="outline" onClick={onRetry} className="border-border text-foreground">Retry</Button>
         </div>
       )}
-
       {state.status === "success" && expanded && (
         <div className="px-5 py-4">
-          {type === "timeline" && (
-            <TimelineCard
-              data={state.data}
-              justification={(state.data as { justification?: string })?.justification ?? ""}
-            />
-          )}
-          {type === "budget" && (
-            <BudgetCard
-              data={state.data}
-              justification={(state.data as { justification?: string })?.justification ?? ""}
-            />
-          )}
+          {type === "timeline" && <TimelineCard data={state.data} />}
+          {type === "budget" && <BudgetCard data={state.data} />}
           {type === "campaigns" && <CampaignsCard data={state.data} />}
           {type === "directors" && <DirectorsCard data={state.data} />}
         </div>
@@ -309,20 +245,31 @@ function AnalysisResultCard({
   )
 }
 
-// --- Main page ---
+// ─── Main page ─────────────────────────────────────────────────────────────
 
 export default function BriefInterpretationPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [mode, setMode] = useState<"upload" | "paste">("upload")
-  const [file, setFile] = useState<File | null>(null)
-  const [fileUrl, setFileUrl] = useState<string | null>(null)
-  const [briefText, setBriefText] = useState("")
-  const [pasteText, setPasteText] = useState("")
-  const [uploadingFile, setUploadingFile] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  // Brief input state — mirrors Step 1a pattern
+  const [uploadMethod, setUploadMethod] = useState<UploadMethod>(null)
+  const [briefFileName, setBriefFileName] = useState("")
+  const [briefSourceText, setBriefSourceText] = useState("")
+  const [briefAugmentText, setBriefAugmentText] = useState("")
+  const [briefUploaded, setBriefUploaded] = useState(false)
+  const [isExtractingBrief, setIsExtractingBrief] = useState(false)
+  const [briefUploadError, setBriefUploadError] = useState<string | null>(null)
+  const [briefExtractWarning, setBriefExtractWarning] = useState<string | null>(null)
 
+  // Paste mode
+  const [pastedContent, setPastedContent] = useState("")
+
+  // Google Link mode
+  const [googleLink, setGoogleLink] = useState("")
+  const [isExtractingGoogle, setIsExtractingGoogle] = useState(false)
+  const [googleLinkError, setGoogleLinkError] = useState<string | null>(null)
+
+  // Analyses
   const [checks, setChecks] = useState<Record<AnalysisType, boolean>>({
     timeline: true,
     budget: true,
@@ -330,7 +277,7 @@ export default function BriefInterpretationPage() {
     directors: true,
   })
 
-  const [pageState, setPageState] = useState<"input" | "loading" | "results">("input")
+  const [pageState, setPageState] = useState<"input" | "results">("input")
   const [interpretationId, setInterpretationId] = useState<string | null>(null)
   const [analyses, setAnalyses] = useState<AnalysesState>({
     timeline: { status: "idle" },
@@ -339,70 +286,101 @@ export default function BriefInterpretationPage() {
     directors: { status: "idle" },
   })
   const [hasAnySuccess, setHasAnySuccess] = useState(false)
+  const [isInterpreting, setIsInterpreting] = useState(false)
 
-  const briefReady = mode === "upload" ? (briefText.trim().length > 0 || fileUrl !== null) : pasteText.trim().length > 100
+  const effectiveBriefText =
+    (briefSourceText + (briefAugmentText.trim() ? `\n\n---\nAdditional brief details:\n${briefAugmentText.trim()}` : "")).trim()
+
   const anyChecked = Object.values(checks).some(Boolean)
-  const canInterpret = briefReady && anyChecked
+  const canInterpret = briefUploaded && anyChecked && !isInterpreting
 
-  // Track any success
-  useEffect(() => {
-    const anySuccess = Object.values(analyses).some((a) => a.status === "success")
-    if (anySuccess) setHasAnySuccess(true)
-  }, [analyses])
-
+  // ── File upload handler (server-side extraction via existing route) ──────
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0]
-    if (!selected) return
-    setFile(selected)
-    setUploadError(null)
-    setUploadingFile(true)
-
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBriefUploadError(null)
+    setBriefExtractWarning(null)
+    setBriefUploaded(true)
+    setBriefFileName(file.name)
+    setBriefSourceText("")
+    setIsExtractingBrief(true)
     try {
-      // Upload to storage
-      const formData = new FormData()
-      formData.append("file", selected)
-      formData.append("folder", "briefs")
-      const res = await fetch("/api/upload", { method: "POST", body: formData })
+      const form = new FormData()
+      form.append("file", file)
+      const res = await fetch("/api/documents/extract-text", { method: "POST", body: form })
       const payload = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(payload?.error || "Upload failed")
-      setFileUrl(payload.url || null)
-
-      // Extract text client-side
-      let extracted = ""
-      const ext = selected.name.split(".").pop()?.toLowerCase()
-      if (ext === "pdf") extracted = await extractTextFromPdf(selected)
-      else if (ext === "docx") extracted = await extractTextFromDocx(selected)
-      setBriefText(extracted)
+      if (!res.ok) throw new Error(payload?.error || "Could not read this file")
+      setBriefExtractWarning(typeof payload?.warning === "string" ? payload.warning : null)
+      setBriefSourceText((payload.text || "").toString())
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Upload failed")
+      setBriefUploaded(false)
+      setBriefFileName("")
+      setBriefExtractWarning(null)
+      setBriefUploadError(err instanceof Error ? err.message : "Brief extraction failed")
     } finally {
-      setUploadingFile(false)
+      setIsExtractingBrief(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
     }
   }
 
+  // ── Google Link handler ──────────────────────────────────────────────────
+  const handleGoogleImport = async () => {
+    if (!googleLink.trim()) return
+    setGoogleLinkError(null)
+    setIsExtractingGoogle(true)
+    try {
+      const res = await fetch("/api/extract-google-doc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: googleLink.trim() }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok || !payload.text) {
+        throw new Error(payload?.error || "Failed to import document")
+      }
+      setBriefSourceText(payload.text)
+      setBriefFileName("Google Doc")
+      setBriefUploaded(true)
+      setBriefUploadError(null)
+    } catch (err) {
+      setGoogleLinkError(err instanceof Error ? err.message : "Failed to import document")
+    } finally {
+      setIsExtractingGoogle(false)
+    }
+  }
+
+  // ── Reset brief ──────────────────────────────────────────────────────────
+  const resetBrief = () => {
+    setBriefUploaded(false)
+    setBriefFileName("")
+    setBriefSourceText("")
+    setBriefUploadError(null)
+    setBriefExtractWarning(null)
+    setIsExtractingBrief(false)
+    setGoogleLinkError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  // ── Run a single analysis ─────────────────────────────────────────────────
   const runAnalysis = useCallback(
-    async (type: AnalysisType, currentBriefText: string, currentInterpretationId: string) => {
+    async (type: AnalysisType, text: string, interpId: string) => {
       setAnalyses((prev) => ({ ...prev, [type]: { status: "loading" } }))
       try {
         const res = await fetch(`/api/interpret/${type}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brief_text: currentBriefText }),
+          body: JSON.stringify({ brief_text: text }),
         })
         const payload = await res.json().catch(() => ({}))
         if (!res.ok || !payload.result) throw new Error(payload?.error || "Analysis failed")
-
         const result = payload.result
         setAnalyses((prev) => ({ ...prev, [type]: { status: "success", data: result } }))
-
+        setHasAnySuccess(true)
         // Write result to DB via browser client
         const supabase = createClient()
-        const colName = ANALYSIS_COLUMNS[type]
-        const updatePayload: Record<string, unknown> = { [colName]: result }
-        if (type === "timeline" && result.brief_summary) {
-          updatePayload.brief_summary = result.brief_summary
-        }
-        await supabase.from("brief_interpretations").update(updatePayload).eq("id", currentInterpretationId)
+        const update: Record<string, unknown> = { [ANALYSIS_COLUMNS[type]]: result }
+        if (type === "timeline" && result.brief_summary) update.brief_summary = result.brief_summary
+        await supabase.from("brief_interpretations").update(update).eq("id", interpId)
       } catch (err) {
         setAnalyses((prev) => ({
           ...prev,
@@ -413,34 +391,27 @@ export default function BriefInterpretationPage() {
     []
   )
 
+  // ── Main interpret handler ───────────────────────────────────────────────
   const handleInterpret = async () => {
-    const effectiveBriefText = mode === "paste" ? pasteText.trim() : briefText.trim()
     if (!effectiveBriefText) return
-
-    // Verify session
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      router.push("/auth/login")
-      return
-    }
+    if (!user) { router.push("/auth/login"); return }
 
-    const briefTitle = deriveBriefTitle(file?.name ?? null, effectiveBriefText)
+    const briefTitle = deriveBriefTitle(briefFileName || null, effectiveBriefText)
     const selectedAnalyses = (Object.keys(checks) as AnalysisType[]).filter((k) => checks[k])
 
-    // Mark selected analyses as loading
+    setIsInterpreting(true)
     const loadingState: Partial<AnalysesState> = {}
     for (const t of selectedAnalyses) loadingState[t] = { status: "loading" }
     setAnalyses((prev) => ({ ...prev, ...loadingState }))
-    setPageState("loading")
+    setPageState("results")
 
-    // Create interpretation row
     const { data: row, error: insertError } = await supabase
       .from("brief_interpretations")
       .insert({
         user_id: user.id,
         brief_text: effectiveBriefText,
-        brief_file_url: fileUrl,
         brief_title: briefTitle,
         analyses_requested: selectedAnalyses,
       })
@@ -450,30 +421,26 @@ export default function BriefInterpretationPage() {
     if (insertError || !row) {
       console.error("[brief/interpret] insert error", insertError)
       setPageState("input")
+      setIsInterpreting(false)
       return
     }
 
     const id = row.id as string
     setInterpretationId(id)
-    setPageState("results")
 
-    // Fire all selected analyses in parallel
     await Promise.allSettled(selectedAnalyses.map((type) => runAnalysis(type, effectiveBriefText, id)))
+    setIsInterpreting(false)
   }
 
-  const handleRetry = async (type: AnalysisType) => {
-    const effectiveBriefText = mode === "paste" ? pasteText.trim() : briefText.trim()
+  const handleRetry = (type: AnalysisType) => {
     if (!effectiveBriefText || !interpretationId) return
-    await runAnalysis(type, effectiveBriefText, interpretationId)
+    runAnalysis(type, effectiveBriefText, interpretationId)
   }
 
-  const toggleCheck = (type: AnalysisType) => {
-    setChecks((prev) => ({ ...prev, [type]: !prev[type] }))
-  }
-
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <AgencyLayout>
-      <div className="p-8 max-w-3xl space-y-8">
+      <div className="p-8 max-w-3xl space-y-6">
         <StageHeader
           stageNumber="00"
           title="Creative Brief Interpretation"
@@ -481,105 +448,204 @@ export default function BriefInterpretationPage() {
           aiPowered
         />
 
+        {/* Brief Input - matches Step 1a style */}
         {pageState === "input" && (
-          <div className="space-y-6">
-            {/* Mode toggle */}
-            <div className="flex gap-2">
-              {(["upload", "paste"] as const).map((m) => (
+          <GlassCard>
+            <GlassCardHeader
+              label="Step 00"
+              title="Creative brief (source)"
+              description="Upload the client's brief, import from Google Docs, or paste text. We extract the content so the AI works from your real requirements."
+            />
+
+            {/* Method selector - exact match to Step 1a */}
+            <div className="flex gap-3 mt-6">
+              {([
+                { method: "file" as const, label: "Upload File", icon: Upload },
+                { method: "google" as const, label: "Google Link", icon: Link2 },
+                { method: "paste" as const, label: "Paste Text", icon: Type },
+              ] as const).map(({ method, label, icon: Icon }) => (
                 <button
-                  key={m}
+                  key={method}
                   type="button"
-                  onClick={() => setMode(m)}
+                  onClick={() => { setUploadMethod(method); resetBrief() }}
                   className={cn(
-                    "px-4 py-2 rounded-full font-mono text-xs border transition-colors",
-                    mode === m
+                    "flex items-center gap-2 px-4 py-3 rounded-lg border transition-all font-mono text-xs font-bold",
+                    uploadMethod === method
                       ? "border-accent bg-accent/10 text-accent"
-                      : "border-border text-foreground-muted hover:border-white/30"
+                      : "border-border hover:border-white/30 bg-white/5 text-foreground-muted"
                   )}
                 >
-                  {m === "upload" ? "Upload File" : "Paste Text"}
+                  <Icon className="w-4 h-4" />
+                  {label}
                 </button>
               ))}
             </div>
 
-            {/* Upload mode */}
-            {mode === "upload" && (
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.docx"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                {!file ? (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full border border-dashed border-border rounded-xl p-10 flex flex-col items-center gap-3 hover:border-accent/50 hover:bg-accent/5 transition-colors text-center"
-                  >
-                    <Upload className="w-8 h-8 text-foreground-muted" />
-                    <div>
-                      <div className="font-display font-bold text-foreground">Click to upload brief</div>
-                      <div className="font-mono text-xs text-foreground-muted mt-1">PDF or DOCX, up to 10 MB</div>
-                    </div>
-                  </button>
-                ) : (
-                  <div className="rounded-xl border border-border bg-white/5 p-4 flex items-center gap-3">
-                    <FileText className="w-5 h-5 text-accent shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-display font-bold text-sm text-foreground truncate">{file.name}</div>
-                      {uploadingFile && (
-                        <div className="flex items-center gap-1.5 mt-1 text-foreground-muted">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          <span className="font-mono text-[10px]">Uploading and extracting text...</span>
-                        </div>
-                      )}
-                      {!uploadingFile && briefText && (
-                        <div className="font-mono text-[10px] text-foreground-muted mt-1">
-                          {briefText.length.toLocaleString()} characters extracted
-                        </div>
-                      )}
-                      {uploadError && (
-                        <div className="font-mono text-[10px] text-red-400 mt-1">{uploadError}</div>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFile(null)
-                        setFileUrl(null)
-                        setBriefText("")
-                        setUploadError(null)
-                        if (fileInputRef.current) fileInputRef.current.value = ""
-                      }}
-                      className="text-foreground-muted hover:text-foreground"
+            {/* Input area */}
+            {uploadMethod && !briefUploaded && (
+              <div className="mt-6">
+                {uploadMethod === "file" && (
+                  <>
+                    <label className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-accent/50 transition-colors cursor-pointer relative block">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf,.doc,.docx,.ppt,.pptx,.txt"
+                        onChange={handleFileChange}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+                        <Upload className="w-8 h-8 text-accent" />
+                      </div>
+                      <div className="font-display font-bold text-foreground mb-1">Drop your file here</div>
+                      <div className="font-mono text-[10px] text-foreground-muted">PDF, Word, PowerPoint, or text - click to browse (max 50MB)</div>
+                    </label>
+                    {briefUploadError && (
+                      <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+                        {briefUploadError}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {uploadMethod === "google" && (
+                  <div className="space-y-3">
+                    <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                      Google Docs or Slides URL
+                    </label>
+                    <Input
+                      placeholder="https://docs.google.com/document/d/..."
+                      value={googleLink}
+                      onChange={(e) => { setGoogleLink(e.target.value); setGoogleLinkError(null) }}
+                      className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                      onKeyDown={(e) => { if (e.key === "Enter" && googleLink.trim()) handleGoogleImport() }}
+                    />
+                    {googleLinkError && (
+                      <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+                        <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                        <span>{googleLinkError}</span>
+                      </div>
+                    )}
+                    <Button
+                      className="bg-accent text-accent-foreground hover:bg-accent/90"
+                      disabled={!googleLink.trim() || isExtractingGoogle}
+                      onClick={handleGoogleImport}
                     >
-                      <X className="w-4 h-4" />
-                    </button>
+                      {isExtractingGoogle ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing...</>
+                      ) : (
+                        "Import from Google"
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {uploadMethod === "paste" && (
+                  <div className="space-y-3">
+                    <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                      Paste Brief Content
+                    </label>
+                    <Textarea
+                      placeholder="Paste the client brief content here..."
+                      value={pastedContent}
+                      onChange={(e) => setPastedContent(e.target.value)}
+                      className="min-h-[200px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                    />
+                    <Button
+                      className="bg-accent text-accent-foreground hover:bg-accent/90"
+                      disabled={!pastedContent.trim()}
+                      onClick={() => {
+                        setBriefSourceText(pastedContent)
+                        setBriefFileName("Pasted content")
+                        setBriefUploaded(true)
+                      }}
+                    >
+                      Use Pasted Content
+                    </Button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Paste mode */}
-            {mode === "paste" && (
-              <textarea
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
-                placeholder="Paste your creative brief here..."
-                className="w-full min-h-[200px] rounded-xl border border-border bg-white/5 px-4 py-3 text-sm text-foreground placeholder:text-foreground-muted resize-y focus:outline-none focus:border-accent/50"
-              />
+            {briefUploadError && uploadMethod !== "file" && (
+              <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+                {briefUploadError}
+              </div>
+            )}
+            {briefExtractWarning && !briefUploadError && (
+              <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-200">
+                {briefExtractWarning}
+              </div>
             )}
 
-            {/* Analyses checkboxes */}
-            <div className="space-y-2">
-              <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Analyses to run</div>
+            {/* Uploaded brief confirmation - matches Step 1a */}
+            {briefUploaded && (
+              <div className="mt-6 p-4 rounded-lg bg-success/10 border border-success/30 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
+                    {isExtractingBrief ? (
+                      <Loader2 className="w-5 h-5 text-accent animate-spin" />
+                    ) : (
+                      <FileCheck className="w-5 h-5 text-success" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-display font-bold text-sm text-foreground">{briefFileName}</div>
+                    <div className="font-mono text-[10px] text-success">
+                      {isExtractingBrief ? "Extracting text from document..." : "Ready for AI - text extracted"}
+                    </div>
+                    {!isExtractingBrief && briefSourceText.trim() && (
+                      <div className="font-mono text-[10px] text-foreground-muted mt-1">
+                        {briefSourceText.length.toLocaleString()} characters extracted
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetBrief}
+                  className="border-border text-foreground-muted hover:bg-white/5"
+                >
+                  Replace
+                </Button>
+              </div>
+            )}
+
+            {/* Optional additional details - matches Step 1a */}
+            <div className="mt-6 space-y-2">
+              <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                Optional: Additional brief details
+              </label>
+              <Textarea
+                placeholder="Paste extra requirements or missing text if extraction was incomplete. Appended when analyzing."
+                value={briefAugmentText}
+                onChange={(e) => setBriefAugmentText(e.target.value)}
+                className="min-h-[120px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+              />
+              {briefAugmentText.trim() && (
+                <p className="font-mono text-[10px] text-foreground-muted">
+                  +{briefAugmentText.trim().length.toLocaleString()} characters appended when analyzing
+                </p>
+              )}
+            </div>
+          </GlassCard>
+        )}
+
+        {/* Analyses checkboxes */}
+        {pageState === "input" && (
+          <GlassCard>
+            <GlassCardHeader
+              label="Analyses"
+              title="Select analyses to run"
+              description="All four run in parallel. Uncheck any you don't need."
+            />
+            <div className="mt-4 space-y-3">
               {(Object.keys(ANALYSIS_LABELS) as AnalysisType[]).map((type) => (
                 <button
                   key={type}
                   type="button"
-                  onClick={() => toggleCheck(type)}
+                  onClick={() => setChecks((prev) => ({ ...prev, [type]: !prev[type] }))}
                   className="flex items-center gap-3 w-full text-left group"
                 >
                   {checks[type] ? (
@@ -594,40 +660,20 @@ export default function BriefInterpretationPage() {
               ))}
             </div>
 
-            <Button
-              onClick={handleInterpret}
-              disabled={!canInterpret || uploadingFile}
-              className="bg-accent text-accent-foreground hover:bg-accent/90 w-full"
-            >
-              {uploadingFile ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Extracting text...
-                </>
-              ) : (
-                "Interpret Brief"
-              )}
-            </Button>
-          </div>
-        )}
-
-        {/* Loading skeleton state */}
-        {pageState === "loading" && (
-          <div className="space-y-4">
-            {(Object.keys(checks) as AnalysisType[])
-              .filter((t) => checks[t])
-              .map((type) => (
-                <div key={type} className="rounded-xl border border-border bg-white/[0.03] p-5">
-                  <div className="flex items-center gap-3 text-foreground-muted">
-                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                    <div>
-                      <div className="font-display font-bold text-sm text-foreground">{ANALYSIS_LABELS[type]}</div>
-                      <div className="text-xs mt-0.5">{LOADING_MESSAGES[type]}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-          </div>
+            <div className="mt-6">
+              <Button
+                onClick={handleInterpret}
+                disabled={!canInterpret}
+                className="bg-accent text-accent-foreground hover:bg-accent/90 w-full"
+              >
+                {isInterpreting ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing...</>
+                ) : (
+                  "Interpret Brief"
+                )}
+              </Button>
+            </div>
+          </GlassCard>
         )}
 
         {/* Results */}
@@ -643,9 +689,8 @@ export default function BriefInterpretationPage() {
                   onRetry={() => handleRetry(type)}
                 />
               ))}
-
             {hasAnySuccess && interpretationId && (
-              <div className="pt-4">
+              <div className="pt-2">
                 <Button
                   onClick={() => router.push(`/agency?interpretation_id=${interpretationId}`)}
                   className="bg-accent text-accent-foreground hover:bg-accent/90 w-full"
