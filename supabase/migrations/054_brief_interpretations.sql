@@ -21,4 +21,7 @@ create policy "Users can manage their own interpretations"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+grant select, insert, update, delete on brief_interpretations to authenticated;
+grant select on brief_interpretations to anon;
+
 alter table rfps add column if not exists interpretation_id uuid references brief_interpretations(id);
