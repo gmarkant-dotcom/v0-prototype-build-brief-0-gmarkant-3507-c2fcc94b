@@ -411,6 +411,7 @@ export default function BriefInterpretationPage() {
         userId: user.id,
         email: user.email,
         hasToken: !!session?.access_token,
+        tokenPreview: session?.access_token ? session.access_token.slice(0, 20) + "..." : "MISSING",
         expiresAt: session?.expires_at,
       })
 
@@ -432,9 +433,13 @@ export default function BriefInterpretationPage() {
 
       if (insertError || !row) {
         const msg = insertError?.message || "Could not save analysis session"
-        const hint = insertError?.code === "42P01"
-          ? "The brief_interpretations table does not exist. Run migration 054 in your Supabase SQL Editor first."
-          : msg
+        console.error("[brief/interpret] insert failed", { code: insertError?.code, message: insertError?.message, details: insertError?.details })
+        const hint =
+          insertError?.code === "42P01"
+            ? "The brief_interpretations table does not exist. Run migration 054 in your Supabase SQL Editor first."
+            : insertError?.code === "42501" || msg.includes("permission denied") || msg.includes("row-level security")
+            ? "Database permission error. Run this SQL in your Supabase SQL Editor: GRANT SELECT, INSERT, UPDATE, DELETE ON brief_interpretations TO authenticated;"
+            : msg
         setInterpretError(hint)
         setIsInterpreting(false)
         return
