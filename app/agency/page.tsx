@@ -432,6 +432,35 @@ function AgencyRFPContent() {
     }
   }
   
+
+  const handleGoogleLinkImport = async () => {
+    if (!googleLink.trim()) return
+    setBriefUploadError(null)
+    setBriefExtractWarning(null)
+    setIsExtractingBrief(true)
+    setBriefUploaded(true)
+    setBriefFileName("Google Doc")
+    setBriefSourceText("")
+    try {
+      const res = await fetch("/api/extract-google-doc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: googleLink.trim() }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok || !payload.text) {
+        throw new Error(payload?.error || "Failed to import document")
+      }
+      setBriefSourceText(payload.text.toString())
+    } catch (err) {
+      setBriefUploaded(false)
+      setBriefFileName("")
+      setBriefUploadError(err instanceof Error ? err.message : "Failed to import document")
+    } finally {
+      setIsExtractingBrief(false)
+    }
+  }
+
   const handleUploadClick = () => {
     // Directly click the file input - feature access is checked on file selection
     fileInputRef.current?.click()
@@ -1192,21 +1221,27 @@ function AgencyRFPContent() {
                       <Input
                         placeholder="https://docs.google.com/document/d/..."
                         value={googleLink}
-                        onChange={(e) => setGoogleLink(e.target.value)}
+                        onChange={(e) => { setGoogleLink(e.target.value); setBriefUploadError(null) }}
                         className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                      />
-                      <Button 
-                        className="bg-accent text-accent-foreground hover:bg-accent/90"
-                        disabled={!googleLink}
-                        onClick={() => {
-                          setBriefUploadError(null)
-                          setBriefExtractWarning(null)
-                          setBriefUploaded(true)
-                          setBriefFileName("Google Doc imported")
-                          setBriefSourceText(`Imported Google document: ${googleLink}`)
+                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                          if (e.key === "Enter" && googleLink.trim()) void handleGoogleLinkImport()
                         }}
+                      />
+                      {briefUploadError && uploadMethod === "google" && (
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+                          <span>{briefUploadError}</span>
+                        </div>
+                      )}
+                      <Button
+                        className="bg-accent text-accent-foreground hover:bg-accent/90"
+                        disabled={!googleLink.trim() || isExtractingBrief}
+                        onClick={() => void handleGoogleLinkImport()}
                       >
-                        Import from Google
+                        {isExtractingBrief ? (
+                          <><span className="mr-2">Importing...</span></>
+                        ) : (
+                          "Import from Google"
+                        )}
                       </Button>
                     </div>
                   )}
