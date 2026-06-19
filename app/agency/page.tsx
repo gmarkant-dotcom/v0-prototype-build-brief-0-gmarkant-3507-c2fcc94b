@@ -284,7 +284,7 @@ function AgencyRFPContent() {
     if (selectedInterpretation.brief_text) {
       setBriefSourceText(selectedInterpretation.brief_text)
       setBriefUploaded(true)
-      setBriefFileName(selectedInterpretation.brief_title || "Brief from Step 00")
+      setBriefFileName(selectedInterpretation.brief_title || "Analysis from Step 00")
     }
     // Build a partial masterRfp from interpretation data
     const budgetStr = selectedInterpretation.budget_result?.total_low != null && selectedInterpretation.budget_result?.total_high != null
@@ -1102,7 +1102,7 @@ function AgencyRFPContent() {
                 <GlassCardHeader
                   label="Brief Source"
                   title="Where is your brief coming from?"
-                  description="Use a brief you already interpreted in Step 00, or upload a new one."
+                  description="Use an analysis from Step 00 (Creative Treatment Analysis), or upload a new brief."
                 />
                 <div className="mt-4 space-y-3">
                   {(["step00", "new"] as const).map((src) => (
@@ -1117,7 +1117,7 @@ function AgencyRFPContent() {
                       />
                       <div>
                         <div className="font-display font-bold text-sm text-foreground">
-                          {src === "step00" ? "Use brief from Step 00" : "Upload a new brief"}
+                          {src === "step00" ? "Use analysis from Step 00" : "Upload a new brief"}
                         </div>
                         {src === "step00" && briefSource === "step00" && (
                           <div className="mt-2">
