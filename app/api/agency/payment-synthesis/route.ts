@@ -359,7 +359,7 @@ Prioritize: paying partners after the agency receives client funds, flagging any
     console.log("[api/agency/payment-synthesis] synthesized user prompt", summary)
 
     const result = streamText({
-      model: "anthropic/claude-sonnet-4-20250514" as any,
+      model: "anthropic/claude-sonnet-4-6" as any,
       system: systemPrompt,
       prompt: summary,
       temperature: 0.2,
