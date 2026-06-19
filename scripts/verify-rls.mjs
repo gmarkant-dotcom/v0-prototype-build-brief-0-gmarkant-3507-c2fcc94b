@@ -1,5 +1,13 @@
 #!/usr/bin/env node
 // scripts/verify-rls.mjs
+// Load .env.local automatically so `npm run verify-rls` works without inline vars.
+// Uses @next/env (bundled with Next.js) - no additional install needed.
+try {
+  const { loadEnvConfig } = await import("@next/env")
+  loadEnvConfig(process.cwd())
+} catch {
+  // @next/env not found - fall through, vars must be set in the shell environment
+}
 //
 // Audits every RLS-enabled table in the public schema and warns if any
 // has zero policies attached. The "RLS enabled, zero policies" state causes
