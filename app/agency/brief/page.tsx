@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { StageHeader } from "@/components/stage-header"
@@ -251,6 +251,18 @@ export default function BriefInterpretationPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Single stable Supabase client — created once on mount, reused everywhere.
+  // Creating inside async handlers risks firing DB requests before the client's
+  // internal auth state has fully initialized, which can cause the JWT to be
+  // missing from the Authorization header even when getSession() returns a user.
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
+  useEffect(() => { supabaseRef.current = createClient() }, [])
+  const getSupabase = () => {
+    if (!supabaseRef.current) supabaseRef.current = createClient()
+    return supabaseRef.current
+  }
+
+
   // Brief input state — mirrors Step 1a pattern
   const [uploadMethod, setUploadMethod] = useState<UploadMethod>(null)
   const [briefFileName, setBriefFileName] = useState("")
@@ -378,7 +390,7 @@ export default function BriefInterpretationPage() {
         setAnalyses((prev) => ({ ...prev, [type]: { status: "success", data: result } }))
         setHasAnySuccess(true)
         // Write result to DB via browser client
-        const supabase = createClient()
+        const supabase = getSupabase()
         const update: Record<string, unknown> = { [ANALYSIS_COLUMNS[type]]: result }
         if (type === "timeline" && result.brief_summary) update.brief_summary = result.brief_summary
         await supabase.from("brief_interpretations").update(update).eq("id", interpId)
@@ -398,7 +410,7 @@ export default function BriefInterpretationPage() {
     setInterpretError(null)
     setIsInterpreting(true)
     try {
-      const supabase = createClient()
+      const supabase = getSupabase()
       // getSession() reads the local session AND refreshes an expired token before
       // returning. This guarantees the access_token sent with the INSERT is fresh,
       // so auth.uid() is non-null on the DB side and the RLS with-check passes.
@@ -419,6 +431,13 @@ export default function BriefInterpretationPage() {
       const selectedAnalyses = (Object.keys(checks) as AnalysisType[]).filter((k) => checks[k])
 
       console.log("[brief/interpret] inserting row", { user_id: user.id, briefTitle, analyses: selectedAnalyses })
+      // Explicit comparison — confirms client-side values are identical before the insert hits RLS
+      console.log("[brief/interpret] id match check", JSON.stringify({
+        sessionUserId: session?.user?.id,
+        payloadUserId: user.id,
+        match: session?.user?.id === user.id,
+        tokenPrefix: session?.access_token?.slice(0, 10) ?? "NONE",
+      }))
 
       const { data: row, error: insertError } = await supabase
         .from("brief_interpretations")
