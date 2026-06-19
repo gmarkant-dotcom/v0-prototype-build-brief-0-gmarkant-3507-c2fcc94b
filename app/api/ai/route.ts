@@ -191,7 +191,7 @@ export async function POST(req: Request) {
   const systemPrompt = SYSTEM_PROMPTS[tool] || SYSTEM_PROMPTS.rfp
   
   const result = streamText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-6'),
     system: systemPrompt,
     messages: await convertToModelMessages(messages),
     abortSignal: req.signal,
