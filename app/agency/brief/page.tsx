@@ -430,41 +430,31 @@ export default function BriefInterpretationPage() {
       const briefTitle = deriveBriefTitle(briefFileName || null, effectiveBriefText)
       const selectedAnalyses = (Object.keys(checks) as AnalysisType[]).filter((k) => checks[k])
 
-      console.log("[brief/interpret] inserting row", { user_id: user.id, briefTitle, analyses: selectedAnalyses })
-      // Explicit comparison — confirms client-side values are identical before the insert hits RLS
-      console.log("[brief/interpret] id match check", JSON.stringify({
-        sessionUserId: session?.user?.id,
-        payloadUserId: user.id,
-        match: session?.user?.id === user.id,
-        tokenPrefix: session?.access_token?.slice(0, 10) ?? "NONE",
-      }))
+      console.log("[brief/interpret] calling /api/brief/save", { userId: user.id, briefTitle })
 
-      const { data: row, error: insertError } = await supabase
-        .from("brief_interpretations")
-        .insert({
-          user_id: user.id,
+      const saveRes = await fetch("/api/brief/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
           brief_text: effectiveBriefText,
           brief_title: briefTitle,
           analyses_requested: selectedAnalyses,
-        })
-        .select("id")
-        .single()
+        }),
+      })
+      const savePayload = await saveRes.json().catch(() => ({}))
 
-      if (insertError || !row) {
-        const msg = insertError?.message || "Could not save analysis session"
-        console.error("[brief/interpret] insert failed", { code: insertError?.code, message: insertError?.message, details: insertError?.details })
-        const hint =
-          insertError?.code === "42P01"
-            ? "The brief_interpretations table does not exist. Run migration 054 in your Supabase SQL Editor first."
-            : insertError?.code === "42501" || msg.includes("permission denied") || msg.includes("row-level security")
-            ? "Database permission error. Run this SQL in your Supabase SQL Editor: GRANT SELECT, INSERT, UPDATE, DELETE ON brief_interpretations TO authenticated;"
-            : msg
-        setInterpretError(hint)
+      if (!saveRes.ok || !savePayload.id) {
+        const msg = savePayload?.error || "Could not save analysis session"
+        console.error("[brief/interpret] save failed", { status: saveRes.status, error: msg })
+        setInterpretError(msg)
         setIsInterpreting(false)
         return
       }
 
-      const id = row.id as string
+      const id = savePayload.id as string
       setInterpretationId(id)
 
       // Transition to results only after a successful DB row exists
