@@ -287,12 +287,13 @@ export default function BriefInterpretationPage() {
   })
   const [hasAnySuccess, setHasAnySuccess] = useState(false)
   const [isInterpreting, setIsInterpreting] = useState(false)
+  const [interpretError, setInterpretError] = useState<string | null>(null)
 
   const effectiveBriefText =
     (briefSourceText + (briefAugmentText.trim() ? `\n\n---\nAdditional brief details:\n${briefAugmentText.trim()}` : "")).trim()
 
   const anyChecked = Object.values(checks).some(Boolean)
-  const canInterpret = briefUploaded && anyChecked && !isInterpreting
+  const canInterpret = briefUploaded && briefSourceText.trim().length > 0 && anyChecked && !isInterpreting && !isExtractingBrief
 
   // ── File upload handler (server-side extraction via existing route) ──────
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -394,42 +395,53 @@ export default function BriefInterpretationPage() {
   // ── Main interpret handler ───────────────────────────────────────────────
   const handleInterpret = async () => {
     if (!effectiveBriefText) return
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { router.push("/auth/login"); return }
-
-    const briefTitle = deriveBriefTitle(briefFileName || null, effectiveBriefText)
-    const selectedAnalyses = (Object.keys(checks) as AnalysisType[]).filter((k) => checks[k])
-
+    setInterpretError(null)
     setIsInterpreting(true)
-    const loadingState: Partial<AnalysesState> = {}
-    for (const t of selectedAnalyses) loadingState[t] = { status: "loading" }
-    setAnalyses((prev) => ({ ...prev, ...loadingState }))
-    setPageState("results")
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push("/auth/login"); return }
 
-    const { data: row, error: insertError } = await supabase
-      .from("brief_interpretations")
-      .insert({
-        user_id: user.id,
-        brief_text: effectiveBriefText,
-        brief_title: briefTitle,
-        analyses_requested: selectedAnalyses,
-      })
-      .select("id")
-      .single()
+      const briefTitle = deriveBriefTitle(briefFileName || null, effectiveBriefText)
+      const selectedAnalyses = (Object.keys(checks) as AnalysisType[]).filter((k) => checks[k])
 
-    if (insertError || !row) {
-      console.error("[brief/interpret] insert error", insertError)
-      setPageState("input")
+      const { data: row, error: insertError } = await supabase
+        .from("brief_interpretations")
+        .insert({
+          user_id: user.id,
+          brief_text: effectiveBriefText,
+          brief_title: briefTitle,
+          analyses_requested: selectedAnalyses,
+        })
+        .select("id")
+        .single()
+
+      if (insertError || !row) {
+        const msg = insertError?.message || "Could not save analysis session"
+        const hint = insertError?.code === "42P01"
+          ? "The brief_interpretations table does not exist. Run migration 054 in your Supabase SQL Editor first."
+          : msg
+        setInterpretError(hint)
+        setIsInterpreting(false)
+        return
+      }
+
+      const id = row.id as string
+      setInterpretationId(id)
+
+      // Transition to results only after a successful DB row exists
+      const loadingState: Partial<AnalysesState> = {}
+      for (const t of selectedAnalyses) loadingState[t] = { status: "loading" }
+      setAnalyses((prev) => ({ ...prev, ...loadingState }))
+      setPageState("results")
+
+      await Promise.allSettled(selectedAnalyses.map((type) => runAnalysis(type, effectiveBriefText, id)))
+    } catch (err) {
+      console.error("[brief/interpret] unexpected error", err)
+      setInterpretError(err instanceof Error ? err.message : "An unexpected error occurred. Please try again.")
+    } finally {
       setIsInterpreting(false)
-      return
     }
-
-    const id = row.id as string
-    setInterpretationId(id)
-
-    await Promise.allSettled(selectedAnalyses.map((type) => runAnalysis(type, effectiveBriefText, id)))
-    setIsInterpreting(false)
   }
 
   const handleRetry = (type: AnalysisType) => {
@@ -660,7 +672,7 @@ export default function BriefInterpretationPage() {
               ))}
             </div>
 
-            <div className="mt-6">
+            <div className="mt-6 space-y-3">
               <Button
                 onClick={handleInterpret}
                 disabled={!canInterpret}
@@ -669,9 +681,15 @@ export default function BriefInterpretationPage() {
                 {isInterpreting ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing...</>
                 ) : (
-                  "Interpret Brief"
+                  "Analyze Treatment"
                 )}
               </Button>
+              {interpretError && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+                  <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                  <span>{interpretError}</span>
+                </div>
+              )}
             </div>
           </GlassCard>
         )}
