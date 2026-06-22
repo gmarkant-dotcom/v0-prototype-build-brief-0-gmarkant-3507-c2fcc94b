@@ -31,6 +31,18 @@ const generalFAQs: FAQ[] = [
 
 const leadFAQs: FAQ[] = [
   {
+    q: "What is Creative Treatment Analysis?",
+    a: "It's Step 00 of your project workflow. Upload a creative treatment or client brief and Ligament runs four AI analyses in parallel: timeline recommendation, budget estimate, comparable campaigns, and director and production company recommendations.",
+  },
+  {
+    q: "What does the Director and Production Company Recommendations analysis return?",
+    a: "A shortlist of directors and production companies matched to your brief, with rationale for each. The shortlist carries forward into Step 01 RFP Broadcast as suggested recipients.",
+  },
+  {
+    q: "Is my Creative Treatment Analysis saved?",
+    a: "Yes. Each analysis is saved to your project automatically. Switch between projects using the project selector at the top of the page and your prior analysis will reload.",
+  },
+  {
     q: "How do I find new production partners?",
     a: "Use the Marketplace to discover partner agencies by capability, location, or agency type. You can search for specific skills like \"video production\" or \"experiential\" to find agencies that match your needs.",
   },
