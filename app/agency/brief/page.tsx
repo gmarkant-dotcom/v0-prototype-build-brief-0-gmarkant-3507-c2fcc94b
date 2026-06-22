@@ -304,6 +304,68 @@ function BriefInterpretationContent() {
   const [isInterpreting, setIsInterpreting] = useState(false)
   const [interpretError, setInterpretError] = useState<string | null>(null)
 
+  // Project-switch: load most recent saved interpretation or reset to empty
+  useEffect(() => {
+    if (!selectedProject?.id) return
+    let cancelled = false
+    ;(async () => {
+      const supabase = getSupabase()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session || cancelled) return
+
+      // Cast to any: project_id column added in migration 055, not in generated types yet
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: interp } = await (supabase as any)
+        .from("brief_interpretations")
+        .select("id, brief_title, brief_text, timeline_result, budget_result, campaigns_result, directors_result")
+        .eq("user_id", session.user.id)
+        .eq("project_id", selectedProject.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (interp) {
+        setInterpretationId(interp.id as string)
+        setBriefFileName((interp.brief_title as string | null) || "Saved brief")
+        setBriefSourceText((interp.brief_text as string | null) || "")
+        setBriefUploaded(!!(interp.brief_text))
+        const reconstructed: AnalysesState = {
+          timeline:   interp.timeline_result   ? { status: "success", data: interp.timeline_result }   : { status: "idle" },
+          budget:     interp.budget_result     ? { status: "success", data: interp.budget_result }     : { status: "idle" },
+          campaigns:  interp.campaigns_result  ? { status: "success", data: interp.campaigns_result }  : { status: "idle" },
+          directors:  interp.directors_result  ? { status: "success", data: interp.directors_result }  : { status: "idle" },
+        }
+        setAnalyses(reconstructed)
+        const anySuccess = Object.values(reconstructed).some(a => a.status === "success")
+        setHasAnySuccess(anySuccess)
+        setPageState(anySuccess ? "results" : "input")
+      } else {
+        // No saved interpretation for this project - reset to empty state
+        setInterpretationId(null)
+        setBriefFileName("")
+        setBriefSourceText("")
+        setBriefAugmentText("")
+        setBriefUploaded(false)
+        setBriefUploadError(null)
+        setBriefExtractWarning(null)
+        setUploadMethod(null)
+        setPastedContent("")
+        setGoogleLink("")
+        setGoogleLinkError(null)
+        setAnalyses({ timeline: { status: "idle" }, budget: { status: "idle" }, campaigns: { status: "idle" }, directors: { status: "idle" } })
+        setHasAnySuccess(false)
+        setInterpretError(null)
+        setPageState("input")
+      }
+    })()
+    return () => { cancelled = true }
+  // getSupabase is a stable ref helper - safe to omit from deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject?.id])
+
+
   const effectiveBriefText =
     (briefSourceText + (briefAugmentText.trim() ? `\n\n---\nAdditional brief details:\n${briefAugmentText.trim()}` : "")).trim()
 
