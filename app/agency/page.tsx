@@ -2114,7 +2114,6 @@ function AgencyRFPContent() {
                       <div className="flex-1 min-w-0">
                         <div className="font-display font-bold text-sm text-foreground">{rec.name}</div>
                         <div className="font-mono text-[10px] text-foreground-muted">{rec.company}</div>
-                        <p className="text-xs text-foreground-muted mt-1.5 leading-relaxed">{rec.fit_reason}</p>
                       </div>
                       <span className="font-mono text-[9px] px-2 py-1 rounded-full border border-border text-foreground-muted whitespace-nowrap shrink-0">Not yet on Ligament</span>
                     </div>
