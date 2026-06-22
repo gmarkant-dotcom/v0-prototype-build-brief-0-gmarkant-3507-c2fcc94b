@@ -6,9 +6,6 @@ export const dynamic = "force-dynamic"
 
 export async function POST(req: NextRequest) {
   try {
-    // Verify the caller is authenticated.
-    // If the server client cannot read the session cookie here, getUser() returns
-    // null and we fall through to the token-based fallback below.
     let userId: string | null = null
 
     const serverSupabase = await createServerClient()
@@ -17,8 +14,6 @@ export async function POST(req: NextRequest) {
     if (serverUser) {
       userId = serverUser.id
     } else {
-      // Fallback: accept the access token from the Authorization header and
-      // verify it directly with the service role client (no session cookie needed).
       const authHeader = req.headers.get("authorization") ?? ""
       const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null
       if (token) {
@@ -36,31 +31,33 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}))
-    const { brief_text, brief_title, analyses_requested } = body as {
+    const { brief_text, brief_title, analyses_requested, project_id } = body as {
       brief_text?: string
       brief_title?: string
       analyses_requested?: string[]
+      project_id?: string | null
     }
 
     if (!brief_text?.trim() || !brief_title?.trim() || !Array.isArray(analyses_requested)) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    // Service role bypasses RLS entirely — works regardless of JWT signing algorithm
-    // or PostgREST JWKS configuration on the brief_interpretations table.
     const serviceClient = createServiceClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
+    const insertPayload: Record<string, unknown> = {
+      user_id: userId,
+      brief_text,
+      brief_title,
+      analyses_requested,
+    }
+    if (project_id) insertPayload.project_id = project_id
+
     const { data: row, error } = await serviceClient
       .from("brief_interpretations")
-      .insert({
-        user_id: userId,
-        brief_text,
-        brief_title,
-        analyses_requested,
-      })
+      .insert(insertPayload)
       .select("id")
       .single()
 
