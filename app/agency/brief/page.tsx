@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { useSelectedProject } from "@/contexts/selected-project-context"
+import { InlineProjectSelector } from "@/components/agency-project-selector"
 import {
   AlertCircle,
   CheckSquare,
@@ -247,8 +249,9 @@ function AnalysisResultCard({
 
 // ─── Main page ─────────────────────────────────────────────────────────────
 
-export default function BriefInterpretationPage() {
+function BriefInterpretationContent() {
   const router = useRouter()
+  const { selectedProject, setSelectedProject, isLoadingProjects, projects } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Single stable Supabase client — created once on mount, reused everywhere.
@@ -442,6 +445,7 @@ export default function BriefInterpretationPage() {
           brief_text: effectiveBriefText,
           brief_title: briefTitle,
           analyses_requested: selectedAnalyses,
+          project_id: selectedProject?.id ?? null,
         }),
       })
       const savePayload = await saveRes.json().catch(() => ({}))
@@ -479,8 +483,7 @@ export default function BriefInterpretationPage() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <AgencyLayout>
-      <div className="p-8 max-w-3xl space-y-6">
+    <div className="p-8 max-w-3xl space-y-6">
 <StageHeader
           stageNumber="00"
           title="Creative Treatment Analysis"
@@ -748,6 +751,13 @@ export default function BriefInterpretationPage() {
           </div>
         )}
       </div>
+  )
+}
+
+export default function BriefInterpretationPage() {
+  return (
+    <AgencyLayout>
+      <BriefInterpretationContent />
     </AgencyLayout>
   )
 }
