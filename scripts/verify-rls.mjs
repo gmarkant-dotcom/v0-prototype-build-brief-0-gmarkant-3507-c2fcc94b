@@ -1,144 +1,164 @@
 #!/usr/bin/env node
 // scripts/verify-rls.mjs
-// Load .env.local automatically so `npm run verify-rls` works without inline vars.
-// Uses @next/env (bundled with Next.js) - no additional install needed.
-try {
-  const { loadEnvConfig } = await import("@next/env")
-  loadEnvConfig(process.cwd())
-} catch {
-  // @next/env not found - fall through, vars must be set in the shell environment
-}
 //
 // Audits every RLS-enabled table in the public schema and warns if any
 // has zero policies attached. The "RLS enabled, zero policies" state causes
 // a silent total lockout: all reads and writes return 403/permission-denied.
 //
-// Usage:
-//   NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co \
-//   SUPABASE_SERVICE_ROLE_KEY=service_role_... \
-//   node scripts/verify-rls.mjs
+// Usage: npm run verify-rls
+// Reads NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY from .env.local
+// (also accepts them as shell env vars - shell env takes precedence).
 //
-// Or via npm: npm run verify-rls (after adding the env vars to .env.local)
-//
-// Exit code 0 = all tables OK
-// Exit code 1 = one or more tables have RLS enabled with no policies (blocked state)
-// Exit code 2 = could not connect
+// Exit 0: all tables OK
+// Exit 1: one or more tables have RLS enabled with zero policies
+// Exit 2: could not connect / missing env vars
 
+import { readFileSync, existsSync } from "fs"
+import { resolve } from "path"
 import { createClient } from "@supabase/supabase-js"
 
-const url   = process.env.NEXT_PUBLIC_SUPABASE_URL
-const key   = process.env.SUPABASE_SERVICE_ROLE_KEY
+console.log("verify-rls starting...")
+
+// Load .env.local manually - no dotenv package required, no @next/env quirks
+const envPath = resolve(process.cwd(), ".env.local")
+if (existsSync(envPath)) {
+  const lines = readFileSync(envPath, "utf8").split("\n")
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line || line.startsWith("#")) continue
+    const eq = line.indexOf("=")
+    if (eq < 1) continue
+    const k = line.slice(0, eq).trim()
+    const v = line.slice(eq + 1).trim().replace(/^["']|["']$/g, "")
+    // Only set if not already in environment (shell env takes precedence)
+    if (!process.env[k]) process.env[k] = v
+  }
+  console.log("  loaded .env.local from", envPath)
+} else {
+  console.log("  no .env.local found at", envPath, "-- using shell env vars")
+}
+
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+console.log("  SUPABASE_URL:", url ?? "(not set)")
+console.log("  SERVICE_ROLE_KEY:", key ? key.slice(0, 12) + "..." : "(not set)")
+console.log()
 
 if (!url || !key) {
-  console.error("ERROR: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.")
+  console.log("ERROR: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.")
+  console.log("       Add them to .env.local in the project root.")
   process.exit(2)
 }
 
-const supabase = createClient(url, key, {
-  auth: { persistSession: false },
-})
+const supabase = createClient(url, key, { auth: { persistSession: false } })
 
-// Supabase exposes pg_catalog through PostgREST when using the service role key.
-// pg_class contains relrowsecurity (RLS enabled flag) for each table.
-// pg_policy contains one row per policy. We join them to find tables with 0 policies.
+// Query all public-schema tables that have RLS enabled, joined with their policy count.
+// We use the Supabase REST API with the service role key, which can read pg_catalog.
+// Supabase exposes pg_class and pg_policy via PostgREST under the service role.
 
-// Step 1: get all public-schema tables with RLS enabled
-const { data: rlsTables, error: e1 } = await supabase
+console.log("Querying pg_class for RLS-enabled tables...")
+const { data: rlsTables, error: classErr } = await supabase
   .from("pg_class")
-  .select("oid, relname, relrowsecurity")
+  .select("oid, relname, relnamespace, relrowsecurity")
   .eq("relrowsecurity", true)
-  .returns()
-  .catch(() => ({ data: null, error: new Error("pg_class not accessible") }))
 
-if (e1 || !rlsTables) {
-  // pg_class might not be directly exposed. Fall back to information_schema + a known view.
-  console.log("Could not access pg_class directly. Trying information_schema approach...")
-  
-  // Use the Supabase management SQL endpoint if SUPABASE_ACCESS_TOKEN is available
-  const accessToken = process.env.SUPABASE_ACCESS_TOKEN
-  const projectRef = url.replace(/^https?:\/\//, "").replace(".supabase.co", "").split(".")[0]
-  
-  if (accessToken) {
-    const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${accessToken}` },
-      body: JSON.stringify({
-        query: `
-          SELECT c.relname AS table_name, COUNT(p.polname)::int AS policy_count
-          FROM pg_class c
-          JOIN pg_namespace n ON c.relnamespace = n.oid
-          LEFT JOIN pg_policy p ON p.polrelid = c.oid
-          WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity = true
-          GROUP BY c.relname ORDER BY c.relname`
-      }),
-    })
-    if (res.ok) {
-      const rows = await res.json()
-      printResults(rows.map(r => ({ table_name: r.table_name, policy_count: parseInt(r.policy_count, 10) })))
-      process.exit(0)
-    }
-  }
-
-  console.error("ERROR: Cannot query pg_class. Provide SUPABASE_ACCESS_TOKEN for management API access.")
-  console.error("       Get one at: https://supabase.com/dashboard/account/tokens")
+if (classErr) {
+  console.log("  pg_class query error:", classErr.message)
+  console.log("  (pg_class may not be accessible via PostgREST on this project)")
+  console.log()
+  console.log("ALTERNATIVE: Run this SQL in your Supabase SQL Editor instead:")
+  console.log()
+  console.log("  SELECT c.relname AS table_name,")
+  console.log("         COUNT(p.polname)::int AS policy_count")
+  console.log("  FROM pg_class c")
+  console.log("  JOIN pg_namespace n ON c.relnamespace = n.oid")
+  console.log("  LEFT JOIN pg_policy p ON p.polrelid = c.oid")
+  console.log("  WHERE n.nspname = 'public'")
+  console.log("    AND c.relkind = 'r'")
+  console.log("    AND c.relrowsecurity = true")
+  console.log("  GROUP BY c.relname")
+  console.log("  ORDER BY c.relname;")
+  console.log()
+  console.log("Any row with policy_count = 0 is locked out.")
   process.exit(2)
 }
 
-// Step 2: filter to public schema only (relnamespace = public oid)
-// First get the oid for public namespace
+console.log("  found", rlsTables?.length ?? 0, "RLS-enabled tables total")
+
+// Filter to public schema (nspname = 'public')
+console.log("Querying pg_namespace for public schema OID...")
 const { data: ns } = await supabase
   .from("pg_namespace")
   .select("oid")
   .eq("nspname", "public")
   .maybeSingle()
 
+if (!ns) {
+  console.log("  WARNING: could not determine public schema OID, showing all RLS tables")
+}
+
 const publicOid = ns?.oid
-const publicTables = publicOid
-  ? rlsTables.filter(t => t.relnamespace === publicOid)
-  : rlsTables // fallback: include all
+const publicTables = (rlsTables ?? []).filter(t =>
+  publicOid ? t.relnamespace === publicOid : true
+)
 
-// Step 3: for each RLS-enabled table, count its policies
-const tableNames = publicTables.map(t => t.relname)
+console.log("  public schema tables with RLS:", publicTables.length)
+
+if (publicTables.length === 0) {
+  console.log()
+  console.log("No public-schema tables with RLS enabled found.")
+  console.log("PASS: Nothing to audit.")
+  process.exit(0)
+}
+
+// Count policies per table
 const oids = publicTables.map(t => t.oid)
-
-const { data: policies } = await supabase
+console.log("Querying pg_policy for policy counts...")
+const { data: policies, error: policyErr } = await supabase
   .from("pg_policy")
   .select("polrelid, polname")
   .in("polrelid", oids)
+
+if (policyErr) {
+  console.log("  pg_policy query error:", policyErr.message)
+}
 
 const policyCounts = new Map()
 for (const p of policies ?? []) {
   policyCounts.set(p.polrelid, (policyCounts.get(p.polrelid) ?? 0) + 1)
 }
 
-const results = publicTables.map(t => ({
-  table_name: t.relname,
-  policy_count: policyCounts.get(t.oid) ?? 0,
-})).sort((a, b) => a.table_name.localeCompare(b.table_name))
+const results = publicTables
+  .map(t => ({ table_name: t.relname, policy_count: policyCounts.get(t.oid) ?? 0 }))
+  .sort((a, b) => a.table_name.localeCompare(b.table_name))
 
-printResults(results)
+// Print results
+let failed = false
+console.log()
+console.log("RLS policy audit - public schema tables with RLS enabled:")
+console.log()
+console.log("  Table                                  Policies")
+console.log("  " + "-".repeat(55))
 
-function printResults(rows) {
-  let failed = false
-  console.log("\nRLS policy audit - public schema tables with RLS enabled:\n")
-  console.log("  Table                                  Policies")
-  console.log("  " + "-".repeat(55))
-  for (const { table_name, policy_count } of rows) {
-    const name = table_name.padEnd(38)
-    if (policy_count === 0) {
-      console.log(`  ${name} WARNING: 0 policies -- LOCKED OUT`)
-      failed = true
-    } else {
-      console.log(`  ${name} ${policy_count} policy${policy_count !== 1 ? "ies" : "y"}`)
-    }
-  }
-  if (rows.length === 0) console.log("  (no tables with RLS enabled found)")
-  console.log()
-  if (failed) {
-    console.error("FAIL: Tables with RLS enabled and zero policies will block ALL access.")
-    console.error("      Add at least one policy or run: ALTER TABLE <name> DISABLE ROW LEVEL SECURITY;")
-    process.exit(1)
+for (const { table_name, policy_count } of results) {
+  const name = table_name.padEnd(38)
+  if (policy_count === 0) {
+    console.log(`  ${name} WARNING: 0 policies -- LOCKED OUT`)
+    failed = true
   } else {
-    console.log("PASS: All RLS-enabled tables have at least one policy.")
+    console.log(`  ${name} ${policy_count} policy${policy_count !== 1 ? "ies" : "y"}`)
   }
+}
+
+console.log()
+
+if (failed) {
+  console.log("FAIL: One or more tables have RLS enabled with no policies.")
+  console.log("      These tables will return 403 for all reads and writes.")
+  console.log("      Add at least one policy, or run: ALTER TABLE <name> DISABLE ROW LEVEL SECURITY;")
+  process.exit(1)
+} else {
+  console.log("PASS: All RLS-enabled tables have at least one policy.")
+  process.exit(0)
 }
