@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { InlineProjectSelector } from "@/components/agency-project-selector"
-import { isDemoMode } from "@/lib/demo-data"
 import {
   AlertCircle,
   CheckSquare,
@@ -253,7 +252,6 @@ function AnalysisResultCard({
 export default function BriefInterpretationPage() {
   const router = useRouter()
   const { selectedProject, setSelectedProject, isLoadingProjects, projects } = useSelectedProject()
-  const isDemo = isDemoMode()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Single stable Supabase client — created once on mount, reused everywhere.
@@ -305,82 +303,6 @@ export default function BriefInterpretationPage() {
   const [hasAnySuccess, setHasAnySuccess] = useState(false)
   const [isInterpreting, setIsInterpreting] = useState(false)
   const [interpretError, setInterpretError] = useState<string | null>(null)
-  const [loadingInterpretation, setLoadingInterpretation] = useState(false)
-
-  const resetToInputState = () => {
-    setUploadMethod(null)
-    setBriefFileName("")
-    setBriefSourceText("")
-    setBriefAugmentText("")
-    setBriefUploaded(false)
-    setBriefUploadError(null)
-    setBriefExtractWarning(null)
-    setIsExtractingBrief(false)
-    setPastedContent("")
-    setGoogleLink("")
-    setGoogleLinkError(null)
-    setPageState("input")
-    setInterpretationId(null)
-    setAnalyses({ timeline: { status: "idle" }, budget: { status: "idle" }, campaigns: { status: "idle" }, directors: { status: "idle" } })
-    setHasAnySuccess(false)
-    setInterpretError(null)
-  }
-
-  // Load saved interpretation when project changes
-  useEffect(() => {
-    if (isDemo) return
-    if (!selectedProject?.id) {
-      resetToInputState()
-      return
-    }
-    let cancelled = false
-    setLoadingInterpretation(true)
-    ;(async () => {
-      try {
-        const supabase = getSupabase()
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session || cancelled) { if (!cancelled) setLoadingInterpretation(false); return }
-
-        // Cast to any to bypass Supabase generated types which may not include
-        // project_id until migration 055 is applied and types are regenerated.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: interp } = await (supabase as any)
-          .from("brief_interpretations")
-          .select("id, brief_title, brief_text, timeline_result, budget_result, campaigns_result, directors_result")
-          .eq("user_id", session.user.id)
-          .eq("project_id", selectedProject.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        if (cancelled) return
-        if (interp) {
-          setInterpretationId(interp.id as string)
-          if (interp.brief_text) {
-            setBriefSourceText(interp.brief_text as string)
-            setBriefFileName((interp.brief_title as string | null) || "Saved brief")
-            setBriefUploaded(true)
-          }
-          const reconstructed: AnalysesState = {
-            timeline: interp.timeline_result ? { status: "success", data: interp.timeline_result } : { status: "idle" },
-            budget: interp.budget_result ? { status: "success", data: interp.budget_result } : { status: "idle" },
-            campaigns: interp.campaigns_result ? { status: "success", data: interp.campaigns_result } : { status: "idle" },
-            directors: interp.directors_result ? { status: "success", data: interp.directors_result } : { status: "idle" },
-          }
-          setAnalyses(reconstructed)
-          const anySuccess = Object.values(reconstructed).some(a => a.status === "success")
-          if (anySuccess) { setHasAnySuccess(true); setPageState("results") }
-          else { setPageState("input") }
-        } else {
-          resetToInputState()
-        }
-      } finally {
-        if (!cancelled) setLoadingInterpretation(false)
-      }
-    })()
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProject?.id, isDemo])
 
   const effectiveBriefText =
     (briefSourceText + (briefAugmentText.trim() ? `\n\n---\nAdditional brief details:\n${briefAugmentText.trim()}` : "")).trim()
@@ -511,7 +433,7 @@ export default function BriefInterpretationPage() {
       const briefTitle = deriveBriefTitle(briefFileName || null, effectiveBriefText)
       const selectedAnalyses = (Object.keys(checks) as AnalysisType[]).filter((k) => checks[k])
 
-      console.log("[brief/interpret] calling /api/brief/save", { userId: user.id, briefTitle, projectId: selectedProject?.id ?? null })
+      console.log("[brief/interpret] calling /api/brief/save", { userId: user.id, briefTitle })
 
       const saveRes = await fetch("/api/brief/save", {
         method: "POST",
@@ -563,15 +485,12 @@ export default function BriefInterpretationPage() {
   return (
     <AgencyLayout>
       <div className="p-8 max-w-3xl space-y-6">
-        {!isDemo && (
-          <InlineProjectSelector
-            selectedProject={selectedProject}
-            projects={projects}
-            isLoadingProjects={isLoadingProjects}
-            onSelect={setSelectedProject}
-          />
-        )}
-
+        <InlineProjectSelector
+          selectedProject={selectedProject}
+          projects={projects}
+          isLoadingProjects={isLoadingProjects}
+          onSelect={setSelectedProject}
+        />
         <StageHeader
           stageNumber="00"
           title="Creative Treatment Analysis"
@@ -579,23 +498,13 @@ export default function BriefInterpretationPage() {
           aiPowered
         />
 
-        {/* Loading state while fetching saved interpretation for selected project */}
-        {loadingInterpretation && (
-          <GlassCard>
-            <div className="flex items-center gap-3 py-6 text-foreground-muted">
-              <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-              <span className="text-sm">Loading saved analysis for this project...</span>
-            </div>
-          </GlassCard>
-        )}
-
         {/* Brief Input - matches Step 1a style */}
-        {!loadingInterpretation && pageState === "input" && (
+        {pageState === "input" && (
           <GlassCard>
             <GlassCardHeader
               label="Step 00"
               title="Creative brief (source)"
-              description={selectedProject ? `No analysis yet for ${selectedProject.name}. Upload or paste a brief to get started.` : "Upload the client's brief, import from Google Docs, or paste text. We extract the content so the AI works from your real requirements."}
+              description="Upload the client's brief, import from Google Docs, or paste text. We extract the content so the AI works from your real requirements."
             />
 
             {/* Method selector - exact match to Step 1a */}
@@ -774,7 +683,7 @@ export default function BriefInterpretationPage() {
         )}
 
         {/* Analyses checkboxes */}
-        {!loadingInterpretation && pageState === "input" && (
+        {pageState === "input" && (
           <GlassCard>
             <GlassCardHeader
               label="Analyses"
@@ -824,7 +733,7 @@ export default function BriefInterpretationPage() {
         )}
 
         {/* Results */}
-        {!loadingInterpretation && pageState === "results" && (
+        {pageState === "results" && (
           <div className="space-y-4">
             {(Object.keys(analyses) as AnalysisType[])
               .filter((t) => analyses[t].status !== "idle")
