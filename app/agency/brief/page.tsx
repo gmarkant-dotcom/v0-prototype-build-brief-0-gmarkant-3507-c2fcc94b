@@ -341,7 +341,10 @@ export default function BriefInterpretationPage() {
         const { data: { session } } = await supabase.auth.getSession()
         if (!session || cancelled) { if (!cancelled) setLoadingInterpretation(false); return }
 
-        const { data: interp } = await supabase
+        // Cast to any to bypass Supabase generated types which may not include
+        // project_id until migration 055 is applied and types are regenerated.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: interp } = await (supabase as any)
           .from("brief_interpretations")
           .select("id, brief_title, brief_text, timeline_result, budget_result, campaigns_result, directors_result")
           .eq("user_id", session.user.id)
