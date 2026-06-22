@@ -271,8 +271,14 @@ export default function AgencyBidsPage() {
 
     const map = new Map<string, BidRow[]>()
     for (const r of filtered) {
+      if (groupBy === "client" && !r.client_name?.trim()) {
+        // Skip RFPs with no client name rather than grouping them under a visible
+        // "No Client" label - missing client data is a data quality issue, not a
+        // valid client group to show real users.
+        continue
+      }
       const key = groupBy === "client"
-        ? (r.client_name || "No Client").trim()
+        ? r.client_name!.trim()
         : r.partner_display_name || "Unknown Partner"
       const list = map.get(key) ?? []
       list.push(r)
