@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { InlineProjectSelector } from "@/components/agency-project-selector"
+import { isDemoMode } from "@/lib/demo-data"
 import {
   AlertCircle,
   CheckSquare,
@@ -252,6 +253,7 @@ function AnalysisResultCard({
 function BriefInterpretationContent() {
   const router = useRouter()
   const { selectedProject, setSelectedProject, isLoadingProjects, projects } = useSelectedProject()
+  const isDemo = isDemoMode()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Single stable Supabase client — created once on mount, reused everywhere.
@@ -546,7 +548,16 @@ function BriefInterpretationContent() {
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="p-8 max-w-3xl space-y-6">
-<StageHeader
+        {/* Inline Project Selector */}
+        {!isDemo && (
+          <InlineProjectSelector
+            selectedProject={selectedProject}
+            projects={projects}
+            isLoadingProjects={isLoadingProjects}
+            onSelect={setSelectedProject}
+          />
+        )}
+        <StageHeader
           stageNumber="00"
           title="Creative Treatment Analysis"
           subtitle="Upload or paste a client brief. Ligament extracts timeline, budget, comparable campaigns, and director recommendations to accelerate your RFP setup."
