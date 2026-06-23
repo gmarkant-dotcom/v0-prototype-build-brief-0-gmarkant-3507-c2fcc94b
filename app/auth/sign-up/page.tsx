@@ -145,35 +145,7 @@ function SignUpContent() {
       return
     }
 
-    if (!inviteToken) {
-      router.push("/auth/sign-up-success")
-      return
-    }
-
-    try {
-      const claimRes = await fetch("/api/partner/rfps/claim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: inviteToken }),
-      })
-      const claimData = await claimRes.json().catch(() => ({}))
-      if (!claimRes.ok) {
-        router.push("/partner/rfps?invite_status=failed")
-        return
-      }
-
-      const inboxItemId = (claimData?.inboxItemId as string) || ""
-      if (!inboxItemId) {
-        router.push("/partner/rfps?invite_status=failed")
-        return
-      }
-      const nextPath = claimData?.ndaGateEnforced
-        ? `/partner/rfps/${encodeURIComponent(inboxItemId)}?nda=required`
-        : `/partner/rfps/${encodeURIComponent(inboxItemId)}`
-      router.push(nextPath)
-    } catch {
-      router.push("/partner/rfps?invite_status=failed")
-    }
+    router.push("/auth/sign-up-success")
   }
 
   return (
