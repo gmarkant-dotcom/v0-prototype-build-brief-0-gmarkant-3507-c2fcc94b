@@ -16,3 +16,5 @@ node_modules/
 .next/
 .DS_Store
 .vercel
+CLAUDE.md
+tsconfig.tsbuildinfo
