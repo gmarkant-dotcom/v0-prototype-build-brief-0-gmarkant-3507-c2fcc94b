@@ -13,6 +13,7 @@ import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { InlineProjectSelector } from "@/components/agency-project-selector"
+import { AgencyRfpMagicLinkInvite } from "@/components/agency-rfp-magic-link-invite"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, ChevronDown, Check, Send, Shield, FileCheck, Loader2, Sparkles, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
@@ -2479,7 +2480,9 @@ function AgencyRFPContent() {
                 </div>
               </div>
             </GlassCard>
-            
+
+            {selectedProject?.id && <AgencyRfpMagicLinkInvite projectId={selectedProject.id} />}
+
             {ndaSignatureRequired && (getTotalNewWithNda() + getTotalExistingWithoutNda()) > 0 && (
               <GlassCard className="border-warning/30 bg-warning/5">
                 <div className="flex items-start gap-3">

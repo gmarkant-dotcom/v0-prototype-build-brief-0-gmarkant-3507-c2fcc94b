@@ -35,14 +35,21 @@ export async function GET(request: Request) {
     console.log("[api] start", { route, method: "GET", userId: user.id, role: profile.role, projectId: projectIdParam || null })
 
     // RLS: policy "Agencies select RFP responses they own" — USING (agency_id = auth.uid())
-    // Optional project-scoped filtering is applied via partner_rfp_inbox.project_id.
+    // Optional project-scoped filtering is applied via partner_rfp_inbox.project_id, unioned with
+    // guest (magic-link) responses scoped via rfp_magic_tokens.project_id — guest rows have no
+    // inbox_item_id, so they'd otherwise be silently excluded by the inbox-scoped filter below.
     let inboxIdsForProject: string[] | null = null
+    let magicResponseIdsForProject: string[] = []
     if (projectIdParam) {
-      const { data: scopedInboxes, error: inboxErr } = await supabase
-        .from("partner_rfp_inbox")
-        .select("id")
-        .eq("agency_id", user.id)
-        .eq("project_id", projectIdParam)
+      const [{ data: scopedInboxes, error: inboxErr }, { data: scopedMagicTokens, error: magicErr }] = await Promise.all([
+        supabase.from("partner_rfp_inbox").select("id").eq("agency_id", user.id).eq("project_id", projectIdParam),
+        supabase
+          .from("rfp_magic_tokens")
+          .select("response_id")
+          .eq("agency_id", user.id)
+          .eq("project_id", projectIdParam)
+          .not("response_id", "is", null),
+      ])
       if (inboxErr) {
         console.error("[agency/rfp-responses] partner_rfp_inbox scoped select error", {
           route,
@@ -53,8 +60,19 @@ export async function GET(request: Request) {
         })
         return NextResponse.json({ error: inboxErr.message }, { status: 500 })
       }
+      if (magicErr) {
+        console.error("[agency/rfp-responses] rfp_magic_tokens scoped select error", {
+          route,
+          userId: user.id,
+          projectId: projectIdParam,
+          message: magicErr.message,
+          code: magicErr.code,
+        })
+        return NextResponse.json({ error: magicErr.message }, { status: 500 })
+      }
       inboxIdsForProject = (scopedInboxes || []).map((r) => r.id as string)
-      if (inboxIdsForProject.length === 0) {
+      magicResponseIdsForProject = (scopedMagicTokens || []).map((r) => r.response_id as string)
+      if (inboxIdsForProject.length === 0 && magicResponseIdsForProject.length === 0) {
         return NextResponse.json({ responses: [] }, { headers: { "Cache-Control": "private, no-store, no-cache, must-revalidate" } })
       }
     }
@@ -65,7 +83,10 @@ export async function GET(request: Request) {
       .eq("agency_id", user.id)
       .order("updated_at", { ascending: false })
     if (inboxIdsForProject) {
-      responsesQuery = responsesQuery.in("inbox_item_id", inboxIdsForProject)
+      const orFilters: string[] = []
+      if (inboxIdsForProject.length > 0) orFilters.push(`inbox_item_id.in.(${inboxIdsForProject.join(",")})`)
+      if (magicResponseIdsForProject.length > 0) orFilters.push(`id.in.(${magicResponseIdsForProject.join(",")})`)
+      responsesQuery = responsesQuery.or(orFilters.join(","))
     }
     const { data: responses, error } = await responsesQuery
 
@@ -79,6 +100,30 @@ export async function GET(request: Request) {
     }
 
     const list = responses || []
+
+    // Guest (magic-link) responses have no inbox_item_id — resolve their display
+    // context (project, scope item, vendor identity) via rfp_magic_tokens instead.
+    const guestResponseIds = list.filter((r) => !r.inbox_item_id).map((r) => r.id as string)
+    let magicTokenByResponseId: Record<
+      string,
+      { vendor_email: string; vendor_name: string | null; scope_item_name: string | null; project_id: string | null }
+    > = {}
+    if (guestResponseIds.length > 0) {
+      const { data: magicRows, error: magicRowsErr } = await supabase
+        .from("rfp_magic_tokens")
+        .select("response_id, vendor_email, vendor_name, scope_item_name, project_id")
+        .in("response_id", guestResponseIds)
+      if (magicRowsErr) {
+        console.error("[agency/rfp-responses] rfp_magic_tokens enrichment select error", {
+          route,
+          userId: user.id,
+          message: magicRowsErr.message,
+          code: magicRowsErr.code,
+        })
+        return NextResponse.json({ error: magicRowsErr.message }, { status: 500 })
+      }
+      magicTokenByResponseId = Object.fromEntries((magicRows || []).map((m) => [m.response_id as string, m]))
+    }
 
     let inboxQuery = supabase
       .from("partner_rfp_inbox")
@@ -122,7 +167,14 @@ export async function GET(request: Request) {
       )
     }
 
-    const projectIdsFromInbox = [...new Set((allInboxes || []).map((i) => (i.project_id as string | null)).filter(Boolean))] as string[]
+    const projectIdsFromInbox = [
+      ...new Set(
+        [
+          ...(allInboxes || []).map((i) => i.project_id as string | null),
+          ...Object.values(magicTokenByResponseId).map((m) => m.project_id),
+        ].filter(Boolean)
+      ),
+    ] as string[]
     const projectMetaById: Record<string, { project_name: string; client_name: string | null }> = {}
     if (projectIdsFromInbox.length > 0) {
       const { data: projRows } = await supabase
@@ -149,17 +201,22 @@ export async function GET(request: Request) {
 
     const merged = list.map((r) => {
       const inboxRow = inboxById[r.inbox_item_id as string] ?? null
+      const magicToken = !r.inbox_item_id ? magicTokenByResponseId[r.id as string] ?? null : null
       const pid = inboxRow ? (inboxRow as Record<string,unknown>).partner_id as string | null : null
       const pr = pid ? profileById[pid] : null
       const displayName = pr?.company_name || pr?.full_name || pr?.email || (r.partner_id ? profileById[r.partner_id as string]?.company_name || profileById[r.partner_id as string]?.full_name || profileById[r.partner_id as string]?.email : null) || 'Partner'
+      const magicProjectMeta = magicToken?.project_id ? projectMetaById[magicToken.project_id] : null
       return {
         ...r,
         response_id: r.id,
         response_exists: true,
         partner_display_name: (r as Record<string,unknown>).partner_display_name as string || displayName,
-        project_name: inboxRow ? (inboxRow as Record<string,unknown>).project_name as string | null : null,
-        client_name: inboxRow ? (inboxRow as Record<string,unknown>).client_name as string | null : null,
-        inbox: inboxRow,
+        project_name: inboxRow ? (inboxRow as Record<string,unknown>).project_name as string | null : (magicProjectMeta?.project_name ?? null),
+        client_name: inboxRow ? (inboxRow as Record<string,unknown>).client_name as string | null : (magicProjectMeta?.client_name ?? null),
+        inbox: inboxRow ?? (magicToken
+          ? { scope_item_name: magicToken.scope_item_name, response_deadline: null, project_id: magicToken.project_id }
+          : null),
+        vendor_email: magicToken?.vendor_email ?? null,
       }
     })
 

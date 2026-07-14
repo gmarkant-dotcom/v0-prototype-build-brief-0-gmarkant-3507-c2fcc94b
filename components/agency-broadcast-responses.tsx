@@ -125,6 +125,8 @@ type AgencyResponseRow = {
   response_id?: string | null
   response_exists?: boolean
   inbox_item_id: string
+  partner_id?: string | null
+  vendor_email?: string | null
   partner_display_name: string
   proposal_text: string
   budget_proposal: string
@@ -357,6 +359,11 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="font-display font-bold text-foreground truncate">{r.partner_display_name}</div>
+                    {!r.partner_id && r.response_exists !== false && (
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded border border-teal-400/40 bg-teal-500/10 text-teal-300 shrink-0">
+                        Guest Submission
+                      </span>
+                    )}
                     {partnerIntentBadge && (
                       <span
                         className={cn(
@@ -419,7 +426,10 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                       <div className="text-foreground">
                         {(() => {
                           const o = parseVersionTimelineObj(r.timeline_proposal)
-                          return o?.duration != null && o?.unit ? `${o.duration} ${o.unit}` : "—"
+                          if (o?.duration != null && o?.unit) return `${o.duration} ${o.unit}`
+                          // Guest bids store timeline_proposal as free text (no versions row to
+                          // structure it), so fall back to showing it as-is rather than "—".
+                          return r.timeline_proposal?.trim() || "—"
                         })()}
                       </div>
                     </div>

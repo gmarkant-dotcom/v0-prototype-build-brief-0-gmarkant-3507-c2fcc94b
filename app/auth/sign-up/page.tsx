@@ -38,11 +38,13 @@ function SignUpContent() {
   const ndaRequired = searchParams.get("nda") === "required"
   const scopeName = (searchParams.get("scope") || "").trim()
   const agencyName = (searchParams.get("agency") || "").trim()
+  const isMagicLinkSource = (searchParams.get("source") || "").trim().toLowerCase() === "magic_link"
   const hasRfpInviteContext = inviteToken.length > 0
   const hasPartnershipInviteContext = inviteType === "partnership"
   const hasInviteContext = hasRfpInviteContext || hasPartnershipInviteContext
-  
+
   const [step, setStep] = useState<1 | 2>(1)
+  const [checkingExistingAccount, setCheckingExistingAccount] = useState(isMagicLinkSource && Boolean(prefillEmail))
   const [role, setRole] = useState<UserRole | null>(null)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -63,8 +65,39 @@ function SignUpContent() {
   }, [hasInviteContext])
 
   useEffect(() => {
+    if (!isMagicLinkSource) return
+    setRole("partner")
+    setStep(2)
+  }, [isMagicLinkSource])
+
+  useEffect(() => {
     if (prefillEmail) setEmail(prefillEmail)
   }, [prefillEmail])
+
+  useEffect(() => {
+    if (!isMagicLinkSource || !prefillEmail) {
+      setCheckingExistingAccount(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(prefillEmail)}`)
+        const data = await res.json().catch(() => ({}))
+        if (!cancelled && data?.exists) {
+          router.replace(`/auth/login?email=${encodeURIComponent(prefillEmail)}`)
+          return
+        }
+      } catch {
+        // Fall through to the normal sign-up form if the check fails.
+      } finally {
+        if (!cancelled) setCheckingExistingAccount(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isMagicLinkSource, prefillEmail, router])
 
   const inviteBannerText = useMemo(() => {
     if (!hasInviteContext) return ""
@@ -146,6 +179,14 @@ function SignUpContent() {
     }
 
     router.push("/auth/sign-up-success")
+  }
+
+  if (checkingExistingAccount) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-pulse text-foreground-muted">Loading...</div>
+      </div>
+    )
   }
 
   return (
@@ -239,7 +280,7 @@ function SignUpContent() {
                   </span>
                 </div>
                 <h1 className="font-display font-black text-2xl text-foreground mb-2">
-                  Your Details
+                  {isMagicLinkSource ? "Finish setting up your Ligament profile" : "Your Details"}
                 </h1>
                 <p className="text-foreground-muted text-sm">
                   Complete your account setup

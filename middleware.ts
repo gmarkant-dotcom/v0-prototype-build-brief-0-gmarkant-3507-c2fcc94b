@@ -20,6 +20,7 @@ const publicPaths = [
   '/api/partner/partnerships/claim',
   '/pricing',
   '/contact',
+  '/rfp',
 ]
 
 function isPublicPath(pathname: string): boolean {

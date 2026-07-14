@@ -1,4 +1,5 @@
 import { Resend } from "resend"
+import { formatDateTime } from "@/lib/utils"
 
 const defaultFrom = "Ligament <notifications@withligament.com>"
 
@@ -21,6 +22,8 @@ export function buildBrandedEmailHtml(opts: {
   body: string
   ctaText?: string
   ctaUrl?: string
+  /** Small muted line (may contain a trusted <a> link) rendered above the signoff, e.g. a low-emphasis secondary link. */
+  footerNote?: string
 }): string {
   const base = siteBaseUrl()
   const safeRecipient = escapeHtml((opts.recipientName || "there").trim()) || "there"
@@ -38,6 +41,9 @@ export function buildBrandedEmailHtml(opts: {
     opts.ctaText && opts.ctaUrl
       ? `<p style="margin:8px 0 0 0;"><a href="${escapeHtml(opts.ctaUrl)}" style="display:inline-block;background:#C8F53C;color:#0C3535;text-decoration:none;padding:16px 32px;border-radius:10px;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:0.05em;">${escapeHtml(opts.ctaText)}</a></p>`
       : ""
+  const footerNoteBlock = opts.footerNote
+    ? `<p style="color:#6E8A8A;font-size:12px;margin:16px 0 0 0;line-height:1.6;">${opts.footerNote}</p>`
+    : ""
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -53,6 +59,7 @@ export function buildBrandedEmailHtml(opts: {
       <p style="color:#FFFFFF;font-size:20px;line-height:1.4;margin:0 0 20px 0;font-weight:700;">${safeTitle}</p>
       ${paragraphs}
       ${ctaBlock}
+      ${footerNoteBlock}
       <p style="color:#9BB8B8;font-size:13px;margin:28px 0 0 0;line-height:1.6;">
         The Ligament Team<br />
         <a href="${escapeHtml(base)}" style="color:#C8F53C;text-decoration:none;">withligament.com</a>
@@ -63,10 +70,32 @@ export function buildBrandedEmailHtml(opts: {
 </html>`
 }
 
+/** Plain-text counterpart to buildBrandedEmailHtml, for Resend's `text` fallback. */
+export function buildBrandedEmailText(opts: {
+  title: string
+  recipientName: string
+  body: string
+  ctaText?: string
+  ctaUrl?: string
+  footerNoteText?: string
+}): string {
+  const recipient = (opts.recipientName || "there").trim() || "there"
+  const lines = [`Hi ${recipient},`, "", opts.title.trim(), "", opts.body.trim()]
+  if (opts.ctaText && opts.ctaUrl) {
+    lines.push("", `${opts.ctaText}: ${opts.ctaUrl}`)
+  }
+  if (opts.footerNoteText) {
+    lines.push("", opts.footerNoteText)
+  }
+  lines.push("", "The Ligament Team", siteBaseUrl())
+  return lines.join("\n")
+}
+
 export async function sendTransactionalEmail(opts: {
   to: string
   subject: string
   html: string
+  text?: string
   from?: string
   cc?: string | string[]
   bcc?: string | string[]
@@ -83,6 +112,7 @@ export async function sendTransactionalEmail(opts: {
       to: opts.to.trim(),
       subject: opts.subject,
       html: opts.html,
+      ...(opts.text ? { text: opts.text } : {}),
       ...(opts.cc ? { cc: opts.cc } : {}),
       ...(opts.bcc ? { bcc: opts.bcc } : {}),
     })
@@ -100,4 +130,78 @@ export function siteBaseUrl(): string {
     return raw.replace("https://withligament.com/", "https://www.withligament.com/")
   }
   return raw
+}
+
+// ── RFP magic-link guest flow email templates ──────────────────────────────
+
+type EmailPayload = { subject: string; html: string; text: string }
+
+export function buildVendorInvitationEmail(opts: {
+  agencyName: string
+  vendorName?: string
+  projectName: string
+  scopeSummary: string
+  token: string
+}): EmailPayload {
+  const recipientName = (opts.vendorName || "").trim() || "there"
+  const subject = `${opts.agencyName} invited you to bid on ${opts.projectName}`
+  const ctaUrl = `https://withligament.com/rfp/respond/${opts.token}`
+  const ctaText = "View Brief & Submit Bid"
+  const body = `${opts.scopeSummary}\n\nThis invitation expires in 72 hours.`
+  return {
+    subject,
+    html: buildBrandedEmailHtml({ title: subject, recipientName, body, ctaText, ctaUrl }),
+    text: buildBrandedEmailText({ title: subject, recipientName, body, ctaText, ctaUrl }),
+  }
+}
+
+export function buildVendorConfirmationEmail(opts: {
+  vendorName?: string
+  vendorEmail: string
+  projectName: string
+  submittedAt: string
+  budgetSummary: string
+  timelineSummary: string
+}): EmailPayload {
+  const recipientName = (opts.vendorName || "").trim() || "there"
+  const subject = `Your bid has been submitted — ${opts.projectName}`
+  const submittedDisplay = formatDateTime(opts.submittedAt)
+  const body = `We've received your bid for ${opts.projectName}, submitted ${submittedDisplay}.\n\nBudget: ${opts.budgetSummary}\nTimeline: ${opts.timelineSummary}\n\nThe agency will review your bid and be in touch.`
+  const signUpUrl = `https://withligament.com/auth/sign-up?email=${encodeURIComponent(opts.vendorEmail)}&source=magic_link`
+  return {
+    subject,
+    html: buildBrandedEmailHtml({
+      title: subject,
+      recipientName,
+      body,
+      footerNote: `Want to track this bid? <a href="${escapeHtml(signUpUrl)}" style="color:#C8F53C;text-decoration:none;">Create your Ligament profile</a>`,
+    }),
+    text: buildBrandedEmailText({
+      title: subject,
+      recipientName,
+      body,
+      footerNoteText: `Want to track this bid? Create your Ligament profile: ${signUpUrl}`,
+    }),
+  }
+}
+
+export function buildAgencyBidNotificationEmail(opts: {
+  agencyRecipientName: string
+  vendorNameOrEmail: string
+  projectName: string
+  proposalText: string
+  budgetSummary: string
+  timelineSummary: string
+}): EmailPayload {
+  const subject = `New bid received — ${opts.projectName}`
+  const trimmedProposal = opts.proposalText.trim()
+  const preview = trimmedProposal.slice(0, 150) + (trimmedProposal.length > 150 ? "…" : "")
+  const body = `${opts.vendorNameOrEmail} has submitted a bid via your magic link invitation.\n\n"${preview}"\n\nBudget: ${opts.budgetSummary}\nTimeline: ${opts.timelineSummary}`
+  const ctaUrl = "https://withligament.com/agency/bids"
+  const ctaText = "View Bid in Dashboard"
+  return {
+    subject,
+    html: buildBrandedEmailHtml({ title: subject, recipientName: opts.agencyRecipientName, body, ctaText, ctaUrl }),
+    text: buildBrandedEmailText({ title: subject, recipientName: opts.agencyRecipientName, body, ctaText, ctaUrl }),
+  }
 }

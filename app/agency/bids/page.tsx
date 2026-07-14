@@ -10,6 +10,7 @@ import {
   Building2, Users, AlertTriangle, Clock, CheckCircle, XCircle,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { formatBudgetForDisplay } from "@/lib/rfp-response-fields"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,8 @@ type BidRow = {
   response_id: string | null
   response_exists: boolean
   inbox_item_id: string
+  partner_id?: string | null
+  vendor_email?: string | null
   partner_display_name: string
   project_name: string | null
   client_name: string | null
@@ -77,6 +80,12 @@ function bestBudgetDisplay(row: BidRow): string | null {
     const n = parseFloat(v.budget)
     if (!isNaN(n)) return `$${n.toLocaleString("en-US")} ${v.budget_currency}`
   }
+  // No version history (e.g. guest bids never get a partner_rfp_response_versions row) —
+  // fall back to the response's own budget_proposal column.
+  if (row.budget_proposal) {
+    const display = formatBudgetForDisplay(row.budget_proposal)
+    return display === "—" ? null : display
+  }
   return null
 }
 
@@ -100,6 +109,11 @@ function BidCard({ row, groupBy }: { row: BidRow; groupBy: "client" | "partner" 
           )}>
             {badge.label}
           </span>
+          {!row.partner_id && row.response_exists && (
+            <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider shrink-0">
+              Guest Submission
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 font-mono text-[10px] text-foreground-muted flex-wrap">
           {groupBy === "client" && (
