@@ -49,10 +49,12 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
     }
     return process.env.NEXT_PUBLIC_IS_DEMO === "true"
   })
-  const [isPaid, setIsPaid] = useState(isDemo) // Start paid if demo
-  const [isAdmin, setIsAdmin] = useState(isDemo) // Start admin if demo
+  // No optimistic defaults: stay unpaid/non-admin/loading until the server confirms
+  // the profile. A restricted screen must never render before that confirmation.
+  const [isPaid, setIsPaid] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [hasDemoAccess, setHasDemoAccess] = useState(false)
-  const [isLoading, setIsLoading] = useState(!isDemo) // Don't show loading in demo
+  const [isLoading, setIsLoading] = useState(true)
   const [role, setRole] = useState<UserRole>(null)
   const [linkedAgencyId, setLinkedAgencyId] = useState<string | null>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
@@ -74,35 +76,59 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
 
     setIsLoading(true)
 
-    const checkPaidStatus = async () => {
-      const supabase = createClient()
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
+    let settled = false
 
-      // Diagnostic logging - remove after debugging
-      if (authError) console.error("[PaidUserContext] auth.getUser error:", authError)
-      if (!user) {
-        console.error("[PaidUserContext] no user returned from auth.getUser - is_paid will stay false")
-      }
-
-      if (user) {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('is_paid, is_admin, role, linked_agency_id, demo_access')
-          .eq('id', user.id)
-          .single()
-
-        if (profileError) console.error("[PaidUserContext] profiles query error:", profileError)
-        console.error("[PaidUserContext] profile fetched:", { is_paid: profile?.is_paid, is_admin: profile?.is_admin, role: profile?.role, userId: user.id.slice(0,8) })
-        setIsPaid(profile?.is_paid !== false)
-        setIsAdmin(profile?.is_admin || false)
-        setHasDemoAccess(profile?.demo_access || false)
-        setRole(profile?.role as UserRole || null)
-        setLinkedAgencyId(profile?.linked_agency_id || null)
-      }
+    // Safety net: if Supabase never responds, don't leave users stuck on a spinner
+    // forever. Fail closed (isPaid = false) rather than granting access.
+    const timeoutId = setTimeout(() => {
+      if (settled) return
+      settled = true
+      console.error("[PaidUserContext] profile fetch timed out after 10s — defaulting to unpaid")
+      setIsPaid(false)
       setIsLoading(false)
+    }, 10000)
+
+    const checkPaidStatus = async () => {
+      try {
+        const supabase = createClient()
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+        // Diagnostic logging - remove after debugging
+        if (authError) console.error("[PaidUserContext] auth.getUser error:", authError)
+        if (!user) {
+          console.error("[PaidUserContext] no user returned from auth.getUser - is_paid will stay false")
+        }
+
+        if (user) {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('is_paid, is_admin, role, linked_agency_id, demo_access')
+            .eq('id', user.id)
+            .single()
+
+          if (profileError) console.error("[PaidUserContext] profiles query error:", profileError)
+          console.error("[PaidUserContext] profile fetched:", { is_paid: profile?.is_paid, is_admin: profile?.is_admin, role: profile?.role, userId: user.id.slice(0,8) })
+          setIsPaid(profile?.is_paid === true)
+          setIsAdmin(profile?.is_admin || false)
+          setHasDemoAccess(profile?.demo_access || false)
+          setRole(profile?.role as UserRole || null)
+          setLinkedAgencyId(profile?.linked_agency_id || null)
+        }
+      } finally {
+        if (!settled) {
+          settled = true
+          clearTimeout(timeoutId)
+          setIsLoading(false)
+        }
+      }
     }
 
     checkPaidStatus()
+
+    return () => {
+      settled = true
+      clearTimeout(timeoutId)
+    }
     // Re-run on every route change so a restriction (or restoration) an admin makes
     // mid-session is picked up on the next page load, instead of staying cached in
     // React state for the lifetime of this provider instance.
