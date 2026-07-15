@@ -4,15 +4,33 @@ import { useState, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { AgencyLayout } from "@/components/agency-layout"
 import { useFetch } from "@/hooks/useFetch"
-import { cn } from "@/lib/utils"
+import { cn, formatDateTime } from "@/lib/utils"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, Users, AlertTriangle, Clock, CheckCircle, XCircle,
+  Paperclip, ExternalLink, Link as LinkIcon,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { formatBudgetForDisplay } from "@/lib/rfp-response-fields"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+type PaymentTerms = {
+  deposit_required_pct?: number | null
+  payment_schedule_preference?: string | null
+  additional_notes?: string | null
+} | null
+
+type BidAttachment = { type?: string; label: string; url: string }
 
 type BidRow = {
   id: string
@@ -26,6 +44,12 @@ type BidRow = {
   client_name: string | null
   status: string
   budget_proposal?: string
+  proposal_text?: string
+  timeline_proposal?: string
+  payment_terms?: PaymentTerms
+  attachments?: BidAttachment[] | null
+  agency_feedback?: string | null
+  submitted_at?: string | null
   created_at: string
   updated_at: string
   inbox: {
@@ -91,12 +115,17 @@ function bestBudgetDisplay(row: BidRow): string | null {
 
 // ── Bid card ─────────────────────────────────────────────────────────────────
 
-function BidCard({ row, groupBy }: { row: BidRow; groupBy: "client" | "partner" }) {
+function BidCard({
+  row, groupBy, onView,
+}: {
+  row: BidRow
+  groupBy: "client" | "partner"
+  onView: (row: BidRow) => void
+}) {
   const badge = statusBadge(row.status)
   const scope = row.inbox?.scope_item_name || row.project_name || "Scope"
   const deadline = formatDeadline(row.inbox?.response_deadline)
   const budget = bestBudgetDisplay(row)
-  const projectId = row.inbox?.project_id
 
   return (
     <div className="flex items-start gap-4 p-4 rounded-lg border border-border/40 bg-white/5 hover:bg-white/8 transition-colors">
@@ -149,27 +178,160 @@ function BidCard({ row, groupBy }: { row: BidRow; groupBy: "client" | "partner" 
           )}
         </div>
       </div>
-      {projectId && (
-        <Link
-          href={`/agency/projects/${projectId}`}
-          className="shrink-0 flex items-center gap-1 font-mono text-[10px] text-accent border border-accent/30 hover:bg-accent/10 rounded-md px-2 py-1 transition-colors"
-        >
-          View <ChevronRight className="w-3 h-3" />
-        </Link>
-      )}
+      <button
+        type="button"
+        onClick={() => onView(row)}
+        className="shrink-0 flex items-center gap-1 font-mono text-[10px] text-accent border border-accent/30 hover:bg-accent/10 rounded-md px-2 py-1 transition-colors"
+      >
+        View <ChevronRight className="w-3 h-3" />
+      </button>
     </div>
+  )
+}
+
+// ── Bid detail dialog ────────────────────────────────────────────────────────
+
+function BidDetailDialog({ row, onClose }: { row: BidRow | null; onClose: () => void }) {
+  if (!row) return null
+
+  const badge = statusBadge(row.status)
+  const scope = row.inbox?.scope_item_name || row.project_name || "Scope"
+  const budget = bestBudgetDisplay(row)
+  const timeline = row.timeline_proposal ? formatTimelineForDisplay(row.timeline_proposal) : null
+  const isGuest = !row.partner_id && row.response_exists
+  const identity = isGuest ? row.vendor_email || row.partner_display_name : row.partner_display_name
+  const projectId = row.inbox?.project_id
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="bg-card border-border text-foreground max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-display flex items-center gap-2 flex-wrap">
+            {scope}
+            <span
+              className={cn(
+                "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider",
+                badge.bg, badge.text
+              )}
+            >
+              {badge.label}
+            </span>
+            {isGuest && (
+              <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider">
+                Guest Submission
+              </span>
+            )}
+          </DialogTitle>
+          <DialogDescription className="text-foreground-muted">
+            {[identity, row.client_name, row.project_name].filter(Boolean).join(" · ")}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {!row.response_exists ? (
+            <p className="text-sm text-foreground-muted">Awaiting partner response.</p>
+          ) : (
+            <>
+              {row.proposal_text && (
+                <div>
+                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
+                  <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                    {row.proposal_text}
+                  </p>
+                </div>
+              )}
+              {(budget || timeline) && (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {budget && (
+                    <div>
+                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Budget</div>
+                      <div className="text-sm text-foreground">{budget}</div>
+                    </div>
+                  )}
+                  {timeline && (
+                    <div>
+                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Timeline</div>
+                      <div className="text-sm text-foreground">{timeline}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {row.payment_terms && (
+                <div>
+                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Payment Terms</div>
+                  <div className="text-sm text-foreground space-y-1">
+                    {row.payment_terms.deposit_required_pct != null && (
+                      <p>Deposit: {row.payment_terms.deposit_required_pct}%</p>
+                    )}
+                    {row.payment_terms.payment_schedule_preference && (
+                      <p>Schedule: {row.payment_terms.payment_schedule_preference}</p>
+                    )}
+                    {row.payment_terms.additional_notes && <p>Notes: {row.payment_terms.additional_notes}</p>}
+                  </div>
+                </div>
+              )}
+              {row.attachments && row.attachments.length > 0 && (
+                <div>
+                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
+                  <ul className="space-y-1.5">
+                    {row.attachments.map((a, i) => (
+                      <li key={`${a.url}-${i}`}>
+                        <a
+                          href={a.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 font-mono text-xs text-accent hover:underline"
+                        >
+                          {a.type === "link" ? (
+                            <LinkIcon className="w-3 h-3" />
+                          ) : (
+                            <Paperclip className="w-3 h-3" />
+                          )}
+                          {a.label}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {row.agency_feedback && (
+                <div>
+                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Your Feedback</div>
+                  <p className="text-sm text-foreground-muted whitespace-pre-wrap">{row.agency_feedback}</p>
+                </div>
+              )}
+              {row.submitted_at && (
+                <div className="font-mono text-[10px] text-foreground-muted">
+                  Submitted {formatDateTime(row.submitted_at)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {projectId && (
+          <DialogFooter>
+            <Button asChild variant="outline" className="border-border text-foreground hover:bg-white/5">
+              <Link href={`/agency/projects/${projectId}`}>Go to Project</Link>
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
 // ── Group section ─────────────────────────────────────────────────────────────
 
 function GroupSection({
-  label, rows, defaultOpen, groupBy,
+  label, rows, defaultOpen, groupBy, onView,
 }: {
   label: string
   rows: BidRow[]
   defaultOpen: boolean
   groupBy: "client" | "partner"
+  onView: (row: BidRow) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [activeStatus, setActiveStatus] = useState<BidStatusKey>("all")
@@ -245,7 +407,7 @@ function GroupSection({
               <p className="text-sm text-foreground-muted py-4 text-center">No bids match this filter.</p>
             ) : (
               filtered.map(row => (
-                <BidCard key={row.id} row={row} groupBy={groupBy} />
+                <BidCard key={row.id} row={row} groupBy={groupBy} onView={onView} />
               ))
             )}
           </div>
@@ -262,6 +424,7 @@ type GroupBy = "client" | "partner"
 export default function AgencyBidsPage() {
   const [search, setSearch] = useState("")
   const [groupBy, setGroupBy] = useState<GroupBy>("client")
+  const [viewingBid, setViewingBid] = useState<BidRow | null>(null)
 
   const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(
     "/api/agency/rfp-responses"
@@ -382,11 +545,13 @@ export default function AgencyBidsPage() {
                 rows={g.rows}
                 defaultOpen={i === 0}
                 groupBy={groupBy}
+                onView={setViewingBid}
               />
             ))}
           </div>
         )}
       </div>
+      <BidDetailDialog row={viewingBid} onClose={() => setViewingBid(null)} />
     </AgencyLayout>
   )
 }

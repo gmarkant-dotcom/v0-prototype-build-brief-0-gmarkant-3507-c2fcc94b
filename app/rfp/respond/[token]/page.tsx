@@ -15,7 +15,10 @@ import { HolographicBlobs } from "@/components/holographic-blobs"
 import { formatDateTime, cn } from "@/lib/utils"
 import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal } from "@/lib/rfp-response-fields"
 import type { ReferenceMaterial } from "@/components/reference-materials-input"
-import { Paperclip, X, ChevronDown, ChevronUp, ExternalLink, Pencil, Download, FileText } from "lucide-react"
+import {
+  Paperclip, X, ChevronDown, ChevronUp, ExternalLink, Pencil, Download, FileText,
+  Link as LinkIcon, Plus,
+} from "lucide-react"
 
 const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "MXN", "BRL", "AED", "SGD"]
 const SCHEDULE_OPTIONS = ["Milestone-based", "Net 30", "Net 60", "Net 90", "Upon completion"]
@@ -70,13 +73,21 @@ type ActivePayload = BasePayload & { status: "active" }
 type SubmittedPayload = BasePayload & { status: "submitted"; response: SubmittedResponse }
 type GuestPayload = ActivePayload | SubmittedPayload
 
-type Attachment = { url: string; filename: string; size: number }
+type Attachment = { type: "file" | "link"; url: string; label: string }
 
 function formatDateOnly(raw: string | null | undefined): string | null {
   if (!raw) return null
   const d = new Date(raw)
   if (Number.isNaN(d.getTime())) return null
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
+function labelFromUrl(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "")
+  } catch {
+    return url
+  }
 }
 
 function agencyDisplayName(agency: AgencyData | null | undefined): string {
@@ -120,19 +131,6 @@ function CenteredCard({ children }: { children: React.ReactNode }) {
   )
 }
 
-function AttachmentPill({ filename, onRemove }: { filename: string; onRemove?: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-border/40 font-mono text-xs text-foreground">
-      <Paperclip className="w-3 h-3 text-foreground-muted shrink-0" />
-      <span className="truncate max-w-[180px]">{filename}</span>
-      {onRemove && (
-        <button type="button" onClick={onRemove} className="text-foreground-muted hover:text-foreground ml-1">
-          <X className="w-3 h-3" />
-        </button>
-      )}
-    </span>
-  )
-}
 
 export default function GuestRfpRespondPage() {
   const params = useParams()
@@ -156,6 +154,8 @@ export default function GuestRfpRespondPage() {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [linkUrl, setLinkUrl] = useState("")
+  const [linkLabel, setLinkLabel] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
@@ -205,7 +205,7 @@ export default function GuestRfpRespondPage() {
         const res = await fetch("/api/rfp/guest/upload", { method: "POST", body: formData })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data?.error || "Upload failed")
-        setAttachments((prev) => [...prev, { url: data.url, filename: data.filename, size: data.size }])
+        setAttachments((prev) => [...prev, { type: "file", url: data.url, label: data.filename }])
       } catch (err) {
         setUploadError(err instanceof Error ? err.message : "Upload failed")
       } finally {
@@ -215,8 +215,16 @@ export default function GuestRfpRespondPage() {
     [token]
   )
 
-  const removeAttachment = (url: string) => {
-    setAttachments((prev) => prev.filter((a) => a.url !== url))
+  const addLinkAttachment = () => {
+    const url = linkUrl.trim()
+    if (!url) return
+    setAttachments((prev) => [...prev, { type: "link", url, label: linkLabel.trim() || labelFromUrl(url) }])
+    setLinkUrl("")
+    setLinkLabel("")
+  }
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index))
   }
 
   const resetForm = () => {
@@ -243,7 +251,13 @@ export default function GuestRfpRespondPage() {
     )
     setSchedulePreference(response.payment_terms?.payment_schedule_preference || SCHEDULE_OPTIONS[0])
     setPaymentNotes(response.payment_terms?.additional_notes || "")
-    setAttachments((response.attachments || []).map((a) => ({ url: a.url, filename: a.label, size: 0 })))
+    setAttachments(
+      (response.attachments || []).map((a) => ({
+        type: a.type === "link" ? "link" : "file",
+        url: a.url,
+        label: a.label,
+      }))
+    )
     setSubmitError(null)
     setIsEditingBid(true)
   }
@@ -273,7 +287,7 @@ export default function GuestRfpRespondPage() {
             currency: budgetCurrency,
             notes: paymentNotes,
           },
-          attachments: attachments.map((a) => a.url),
+          attachments: attachments.map((a) => ({ type: a.type, label: a.label, url: a.url })),
           ...(wasEditing ? { is_edit: true } : {}),
         }),
       })
@@ -578,17 +592,52 @@ export default function GuestRfpRespondPage() {
                   <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
                     Attachments
                   </label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {attachments.map((a) => (
-                      <AttachmentPill key={a.url} filename={a.filename} onRemove={() => removeAttachment(a.url)} />
-                    ))}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex-1 flex gap-2">
+                      <Input
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            addLinkAttachment()
+                          }
+                        }}
+                        placeholder="https://..."
+                        className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                      />
+                      <Input
+                        value={linkLabel}
+                        onChange={(e) => setLinkLabel(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            addLinkAttachment()
+                          }
+                        }}
+                        placeholder="Label (optional)"
+                        className="w-32 shrink-0 bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!linkUrl.trim()}
+                        onClick={addLinkAttachment}
+                        className="border-border text-foreground-muted hover:bg-white/5 shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1" />
+                        Add Link
+                      </Button>
+                    </div>
+
                     <label
                       className={cn(
-                        "inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-dashed border-border/60 font-mono text-xs text-foreground-muted hover:text-foreground hover:border-accent/50 cursor-pointer transition-colors",
+                        "inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border/60 font-mono text-xs text-foreground-muted hover:text-foreground hover:border-accent/50 cursor-pointer transition-colors shrink-0",
                         uploading && "opacity-60 pointer-events-none"
                       )}
                     >
-                      {uploading ? <Spinner className="size-3" /> : <Paperclip className="w-3 h-3" />}
+                      {uploading ? <Spinner className="size-3.5" /> : <Paperclip className="w-3.5 h-3.5" />}
                       {uploading ? "Uploading…" : "Attach Files"}
                       <input
                         type="file"
@@ -599,6 +648,35 @@ export default function GuestRfpRespondPage() {
                     </label>
                   </div>
                   {uploadError && <p className="text-xs text-red-400 mt-2">{uploadError}</p>}
+
+                  {attachments.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {attachments.map((a, i) => (
+                        <div
+                          key={`${a.url}-${i}`}
+                          className="flex items-center gap-3 p-2.5 rounded-lg border border-border/40 bg-white/5"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                            {a.type === "link" ? (
+                              <LinkIcon className="w-3.5 h-3.5 text-accent" />
+                            ) : (
+                              <Paperclip className="w-3.5 h-3.5 text-accent" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm text-foreground truncate">{a.label}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(i)}
+                            className="text-foreground-muted hover:text-red-400 shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {submitError && (
@@ -687,15 +765,19 @@ export default function GuestRfpRespondPage() {
                     <div>
                       <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
                       <ul className="space-y-1.5">
-                        {response.attachments.map((a) => (
-                          <li key={a.url}>
+                        {response.attachments.map((a, i) => (
+                          <li key={`${a.url}-${i}`}>
                             <a
                               href={a.url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 font-mono text-xs text-accent hover:underline"
                             >
-                              <Paperclip className="w-3 h-3" />
+                              {a.type === "link" ? (
+                                <LinkIcon className="w-3 h-3" />
+                              ) : (
+                                <Paperclip className="w-3 h-3" />
+                              )}
                               {a.label}
                               <ExternalLink className="w-3 h-3" />
                             </a>

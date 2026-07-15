@@ -101,12 +101,14 @@ export async function POST(request: NextRequest) {
     console.log("[api] success", { route, method: "POST", pathname: blob.pathname })
     return NextResponse.json({ url: blob.url, filename: file.name, size: file.size })
   } catch (error) {
+    console.error('[guest/upload] error:', error)
     console.error("[api] failure", {
       route,
       method: "POST",
       code: 500,
       message: error instanceof Error ? error.message : String(error),
     })
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 })
+    const message = error instanceof Error ? error.message : "Upload failed"
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

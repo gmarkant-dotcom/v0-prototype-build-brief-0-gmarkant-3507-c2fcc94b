@@ -53,9 +53,22 @@ function normalizeGuestAttachments(raw: unknown): { type: string; label: string;
   if (!Array.isArray(raw)) return []
   const out: { type: string; label: string; url: string }[] = []
   for (const item of raw.slice(0, 10)) {
-    const url = typeof item === "string" ? item.trim() : ""
-    if (!url) continue
-    out.push({ type: "other", label: labelFromUrl(url), url })
+    // Legacy shape: a bare URL string, with no label/type of its own.
+    if (typeof item === "string") {
+      const url = item.trim()
+      if (!url) continue
+      out.push({ type: "other", label: labelFromUrl(url), url })
+      continue
+    }
+    // Current shape: { type: 'file' | 'link', label, url } from the guest response form.
+    if (item && typeof item === "object") {
+      const obj = item as Record<string, unknown>
+      const url = typeof obj.url === "string" ? obj.url.trim() : ""
+      if (!url) continue
+      const type = obj.type === "link" ? "link" : obj.type === "file" ? "file" : "other"
+      const label = typeof obj.label === "string" && obj.label.trim() ? obj.label.trim() : labelFromUrl(url)
+      out.push({ type, label, url })
+    }
   }
   return out
 }
