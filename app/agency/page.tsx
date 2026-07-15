@@ -1185,7 +1185,7 @@ function AgencyRFPContent() {
                   description="Use an analysis from Step 00 (Creative Treatment Analysis), or upload a new brief."
                 />
                 <div className="mt-4 space-y-3">
-                  {(["step00", "new"] as const).map((src) => (
+                  {(["new", "step00"] as const).map((src) => (
                     <label key={src} className="flex items-start gap-3 cursor-pointer">
                       <input
                         type="radio"
@@ -1197,7 +1197,7 @@ function AgencyRFPContent() {
                       />
                       <div>
                         <div className="font-display font-bold text-sm text-foreground">
-                          {src === "step00" ? "Use analysis from Step 00" : "Upload a new brief"}
+                          {src === "step00" ? "Use Creative Treatment Analysis" : "Upload a new brief"}
                         </div>
                         {src === "step00" && briefSource === "step00" && (
                           <div className="mt-2">

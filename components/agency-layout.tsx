@@ -100,7 +100,7 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
               Vendor RFP Broadcast
             </Link>
             <Link
-              href="/agency"
+              href="/agency/magic-rfp"
               className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
             >
               <Zap className="w-4 h-4 text-accent" />
@@ -121,7 +121,7 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
             Vendor RFP Broadcast
           </Link>
           <Link
-            href="/agency"
+            href="/agency/magic-rfp"
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
           >
             <Zap className="w-4 h-4 text-accent" />
