@@ -13,109 +13,61 @@ type FAQ = { q: string; a: string }
 const generalFAQs: FAQ[] = [
   {
     q: "What is Ligament?",
-    a: "Ligament is a platform that helps creative and production agencies manage their external partner network - from finding vendors, to running RFPs, to tracking active projects and payments, all in one place.",
+    a: "Ligament is an AI-powered vendor orchestration platform for independent creative agencies. It helps lead agencies identify, mobilize, and manage partner vendors across every project scope, and gives partner agencies a structured way to receive RFPs, submit bids, and manage active engagements.",
   },
   {
     q: "Who is Ligament for?",
-    a: "Two types of users: Lead Agencies (who hire and manage external production partners) and Partner Agencies (who get hired to execute on specific scopes of work).",
+    a: "Ligament is built for two types of users. Lead Agencies use it to manage their vendor pool, create projects, broadcast RFPs, review bids, manage onboarding, and track payments. Partner Agencies use it to receive RFP invitations, submit bids with payment terms, complete onboarding, submit status updates, and manage their profile and credentials.",
   },
   {
-    q: "Can my agency be both a lead agency and a partner agency?",
-    a: "Yes. Many agencies operate as both, hiring partners for some projects while being hired as a partner on others. Ligament supports a dual-role toggle so you can switch between portals.",
-  },
-  {
-    q: "Is there a cost to join?",
-    a: "Lead agencies are on paid plans (see Pricing). Partner agencies access the platform at no cost.",
+    q: "Is my data secure?",
+    a: "Data is stored on Supabase hosted on AWS US-East. AI processing uses the Anthropic API. File storage uses Vercel Blob with private access controls. Row-level security ensures each agency and partner only sees their own data. All connections use HTTPS.",
   },
 ]
 
 const leadFAQs: FAQ[] = [
   {
-    q: "What is Creative Treatment Analysis?",
-    a: "It's Step 00 of your project workflow. Upload a creative treatment or client brief and Ligament runs four AI analyses in parallel: timeline recommendation, budget estimate, comparable campaigns, and director and production company recommendations.",
-  },
-  {
-    q: "What does the Director and Production Company Recommendations analysis return?",
-    a: "A shortlist of directors and production companies matched to your brief, with rationale for each. The shortlist carries forward into Step 01 RFP Broadcast as suggested recipients.",
-  },
-  {
-    q: "Is my Creative Treatment Analysis saved?",
-    a: "Yes. Each analysis is saved to your project automatically. Switch between projects using the project selector at the top of the page and your prior analysis will reload.",
-  },
-  {
-    q: "How do I find new production partners?",
-    a: "Use the Marketplace to discover partner agencies by capability, location, or agency type. You can search for specific skills like \"video production\" or \"experiential\" to find agencies that match your needs.",
+    q: "What is the Partner Pool?",
+    a: "Your Partner Pool is your curated network of vetted vendor partners. You can manage existing relationships, track NDA and MSA status, and discover new partners through the built-in Marketplace. Partners in your pool can be invited to bid on any project scope.",
   },
   {
     q: "How does RFP Broadcast work?",
-    a: "Upload a client brief (any file type, or paste text), and Ligament's AI generates a structured Master RFP. From there, allocate scope items to internal teams or external partners, and broadcast directly to your partner network or new contacts via email invite.",
+    a: "Start by uploading or creating a client brief. Optionally set output template preferences including style, sensitivity scrubbing, and format. The platform uses AI to map your brief into a structured master RFP. You then allocate scope items to internal teams or external partners, select recipients from your partner pool, and broadcast. Each partner receives a scoped RFP tailored to their deliverable.",
   },
   {
-    q: "What happens when I broadcast an RFP that requires an NDA?",
-    a: "You can attach an NDA link (set a default in your profile settings, or override per broadcast). Partners are gated from viewing the RFP details until they confirm they've signed it, and you confirm it in the Partner Pool.",
+    q: "What is Lightning RFP Magic Link?",
+    a: "Lightning RFP Magic Link is the fastest way to get a bid from any vendor. No Ligament account required. Create a brief, add vendor email addresses and names, and send instant personalized invitations. Each vendor receives a unique secure link valid for 72 hours. They can view the full project brief, upload files, add reference links, and submit their bid including payment terms, all without creating an account. After submitting, vendors are invited to create a Ligament profile to track their bid status, receive future RFPs, and get discovered by other agencies.",
   },
   {
-    q: "How do I manage incoming bids?",
-    a: "The Bid Management page shows all responses grouped by client or partner agency, with status tracking: New, Submitted, Changes Requested, Shortlisted, Meeting Requested, Awarded, Declined.",
+    q: "How does Bid Management work?",
+    a: "All bids from partner pool vendors and Lightning RFP Magic Link guest submissions appear in one place. Review proposals, budgets, payment terms, and attachments side by side. Shortlist bids, request meetings, provide feedback, award scopes, or decline. Guest submissions from vendors without Ligament accounts are clearly labeled and support all the same actions except awarding, which requires the vendor to create an account to complete onboarding.",
   },
   {
-    q: "What is Active Engagements?",
-    a: "Once a partner is awarded, Active Engagements is your command center for that project showing partner-submitted status updates, completion percentages, alerts, utilization details, and cash flow/payment milestones, all in one slide-over view per partner.",
+    q: "What is Onboarding?",
+    a: "After awarding a bid, send a structured onboarding package to the partner. The package includes kickoff details, key documents, and MSA tracking. Partners acknowledge receipt through their Ligament portal. Track acknowledgment status across all active partnerships from the Onboarding page.",
   },
   {
-    q: "Can I override a partner's status update?",
-    a: "Yes. If you have additional context, you can manually override the status and completion percentage with a note. This is recorded as an agency-set update.",
+    q: "How does Cash Flow & Payments work?",
+    a: "The Cash Flow & Payments page lets you track client cash inflows and partner payment milestones per project. Add expected client payments with amounts and dates, then use AI Payment Synthesis to generate a recommended partner payment schedule that protects your margin and minimizes cash flow risk. Accept the AI recommendation to save it as your official milestone schedule, or adjust manually.",
   },
   {
-    q: "How do I track payments to partners?",
-    a: "The Cash Flow tab in Active Engagements shows agreed terms, payment milestones, and status (Invoice Received, Payment Sent, Payment Received, etc). Partners can confirm receipt on their end, which updates your view automatically.",
-  },
-  {
-    q: "What does \"vouching\" mean?",
-    a: "You can vouch for partner agencies you trust based on direct experience. When a partner receives vouches from 3 or more lead agencies, they earn a \"Triple-Vouched\" badge, a credibility signal visible across the platform. Vouches are anonymous to the partner.",
-  },
-  {
-    q: "What is \"MSA Approved\" status?",
-    a: "Once you've confirmed a Master Service Agreement is in place with a partner, you can mark it as approved in the Partner Pool, which updates their legal status and filters.",
+    q: "How do I get started as a Lead Agency?",
+    a: "Sign up, create your first project, and either invite partners from your existing network using Lightning RFP Magic Link or build your Partner Pool by inviting vendors to join Ligament. No setup fee required during the current beta period.",
   },
 ]
 
 const partnerFAQs: FAQ[] = [
   {
-    q: "How do I get discovered by lead agencies?",
-    a: "Complete your company profile with your capabilities, bio, location, and agency type, and opt into being publicly discoverable. Lead agencies can search by capability to find agencies like yours.",
+    q: "How do I respond to a Lightning RFP Magic Link as a vendor?",
+    a: "When you receive a Lightning RFP Magic Link invitation by email, click the link to open your personalized brief page. You will see the full project brief including scope, budget, and timeline. Fill in your proposal, budget, payment terms, and any file attachments or reference links, then submit. You can return to the same link at any time within 72 hours to check your bid status, see agency feedback, or edit your submission. After the link expires, create a Ligament profile to continue tracking this bid and receive future invitations.",
   },
   {
-    q: "How do I respond to RFPs?",
-    a: "Open RFPs shows all briefs sent to you, grouped by agency, client, or status. Click into any RFP to view the full brief, ask questions, and submit your bid.",
+    q: "How do I set up my partner profile to get discovered?",
+    a: "Go to your Partner Profile page and complete your capabilities, credentials and portfolio, reel and work examples, legal information, and payment setup. Your profile completion percentage is shown on your dashboard. A complete profile makes you discoverable to lead agencies browsing the Partner Pool and Marketplace, and increases the likelihood of receiving RFP invitations.",
   },
   {
-    q: "What if an RFP requires an NDA?",
-    a: "You'll see a gate before viewing the RFP details. Sign the NDA externally (link provided), then click \"I've signed the NDA\" to notify the lead agency. Once they confirm, the RFP unlocks.",
-  },
-  {
-    q: "What happens after I'm awarded a project?",
-    a: "You'll move into onboarding, where you complete any required documents and setup steps for the project.",
-  },
-  {
-    q: "How do I provide status updates?",
-    a: "On Active Projects, click into any engagement to submit updates: workflow status, budget status, completion percentage, and notes. These are visible to the lead agency in real time.",
-  },
-  {
-    q: "How do payments work?",
-    a: "The Cash Flow tab on each active project shows your agreed rate and terms, payment milestones, and status. You can confirm when you've received payment, which updates the lead agency's view.",
-  },
-  {
-    q: "Can I request a change to my rate or terms?",
-    a: "Yes. Submit a request with your proposed terms and a note. The lead agency must review and accept the change before it takes effect. A history of all requests and changes is maintained.",
-  },
-  {
-    q: "What does \"Triple-Vouched\" mean for me?",
-    a: "If 3 or more lead agencies have vouched for your agency based on past work, you'll display a \"Triple-Vouched\" badge on your profile, a trust signal to other lead agencies browsing the marketplace. You won't see who vouched for you, only your total count.",
-  },
-  {
-    q: "Can I be a lead agency too?",
-    a: "Yes, use \"Switch to Lead Agency\" to access the lead agency portal and manage your own partner network.",
+    q: "How do I get started as a Partner Agency?",
+    a: "You can join Ligament by accepting an invitation from a lead agency, or by signing up directly and completing your profile to become discoverable. Once your profile is complete, lead agencies can find you in the Marketplace and invite you to bid on projects.",
   },
 ]
 
