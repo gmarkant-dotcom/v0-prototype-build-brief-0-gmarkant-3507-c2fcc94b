@@ -102,19 +102,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       )
     }
 
-    if (tokenRow.status === "submitted" && tokenRow.response_id) {
-      const { data: response, error: responseErr } = await supabase
-        .from("partner_rfp_responses")
-        .select("*")
-        .eq("id", tokenRow.response_id)
-        .maybeSingle()
-      if (responseErr) {
-        console.error("[api] failure", { route, method: "GET", code: 500, message: responseErr.message })
-        return NextResponse.json({ error: "Failed to load submitted bid" }, { status: 500 })
-      }
-      return NextResponse.json({ status: "submitted", token: tokenRow, response })
-    }
-
+    // Project/agency/scope-item context is needed for the "RFP Details" tab regardless of
+    // whether a bid has already been submitted, so fetch it up front for both branches.
     const [{ data: project, error: projectErr }, { data: agency, error: agencyErr }] = await Promise.all([
       supabase
         .from("projects")
@@ -144,6 +133,34 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       ? { name: tokenRow.scope_item_name, description: tokenRow.scope_item_description || null }
       : null
 
+    if (tokenRow.status === "submitted" && tokenRow.response_id) {
+      const { data: response, error: responseErr } = await supabase
+        .from("partner_rfp_responses")
+        .select("*")
+        .eq("id", tokenRow.response_id)
+        .maybeSingle()
+      if (responseErr) {
+        console.error("[api] failure", { route, method: "GET", code: 500, message: responseErr.message })
+        return NextResponse.json({ error: "Failed to load submitted bid" }, { status: 500 })
+      }
+      console.log("[api] success", { route, method: "GET", token, status: "submitted" })
+      return NextResponse.json({
+        status: "submitted",
+        token: tokenRow,
+        project,
+        scopeItem,
+        agency,
+        response: response
+          ? {
+              ...response,
+              // partner_rfp_responses may not carry its own submitted_at; the token row's
+              // submitted_at (set on every (re)submission) is the reliable source.
+              submitted_at: response.submitted_at || tokenRow.submitted_at,
+            }
+          : null,
+      })
+    }
+
     console.log("[api] success", { route, method: "GET", token, status: "active" })
     return NextResponse.json({ status: "active", token: tokenRow, project, scopeItem, agency })
   } catch (error) {
@@ -164,6 +181,7 @@ type PostBody = {
   timeline_proposal?: string
   payment_terms?: PaymentTermsInput
   attachments?: unknown
+  is_edit?: boolean
 }
 
 export async function POST(req: Request) {
@@ -195,8 +213,12 @@ export async function POST(req: Request) {
     if (new Date(tokenRow.expires_at as string).getTime() <= Date.now()) {
       return NextResponse.json({ error: "expired" }, { status: 400 })
     }
-    if (tokenRow.status === "submitted") {
+    const is_edit = body.is_edit === true
+    if (tokenRow.status === "submitted" && !is_edit) {
       return NextResponse.json({ error: "already_submitted" }, { status: 409 })
+    }
+    if (is_edit && !tokenRow.response_id) {
+      return NextResponse.json({ error: "No existing bid to edit" }, { status: 400 })
     }
 
     const proposal_text = (body.proposal_text || "").toString().trim()
@@ -226,6 +248,39 @@ export async function POST(req: Request) {
     const attachments = normalizeGuestAttachments(body.attachments)
     const budget_proposal = serializeBudget(amount, currency)
     const partner_display_name = (tokenRow.vendor_name || "").trim() || vendorEmail
+
+    if (is_edit) {
+      const submittedAt = new Date().toISOString()
+      const { error: updateErr } = await supabase
+        .from("partner_rfp_responses")
+        .update({
+          proposal_text,
+          budget_proposal,
+          timeline_proposal,
+          payment_terms,
+          attachments,
+          status: "submitted",
+          submitted_at: submittedAt,
+          updated_at: submittedAt,
+        })
+        .eq("id", tokenRow.response_id)
+
+      if (updateErr) {
+        console.error("[api] failure", { route, method: "POST", code: 500, message: updateErr.message })
+        return NextResponse.json({ error: "Failed to update bid" }, { status: 500 })
+      }
+
+      const { error: tokenUpdateErr } = await supabase
+        .from("rfp_magic_tokens")
+        .update({ submitted_at: submittedAt })
+        .eq("token", token)
+      if (tokenUpdateErr) {
+        console.error("[api] failure", { route, method: "POST", code: 500, message: tokenUpdateErr.message })
+      }
+
+      console.log("[api] success", { route, method: "POST", token, is_existing_partner, is_edit: true })
+      return NextResponse.json({ success: true, is_existing_partner, is_edit: true })
+    }
 
     const { data: saved, error: insertErr } = await supabase
       .from("partner_rfp_responses")

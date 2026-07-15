@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, Suspense, Component, type ReactNode } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { StageHeader } from "@/components/stage-header"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
@@ -14,7 +14,7 @@ import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { InlineProjectSelector } from "@/components/agency-project-selector"
 import { AgencyRfpMagicLinkInvite } from "@/components/agency-rfp-magic-link-invite"
-import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, ChevronDown, Check, Send, Shield, FileCheck, Loader2, Sparkles, X } from "lucide-react"
+import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, ChevronDown, Check, Send, Shield, FileCheck, Loader2, Sparkles, X, Zap } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
 import { readTextStream } from "@/lib/read-text-stream"
@@ -52,6 +52,8 @@ type NewRecipient = {
   email: string
   name: string
   requireNda: boolean
+  /** When true, sent via the no-signup magic-link flow instead of the standard invitation. */
+  sendAsMagicLink: boolean
 }
 
 /** Row from GET /api/partnerships (agency view) */
@@ -227,6 +229,7 @@ function AgencyRFPContent() {
 
   // Step 00 interpretation integration
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [briefSource, setBriefSource] = useState<"step00" | "new">("new")
   const [interpretations, setInterpretations] = useState<Array<{
     id: string
@@ -340,7 +343,9 @@ function AgencyRFPContent() {
   const [isGeneratingAiTemplate, setIsGeneratingAiTemplate] = useState(false)
   const [aiTemplateError, setAiTemplateError] = useState<string | null>(null)
   const [aiTemplateGenerated, setAiTemplateGenerated] = useState(false)
-  
+  /** Step 1b skipped via "Skip — Use Client Brief As-Is"; persisted as brief_used_as_is in the draft */
+  const [briefUsedAsIs, setBriefUsedAsIs] = useState(false)
+
   // Step 2: Master RFP (AI generated)
   const [masterRfp, setMasterRfp] = useState<{
     projectName: string
@@ -368,7 +373,7 @@ function AgencyRFPContent() {
 
   const [newRecipients, setNewRecipients] = useState<Record<string, NewRecipient[]>>({})
   const [recipientDrafts, setRecipientDrafts] = useState<
-    Record<string, { email: string; name: string; requireNda: boolean }>
+    Record<string, { email: string; name: string; requireNda: boolean; sendAsMagicLink: boolean }>
   >({})
   const [recipientAddErrors, setRecipientAddErrors] = useState<Record<string, string | null>>({})
   const [recipientAddSuccess, setRecipientAddSuccess] = useState<Record<string, string | null>>({})
@@ -600,6 +605,42 @@ function AgencyRFPContent() {
     }
   }
 
+  /** Step 1b "Skip — Use Client Brief As-Is": bypass the output template entirely and
+   *  generate the Master RFP straight from the client brief with a default structure. */
+  const handleSkipOutputTemplate = () => {
+    setBriefUsedAsIs(true)
+    setRfpTemplateMode("upload")
+    setSelectedRfpTemplate(null)
+    setUploadedRfpTemplate(null)
+    setTemplateSourceText("")
+    void generateMasterRfp()
+  }
+
+  /** Step 1 "Send as Lightning RFP Magic Link": hand off the brief entered so far to the
+   *  dedicated magic-link workflow instead of continuing through Master RFP generation. */
+  const handleSendAsLightningRfp = () => {
+    const sourceText = buildMasterBriefSourceText({
+      briefSourceText,
+      pastedContent,
+      googleLink,
+      briefFileName,
+      briefAugmentText,
+    })
+    try {
+      sessionStorage.setItem(
+        "magic_rfp_prefill",
+        JSON.stringify({
+          projectName: selectedProject?.name || "",
+          clientName: selectedProject?.client || "",
+          scopeDescription: sourceText,
+        })
+      )
+    } catch {
+      // sessionStorage unavailable (private mode, etc.) — proceed without prefill
+    }
+    router.push("/agency/magic-rfp")
+  }
+
   const generateAiOutputTemplate = async () => {
     setAiTemplateError(null)
     const sourceText = buildMasterBriefSourceText({
@@ -747,7 +788,7 @@ function AgencyRFPContent() {
   
   // Add new recipient
   const addNewRecipient = (scopeItemId: string) => {
-    const draft = recipientDrafts[scopeItemId] || { email: "", name: "", requireNda: ndaSignatureRequired }
+    const draft = recipientDrafts[scopeItemId] || { email: "", name: "", requireNda: ndaSignatureRequired, sendAsMagicLink: true }
     const email = draft.email.trim().toLowerCase()
     if (!email) return
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -781,12 +822,12 @@ function AgencyRFPContent() {
       ...prev,
       [scopeItemId]: [
         ...(prev[scopeItemId] || []),
-        { email, name: draft.name.trim(), requireNda: draft.requireNda },
+        { email, name: draft.name.trim(), requireNda: draft.requireNda, sendAsMagicLink: draft.sendAsMagicLink !== false },
       ],
     }))
     setRecipientDrafts((prev) => ({
       ...prev,
-      [scopeItemId]: { email: "", name: "", requireNda: ndaSignatureRequired },
+      [scopeItemId]: { email: "", name: "", requireNda: ndaSignatureRequired, sendAsMagicLink: true },
     }))
     setRecipientAddErrors((prev) => ({ ...prev, [scopeItemId]: null }))
     setRecipientAddSuccess((prev) => ({ ...prev, [scopeItemId]: `Recipient added: ${email}` }))
@@ -835,13 +876,28 @@ function AgencyRFPContent() {
         responseDeadlineDate.trim().length > 0
           ? new Date(`${responseDeadlineDate.trim()}T23:59:59`).toISOString()
           : null
+      // Manually-added recipients with "Send as Magic Link" checked are routed to the
+      // no-signup magic-link API individually; everyone else goes through the standard
+      // broadcast-rfp flow below, completely unchanged.
+      const magicLinkQueue: { email: string; name: string; scopeItem: ScopeItem }[] = []
       const normalizedNewRecipientsByScope = outsourcedItems.reduce(
         (acc, item) => {
-          acc[item.id] = (newRecipients[item.id] || []).map((recipient) => ({
-            email: recipient.email.trim().toLowerCase(),
-            name: recipient.name?.trim?.() || "",
-            requireNda: ndaSignatureRequired ? recipient.requireNda !== false : false,
-          }))
+          const standardRows: NewRecipient[] = []
+          for (const recipient of newRecipients[item.id] || []) {
+            const email = recipient.email.trim().toLowerCase()
+            const name = recipient.name?.trim?.() || ""
+            if (recipient.sendAsMagicLink) {
+              magicLinkQueue.push({ email, name, scopeItem: item })
+            } else {
+              standardRows.push({
+                email,
+                name,
+                requireNda: ndaSignatureRequired ? recipient.requireNda !== false : false,
+                sendAsMagicLink: false,
+              })
+            }
+          }
+          acc[item.id] = standardRows
           return acc
         },
         {} as Record<string, NewRecipient[]>
@@ -870,6 +926,25 @@ function AgencyRFPContent() {
         throw new Error(
           [payload?.error, payload?.detail].filter(Boolean).join(" ") || "Broadcast failed"
         )
+      }
+      if (magicLinkQueue.length > 0 && selectedProject?.id) {
+        for (const recipient of magicLinkQueue) {
+          try {
+            await fetch("/api/agency/rfp/magic-link", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                vendor_email: recipient.email,
+                vendor_name: recipient.name || undefined,
+                project_id: selectedProject.id,
+                scope_item_name: recipient.scopeItem.name,
+                scope_item_description: recipient.scopeItem.description,
+              }),
+            })
+          } catch (magicLinkErr) {
+            console.error("Magic link invite failed:", recipient.email, magicLinkErr)
+          }
+        }
       }
       setBroadcastComplete(true)
     } catch (e) {
@@ -912,6 +987,7 @@ function AgencyRFPContent() {
     setAiScrubStrategy(false)
     setAiScrubTimeline(false)
     setAiOutputFormat("section")
+    setBriefUsedAsIs(false)
     setMasterRfp(null)
     setGenerateMasterBriefError(null)
     setIsGenerating(false)
@@ -964,6 +1040,7 @@ function AgencyRFPContent() {
     if (draft.masterRfp !== undefined) setMasterRfp(draft.masterRfp as typeof masterRfp)
     if (Array.isArray(draft.scopeItems)) setScopeItems(draft.scopeItems as ScopeItem[])
     if (typeof draft.additionalContext === "string") setAdditionalContext(draft.additionalContext)
+    if (draft.brief_used_as_is !== undefined) setBriefUsedAsIs(Boolean(draft.brief_used_as_is))
   }, [selectedProject?.id])
 
   useEffect(() => {
@@ -990,6 +1067,7 @@ function AgencyRFPContent() {
       masterRfp,
       scopeItems,
       additionalContext,
+      brief_used_as_is: briefUsedAsIs,
     })
   }, [
     selectedProject?.id,
@@ -1014,6 +1092,7 @@ function AgencyRFPContent() {
     masterRfp,
     scopeItems,
     additionalContext,
+    briefUsedAsIs,
     isDemo,
   ])
   
@@ -1731,7 +1810,30 @@ function AgencyRFPContent() {
                 </div>
               </div>
             </GlassCard>
-            
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  isGenerating ||
+                  !selectedProject ||
+                  isExtractingBrief ||
+                  !buildMasterBriefSourceText({
+                    briefSourceText,
+                    pastedContent,
+                    googleLink,
+                    briefFileName,
+                    briefAugmentText,
+                  }).trim()
+                }
+                onClick={handleSkipOutputTemplate}
+                className="border-border text-foreground-muted hover:bg-white/5"
+              >
+                Skip — Use Client Brief As-Is
+              </Button>
+            </div>
+
             {/* Generate Button */}
             <div className="flex flex-col items-end gap-2">
               <p className="font-mono text-[10px] text-foreground-muted text-right max-w-md">
@@ -1782,9 +1884,20 @@ function AgencyRFPContent() {
                 Select a project in Current Project View before generating the master brief.
               </p>
             )}
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSendAsLightningRfp}
+                className="border-accent/40 text-accent hover:bg-accent/10 flex items-center gap-2"
+              >
+                <Zap className="w-4 h-4" />
+                Send as Lightning RFP Magic Link
+              </Button>
+            </div>
           </div>
         )}
-        
+
         {/* STEP 2: Master RFP Review */}
         {currentStep === 2 && masterRfp && (
           <div className="space-y-6">
@@ -2171,6 +2284,11 @@ function AgencyRFPContent() {
                           {recipient.name ? `${recipient.name} · ${recipient.email}` : recipient.email}
                         </span>
                         <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-100">New</span>
+                        {recipient.sendAsMagicLink && (
+                          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-accent/15 text-accent flex items-center gap-0.5">
+                            <Zap className="w-2.5 h-2.5" /> Magic Link
+                          </span>
+                        )}
                         {ndaSignatureRequired && recipient.requireNda && (
                           <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Required</span>
                         )}
@@ -2281,6 +2399,7 @@ function AgencyRFPContent() {
                               email: prev[item.id]?.email || "",
                               name: e.target.value,
                               requireNda: prev[item.id]?.requireNda ?? ndaSignatureRequired,
+                              sendAsMagicLink: prev[item.id]?.sendAsMagicLink ?? true,
                             },
                           }))
                         }
@@ -2296,6 +2415,7 @@ function AgencyRFPContent() {
                               email: e.target.value,
                               name: prev[item.id]?.name || "",
                               requireNda: prev[item.id]?.requireNda ?? ndaSignatureRequired,
+                              sendAsMagicLink: prev[item.id]?.sendAsMagicLink ?? true,
                             },
                           }))
                         }
@@ -2303,8 +2423,8 @@ function AgencyRFPContent() {
                       />
                       {ndaSignatureRequired ? (
                         <label className="flex items-center gap-2 cursor-pointer">
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
                             checked={recipientDrafts[item.id]?.requireNda ?? true}
                             onChange={(e) =>
                               setRecipientDrafts((prev) => ({
@@ -2313,6 +2433,7 @@ function AgencyRFPContent() {
                                   email: prev[item.id]?.email || "",
                                   name: prev[item.id]?.name || "",
                                   requireNda: e.target.checked,
+                                  sendAsMagicLink: prev[item.id]?.sendAsMagicLink ?? true,
                                 },
                               }))
                             }
@@ -2327,7 +2448,29 @@ function AgencyRFPContent() {
                           NDA requirement is off for this broadcast.
                         </p>
                       )}
-                      <Button 
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={recipientDrafts[item.id]?.sendAsMagicLink ?? true}
+                          onChange={(e) =>
+                            setRecipientDrafts((prev) => ({
+                              ...prev,
+                              [item.id]: {
+                                email: prev[item.id]?.email || "",
+                                name: prev[item.id]?.name || "",
+                                requireNda: prev[item.id]?.requireNda ?? ndaSignatureRequired,
+                                sendAsMagicLink: e.target.checked,
+                              },
+                            }))
+                          }
+                          className="rounded border-border"
+                        />
+                        <span className="font-mono text-[10px] text-foreground-muted flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-accent" />
+                          Send as Magic Link
+                        </span>
+                      </label>
+                      <Button
                         size="sm"
                         onClick={() => addNewRecipient(item.id)}
                         disabled={!(recipientDrafts[item.id]?.email || "").trim()}
