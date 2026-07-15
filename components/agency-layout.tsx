@@ -8,11 +8,12 @@ import { HolographicBlobs } from "./holographic-blobs"
 import { LigamentLogo } from "./ligament-logo"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditCard } from "lucide-react"
+import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditCard, Zap } from "lucide-react"
 import { SelectedProjectProvider, useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
 import { RoleToggle } from "@/components/role-toggle"
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 
 declare global {
   interface Window {
@@ -28,25 +29,109 @@ const navSections = [
     ]
   },
   {
-    label: "Project Workflow",
+    label: "BID REQUESTS",
     items: [
-      { number: "00", title: "Creative Treatment Analysis", aiPowered: true, href: "/agency/brief" },
-      { number: "01", title: "RFP Broadcast", aiPowered: false, href: "/agency" },
-      { number: "02", title: "Bid Management", aiPowered: false, href: "/agency/bids" },
-      { number: "03", title: "Onboarding", aiPowered: false, href: "/agency/onboarding" },
-      { number: "04", title: "Active Engagements", aiPowered: false, href: "/agency/project" },
+      { number: "00", title: "Partner Pool", href: "/agency/pool" },
+      { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true },
+      { number: "02", title: "Bid Management", href: "/agency/bids" },
+      { number: "03", title: "Onboarding", href: "/agency/onboarding" },
     ]
   },
   {
-    label: "Resources",
+    label: "Additional Resources",
     items: [
-      { icon: "◈", title: "Partner Pool", href: "/agency/pool" },
-      { icon: "✦", title: "Marketplace", href: "/agency/pool/marketplace" },
-      { icon: "□", title: "Documents", href: "/agency/documents" },
+      { icon: "▤", title: "Vendor Engagement Tracking", href: "/agency/project" },
+      { icon: "□", title: "Master Documents", href: "/agency/documents" },
+      { icon: "◆", title: "Creative Treatment Analysis", href: "/agency/brief" },
       { icon: "?", title: "FAQ", href: "/faq" },
     ]
   }
 ]
+
+/**
+ * RFP Broadcast nav item: desktop shows a HoverCard with the two RFP paths;
+ * mobile (<768px) skips the hover interaction (no hover on touch) and lists
+ * both options inline instead. Clicking the row itself always goes to /agency.
+ */
+function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
+  const isActive = pathname === "/agency"
+
+  const link = (
+    <Link
+      href="/agency"
+      className={cn(
+        "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
+        isActive
+          ? "bg-accent/10 border border-accent/30"
+          : "hover:bg-white/5 border border-transparent"
+      )}
+    >
+      <span className={cn(
+        "font-mono text-xs font-medium mt-0.5",
+        isActive ? "text-accent" : "text-foreground-muted"
+      )}>
+        01
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className={cn(
+          "font-display font-bold text-sm leading-tight",
+          isActive ? "text-accent" : "text-foreground group-hover:text-white"
+        )}>
+          RFP Broadcast
+        </div>
+      </div>
+      {isActive && (
+        <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />
+      )}
+    </Link>
+  )
+
+  return (
+    <div>
+      {/* Desktop: hover dropdown */}
+      <div className="hidden md:block">
+        <HoverCard openDelay={200}>
+          <HoverCardTrigger asChild>{link}</HoverCardTrigger>
+          <HoverCardContent side="right" align="start" className="w-64 p-1.5 bg-background border-border">
+            <Link
+              href="/agency"
+              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
+            >
+              Vendor RFP Broadcast
+            </Link>
+            <Link
+              href="/agency"
+              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
+            >
+              <Zap className="w-4 h-4 text-accent" />
+              Lightning RFP Magic Link
+            </Link>
+          </HoverCardContent>
+        </HoverCard>
+      </div>
+
+      {/* Mobile: no hover, list both options inline */}
+      <div className="md:hidden">
+        {link}
+        <div className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
+          <Link
+            href="/agency"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
+          >
+            Vendor RFP Broadcast
+          </Link>
+          <Link
+            href="/agency"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
+          >
+            <Zap className="w-4 h-4 text-accent" />
+            Lightning RFP Magic Link
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface AgencyLayoutProps {
   children: React.ReactNode
@@ -358,7 +443,10 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
               </div>
               <div className="space-y-1">
                 {section.items.map((item) => {
-                  const isActive = pathname === item.href || 
+                  if ('hasRfpDropdown' in item && item.hasRfpDropdown) {
+                    return <RfpBroadcastNavItem key={item.href} pathname={pathname} />
+                  }
+                  const isActive = pathname === item.href ||
                     (item.href !== "/agency" && pathname?.startsWith(item.href))
                   return (
                     <Link

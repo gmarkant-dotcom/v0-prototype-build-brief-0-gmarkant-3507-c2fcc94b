@@ -15,8 +15,10 @@ import { cn } from "@/lib/utils"
 import { isDemoMode, demoPartners, disciplines, partnerTypes, type Partner, type PartnerNote, type ProjectRating, type PartnerAvailability } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { createClient } from "@/lib/supabase/client"
-import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Clock, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2 } from "lucide-react"
+import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Clock, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { MarketplaceContent } from "@/components/marketplace-content"
 
 // Partnership type (Tier 1 - business relationship)
 type Partnership = {
@@ -259,7 +261,11 @@ export default function PartnerPoolPage() {
   const [selectedStatus, setSelectedStatus] = useState("All")
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false)
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null)
-  
+
+  // Discover New Partners sheet (embeds Marketplace)
+  const [discoverSheetOpen, setDiscoverSheetOpen] = useState(false)
+  const [marketplaceOpened, setMarketplaceOpened] = useState(false)
+
   // Partnerships state (new closed ecosystem)
   const [partnerships, setPartnerships] = useState<Partnership[]>([])
   const [partnersWithActiveEngagements, setPartnersWithActiveEngagements] = useState(0)
@@ -1010,7 +1016,18 @@ export default function PartnerPoolPage() {
             subtitle="Your curated roster of trusted partners. View credentials, track legal status, add notes, and manage relationships."
           />
           <div className="flex items-center gap-3">
-            <Button 
+            <Button
+              onClick={() => {
+                setDiscoverSheetOpen(true)
+                if (!marketplaceOpened) setMarketplaceOpened(true)
+              }}
+              variant="outline"
+              className="border-border text-foreground hover:bg-white/5 flex items-center gap-2"
+            >
+              <Compass className="w-4 h-4" />
+              Discover New Partners
+            </Button>
+            <Button
               onClick={() => {
                 setEditingPartner(null)
                 setShowAddPartnerModal(true)
@@ -1021,7 +1038,7 @@ export default function PartnerPoolPage() {
               <Plus className="w-4 h-4" />
               Add Partner
             </Button>
-            <Button 
+            <Button
               onClick={() => setShowInviteModal(true)}
               className="bg-accent text-accent-foreground hover:bg-accent/90 flex items-center gap-2"
             >
@@ -2025,6 +2042,22 @@ export default function PartnerPoolPage() {
           </div>
         )}
       </div>
+
+      <Sheet open={discoverSheetOpen} onOpenChange={setDiscoverSheetOpen} modal={false}>
+        <SheetContent
+          side="right"
+          overlay={false}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="w-full sm:max-w-[480px] overflow-y-auto"
+        >
+          <SheetHeader>
+            <SheetTitle>Discover New Partners</SheetTitle>
+          </SheetHeader>
+          <div className="px-4 pb-4">
+            {marketplaceOpened && <MarketplaceContent compact />}
+          </div>
+        </SheetContent>
+      </Sheet>
     </AgencyLayout>
   )
 }
