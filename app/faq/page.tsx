@@ -23,6 +23,14 @@ const generalFAQs: FAQ[] = [
     q: "Is my data secure?",
     a: "Data is stored on Supabase hosted on AWS US-East. AI processing uses the Anthropic API. File storage uses Vercel Blob with private access controls. Row-level security ensures each agency and partner only sees their own data. All connections use HTTPS.",
   },
+  {
+    q: "Is Ligament free for partner agencies?",
+    a: "Yes, completely free. Ligament charges lead agencies for platform access. Partner agencies, the vendors receiving RFPs and submitting bids, always use Ligament at no cost.",
+  },
+  {
+    q: "Do I need to create an account to submit a bid?",
+    a: "No. If a lead agency sends you a Lightning RFP Magic Link, you can view the full project brief and submit a complete bid including payment terms and file attachments without creating a Ligament account. Your link stays active for 72 hours so you can return to check your bid status and see agency feedback. Creating an account is optional but unlocks bid tracking across all projects, profile discoverability, and direct RFP invitations from agencies in the network.",
+  },
 ]
 
 const leadFAQs: FAQ[] = [
@@ -58,16 +66,36 @@ const leadFAQs: FAQ[] = [
 
 const partnerFAQs: FAQ[] = [
   {
-    q: "How do I respond to a Lightning RFP Magic Link as a vendor?",
-    a: "When you receive a Lightning RFP Magic Link invitation by email, click the link to open your personalized brief page. You will see the full project brief including scope, budget, and timeline. Fill in your proposal, budget, payment terms, and any file attachments or reference links, then submit. You can return to the same link at any time within 72 hours to check your bid status, see agency feedback, or edit your submission. After the link expires, create a Ligament profile to continue tracking this bid and receive future invitations.",
+    q: "Do I need to pay to use Ligament as a partner agency?",
+    a: "Ligament is completely free for partner agencies. There are no fees to create a profile, receive RFP invitations, submit bids, or manage active projects. Lead agencies pay for platform access. Partners never do.",
   },
   {
-    q: "How do I set up my partner profile to get discovered?",
-    a: "Go to your Partner Profile page and complete your capabilities, credentials and portfolio, reel and work examples, legal information, and payment setup. Your profile completion percentage is shown on your dashboard. A complete profile makes you discoverable to lead agencies browsing the Partner Pool and Marketplace, and increases the likelihood of receiving RFP invitations.",
+    q: "How do I join Ligament as a partner agency?",
+    a: "You can join in two ways. If a lead agency invites you to bid on a project, you will receive either a direct platform invitation or a Lightning RFP Magic Link, both let you respond immediately. You can also sign up directly at withligament.com and complete your profile to become discoverable to agencies actively looking for partners.",
   },
   {
-    q: "How do I get started as a Partner Agency?",
-    a: "You can join Ligament by accepting an invitation from a lead agency, or by signing up directly and completing your profile to become discoverable. Once your profile is complete, lead agencies can find you in the Marketplace and invite you to bid on projects.",
+    q: "How do I make my profile discoverable to agencies?",
+    a: "On your Partner Profile page, toggle on \"Make my profile discoverable\" to opt in to public visibility. Once discoverable, your profile appears in the Partner Pool and Marketplace that lead agencies browse when looking for new vendors. A complete profile with capabilities, credentials, a reel or work examples, and a filled-in bio significantly increases the likelihood of receiving unsolicited RFP invitations.",
+  },
+  {
+    q: "What information should I include in my profile?",
+    a: "Focus on your capabilities (the types of work you do), credentials and portfolio (past projects with relevant context), and reel or work examples (links or uploaded files showing your best work). You can also upload a capabilities overview document. Add your legal entity information and payment preferences when you are ready to formalize engagements. The more complete your profile, the more credible you appear to lead agencies.",
+  },
+  {
+    q: "How do I track my bid submissions?",
+    a: "Your partner dashboard shows all active RFP invitations and bid submissions in one place. For each bid you can see the current status (submitted, under review, shortlisted, awarded, or declined), any feedback the agency has left, and key dates. If you submitted a bid via a Lightning RFP Magic Link, you can return to that same link within 72 hours to check status and see agency feedback without needing a Ligament account. After 72 hours, create a profile to continue tracking.",
+  },
+  {
+    q: "Can I share my Ligament profile with agencies outside the platform?",
+    a: "Yes. Once your profile is set to discoverable, it has a public URL you can share directly with potential clients or include in proposals and pitches. Agencies who click your profile link can see your capabilities, portfolio, and work examples without needing a Ligament account themselves.",
+  },
+  {
+    q: "What happens after I win a bid?",
+    a: "When a lead agency awards your bid, you will receive an onboarding package through Ligament containing kickoff details, key project documents, and any MSA or legal agreements to review. Acknowledge receipt through your partner portal. From there, your active project appears in your Active Projects view where you can submit status updates, track milestones, and manage payment schedules.",
+  },
+  {
+    q: "What if I submitted a bid via Magic Link but want to create an account?",
+    a: "After submitting a bid via Lightning RFP Magic Link, you will see a prompt to create a Ligament profile. Click it and your email will be pre-filled. Once your account is created, your submitted bid is automatically associated with your new profile so you can track it, receive the agency's decision, and access onboarding if awarded, all without resubmitting anything.",
   },
 ]
 
