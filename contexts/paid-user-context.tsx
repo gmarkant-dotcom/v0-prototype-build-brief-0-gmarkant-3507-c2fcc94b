@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { RequestInvitationModal } from "@/components/request-invitation-modal"
@@ -14,6 +14,7 @@ type PaidUserContextType = {
   isAdmin: boolean
   isLoading: boolean
   isDemo: boolean
+  hasDemoAccess: boolean
   role: UserRole
   linkedAgencyId: string | null
   checkFeatureAccess: (featureName?: string) => boolean
@@ -25,6 +26,7 @@ const PaidUserContext = createContext<PaidUserContextType>({
   isAdmin: false,
   isLoading: true,
   isDemo: false,
+  hasDemoAccess: false,
   role: null,
   linkedAgencyId: null,
   checkFeatureAccess: () => false,
@@ -33,6 +35,7 @@ const PaidUserContext = createContext<PaidUserContextType>({
 
 export function PaidUserProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   // Initialize isDemo immediately to avoid timing issues
   const [isDemo, setIsDemo] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -48,6 +51,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
   })
   const [isPaid, setIsPaid] = useState(isDemo) // Start paid if demo
   const [isAdmin, setIsAdmin] = useState(isDemo) // Start admin if demo
+  const [hasDemoAccess, setHasDemoAccess] = useState(false)
   const [isLoading, setIsLoading] = useState(!isDemo) // Don't show loading in demo
   const [role, setRole] = useState<UserRole>(null)
   const [linkedAgencyId, setLinkedAgencyId] = useState<string | null>(null)
@@ -58,7 +62,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const demoMode = isDemoMode()
     setIsDemo(demoMode)
-    
+
     // In demo mode, everyone has full access
     if (demoMode) {
       setIsPaid(true)
@@ -67,6 +71,8 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
       return
     }
+
+    setIsLoading(true)
 
     const checkPaidStatus = async () => {
       const supabase = createClient()
@@ -81,7 +87,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
       if (user) {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('is_paid, is_admin, role, linked_agency_id')
+          .select('is_paid, is_admin, role, linked_agency_id, demo_access')
           .eq('id', user.id)
           .single()
 
@@ -89,6 +95,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
         console.error("[PaidUserContext] profile fetched:", { is_paid: profile?.is_paid, is_admin: profile?.is_admin, role: profile?.role, userId: user.id.slice(0,8) })
         setIsPaid(profile?.is_paid !== false)
         setIsAdmin(profile?.is_admin || false)
+        setHasDemoAccess(profile?.demo_access || false)
         setRole(profile?.role as UserRole || null)
         setLinkedAgencyId(profile?.linked_agency_id || null)
       }
@@ -96,7 +103,10 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
     }
 
     checkPaidStatus()
-  }, [])
+    // Re-run on every route change so a restriction (or restoration) an admin makes
+    // mid-session is picked up on the next page load, instead of staying cached in
+    // React state for the lifetime of this provider instance.
+  }, [pathname])
   
   const checkFeatureAccess = (featureName?: string): boolean => {
     // Demo preview: full access
@@ -126,11 +136,12 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <PaidUserContext.Provider value={{ 
-      isPaid, 
-      isAdmin, 
+    <PaidUserContext.Provider value={{
+      isPaid,
+      isAdmin,
       isLoading,
       isDemo,
+      hasDemoAccess,
       role,
       linkedAgencyId,
       checkFeatureAccess,
