@@ -12,10 +12,10 @@ async function syncUserProfile(supabase: any, user: any) {
   // Check if profile exists
   const { data: existingProfile } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, role, is_paid, demo_access')
     .eq('id', user.id)
     .single()
-  
+
   if (!existingProfile) {
     // Create profile if it doesn't exist
     await supabase.from('profiles').insert({
@@ -28,13 +28,16 @@ async function syncUserProfile(supabase: any, user: any) {
       active_role: role,
       is_paid: true,
       is_admin: false,
-      demo_access: false,
+      demo_access: true,
     })
   } else {
     // Update role if not set, and always sync company_linkedin_url if present
     const updatePayload: Record<string, unknown> = {}
     if (!existingProfile.role) updatePayload.role = role
     if (metadata.company_linkedin_url) updatePayload.company_linkedin_url = metadata.company_linkedin_url
+    // Self-heal: restore access if it was ever lost, without touching is_admin
+    if (!existingProfile.is_paid) updatePayload.is_paid = true
+    if (!existingProfile.demo_access) updatePayload.demo_access = true
     if (Object.keys(updatePayload).length > 0) {
       await supabase.from('profiles').update(updatePayload).eq('id', user.id)
     }
