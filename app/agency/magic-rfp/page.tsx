@@ -24,7 +24,7 @@ import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { readTextStream } from "@/lib/read-text-stream"
 import { cn } from "@/lib/utils"
-import { Zap, Plus, Trash2, Check, X, FolderOpen, Copy, Send, ChevronDown, ChevronUp } from "lucide-react"
+import { Zap, Plus, Trash2, Check, X, FolderOpen, Copy, Send, ChevronDown, ChevronUp, Upload, Sparkles } from "lucide-react"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -93,8 +93,18 @@ function MagicRfpContent() {
   const [agencyId, setAgencyId] = useState<string | null>(null)
   const [hasUsedSelectedProject, setHasUsedSelectedProject] = useState(false)
 
-  // Step 1: Advanced Options — output template (collapsed by default)
+  // Step 1: Advanced Options (collapsed by default)
   const [advancedOptionsOpen, setAdvancedOptionsOpen] = useState(false)
+
+  // Subsection 1 — Client Brief: import or AI-structure the Scope Description text
+  const [briefImportedMessage, setBriefImportedMessage] = useState(false)
+  const [isUploadingBrief, setIsUploadingBrief] = useState(false)
+  const [briefUploadError, setBriefUploadError] = useState<string | null>(null)
+  const [isGeneratingBrief, setIsGeneratingBrief] = useState(false)
+  const [briefGenerateError, setBriefGenerateError] = useState<string | null>(null)
+  const briefFileInputRef = useRef<HTMLInputElement>(null)
+
+  // Subsection 2 — Output Template
   const [templateMode, setTemplateMode] = useState<OutputTemplateMode>("upload")
   const [templateStyle, setTemplateStyle] = useState<TemplateStyle>("formal")
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("section")
@@ -190,6 +200,91 @@ function MagicRfpContent() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject?.id])
+
+  const handleBriefFileSelect = async (file: File) => {
+    if (!checkFeatureAccess("file uploads")) {
+      setBriefUploadError("File uploads require an active subscription (or use demo mode).")
+      return
+    }
+    setBriefUploadError(null)
+    setIsUploadingBrief(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/documents/extract-text", { method: "POST", body: fd })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(payload?.error || "Could not read brief text")
+      setBrief((prev) => ({ ...prev, scopeDescription: (payload.text || "").toString() }))
+      setBriefImportedMessage(true)
+    } catch (err) {
+      setBriefUploadError(err instanceof Error ? err.message : "Brief import failed")
+    } finally {
+      setIsUploadingBrief(false)
+    }
+  }
+
+  const generateStructuredBrief = async () => {
+    setBriefGenerateError(null)
+    const sourceText = brief.scopeDescription.trim()
+    if (!sourceText) {
+      setBriefGenerateError("Add a scope description first — AI needs that text to work from.")
+      return
+    }
+    if (!checkFeatureAccess("AI brief structuring")) {
+      setBriefGenerateError("Subscription required for AI features, or enable demo mode.")
+      return
+    }
+    setIsGeneratingBrief(true)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 125_000)
+    try {
+      const res = await fetch("/api/ai/rfp-output-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          briefText: sourceText,
+          templateStyle: "formal",
+          outputFormat: "section",
+          sensitivity: {},
+        }),
+      })
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "")
+        let payload: Record<string, unknown> = {}
+        try {
+          payload = JSON.parse(errorText) as Record<string, unknown>
+        } catch {
+          payload = {}
+        }
+        const parts = [
+          typeof payload.error === "string" ? payload.error : null,
+          typeof payload.hint === "string" ? payload.hint : null,
+          typeof payload.detail === "string" ? payload.detail : null,
+          !payload.error && !payload.detail && !payload.hint ? errorText.trim() || `HTTP ${res.status}` : null,
+        ].filter(Boolean)
+        throw new Error(parts.join(" — ") || "Generation failed")
+      }
+      if (!res.body) throw new Error("No stream body returned from template route")
+
+      const text = await readTextStream(res.body, (fullText) => {
+        setBrief((prev) => ({ ...prev, scopeDescription: fullText }))
+      })
+      if (!text.trim()) {
+        throw new Error("AI returned an empty result. Check server logs and ANTHROPIC_API_KEY on Vercel.")
+      }
+      setBriefImportedMessage(true)
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        setBriefGenerateError("Request timed out or was cancelled. Claude can take 30–90s.")
+      } else {
+        setBriefGenerateError(e instanceof Error ? e.message : "Brief generation failed")
+      }
+    } finally {
+      clearTimeout(timeoutId)
+      setIsGeneratingBrief(false)
+    }
+  }
 
   const handleTemplateFileSelect = async (file: File) => {
     if (!checkFeatureAccess("file uploads")) {
@@ -538,10 +633,18 @@ function MagicRfpContent() {
                   <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
                     Scope description
                   </label>
+                  {briefImportedMessage && (
+                    <p className="font-mono text-[10px] text-teal-300 mb-2">
+                      Brief imported — review and edit below
+                    </p>
+                  )}
                   <Textarea
                     rows={4}
                     value={brief.scopeDescription}
-                    onChange={(e) => setBrief((prev) => ({ ...prev, scopeDescription: e.target.value }))}
+                    onChange={(e) => {
+                      setBriefImportedMessage(false)
+                      setBrief((prev) => ({ ...prev, scopeDescription: e.target.value }))
+                    }}
                     placeholder="Describe what you need done"
                     className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                   />
@@ -580,7 +683,7 @@ function MagicRfpContent() {
                     <div>
                       <div className="font-display font-bold text-sm text-foreground">Advanced Options</div>
                       <p className="font-mono text-[10px] text-foreground-muted mt-0.5">
-                        Output template — style, sensitivity, and format for the generated brief.
+                        Structure your brief and format the output vendors receive.
                       </p>
                     </div>
                     {advancedOptionsOpen ? (
@@ -590,28 +693,82 @@ function MagicRfpContent() {
                     )}
                   </button>
                   {advancedOptionsOpen && (
-                    <div className="px-4 pb-4 border-t border-border/30 pt-4">
-                      <RfpOutputTemplate
-                        mode={templateMode}
-                        onModeChange={setTemplateMode}
-                        uploadedTemplate={uploadedTemplate}
-                        onFileSelect={(file) => void handleTemplateFileSelect(file)}
-                        onRemoveUploadedTemplate={handleRemoveUploadedTemplate}
-                        isUploadingTemplate={isUploadingTemplate}
-                        uploadError={templateUploadError}
-                        extractWarning={templateExtractWarning}
-                        templateStyle={templateStyle}
-                        onTemplateStyleChange={setTemplateStyle}
-                        sensitivity={sensitivity}
-                        onSensitivityChange={handleSensitivityChange}
-                        outputFormat={outputFormat}
-                        onOutputFormatChange={setOutputFormat}
-                        isGenerating={isGeneratingTemplate}
-                        onGenerate={() => void generateOutputTemplate()}
-                        generateError={templateGenerateError}
-                        generatedTemplateText={generatedTemplateText}
-                        isTemplateReady={isTemplateReady}
-                      />
+                    <div className="px-4 pb-4 border-t border-border/30 pt-4 space-y-5">
+                      {/* Subsection 1: Client Brief */}
+                      <div>
+                        <div className="font-display font-bold text-sm text-foreground">Client Brief</div>
+                        <p className="font-mono text-[10px] text-foreground-muted mt-0.5 mb-3">
+                          Help structure your brief
+                        </p>
+
+                        <input
+                          ref={briefFileInputRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            e.target.value = ""
+                            if (file) void handleBriefFileSelect(file)
+                          }}
+                        />
+
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isUploadingBrief}
+                            onClick={() => briefFileInputRef.current?.click()}
+                            className="border-border text-foreground-muted hover:bg-white/5 flex items-center justify-center gap-2"
+                          >
+                            {isUploadingBrief ? <Spinner className="size-3.5" /> : <Upload className="w-3.5 h-3.5" />}
+                            {isUploadingBrief ? "Reading…" : "Upload Client Brief"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={isGeneratingBrief}
+                            onClick={() => void generateStructuredBrief()}
+                            className="border-border text-foreground-muted hover:bg-white/5 flex items-center justify-center gap-2"
+                          >
+                            {isGeneratingBrief ? <Spinner className="size-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+                            {isGeneratingBrief ? "Generating…" : "Generate with AI"}
+                          </Button>
+                        </div>
+                        {briefUploadError && <p className="text-xs text-red-400 mt-2">{briefUploadError}</p>}
+                        {briefGenerateError && <p className="text-xs text-red-400 mt-2">{briefGenerateError}</p>}
+                      </div>
+
+                      <div className="border-t border-border/30" />
+
+                      {/* Subsection 2: Output Template */}
+                      <div>
+                        <div className="font-display font-bold text-sm text-foreground">Output Template</div>
+                        <p className="font-mono text-[10px] text-foreground-muted mt-0.5 mb-3">
+                          Format the RFP vendors receive
+                        </p>
+                        <RfpOutputTemplate
+                          mode={templateMode}
+                          onModeChange={setTemplateMode}
+                          uploadedTemplate={uploadedTemplate}
+                          onFileSelect={(file) => void handleTemplateFileSelect(file)}
+                          onRemoveUploadedTemplate={handleRemoveUploadedTemplate}
+                          isUploadingTemplate={isUploadingTemplate}
+                          uploadError={templateUploadError}
+                          extractWarning={templateExtractWarning}
+                          templateStyle={templateStyle}
+                          onTemplateStyleChange={setTemplateStyle}
+                          sensitivity={sensitivity}
+                          onSensitivityChange={handleSensitivityChange}
+                          outputFormat={outputFormat}
+                          onOutputFormatChange={setOutputFormat}
+                          isGenerating={isGeneratingTemplate}
+                          onGenerate={() => void generateOutputTemplate()}
+                          generateError={templateGenerateError}
+                          generatedTemplateText={generatedTemplateText}
+                          isTemplateReady={isTemplateReady}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>

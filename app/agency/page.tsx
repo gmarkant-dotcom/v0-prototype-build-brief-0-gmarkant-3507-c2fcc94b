@@ -951,24 +951,33 @@ function AgencyRFPContent() {
         partnerIds: selectedPartners[item.id] || [],
         newRecipients: normalizedNewRecipientsByScope[item.id] || [],
       }))
-      const res = await fetch("/api/agency/broadcast-rfp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: selectedProject?.id ?? null,
-          masterRfp: { ...masterRfp, referenceMaterials },
-          ndaRequired: ndaSignatureRequired,
-          ndaLink: ndaSignatureRequired ? ndaSigningLink.trim() : "",
-          response_deadline: responseDeadline,
-          newRecipientsByScope: normalizedNewRecipientsByScope,
-          items,
-        }),
-      })
-      const payload = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(
-          [payload?.error, payload?.detail].filter(Boolean).join(" ") || "Broadcast failed"
-        )
+      // If every recipient across every scope item was routed to the magic-link queue above,
+      // there's nothing left for the standard broadcast-rfp endpoint to send — calling it would
+      // incorrectly fail with "No recipients to broadcast to" even though every scope item does
+      // have a valid (magic-link) recipient, per allOutsourcedHaveRecipients().
+      const hasStandardRecipients = items.some(
+        (item) => item.partnerIds.length > 0 || item.newRecipients.length > 0
+      )
+      if (hasStandardRecipients) {
+        const res = await fetch("/api/agency/broadcast-rfp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectId: selectedProject?.id ?? null,
+            masterRfp: { ...masterRfp, referenceMaterials },
+            ndaRequired: ndaSignatureRequired,
+            ndaLink: ndaSignatureRequired ? ndaSigningLink.trim() : "",
+            response_deadline: responseDeadline,
+            newRecipientsByScope: normalizedNewRecipientsByScope,
+            items,
+          }),
+        })
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(
+            [payload?.error, payload?.detail].filter(Boolean).join(" ") || "Broadcast failed"
+          )
+        }
       }
       if (magicLinkQueue.length > 0 && selectedProject?.id) {
         for (const recipient of magicLinkQueue) {

@@ -5,6 +5,7 @@ import { anthropic } from "@ai-sdk/anthropic"
 import { createClient } from "@/lib/supabase/server"
 
 export const maxDuration = 120
+export const runtime = 'nodejs'
 
 const MAX_BRIEF_CHARS = 100_000
 

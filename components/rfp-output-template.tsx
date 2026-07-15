@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Upload, Sparkles, FileText, Plus, Loader2, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -83,6 +83,18 @@ export function RfpOutputTemplate({
   isTemplateReady,
 }: RfpOutputTemplateProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showSlowMessage, setShowSlowMessage] = useState(false)
+
+  // Generation can legitimately take 30-90s+ — surface a visible "still working" message
+  // instead of leaving the user staring at a spinner with no signal it hasn't stalled.
+  useEffect(() => {
+    if (!isGenerating) {
+      setShowSlowMessage(false)
+      return
+    }
+    const timer = setTimeout(() => setShowSlowMessage(true), 30_000)
+    return () => clearTimeout(timer)
+  }, [isGenerating])
 
   const triggerFilePicker = () => {
     onModeChange("upload")
@@ -313,6 +325,14 @@ export function RfpOutputTemplate({
                 </span>
               )}
             </Button>
+            {isGenerating && showSlowMessage && (
+              <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 text-accent animate-spin shrink-0" />
+                <p className="font-mono text-[10px] text-foreground-muted">
+                  Still generating — this may take a moment…
+                </p>
+              </div>
+            )}
             {generateError && (
               <div role="alert" className="rounded-lg border border-red-400/40 bg-red-950/40 px-3 py-2 text-xs text-red-200">
                 {generateError}
