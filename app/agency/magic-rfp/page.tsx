@@ -3,17 +3,28 @@
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AgencyLayout } from "@/components/agency-layout"
-import { SelectedProjectHeader } from "@/components/selected-project-header"
+import { InlineProjectSelector } from "@/components/agency-project-selector"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Spinner } from "@/components/ui/spinner"
 import { ReferenceMaterialsInput, type ReferenceMaterial } from "@/components/reference-materials-input"
+import {
+  RfpOutputTemplate,
+  type OutputTemplateMode,
+  type TemplateStyle,
+  type OutputFormat,
+  type SensitivityOptions,
+  type UploadedTemplate,
+} from "@/components/rfp-output-template"
 import { useSelectedProject } from "@/contexts/selected-project-context"
+import { usePaidUser } from "@/contexts/paid-user-context"
 import { createClient } from "@/lib/supabase/client"
+import { isDemoMode } from "@/lib/demo-data"
+import { readTextStream } from "@/lib/read-text-stream"
 import { cn } from "@/lib/utils"
-import { Zap, Plus, Trash2, Check, X, FolderOpen, Copy, Send } from "lucide-react"
+import { Zap, Plus, Trash2, Check, X, FolderOpen, Copy, Send, ChevronDown, ChevronUp } from "lucide-react"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -71,7 +82,9 @@ function formatDateOnly(raw: string | null | undefined): string | null {
 }
 
 function MagicRfpContent() {
-  const { selectedProject } = useSelectedProject()
+  const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
+  const { checkFeatureAccess } = usePaidUser()
+  const isDemo = isDemoMode()
 
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [brief, setBrief] = useState<BriefData>(EMPTY_BRIEF)
@@ -79,6 +92,26 @@ function MagicRfpContent() {
   const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterial[]>([])
   const [agencyId, setAgencyId] = useState<string | null>(null)
   const [hasUsedSelectedProject, setHasUsedSelectedProject] = useState(false)
+
+  // Step 1: Advanced Options — output template (collapsed by default)
+  const [advancedOptionsOpen, setAdvancedOptionsOpen] = useState(false)
+  const [templateMode, setTemplateMode] = useState<OutputTemplateMode>("upload")
+  const [templateStyle, setTemplateStyle] = useState<TemplateStyle>("formal")
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("section")
+  const [sensitivity, setSensitivity] = useState<SensitivityOptions>({
+    scrubBrand: false,
+    scrubBudget: false,
+    scrubStrategy: false,
+    scrubTimeline: false,
+  })
+  const [uploadedTemplate, setUploadedTemplate] = useState<UploadedTemplate>(null)
+  const [generatedTemplateText, setGeneratedTemplateText] = useState("")
+  const [isTemplateReady, setIsTemplateReady] = useState(false)
+  const [isUploadingTemplate, setIsUploadingTemplate] = useState(false)
+  const [templateUploadError, setTemplateUploadError] = useState<string | null>(null)
+  const [templateExtractWarning, setTemplateExtractWarning] = useState<string | null>(null)
+  const [isGeneratingTemplate, setIsGeneratingTemplate] = useState(false)
+  const [templateGenerateError, setTemplateGenerateError] = useState<string | null>(null)
 
   const [recipients, setRecipients] = useState<RecipientRow[]>([newRecipientRow()])
   const [sending, setSending] = useState(false)
@@ -158,6 +191,114 @@ function MagicRfpContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject?.id])
 
+  const handleTemplateFileSelect = async (file: File) => {
+    if (!checkFeatureAccess("file uploads")) {
+      setTemplateUploadError("File uploads require an active subscription (or use demo mode).")
+      return
+    }
+    setTemplateUploadError(null)
+    setTemplateExtractWarning(null)
+    setIsUploadingTemplate(true)
+    try {
+      const extractFd = new FormData()
+      extractFd.append("file", file)
+      const extractRes = await fetch("/api/documents/extract-text", { method: "POST", body: extractFd })
+      const extractPayload = await extractRes.json().catch(() => ({}))
+      if (!extractRes.ok) throw new Error(extractPayload?.error || "Could not read template text")
+
+      setUploadedTemplate({ name: file.name, url: "" })
+      const warning = typeof extractPayload?.warning === "string" ? extractPayload.warning : null
+      setTemplateExtractWarning(warning)
+      setGeneratedTemplateText((extractPayload.text || "").toString())
+      setTemplateMode("upload")
+    } catch (err) {
+      setTemplateUploadError(err instanceof Error ? err.message : "Template processing failed")
+      setTemplateExtractWarning(null)
+      setUploadedTemplate(null)
+      setGeneratedTemplateText("")
+    } finally {
+      setIsUploadingTemplate(false)
+    }
+  }
+
+  const handleRemoveUploadedTemplate = () => {
+    setUploadedTemplate(null)
+    setGeneratedTemplateText("")
+    setTemplateUploadError(null)
+    setTemplateExtractWarning(null)
+  }
+
+  const handleSensitivityChange = (key: keyof SensitivityOptions, value: boolean) => {
+    setSensitivity((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const generateOutputTemplate = async () => {
+    setTemplateGenerateError(null)
+    const sourceText = brief.scopeDescription.trim()
+    if (!sourceText) {
+      setTemplateGenerateError("Add a scope description above first — AI needs that text to infer structure.")
+      return
+    }
+    if (!checkFeatureAccess("AI output template")) {
+      setTemplateGenerateError("Subscription required for AI features, or enable demo mode.")
+      return
+    }
+    setIsTemplateReady(false)
+    setIsGeneratingTemplate(true)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 125_000)
+    try {
+      setGeneratedTemplateText("")
+      setUploadedTemplate(null)
+      setTemplateExtractWarning(null)
+      setTemplateUploadError(null)
+
+      const res = await fetch("/api/ai/rfp-output-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          briefText: sourceText,
+          templateStyle,
+          outputFormat,
+          sensitivity,
+        }),
+      })
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => "")
+        let payload: Record<string, unknown> = {}
+        try {
+          payload = JSON.parse(errorText) as Record<string, unknown>
+        } catch {
+          payload = {}
+        }
+        const parts = [
+          typeof payload.error === "string" ? payload.error : null,
+          typeof payload.hint === "string" ? payload.hint : null,
+          typeof payload.detail === "string" ? payload.detail : null,
+          !payload.error && !payload.detail && !payload.hint ? errorText.trim() || `HTTP ${res.status}` : null,
+        ].filter(Boolean)
+        throw new Error(parts.join(" — ") || "Generation failed")
+      }
+      if (!res.body) throw new Error("No stream body returned from template route")
+
+      const text = await readTextStream(res.body, (fullText) => setGeneratedTemplateText(fullText))
+      if (!text.trim()) {
+        throw new Error("AI returned an empty template. Check server logs and ANTHROPIC_API_KEY on Vercel.")
+      }
+      setIsTemplateReady(true)
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        setTemplateGenerateError("Request timed out or was cancelled. Claude can take 30–90s.")
+      } else {
+        setTemplateGenerateError(e instanceof Error ? e.message : "Template generation failed")
+      }
+    } finally {
+      clearTimeout(timeoutId)
+      setIsGeneratingTemplate(false)
+    }
+  }
+
   const briefValid =
     brief.projectName.trim().length > 0 &&
     brief.clientName.trim().length > 0 &&
@@ -217,6 +358,14 @@ function MagicRfpContent() {
             scope_item_name: brief.projectName,
             scope_item_description: brief.scopeDescription,
             reference_materials: referenceMaterials,
+            output_template_config: {
+              mode: templateMode,
+              templateStyle,
+              outputFormat,
+              sensitivity,
+              uploadedTemplate,
+              generatedTemplate: generatedTemplateText,
+            },
           }),
         })
         const data = await res.json().catch(() => ({}))
@@ -288,7 +437,14 @@ function MagicRfpContent() {
 
   return (
       <div className="p-8 max-w-3xl">
-        <SelectedProjectHeader dropdown />
+        {!isDemo && (
+          <InlineProjectSelector
+            selectedProject={selectedProject}
+            projects={projects}
+            isLoadingProjects={isLoadingProjects}
+            onSelect={setSelectedProject}
+          />
+        )}
 
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-3">
@@ -413,6 +569,51 @@ function MagicRfpContent() {
                       className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                     />
                   </div>
+                </div>
+
+                <div className="rounded-lg border border-border/40 bg-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setAdvancedOptionsOpen((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  >
+                    <div>
+                      <div className="font-display font-bold text-sm text-foreground">Advanced Options</div>
+                      <p className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                        Output template — style, sensitivity, and format for the generated brief.
+                      </p>
+                    </div>
+                    {advancedOptionsOpen ? (
+                      <ChevronUp className="w-4 h-4 text-foreground-muted shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-foreground-muted shrink-0" />
+                    )}
+                  </button>
+                  {advancedOptionsOpen && (
+                    <div className="px-4 pb-4 border-t border-border/30 pt-4">
+                      <RfpOutputTemplate
+                        mode={templateMode}
+                        onModeChange={setTemplateMode}
+                        uploadedTemplate={uploadedTemplate}
+                        onFileSelect={(file) => void handleTemplateFileSelect(file)}
+                        onRemoveUploadedTemplate={handleRemoveUploadedTemplate}
+                        isUploadingTemplate={isUploadingTemplate}
+                        uploadError={templateUploadError}
+                        extractWarning={templateExtractWarning}
+                        templateStyle={templateStyle}
+                        onTemplateStyleChange={setTemplateStyle}
+                        sensitivity={sensitivity}
+                        onSensitivityChange={handleSensitivityChange}
+                        outputFormat={outputFormat}
+                        onOutputFormatChange={setOutputFormat}
+                        isGenerating={isGeneratingTemplate}
+                        onGenerate={() => void generateOutputTemplate()}
+                        generateError={templateGenerateError}
+                        generatedTemplateText={generatedTemplateText}
+                        isTemplateReady={isTemplateReady}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <ReferenceMaterialsInput

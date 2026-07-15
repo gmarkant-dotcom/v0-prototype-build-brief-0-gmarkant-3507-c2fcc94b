@@ -14,6 +14,36 @@ function getServiceSupabase() {
   return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
+/** Advanced Options (output template) config captured on the Lightning RFP brief step.
+ *  Nested inside rfp_magic_tokens.reference_materials so no new column is needed. */
+function normalizeOutputTemplateConfig(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null
+  const r = raw as Record<string, unknown>
+  const mode = r.mode === "ai" ? "ai" : r.mode === "upload" ? "upload" : null
+  if (!mode) return null
+
+  const sensitivityRaw = r.sensitivity && typeof r.sensitivity === "object" ? (r.sensitivity as Record<string, unknown>) : null
+  const uploadedRaw = r.uploadedTemplate && typeof r.uploadedTemplate === "object" ? (r.uploadedTemplate as Record<string, unknown>) : null
+
+  return {
+    mode,
+    templateStyle: typeof r.templateStyle === "string" ? r.templateStyle : null,
+    outputFormat: typeof r.outputFormat === "string" ? r.outputFormat : null,
+    sensitivity: sensitivityRaw
+      ? {
+          scrubBrand: Boolean(sensitivityRaw.scrubBrand),
+          scrubBudget: Boolean(sensitivityRaw.scrubBudget),
+          scrubStrategy: Boolean(sensitivityRaw.scrubStrategy),
+          scrubTimeline: Boolean(sensitivityRaw.scrubTimeline),
+        }
+      : null,
+    uploadedTemplate: uploadedRaw
+      ? { name: String(uploadedRaw.name || ""), url: String(uploadedRaw.url || "") }
+      : null,
+    generatedTemplate: typeof r.generatedTemplate === "string" ? r.generatedTemplate.slice(0, 50000) : "",
+  }
+}
+
 async function requireAgency() {
   const supabase = await createAnonClient()
   const {
@@ -66,6 +96,7 @@ export async function POST(request: NextRequest) {
           )
           .slice(0, 20)
       : []
+    const outputTemplateConfig = normalizeOutputTemplateConfig(body.output_template_config)
 
     if (!vendorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vendorEmail)) {
       return NextResponse.json({ error: "A valid vendor email is required" }, { status: 400 })
@@ -109,7 +140,7 @@ export async function POST(request: NextRequest) {
           scope_item_id: scopeItemId,
           scope_item_name: scopeItemName,
           scope_item_description: scopeItemDescription,
-          reference_materials: referenceMaterials,
+          reference_materials: { materials: referenceMaterials, output_template_config: outputTemplateConfig },
           token,
           expires_at,
           status: "pending",

@@ -132,7 +132,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     const scopeItem = tokenRow.scope_item_name
       ? { name: tokenRow.scope_item_name, description: tokenRow.scope_item_description || null }
       : null
-    const referenceMaterials = Array.isArray(tokenRow.reference_materials) ? tokenRow.reference_materials : []
+    // reference_materials is stored as { materials, output_template_config } — output_template_config
+    // is an internal agency-side setting and is intentionally not exposed to guests. Older rows may
+    // still hold a bare array from before that shape existed, so support both.
+    const rawReferenceMaterials = tokenRow.reference_materials
+    const referenceMaterials = Array.isArray(rawReferenceMaterials)
+      ? rawReferenceMaterials
+      : Array.isArray(rawReferenceMaterials?.materials)
+        ? rawReferenceMaterials.materials
+        : []
 
     if (tokenRow.status === "submitted" && tokenRow.response_id) {
       const { data: response, error: responseErr } = await supabase

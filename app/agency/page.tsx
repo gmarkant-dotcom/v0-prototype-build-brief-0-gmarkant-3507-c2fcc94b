@@ -18,6 +18,7 @@ import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronR
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
 import { ReferenceMaterialsInput, type ReferenceMaterial } from "@/components/reference-materials-input"
+import { RfpOutputTemplate, type SensitivityOptions } from "@/components/rfp-output-template"
 import { readTextStream } from "@/lib/read-text-stream"
 
 // Types
@@ -125,9 +126,7 @@ function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
   const { selectedProject, setSelectedProject, isLoadingProjects, projects } = useSelectedProject()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  /** Must stay mounted when switching 1b tabs so "Upload file" can call .click() (input was inside `upload` branch only → ref null in AI mode). */
-  const rfpTemplateFileInputRef = useRef<HTMLInputElement>(null)
-  
+
   const isDemo = isDemoMode()
   const [poolPartners, setPoolPartners] = useState<Partner[]>([])
   const [poolPartnersLoading, setPoolPartnersLoading] = useState(false)
@@ -476,17 +475,9 @@ function AgencyRFPContent() {
     fileInputRef.current?.click()
   }
 
-  const triggerRfpTemplateFilePicker = () => {
-    setRfpTemplateMode("upload")
-    rfpTemplateFileInputRef.current?.click()
-  }
-
-  const handleRfpTemplateFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+  const handleRfpTemplateFileSelect = async (file: File) => {
     if (!checkFeatureAccess("file uploads")) {
       setRfpTemplateUploadError("File uploads require an active subscription (or use demo mode).")
-      e.target.value = ""
       return
     }
     setRfpTemplateUploadError(null)
@@ -517,8 +508,34 @@ function AgencyRFPContent() {
       setTemplateSourceText("")
     } finally {
       setIsUploadingRfpTemplate(false)
-      e.target.value = ""
     }
+  }
+
+  const handleSelectLibraryRfpTemplate = (templateId: string) => {
+    const next = templateId === selectedRfpTemplate ? null : templateId
+    setSelectedRfpTemplate(next)
+    setRfpTemplateMode("upload")
+    if (next) {
+      setUploadedRfpTemplate(null)
+      setTemplateSourceText("")
+      setRfpTemplateUploadError(null)
+      setRfpTemplateExtractWarning(null)
+    }
+  }
+
+  const handleRemoveUploadedRfpTemplate = () => {
+    setUploadedRfpTemplate(null)
+    setTemplateSourceText("")
+    setSelectedRfpTemplate(null)
+    setRfpTemplateUploadError(null)
+    setRfpTemplateExtractWarning(null)
+  }
+
+  const handleSensitivityChange = (key: keyof SensitivityOptions, value: boolean) => {
+    if (key === "scrubBrand") setAiScrubBrand(value)
+    else if (key === "scrubBudget") setAiScrubBudget(value)
+    else if (key === "scrubStrategy") setAiScrubStrategy(value)
+    else if (key === "scrubTimeline") setAiScrubTimeline(value)
   }
 
   // Generate Master RFP (AI-backed)
@@ -1471,297 +1488,44 @@ function AgencyRFPContent() {
                 description="Upload a Word/PDF structure, or generate a layout with AI. The Master RFP step maps your client brief into this format (sections, headings, tone)."
               />
 
-              <input
-                ref={rfpTemplateFileInputRef}
-                id="rfp-template-file-input"
-                type="file"
-                accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-                className="sr-only"
-                onChange={(e) => void handleRfpTemplateFileChange(e)}
-              />
-
-              <div className="flex flex-wrap gap-2 mt-4">
-                <button
-                  type="button"
-                  onClick={() => triggerRfpTemplateFilePicker()}
-                  className={cn(
-                    "font-mono text-xs px-3 py-2 rounded-lg border transition-colors flex items-center gap-2",
-                    rfpTemplateMode === "upload"
-                      ? "border-accent bg-accent/10 text-foreground"
-                      : "border-border text-foreground-muted hover:border-white/30"
-                  )}
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  Upload file
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRfpTemplateMode("ai")}
-                  className={cn(
-                    "font-mono text-xs px-3 py-2 rounded-lg border transition-colors flex items-center gap-2",
-                    rfpTemplateMode === "ai"
-                      ? "border-accent bg-accent/10 text-foreground"
-                      : "border-border text-foreground-muted hover:border-white/30"
-                  )}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Generate with AI
-                </button>
-              </div>
-              
               <div className="grid grid-cols-2 gap-6 mt-4">
                 <div>
                   <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
                     RFP output template
                   </label>
-                  {rfpTemplateMode === "upload" ? (
-                  <div className="space-y-2">
-                    {(isDemoMode() ? demoTemplates : []).filter(t => t.type === "rfp").map((template) => (
-                      <button
-                        key={template.id}
-                        onClick={() => {
-                          const next = template.id === selectedRfpTemplate ? null : template.id
-                          setSelectedRfpTemplate(next)
-                          setRfpTemplateMode("upload")
-                          if (next) {
-                            setUploadedRfpTemplate(null)
-                            setTemplateSourceText("")
-                            setRfpTemplateUploadError(null)
-                            setRfpTemplateExtractWarning(null)
-                          }
-                        }}
-                        className={cn(
-                          "w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-3",
-                          selectedRfpTemplate === template.id
-                            ? "border-accent bg-accent/10"
-                            : "border-border hover:border-white/30"
-                        )}
-                      >
-                        <FileText className="w-5 h-5 text-blue-400" />
-                        <div className="flex-1">
-                          <div className="font-display font-bold text-sm text-foreground">{template.name}</div>
-                          <div className="font-mono text-[10px] text-foreground-muted">From Documents Library</div>
-                        </div>
-                        {selectedRfpTemplate === template.id && <Check className="w-4 h-4 text-accent" />}
-                      </button>
-                    ))}
-                    {/* Uploaded RFP Template */}
-                    {uploadedRfpTemplate && (
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRfpTemplateMode("upload")
-                            setSelectedRfpTemplate("uploaded")
-                            setSelectedSowTemplate(null)
-                          }}
-                          className={cn(
-                            "w-full text-left p-3 rounded-lg border transition-colors flex items-center gap-3",
-                            selectedRfpTemplate === "uploaded"
-                              ? "border-accent bg-accent/10"
-                              : "border-border hover:border-white/30"
-                          )}
-                        >
-                          <FileText className="w-5 h-5 text-green-400" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-display font-bold text-sm text-foreground truncate">{uploadedRfpTemplate.name}</div>
-                            <div className="font-mono text-[10px] text-foreground-muted">
-                              {templateSourceText
-                                ? `Format loaded — ${templateSourceText.length.toLocaleString()} characters`
-                                : "No readable format text"}
-                            </div>
-                          </div>
-                          {selectedRfpTemplate === "uploaded" && <Check className="w-4 h-4 text-accent shrink-0" />}
-                        </button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-foreground-muted hover:text-foreground h-8"
-                          onClick={() => {
-                            setUploadedRfpTemplate(null)
-                            setTemplateSourceText("")
-                            setSelectedRfpTemplate(null)
-                            setRfpTemplateUploadError(null)
-                            setRfpTemplateExtractWarning(null)
-                          }}
-                        >
-                          Remove template
-                        </Button>
-                      </div>
-                    )}
-                    <label
-                      htmlFor="rfp-template-file-input"
-                      className="w-full text-left p-3 rounded-lg border border-dashed border-border hover:border-accent/50 transition-colors flex items-center gap-3 cursor-pointer"
-                    >
-                      {isUploadingRfpTemplate ? (
-                        <>
-                          <Loader2 className="w-5 h-5 text-accent animate-spin" />
-                          <span className="font-mono text-xs text-accent">Reading template…</span>
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="w-5 h-5 text-foreground-muted" />
-                          <span className="font-mono text-xs text-foreground-muted">Upload output template</span>
-                        </>
-                      )}
-                    </label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="border-border/60 text-foreground-muted"
-                      disabled={isUploadingRfpTemplate}
-                      onClick={() => triggerRfpTemplateFilePicker()}
-                    >
-                      <Upload className="w-3.5 h-3.5 mr-1.5" />
-                      Choose file…
-                    </Button>
-                    {rfpTemplateUploadError && (
-                      <div
-                        role="alert"
-                        className="rounded-lg border border-red-400/40 bg-red-950/40 px-3 py-2 text-xs text-red-200"
-                      >
-                        {rfpTemplateUploadError}
-                      </div>
-                    )}
-                    {rfpTemplateExtractWarning && !rfpTemplateUploadError && (
-                      <p className="text-xs text-amber-300 px-1">{rfpTemplateExtractWarning}</p>
-                    )}
-                  </div>
-                  ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <span className="font-mono text-[10px] text-foreground-muted uppercase block">
-                        Template style
-                      </span>
-                      <div className="flex flex-wrap gap-2">
-                        {(
-                          [
-                            { id: "formal" as const, label: "Formal / structured" },
-                            { id: "lean" as const, label: "Lean / conversational" },
-                            { id: "creative" as const, label: "Creative agency style" },
-                          ] as const
-                        ).map((opt) => (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => setAiTemplateStyle(opt.id)}
-                            className={cn(
-                              "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
-                              aiTemplateStyle === opt.id
-                                ? "border-accent bg-accent/10 text-foreground"
-                                : "border-border text-foreground-muted hover:border-white/30"
-                            )}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <span className="font-mono text-[10px] text-foreground-muted uppercase block">
-                        Sensitivity (optional)
-                      </span>
-                      <div className="space-y-2">
-                        {(
-                          [
-                            { checked: aiScrubBrand, set: setAiScrubBrand, label: "Scrub client brand name → industry category" },
-                            { checked: aiScrubBudget, set: setAiScrubBudget, label: "Scrub budget figures → tier description" },
-                            { checked: aiScrubStrategy, set: setAiScrubStrategy, label: "Scrub campaign-specific strategy → generic workstreams" },
-                            { checked: aiScrubTimeline, set: setAiScrubTimeline, label: "Scrub timeline dates → relative phases" },
-                          ] as const
-                        ).map((row) => (
-                          <label
-                            key={row.label}
-                            className="flex items-start gap-2 cursor-pointer font-mono text-[11px] text-foreground/90 leading-snug"
-                          >
-                            <Checkbox
-                              checked={row.checked}
-                              onCheckedChange={(v) => row.set(v === true)}
-                              className="mt-0.5 border-border"
-                            />
-                            <span>{row.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <span className="font-mono text-[10px] text-foreground-muted uppercase block">
-                        Output format
-                      </span>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setAiOutputFormat("section")}
-                          className={cn(
-                            "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
-                            aiOutputFormat === "section"
-                              ? "border-accent bg-accent/10 text-foreground"
-                              : "border-border text-foreground-muted hover:border-white/30"
-                          )}
-                        >
-                          Section-based RFP
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAiOutputFormat("modular")}
-                          className={cn(
-                            "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
-                            aiOutputFormat === "modular"
-                              ? "border-accent bg-accent/10 text-foreground"
-                              : "border-border text-foreground-muted hover:border-white/30"
-                          )}
-                        >
-                          Modular workstreams
-                        </button>
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      onClick={() => void generateAiOutputTemplate()}
-                      disabled={isGeneratingAiTemplate}
-                      className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto"
-                    >
-                      {isGeneratingAiTemplate ? (
-                        <span className="flex items-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Generating…
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4" />
-                          Generate template
-                        </span>
-                      )}
-                    </Button>
-                    {aiTemplateError && (
-                      <div
-                        role="alert"
-                        className="rounded-lg border border-red-400/40 bg-red-950/40 px-3 py-2 text-xs text-red-200"
-                      >
-                        {aiTemplateError}
-                      </div>
-                    )}
-                    {selectedRfpTemplate === "ai" && templateSourceText.trim() && (
-                      <div className={cn(
-                        "rounded-lg border px-3 py-2 flex items-center gap-2",
-                        aiTemplateGenerated
-                          ? "border-success/40 bg-success/10"
-                          : "border-border bg-white/5"
-                      )}>
-                        {aiTemplateGenerated && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
-                        <p className="font-mono text-[10px] text-foreground-muted">
-                          {aiTemplateGenerated
-                            ? `Template ready — ${templateSourceText.length.toLocaleString()} characters loaded`
-                            : `AI format loading — ${templateSourceText.length.toLocaleString()} characters so far`}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  )}
+                  <RfpOutputTemplate
+                    mode={rfpTemplateMode}
+                    onModeChange={setRfpTemplateMode}
+                    libraryTemplates={(isDemoMode() ? demoTemplates : [])
+                      .filter((t) => t.type === "rfp")
+                      .map((t) => ({ id: t.id, name: t.name }))}
+                    selectedLibraryTemplateId={selectedRfpTemplate}
+                    onSelectLibraryTemplate={handleSelectLibraryRfpTemplate}
+                    uploadedTemplate={uploadedRfpTemplate}
+                    onFileSelect={(file) => void handleRfpTemplateFileSelect(file)}
+                    onRemoveUploadedTemplate={handleRemoveUploadedRfpTemplate}
+                    isUploadingTemplate={isUploadingRfpTemplate}
+                    uploadError={rfpTemplateUploadError}
+                    extractWarning={rfpTemplateExtractWarning}
+                    templateStyle={aiTemplateStyle}
+                    onTemplateStyleChange={setAiTemplateStyle}
+                    sensitivity={{
+                      scrubBrand: aiScrubBrand,
+                      scrubBudget: aiScrubBudget,
+                      scrubStrategy: aiScrubStrategy,
+                      scrubTimeline: aiScrubTimeline,
+                    }}
+                    onSensitivityChange={handleSensitivityChange}
+                    outputFormat={aiOutputFormat}
+                    onOutputFormatChange={setAiOutputFormat}
+                    isGenerating={isGeneratingAiTemplate}
+                    onGenerate={() => void generateAiOutputTemplate()}
+                    generateError={aiTemplateError}
+                    generatedTemplateText={templateSourceText}
+                    isTemplateReady={aiTemplateGenerated}
+                  />
                 </div>
-                
+
                 <div>
                   <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
                     SOW Template
