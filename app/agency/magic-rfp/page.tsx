@@ -78,6 +78,7 @@ function MagicRfpContent() {
   const [loadingProjectData, setLoadingProjectData] = useState(false)
   const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterial[]>([])
   const [agencyId, setAgencyId] = useState<string | null>(null)
+  const [hasUsedSelectedProject, setHasUsedSelectedProject] = useState(false)
 
   const [recipients, setRecipients] = useState<RecipientRow[]>([newRecipientRow()])
   const [sending, setSending] = useState(false)
@@ -147,6 +148,15 @@ function MagicRfpContent() {
       setLoadingProjectData(false)
     }
   }
+
+  // Re-populate the brief automatically when the project is switched via the dropdown,
+  // but only if "Use Selected Project" was already clicked once for this session.
+  useEffect(() => {
+    if (hasUsedSelectedProject && selectedProject?.id) {
+      void useSelectedProjectData()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject?.id])
 
   const briefValid =
     brief.projectName.trim().length > 0 &&
@@ -278,7 +288,7 @@ function MagicRfpContent() {
 
   return (
       <div className="p-8 max-w-3xl">
-        <SelectedProjectHeader />
+        <SelectedProjectHeader dropdown />
 
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-3">
@@ -334,7 +344,10 @@ function MagicRfpContent() {
                   variant="outline"
                   size="sm"
                   disabled={!selectedProject?.id || loadingProjectData}
-                  onClick={() => void useSelectedProjectData()}
+                  onClick={() => {
+                    setHasUsedSelectedProject(true)
+                    void useSelectedProjectData()
+                  }}
                   className="border-border text-foreground-muted hover:bg-white/5 flex items-center gap-2"
                 >
                   {loadingProjectData ? <Spinner className="size-3.5" /> : <FolderOpen className="w-3.5 h-3.5" />}
