@@ -73,8 +73,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Reference materials are shared with unauthenticated guest vendors on the RFP
+    // response page, so they need a publicly-fetchable blob URL (no signed token) —
+    // unlike NDAs/contracts/other agency documents, which stay private by default.
+    const isPubliclySharedDocument = folder.startsWith('reference-materials')
+
     const filename = `${folder}/${user.id}/${timestamp}-${file.name}`
-    const blob = await put(filename, file, { access: 'private' })
+    const blob = await put(filename, file, { access: isPubliclySharedDocument ? 'public' : 'private' })
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, pathname: blob.pathname })
     return NextResponse.json({

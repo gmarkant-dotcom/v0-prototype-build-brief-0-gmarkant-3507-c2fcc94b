@@ -14,7 +14,8 @@ import { Spinner } from "@/components/ui/spinner"
 import { HolographicBlobs } from "@/components/holographic-blobs"
 import { formatDateTime, cn } from "@/lib/utils"
 import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal } from "@/lib/rfp-response-fields"
-import { Paperclip, X, ChevronDown, ChevronUp, ExternalLink, Pencil } from "lucide-react"
+import type { ReferenceMaterial } from "@/components/reference-materials-input"
+import { Paperclip, X, ChevronDown, ChevronUp, ExternalLink, Pencil, Download, FileText } from "lucide-react"
 
 const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "MXN", "BRL", "AED", "SGD"]
 const SCHEDULE_OPTIONS = ["Milestone-based", "Net 30", "Net 60", "Net 90", "Upon completion"]
@@ -63,6 +64,7 @@ type BasePayload = {
   project: ProjectData
   scopeItem: ScopeItemData
   agency: AgencyData
+  reference_materials?: ReferenceMaterial[]
 }
 type ActivePayload = BasePayload & { status: "active" }
 type SubmittedPayload = BasePayload & { status: "submitted"; response: SubmittedResponse }
@@ -316,7 +318,7 @@ export default function GuestRfpRespondPage() {
     )
   }
 
-  const { project, scopeItem, agency, token: tokenRow } = payload
+  const { project, scopeItem, agency, token: tokenRow, reference_materials: referenceMaterials = [] } = payload
   const hasSubmittedBid = payload.status === "submitted"
   const response = hasSubmittedBid ? payload.response : null
   const showForm = !hasSubmittedBid || isEditingBid
@@ -407,6 +409,34 @@ export default function GuestRfpRespondPage() {
               </div>
               {project.description && (
                 <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">{project.description}</p>
+              )}
+              {referenceMaterials.length > 0 && (
+                <div className="pt-3 border-t border-border/30 space-y-2">
+                  <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider">
+                    Reference Materials
+                  </div>
+                  {referenceMaterials.map((material, i) => (
+                    <a
+                      key={`${material.url}-${i}`}
+                      href={material.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-white/5 hover:border-accent/40 transition-colors"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4 text-accent" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-foreground truncate">{material.label}</div>
+                      </div>
+                      {material.type === "link" ? (
+                        <ExternalLink className="w-3.5 h-3.5 text-foreground-muted shrink-0" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5 text-foreground-muted shrink-0" />
+                      )}
+                    </a>
+                  ))}
+                </div>
               )}
               {scopeItem?.name && (
                 <div className="pt-3 border-t border-border/30">

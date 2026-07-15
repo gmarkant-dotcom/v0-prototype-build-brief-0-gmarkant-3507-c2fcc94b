@@ -17,6 +17,7 @@ import { AgencyRfpMagicLinkInvite } from "@/components/agency-rfp-magic-link-inv
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, ChevronDown, Check, Send, Shield, FileCheck, Loader2, Sparkles, X, Zap } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/file-upload"
+import { ReferenceMaterialsInput, type ReferenceMaterial } from "@/components/reference-materials-input"
 import { readTextStream } from "@/lib/read-text-stream"
 
 // Types
@@ -213,6 +214,7 @@ function AgencyRFPContent() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (!user || cancelled) return
+        setAgencyId(user.id)
         const { data: profile } = await supabase
           .from("profiles")
           .select("default_nda_url")
@@ -386,6 +388,8 @@ function AgencyRFPContent() {
   const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
   const [defaultNdaUrl, setDefaultNdaUrl] = useState("")
   const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
+  const [agencyId, setAgencyId] = useState<string | null>(null)
+  const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterial[]>([])
 
   const DRAFT_KEY = (projectId: string) => `ligament-rfp-draft-${projectId}`
 
@@ -851,6 +855,28 @@ function AgencyRFPContent() {
     return outsourcedItems.every(item => getRecipientCount(item.id) > 0)
   }
   
+  const saveReferenceMaterialsToLibrary = async (materials: ReferenceMaterial[]) => {
+    for (const material of materials) {
+      try {
+        await fetch("/api/agency/library-documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            section: "agency",
+            kind: "other",
+            label: material.label,
+            source_type: material.type === "link" ? "url" : "file",
+            external_url: material.type === "link" ? material.url : null,
+            blob_url: material.type === "file" ? material.url : null,
+            file_name: material.type === "file" ? material.label : null,
+          }),
+        })
+      } catch (err) {
+        console.error("Failed to save reference material to library:", material.label, err)
+      }
+    }
+  }
+
   // Broadcast RFPs (persist per-recipient rows for partner inbox when not demo)
   const broadcastRfps = async () => {
     setBroadcastError(null)
@@ -913,7 +939,7 @@ function AgencyRFPContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: selectedProject?.id ?? null,
-          masterRfp,
+          masterRfp: { ...masterRfp, referenceMaterials },
           ndaRequired: ndaSignatureRequired,
           ndaLink: ndaSignatureRequired ? ndaSigningLink.trim() : "",
           response_deadline: responseDeadline,
@@ -939,12 +965,16 @@ function AgencyRFPContent() {
                 project_id: selectedProject.id,
                 scope_item_name: recipient.scopeItem.name,
                 scope_item_description: recipient.scopeItem.description,
+                reference_materials: referenceMaterials,
               }),
             })
           } catch (magicLinkErr) {
             console.error("Magic link invite failed:", recipient.email, magicLinkErr)
           }
         }
+      }
+      if (referenceMaterials.length > 0) {
+        await saveReferenceMaterialsToLibrary(referenceMaterials)
       }
       setBroadcastComplete(true)
     } catch (e) {
@@ -1426,7 +1456,13 @@ function AgencyRFPContent() {
               </div>
             </GlassCard>
             )}
-            
+
+            <ReferenceMaterialsInput
+              projectId={selectedProject?.id ?? null}
+              agencyId={agencyId ?? ""}
+              onChange={setReferenceMaterials}
+            />
+
             {/* Output format template + SOW (RFP format drives Generate Master RFP) */}
             <GlassCard>
               <GlassCardHeader

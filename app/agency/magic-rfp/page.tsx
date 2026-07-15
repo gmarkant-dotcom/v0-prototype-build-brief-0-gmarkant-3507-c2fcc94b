@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Spinner } from "@/components/ui/spinner"
+import { ReferenceMaterialsInput, type ReferenceMaterial } from "@/components/reference-materials-input"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
@@ -75,6 +76,8 @@ function MagicRfpContent() {
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [brief, setBrief] = useState<BriefData>(EMPTY_BRIEF)
   const [loadingProjectData, setLoadingProjectData] = useState(false)
+  const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterial[]>([])
+  const [agencyId, setAgencyId] = useState<string | null>(null)
 
   const [recipients, setRecipients] = useState<RecipientRow[]>([newRecipientRow()])
   const [sending, setSending] = useState(false)
@@ -109,6 +112,11 @@ function MagicRfpContent() {
     return () => {
       Object.values(debounceTimers.current).forEach((t) => clearTimeout(t))
     }
+  }, [])
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => setAgencyId(user?.id ?? null))
   }, [])
 
   const useSelectedProjectData = async () => {
@@ -198,6 +206,7 @@ function MagicRfpContent() {
             project_id: selectedProject?.id ?? null,
             scope_item_name: brief.projectName,
             scope_item_description: brief.scopeDescription,
+            reference_materials: referenceMaterials,
           }),
         })
         const data = await res.json().catch(() => ({}))
@@ -214,9 +223,34 @@ function MagicRfpContent() {
       }
       if (i < recipients.length - 1) await sleep(100)
     }
+    if (referenceMaterials.length > 0 && results.some((r) => r.success)) {
+      await saveReferenceMaterialsToLibrary(referenceMaterials)
+    }
     setSendResults(results)
     setSending(false)
     setStep(3)
+  }
+
+  const saveReferenceMaterialsToLibrary = async (materials: ReferenceMaterial[]) => {
+    for (const material of materials) {
+      try {
+        await fetch("/api/agency/library-documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            section: "agency",
+            kind: "other",
+            label: material.label,
+            source_type: material.type === "link" ? "url" : "file",
+            external_url: material.type === "link" ? material.url : null,
+            blob_url: material.type === "file" ? material.url : null,
+            file_name: material.type === "file" ? material.label : null,
+          }),
+        })
+      } catch (err) {
+        console.error("Failed to save reference material to library:", material.label, err)
+      }
+    }
   }
 
   const copyAllLinks = async () => {
@@ -367,6 +401,12 @@ function MagicRfpContent() {
                     />
                   </div>
                 </div>
+
+                <ReferenceMaterialsInput
+                  projectId={selectedProject?.id ?? null}
+                  agencyId={agencyId ?? ""}
+                  onChange={setReferenceMaterials}
+                />
               </div>
             </GlassCard>
 

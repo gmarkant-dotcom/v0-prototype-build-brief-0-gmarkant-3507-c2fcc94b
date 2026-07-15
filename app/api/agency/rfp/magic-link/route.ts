@@ -53,6 +53,19 @@ export async function POST(request: NextRequest) {
     const scopeItemId = UUID_RE.test(rawScopeItemId) ? rawScopeItemId : null
     const scopeItemName = String(body.scope_item_name || "").trim() || null
     const scopeItemDescription = String(body.scope_item_description || "").trim() || null
+    const referenceMaterials = Array.isArray(body.reference_materials)
+      ? body.reference_materials
+          .filter(
+            (m: unknown): m is { type: string; label: string; url: string; created_at: string } =>
+              !!m &&
+              typeof m === "object" &&
+              ("type" in m) &&
+              ((m as Record<string, unknown>).type === "link" || (m as Record<string, unknown>).type === "file") &&
+              typeof (m as Record<string, unknown>).url === "string" &&
+              typeof (m as Record<string, unknown>).label === "string"
+          )
+          .slice(0, 20)
+      : []
 
     if (!vendorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vendorEmail)) {
       return NextResponse.json({ error: "A valid vendor email is required" }, { status: 400 })
@@ -96,6 +109,7 @@ export async function POST(request: NextRequest) {
           scope_item_id: scopeItemId,
           scope_item_name: scopeItemName,
           scope_item_description: scopeItemDescription,
+          reference_materials: referenceMaterials,
           token,
           expires_at,
           status: "pending",

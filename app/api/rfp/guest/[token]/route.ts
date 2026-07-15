@@ -132,6 +132,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     const scopeItem = tokenRow.scope_item_name
       ? { name: tokenRow.scope_item_name, description: tokenRow.scope_item_description || null }
       : null
+    const referenceMaterials = Array.isArray(tokenRow.reference_materials) ? tokenRow.reference_materials : []
 
     if (tokenRow.status === "submitted" && tokenRow.response_id) {
       const { data: response, error: responseErr } = await supabase
@@ -150,6 +151,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
         project,
         scopeItem,
         agency,
+        reference_materials: referenceMaterials,
         response: response
           ? {
               ...response,
@@ -162,7 +164,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     }
 
     console.log("[api] success", { route, method: "GET", token, status: "active" })
-    return NextResponse.json({ status: "active", token: tokenRow, project, scopeItem, agency })
+    return NextResponse.json({
+      status: "active",
+      token: tokenRow,
+      project,
+      scopeItem,
+      agency,
+      reference_materials: referenceMaterials,
+    })
   } catch (error) {
     console.error("[api] failure", {
       route,

@@ -49,6 +49,7 @@ bid management, onboarding, active engagements, and cash flow.
 | 051 | Added msa_confirmed_at timestamptz, msa_confirmed_by uuid to partnerships |
 | 057 | Magic link guest RFP flow: dropped NOT NULL on partner_rfp_responses.inbox_item_id and .partner_id; added scope_item_name/scope_item_description text to rfp_magic_tokens; unique index on rfp_magic_tokens(agency_id, project_id, vendor_email) |
 | 058 | Added submitted_at timestamptz to partner_rfp_responses (backfilled from updated_at); required for the guest "Edit Bid" flow to re-stamp submission time |
+| 059 | Added reference_materials jsonb (default '[]') to rfp_magic_tokens; Lightning RFP files/links shown on the guest response page |
 
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
