@@ -228,22 +228,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Failed to update bid response" }, { status: 500 })
     }
 
-    const { error: inboxStatusErr } = await supabase
-      .from("partner_rfp_inbox")
-      .update({ status: mapResponseStatusToInboxStatus(nextStatus), updated_at: new Date().toISOString() })
-      .eq("id", existing.inbox_item_id)
-      .eq("agency_id", user.id)
-    if (inboxStatusErr) {
-      console.error("[api] PATCH partner_rfp_inbox status sync failed", {
-        route,
-        responseId: id,
-        inbox_item_id: existing.inbox_item_id,
-        userId: user.id,
-        nextStatus,
-        message: inboxStatusErr.message,
-        code: inboxStatusErr.code,
-      })
-      return NextResponse.json({ error: "Bid updated but inbox status sync failed." }, { status: 500 })
+    // Guest (Lightning RFP Magic Link) submissions have no partner_rfp_inbox row — inbox_item_id
+    // is null by design (see app/api/rfp/guest/[token]/route.ts). Skip the sync silently rather
+    // than attempting a query with a null id and treating the no-op as a failure.
+    if (existing.inbox_item_id) {
+      const { error: inboxStatusErr } = await supabase
+        .from("partner_rfp_inbox")
+        .update({ status: mapResponseStatusToInboxStatus(nextStatus), updated_at: new Date().toISOString() })
+        .eq("id", existing.inbox_item_id)
+        .eq("agency_id", user.id)
+      if (inboxStatusErr) {
+        console.error("[api] PATCH partner_rfp_inbox status sync failed", {
+          route,
+          responseId: id,
+          inbox_item_id: existing.inbox_item_id,
+          userId: user.id,
+          nextStatus,
+          message: inboxStatusErr.message,
+          code: inboxStatusErr.code,
+        })
+        return NextResponse.json({ error: "Bid updated but inbox status sync failed." }, { status: 500 })
+      }
     }
 
     if (shouldSendAgencyFeedbackEmail) {
