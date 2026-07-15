@@ -2,15 +2,17 @@
 
 import { useState, useMemo, useCallback } from "react"
 import Link from "next/link"
+import { mutate } from "swr"
 import { AgencyLayout } from "@/components/agency-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn, formatDateTime } from "@/lib/utils"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, Users, AlertTriangle, Clock, CheckCircle, XCircle,
-  Paperclip, ExternalLink, Link as LinkIcon,
+  Paperclip, ExternalLink, Link as LinkIcon, Star, CalendarDays, Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -20,7 +22,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
+
+const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -193,6 +207,21 @@ function BidCard({
 
 function BidDetailDialog({ row, onClose }: { row: BidRow | null; onClose: () => void }) {
   if (!row) return null
+  // Key by id so switching to a different bid gets a fresh instance — local action/feedback
+  // state below must not leak from one bid's dialog session into another's.
+  return <BidDetailDialogInner key={row.id} initialRow={row} onClose={onClose} />
+}
+
+function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onClose: () => void }) {
+  const [row, setRow] = useState(initialRow)
+  const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [feedbackDraft, setFeedbackDraft] = useState((initialRow.agency_feedback || "").trim())
+  const [feedbackSaved, setFeedbackSaved] = useState(false)
+  const [declineReason, setDeclineReason] = useState("")
+  const [awardConfirmOpen, setAwardConfirmOpen] = useState(false)
+  const [shortlistHover, setShortlistHover] = useState(false)
+  const [meetingHover, setMeetingHover] = useState(false)
 
   const badge = statusBadge(row.status)
   const scope = row.inbox?.scope_item_name || row.project_name || "Scope"
@@ -201,124 +230,332 @@ function BidDetailDialog({ row, onClose }: { row: BidRow | null; onClose: () => 
   const isGuest = !row.partner_id && row.response_exists
   const identity = isGuest ? row.vendor_email || row.partner_display_name : row.partner_display_name
   const projectId = row.inbox?.project_id
+  const canMutate = Boolean(row.response_id)
+  const isAwarded = row.status === "awarded"
+
+  // Same endpoint, payload shapes, and local-merge pattern as the original per-row actions
+  // in components/agency-broadcast-responses.tsx — just scoped to a single row here.
+  const patchResponse = async (payload: Record<string, unknown>) => {
+    setBusy(true)
+    setActionError(null)
+    try {
+      const res = await fetch(`/api/agency/rfp-responses/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || "Failed to update response")
+      setRow((prev) => ({ ...prev, ...(data.response || prev) }))
+      if ("agency_feedback" in payload) {
+        setFeedbackSaved(true)
+        setTimeout(() => setFeedbackSaved(false), 3000)
+      }
+      void mutate(RFP_RESPONSES_URL)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to update")
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="bg-card border-border text-foreground max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="font-display flex items-center gap-2 flex-wrap">
-            {scope}
-            <span
-              className={cn(
-                "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider",
-                badge.bg, badge.text
-              )}
-            >
-              {badge.label}
-            </span>
-            {isGuest && (
-              <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider">
-                Guest Submission
+    <>
+      <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+        <DialogContent className="bg-card border-border text-foreground max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-display flex items-center gap-2 flex-wrap">
+              {scope}
+              <span
+                className={cn(
+                  "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider",
+                  badge.bg, badge.text
+                )}
+              >
+                {badge.label}
               </span>
-            )}
-          </DialogTitle>
-          <DialogDescription className="text-foreground-muted">
-            {[identity, row.client_name, row.project_name].filter(Boolean).join(" · ")}
-          </DialogDescription>
-        </DialogHeader>
+              {isGuest && (
+                <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider">
+                  Guest Submission
+                </span>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-foreground-muted">
+              {[identity, row.client_name, row.project_name].filter(Boolean).join(" · ")}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          {!row.response_exists ? (
-            <p className="text-sm text-foreground-muted">Awaiting partner response.</p>
-          ) : (
-            <>
-              {row.proposal_text && (
-                <div>
-                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
-                  <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                    {row.proposal_text}
-                  </p>
-                </div>
-              )}
-              {(budget || timeline) && (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {budget && (
-                    <div>
-                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Budget</div>
-                      <div className="text-sm text-foreground">{budget}</div>
-                    </div>
-                  )}
-                  {timeline && (
-                    <div>
-                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Timeline</div>
-                      <div className="text-sm text-foreground">{timeline}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-              {row.payment_terms && (
-                <div>
-                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Payment Terms</div>
-                  <div className="text-sm text-foreground space-y-1">
-                    {row.payment_terms.deposit_required_pct != null && (
-                      <p>Deposit: {row.payment_terms.deposit_required_pct}%</p>
-                    )}
-                    {row.payment_terms.payment_schedule_preference && (
-                      <p>Schedule: {row.payment_terms.payment_schedule_preference}</p>
-                    )}
-                    {row.payment_terms.additional_notes && <p>Notes: {row.payment_terms.additional_notes}</p>}
+          <div className="space-y-4">
+            {!row.response_exists ? (
+              <p className="text-sm text-foreground-muted">Awaiting partner response.</p>
+            ) : (
+              <>
+                {row.proposal_text && (
+                  <div>
+                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
+                    <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                      {row.proposal_text}
+                    </p>
                   </div>
-                </div>
-              )}
-              {row.attachments && row.attachments.length > 0 && (
-                <div>
-                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
-                  <ul className="space-y-1.5">
-                    {row.attachments.map((a, i) => (
-                      <li key={`${a.url}-${i}`}>
-                        <a
-                          href={a.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 font-mono text-xs text-accent hover:underline"
-                        >
-                          {a.type === "link" ? (
-                            <LinkIcon className="w-3 h-3" />
-                          ) : (
-                            <Paperclip className="w-3 h-3" />
-                          )}
-                          {a.label}
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {row.agency_feedback && (
-                <div>
-                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Your Feedback</div>
-                  <p className="text-sm text-foreground-muted whitespace-pre-wrap">{row.agency_feedback}</p>
-                </div>
-              )}
-              {row.submitted_at && (
-                <div className="font-mono text-[10px] text-foreground-muted">
-                  Submitted {formatDateTime(row.submitted_at)}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                )}
+                {(budget || timeline) && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {budget && (
+                      <div>
+                        <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Budget</div>
+                        <div className="text-sm text-foreground">{budget}</div>
+                      </div>
+                    )}
+                    {timeline && (
+                      <div>
+                        <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Timeline</div>
+                        <div className="text-sm text-foreground">{timeline}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {row.payment_terms && (
+                  <div>
+                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Payment Terms</div>
+                    <div className="text-sm text-foreground space-y-1">
+                      {row.payment_terms.deposit_required_pct != null && (
+                        <p>Deposit: {row.payment_terms.deposit_required_pct}%</p>
+                      )}
+                      {row.payment_terms.payment_schedule_preference && (
+                        <p>Schedule: {row.payment_terms.payment_schedule_preference}</p>
+                      )}
+                      {row.payment_terms.additional_notes && <p>Notes: {row.payment_terms.additional_notes}</p>}
+                    </div>
+                  </div>
+                )}
+                {row.attachments && row.attachments.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
+                    <ul className="space-y-1.5">
+                      {row.attachments.map((a, i) => (
+                        <li key={`${a.url}-${i}`}>
+                          <a
+                            href={a.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 font-mono text-xs text-accent hover:underline"
+                          >
+                            {a.type === "link" ? (
+                              <LinkIcon className="w-3 h-3" />
+                            ) : (
+                              <Paperclip className="w-3 h-3" />
+                            )}
+                            {a.label}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {row.submitted_at && (
+                  <div className="font-mono text-[10px] text-foreground-muted">
+                    Submitted {formatDateTime(row.submitted_at)}
+                  </div>
+                )}
 
-        {projectId && (
-          <DialogFooter>
-            <Button asChild variant="outline" className="border-border text-foreground hover:bg-white/5">
-              <Link href={`/agency/projects/${projectId}`}>Go to Project</Link>
-            </Button>
-          </DialogFooter>
-        )}
-      </DialogContent>
-    </Dialog>
+                {canMutate && (
+                  <div>
+                    <label className="block font-mono text-[10px] uppercase text-foreground-muted mb-1">
+                      Agency Feedback
+                    </label>
+                    <Textarea
+                      value={feedbackDraft}
+                      onChange={(e) => setFeedbackDraft(e.target.value)}
+                      placeholder="Share notes or next steps for the partner…"
+                      className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 min-h-[90px]"
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-border text-foreground hover:bg-white/5"
+                        disabled={busy}
+                        onClick={() =>
+                          patchResponse({
+                            agency_feedback: feedbackDraft,
+                            status: row.status === "submitted" ? "under_review" : row.status,
+                          })
+                        }
+                      >
+                        {busy ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : null}
+                        Save Feedback
+                      </Button>
+                      {feedbackSaved && (
+                        <span className="inline-flex items-center gap-1 text-xs text-green-500">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          Feedback submitted
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {actionError && (
+                  <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+                    {actionError}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {(canMutate || projectId) && (
+            <DialogFooter className="flex-wrap gap-2 sm:justify-start">
+              {canMutate && (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={row.status === "meeting_requested" ? "default" : "outline"}
+                    className={cn(
+                      row.status === "meeting_requested"
+                        ? meetingHover
+                          ? "bg-slate-600 hover:bg-slate-600/90 text-white"
+                          : "bg-cyan-600 hover:bg-cyan-600/90 text-white"
+                        : "border-cyan-400/40 bg-cyan-900/30 text-cyan-100 hover:bg-cyan-900/45"
+                    )}
+                    onMouseEnter={() => row.status === "meeting_requested" && setMeetingHover(true)}
+                    onMouseLeave={() => row.status === "meeting_requested" && setMeetingHover(false)}
+                    onClick={() =>
+                      patchResponse({ status: row.status === "meeting_requested" ? "under_review" : "meeting_requested" })
+                    }
+                    disabled={busy || isAwarded}
+                  >
+                    <CalendarDays
+                      className={cn(
+                        "w-3.5 h-3.5 mr-1.5",
+                        row.status === "meeting_requested" && !meetingHover && "fill-current"
+                      )}
+                    />
+                    {row.status === "meeting_requested"
+                      ? meetingHover
+                        ? "Cancel Meeting Request"
+                        : "Meeting Requested"
+                      : "Request Meeting"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={row.status === "shortlisted" ? "default" : "outline"}
+                    className={cn(
+                      row.status === "shortlisted"
+                        ? shortlistHover
+                          ? "bg-red-600 hover:bg-red-600/90 text-white"
+                          : "bg-purple-600 hover:bg-purple-600/90 text-white"
+                        : "border-purple-400/40 bg-purple-900/30 text-purple-100 hover:bg-purple-900/45"
+                    )}
+                    onMouseEnter={() => row.status === "shortlisted" && setShortlistHover(true)}
+                    onMouseLeave={() => row.status === "shortlisted" && setShortlistHover(false)}
+                    onClick={() => patchResponse({ status: row.status === "shortlisted" ? "under_review" : "shortlisted" })}
+                    disabled={busy || isAwarded}
+                  >
+                    <Star className={cn("w-3.5 h-3.5 mr-1.5", row.status === "shortlisted" && !shortlistHover && "fill-current")} />
+                    {row.status === "shortlisted" ? (shortlistHover ? "Remove from shortlist" : "Shortlisted") : "Shortlist"}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-600/90 text-white"
+                    onClick={() => setAwardConfirmOpen(true)}
+                    disabled={busy || isAwarded || isGuest}
+                    title={isGuest ? "Award isn't available yet for guest submissions — they aren't linked to a partner account." : undefined}
+                  >
+                    Award
+                  </Button>
+                  {row.status !== "declined" && (
+                    <Input
+                      value={declineReason}
+                      onChange={(e) => setDeclineReason(e.target.value)}
+                      placeholder="Optional decline reason"
+                      className="h-8 max-w-[180px] text-sm bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                    />
+                  )}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-red-400/40 bg-red-900/30 text-red-100 hover:bg-red-900/45"
+                    onClick={() => patchResponse({ status: "declined", decline_reason: declineReason })}
+                    disabled={busy || isAwarded || row.status === "declined"}
+                  >
+                    {row.status === "declined" ? "Declined" : "Decline"}
+                  </Button>
+                  {row.status === "declined" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-border text-foreground hover:bg-white/5"
+                      onClick={() => patchResponse({ status: "submitted" })}
+                      disabled={busy}
+                    >
+                      Undo Decline
+                    </Button>
+                  )}
+                  {isAwarded && projectId && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white border border-white/10"
+                      asChild
+                    >
+                      <Link href={`/agency/onboarding?projectId=${encodeURIComponent(projectId)}`} prefetch={false}>
+                        Start Onboarding
+                      </Link>
+                    </Button>
+                  )}
+                </>
+              )}
+              {projectId && (
+                <Button asChild variant="outline" className="border-border text-foreground hover:bg-white/5">
+                  <Link href={`/agency/projects/${projectId}`}>Go to Project</Link>
+                </Button>
+              )}
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={awardConfirmOpen} onOpenChange={setAwardConfirmOpen}>
+        <AlertDialogContent className="border border-white/15 bg-[#081F1F] text-foreground shadow-2xl sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-display text-foreground">Award this bid?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <p className="text-foreground/85 text-left text-sm leading-relaxed">
+                You&apos;re about to award <span className="font-semibold text-foreground">{row.partner_display_name}</span>{" "}
+                the <span className="font-semibold text-foreground">{scope}</span>. This action cannot be undone. The
+                partner will be notified immediately.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel type="button" className="border-border/60 text-foreground hover:bg-white/10 mt-0">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                type="button"
+                className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                disabled={busy}
+                onClick={() => {
+                  setAwardConfirmOpen(false)
+                  void patchResponse({ status: "awarded" })
+                }}
+              >
+                Confirm Award
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -426,9 +663,7 @@ export default function AgencyBidsPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>("client")
   const [viewingBid, setViewingBid] = useState<BidRow | null>(null)
 
-  const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(
-    "/api/agency/rfp-responses"
-  )
+  const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(RFP_RESPONSES_URL)
 
   const groups = useMemo(() => {
     const all = data?.responses ?? []
