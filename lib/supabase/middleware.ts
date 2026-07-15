@@ -27,7 +27,10 @@ export async function createMiddlewareClient(request: NextRequest) {
               // Ensure cookies persist across deployments
               sameSite: 'lax',
               secure: process.env.NODE_ENV === 'production',
-              httpOnly: true,
+              // Must stay readable by the browser client (@supabase/ssr manages the
+              // session via document.cookie on the client) — httpOnly here blocks
+              // createBrowserClient from ever seeing the session, causing
+              // AuthSessionMissingError immediately after login.
               maxAge: 60 * 60 * 24 * 7, // 7 days
             }),
           )
