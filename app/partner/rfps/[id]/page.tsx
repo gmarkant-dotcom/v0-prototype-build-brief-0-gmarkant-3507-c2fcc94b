@@ -584,7 +584,7 @@ export default function PartnerRfpDetailPage() {
       router.push(`/auth/login?redirect=${encodeURIComponent(returnPath)}`)
       return false
     }
-    const { data: profile, error: profileErr } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+    const { data: profile, error: profileErr } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).maybeSingle()
     if (profileErr) {
       console.error("[partner/rfps] ensurePartnerAuth profile select failed", {
         userId: user.id,
@@ -594,7 +594,8 @@ export default function PartnerRfpDetailPage() {
       setSubmitError("Could not verify your account. Try again.")
       return false
     }
-    if (profile?.role !== "partner") {
+    const isPartner = profile?.role === "partner" || profile?.active_role === "partner"
+    if (!isPartner) {
       setSubmitError("Only partner accounts can submit bid responses. Sign in with a partner profile.")
       return false
     }
