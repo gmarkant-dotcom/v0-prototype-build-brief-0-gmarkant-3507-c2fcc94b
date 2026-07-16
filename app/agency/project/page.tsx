@@ -7,7 +7,7 @@ import { useSelectedProject } from "@/contexts/selected-project-context"
 import { GlassCard } from "@/components/glass-card"
 import { cn } from "@/lib/utils"
 import { useFetch } from "@/hooks/useFetch"
-import { AgencyMsaContent } from "@/app/agency/msa/page"
+import { AgencyCashFlowContent } from "@/app/agency/msa/page"
 import {
   AlertTriangle, CheckCircle, Loader2, Users, Shield,
   X, ChevronDown, ChevronRight, DollarSign, Activity,
@@ -449,7 +449,7 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
 
 {tab === "cashflow" && (
             <div className="p-6">
-              <AgencyMsaContent hideProjectHeader />
+              <AgencyCashFlowContent hideProjectHeader />
             </div>
           )}
         </div>

@@ -197,12 +197,12 @@ function milestoneStatusBadge(status: string) {
 export default function AgencyMsaPage() {
   return (
     <AgencyLayout>
-      <AgencyMsaContent />
+      <AgencyCashFlowContent />
     </AgencyLayout>
   )
 }
 
-export function AgencyMsaContent({ hideProjectHeader = false }: { hideProjectHeader?: boolean } = {}) {
+export function AgencyCashFlowContent({ hideProjectHeader = false }: { hideProjectHeader?: boolean } = {}) {
   const projectContext = useSelectedProjectSafe()
   if (!projectContext) {
     return (
