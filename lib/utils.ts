@@ -27,3 +27,17 @@ export function formatDateTime(iso: string | null | undefined): string {
     hour12: true,
   })
 }
+
+/**
+ * "Mon DD, YYYY at H:MM AM/PM" (e.g. "Jul 16, 2026 at 2:30 PM") for bid submission timestamps.
+ * Returns null rather than a placeholder string - callers should render nothing for a
+ * draft/unsent bid instead of showing an error or dash.
+ */
+export function formatSubmittedAt(iso: string | null | undefined): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  const timePart = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+  return `${datePart} at ${timePart}`
+}

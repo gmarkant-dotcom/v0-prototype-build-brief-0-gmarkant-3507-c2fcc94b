@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
-import { cn, normalizeMeetingUrlForHref } from "@/lib/utils"
+import { cn, normalizeMeetingUrlForHref, formatSubmittedAt } from "@/lib/utils"
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { isDemoMode } from "@/lib/demo-data"
 import { createClient } from "@/lib/supabase/client"
@@ -209,6 +209,7 @@ type ResponseRow = {
   status: string
   agency_feedback?: string | null
   feedback_updated_at?: string | null
+  submitted_at?: string | null
   updated_at: string
 }
 
@@ -1140,6 +1141,11 @@ export default function PartnerRfpDetailPage() {
                   {currentStatus === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
                   {getBidStatusLabel(currentStatus, "partner")}
                 </span>
+                {formatSubmittedAt(existing?.submitted_at) && (
+                  <p className="font-mono text-[10px] text-gray-500 mt-2">
+                    Submitted {formatSubmittedAt(existing?.submitted_at)}
+                  </p>
+                )}
               </div>
 
               {existing?.agency_feedback && (

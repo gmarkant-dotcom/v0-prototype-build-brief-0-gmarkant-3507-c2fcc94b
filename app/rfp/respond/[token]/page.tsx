@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Spinner } from "@/components/ui/spinner"
 import { HolographicBlobs } from "@/components/holographic-blobs"
-import { formatDateTime, cn } from "@/lib/utils"
+import { formatDateTime, formatSubmittedAt, cn } from "@/lib/utils"
 import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal } from "@/lib/rfp-response-fields"
 import type { ReferenceMaterial } from "@/components/reference-materials-input"
 import {
@@ -923,11 +923,13 @@ export default function GuestRfpRespondPage() {
             ) : (
               response && (
                 <div className="rounded-2xl border border-border/30 bg-white/5 p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="font-mono text-[10px] uppercase text-accent tracking-wider">
-                      Submitted {formatDateTime(response.submitted_at) || formatDateTime(tokenRow.submitted_at) || ""}
+                  {(formatSubmittedAt(response.submitted_at) || formatSubmittedAt(tokenRow.submitted_at)) && (
+                    <div className="flex items-center justify-between">
+                      <div className="font-mono text-[10px] uppercase text-accent tracking-wider">
+                        Submitted {formatSubmittedAt(response.submitted_at) || formatSubmittedAt(tokenRow.submitted_at)}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div>
                     <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
                     <p
@@ -1062,7 +1064,7 @@ export default function GuestRfpRespondPage() {
                       <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0" />
                       <span className="text-sm text-foreground">Bid submitted</span>
                       <span className="font-mono text-[10px] text-foreground-muted ml-auto">
-                        {formatDateTime(response?.submitted_at || tokenRow.submitted_at) || "—"}
+                        {formatSubmittedAt(response?.submitted_at || tokenRow.submitted_at)}
                       </span>
                     </li>
                   )}

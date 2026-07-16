@@ -5,7 +5,7 @@ import Link from "next/link"
 import { mutate } from "swr"
 import { AgencyLayout } from "@/components/agency-layout"
 import { useFetch } from "@/hooks/useFetch"
-import { cn, formatDateTime } from "@/lib/utils"
+import { cn, formatSubmittedAt } from "@/lib/utils"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, Users, AlertTriangle, Clock, CheckCircle, XCircle,
@@ -152,6 +152,7 @@ function BidCard({
   const scope = row.inbox?.scope_item_name || row.project_name || "Scope"
   const deadline = formatDeadline(row.inbox?.response_deadline)
   const budget = bestBudgetDisplay(row)
+  const submittedAt = formatSubmittedAt(row.submitted_at)
 
   return (
     <div className="flex items-start gap-4 p-4 rounded-lg border border-border/40 bg-white/5 hover:bg-white/8 transition-colors">
@@ -203,6 +204,11 @@ function BidCard({
             </>
           )}
         </div>
+        {submittedAt && (
+          <div className="font-mono text-[10px] text-foreground-muted/70 mt-1">
+            Submitted {submittedAt}
+          </div>
+        )}
       </div>
       <button
         type="button"
@@ -380,9 +386,9 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
                     </ul>
                   </div>
                 )}
-                {row.submitted_at && (
+                {formatSubmittedAt(row.submitted_at) && (
                   <div className="font-mono text-[10px] text-foreground-muted">
-                    Submitted {formatDateTime(row.submitted_at)}
+                    Submitted {formatSubmittedAt(row.submitted_at)}
                   </div>
                 )}
 
