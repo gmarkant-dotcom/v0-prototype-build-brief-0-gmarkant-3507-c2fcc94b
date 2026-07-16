@@ -383,6 +383,7 @@ When a lead agency manually enters an email address in the RFP broadcast:
 | P4 | Pool page SWR conversion | `loadPartnerships` / `loadAccessRequests` in `/agency/pool` still use raw useEffect + fetch. Convert to `useFetch`. |
 | P5 | Supabase Pro upgrade | When first paying customer lands - unlocks pgBouncer Transaction mode. |
 | P6 | `/api/projects/[id]` session fix | Route exists but session auth broken. Frontend works around it. Long-term: fix by adding to middleware matcher carefully or migrate to service role key. |
+| P7 | Rename `AgencyMsaContent` to `AgencyCashFlowContent` | Component in `app/agency/msa/page.tsx` is misnamed - it renders the Cash Flow & Payments feature (client cash flow, payment milestones, AI Payment Synthesis), not MSA agreement content. `/agency/cashflow` correctly imports and renders it. Rename-only refactor, low priority. |
 
 ---
 
