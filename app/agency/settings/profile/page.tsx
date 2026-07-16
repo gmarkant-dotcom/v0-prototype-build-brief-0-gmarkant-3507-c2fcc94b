@@ -7,9 +7,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Checkbox } from "@/components/ui/checkbox"
 import { createClient } from "@/lib/supabase/client"
 import { Camera, Loader2 } from "lucide-react"
 import { isDemoMode } from "@/lib/demo-data"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  type BusinessCriteriaHolds,
+  type DesignationHolds,
+  emptyBusinessCriteriaHolds,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
 
 const disciplines = [
   "Video Production",
@@ -103,6 +112,7 @@ export default function AgencyProfileSettingsPage() {
     payment_terms: "net_30",
     payment_terms_custom: "",
   })
+  const [businessCriteria, setBusinessCriteria] = useState<BusinessCriteriaHolds>(emptyBusinessCriteriaHolds())
 
   useEffect(() => {
     const load = async () => {
@@ -117,7 +127,7 @@ export default function AgencyProfileSettingsPage() {
       const { data: profile } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, company_linkedin_url, default_nda_url, is_discoverable, bio, location, agency_type, avatar_url, company_logo_url, meeting_url, payment_terms, payment_terms_custom"
+          "id, role, email, full_name, company_name, company_website, company_linkedin_url, default_nda_url, is_discoverable, bio, location, agency_type, avatar_url, company_logo_url, meeting_url, payment_terms, payment_terms_custom, business_criteria"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -143,6 +153,7 @@ export default function AgencyProfileSettingsPage() {
         payment_terms: (profile as { payment_terms?: string | null }).payment_terms || "net_30",
         payment_terms_custom: (profile as { payment_terms_custom?: string | null }).payment_terms_custom || "",
       })
+      setBusinessCriteria(withBusinessCriteriaDefaults((profile as { business_criteria?: unknown }).business_criteria))
       if (typeof window !== "undefined") {
         const savedDiscipline = localStorage.getItem("agencyPrimaryDiscipline")
         const savedCaps = localStorage.getItem("agencySelectedCapabilities")
@@ -214,6 +225,23 @@ export default function AgencyProfileSettingsPage() {
     }
   }, [loading])
 
+  const updateDesignation = (key: (typeof DESIGNATION_KEYS)[number], patch: Partial<DesignationHolds>) => {
+    setBusinessCriteria((prev) => ({
+      ...prev,
+      designations: {
+        ...prev.designations,
+        [key]: { ...prev.designations[key], ...patch },
+      },
+    }))
+  }
+
+  const updateCompanyFacts = (patch: Partial<BusinessCriteriaHolds["company_facts"]>) => {
+    setBusinessCriteria((prev) => ({
+      ...prev,
+      company_facts: { ...prev.company_facts, ...patch },
+    }))
+  }
+
   const saveProfile = async () => {
     setSaving(true)
     setMessage(null)
@@ -239,6 +267,7 @@ export default function AgencyProfileSettingsPage() {
         payment_terms: form.payment_terms || "net_30",
         payment_terms_custom:
           form.payment_terms === "custom" ? form.payment_terms_custom.trim() || null : null,
+        business_criteria: businessCriteria,
         updated_at: new Date().toISOString(),
       })
       .eq("id", form.id)
@@ -593,6 +622,124 @@ export default function AgencyProfileSettingsPage() {
             </div>
             <Switch checked={form.is_discoverable} onCheckedChange={toggleDiscoverable} />
           </label>
+          <div className="pt-2 border-t border-border/40">
+            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-1">Business Profile</label>
+            <p className="text-xs text-foreground-muted mb-4">
+              Diversity and ownership designations, plus company facts used for procurement requirements.
+            </p>
+
+            <div className="space-y-3 mb-6">
+              {DESIGNATION_KEYS.map((key) => {
+                const designation = businessCriteria.designations[key]
+                return (
+                  <div key={key} className="rounded-lg border border-border/40 bg-white/[0.02] p-4">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <Checkbox
+                        checked={designation.holds}
+                        onCheckedChange={(checked) => updateDesignation(key, { holds: checked === true })}
+                        className="mt-0.5"
+                      />
+                      <div className="font-display font-bold text-sm text-foreground">{DESIGNATION_LABELS[key]}</div>
+                    </label>
+                    {designation.holds && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-7">
+                        <div>
+                          <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                            Certifying Body
+                          </label>
+                          <Input
+                            value={designation.certifying_body || ""}
+                            onChange={(e) => updateDesignation(key, { certifying_body: e.target.value || null })}
+                            placeholder="e.g. NMSDC, WBENC, NGLCC"
+                            className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                            disabled={designation.self_certified}
+                          />
+                        </div>
+                        <div>
+                          <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                            Certification Number
+                          </label>
+                          <Input
+                            value={designation.certification_number || ""}
+                            onChange={(e) => updateDesignation(key, { certification_number: e.target.value || null })}
+                            className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                            disabled={designation.self_certified}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <Checkbox
+                              checked={designation.self_certified}
+                              onCheckedChange={(checked) =>
+                                updateDesignation(key, {
+                                  self_certified: checked === true,
+                                  ...(checked === true ? { certifying_body: null, certification_number: null } : {}),
+                                })
+                              }
+                            />
+                            <span className="text-sm text-foreground-muted">
+                              Self-certified (no third-party certification)
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                  Years in Business
+                </label>
+                <Input
+                  type="number"
+                  value={businessCriteria.company_facts.years_in_business ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value
+                    updateCompanyFacts({ years_in_business: raw === "" ? null : Number(raw) })
+                  }}
+                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                />
+              </div>
+              <div>
+                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                  Union Signatory
+                </label>
+                <Input
+                  value={businessCriteria.company_facts.union_signatory}
+                  onChange={(e) => updateCompanyFacts({ union_signatory: e.target.value })}
+                  placeholder="e.g. SAG-AFTRA, IATSE"
+                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                  Sustainability Approach
+                </label>
+                <Textarea
+                  value={businessCriteria.company_facts.sustainability_approach}
+                  onChange={(e) => updateCompanyFacts({ sustainability_approach: e.target.value })}
+                  className="min-h-[90px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                  placeholder="Describe your sustainability practices."
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                  Workforce Diversity Summary
+                </label>
+                <Textarea
+                  value={businessCriteria.company_facts.workforce_diversity_summary}
+                  onChange={(e) => updateCompanyFacts({ workforce_diversity_summary: e.target.value })}
+                  className="min-h-[90px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                  placeholder="Describe your team's diversity."
+                />
+              </div>
+            </div>
+          </div>
+
           {message && <p className="text-sm text-foreground-muted">{message}</p>}
           <div className="flex justify-end">
             <Button onClick={saveProfile} disabled={saving} className="bg-accent text-accent-foreground hover:bg-accent/90">

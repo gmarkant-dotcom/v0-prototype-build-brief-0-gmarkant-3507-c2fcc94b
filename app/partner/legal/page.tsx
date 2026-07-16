@@ -10,6 +10,14 @@ import { isDemoMode } from "@/lib/demo-data"
 import { Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import {
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  type BusinessCriteriaHolds,
+  type InsuranceHolds,
+  emptyBusinessCriteriaHolds,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
 
 type Document = {
   id: string
@@ -93,7 +101,10 @@ export default function PartnerLegalPage() {
   })
   
   const [uploadError, setUploadError] = useState<string | null>(null)
-  
+  const [businessCriteria, setBusinessCriteria] = useState<BusinessCriteriaHolds>(emptyBusinessCriteriaHolds())
+  const [savingInsurance, setSavingInsurance] = useState(false)
+  const [insuranceMsg, setInsuranceMsg] = useState<string | null>(null)
+
   useEffect(() => {
     if (isDemo) return
     const ensurePartnerAuth = async () => {
@@ -115,7 +126,7 @@ export default function PartnerLegalPage() {
       const { data } = await supabase
         .from("profiles")
         .select(
-          "id, legal_entity_name, legal_entity_type, legal_ein, legal_address, legal_state_of_incorporation",
+          "id, legal_entity_name, legal_entity_type, legal_ein, legal_address, legal_state_of_incorporation, business_criteria",
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -131,9 +142,60 @@ export default function PartnerLegalPage() {
             (data as { legal_state_of_incorporation?: string | null }).legal_state_of_incorporation || "",
         }))
       }
+      setBusinessCriteria(withBusinessCriteriaDefaults((data as { business_criteria?: unknown } | null)?.business_criteria))
     }
     ensurePartnerAuth()
   }, [isDemo, router])
+
+  const updateInsurance = (key: (typeof INSURANCE_KEYS)[number], patch: Partial<InsuranceHolds>) => {
+    setBusinessCriteria((prev) => ({
+      ...prev,
+      insurance: {
+        ...prev.insurance,
+        [key]: { ...prev.insurance[key], ...patch },
+      },
+    }))
+  }
+
+  const updateCoiOnFile = (coi_on_file: boolean) => {
+    setBusinessCriteria((prev) => ({
+      ...prev,
+      insurance: { ...prev.insurance, coi_on_file },
+    }))
+  }
+
+  const saveInsurance = async () => {
+    setInsuranceMsg(null)
+    if (isDemo) {
+      setInsuranceMsg("Demo mode - insurance information is not persisted.")
+      return
+    }
+    setSavingInsurance(true)
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        router.push("/auth/login?redirect=%2Fpartner%2Flegal")
+        return
+      }
+      const target = profileId || user.id
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          business_criteria: businessCriteria,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", target)
+      if (error) throw error
+      setInsuranceMsg("Insurance information saved.")
+    } catch (error) {
+      setInsuranceMsg(error instanceof Error ? error.message : "Failed to save insurance information.")
+    } finally {
+      setSavingInsurance(false)
+    }
+  }
   const completedCount = documents.filter(d => d.status === "complete").length
   const totalCount = documents.length
   const completionPercentage = Math.round((completedCount / totalCount) * 100)
@@ -437,42 +499,72 @@ export default function PartnerLegalPage() {
         
         {/* Insurance Requirements */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-4">Insurance Requirements</h2>
-          <p className="text-sm text-gray-600 mb-6">
-            The following insurance coverages are required for project eligibility.
-          </p>
-          
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h2 className="font-display font-bold text-lg text-[#0C3535] mb-1">Insurance Requirements</h2>
+              <p className="text-sm text-gray-600">
+                Confirm the insurance coverages your company carries, with limits, for project eligibility.
+              </p>
+            </div>
+            <Button
+              onClick={saveInsurance}
+              disabled={savingInsurance}
+              className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90 shrink-0"
+            >
+              {savingInsurance ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Save Insurance
+            </Button>
+          </div>
+
           <div className="space-y-3">
-            {[
-              { name: "General Liability", amount: "$1,000,000", status: "verified" },
-              { name: "Professional Liability / E&O", amount: "$1,000,000", status: "verified" },
-              { name: "Workers Compensation", amount: "State Required", status: "not_required" },
-            ].map((insurance) => (
-              <div 
-                key={insurance.name}
-                className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200"
-              >
-                <div className="flex items-center gap-3">
-                  <Checkbox 
-                    checked={insurance.status === "verified"} 
-                    disabled
-                    className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
-                  />
-                  <div>
-                    <div className="font-display font-bold text-sm text-[#0C3535]">{insurance.name}</div>
-                    <div className="font-mono text-[10px] text-gray-500">Minimum: {insurance.amount}</div>
+            {INSURANCE_KEYS.map((key) => {
+              const coverage = businessCriteria.insurance[key]
+              return (
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-4 p-3 rounded-lg bg-gray-50 border border-gray-200"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Checkbox
+                      checked={coverage.has_coverage}
+                      onCheckedChange={(checked) => updateInsurance(key, { has_coverage: checked === true })}
+                      className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                    />
+                    <div className="font-display font-bold text-sm text-[#0C3535] truncate">
+                      {INSURANCE_LABELS[key]}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Input
+                      value={coverage.limit || ""}
+                      onChange={(e) => updateInsurance(key, { limit: e.target.value || null })}
+                      placeholder="e.g. $1M/$2M"
+                      className="border-gray-200 text-gray-900 placeholder:text-gray-500 w-36"
+                    />
+                    <span
+                      className={cn(
+                        "font-mono text-[10px] px-2 py-0.5 rounded-full",
+                        coverage.has_coverage ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                      )}
+                    >
+                      {coverage.has_coverage ? "covered" : "not covered"}
+                    </span>
                   </div>
                 </div>
-                <span className={cn(
-                  "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize",
-                  insurance.status === "verified" && "bg-green-100 text-green-700",
-                  insurance.status === "not_required" && "bg-gray-100 text-gray-600"
-                )}>
-                  {insurance.status.replace("_", " ")}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
+
+          <label className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-200 cursor-pointer">
+            <Checkbox
+              checked={businessCriteria.insurance.coi_on_file}
+              onCheckedChange={(checked) => updateCoiOnFile(checked === true)}
+              className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+            />
+            <span className="text-sm text-gray-700">Certificate of Insurance (COI) on file</span>
+          </label>
+
+          {insuranceMsg ? <p className="text-xs text-gray-600 mt-3">{insuranceMsg}</p> : null}
         </div>
       </div>
     </PartnerLayout>

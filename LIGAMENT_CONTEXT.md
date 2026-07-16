@@ -50,6 +50,7 @@ bid management, onboarding, active engagements, and cash flow.
 | 057 | Magic link guest RFP flow: dropped NOT NULL on partner_rfp_responses.inbox_item_id and .partner_id; added scope_item_name/scope_item_description text to rfp_magic_tokens; unique index on rfp_magic_tokens(agency_id, project_id, vendor_email) |
 | 058 | Added submitted_at timestamptz to partner_rfp_responses (backfilled from updated_at); required for the guest "Edit Bid" flow to re-stamp submission time |
 | 059 | Added reference_materials jsonb (default '[]') to rfp_magic_tokens; Lightning RFP files/links shown on the guest response page |
+| 060 | Business Criteria / Procurement Requirements: added business_criteria jsonb (default '{}') to profiles, business_criteria_required jsonb (default '{}') to rfp_magic_tokens, business_criteria_responses jsonb (default '{}') to partner_rfp_responses. Shape shared via lib/business-criteria.ts. Applied and verified - all three columns confirmed jsonb. |
 
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
@@ -384,6 +385,8 @@ When a lead agency manually enters an email address in the RFP broadcast:
 | P5 | Supabase Pro upgrade | When first paying customer lands - unlocks pgBouncer Transaction mode. |
 | P6 | `/api/projects/[id]` session fix | Route exists but session auth broken. Frontend works around it. Long-term: fix by adding to middleware matcher carefully or migrate to service role key. |
 | P7 | Rename `AgencyMsaContent` to `AgencyCashFlowContent` | Component in `app/agency/msa/page.tsx` is misnamed - it renders the Cash Flow & Payments feature (client cash flow, payment milestones, AI Payment Synthesis), not MSA agreement content. `/agency/cashflow` correctly imports and renders it. Rename-only refactor, low priority. |
+| P8 | Numeric insurance-limit parser | Business Criteria insurance limits/minimums (e.g. "$1M/$2M") are stored as free text. `compareBusinessCriteria()` in `lib/business-criteria.ts` only checks presence of coverage, not whether a held limit numerically satisfies a required minimum. Needed for automated minimum-sufficiency checks; v1 relies on manual review. |
+| P9 | `profiles.credentials` shape inconsistency | `app/partner/profile/page.tsx` writes it as an object array (`{ id, title, client, year, relevant_context }`); `app/agency/pool/page.tsx` writes it as a plain string array (add/remove tag pattern). Same column, two incompatible serializations. Not fixed - needs a decision on canonical shape plus a read-side migration for existing rows. |
 
 ---
 
