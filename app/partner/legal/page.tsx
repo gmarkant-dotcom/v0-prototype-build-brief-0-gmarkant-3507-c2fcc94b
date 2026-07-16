@@ -269,8 +269,10 @@ export default function PartnerLegalPage() {
   /**
    * COI is the only Required Documents row wired to real persistence (P10 backlog item covers
    * the rest, e.g. EIN Verification, which stay local-only status like handleFileUpload above).
-   * Uploads the file, then saves the URL and coi_on_file=true onto profiles.business_criteria
-   * in the same action, so the checklist survives a reload.
+   * Uploads through /api/partner/documents/upload (sanitizes the filename before building the
+   * blob pathname, unlike the generic /api/upload route), then saves the URL and
+   * coi_on_file=true onto profiles.business_criteria in the same action, so the checklist
+   * survives a reload.
    */
   const handleCoiUpload = async (file: File) => {
     setUploadingDocId("coi")
@@ -279,9 +281,9 @@ export default function PartnerLegalPage() {
     try {
       const formData = new FormData()
       formData.append("file", file)
-      formData.append("folder", "partner-legal")
+      formData.append("docId", "coi")
 
-      const response = await fetch("/api/upload", {
+      const response = await fetch("/api/partner/documents/upload", {
         method: "POST",
         body: formData,
       })
