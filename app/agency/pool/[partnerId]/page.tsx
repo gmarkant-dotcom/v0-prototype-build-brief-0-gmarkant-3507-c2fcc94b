@@ -31,6 +31,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
 
 const PAYMENT_TERM_LABELS: Record<string, string> = {
   net_15: "Net 15",
@@ -106,6 +113,7 @@ type ProfilePayload = {
     company_logo_url?: string | null
     meeting_url: string | null
     rate_info: PartnerRateInfoPayload
+    business_criteria?: unknown
     tags: string[]
   }
   engagement_history: Array<{
@@ -328,6 +336,19 @@ export default function AgencyPartnerProfilePage() {
   const msaOk = !!profile.partnership.msa_confirmed_at
   const ri = p.rate_info
 
+  const businessCriteria = withBusinessCriteriaDefaults(p.business_criteria)
+  const heldDesignations = DESIGNATION_KEYS.filter((key) => businessCriteria.designations[key].holds)
+  const heldInsurance = INSURANCE_KEYS.filter((key) => businessCriteria.insurance[key].has_coverage)
+  const hasDesignations = heldDesignations.length > 0
+  const hasInsurance = heldInsurance.length > 0 || businessCriteria.insurance.coi_on_file
+  const companyFacts = businessCriteria.company_facts
+  const hasCompanyFacts = Boolean(
+    companyFacts.years_in_business != null ||
+      companyFacts.union_signatory.trim() ||
+      companyFacts.sustainability_approach.trim() ||
+      companyFacts.workforce_diversity_summary.trim()
+  )
+
   return (
     <AgencyLayout>
       <div className="p-8 max-w-6xl mx-auto space-y-8">
@@ -481,6 +502,98 @@ export default function AgencyPartnerProfilePage() {
               )}
             </div>
           </GlassCard>
+
+          {hasDesignations && (
+            <GlassCard className="p-6">
+              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+                Business Designations
+              </h2>
+              <ul className="space-y-3 text-sm">
+                {heldDesignations.map((key) => {
+                  const designation = businessCriteria.designations[key]
+                  return (
+                    <li key={key}>
+                      <div className="text-foreground font-medium">{DESIGNATION_LABELS[key]}</div>
+                      {(designation.certifying_body || designation.certification_number) && (
+                        <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                          {[designation.certifying_body, designation.certification_number].filter(Boolean).join(" · ")}
+                        </div>
+                      )}
+                      {designation.self_certified && (
+                        <div className="font-mono text-[10px] text-foreground-muted mt-0.5">Self-certified</div>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            </GlassCard>
+          )}
+
+          {hasInsurance && (
+            <GlassCard className="p-6">
+              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+                Insurance Coverage
+              </h2>
+              <ul className="space-y-3 text-sm">
+                {heldInsurance.map((key) => {
+                  const coverage = businessCriteria.insurance[key]
+                  return (
+                    <li key={key} className="flex items-center justify-between gap-3">
+                      <span className="text-foreground font-medium">{INSURANCE_LABELS[key]}</span>
+                      <span className="font-mono text-[10px] text-foreground-muted">{coverage.limit || "No limit on file"}</span>
+                    </li>
+                  )
+                })}
+                <li className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+                  <span className="text-foreground font-medium">Certificate of Insurance</span>
+                  <span
+                    className={cn(
+                      "font-mono text-[10px] px-2 py-0.5 rounded-full",
+                      businessCriteria.insurance.coi_on_file
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-white/10 text-foreground-muted"
+                    )}
+                  >
+                    {businessCriteria.insurance.coi_on_file ? "On file" : "Not on file"}
+                  </span>
+                </li>
+              </ul>
+            </GlassCard>
+          )}
+
+          {hasCompanyFacts && (
+            <GlassCard className="p-6">
+              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+                Company Facts
+              </h2>
+              <dl className="space-y-3 text-sm">
+                {companyFacts.years_in_business != null && (
+                  <div>
+                    <dt className="font-mono text-[10px] text-foreground-muted uppercase">Years in Business</dt>
+                    <dd className="text-foreground">{companyFacts.years_in_business}</dd>
+                  </div>
+                )}
+                {companyFacts.union_signatory.trim() && (
+                  <div>
+                    <dt className="font-mono text-[10px] text-foreground-muted uppercase">Union Signatory</dt>
+                    <dd className="text-foreground">{companyFacts.union_signatory}</dd>
+                  </div>
+                )}
+                {companyFacts.sustainability_approach.trim() && (
+                  <div>
+                    <dt className="font-mono text-[10px] text-foreground-muted uppercase">Sustainability Approach</dt>
+                    <dd className="text-foreground whitespace-pre-wrap">{companyFacts.sustainability_approach}</dd>
+                  </div>
+                )}
+                {companyFacts.workforce_diversity_summary.trim() && (
+                  <div>
+                    <dt className="font-mono text-[10px] text-foreground-muted uppercase">Workforce Diversity Summary</dt>
+                    <dd className="text-foreground whitespace-pre-wrap">{companyFacts.workforce_diversity_summary}</dd>
+                  </div>
+                )}
+              </dl>
+            </GlassCard>
+          )}
 
           <GlassCard className="p-6">
             <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
