@@ -853,7 +853,7 @@ export default function AgencyBidsPage() {
         })
       : all
 
-    const map = new Map<string, BidRow[]>()
+    const map = new Map<string, { label: string; rows: BidRow[] }>()
     for (const r of filtered) {
       if (groupBy === "client" && !r.client_name?.trim()) {
         // Skip RFPs with no client name rather than grouping them under a visible
@@ -861,17 +861,23 @@ export default function AgencyBidsPage() {
         // valid client group to show real users.
         continue
       }
-      const key = groupBy === "client"
-        ? r.client_name!.trim()
-        : r.partner_display_name || "Unknown Partner"
-      const list = map.get(key) ?? []
-      list.push(r)
-      map.set(key, list)
+      // Group by partner_id when present, not partner_display_name: a guest/magic-link bid
+      // from a known partner carries whatever name the agency typed into the invite, which
+      // can differ from that partner's other bids and would otherwise split them into a
+      // separate group. partner_id is the stable identity; display_name is cosmetic only.
+      const key = groupBy === "client" ? r.client_name!.trim() : r.partner_id || r.partner_display_name || "Unknown Partner"
+      const label = groupBy === "client" ? r.client_name!.trim() : r.partner_display_name || "Unknown Partner"
+      const existing = map.get(key)
+      if (existing) {
+        existing.rows.push(r)
+      } else {
+        map.set(key, { label, rows: [r] })
+      }
     }
 
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([label, rows]) => ({ label, rows }))
+    return Array.from(map.values())
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .map(({ label, rows }) => ({ label, rows }))
   }, [data, search, groupBy])
 
   const totalRfps = data?.responses?.length ?? 0

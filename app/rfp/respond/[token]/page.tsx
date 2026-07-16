@@ -407,23 +407,54 @@ export default function GuestRfpRespondPage() {
           </div>
         </div>
 
-        {/* Persistent guest banner */}
-        <div className="rounded-2xl border border-teal-400/30 bg-teal-400/[0.06] p-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-foreground/90 leading-relaxed max-w-md">
-            You&apos;re viewing as a guest. Create a profile to track all your bids and get discovered by agencies.
-          </p>
-          <Button
-            asChild
-            variant="outline"
-            className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0"
-          >
-            <a
-              href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link`}
+        {/* Persistent guest banner - visible on every tab, not just Status & Feedback, so the
+            account-status confirmation is seen immediately regardless of which tab a guest
+            lands on (including a fresh page load of an already-submitted link). */}
+        {hasSubmittedBid ? (
+          <div className="rounded-2xl border border-teal-400/30 bg-teal-400/[0.06] p-4 flex flex-wrap items-center justify-between gap-3">
+            {isExistingPartner ? (
+              <>
+                <p className="text-sm text-foreground/90 leading-relaxed max-w-md">
+                  You already have a Ligament account. Sign in to view this bid in your portal.
+                </p>
+                <Button asChild variant="outline" className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0">
+                  <a href="/auth/login">Sign In</a>
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-foreground/90 leading-relaxed max-w-md">
+                  You&apos;ve been added to {agencyDisplayName(agency)}&apos;s partner network. Create your profile
+                  to be discoverable to other agencies and track all your bids in one place.
+                </p>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0"
+                >
+                  <a href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link`}>
+                    Create Profile
+                  </a>
+                </Button>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-teal-400/30 bg-teal-400/[0.06] p-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-foreground/90 leading-relaxed max-w-md">
+              You&apos;re viewing as a guest. Create a profile to track all your bids and get discovered by agencies.
+            </p>
+            <Button
+              asChild
+              variant="outline"
+              className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0"
             >
-              Create Profile
-            </a>
-          </Button>
-        </div>
+              <a href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link`}>
+                Create Profile
+              </a>
+            </Button>
+          </div>
+        )}
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
           <TabsList className="w-full grid grid-cols-3 bg-white/5 border border-border/30 rounded-xl p-1 h-auto">
@@ -1047,25 +1078,6 @@ export default function GuestRfpRespondPage() {
                   {statusLabel}
                 </span>
               </div>
-
-              {hasSubmittedBid && (
-                <div className="rounded-2xl border border-border/30 bg-white/5 p-5 text-center">
-                  {isExistingPartner ? (
-                    <p className="text-sm text-foreground-muted">
-                      You already have a Ligament account.{" "}
-                      <a href="/auth/login" className="text-accent hover:underline">
-                        Sign in
-                      </a>{" "}
-                      to view this bid in your portal.
-                    </p>
-                  ) : (
-                    <p className="text-sm text-foreground-muted">
-                      You&apos;ve been added to {agencyDisplayName(agency)}&apos;s partner network. Create your
-                      profile to be discoverable to other agencies and track all your bids in one place.
-                    </p>
-                  )}
-                </div>
-              )}
 
               {response?.agency_feedback && (
                 <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.05] p-5">

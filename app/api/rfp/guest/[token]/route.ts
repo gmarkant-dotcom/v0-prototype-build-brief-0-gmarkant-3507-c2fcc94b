@@ -365,7 +365,7 @@ export async function POST(req: Request) {
     const vendorEmail = (tokenRow.vendor_email || "").trim().toLowerCase()
     const { data: matchedProfile } = await supabase
       .from("profiles")
-      .select("id")
+      .select("id, company_name, full_name, display_name")
       .ilike("email", vendorEmail)
       .maybeSingle()
     const is_existing_partner = Boolean(matchedProfile?.id)
@@ -374,7 +374,13 @@ export async function POST(req: Request) {
     const attachments = normalizeGuestAttachments(body.attachments)
     const business_criteria_responses = withBusinessCriteriaDefaults(body.business_criteria_responses)
     const budget_proposal = serializeBudget(amount, currency)
-    const partner_display_name = (tokenRow.vendor_name || "").trim() || vendorEmail
+    // /agency/bids groups bids by this exact string (see app/agency/bids/page.tsx groupBy
+    // "partner"). For a known vendor, use their real profile name so the bid lands in the
+    // same group as every other bid tied to partner_id - not a separate group keyed off
+    // whatever name/email the agency typed into the magic-link invite.
+    const partner_display_name = is_existing_partner
+      ? matchedProfile?.company_name?.trim() || matchedProfile?.full_name?.trim() || matchedProfile?.display_name?.trim() || vendorEmail
+      : (tokenRow.vendor_name || "").trim() || vendorEmail
 
     if (is_edit) {
       const submittedAt = new Date().toISOString()
@@ -445,6 +451,9 @@ export async function POST(req: Request) {
 
     // Partner-pool auto-classification (magic link auto-add). Must never block or fail
     // the bid submission response - any failure here is logged loudly and swallowed.
+    // On failure, pool_status is set to 'classification_error' (best-effort, also swallowed)
+    // so a broken classification is visible with a plain SELECT on rfp_magic_tokens, not
+    // just in function logs, which have short retention.
     let poolClassification: PoolClassification | null = null
     try {
       poolClassification = await classifyGuestVendorForPool(supabase, {
@@ -463,16 +472,36 @@ export async function POST(req: Request) {
         console.error("[api] partner-pool classification: failed to persist pool_status", {
           route,
           token,
+          vendorEmail,
+          code: poolStatusErr.code,
           message: poolStatusErr.message,
+          details: poolStatusErr.details,
+          hint: poolStatusErr.hint,
         })
       }
     } catch (classifyErr) {
+      const supabaseErr = classifyErr as { code?: string; message?: string; details?: string; hint?: string }
       console.error("[api] partner-pool classification failed", {
         route,
         token,
         vendorEmail,
+        agencyId: tokenRow.agency_id,
+        matchedProfileId: is_existing_partner ? matchedProfile?.id : null,
+        code: supabaseErr?.code,
         message: classifyErr instanceof Error ? classifyErr.message : String(classifyErr),
+        details: supabaseErr?.details,
+        hint: supabaseErr?.hint,
+        stack: classifyErr instanceof Error ? classifyErr.stack : undefined,
       })
+      try {
+        await supabase.from("rfp_magic_tokens").update({ pool_status: "classification_error" }).eq("token", token)
+      } catch (markErr) {
+        console.error("[api] partner-pool classification: failed to mark classification_error", {
+          route,
+          token,
+          message: markErr instanceof Error ? markErr.message : String(markErr),
+        })
+      }
     }
 
     const { data: project } = await supabase
