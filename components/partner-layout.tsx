@@ -11,6 +11,7 @@ import { LigamentLogo } from "./ligament-logo"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { LeadAgencyFilterProvider } from "@/contexts/lead-agency-filter-context"
 import { RoleToggle } from "./role-toggle"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 declare global {
   interface Window {
@@ -19,14 +20,14 @@ declare global {
 }
 
 const navItems = [
-  { icon: "◇", title: "Dashboard", href: "/partner" },
-  { icon: "✉", title: "Invitations", href: "/partner/invitations" },
-  { icon: "🔍", title: "Discover Agencies", href: "/partner/discover" },
-  { icon: "◈", title: "Open RFPs", href: "/partner/rfps" },
-  { icon: "□", title: "Onboarding", href: "/partner/onboarding" },
-  { icon: "▣", title: "Active Projects", href: "/partner/projects" },
-  { icon: "◎", title: "Legal & Compliance", href: "/partner/legal" },
-  { icon: "?", title: "FAQ", href: "/faq" },
+  { icon: "◇", title: "Dashboard", href: "/partner", tooltip: "Overview of your bid submissions, active projects, and agency relationships" },
+  { icon: "✉", title: "Invitations", href: "/partner/invitations", tooltip: "Partnership invitations from lead agencies" },
+  { icon: "🔍", title: "Discover Agencies", href: "/partner/discover", tooltip: "Browse and connect with lead agencies open to new vendor relationships" },
+  { icon: "◈", title: "Open RFPs", href: "/partner/rfps", tooltip: "Active RFP invitations waiting for your bid submission" },
+  { icon: "□", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your agency partners" },
+  { icon: "▣", title: "Active Projects", href: "/partner/projects", tooltip: "Your currently active project engagements and status updates" },
+  { icon: "◎", title: "Legal & Compliance", href: "/partner/legal", tooltip: "Your legal entity information and compliance documentation" },
+  { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
 ]
 
 interface PartnerLayoutProps {
@@ -115,22 +116,28 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               {/* Navigation */}
               <nav className="hidden md:flex items-center gap-1">
                 {navItems.map((item) => {
-                  const isActive = pathname === item.href || 
+                  const isActive = pathname === item.href ||
                     (item.href !== "/partner" && pathname?.startsWith(item.href))
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
-                        isActive
-                          ? "bg-white/10 text-[#C8F53C]"
-                          : "text-white/90 hover:text-white hover:bg-white/5"
-                      )}
-                    >
-                      <span>{item.icon}</span>
-                      <span>{item.title}</span>
-                    </Link>
+                    <Tooltip key={item.href}>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={item.href}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
+                            isActive
+                              ? "bg-white/10 text-[#C8F53C]"
+                              : "text-white/90 hover:text-white hover:bg-white/5"
+                          )}
+                        >
+                          <span>{item.icon}</span>
+                          <span>{item.title}</span>
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>{item.tooltip}</p>
+                      </TooltipContent>
+                    </Tooltip>
                   )
                 })}
               </nav>

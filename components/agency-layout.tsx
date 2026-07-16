@@ -14,6 +14,7 @@ import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
 import { RoleToggle } from "@/components/role-toggle"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 declare global {
   interface Window {
@@ -25,25 +26,26 @@ const navSections = [
   {
     label: "Overview",
     items: [
-      { icon: "◉", title: "Summary Dashboard", href: "/agency/dashboard" },
+      { icon: "◉", title: "Summary Dashboard", href: "/agency/dashboard", tooltip: "Overview of your active projects, pipeline, and platform activity" },
     ]
   },
   {
     label: "BID REQUESTS",
     items: [
-      { number: "00", title: "Partner Pool", href: "/agency/pool" },
-      { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true },
-      { number: "02", title: "Bid Management", href: "/agency/bids" },
-      { number: "03", title: "Onboarding", href: "/agency/onboarding" },
+      { number: "00", title: "Partner Pool", href: "/agency/pool", tooltip: "Your curated network of vetted vendors. Manage relationships and discover new partners." },
+      { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Create and send scoped RFPs to your partner pool or any vendor via Lightning RFP Magic Link" },
+      { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Review, shortlist, and award bids from partners and guest vendors" },
+      { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track partner onboarding across active projects" },
     ]
   },
   {
     label: "Additional Resources",
     items: [
-      { icon: "▤", title: "Vendor Engagement Tracking", href: "/agency/project" },
-      { icon: "□", title: "Master Documents", href: "/agency/documents" },
-      { icon: "◆", title: "Creative Treatment Analysis", href: "/agency/brief" },
-      { icon: "?", title: "FAQ", href: "/faq" },
+      { icon: "▤", title: "Vendor Engagement Tracking", href: "/agency/project", tooltip: "Monitor active project progress, status updates, and utilization" },
+      { icon: "□", title: "Master Documents", href: "/agency/documents", tooltip: "Central repository for project documents and reference files" },
+      { icon: "◆", title: "Creative Treatment Analysis", href: "/agency/brief", tooltip: "AI-powered analysis of client briefs to extract scope and structure" },
+      { icon: "$", title: "Cash Flow", href: "/agency/cashflow", tooltip: "Track client payments and partner milestones with AI payment scheduling" },
+      { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
     ]
   }
 ]
@@ -280,33 +282,40 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
               Overview
             </div>
             <div className="space-y-1">
-              <Link
-                href="/agency/dashboard"
-                className={cn(
-                  "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
-                  pathname === "/agency/dashboard"
-                    ? "bg-accent/10 border border-accent/30" 
-                    : "hover:bg-white/5 border border-transparent"
-                )}
-              >
-                <span className={cn(
-                  "text-sm mt-0.5",
-                  pathname === "/agency/dashboard" ? "text-accent" : "text-foreground-muted"
-                )}>
-                  ◉
-                </span>
-                <div className="flex-1 min-w-0">
-                  <div className={cn(
-                    "font-display font-bold text-sm leading-tight",
-                    pathname === "/agency/dashboard" ? "text-accent" : "text-foreground group-hover:text-white"
-                  )}>
-                    Summary Dashboard
-                  </div>
-                </div>
-                {pathname === "/agency/dashboard" && (
-                  <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />
-                )}
-              </Link>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href="/agency/dashboard"
+                    className={cn(
+                      "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
+                      pathname === "/agency/dashboard"
+                        ? "bg-accent/10 border border-accent/30"
+                        : "hover:bg-white/5 border border-transparent"
+                    )}
+                  >
+                    <span className={cn(
+                      "text-sm mt-0.5",
+                      pathname === "/agency/dashboard" ? "text-accent" : "text-foreground-muted"
+                    )}>
+                      ◉
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className={cn(
+                        "font-display font-bold text-sm leading-tight",
+                        pathname === "/agency/dashboard" ? "text-accent" : "text-foreground group-hover:text-white"
+                      )}>
+                        Summary Dashboard
+                      </div>
+                    </div>
+                    {pathname === "/agency/dashboard" && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />
+                    )}
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>Overview of your active projects, pipeline, and platform activity</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
           
@@ -448,14 +457,13 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                   }
                   const isActive = pathname === item.href ||
                     (item.href !== "/agency" && pathname?.startsWith(item.href))
-                  return (
+                  const link = (
                     <Link
-                      key={item.href}
                       href={item.href}
                       className={cn(
                         "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
-                        isActive 
-                          ? "bg-accent/10 border border-accent/30" 
+                        isActive
+                          ? "bg-accent/10 border border-accent/30"
                           : "hover:bg-white/5 border border-transparent"
                       )}
                     >
@@ -487,6 +495,14 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                         <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />
                       )}
                     </Link>
+                  )
+                  return (
+                    <Tooltip key={item.href}>
+                      <TooltipTrigger asChild>{link}</TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>{item.tooltip}</p>
+                      </TooltipContent>
+                    </Tooltip>
                   )
                 })}
               </div>
