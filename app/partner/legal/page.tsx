@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
@@ -11,9 +12,12 @@ import { Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
   INSURANCE_KEYS,
   INSURANCE_LABELS,
   type BusinessCriteriaHolds,
+  type DesignationHolds,
   type InsuranceHolds,
   emptyBusinessCriteriaHolds,
   withBusinessCriteriaDefaults,
@@ -102,8 +106,8 @@ export default function PartnerLegalPage() {
   
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [businessCriteria, setBusinessCriteria] = useState<BusinessCriteriaHolds>(emptyBusinessCriteriaHolds())
-  const [savingInsurance, setSavingInsurance] = useState(false)
-  const [insuranceMsg, setInsuranceMsg] = useState<string | null>(null)
+  const [savingBusinessCriteria, setSavingBusinessCriteria] = useState(false)
+  const [businessCriteriaMsg, setBusinessCriteriaMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (isDemo) return
@@ -147,6 +151,23 @@ export default function PartnerLegalPage() {
     ensurePartnerAuth()
   }, [isDemo, router])
 
+  const updateDesignation = (key: (typeof DESIGNATION_KEYS)[number], patch: Partial<DesignationHolds>) => {
+    setBusinessCriteria((prev) => ({
+      ...prev,
+      designations: {
+        ...prev.designations,
+        [key]: { ...prev.designations[key], ...patch },
+      },
+    }))
+  }
+
+  const updateCompanyFacts = (patch: Partial<BusinessCriteriaHolds["company_facts"]>) => {
+    setBusinessCriteria((prev) => ({
+      ...prev,
+      company_facts: { ...prev.company_facts, ...patch },
+    }))
+  }
+
   const updateInsurance = (key: (typeof INSURANCE_KEYS)[number], patch: Partial<InsuranceHolds>) => {
     setBusinessCriteria((prev) => ({
       ...prev,
@@ -164,13 +185,13 @@ export default function PartnerLegalPage() {
     }))
   }
 
-  const saveInsurance = async () => {
-    setInsuranceMsg(null)
+  const saveBusinessCriteria = async () => {
+    setBusinessCriteriaMsg(null)
     if (isDemo) {
-      setInsuranceMsg("Demo mode - insurance information is not persisted.")
+      setBusinessCriteriaMsg("Demo mode - business criteria is not persisted.")
       return
     }
-    setSavingInsurance(true)
+    setSavingBusinessCriteria(true)
     try {
       const supabase = createClient()
       const {
@@ -189,11 +210,11 @@ export default function PartnerLegalPage() {
         })
         .eq("id", target)
       if (error) throw error
-      setInsuranceMsg("Insurance information saved.")
+      setBusinessCriteriaMsg("Business criteria saved.")
     } catch (error) {
-      setInsuranceMsg(error instanceof Error ? error.message : "Failed to save insurance information.")
+      setBusinessCriteriaMsg(error instanceof Error ? error.message : "Failed to save business criteria.")
     } finally {
-      setSavingInsurance(false)
+      setSavingBusinessCriteria(false)
     }
   }
   const completedCount = documents.filter(d => d.status === "complete").length
@@ -497,6 +518,125 @@ export default function PartnerLegalPage() {
           </div>
         </div>
         
+        {/* Business Designations & Company Facts */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Business Designations & Company Facts</h2>
+          <p className="text-sm text-gray-600 mb-6">
+            Diversity and ownership designations, plus company facts agencies use for procurement requirements. Saved
+            together with Insurance Requirements below.
+          </p>
+
+          <div className="space-y-3 mb-8">
+            {DESIGNATION_KEYS.map((key) => {
+              const designation = businessCriteria.designations[key]
+              return (
+                <div key={key} className="rounded-lg border border-gray-200 p-4">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <Checkbox
+                      checked={designation.holds}
+                      onCheckedChange={(checked) => updateDesignation(key, { holds: checked === true })}
+                      className="mt-0.5 border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                    />
+                    <div className="font-display font-bold text-sm text-[#0C3535]">{DESIGNATION_LABELS[key]}</div>
+                  </label>
+                  {designation.holds && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-7">
+                      <div>
+                        <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                          Certifying Body
+                        </label>
+                        <Input
+                          value={designation.certifying_body || ""}
+                          onChange={(e) => updateDesignation(key, { certifying_body: e.target.value || null })}
+                          placeholder="e.g. NMSDC, WBENC, NGLCC"
+                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                          disabled={designation.self_certified}
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                          Certification Number
+                        </label>
+                        <Input
+                          value={designation.certification_number || ""}
+                          onChange={(e) => updateDesignation(key, { certification_number: e.target.value || null })}
+                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                          disabled={designation.self_certified}
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox
+                            checked={designation.self_certified}
+                            onCheckedChange={(checked) =>
+                              updateDesignation(key, {
+                                self_certified: checked === true,
+                                ...(checked === true ? { certifying_body: null, certification_number: null } : {}),
+                              })
+                            }
+                            className="border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                          />
+                          <span className="text-sm text-gray-700">Self-certified (no third-party certification)</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                Years in Business
+              </label>
+              <Input
+                type="number"
+                value={businessCriteria.company_facts.years_in_business ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  updateCompanyFacts({ years_in_business: raw === "" ? null : Number(raw) })
+                }}
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+              />
+            </div>
+            <div>
+              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                Union Signatory
+              </label>
+              <Input
+                value={businessCriteria.company_facts.union_signatory}
+                onChange={(e) => updateCompanyFacts({ union_signatory: e.target.value })}
+                placeholder="e.g. SAG-AFTRA, IATSE"
+                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                Sustainability Approach
+              </label>
+              <Textarea
+                value={businessCriteria.company_facts.sustainability_approach}
+                onChange={(e) => updateCompanyFacts({ sustainability_approach: e.target.value })}
+                className="min-h-[90px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                placeholder="Describe your sustainability practices."
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                Workforce Diversity Summary
+              </label>
+              <Textarea
+                value={businessCriteria.company_facts.workforce_diversity_summary}
+                onChange={(e) => updateCompanyFacts({ workforce_diversity_summary: e.target.value })}
+                className="min-h-[90px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                placeholder="Describe your team's diversity."
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Insurance Requirements */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-start justify-between gap-4 mb-4">
@@ -507,12 +647,12 @@ export default function PartnerLegalPage() {
               </p>
             </div>
             <Button
-              onClick={saveInsurance}
-              disabled={savingInsurance}
+              onClick={saveBusinessCriteria}
+              disabled={savingBusinessCriteria}
               className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90 shrink-0"
             >
-              {savingInsurance ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Save Insurance
+              {savingBusinessCriteria ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Save Business Criteria
             </Button>
           </div>
 
@@ -528,7 +668,7 @@ export default function PartnerLegalPage() {
                     <Checkbox
                       checked={coverage.has_coverage}
                       onCheckedChange={(checked) => updateInsurance(key, { has_coverage: checked === true })}
-                      className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                      className="border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
                     />
                     <div className="font-display font-bold text-sm text-[#0C3535] truncate">
                       {INSURANCE_LABELS[key]}
@@ -537,7 +677,13 @@ export default function PartnerLegalPage() {
                   <div className="flex items-center gap-3 shrink-0">
                     <Input
                       value={coverage.limit || ""}
-                      onChange={(e) => updateInsurance(key, { limit: e.target.value || null })}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        updateInsurance(key, {
+                          limit: value || null,
+                          ...(value.trim() ? { has_coverage: true } : {}),
+                        })
+                      }}
                       placeholder="e.g. $1M/$2M"
                       className="border-gray-200 text-gray-900 placeholder:text-gray-500 w-36"
                     />
@@ -547,7 +693,7 @@ export default function PartnerLegalPage() {
                         coverage.has_coverage ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
                       )}
                     >
-                      {coverage.has_coverage ? "covered" : "not covered"}
+                      {coverage.has_coverage ? "Covered" : "Not Covered"}
                     </span>
                   </div>
                 </div>
@@ -555,16 +701,22 @@ export default function PartnerLegalPage() {
             })}
           </div>
 
-          <label className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-200 cursor-pointer">
-            <Checkbox
-              checked={businessCriteria.insurance.coi_on_file}
-              onCheckedChange={(checked) => updateCoiOnFile(checked === true)}
-              className="data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
-            />
-            <span className="text-sm text-gray-700">Certificate of Insurance (COI) on file</span>
-          </label>
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <Checkbox
+                checked={businessCriteria.insurance.coi_on_file}
+                onCheckedChange={(checked) => updateCoiOnFile(checked === true)}
+                className="border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+              />
+              <span className="text-sm text-gray-700">Certificate of Insurance (COI) on file</span>
+            </label>
+            <p className="text-xs text-gray-500 mt-2 pl-7">
+              A Certificate of Insurance is the standard proof-of-coverage document issued by your insurance broker.
+              Checking this confirms you can provide a current COI on request.
+            </p>
+          </div>
 
-          {insuranceMsg ? <p className="text-xs text-gray-600 mt-3">{insuranceMsg}</p> : null}
+          {businessCriteriaMsg ? <p className="text-xs text-gray-600 mt-3">{businessCriteriaMsg}</p> : null}
         </div>
       </div>
     </PartnerLayout>

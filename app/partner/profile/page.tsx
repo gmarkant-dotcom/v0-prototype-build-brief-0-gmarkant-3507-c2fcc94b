@@ -6,20 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { Camera, Loader2, Upload, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import {
-  DESIGNATION_KEYS,
-  DESIGNATION_LABELS,
-  type BusinessCriteriaHolds,
-  type DesignationHolds,
-  emptyBusinessCriteriaHolds,
-  withBusinessCriteriaDefaults,
-} from "@/lib/business-criteria"
 
 const disciplines = [
   "Video Production",
@@ -150,7 +141,6 @@ export default function PartnerProfilePage() {
     yearFounded: "",
   })
 
-  const [businessCriteria, setBusinessCriteria] = useState<BusinessCriteriaHolds>(emptyBusinessCriteriaHolds())
   const [credentials, setCredentials] = useState<CredentialItem[]>([])
   const [editingCredentialId, setEditingCredentialId] = useState<string | null>(null)
   const [showAddProject, setShowAddProject] = useState(false)
@@ -204,7 +194,7 @@ export default function PartnerProfilePage() {
       const { data } = await supabase
         .from("profiles")
         .select(
-          "id, role, email, full_name, company_name, company_website, company_linkedin_url, is_discoverable, bio, location, agency_type, company_logo_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples, business_criteria"
+          "id, role, email, full_name, company_name, company_website, company_linkedin_url, is_discoverable, bio, location, agency_type, company_logo_url, reel_url, capabilities_overview_url, capabilities, credentials, work_examples"
         )
         .eq("id", user.id)
         .maybeSingle()
@@ -238,7 +228,6 @@ export default function PartnerProfilePage() {
         ? ((data as { capabilities?: unknown[] }).capabilities?.map((x) => String(x)) || [])
         : []
       setCustomCapabilities(loadedCaps.filter((x) => !capabilities.includes(x)))
-      setBusinessCriteria(withBusinessCriteriaDefaults((data as { business_criteria?: unknown } | null)?.business_criteria))
       setCompanyLogoUrl((data as { company_logo_url?: string | null } | null)?.company_logo_url || "")
       setReelUrl((data as { reel_url?: string | null } | null)?.reel_url || "")
       setCapabilitiesOverviewUrl((data as { capabilities_overview_url?: string | null } | null)?.capabilities_overview_url || "")
@@ -561,23 +550,6 @@ export default function PartnerProfilePage() {
     }
   }
 
-  const updateDesignation = (key: (typeof DESIGNATION_KEYS)[number], patch: Partial<DesignationHolds>) => {
-    setBusinessCriteria((prev) => ({
-      ...prev,
-      designations: {
-        ...prev.designations,
-        [key]: { ...prev.designations[key], ...patch },
-      },
-    }))
-  }
-
-  const updateCompanyFacts = (patch: Partial<BusinessCriteriaHolds["company_facts"]>) => {
-    setBusinessCriteria((prev) => ({
-      ...prev,
-      company_facts: { ...prev.company_facts, ...patch },
-    }))
-  }
-
   const addProject = () => {
     if (newProject.title && newProject.client) {
       setCredentials(prev => [...prev, { id: Date.now().toString(), ...newProject }])
@@ -649,7 +621,6 @@ export default function PartnerProfilePage() {
             capabilities_overview_url: capabilitiesOverviewUrl || null,
             credentials,
             work_examples: workExamples,
-            business_criteria: businessCriteria,
             is_discoverable: discoverable,
             updated_at: new Date().toISOString(),
           })
@@ -1288,123 +1259,6 @@ export default function PartnerProfilePage() {
           </div>
         </div>
         
-        {/* Business Profile: diversity/ownership designations + company facts. Insurance lives on /partner/legal. */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Business Profile</h2>
-          <p className="text-sm text-gray-600 mb-6">
-            Diversity and ownership designations, plus company facts agencies use for procurement requirements.
-          </p>
-
-          <div className="space-y-3 mb-8">
-            {DESIGNATION_KEYS.map((key) => {
-              const designation = businessCriteria.designations[key]
-              return (
-                <div key={key} className="rounded-lg border border-gray-200 p-4">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <Checkbox
-                      checked={designation.holds}
-                      onCheckedChange={(checked) => updateDesignation(key, { holds: checked === true })}
-                      className="mt-0.5"
-                    />
-                    <div className="font-display font-bold text-sm text-[#0C3535]">{DESIGNATION_LABELS[key]}</div>
-                  </label>
-                  {designation.holds && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-7">
-                      <div>
-                        <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                          Certifying Body
-                        </label>
-                        <Input
-                          value={designation.certifying_body || ""}
-                          onChange={(e) => updateDesignation(key, { certifying_body: e.target.value || null })}
-                          placeholder="e.g. NMSDC, WBENC, NGLCC"
-                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-                          disabled={designation.self_certified}
-                        />
-                      </div>
-                      <div>
-                        <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                          Certification Number
-                        </label>
-                        <Input
-                          value={designation.certification_number || ""}
-                          onChange={(e) => updateDesignation(key, { certification_number: e.target.value || null })}
-                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-                          disabled={designation.self_certified}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <Checkbox
-                            checked={designation.self_certified}
-                            onCheckedChange={(checked) =>
-                              updateDesignation(key, {
-                                self_certified: checked === true,
-                                ...(checked === true ? { certifying_body: null, certification_number: null } : {}),
-                              })
-                            }
-                          />
-                          <span className="text-sm text-gray-700">Self-certified (no third-party certification)</span>
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Years in Business
-              </label>
-              <Input
-                type="number"
-                value={businessCriteria.company_facts.years_in_business ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value
-                  updateCompanyFacts({ years_in_business: raw === "" ? null : Number(raw) })
-                }}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-              />
-            </div>
-            <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Union Signatory
-              </label>
-              <Input
-                value={businessCriteria.company_facts.union_signatory}
-                onChange={(e) => updateCompanyFacts({ union_signatory: e.target.value })}
-                placeholder="e.g. SAG-AFTRA, IATSE"
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Sustainability Approach
-              </label>
-              <Textarea
-                value={businessCriteria.company_facts.sustainability_approach}
-                onChange={(e) => updateCompanyFacts({ sustainability_approach: e.target.value })}
-                className="min-h-[90px] border-gray-200 text-gray-900 placeholder:text-gray-500"
-                placeholder="Describe your sustainability practices."
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                Workforce Diversity Summary
-              </label>
-              <Textarea
-                value={businessCriteria.company_facts.workforce_diversity_summary}
-                onChange={(e) => updateCompanyFacts({ workforce_diversity_summary: e.target.value })}
-                className="min-h-[90px] border-gray-200 text-gray-900 placeholder:text-gray-500"
-                placeholder="Describe your team's diversity."
-              />
-            </div>
-          </div>
-        </div>
-
         {/* Credentials / Portfolio */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <div className="flex items-center justify-between mb-6">

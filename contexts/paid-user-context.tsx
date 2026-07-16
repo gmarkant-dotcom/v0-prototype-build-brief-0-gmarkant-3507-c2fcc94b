@@ -107,7 +107,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
             .single()
 
           if (profileError) console.error("[PaidUserContext] profiles query error:", profileError)
-          console.error("[PaidUserContext] profile fetched:", { is_paid: profile?.is_paid, is_admin: profile?.is_admin, role: profile?.role, userId: user.id.slice(0,8) })
+          console.log("[PaidUserContext] profile fetched:", { is_paid: profile?.is_paid, is_admin: profile?.is_admin, role: profile?.role, userId: user.id.slice(0,8) })
           setIsPaid(profile?.is_paid === true)
           setIsAdmin(profile?.is_admin || false)
           setHasDemoAccess(profile?.demo_access || false)
