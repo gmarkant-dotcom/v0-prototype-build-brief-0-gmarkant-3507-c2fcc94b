@@ -1027,6 +1027,13 @@ export default function PartnerPoolPage() {
     return ["All", ...sorted]
   }, [isDemo, partners, partnerships])
 
+  // Already-loaded partnerships data, reused so the Discover sheet doesn't need its own
+  // duplicate fetch to know who's already an active partner.
+  const activePartnerIds = useMemo(
+    () => partnerships.filter((p) => p.status === "active").map((p) => p.partnerId).filter(Boolean),
+    [partnerships]
+  )
+
   const totalFilteredMatches = filteredNetworkRows.length + filteredPartners.length
   const hasNetworkSource = allNetworkRows.length > 0
 
@@ -2136,7 +2143,7 @@ export default function PartnerPoolPage() {
             <SheetTitle>Discover New Partners</SheetTitle>
           </SheetHeader>
           <div className="px-4 pb-4">
-            {marketplaceOpened && <MarketplaceContent compact />}
+            {marketplaceOpened && <MarketplaceContent compact excludePartnerIds={activePartnerIds} />}
           </div>
         </SheetContent>
       </Sheet>

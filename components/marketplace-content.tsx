@@ -59,9 +59,16 @@ const externalHubs = [
 interface MarketplaceContentProps {
   /** Use a single-column layout — for narrow containers like the Partner Pool sheet. */
   compact?: boolean
+  /**
+   * Partner ids the caller already knows have an active partnership (e.g. the Partner Pool
+   * page's already-loaded partnerships list). Merged with this component's own connectedIds
+   * fetch and excluded from the discover list entirely - an existing partner showing up in
+   * Discover is confusing since they're already in the pool.
+   */
+  excludePartnerIds?: string[]
 }
 
-export function MarketplaceContent({ compact = false }: MarketplaceContentProps) {
+export function MarketplaceContent({ compact = false, excludePartnerIds }: MarketplaceContentProps) {
   const normalizeWebsiteUrl = (value: string | null | undefined) => {
     if (!value) return null
     const trimmed = value.trim()
@@ -119,10 +126,16 @@ export function MarketplaceContent({ compact = false }: MarketplaceContentProps)
     load()
   }, [isDemo])
 
+  const excludedIds = useMemo(
+    () => new Set<string>([...connectedIds, ...(excludePartnerIds || [])]),
+    [connectedIds, excludePartnerIds]
+  )
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return partners
     return partners.filter((p) => {
+      if (excludedIds.has(p.id)) return false
+      if (!q) return true
       const name = (p.company_name || p.full_name || "").toLowerCase()
       const location = (p.location || "").toLowerCase()
       const bio = (p.bio || "").toLowerCase()
@@ -132,7 +145,7 @@ export function MarketplaceContent({ compact = false }: MarketplaceContentProps)
         : false
       return name.includes(q) || location.includes(q) || bio.includes(q) || agencyType.includes(q) || caps
     })
-  }, [partners, search])
+  }, [partners, search, excludedIds])
 
   const invitePartner = useMemo(
     () => partners.find((p) => p.id === invitePartnerId) ?? null,
@@ -243,20 +256,14 @@ export function MarketplaceContent({ compact = false }: MarketplaceContentProps)
                   >
                     View Profile
                   </Button>
-                  {connectedIds.has(partner.id) ? (
-                    <Button disabled className="bg-white/10 text-foreground-muted cursor-default">
-                      Connected
-                    </Button>
-                  ) : (
-                    <Button
-                      className="bg-accent text-accent-foreground hover:bg-accent/90"
-                      onClick={() => setInvitePartnerId(partner.id)}
-                      disabled={!partner.id}
-                    >
-                      <UserPlus className="w-4 h-4 mr-2" />
-                      Invite to Pool
-                    </Button>
-                  )}
+                  <Button
+                    className="bg-accent text-accent-foreground hover:bg-accent/90"
+                    onClick={() => setInvitePartnerId(partner.id)}
+                    disabled={!partner.id}
+                  >
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Invite to Pool
+                  </Button>
                 </div>
               </GlassCard>
             ))}
