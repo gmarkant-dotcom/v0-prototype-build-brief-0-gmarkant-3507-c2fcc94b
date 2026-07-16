@@ -79,10 +79,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, active_role")
       .eq("id", user.id)
       .single()
-    if (profileErr || profile?.role !== "partner") {
+    if (profileErr || (profile?.role !== "partner" && profile?.active_role !== "partner")) {
       return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
     }
 

@@ -11,8 +11,8 @@ export async function GET() {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (profile?.role !== "agency") {
+    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (profile?.role !== "agency") {
+    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 

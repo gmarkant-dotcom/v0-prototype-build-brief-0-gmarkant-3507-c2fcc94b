@@ -70,8 +70,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
     }
 
-    const { data: me, error: meErr } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (meErr || me?.role !== "agency") {
+    const { data: me, error: meErr } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (meErr || (me?.role !== "agency" && me?.active_role !== "agency")) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 

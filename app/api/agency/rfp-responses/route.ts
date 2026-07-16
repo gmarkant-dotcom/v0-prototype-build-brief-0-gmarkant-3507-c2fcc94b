@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile, error: profileErr } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    const { data: profile, error: profileErr } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
     if (profileErr) {
       console.error("[agency/rfp-responses] GET profile load failed", {
         route,
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Failed to load profile" }, { status: 500 })
     }
 
-    if (profile?.role !== "agency") {
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
     console.log("[api] start", { route, method: "GET", userId: user.id, role: profile.role, projectId: projectIdParam || null })

@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (profile?.role !== "partner") {
+    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Partner only" }, { status: 403 })
     }
 

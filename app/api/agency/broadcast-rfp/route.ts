@@ -75,11 +75,11 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, company_name, full_name")
+      .select("role, active_role, company_name, full_name")
       .eq("id", user.id)
       .single()
 
-    if (profile?.role !== "agency") {
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Only lead agencies can broadcast RFPs" }, { status: 403 })
     }
 

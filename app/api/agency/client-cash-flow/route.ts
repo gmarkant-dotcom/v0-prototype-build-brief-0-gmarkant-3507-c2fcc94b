@@ -6,9 +6,9 @@ export const dynamic = "force-dynamic"
 const noStore = { "Cache-Control": "private, no-store, no-cache, must-revalidate" } as const
 
 async function requireAgency(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
-  const { data: profile, error } = await supabase.from("profiles").select("role").eq("id", userId).single()
-  if (error || profile?.role !== "agency") return false
-  return true
+  const { data: profile, error } = await supabase.from("profiles").select("role, active_role").eq("id", userId).single()
+  if (error) return false
+  return profile?.role === "agency" || profile?.active_role === "agency"
 }
 
 async function assertProjectOwned(

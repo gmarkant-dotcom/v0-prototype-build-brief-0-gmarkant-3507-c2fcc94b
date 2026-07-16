@@ -20,11 +20,11 @@ export async function POST(request: Request) {
     // Get agency profile and enforce role
     const { data: agencyProfile } = await supabase
       .from("profiles")
-      .select("role, company_name, full_name")
+      .select("role, active_role, company_name, full_name")
       .eq("id", user.id)
       .single()
 
-    if (agencyProfile?.role !== "agency") {
+    if (agencyProfile?.role !== "agency" && agencyProfile?.active_role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 

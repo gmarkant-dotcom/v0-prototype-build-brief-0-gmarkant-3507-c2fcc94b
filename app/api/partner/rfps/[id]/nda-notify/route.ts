@@ -17,10 +17,16 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, email, company_name, full_name")
+      .select("role, active_role, email, company_name, full_name")
       .eq("id", user.id)
-      .maybeSingle<{ role: string | null; email: string | null; company_name: string | null; full_name: string | null }>()
-    if (profile?.role !== "partner") {
+      .maybeSingle<{
+        role: string | null
+        active_role: string | null
+        email: string | null
+        company_name: string | null
+        full_name: string | null
+      }>()
+    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Partners only" }, { status: 403 })
     }
 

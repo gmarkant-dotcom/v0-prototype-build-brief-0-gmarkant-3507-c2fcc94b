@@ -56,6 +56,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
   const [hasDemoAccess, setHasDemoAccess] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [role, setRole] = useState<UserRole>(null)
+  const [activeRole, setActiveRole] = useState<UserRole>(null)
   const [linkedAgencyId, setLinkedAgencyId] = useState<string | null>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
@@ -70,6 +71,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
       setIsPaid(true)
       setIsAdmin(true)
       setRole('agency') // Default to agency in demo
+      setActiveRole('agency')
       setIsLoading(false)
       return
     }
@@ -102,7 +104,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
         if (user) {
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('is_paid, is_admin, role, linked_agency_id, demo_access')
+            .select('is_paid, is_admin, role, active_role, linked_agency_id, demo_access')
             .eq('id', user.id)
             .single()
 
@@ -112,6 +114,7 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
           setIsAdmin(profile?.is_admin || false)
           setHasDemoAccess(profile?.demo_access || false)
           setRole(profile?.role as UserRole || null)
+          setActiveRole((profile?.active_role as UserRole) || null)
           setLinkedAgencyId(profile?.linked_agency_id || null)
         }
       } finally {
@@ -147,7 +150,9 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
 
     // Partner agencies collaborate in the lead agency’s ecosystem; they are not
     // the billable “primary” subscriber — do not gate partner portal features on is_paid.
-    if (role === "partner") return true
+    // A dual-role account currently active as partner gets the same treatment, even if
+    // its permanent base role is agency.
+    if (role === "partner" || activeRole === "partner") return true
 
     // Lead agency: paid subscription required for product features
     if (isPaid) return true

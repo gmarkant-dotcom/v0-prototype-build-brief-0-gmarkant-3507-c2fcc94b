@@ -124,12 +124,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, company_name, full_name, email")
+      .select("role, active_role, company_name, full_name, email")
       .eq("id", user.id)
       .single()
     console.log("[api] start", { route, method: "POST", userId: user.id, role: profile?.role ?? null })
 
-    if (profile?.role !== "partner") {
+    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Partners only" }, { status: 403 })
     }
 

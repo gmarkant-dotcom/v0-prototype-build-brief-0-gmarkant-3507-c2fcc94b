@@ -94,10 +94,10 @@ export async function POST(
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("role, company_name, full_name, meeting_url")
+      .select("role, active_role, company_name, full_name, meeting_url")
       .eq("id", user.id)
       .single()
-    if (profile?.role !== "agency") {
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 

@@ -21,8 +21,9 @@ function partnerDisplayName(p: {
 }
 
 async function requireAgency(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
-  const { data: profile, error } = await supabase.from("profiles").select("role").eq("id", userId).single()
-  if (error || profile?.role !== "agency") return null
+  const { data: profile, error } = await supabase.from("profiles").select("role, active_role").eq("id", userId).single()
+  if (error) return null
+  if (profile?.role !== "agency" && profile?.active_role !== "agency") return null
   return profile
 }
 

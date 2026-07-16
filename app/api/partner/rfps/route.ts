@@ -29,11 +29,11 @@ export async function GET() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, email")
+      .select("role, active_role, email")
       .eq("id", user.id)
       .single()
 
-    if (profile?.role !== "partner") {
+    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       console.warn(
         `[partner/rfps] GET: wrong role — userId=${user.id} email=${user.email ?? profile?.email ?? "n/a"} profileRole=${profile?.role ?? "null"}`
       )

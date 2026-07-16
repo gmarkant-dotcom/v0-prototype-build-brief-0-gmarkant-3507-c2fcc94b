@@ -140,8 +140,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (profile?.role !== "partner") {
+    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Partners only" }, { status: 403, headers: noStore })
     }
 
@@ -232,8 +232,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (profile?.role !== "partner") {
+    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Partners only" }, { status: 403, headers: noStore })
     }
 

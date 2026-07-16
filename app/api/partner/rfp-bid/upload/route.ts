@@ -22,20 +22,22 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, is_paid, is_admin, email")
+      .select("role, active_role, is_paid, is_admin, email")
       .eq("id", user.id)
       .single()
     console.log("[api] start", { route, method: "POST", userId: user.id, role: profile?.role ?? null })
 
     const isDemoMode = process.env.NEXT_PUBLIC_IS_DEMO === "true"
-    const canUpload =
-      isDemoMode || profile?.role === "partner" || profile?.is_admin || profile?.is_paid
+    const isPartner = profile?.role === "partner" || profile?.active_role === "partner"
+    const canUpload = isDemoMode || isPartner || profile?.is_admin || profile?.is_paid
 
     if (!canUpload) {
       return NextResponse.json({ error: "Upgrade to upload files" }, { status: 403 })
     }
 
-    if (profile?.role === "agency") {
+    // Only block a pure agency profile that isn't currently acting as partner - a dual-role
+    // account with active_role="partner" is legitimately submitting a bid in this session.
+    if (profile?.role === "agency" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Partners only" }, { status: 403 })
     }
 

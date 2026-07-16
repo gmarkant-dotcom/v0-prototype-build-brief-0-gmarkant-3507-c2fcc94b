@@ -53,10 +53,11 @@ async function requireAgency() {
   if (!user) return { ok: false as const, status: 401, error: "Unauthorized" }
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, company_name, full_name, display_name")
+    .select("role, active_role, company_name, full_name, display_name")
     .eq("id", user.id)
     .single()
-  if (profile?.role !== "agency") return { ok: false as const, status: 403, error: "Agency only" }
+  if (profile?.role !== "agency" && profile?.active_role !== "agency")
+    return { ok: false as const, status: 403, error: "Agency only" }
   return { ok: true as const, userId: user.id, profile }
 }
 

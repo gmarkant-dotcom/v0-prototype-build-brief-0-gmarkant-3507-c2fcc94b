@@ -33,7 +33,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("role, company_name, full_name, email")
+      .select("role, active_role, company_name, full_name, email")
       .eq("id", user.id)
       .single()
     if (profileErr) {
@@ -45,7 +45,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       })
       return NextResponse.json({ error: "Failed to load profile" }, { status: 500 })
     }
-    if (profile?.role !== "agency") return NextResponse.json({ error: "Agency only" }, { status: 403 })
+    if (profile?.role !== "agency" && profile?.active_role !== "agency")
+      return NextResponse.json({ error: "Agency only" }, { status: 403 })
     console.log("[api] start", { route, method: "PATCH", userId: user.id, role: profile.role, responseId: id })
 
     const { data: existing, error: existingErr } = await supabase

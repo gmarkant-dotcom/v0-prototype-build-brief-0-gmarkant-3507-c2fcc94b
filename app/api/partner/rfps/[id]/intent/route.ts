@@ -18,11 +18,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("role, email")
+      .select("role, active_role, email")
       .eq("id", user.id)
       .single()
 
-    if (profileError || profile?.role !== "partner") {
+    if (profileError || (profile?.role !== "partner" && profile?.active_role !== "partner")) {
       return NextResponse.json({ error: "Partners only" }, { status: 403 })
     }
 

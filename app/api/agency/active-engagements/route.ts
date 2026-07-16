@@ -81,10 +81,10 @@ export async function GET(request: NextRequest) {
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, active_role")
       .eq("id", user.id)
       .single()
-    if (profileErr || profile?.role !== "agency") {
+    if (profileErr || (profile?.role !== "agency" && profile?.active_role !== "agency")) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
     }
 

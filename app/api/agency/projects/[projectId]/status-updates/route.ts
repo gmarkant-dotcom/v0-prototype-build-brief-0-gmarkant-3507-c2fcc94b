@@ -20,8 +20,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (profile?.role !== "agency") {
+    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
     }
 
@@ -110,8 +110,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (profile?.role !== "agency") {
+    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
     }
 
@@ -225,8 +225,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
 
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    if (profile?.role !== "agency") return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
+    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
 
     const { data: project } = await supabase
       .from("projects").select("id, agency_id").eq("id", projectId).eq("agency_id", user.id).maybeSingle()
