@@ -42,6 +42,7 @@ import {
   normalizeBusinessCriteriaRequired,
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
+import { meetsInsuranceMinimum } from "@/lib/insurance-limit-parser"
 
 const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 
@@ -433,6 +434,13 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
                         const isRequired = requiredInsuranceKeys.includes(key)
                         const isMissing = businessCriteriaGap.missingInsurance.includes(key)
                         const minimum = businessCriteriaRequired.insurance[key]?.minimum
+                        // Presence-only check (isMissing) only knows whether coverage exists.
+                        // When it's present and required, additionally verify the held limit
+                        // against the stated minimum - "not_met" upgrades the badge to Missing,
+                        // "unknown" (either side unparseable) keeps the presence-only Met badge
+                        // with a hint rather than guessing.
+                        const limitVerdict =
+                          isRequired && !isMissing && minimum ? meetsInsuranceMinimum(coverage.limit, minimum) : null
                         return (
                           <div key={key} className="flex items-start justify-between gap-3 text-sm">
                             <div className="min-w-0">
@@ -445,9 +453,14 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
                                   Limit: {coverage.limit}
                                 </div>
                               )}
+                              {limitVerdict === "unknown" && (
+                                <div className="font-mono text-[9px] text-foreground-muted/70 mt-0.5 italic">
+                                  Limit not auto-verified
+                                </div>
+                              )}
                             </div>
                             {isRequired ? (
-                              isMissing ? (
+                              isMissing || limitVerdict === "not_met" ? (
                                 <span className="inline-flex items-center gap-1 text-amber-300 shrink-0">
                                   <AlertTriangle className="w-3.5 h-3.5" />
                                   <span className="font-mono text-[9px] uppercase">Missing</span>
