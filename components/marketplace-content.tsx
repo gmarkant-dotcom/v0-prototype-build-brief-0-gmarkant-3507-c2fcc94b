@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
 import { Building2, ExternalLink, Search, UserPlus, X, Zap } from "lucide-react"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
 
 type PartnerProfile = {
   id: string
@@ -21,6 +28,7 @@ type PartnerProfile = {
   agency_type?: string | null
   reel_url?: string | null
   capabilities?: unknown
+  business_criteria?: unknown
   vouch_count?: number
 }
 
@@ -85,7 +93,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
   const [inviteMessage, setInviteMessage] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [banner, setBanner] = useState<string | null>(null)
-  const [selectedPartner, setSelectedPartner] = useState<any>(null)
+  const [selectedPartner, setSelectedPartner] = useState<PartnerProfile | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -150,6 +158,26 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
   const invitePartner = useMemo(
     () => partners.find((p) => p.id === invitePartnerId) ?? null,
     [partners, invitePartnerId]
+  )
+
+  // Same detail depth as the /agency/pool/[partnerId] view (commit 466f17d): designations,
+  // insurance coverage, and company facts, each omitted entirely when the partner holds nothing.
+  const selectedPartnerCriteria = selectedPartner ? withBusinessCriteriaDefaults(selectedPartner.business_criteria) : null
+  const selectedPartnerDesignations = selectedPartnerCriteria
+    ? DESIGNATION_KEYS.filter((key) => selectedPartnerCriteria.designations[key].holds)
+    : []
+  const selectedPartnerInsurance = selectedPartnerCriteria
+    ? INSURANCE_KEYS.filter((key) => selectedPartnerCriteria.insurance[key].has_coverage)
+    : []
+  const selectedPartnerHasInsurance =
+    selectedPartnerInsurance.length > 0 || Boolean(selectedPartnerCriteria?.insurance.coi_on_file)
+  const selectedPartnerFacts = selectedPartnerCriteria?.company_facts ?? null
+  const selectedPartnerHasFacts = Boolean(
+    selectedPartnerFacts &&
+      (selectedPartnerFacts.years_in_business != null ||
+        selectedPartnerFacts.union_signatory.trim() ||
+        selectedPartnerFacts.sustainability_approach.trim() ||
+        selectedPartnerFacts.workforce_diversity_summary.trim())
   )
 
   const inviteToPool = async () => {
@@ -319,7 +347,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
                   {selectedPartner.company_logo_url ? (
-                    <img src={selectedPartner.company_logo_url} alt={selectedPartner.company_name} className="w-full h-full object-cover" />
+                    <img src={selectedPartner.company_logo_url} alt={selectedPartner.company_name || ""} className="w-full h-full object-cover" />
                   ) : (
                     <Building2 className="w-6 h-6 text-foreground-muted" />
                   )}
@@ -357,7 +385,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
               )}
             </div>
 
-            {selectedPartner.capabilities && Array.isArray(selectedPartner.capabilities) && (selectedPartner.capabilities as string[]).length > 0 && (
+            {Array.isArray(selectedPartner.capabilities) && (selectedPartner.capabilities as string[]).length > 0 && (
               <div>
                 <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">Capabilities</div>
                 <div className="flex flex-wrap gap-1">
@@ -365,6 +393,100 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                     <span key={i} className="px-2 py-0.5 rounded-full bg-white/10 text-foreground-muted text-xs">{cap}</span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {selectedPartnerDesignations.length > 0 && (
+              <div>
+                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  Business Designations
+                </div>
+                <ul className="space-y-2 text-sm">
+                  {selectedPartnerDesignations.map((key) => {
+                    const designation = selectedPartnerCriteria!.designations[key]
+                    return (
+                      <li key={key}>
+                        <div className="text-foreground font-medium">{DESIGNATION_LABELS[key]}</div>
+                        {(designation.certifying_body || designation.certification_number) && (
+                          <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                            {[designation.certifying_body, designation.certification_number].filter(Boolean).join(" · ")}
+                          </div>
+                        )}
+                        {designation.self_certified && (
+                          <div className="font-mono text-[10px] text-foreground-muted mt-0.5">Self-certified</div>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {selectedPartnerHasInsurance && (
+              <div>
+                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  Insurance Coverage
+                </div>
+                <ul className="space-y-2 text-sm">
+                  {selectedPartnerInsurance.map((key) => {
+                    const coverage = selectedPartnerCriteria!.insurance[key]
+                    return (
+                      <li key={key} className="flex items-center justify-between gap-3">
+                        <span className="text-foreground font-medium">{INSURANCE_LABELS[key]}</span>
+                        <span className="font-mono text-[10px] text-foreground-muted">
+                          {coverage.limit || "No limit on file"}
+                        </span>
+                      </li>
+                    )
+                  })}
+                  <li className="flex items-center justify-between gap-3 pt-2 border-t border-border">
+                    <span className="text-foreground font-medium">Certificate of Insurance</span>
+                    <span
+                      className={cn(
+                        "font-mono text-[10px] px-2 py-0.5 rounded-full",
+                        selectedPartnerCriteria?.insurance.coi_on_file
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : "bg-white/10 text-foreground-muted"
+                      )}
+                    >
+                      {selectedPartnerCriteria?.insurance.coi_on_file ? "On file" : "Not on file"}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            )}
+
+            {selectedPartnerHasFacts && selectedPartnerFacts && (
+              <div>
+                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  Company Facts
+                </div>
+                <dl className="space-y-2 text-sm">
+                  {selectedPartnerFacts.years_in_business != null && (
+                    <div>
+                      <dt className="font-mono text-[10px] text-foreground-muted uppercase">Years in Business</dt>
+                      <dd className="text-foreground">{selectedPartnerFacts.years_in_business}</dd>
+                    </div>
+                  )}
+                  {selectedPartnerFacts.union_signatory.trim() && (
+                    <div>
+                      <dt className="font-mono text-[10px] text-foreground-muted uppercase">Union Signatory</dt>
+                      <dd className="text-foreground">{selectedPartnerFacts.union_signatory}</dd>
+                    </div>
+                  )}
+                  {selectedPartnerFacts.sustainability_approach.trim() && (
+                    <div>
+                      <dt className="font-mono text-[10px] text-foreground-muted uppercase">Sustainability Approach</dt>
+                      <dd className="text-foreground whitespace-pre-wrap">{selectedPartnerFacts.sustainability_approach}</dd>
+                    </div>
+                  )}
+                  {selectedPartnerFacts.workforce_diversity_summary.trim() && (
+                    <div>
+                      <dt className="font-mono text-[10px] text-foreground-muted uppercase">Workforce Diversity Summary</dt>
+                      <dd className="text-foreground whitespace-pre-wrap">{selectedPartnerFacts.workforce_diversity_summary}</dd>
+                    </div>
+                  )}
+                </dl>
               </div>
             )}
 
