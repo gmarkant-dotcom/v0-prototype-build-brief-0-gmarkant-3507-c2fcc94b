@@ -126,7 +126,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
         .maybeSingle(),
       supabase
         .from("profiles")
-        .select("company_name, display_name, avatar_url")
+        // company_logo_url is the agency's company logo (shown to vendors). avatar_url is the
+        // signed-in user's personal photo, a different field, and not what belongs on this page.
+        .select("company_name, display_name, company_logo_url")
         .eq("id", tokenRow.agency_id)
         .maybeSingle(),
     ])

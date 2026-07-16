@@ -221,3 +221,23 @@ export function compareBusinessCriteria(
     missingCoi,
   }
 }
+
+/**
+ * Ad hoc filter match: does a company's holds satisfy an agency's picked designation/insurance
+ * checkboxes (e.g. on /agency/pool or /partner/discover)? Unlike compareBusinessCriteria, there
+ * is no RFP "required" object here, just a free-form filter selection - every selected key must
+ * be held for a match. An empty selection always matches (no filter applied).
+ */
+export function businessCriteriaHoldsMatchesSelection(
+  holds: BusinessCriteriaHolds,
+  selectedDesignations: DesignationKey[],
+  selectedInsurance: InsuranceKey[]
+): boolean {
+  for (const key of selectedDesignations) {
+    if (!holds.designations[key].holds) return false
+  }
+  for (const key of selectedInsurance) {
+    if (!holds.insurance[key].has_coverage) return false
+  }
+  return true
+}

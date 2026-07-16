@@ -19,6 +19,17 @@ import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Ca
 import { Checkbox } from "@/components/ui/checkbox"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { MarketplaceContent } from "@/components/marketplace-content"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  type DesignationKey,
+  type InsuranceKey,
+  businessCriteriaHoldsMatchesSelection,
+  emptyBusinessCriteriaHolds,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
 
 // Partnership type (Tier 1 - business relationship)
 type Partnership = {
@@ -41,6 +52,7 @@ type Partnership = {
   partnerBio?: string | null
   partnerCapabilities?: string[]
   partnerLogoUrl?: string | null
+  partnerBusinessCriteria?: unknown
   msaConfirmedAt?: string | null
 }
 
@@ -260,7 +272,17 @@ export default function PartnerPoolPage() {
   const [selectedLegal, setSelectedLegal] = useState("All")
   const [selectedStatus, setSelectedStatus] = useState("All")
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false)
+  const [selectedDesignationFilters, setSelectedDesignationFilters] = useState<DesignationKey[]>([])
+  const [selectedInsuranceFilters, setSelectedInsuranceFilters] = useState<InsuranceKey[]>([])
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null)
+
+  const toggleDesignationFilter = (key: DesignationKey) => {
+    setSelectedDesignationFilters((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  }
+
+  const toggleInsuranceFilter = (key: InsuranceKey) => {
+    setSelectedInsuranceFilters((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  }
 
   // Discover New Partners sheet (embeds Marketplace)
   const [discoverSheetOpen, setDiscoverSheetOpen] = useState(false)
@@ -400,12 +422,13 @@ export default function PartnerPoolPage() {
             bio: string | null
             capabilities: unknown
             company_logo_url: string | null
+            business_criteria: unknown
           }
         > = {}
         if (partnerIds.length > 0) {
           const { data: profs } = await supabase
             .from("profiles")
-            .select("id, company_name, full_name, display_name, agency_type, bio, capabilities, company_logo_url")
+            .select("id, company_name, full_name, display_name, agency_type, bio, capabilities, company_logo_url, business_criteria")
             .in("id", partnerIds)
           for (const pr of profs || []) {
             profileById[pr.id as string] = {
@@ -416,6 +439,7 @@ export default function PartnerPoolPage() {
               bio: pr.bio as string | null,
               capabilities: (pr as { capabilities?: unknown }).capabilities ?? null,
               company_logo_url: (pr as { company_logo_url?: string | null }).company_logo_url ?? null,
+              business_criteria: (pr as { business_criteria?: unknown }).business_criteria ?? null,
             }
           }
         }
@@ -428,6 +452,7 @@ export default function PartnerPoolPage() {
             partnerBio: prof?.bio ?? null,
             partnerCapabilities: extractCapabilityValues(prof?.capabilities),
             partnerLogoUrl: prof?.company_logo_url ?? null,
+            partnerBusinessCriteria: prof?.business_criteria ?? null,
             partnerName: row.partnerName || prof?.full_name || undefined,
             partnerCompany: row.partnerCompany || prof?.company_name || undefined,
             // msaConfirmedAt already set from API response
@@ -876,6 +901,17 @@ export default function PartnerPoolPage() {
         if (!demoInvitationMatchesStatus(inv, partner, selectedStatus)) return false
         if (!demoInvitationMatchesLegal(partner, selectedLegal)) return false
         if (!disciplineMatches(selectedDiscipline, partner?.discipline ?? null, partner?.tags ?? [])) return false
+        // Demo partners carry no real profiles.business_criteria - an empty selection always
+        // matches (no filter applied), but any active filter excludes all demo rows rather than
+        // erroring on data that doesn't exist for them.
+        if (
+          !businessCriteriaHoldsMatchesSelection(
+            emptyBusinessCriteriaHolds(),
+            selectedDesignationFilters,
+            selectedInsuranceFilters
+          )
+        )
+          return false
         return true
       }
       const p = row.p
@@ -890,6 +926,14 @@ export default function PartnerPoolPage() {
       if (!partnershipMatchesStatusFilter(p, selectedStatus)) return false
       if (!partnershipMatchesLegalFilter(p, selectedLegal)) return false
       if (!disciplineMatches(selectedDiscipline, p.partnerAgencyType, p.partnerCapabilities ?? [])) return false
+      if (
+        !businessCriteriaHoldsMatchesSelection(
+          withBusinessCriteriaDefaults(p.partnerBusinessCriteria),
+          selectedDesignationFilters,
+          selectedInsuranceFilters
+        )
+      )
+        return false
       return true
     })
   }, [
@@ -899,6 +943,8 @@ export default function PartnerPoolPage() {
     selectedStatus,
     selectedLegal,
     selectedDiscipline,
+    selectedDesignationFilters,
+    selectedInsuranceFilters,
   ])
 
   const filteredPartners = useMemo(() => {
@@ -1168,6 +1214,42 @@ export default function PartnerPoolPage() {
                 )}
               >
                 {discipline}
+              </button>
+            ))}
+          </div>
+
+          {/* Business Criteria Filter */}
+          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
+            <span className="font-mono text-[10px] text-foreground-muted mr-2">Designations:</span>
+            {DESIGNATION_KEYS.map((key) => (
+              <button
+                key={key}
+                onClick={() => toggleDesignationFilter(key)}
+                className={cn(
+                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                  selectedDesignationFilters.includes(key)
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-foreground/90 hover:border-white/30"
+                )}
+              >
+                {DESIGNATION_LABELS[key]}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
+            <span className="font-mono text-[10px] text-foreground-muted mr-2">Insurance:</span>
+            {INSURANCE_KEYS.map((key) => (
+              <button
+                key={key}
+                onClick={() => toggleInsuranceFilter(key)}
+                className={cn(
+                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                  selectedInsuranceFilters.includes(key)
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-foreground/90 hover:border-white/30"
+                )}
+              >
+                {INSURANCE_LABELS[key]}
               </button>
             ))}
           </div>

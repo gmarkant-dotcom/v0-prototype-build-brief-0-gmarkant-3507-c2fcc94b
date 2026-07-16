@@ -55,7 +55,7 @@ type ProjectData = {
   end_date: string | null
 }
 
-type AgencyData = { company_name: string | null; display_name: string | null; avatar_url: string | null }
+type AgencyData = { company_name: string | null; display_name: string | null; company_logo_url: string | null }
 type ScopeItemData = { name: string | null; description: string | null } | null
 
 type PaymentTerms = {
@@ -158,6 +158,7 @@ export default function GuestRfpRespondPage() {
   const [activeTab, setActiveTab] = useState<"rfp-details" | "my-bid" | "status">("rfp-details")
   const [isEditingBid, setIsEditingBid] = useState(false)
   const [proposalExpanded, setProposalExpanded] = useState(false)
+  const [agencyLogoLoadError, setAgencyLogoLoadError] = useState(false)
 
   const [proposalText, setProposalText] = useState("")
   const [budgetAmount, setBudgetAmount] = useState("")
@@ -440,9 +441,14 @@ export default function GuestRfpRespondPage() {
           <TabsContent value="rfp-details">
             <div className="rounded-2xl border border-border/30 bg-white/5 p-6 space-y-4">
               <div className="flex items-center gap-3">
-                {agency.avatar_url ? (
+                {agency.company_logo_url && !agencyLogoLoadError ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={agency.avatar_url} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                  <img
+                    src={agency.company_logo_url}
+                    alt=""
+                    className="w-10 h-10 rounded-full object-cover shrink-0"
+                    onError={() => setAgencyLogoLoadError(true)}
+                  />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center shrink-0 font-display font-bold text-accent">
                     {agencyDisplayName(agency).charAt(0).toUpperCase()}
