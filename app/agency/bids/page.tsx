@@ -33,6 +33,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  compareBusinessCriteria,
+  normalizeBusinessCriteriaRequired,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
 
 const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 
@@ -62,6 +71,8 @@ type BidRow = {
   timeline_proposal?: string
   payment_terms?: PaymentTerms
   attachments?: BidAttachment[] | null
+  business_criteria_responses?: unknown
+  business_criteria_required?: unknown
   agency_feedback?: string | null
   submitted_at?: string | null
   created_at: string
@@ -227,6 +238,21 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
   const scope = row.inbox?.scope_item_name || row.project_name || "Scope"
   const budget = bestBudgetDisplay(row)
   const timeline = row.timeline_proposal ? formatTimelineForDisplay(row.timeline_proposal) : null
+
+  const businessCriteriaResponses = withBusinessCriteriaDefaults(row.business_criteria_responses)
+  const businessCriteriaRequired = normalizeBusinessCriteriaRequired(row.business_criteria_required)
+  const businessCriteriaGap = compareBusinessCriteria(businessCriteriaRequired, businessCriteriaResponses)
+  const requiredDesignationKeys = DESIGNATION_KEYS.filter((key) => businessCriteriaRequired.designations[key] === true)
+  const requiredInsuranceKeys = INSURANCE_KEYS.filter((key) => businessCriteriaRequired.insurance[key]?.required === true)
+  const designationKeysToShow = DESIGNATION_KEYS.filter(
+    (key) => requiredDesignationKeys.includes(key) || businessCriteriaResponses.designations[key].holds
+  )
+  const insuranceKeysToShow = INSURANCE_KEYS.filter(
+    (key) => requiredInsuranceKeys.includes(key) || businessCriteriaResponses.insurance[key].has_coverage
+  )
+  const showCoiRow = businessCriteriaRequired.insurance.coi_on_file || businessCriteriaResponses.insurance.coi_on_file
+  const showBusinessCriteriaSection =
+    designationKeysToShow.length > 0 || insuranceKeysToShow.length > 0 || showCoiRow
   const isGuest = !row.partner_id && row.response_exists
   const identity = isGuest ? row.vendor_email || row.partner_display_name : row.partner_display_name
   const projectId = row.inbox?.project_id
@@ -356,6 +382,113 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
                 {row.submitted_at && (
                   <div className="font-mono text-[10px] text-foreground-muted">
                     Submitted {formatDateTime(row.submitted_at)}
+                  </div>
+                )}
+
+                {showBusinessCriteriaSection && (
+                  <div>
+                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Business Criteria</div>
+                    <div className="space-y-2">
+                      {designationKeysToShow.map((key) => {
+                        const designation = businessCriteriaResponses.designations[key]
+                        const isRequired = requiredDesignationKeys.includes(key)
+                        const isMissing = businessCriteriaGap.missingDesignations.includes(key)
+                        return (
+                          <div key={key} className="flex items-start justify-between gap-3 text-sm">
+                            <div className="min-w-0">
+                              <div className="text-foreground">{DESIGNATION_LABELS[key]}</div>
+                              {designation.holds && (designation.certifying_body || designation.certification_number) && (
+                                <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                                  {[designation.certifying_body, designation.certification_number]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </div>
+                              )}
+                              {designation.holds && designation.self_certified && (
+                                <div className="font-mono text-[10px] text-foreground-muted mt-0.5">Self-certified</div>
+                              )}
+                            </div>
+                            {isRequired ? (
+                              isMissing ? (
+                                <span className="inline-flex items-center gap-1 text-amber-300 shrink-0">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span className="font-mono text-[9px] uppercase">Missing</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-emerald-300 shrink-0">
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <span className="font-mono text-[9px] uppercase">Met</span>
+                                </span>
+                              )
+                            ) : (
+                              <span className="font-mono text-[9px] uppercase text-foreground-muted shrink-0">
+                                Confirmed
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {insuranceKeysToShow.map((key) => {
+                        const coverage = businessCriteriaResponses.insurance[key]
+                        const isRequired = requiredInsuranceKeys.includes(key)
+                        const isMissing = businessCriteriaGap.missingInsurance.includes(key)
+                        const minimum = businessCriteriaRequired.insurance[key]?.minimum
+                        return (
+                          <div key={key} className="flex items-start justify-between gap-3 text-sm">
+                            <div className="min-w-0">
+                              <div className="text-foreground">
+                                {INSURANCE_LABELS[key]}
+                                {minimum ? ` (min. ${minimum})` : ""}
+                              </div>
+                              {coverage.has_coverage && coverage.limit && (
+                                <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                                  Limit: {coverage.limit}
+                                </div>
+                              )}
+                            </div>
+                            {isRequired ? (
+                              isMissing ? (
+                                <span className="inline-flex items-center gap-1 text-amber-300 shrink-0">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span className="font-mono text-[9px] uppercase">Missing</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-emerald-300 shrink-0">
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <span className="font-mono text-[9px] uppercase">Met</span>
+                                </span>
+                              )
+                            ) : (
+                              <span className="font-mono text-[9px] uppercase text-foreground-muted shrink-0">
+                                Confirmed
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                      {showCoiRow && (
+                        <div className="flex items-center justify-between gap-3 text-sm">
+                          <div className="text-foreground">Certificate of Insurance (COI) on file</div>
+                          {businessCriteriaRequired.insurance.coi_on_file ? (
+                            businessCriteriaGap.missingCoi ? (
+                              <span className="inline-flex items-center gap-1 text-amber-300 shrink-0">
+                                <AlertTriangle className="w-3.5 h-3.5" />
+                                <span className="font-mono text-[9px] uppercase">Missing</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-emerald-300 shrink-0">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                <span className="font-mono text-[9px] uppercase">Met</span>
+                              </span>
+                            )
+                          ) : (
+                            <span className="font-mono text-[9px] uppercase text-foreground-muted shrink-0">
+                              Confirmed
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

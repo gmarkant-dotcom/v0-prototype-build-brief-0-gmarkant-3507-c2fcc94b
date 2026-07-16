@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { parseBudgetProposal, parseTimelineProposal } from "@/lib/rfp-response-fields"
+import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 
 export const dynamic = "force-dynamic"
 
@@ -106,12 +107,18 @@ export async function GET(request: Request) {
     const guestResponseIds = list.filter((r) => !r.inbox_item_id).map((r) => r.id as string)
     let magicTokenByResponseId: Record<
       string,
-      { vendor_email: string; vendor_name: string | null; scope_item_name: string | null; project_id: string | null }
+      {
+        vendor_email: string
+        vendor_name: string | null
+        scope_item_name: string | null
+        project_id: string | null
+        business_criteria_required: unknown
+      }
     > = {}
     if (guestResponseIds.length > 0) {
       const { data: magicRows, error: magicRowsErr } = await supabase
         .from("rfp_magic_tokens")
-        .select("response_id, vendor_email, vendor_name, scope_item_name, project_id")
+        .select("response_id, vendor_email, vendor_name, scope_item_name, project_id, business_criteria_required")
         .in("response_id", guestResponseIds)
       if (magicRowsErr) {
         console.error("[agency/rfp-responses] rfp_magic_tokens enrichment select error", {
@@ -206,6 +213,14 @@ export async function GET(request: Request) {
       const pr = pid ? profileById[pid] : null
       const displayName = pr?.company_name || pr?.full_name || pr?.email || (r.partner_id ? profileById[r.partner_id as string]?.company_name || profileById[r.partner_id as string]?.full_name || profileById[r.partner_id as string]?.email : null) || 'Partner'
       const magicProjectMeta = magicToken?.project_id ? projectMetaById[magicToken.project_id] : null
+      // Requirements live on partner_rfp_inbox.master_rfp_json for partner bids, or on
+      // rfp_magic_tokens.business_criteria_required for guest bids (no inbox row exists there).
+      const inboxMasterRfp = inboxRow
+        ? ((inboxRow as Record<string, unknown>).master_rfp_json as Record<string, unknown> | null)
+        : null
+      const businessCriteriaRequiredSource = inboxRow
+        ? inboxMasterRfp?.business_criteria_required ?? null
+        : magicToken?.business_criteria_required ?? null
       return {
         ...r,
         response_id: r.id,
@@ -217,6 +232,7 @@ export async function GET(request: Request) {
           ? { scope_item_name: magicToken.scope_item_name, response_deadline: null, project_id: magicToken.project_id }
           : null),
         vendor_email: magicToken?.vendor_email ?? null,
+        business_criteria_required: normalizeBusinessCriteriaRequired(businessCriteriaRequiredSource),
       }
     })
 
