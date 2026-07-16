@@ -95,6 +95,9 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
         <HoverCard openDelay={200}>
           <HoverCardTrigger asChild>{link}</HoverCardTrigger>
           <HoverCardContent side="right" align="start" className="w-64 p-1.5 bg-background border-border">
+            <p className="px-3 pt-1.5 pb-2 mb-1 border-b border-border text-xs text-foreground-muted">
+              Create and send scoped RFPs to your partner pool or any vendor via Lightning RFP Magic Link
+            </p>
             <Link
               href="/agency"
               className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
