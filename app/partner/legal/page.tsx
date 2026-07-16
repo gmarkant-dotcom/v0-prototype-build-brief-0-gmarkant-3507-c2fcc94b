@@ -105,6 +105,7 @@ export default function PartnerLegalPage() {
   })
   
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [coiSaved, setCoiSaved] = useState(false)
   const [businessCriteria, setBusinessCriteria] = useState<BusinessCriteriaHolds>(emptyBusinessCriteriaHolds())
   const [savingBusinessCriteria, setSavingBusinessCriteria] = useState(false)
   const [savedBusinessCriteria, setSavedBusinessCriteria] = useState(false)
@@ -277,7 +278,9 @@ export default function PartnerLegalPage() {
   const handleCoiUpload = async (file: File) => {
     setUploadingDocId("coi")
     setUploadError(null)
+    setCoiSaved(false)
 
+    let url = ""
     try {
       const formData = new FormData()
       formData.append("file", file)
@@ -292,45 +295,60 @@ export default function PartnerLegalPage() {
       if (!response.ok) {
         throw new Error(payload?.error || "Upload failed")
       }
-      const url = String(payload?.url || "")
+      url = String(payload?.url || "")
       if (!url) {
         throw new Error("Upload succeeded but no file URL was returned")
-      }
-
-      const updatedCriteria: BusinessCriteriaHolds = {
-        ...businessCriteria,
-        insurance: { ...businessCriteria.insurance, coi_on_file: true, coi_document_url: url },
-      }
-      setBusinessCriteria(updatedCriteria)
-      setDocuments((prev) =>
-        prev.map((doc) =>
-          doc.id === "coi"
-            ? {
-                ...doc,
-                status: "complete" as const,
-                uploadedDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-              }
-            : doc
-        )
-      )
-
-      if (!isDemo) {
-        const supabase = createClient()
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (user) {
-          const target = profileId || user.id
-          const { error } = await supabase
-            .from("profiles")
-            .update({ business_criteria: updatedCriteria, updated_at: new Date().toISOString() })
-            .eq("id", target)
-          if (error) throw error
-        }
       }
     } catch (error) {
       console.error("COI upload error:", error)
       setUploadError(error instanceof Error ? error.message : "Upload failed. Please try again.")
+      setUploadingDocId(null)
+      return
+    }
+
+    const updatedCriteria: BusinessCriteriaHolds = {
+      ...businessCriteria,
+      insurance: { ...businessCriteria.insurance, coi_on_file: true, coi_document_url: url },
+    }
+    setBusinessCriteria(updatedCriteria)
+    setDocuments((prev) =>
+      prev.map((doc) =>
+        doc.id === "coi"
+          ? {
+              ...doc,
+              status: "complete" as const,
+              uploadedDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+            }
+          : doc
+      )
+    )
+
+    if (isDemo) {
+      setUploadingDocId(null)
+      return
+    }
+
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error("Could not confirm your session")
+      }
+      const target = profileId || user.id
+      const { error } = await supabase
+        .from("profiles")
+        .update({ business_criteria: updatedCriteria, updated_at: new Date().toISOString() })
+        .eq("id", target)
+      if (error) throw error
+      setCoiSaved(true)
+      setTimeout(() => setCoiSaved(false), 2500)
+    } catch (error) {
+      console.error("COI auto-save error:", error)
+      setUploadError(
+        "Your file uploaded, but saving it to your profile failed. Click Save Business Criteria below to finish."
+      )
     } finally {
       setUploadingDocId(null)
     }
@@ -554,6 +572,9 @@ export default function PartnerLegalPage() {
                   <div>
                     {doc.status === "complete" ? (
                       <div className="flex items-center gap-2">
+                        {doc.id === "coi" && coiSaved && (
+                          <span className="text-xs font-medium text-green-600">Saved</span>
+                        )}
                         <Button variant="ghost" size="sm" className="text-gray-800 hover:text-[#0C3535]">
                           View
                         </Button>
