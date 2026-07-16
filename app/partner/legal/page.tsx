@@ -107,6 +107,7 @@ export default function PartnerLegalPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [businessCriteria, setBusinessCriteria] = useState<BusinessCriteriaHolds>(emptyBusinessCriteriaHolds())
   const [savingBusinessCriteria, setSavingBusinessCriteria] = useState(false)
+  const [savedBusinessCriteria, setSavedBusinessCriteria] = useState(false)
   const [businessCriteriaMsg, setBusinessCriteriaMsg] = useState<string | null>(null)
 
   useEffect(() => {
@@ -187,6 +188,7 @@ export default function PartnerLegalPage() {
 
   const saveBusinessCriteria = async () => {
     setBusinessCriteriaMsg(null)
+    setSavedBusinessCriteria(false)
     if (isDemo) {
       setBusinessCriteriaMsg("Demo mode - business criteria is not persisted.")
       return
@@ -211,6 +213,8 @@ export default function PartnerLegalPage() {
         .eq("id", target)
       if (error) throw error
       setBusinessCriteriaMsg("Business criteria saved.")
+      setSavedBusinessCriteria(true)
+      setTimeout(() => setSavedBusinessCriteria(false), 2500)
     } catch (error) {
       setBusinessCriteriaMsg(error instanceof Error ? error.message : "Failed to save business criteria.")
     } finally {
@@ -518,12 +522,34 @@ export default function PartnerLegalPage() {
           </div>
         </div>
         
-        {/* Business Designations & Company Facts */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Business Designations & Company Facts</h2>
+        {/* Business Criteria: shared header + save action governs both cards below */}
+        <div className="space-y-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="font-display font-bold text-xl text-[#0C3535]">Business Criteria</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Diversity designations, company facts, and insurance coverage used for procurement requirements.
+              </p>
+            </div>
+            <Button
+              onClick={saveBusinessCriteria}
+              disabled={savingBusinessCriteria}
+              className={cn(
+                "shrink-0 min-w-[190px] text-white",
+                savedBusinessCriteria ? "bg-green-600 hover:bg-green-600" : "bg-[#0C3535] hover:bg-[#0C3535]/90"
+              )}
+            >
+              {savingBusinessCriteria ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {savingBusinessCriteria ? "Saving..." : savedBusinessCriteria ? "Saved" : "Save Business Criteria"}
+            </Button>
+          </div>
+          {businessCriteriaMsg ? <p className="text-xs text-gray-600">{businessCriteriaMsg}</p> : null}
+
+          {/* Business Designations & Company Facts */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-display font-bold text-lg text-[#0C3535] mb-2">Business Designations & Company Facts</h3>
           <p className="text-sm text-gray-600 mb-6">
-            Diversity and ownership designations, plus company facts agencies use for procurement requirements. Saved
-            together with Insurance Requirements below.
+            Diversity and ownership designations, plus company facts agencies use for procurement requirements.
           </p>
 
           <div className="space-y-3 mb-8">
@@ -635,26 +661,14 @@ export default function PartnerLegalPage() {
               />
             </div>
           </div>
-        </div>
-
-        {/* Insurance Requirements */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <div>
-              <h2 className="font-display font-bold text-lg text-[#0C3535] mb-1">Insurance Requirements</h2>
-              <p className="text-sm text-gray-600">
-                Confirm the insurance coverages your company carries, with limits, for project eligibility.
-              </p>
-            </div>
-            <Button
-              onClick={saveBusinessCriteria}
-              disabled={savingBusinessCriteria}
-              className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90 shrink-0"
-            >
-              {savingBusinessCriteria ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Save Business Criteria
-            </Button>
           </div>
+
+          {/* Insurance Requirements */}
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h3 className="font-display font-bold text-lg text-[#0C3535] mb-1">Insurance Requirements</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Confirm the insurance coverages your company carries, with limits, for project eligibility.
+          </p>
 
           <div className="space-y-3">
             {INSURANCE_KEYS.map((key) => {
@@ -715,8 +729,7 @@ export default function PartnerLegalPage() {
               Checking this confirms you can provide a current COI on request.
             </p>
           </div>
-
-          {businessCriteriaMsg ? <p className="text-xs text-gray-600 mt-3">{businessCriteriaMsg}</p> : null}
+          </div>
         </div>
       </div>
     </PartnerLayout>
