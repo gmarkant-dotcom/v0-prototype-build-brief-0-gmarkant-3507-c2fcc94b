@@ -113,12 +113,13 @@ export async function GET(request: Request) {
         scope_item_name: string | null
         project_id: string | null
         business_criteria_required: unknown
+        created_at: string | null
       }
     > = {}
     if (guestResponseIds.length > 0) {
       const { data: magicRows, error: magicRowsErr } = await supabase
         .from("rfp_magic_tokens")
-        .select("response_id, vendor_email, vendor_name, scope_item_name, project_id, business_criteria_required")
+        .select("response_id, vendor_email, vendor_name, scope_item_name, project_id, business_criteria_required, created_at")
         .in("response_id", guestResponseIds)
       if (magicRowsErr) {
         console.error("[agency/rfp-responses] rfp_magic_tokens enrichment select error", {
@@ -135,7 +136,7 @@ export async function GET(request: Request) {
     let inboxQuery = supabase
       .from("partner_rfp_inbox")
       .select(
-        "id, project_id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, partner_id, recipient_email, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at"
+        "id, project_id, partnership_id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, partner_id, recipient_email, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at"
       )
       .eq("agency_id", user.id)
       .order("created_at", { ascending: false })
@@ -233,8 +234,55 @@ export async function GET(request: Request) {
           : null),
         vendor_email: magicToken?.vendor_email ?? null,
         business_criteria_required: normalizeBusinessCriteriaRequired(businessCriteriaRequiredSource),
+        rfp_sent_at: inboxRow
+          ? ((inboxRow as Record<string, unknown>).created_at as string | null) ?? null
+          : magicToken?.created_at ?? null,
       }
     })
+
+    // "Awarded" timeline entry: project_assignments has its own awarded_at, keyed by
+    // (project_id, partnership_id) rather than by response id - batch-resolve it only for
+    // awarded rows where both keys are available. No row here means the entry is just omitted.
+    const awardedLookupKeys: { responseId: string; projectId: string; partnershipId: string }[] = []
+    for (const r of merged) {
+      if (r.status !== "awarded") continue
+      const inboxRow = inboxById[r.inbox_item_id as string] ?? null
+      const projectId = inboxRow ? ((inboxRow as Record<string, unknown>).project_id as string | null) : null
+      const partnershipId = inboxRow ? ((inboxRow as Record<string, unknown>).partnership_id as string | null) : null
+      if (projectId && partnershipId) {
+        awardedLookupKeys.push({ responseId: r.id as string, projectId, partnershipId })
+      }
+    }
+    const awardedAtByResponseId: Record<string, string | null> = {}
+    if (awardedLookupKeys.length > 0) {
+      const { data: assignmentRows, error: assignmentErr } = await supabase
+        .from("project_assignments")
+        .select("project_id, partnership_id, awarded_at")
+        .in("project_id", [...new Set(awardedLookupKeys.map((k) => k.projectId))])
+        .in("partnership_id", [...new Set(awardedLookupKeys.map((k) => k.partnershipId))])
+      if (assignmentErr) {
+        console.error("[agency/rfp-responses] project_assignments lookup error", {
+          route,
+          userId: user.id,
+          message: assignmentErr.message,
+          code: assignmentErr.code,
+        })
+      } else {
+        const awardedAtByKey = new Map<string, string | null>(
+          (assignmentRows || []).map((a) => [
+            `${a.project_id as string}:${a.partnership_id as string}`,
+            (a.awarded_at as string | null) ?? null,
+          ])
+        )
+        for (const k of awardedLookupKeys) {
+          awardedAtByResponseId[k.responseId] = awardedAtByKey.get(`${k.projectId}:${k.partnershipId}`) ?? null
+        }
+      }
+    }
+    const mergedWithAwardedAt = merged.map((r) => ({
+      ...r,
+      awarded_at: awardedAtByResponseId[r.id as string] ?? null,
+    }))
 
     const responseIds = merged.map((r) => r.id).filter(Boolean)
     let versionsByResponseId: Record<string, unknown[]> = {}
@@ -275,7 +323,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const mergedWithVersions = merged.map((r) => ({
+    const mergedWithVersions = mergedWithAwardedAt.map((r) => ({
       ...r,
       versions: versionsByResponseId[r.id as string] || [],
     }))

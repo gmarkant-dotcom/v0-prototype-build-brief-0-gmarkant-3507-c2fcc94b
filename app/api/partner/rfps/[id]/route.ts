@@ -154,8 +154,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
+    // "Awarded" timeline entry: project_assignments has its own awarded_at, keyed by
+    // (project_id, partnership_id) rather than by response id. Best-effort only - if either
+    // key is missing, the entry is simply omitted client-side rather than erroring.
+    let awardedAt: string | null = null
+    const respStatus = (response as { status?: string } | null)?.status
+    const partnershipId = (inboxWithViewed.partnership_id as string | null) ?? null
+    if (respStatus === "awarded" && projectId && partnershipId) {
+      const { data: assignmentRow } = await supabase
+        .from("project_assignments")
+        .select("awarded_at")
+        .eq("project_id", projectId)
+        .eq("partnership_id", partnershipId)
+        .maybeSingle()
+      awardedAt = (assignmentRow?.awarded_at as string | null) ?? null
+    }
+
     return NextResponse.json(
-      { inbox: { ...inboxWithViewed, agency_meeting_url: agencyMeetingUrl, client_name: clientName }, response: response ?? null, versions },
+      {
+        inbox: { ...inboxWithViewed, agency_meeting_url: agencyMeetingUrl, client_name: clientName, awarded_at: awardedAt },
+        response: response ?? null,
+        versions,
+      },
       {
         headers: {
           "Cache-Control": "private, no-store, no-cache, must-revalidate",

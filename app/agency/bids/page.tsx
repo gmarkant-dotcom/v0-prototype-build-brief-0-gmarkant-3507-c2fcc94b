@@ -6,6 +6,7 @@ import { mutate } from "swr"
 import { AgencyLayout } from "@/components/agency-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn, formatSubmittedAt } from "@/lib/utils"
+import { buildBidTimeline } from "@/lib/bid-timeline"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, Users, AlertTriangle, Clock, CheckCircle, XCircle,
@@ -75,13 +76,17 @@ type BidRow = {
   business_criteria_responses?: unknown
   business_criteria_required?: unknown
   agency_feedback?: string | null
+  feedback_updated_at?: string | null
   submitted_at?: string | null
+  rfp_sent_at?: string | null
+  awarded_at?: string | null
   created_at: string
   updated_at: string
   inbox: {
     scope_item_name?: string | null
     response_deadline?: string | null
     project_id?: string | null
+    created_at?: string | null
   } | null
   versions?: { budget?: string | null; budget_currency?: string | null }[]
 }
@@ -246,6 +251,13 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
   const budget = bestBudgetDisplay(row)
   const timeline = row.timeline_proposal ? formatTimelineForDisplay(row.timeline_proposal) : null
 
+  const activityTimeline = buildBidTimeline({
+    rfpSentAt: row.rfp_sent_at ?? row.inbox?.created_at ?? null,
+    submittedAt: row.submitted_at,
+    feedbackAt: row.agency_feedback ? row.feedback_updated_at : null,
+    awardedAt: row.awarded_at,
+  })
+
   const businessCriteriaResponses = withBusinessCriteriaDefaults(row.business_criteria_responses)
   const businessCriteriaRequired = normalizeBusinessCriteriaRequired(row.business_criteria_required)
   const businessCriteriaGap = compareBusinessCriteria(businessCriteriaRequired, businessCriteriaResponses)
@@ -386,9 +398,17 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
                     </ul>
                   </div>
                 )}
-                {formatSubmittedAt(row.submitted_at) && (
-                  <div className="font-mono text-[10px] text-foreground-muted">
-                    Submitted {formatSubmittedAt(row.submitted_at)}
+                {activityTimeline.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Activity</div>
+                    <ul className="space-y-1">
+                      {activityTimeline.map((entry, i) => (
+                        <li key={i} className="font-mono text-[10px] text-foreground-muted flex items-center gap-2">
+                          <span className="w-1 h-1 rounded-full bg-foreground-muted/60 shrink-0" />
+                          {entry.label} {formatSubmittedAt(entry.iso)}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 

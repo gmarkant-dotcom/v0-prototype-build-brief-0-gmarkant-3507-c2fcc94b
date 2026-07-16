@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import { cn, normalizeMeetingUrlForHref, formatSubmittedAt } from "@/lib/utils"
+import { buildBidTimeline } from "@/lib/bid-timeline"
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { isDemoMode } from "@/lib/demo-data"
 import { createClient } from "@/lib/supabase/client"
@@ -86,6 +87,7 @@ type InboxRow = {
   agency_meeting_url?: string | null
   status: string
   created_at: string
+  awarded_at?: string | null
   response_deadline?: string | null
   partner_intent?: "will_respond" | "has_questions" | "requesting_call" | null
   intent_set_at?: string | null
@@ -952,6 +954,12 @@ export default function PartnerRfpDetailPage() {
       currentStatus
     )
   const feedbackUpdatedAt = existing?.feedback_updated_at ? new Date(existing.feedback_updated_at).toLocaleString() : null
+  const activityTimeline = buildBidTimeline({
+    rfpSentAt: inbox.created_at,
+    submittedAt: existing?.submitted_at ?? null,
+    feedbackAt: existing?.agency_feedback ? existing.feedback_updated_at ?? null : null,
+    awardedAt: inbox.awarded_at ?? null,
+  })
   const responseDeadlineLabel = formatDeadlineDate(inbox.response_deadline)
   const responseDeadlineSoon = isDeadlineWithin48Hours(inbox.response_deadline)
 
@@ -1141,12 +1149,22 @@ export default function PartnerRfpDetailPage() {
                   {currentStatus === "meeting_requested" && <CalendarDays className="w-3 h-3" />}
                   {getBidStatusLabel(currentStatus, "partner")}
                 </span>
-                {formatSubmittedAt(existing?.submitted_at) && (
-                  <p className="font-mono text-[10px] text-gray-500 mt-2">
-                    Submitted {formatSubmittedAt(existing?.submitted_at)}
-                  </p>
-                )}
               </div>
+
+              {activityTimeline.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="font-mono text-[10px] uppercase text-gray-500 mb-3">Activity</div>
+                  <ul className="space-y-2">
+                    {activityTimeline.map((entry, i) => (
+                      <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#0C3535]/60 shrink-0" />
+                        <span className="font-medium">{entry.label}</span>
+                        <span className="font-mono text-[10px] text-gray-500">{formatSubmittedAt(entry.iso)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {existing?.agency_feedback && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">

@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Spinner } from "@/components/ui/spinner"
 import { HolographicBlobs } from "@/components/holographic-blobs"
-import { formatDateTime, formatSubmittedAt, cn } from "@/lib/utils"
+import { formatSubmittedAt, cn } from "@/lib/utils"
+import { buildBidTimeline } from "@/lib/bid-timeline"
 import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal } from "@/lib/rfp-response-fields"
 import type { ReferenceMaterial } from "@/components/reference-materials-input"
 import {
@@ -73,6 +74,7 @@ type SubmittedResponse = {
   business_criteria_responses?: unknown
   status: string
   agency_feedback?: string | null
+  feedback_updated_at?: string | null
   submitted_at?: string | null
 }
 
@@ -381,6 +383,13 @@ export default function GuestRfpRespondPage() {
   const showForm = !hasSubmittedBid || isEditingBid
   const dateRange = [formatDateOnly(project.start_date), formatDateOnly(project.end_date)].filter(Boolean).join(" – ")
   const statusLabel = guestStatusLabel(hasSubmittedBid, response?.status)
+  // No "Awarded" entry here: rfp_magic_tokens has no partnership_id, so there is no key to
+  // join project_assignments.awarded_at against for a guest submission.
+  const activityTimeline = buildBidTimeline({
+    rfpSentAt: tokenRow.created_at,
+    submittedAt: response?.submitted_at ?? tokenRow.submitted_at ?? null,
+    feedbackAt: response?.agency_feedback ? response.feedback_updated_at ?? null : null,
+  })
   const requiredCriteria = normalizeBusinessCriteriaRequired(payload.business_criteria_required)
   const requiredDesignationKeysForBid = DESIGNATION_KEYS.filter((key) => requiredCriteria.designations[key] === true)
   const requiredInsuranceKeysForBid = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
@@ -1052,22 +1061,15 @@ export default function GuestRfpRespondPage() {
               <div className="rounded-2xl border border-border/30 bg-white/5 p-5">
                 <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider mb-3">Timeline</div>
                 <ul className="space-y-3">
-                  <li className="flex items-center gap-3">
-                    <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
-                    <span className="text-sm text-foreground">Invitation sent</span>
-                    <span className="font-mono text-[10px] text-foreground-muted ml-auto">
-                      {formatDateTime(tokenRow.created_at) || "—"}
-                    </span>
-                  </li>
-                  {hasSubmittedBid && (
-                    <li className="flex items-center gap-3">
-                      <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0" />
-                      <span className="text-sm text-foreground">Bid submitted</span>
+                  {activityTimeline.map((entry, i) => (
+                    <li key={i} className="flex items-center gap-3">
+                      <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
+                      <span className="text-sm text-foreground">{entry.label}</span>
                       <span className="font-mono text-[10px] text-foreground-muted ml-auto">
-                        {formatSubmittedAt(response?.submitted_at || tokenRow.submitted_at)}
+                        {formatSubmittedAt(entry.iso)}
                       </span>
                     </li>
-                  )}
+                  ))}
                 </ul>
               </div>
 
