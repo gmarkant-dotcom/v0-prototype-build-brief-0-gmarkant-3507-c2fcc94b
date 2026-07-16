@@ -147,7 +147,11 @@ export default function PartnerLegalPage() {
             (data as { legal_state_of_incorporation?: string | null }).legal_state_of_incorporation || "",
         }))
       }
-      setBusinessCriteria(withBusinessCriteriaDefaults((data as { business_criteria?: unknown } | null)?.business_criteria))
+      const loadedCriteria = withBusinessCriteriaDefaults((data as { business_criteria?: unknown } | null)?.business_criteria)
+      setBusinessCriteria(loadedCriteria)
+      if (loadedCriteria.insurance.coi_on_file && loadedCriteria.insurance.coi_document_url) {
+        setDocuments((prev) => prev.map((doc) => (doc.id === "coi" ? { ...doc, status: "complete" } : doc)))
+      }
     }
     ensurePartnerAuth()
   }, [isDemo, router])
@@ -262,13 +266,84 @@ export default function PartnerLegalPage() {
     }
   }
 
+  /**
+   * COI is the only Required Documents row wired to real persistence (P10 backlog item covers
+   * the rest, e.g. EIN Verification, which stay local-only status like handleFileUpload above).
+   * Uploads the file, then saves the URL and coi_on_file=true onto profiles.business_criteria
+   * in the same action, so the checklist survives a reload.
+   */
+  const handleCoiUpload = async (file: File) => {
+    setUploadingDocId("coi")
+    setUploadError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("folder", "partner-legal")
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload?.error || "Upload failed")
+      }
+      const url = String(payload?.url || "")
+      if (!url) {
+        throw new Error("Upload succeeded but no file URL was returned")
+      }
+
+      const updatedCriteria: BusinessCriteriaHolds = {
+        ...businessCriteria,
+        insurance: { ...businessCriteria.insurance, coi_on_file: true, coi_document_url: url },
+      }
+      setBusinessCriteria(updatedCriteria)
+      setDocuments((prev) =>
+        prev.map((doc) =>
+          doc.id === "coi"
+            ? {
+                ...doc,
+                status: "complete" as const,
+                uploadedDate: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+              }
+            : doc
+        )
+      )
+
+      if (!isDemo) {
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (user) {
+          const target = profileId || user.id
+          const { error } = await supabase
+            .from("profiles")
+            .update({ business_criteria: updatedCriteria, updated_at: new Date().toISOString() })
+            .eq("id", target)
+          if (error) throw error
+        }
+      }
+    } catch (error) {
+      console.error("COI upload error:", error)
+      setUploadError(error instanceof Error ? error.message : "Upload failed. Please try again.")
+    } finally {
+      setUploadingDocId(null)
+    }
+  }
+
   const handleUploadClick = (docId: string) => {
     fileInputRefs.current[docId]?.click()
   }
 
   const handleFileChange = (docId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
+    if (!file) return
+    if (docId === "coi") {
+      handleCoiUpload(file)
+    } else {
       handleFileUpload(docId, file)
     }
   }

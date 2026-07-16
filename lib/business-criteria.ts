@@ -79,7 +79,7 @@ export interface InsuranceHolds {
 
 export interface BusinessCriteriaHolds {
   designations: Record<DesignationKey, DesignationHolds>
-  insurance: Record<InsuranceKey, InsuranceHolds> & { coi_on_file: boolean }
+  insurance: Record<InsuranceKey, InsuranceHolds> & { coi_on_file: boolean; coi_document_url: string | null }
   company_facts: {
     years_in_business: number | null
     union_signatory: string
@@ -118,6 +118,7 @@ export function emptyBusinessCriteriaHolds(): BusinessCriteriaHolds {
         InsuranceHolds
       >),
       coi_on_file: false,
+      coi_document_url: null,
     },
     company_facts: {
       years_in_business: null,
@@ -155,6 +156,9 @@ export function withBusinessCriteriaDefaults(stored: unknown): BusinessCriteriaH
   }
   if (typeof s.insurance?.coi_on_file === "boolean") {
     insurance.coi_on_file = s.insurance.coi_on_file
+  }
+  if (typeof s.insurance?.coi_document_url === "string" || s.insurance?.coi_document_url === null) {
+    insurance.coi_document_url = s.insurance.coi_document_url
   }
 
   const company_facts = { ...base.company_facts, ...(s.company_facts || {}) }
