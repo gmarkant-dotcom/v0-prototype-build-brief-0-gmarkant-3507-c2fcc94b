@@ -6,6 +6,7 @@ import {
   buildAgencyBidNotificationEmail,
   sendTransactionalEmail,
 } from "@/lib/email"
+import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults } from "@/lib/business-criteria"
 
 export const dynamic = "force-dynamic"
 
@@ -173,6 +174,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
         scopeItem,
         agency,
         reference_materials: referenceMaterials,
+        business_criteria_required: normalizeBusinessCriteriaRequired(tokenRow.business_criteria_required),
         response: response
           ? {
               ...response,
@@ -192,6 +194,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       scopeItem,
       agency,
       reference_materials: referenceMaterials,
+      business_criteria_required: normalizeBusinessCriteriaRequired(tokenRow.business_criteria_required),
     })
   } catch (error) {
     console.error("[api] failure", {
@@ -211,6 +214,7 @@ type PostBody = {
   timeline_proposal?: string
   payment_terms?: PaymentTermsInput
   attachments?: unknown
+  business_criteria_responses?: unknown
   is_edit?: boolean
 }
 
@@ -276,6 +280,7 @@ export async function POST(req: Request) {
 
     const payment_terms = normalizeGuestPaymentTerms(body.payment_terms)
     const attachments = normalizeGuestAttachments(body.attachments)
+    const business_criteria_responses = withBusinessCriteriaDefaults(body.business_criteria_responses)
     const budget_proposal = serializeBudget(amount, currency)
     const partner_display_name = (tokenRow.vendor_name || "").trim() || vendorEmail
 
@@ -289,6 +294,7 @@ export async function POST(req: Request) {
           timeline_proposal,
           payment_terms,
           attachments,
+          business_criteria_responses,
           status: "submitted",
           submitted_at: submittedAt,
           updated_at: submittedAt,
@@ -323,6 +329,7 @@ export async function POST(req: Request) {
         timeline_proposal,
         payment_terms,
         attachments,
+        business_criteria_responses,
         partner_display_name,
         status: "submitted",
         updated_at: new Date().toISOString(),

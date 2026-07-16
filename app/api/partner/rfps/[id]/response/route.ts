@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { withBusinessCriteriaDefaults } from "@/lib/business-criteria"
 
 export const dynamic = "force-dynamic"
 
@@ -12,6 +13,7 @@ type Body = {
   timeline_proposal?: string
   payment_terms?: unknown
   attachments?: unknown
+  business_criteria_responses?: unknown
   status?: "draft" | "submitted"
   change_notes?: string
 }
@@ -166,6 +168,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
     const payment_terms = normalizePaymentTerms(body.payment_terms)
     const attachments = normalizeAttachments(body.attachments)
+    const business_criteria_responses = withBusinessCriteriaDefaults(body.business_criteria_responses)
     const changeNotes = (body.change_notes ?? "").toString().trim()
 
     if (status === "submitted") {
@@ -207,6 +210,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       timeline_proposal,
       payment_terms,
       attachments,
+      business_criteria_responses,
       partner_display_name,
       status,
       updated_at: new Date().toISOString(),

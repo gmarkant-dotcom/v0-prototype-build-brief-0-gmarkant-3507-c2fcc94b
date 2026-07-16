@@ -20,6 +20,17 @@ import { FileUpload } from "@/components/file-upload"
 import { ReferenceMaterialsInput, type ReferenceMaterial } from "@/components/reference-materials-input"
 import { RfpOutputTemplate, type SensitivityOptions } from "@/components/rfp-output-template"
 import { readTextStream } from "@/lib/read-text-stream"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  type BusinessCriteriaRequired,
+  type DesignationKey,
+  type InsuranceKey,
+  type InsuranceRequirement,
+  normalizeBusinessCriteriaRequired,
+} from "@/lib/business-criteria"
 
 // Types
 type UploadMethod = "file" | "google" | "paste" | null
@@ -356,11 +367,51 @@ function AgencyRFPContent() {
     scopeItems: ScopeItem[]
     totalBudget: string
     timeline: string
+    business_criteria_required: BusinessCriteriaRequired
   } | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [masterBriefLoadingMessageIndex, setMasterBriefLoadingMessageIndex] = useState(0)
   const [generateMasterBriefError, setGenerateMasterBriefError] = useState<string | null>(null)
-  
+
+  const updateRequiredDesignation = (key: DesignationKey, required: boolean) => {
+    setMasterRfp((prev) => {
+      if (!prev) return prev
+      const designations = { ...prev.business_criteria_required.designations }
+      if (required) designations[key] = true
+      else delete designations[key]
+      return { ...prev, business_criteria_required: { ...prev.business_criteria_required, designations } }
+    })
+  }
+
+  const updateRequiredInsurance = (key: InsuranceKey, patch: Partial<InsuranceRequirement>) => {
+    setMasterRfp((prev) => {
+      if (!prev) return prev
+      const current = prev.business_criteria_required.insurance[key] || { required: false, minimum: null }
+      const insurance = { ...prev.business_criteria_required.insurance, [key]: { ...current, ...patch } }
+      return { ...prev, business_criteria_required: { ...prev.business_criteria_required, insurance } }
+    })
+  }
+
+  const updateRequiredCoi = (required: boolean) => {
+    setMasterRfp((prev) =>
+      prev
+        ? {
+            ...prev,
+            business_criteria_required: {
+              ...prev.business_criteria_required,
+              insurance: { ...prev.business_criteria_required.insurance, coi_on_file: required },
+            },
+          }
+        : prev
+    )
+  }
+
+  const updateRequiredNotes = (notes: string) => {
+    setMasterRfp((prev) =>
+      prev ? { ...prev, business_criteria_required: { ...prev.business_criteria_required, notes } } : prev
+    )
+  }
+
   // Step 3: Allocate Scope
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>([])
   const [newScopeName, setNewScopeName] = useState("")
@@ -604,6 +655,7 @@ function AgencyRFPContent() {
         totalBudget: generated.totalBudget || "TBD",
         timeline: generated.timeline || "TBD",
         scopeItems: normalizedScope,
+        business_criteria_required: normalizeBusinessCriteriaRequired(null),
       }
 
       setMasterRfp(normalized)
@@ -1093,7 +1145,17 @@ function AgencyRFPContent() {
     if (typeof draft.templateSourceText === "string") setTemplateSourceText(draft.templateSourceText)
     if (draft.selectedRfpTemplate !== undefined) setSelectedRfpTemplate(draft.selectedRfpTemplate as string|null)
     if (draft.uploadedRfpTemplate !== undefined) setUploadedRfpTemplate(draft.uploadedRfpTemplate as {name:string;url:string}|null)
-    if (draft.masterRfp !== undefined) setMasterRfp(draft.masterRfp as typeof masterRfp)
+    if (draft.masterRfp !== undefined) {
+      const draftMasterRfp = draft.masterRfp as typeof masterRfp
+      setMasterRfp(
+        draftMasterRfp
+          ? {
+              ...draftMasterRfp,
+              business_criteria_required: normalizeBusinessCriteriaRequired(draftMasterRfp.business_criteria_required),
+            }
+          : draftMasterRfp
+      )
+    }
     if (Array.isArray(draft.scopeItems)) setScopeItems(draft.scopeItems as ScopeItem[])
     if (typeof draft.additionalContext === "string") setAdditionalContext(draft.additionalContext)
     if (draft.brief_used_as_is !== undefined) setBriefUsedAsIs(Boolean(draft.brief_used_as_is))
@@ -1168,7 +1230,7 @@ function AgencyRFPContent() {
   
   const steps = [
     { number: 1, label: "Upload Brief", icon: Upload },
-    { number: 2, label: "Master RFP", icon: FileText },
+    { number: 2, label: "Master RFP + Business Criteria", icon: FileText },
     { number: 3, label: "Allocate Scope", icon: Users },
     { number: 4, label: "Review", icon: Check },
     { number: 5, label: "Recipients", icon: Send },
@@ -1777,7 +1839,80 @@ function AgencyRFPContent() {
                 </div>
               </div>
             </GlassCard>
-            
+
+            <GlassCard>
+              <div className="mb-6">
+                <h2 className="font-display font-bold text-xl text-foreground">Business Criteria</h2>
+                <p className="text-sm text-foreground-muted mt-1">
+                  Require any diversity designation or insurance coverage from bidders. Left unchecked, a
+                  requirement is optional.
+                </p>
+              </div>
+
+              <div className="space-y-3 mb-8">
+                {DESIGNATION_KEYS.map((key) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white/[0.02] cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={masterRfp.business_criteria_required.designations[key] === true}
+                      onCheckedChange={(checked) => updateRequiredDesignation(key, checked === true)}
+                    />
+                    <span className="font-display font-bold text-sm text-foreground">{DESIGNATION_LABELS[key]}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="space-y-3 mb-6">
+                {INSURANCE_KEYS.map((key) => {
+                  const requirement = masterRfp.business_criteria_required.insurance[key]
+                  return (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border bg-white/[0.02]"
+                    >
+                      <label className="flex items-center gap-3 min-w-0 cursor-pointer">
+                        <Checkbox
+                          checked={requirement?.required === true}
+                          onCheckedChange={(checked) => updateRequiredInsurance(key, { required: checked === true })}
+                        />
+                        <span className="font-display font-bold text-sm text-foreground truncate">
+                          {INSURANCE_LABELS[key]}
+                        </span>
+                      </label>
+                      <Input
+                        value={requirement?.minimum || ""}
+                        onChange={(e) => updateRequiredInsurance(key, { minimum: e.target.value || null })}
+                        placeholder="Minimum, e.g. $1M/$2M"
+                        className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-48 shrink-0"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+
+              <label className="flex items-center gap-3 mb-6 cursor-pointer">
+                <Checkbox
+                  checked={masterRfp.business_criteria_required.insurance.coi_on_file === true}
+                  onCheckedChange={(checked) => updateRequiredCoi(checked === true)}
+                />
+                <span className="text-sm text-foreground">Require a Certificate of Insurance (COI) on file</span>
+              </label>
+
+              <div>
+                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                  Additional Notes
+                </label>
+                <Textarea
+                  value={masterRfp.business_criteria_required.notes}
+                  onChange={(e) => updateRequiredNotes(e.target.value)}
+                  placeholder="Any other procurement requirements bidders should know about."
+                  className="min-h-[80px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                />
+              </div>
+            </GlassCard>
+
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border text-foreground hover:bg-white/5">
                 Back

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient as createAnonClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
+import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 
 export const dynamic = "force-dynamic"
 
@@ -97,6 +98,7 @@ export async function POST(request: NextRequest) {
           .slice(0, 20)
       : []
     const outputTemplateConfig = normalizeOutputTemplateConfig(body.output_template_config)
+    const businessCriteriaRequired = normalizeBusinessCriteriaRequired(body.business_criteria_required)
 
     if (!vendorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vendorEmail)) {
       return NextResponse.json({ error: "A valid vendor email is required" }, { status: 400 })
@@ -141,6 +143,7 @@ export async function POST(request: NextRequest) {
           scope_item_name: scopeItemName,
           scope_item_description: scopeItemDescription,
           reference_materials: { materials: referenceMaterials, output_template_config: outputTemplateConfig },
+          business_criteria_required: businessCriteriaRequired,
           token,
           expires_at,
           status: "pending",

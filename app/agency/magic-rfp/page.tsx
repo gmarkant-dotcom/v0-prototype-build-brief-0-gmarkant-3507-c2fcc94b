@@ -25,6 +25,18 @@ import { isDemoMode } from "@/lib/demo-data"
 import { readTextStream } from "@/lib/read-text-stream"
 import { cn } from "@/lib/utils"
 import { Zap, Plus, Trash2, Check, X, FolderOpen, Copy, Send, ChevronDown, ChevronUp, Upload, Sparkles } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  type BusinessCriteriaRequired,
+  type DesignationKey,
+  type InsuranceKey,
+  type InsuranceRequirement,
+  normalizeBusinessCriteriaRequired,
+} from "@/lib/business-criteria"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -95,6 +107,39 @@ function MagicRfpContent() {
 
   // Step 1: Advanced Options (collapsed by default)
   const [advancedOptionsOpen, setAdvancedOptionsOpen] = useState(false)
+
+  // Step 1: Additional Business Criteria (collapsed by default)
+  const [businessCriteriaOpen, setBusinessCriteriaOpen] = useState(false)
+  const [businessCriteriaRequired, setBusinessCriteriaRequired] = useState<BusinessCriteriaRequired>(
+    normalizeBusinessCriteriaRequired(null)
+  )
+
+  const updateRequiredDesignation = (key: DesignationKey, required: boolean) => {
+    setBusinessCriteriaRequired((prev) => {
+      const designations = { ...prev.designations }
+      if (required) designations[key] = true
+      else delete designations[key]
+      return { ...prev, designations }
+    })
+  }
+
+  const updateRequiredInsurance = (key: InsuranceKey, patch: Partial<InsuranceRequirement>) => {
+    setBusinessCriteriaRequired((prev) => {
+      const current = prev.insurance[key] || { required: false, minimum: null }
+      return { ...prev, insurance: { ...prev.insurance, [key]: { ...current, ...patch } } }
+    })
+  }
+
+  const updateRequiredCoi = (required: boolean) => {
+    setBusinessCriteriaRequired((prev) => ({
+      ...prev,
+      insurance: { ...prev.insurance, coi_on_file: required },
+    }))
+  }
+
+  const updateRequiredNotes = (notes: string) => {
+    setBusinessCriteriaRequired((prev) => ({ ...prev, notes }))
+  }
 
   // Subsection 1 — Client Brief: import or AI-structure the Scope Description text
   const [briefImportedMessage, setBriefImportedMessage] = useState(false)
@@ -453,6 +498,7 @@ function MagicRfpContent() {
             scope_item_name: brief.projectName,
             scope_item_description: brief.scopeDescription,
             reference_materials: referenceMaterials,
+            business_criteria_required: businessCriteriaRequired,
             output_template_config: {
               mode: templateMode,
               templateStyle,
@@ -767,6 +813,98 @@ function MagicRfpContent() {
                           generateError={templateGenerateError}
                           generatedTemplateText={generatedTemplateText}
                           isTemplateReady={isTemplateReady}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-border/40 bg-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setBusinessCriteriaOpen((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  >
+                    <div>
+                      <div className="font-display font-bold text-sm text-foreground">Additional Business Criteria</div>
+                      <p className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                        Require diversity designations or insurance coverage from this vendor.
+                      </p>
+                    </div>
+                    {businessCriteriaOpen ? (
+                      <ChevronUp className="w-4 h-4 text-foreground-muted shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-foreground-muted shrink-0" />
+                    )}
+                  </button>
+                  {businessCriteriaOpen && (
+                    <div className="px-4 pb-4 border-t border-border/30 pt-4 space-y-5">
+                      <div className="space-y-3">
+                        {DESIGNATION_KEYS.map((key) => (
+                          <label
+                            key={key}
+                            className="flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-white/[0.02] cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={businessCriteriaRequired.designations[key] === true}
+                              onCheckedChange={(checked) => updateRequiredDesignation(key, checked === true)}
+                            />
+                            <span className="font-display font-bold text-sm text-foreground">
+                              {DESIGNATION_LABELS[key]}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="space-y-3">
+                        {INSURANCE_KEYS.map((key) => {
+                          const requirement = businessCriteriaRequired.insurance[key]
+                          return (
+                            <div
+                              key={key}
+                              className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border/40 bg-white/[0.02]"
+                            >
+                              <label className="flex items-center gap-3 min-w-0 cursor-pointer">
+                                <Checkbox
+                                  checked={requirement?.required === true}
+                                  onCheckedChange={(checked) =>
+                                    updateRequiredInsurance(key, { required: checked === true })
+                                  }
+                                />
+                                <span className="font-display font-bold text-sm text-foreground truncate">
+                                  {INSURANCE_LABELS[key]}
+                                </span>
+                              </label>
+                              <Input
+                                value={requirement?.minimum || ""}
+                                onChange={(e) => updateRequiredInsurance(key, { minimum: e.target.value || null })}
+                                placeholder="Minimum, e.g. $1M/$2M"
+                                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-48 shrink-0"
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <Checkbox
+                          checked={businessCriteriaRequired.insurance.coi_on_file === true}
+                          onCheckedChange={(checked) => updateRequiredCoi(checked === true)}
+                        />
+                        <span className="text-sm text-foreground">
+                          Require a Certificate of Insurance (COI) on file
+                        </span>
+                      </label>
+
+                      <div>
+                        <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                          Additional Notes
+                        </label>
+                        <Textarea
+                          value={businessCriteriaRequired.notes}
+                          onChange={(e) => updateRequiredNotes(e.target.value)}
+                          placeholder="Any other procurement requirements this vendor should know about."
+                          className="min-h-[80px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                         />
                       </div>
                     </div>

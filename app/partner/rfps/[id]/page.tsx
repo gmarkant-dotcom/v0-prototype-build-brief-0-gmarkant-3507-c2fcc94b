@@ -14,6 +14,19 @@ import { isDemoMode } from "@/lib/demo-data"
 import { createClient } from "@/lib/supabase/client"
 import { getBidStatusColor, getBidStatusLabel } from "@/lib/bid-status"
 import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  type BusinessCriteriaHolds,
+  type DesignationHolds,
+  type DesignationKey,
+  type InsuranceHolds,
+  type InsuranceKey,
+  normalizeBusinessCriteriaRequired,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
+import {
   BUDGET_CURRENCY_OPTIONS,
   TIMELINE_UNIT_OPTIONS,
   parseBudgetProposal,
@@ -192,6 +205,7 @@ type ResponseRow = {
   timeline_proposal: string
   payment_terms?: Record<string, unknown> | null
   attachments: SavedAttachment[] | null
+  business_criteria_responses?: unknown
   status: string
   agency_feedback?: string | null
   feedback_updated_at?: string | null
@@ -306,6 +320,11 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
   const totalBudget = typeof json.totalBudget === "string" ? json.totalBudget : ""
   const timeline = typeof json.timeline === "string" ? json.timeline : ""
   const scopeItems = Array.isArray(json.scopeItems) ? json.scopeItems : []
+  const requiredCriteria = normalizeBusinessCriteriaRequired(json.business_criteria_required)
+  const requiredDesignationKeys = DESIGNATION_KEYS.filter((key) => requiredCriteria.designations[key] === true)
+  const requiredInsuranceKeys = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
+  const hasRequiredCriteria =
+    requiredDesignationKeys.length > 0 || requiredInsuranceKeys.length > 0 || requiredCriteria.insurance.coi_on_file
 
   return (
     <div className="space-y-6 text-sm text-gray-700">
@@ -372,6 +391,37 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
           </ul>
         </div>
       )}
+      {hasRequiredCriteria && (
+        <div>
+          <h4 className="font-display font-bold text-[#0C3535] mb-2">Business Criteria Required</h4>
+          {requiredDesignationKeys.length > 0 && (
+            <ul className="list-disc list-inside space-y-1">
+              {requiredDesignationKeys.map((key) => (
+                <li key={key}>{DESIGNATION_LABELS[key]}</li>
+              ))}
+            </ul>
+          )}
+          {requiredInsuranceKeys.length > 0 && (
+            <ul className="list-disc list-inside space-y-1 mt-1">
+              {requiredInsuranceKeys.map((key) => {
+                const minimum = requiredCriteria.insurance[key]?.minimum
+                return (
+                  <li key={key}>
+                    {INSURANCE_LABELS[key]}
+                    {minimum ? ` (minimum ${minimum})` : ""}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          {requiredCriteria.insurance.coi_on_file && (
+            <p className="mt-1">Certificate of Insurance (COI) on file</p>
+          )}
+          {requiredCriteria.notes.trim() && (
+            <p className="text-gray-600 mt-2 whitespace-pre-wrap">{requiredCriteria.notes}</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -432,6 +482,9 @@ export default function PartnerRfpDetailPage() {
   const [paymentTermsPreferredCurrency, setPaymentTermsPreferredCurrency] = useState("USD")
   const [paymentTermsAdditionalNotes, setPaymentTermsAdditionalNotes] = useState("")
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([])
+  const [businessCriteriaResponses, setBusinessCriteriaResponses] = useState<BusinessCriteriaHolds>(
+    withBusinessCriteriaDefaults(null)
+  )
   const [uploadingId, setUploadingId] = useState<string | null>(null)
   const [savingKind, setSavingKind] = useState<null | "draft" | "submitted">(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -460,6 +513,27 @@ export default function PartnerRfpDetailPage() {
   const addDraft = useCallback(() => {
     setDraftAttachments((prev) => (prev.length >= 6 ? prev : [...prev, newDraft()]))
   }, [])
+
+  const updateBusinessCriteriaDesignation = (key: DesignationKey, patch: Partial<DesignationHolds>) => {
+    setBusinessCriteriaResponses((prev) => ({
+      ...prev,
+      designations: { ...prev.designations, [key]: { ...prev.designations[key], ...patch } },
+    }))
+  }
+
+  const updateBusinessCriteriaInsurance = (key: InsuranceKey, patch: Partial<InsuranceHolds>) => {
+    setBusinessCriteriaResponses((prev) => ({
+      ...prev,
+      insurance: { ...prev.insurance, [key]: { ...prev.insurance[key], ...patch } },
+    }))
+  }
+
+  const updateBusinessCriteriaCoi = (coi_on_file: boolean) => {
+    setBusinessCriteriaResponses((prev) => ({
+      ...prev,
+      insurance: { ...prev.insurance, coi_on_file },
+    }))
+  }
 
   useEffect(() => {
     if (isDemoDetail) {
@@ -523,6 +597,7 @@ export default function PartnerRfpDetailPage() {
             setPaymentTermsAdditionalNotes(pt.additional_notes)
             const att = Array.isArray(r.attachments) ? r.attachments : []
             setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
+            setBusinessCriteriaResponses(withBusinessCriteriaDefaults(r.business_criteria_responses))
           } else {
             setExisting(null)
             setProposalText("")
@@ -538,6 +613,7 @@ export default function PartnerRfpDetailPage() {
             setPaymentTermsPreferredCurrency("USD")
             setPaymentTermsAdditionalNotes("")
             setDraftAttachments([])
+            setBusinessCriteriaResponses(withBusinessCriteriaDefaults(null))
             setVersions([])
           }
         }
@@ -674,6 +750,7 @@ export default function PartnerRfpDetailPage() {
           additional_notes: paymentTermsAdditionalNotes.trim() || null,
         },
         attachments,
+        business_criteria_responses: businessCriteriaResponses,
         status,
         change_notes: changeNotes,
       }
@@ -876,6 +953,14 @@ export default function PartnerRfpDetailPage() {
   const feedbackUpdatedAt = existing?.feedback_updated_at ? new Date(existing.feedback_updated_at).toLocaleString() : null
   const responseDeadlineLabel = formatDeadlineDate(inbox.response_deadline)
   const responseDeadlineSoon = isDeadlineWithin48Hours(inbox.response_deadline)
+
+  const requiredCriteria = normalizeBusinessCriteriaRequired(
+    (inbox.master_rfp_json as Record<string, unknown> | null)?.business_criteria_required
+  )
+  const requiredDesignationKeysForBid = DESIGNATION_KEYS.filter((key) => requiredCriteria.designations[key] === true)
+  const requiredInsuranceKeysForBid = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
+  const hasRequiredCriteriaForBid =
+    requiredDesignationKeysForBid.length > 0 || requiredInsuranceKeysForBid.length > 0 || requiredCriteria.insurance.coi_on_file
 
   const updatePartnerIntent = async (nextIntent: PartnerIntent) => {
     if (isDemoDetail) {
@@ -1431,6 +1516,132 @@ export default function PartnerRfpDetailPage() {
                 </div>
               </div>
             </div>
+
+            {hasRequiredCriteriaForBid && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+                <h3 className="font-display font-bold text-sm text-[#0C3535] mb-1">Business Criteria</h3>
+                <p className="text-xs text-gray-600 mb-3">
+                  This RFP requires confirmation of the following. Confirm what applies to your company.
+                </p>
+                {requiredCriteria.notes.trim() && (
+                  <p className="text-xs text-gray-600 mb-3 whitespace-pre-wrap">{requiredCriteria.notes}</p>
+                )}
+
+                {requiredDesignationKeysForBid.length > 0 && (
+                  <div className="space-y-3 mb-4">
+                    {requiredDesignationKeysForBid.map((key) => {
+                      const designation = businessCriteriaResponses.designations[key]
+                      return (
+                        <div key={key} className="rounded-lg border border-gray-200 bg-white p-3">
+                          <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={designation.holds}
+                              disabled={!canEdit}
+                              onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
+                              className="mt-0.5 w-4 h-4 rounded border-gray-400"
+                            />
+                            <span className="font-display font-bold text-sm text-[#0C3535]">
+                              {DESIGNATION_LABELS[key]}
+                            </span>
+                          </label>
+                          {designation.holds && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pl-7">
+                              <Input
+                                value={designation.certifying_body || ""}
+                                onChange={(e) =>
+                                  updateBusinessCriteriaDesignation(key, { certifying_body: e.target.value || null })
+                                }
+                                placeholder="Certifying body (e.g. NMSDC, WBENC)"
+                                className={inputClass}
+                                disabled={!canEdit || designation.self_certified}
+                              />
+                              <Input
+                                value={designation.certification_number || ""}
+                                onChange={(e) =>
+                                  updateBusinessCriteriaDesignation(key, {
+                                    certification_number: e.target.value || null,
+                                  })
+                                }
+                                placeholder="Certification number"
+                                className={inputClass}
+                                disabled={!canEdit || designation.self_certified}
+                              />
+                              <label className="flex items-center gap-2 sm:col-span-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={designation.self_certified}
+                                  disabled={!canEdit}
+                                  onChange={(e) =>
+                                    updateBusinessCriteriaDesignation(key, {
+                                      self_certified: e.target.checked,
+                                      ...(e.target.checked
+                                        ? { certifying_body: null, certification_number: null }
+                                        : {}),
+                                    })
+                                  }
+                                  className="w-4 h-4 rounded border-gray-400"
+                                />
+                                <span className="text-sm text-gray-700">Self-certified (no third-party certification)</span>
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {requiredInsuranceKeysForBid.length > 0 && (
+                  <div className="space-y-3 mb-4">
+                    {requiredInsuranceKeysForBid.map((key) => {
+                      const coverage = businessCriteriaResponses.insurance[key]
+                      const minimum = requiredCriteria.insurance[key]?.minimum
+                      return (
+                        <div
+                          key={key}
+                          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-gray-200 bg-white"
+                        >
+                          <label className="flex items-center gap-3 min-w-0 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={coverage.has_coverage}
+                              disabled={!canEdit}
+                              onChange={(e) => updateBusinessCriteriaInsurance(key, { has_coverage: e.target.checked })}
+                              className="w-4 h-4 rounded border-gray-400"
+                            />
+                            <span className="font-display font-bold text-sm text-[#0C3535] truncate">
+                              {INSURANCE_LABELS[key]}
+                              {minimum ? ` (min. ${minimum})` : ""}
+                            </span>
+                          </label>
+                          <Input
+                            value={coverage.limit || ""}
+                            onChange={(e) => updateBusinessCriteriaInsurance(key, { limit: e.target.value || null })}
+                            placeholder="Your limit, e.g. $1M/$2M"
+                            disabled={!canEdit}
+                            className={cn(inputClass, "w-44 shrink-0")}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {requiredCriteria.insurance.coi_on_file && (
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={businessCriteriaResponses.insurance.coi_on_file}
+                      disabled={!canEdit}
+                      onChange={(e) => updateBusinessCriteriaCoi(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-400"
+                    />
+                    <span className="text-sm text-gray-700">Certificate of Insurance (COI) on file</span>
+                  </label>
+                )}
+              </div>
+            )}
 
             <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/80">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">

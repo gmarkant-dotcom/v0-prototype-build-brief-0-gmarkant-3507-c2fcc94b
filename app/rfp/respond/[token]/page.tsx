@@ -19,6 +19,19 @@ import {
   Paperclip, X, ChevronDown, ChevronUp, ExternalLink, Pencil, Download, FileText,
   Link as LinkIcon, Plus,
 } from "lucide-react"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  type BusinessCriteriaHolds,
+  type DesignationHolds,
+  type DesignationKey,
+  type InsuranceHolds,
+  type InsuranceKey,
+  normalizeBusinessCriteriaRequired,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
 
 const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "MXN", "BRL", "AED", "SGD"]
 const SCHEDULE_OPTIONS = ["Milestone-based", "Net 30", "Net 60", "Net 90", "Upon completion"]
@@ -57,6 +70,7 @@ type SubmittedResponse = {
   timeline_proposal: string
   payment_terms: PaymentTerms
   attachments: { type: string; label: string; url: string }[] | null
+  business_criteria_responses?: unknown
   status: string
   agency_feedback?: string | null
   submitted_at?: string | null
@@ -68,6 +82,7 @@ type BasePayload = {
   scopeItem: ScopeItemData
   agency: AgencyData
   reference_materials?: ReferenceMaterial[]
+  business_criteria_required?: unknown
 }
 type ActivePayload = BasePayload & { status: "active" }
 type SubmittedPayload = BasePayload & { status: "submitted"; response: SubmittedResponse }
@@ -152,6 +167,9 @@ export default function GuestRfpRespondPage() {
   const [schedulePreference, setSchedulePreference] = useState(SCHEDULE_OPTIONS[0])
   const [paymentNotes, setPaymentNotes] = useState("")
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [businessCriteriaResponses, setBusinessCriteriaResponses] = useState<BusinessCriteriaHolds>(
+    withBusinessCriteriaDefaults(null)
+  )
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [linkUrl, setLinkUrl] = useState("")
@@ -236,6 +254,7 @@ export default function GuestRfpRespondPage() {
     setSchedulePreference(SCHEDULE_OPTIONS[0])
     setPaymentNotes("")
     setAttachments([])
+    setBusinessCriteriaResponses(withBusinessCriteriaDefaults(null))
   }
 
   const startEditingBid = () => {
@@ -258,8 +277,30 @@ export default function GuestRfpRespondPage() {
         label: a.label,
       }))
     )
+    setBusinessCriteriaResponses(withBusinessCriteriaDefaults(response.business_criteria_responses))
     setSubmitError(null)
     setIsEditingBid(true)
+  }
+
+  const updateBusinessCriteriaDesignation = (key: DesignationKey, patch: Partial<DesignationHolds>) => {
+    setBusinessCriteriaResponses((prev) => ({
+      ...prev,
+      designations: { ...prev.designations, [key]: { ...prev.designations[key], ...patch } },
+    }))
+  }
+
+  const updateBusinessCriteriaInsurance = (key: InsuranceKey, patch: Partial<InsuranceHolds>) => {
+    setBusinessCriteriaResponses((prev) => ({
+      ...prev,
+      insurance: { ...prev.insurance, [key]: { ...prev.insurance[key], ...patch } },
+    }))
+  }
+
+  const updateBusinessCriteriaCoi = (coi_on_file: boolean) => {
+    setBusinessCriteriaResponses((prev) => ({
+      ...prev,
+      insurance: { ...prev.insurance, coi_on_file },
+    }))
   }
 
   const cancelEditingBid = () => {
@@ -288,6 +329,7 @@ export default function GuestRfpRespondPage() {
             notes: paymentNotes,
           },
           attachments: attachments.map((a) => ({ type: a.type, label: a.label, url: a.url })),
+          business_criteria_responses: businessCriteriaResponses,
           ...(wasEditing ? { is_edit: true } : {}),
         }),
       })
@@ -338,6 +380,11 @@ export default function GuestRfpRespondPage() {
   const showForm = !hasSubmittedBid || isEditingBid
   const dateRange = [formatDateOnly(project.start_date), formatDateOnly(project.end_date)].filter(Boolean).join(" – ")
   const statusLabel = guestStatusLabel(hasSubmittedBid, response?.status)
+  const requiredCriteria = normalizeBusinessCriteriaRequired(payload.business_criteria_required)
+  const requiredDesignationKeysForBid = DESIGNATION_KEYS.filter((key) => requiredCriteria.designations[key] === true)
+  const requiredInsuranceKeysForBid = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
+  const hasRequiredCriteriaForBid =
+    requiredDesignationKeysForBid.length > 0 || requiredInsuranceKeysForBid.length > 0 || requiredCriteria.insurance.coi_on_file
 
   return (
     <div className="min-h-screen bg-background px-4 py-12">
@@ -457,6 +504,37 @@ export default function GuestRfpRespondPage() {
                   <div className="font-display font-bold text-sm text-foreground">{scopeItem.name}</div>
                   {scopeItem.description && (
                     <p className="text-sm text-foreground-muted mt-1 whitespace-pre-wrap">{scopeItem.description}</p>
+                  )}
+                </div>
+              )}
+              {hasRequiredCriteriaForBid && (
+                <div className="pt-3 border-t border-border/30">
+                  <div className="font-display font-bold text-sm text-foreground mb-2">Business Criteria Required</div>
+                  {requiredDesignationKeysForBid.length > 0 && (
+                    <ul className="list-disc list-inside space-y-1 text-sm text-foreground-muted">
+                      {requiredDesignationKeysForBid.map((key) => (
+                        <li key={key}>{DESIGNATION_LABELS[key]}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {requiredInsuranceKeysForBid.length > 0 && (
+                    <ul className="list-disc list-inside space-y-1 text-sm text-foreground-muted mt-1">
+                      {requiredInsuranceKeysForBid.map((key) => {
+                        const minimum = requiredCriteria.insurance[key]?.minimum
+                        return (
+                          <li key={key}>
+                            {INSURANCE_LABELS[key]}
+                            {minimum ? ` (minimum ${minimum})` : ""}
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                  {requiredCriteria.insurance.coi_on_file && (
+                    <p className="text-sm text-foreground-muted mt-1">Certificate of Insurance (COI) on file</p>
+                  )}
+                  {requiredCriteria.notes.trim() && (
+                    <p className="text-sm text-foreground-muted mt-2 whitespace-pre-wrap">{requiredCriteria.notes}</p>
                   )}
                 </div>
               )}
@@ -587,6 +665,141 @@ export default function GuestRfpRespondPage() {
                     />
                   </div>
                 </div>
+
+                {hasRequiredCriteriaForBid && (
+                  <div className="p-4 rounded-lg border border-border/40 bg-white/5 space-y-4">
+                    <div>
+                      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
+                        Business Criteria
+                      </div>
+                      <p className="text-xs text-foreground-muted mt-1">
+                        This RFP requires confirmation of the following. Confirm what applies to your company.
+                      </p>
+                      {requiredCriteria.notes.trim() && (
+                        <p className="text-xs text-foreground-muted mt-1 whitespace-pre-wrap">{requiredCriteria.notes}</p>
+                      )}
+                    </div>
+
+                    {requiredDesignationKeysForBid.length > 0 && (
+                      <div className="space-y-3">
+                        {requiredDesignationKeysForBid.map((key) => {
+                          const designation = businessCriteriaResponses.designations[key]
+                          return (
+                            <div key={key} className="rounded-lg border border-border/40 bg-white/[0.02] p-3">
+                              <label className="flex items-start gap-3 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={designation.holds}
+                                  onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
+                                  className="mt-0.5 w-4 h-4 rounded border-foreground-muted"
+                                />
+                                <span className="font-display font-bold text-sm text-foreground">
+                                  {DESIGNATION_LABELS[key]}
+                                </span>
+                              </label>
+                              {designation.holds && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pl-7">
+                                  <Input
+                                    value={designation.certifying_body || ""}
+                                    onChange={(e) =>
+                                      updateBusinessCriteriaDesignation(key, {
+                                        certifying_body: e.target.value || null,
+                                      })
+                                    }
+                                    placeholder="Certifying body (e.g. NMSDC, WBENC)"
+                                    className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                                    disabled={designation.self_certified}
+                                  />
+                                  <Input
+                                    value={designation.certification_number || ""}
+                                    onChange={(e) =>
+                                      updateBusinessCriteriaDesignation(key, {
+                                        certification_number: e.target.value || null,
+                                      })
+                                    }
+                                    placeholder="Certification number"
+                                    className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                                    disabled={designation.self_certified}
+                                  />
+                                  <label className="flex items-center gap-2 sm:col-span-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={designation.self_certified}
+                                      onChange={(e) =>
+                                        updateBusinessCriteriaDesignation(key, {
+                                          self_certified: e.target.checked,
+                                          ...(e.target.checked
+                                            ? { certifying_body: null, certification_number: null }
+                                            : {}),
+                                        })
+                                      }
+                                      className="w-4 h-4 rounded border-foreground-muted"
+                                    />
+                                    <span className="text-sm text-foreground-muted">
+                                      Self-certified (no third-party certification)
+                                    </span>
+                                  </label>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {requiredInsuranceKeysForBid.length > 0 && (
+                      <div className="space-y-3">
+                        {requiredInsuranceKeysForBid.map((key) => {
+                          const coverage = businessCriteriaResponses.insurance[key]
+                          const minimum = requiredCriteria.insurance[key]?.minimum
+                          return (
+                            <div
+                              key={key}
+                              className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border/40 bg-white/[0.02]"
+                            >
+                              <label className="flex items-center gap-3 min-w-0 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={coverage.has_coverage}
+                                  onChange={(e) =>
+                                    updateBusinessCriteriaInsurance(key, { has_coverage: e.target.checked })
+                                  }
+                                  className="w-4 h-4 rounded border-foreground-muted"
+                                />
+                                <span className="font-display font-bold text-sm text-foreground truncate">
+                                  {INSURANCE_LABELS[key]}
+                                  {minimum ? ` (min. ${minimum})` : ""}
+                                </span>
+                              </label>
+                              <Input
+                                value={coverage.limit || ""}
+                                onChange={(e) =>
+                                  updateBusinessCriteriaInsurance(key, { limit: e.target.value || null })
+                                }
+                                placeholder="Your limit, e.g. $1M/$2M"
+                                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-44 shrink-0"
+                              />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {requiredCriteria.insurance.coi_on_file && (
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={businessCriteriaResponses.insurance.coi_on_file}
+                          onChange={(e) => updateBusinessCriteriaCoi(e.target.checked)}
+                          className="w-4 h-4 rounded border-foreground-muted"
+                        />
+                        <span className="text-sm text-foreground-muted">
+                          Certificate of Insurance (COI) on file
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
