@@ -170,6 +170,10 @@ export async function POST(request: NextRequest) {
       .filter(Boolean)
       .join(" ")
 
+    // sendTransactionalEmail swallows Resend API failures internally and returns false rather
+    // than throwing (and returns false immediately, with no Resend attempt, if RESEND_API_KEY
+    // is unset). A try/catch alone cannot detect a failed send, so the return value is checked too.
+    let emailSent = false
     try {
       const invitation = buildVendorInvitationEmail({
         agencyName,
@@ -178,16 +182,28 @@ export async function POST(request: NextRequest) {
         scopeSummary,
         token: tokenRow.token as string,
       })
-      await sendTransactionalEmail({ to: vendorEmail, ...invitation })
+      emailSent = await sendTransactionalEmail({ to: vendorEmail, ...invitation })
+      if (!emailSent) {
+        console.error("[api] vendor invitation email not sent", {
+          route,
+          method: "POST",
+          token: tokenRow.token,
+          vendorEmail,
+          reason: "sendTransactionalEmail returned false. Check RESEND_API_KEY and the Resend API response.",
+        })
+      }
     } catch (emailErr) {
       console.error("[api] vendor invitation email failed", {
         route,
+        method: "POST",
+        token: tokenRow.token,
+        vendorEmail,
         message: emailErr instanceof Error ? emailErr.message : String(emailErr),
       })
     }
 
-    console.log("[api] success", { route, method: "POST", userId: auth.userId, projectId, is_existing_partner })
-    return NextResponse.json({ token: tokenRow.token, is_existing_partner, expires_at })
+    console.log("[api] success", { route, method: "POST", userId: auth.userId, projectId, is_existing_partner, emailSent })
+    return NextResponse.json({ token: tokenRow.token, is_existing_partner, expires_at, email_sent: emailSent })
   } catch (error) {
     console.error("[api] failure", {
       route,
