@@ -7,7 +7,18 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
+import { cn } from "@/lib/utils"
 import { Building2, Search, Send, CheckCircle, Clock, MapPin, Globe, Users, X, Zap } from "lucide-react"
+import {
+  DESIGNATION_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_KEYS,
+  INSURANCE_LABELS,
+  type DesignationKey,
+  type InsuranceKey,
+  businessCriteriaHoldsMatchesSelection,
+  withBusinessCriteriaDefaults,
+} from "@/lib/business-criteria"
 
 interface Agency {
   id: string
@@ -26,12 +37,60 @@ interface Agency {
   agency_type?: string
   partner_count?: number
   role?: "agency" | "partner"
+  active_role?: "agency" | "partner" | null
   collaborated?: boolean
+  has_partnership?: boolean
+  business_criteria?: unknown
   relationshipStatus?: string
   invitedAt?: string
   acceptedAt?: string
   invitationMessage?: string
   vouch_count?: number
+}
+
+/** Split profile agency_type when it lists multiple specialties (comma or semicolon). Mirrors app/agency/pool/page.tsx. */
+function splitAgencyTypeValues(value: string | null | undefined): string[] {
+  if (!value?.trim()) return []
+  return value
+    .split(/[,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function extractCapabilityValues(raw: unknown): string[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) {
+    return raw.map((x) => String(x).trim()).filter(Boolean)
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(/[,;]+/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+  }
+  if (typeof raw === "object") {
+    const maybeTags = (raw as { tags?: unknown }).tags
+    if (Array.isArray(maybeTags)) {
+      return maybeTags.map((x) => String(x).trim()).filter(Boolean)
+    }
+  }
+  return []
+}
+
+/** Mirrors disciplineMatches in app/agency/pool/page.tsx, adapted for the Agency shape here. */
+function disciplineMatches(selectedDiscipline: string, agencyType: string | null | undefined, capabilities: unknown): boolean {
+  if (selectedDiscipline === "All") return true
+  const needle = selectedDiscipline.trim().toLowerCase()
+  if (!needle) return true
+  for (const token of splitAgencyTypeValues(agencyType)) {
+    const x = token.toLowerCase()
+    if (x === needle || x.includes(needle) || needle.includes(x)) return true
+  }
+  for (const cap of extractCapabilityValues(capabilities)) {
+    const x = cap.toLowerCase()
+    if (x === needle || x.includes(needle) || needle.includes(x)) return true
+  }
+  return false
 }
 
 interface AccessRequest {
@@ -102,6 +161,19 @@ export default function DiscoverAgenciesPage() {
   // create a new client and trigger a second auth-token lock acquisition concurrently.
   const [cachedUserId, setCachedUserId] = useState<string | null>(null)
 
+  const [viewMode, setViewMode] = useState<"network" | "all">("all")
+  const [selectedDiscipline, setSelectedDiscipline] = useState("All")
+  const [selectedDesignationFilters, setSelectedDesignationFilters] = useState<DesignationKey[]>([])
+  const [selectedInsuranceFilters, setSelectedInsuranceFilters] = useState<InsuranceKey[]>([])
+
+  const toggleDesignationFilter = (key: DesignationKey) => {
+    setSelectedDesignationFilters((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  }
+
+  const toggleInsuranceFilter = (key: InsuranceKey) => {
+    setSelectedInsuranceFilters((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  }
+
   const loadMyRequests = async (supabase: ReturnType<typeof createClient>, userId: string) => {
     try {
       const { data, error } = await supabase
@@ -138,7 +210,7 @@ export default function DiscoverAgenciesPage() {
         const payload = await agencyRes.json().catch(() => ({}))
         if (!agencyRes.ok) throw new Error(payload?.error || "Failed to load discoverable agencies")
         const rows = (payload?.profiles || []) as Agency[]
-        setAgencies(rows.map((row) => ({ ...row, collaborated: false })))
+        setAgencies(rows.map((row) => ({ ...row, collaborated: row.has_partnership === true })))
       } catch (error) {
         console.error("Error:", error)
       }
@@ -235,24 +307,68 @@ export default function DiscoverAgenciesPage() {
     setIsLoadingAgencyProfile(false)
   }
 
+  const dynamicDisciplineFilters = useMemo(() => {
+    const seen = new Map<string, string>()
+    const add = (raw: string) => {
+      const t = raw.trim()
+      if (!t) return
+      const k = t.toLowerCase()
+      if (!seen.has(k)) seen.set(k, t)
+    }
+    for (const agency of agencies) {
+      for (const part of splitAgencyTypeValues(agency.agency_type)) add(part)
+      for (const part of extractCapabilityValues(agency.capabilities)) add(part)
+    }
+    const sorted = [...seen.values()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    return ["All", ...sorted]
+  }, [agencies])
+
   const filteredAgencies = useMemo(() => {
     return agencies.filter((agency) => {
+      if (viewMode === "network") {
+        const request = myRequests.find((req) => req.agency_id === agency.id)
+        const inNetwork = agency.collaborated === true || request?.status === "approved"
+        if (!inNetwork) return false
+      }
+
       const query = searchQuery.toLowerCase()
-      if (!query) return true
-      const displayName = agency.company_name || agency.full_name || agency.email || ""
-      const caps = Array.isArray(agency.capabilities)
-        ? agency.capabilities.some((c: unknown) => typeof c === "string" && c.toLowerCase().includes(query))
-        : false
-      return (
-        displayName.toLowerCase().includes(query) ||
-        agency.email?.toLowerCase().includes(query) ||
-        (agency.location || "").toLowerCase().includes(query) ||
-        (agency.bio || "").toLowerCase().includes(query) ||
-        (agency.agency_type || "").toLowerCase().includes(query) ||
-        caps
+      if (query) {
+        const displayName = agency.company_name || agency.full_name || agency.email || ""
+        const caps = Array.isArray(agency.capabilities)
+          ? agency.capabilities.some((c: unknown) => typeof c === "string" && c.toLowerCase().includes(query))
+          : false
+        const matchesQuery =
+          displayName.toLowerCase().includes(query) ||
+          agency.email?.toLowerCase().includes(query) ||
+          (agency.location || "").toLowerCase().includes(query) ||
+          (agency.bio || "").toLowerCase().includes(query) ||
+          (agency.agency_type || "").toLowerCase().includes(query) ||
+          caps
+        if (!matchesQuery) return false
+      }
+
+      if (!disciplineMatches(selectedDiscipline, agency.agency_type, agency.capabilities)) return false
+
+      if (
+        !businessCriteriaHoldsMatchesSelection(
+          withBusinessCriteriaDefaults(agency.business_criteria),
+          selectedDesignationFilters,
+          selectedInsuranceFilters
+        )
       )
+        return false
+
+      return true
     })
-  }, [agencies, searchQuery])
+  }, [
+    agencies,
+    searchQuery,
+    viewMode,
+    myRequests,
+    selectedDiscipline,
+    selectedDesignationFilters,
+    selectedInsuranceFilters,
+  ])
 
   const searchSuggestions = useMemo(() => filteredAgencies.slice(0, 8), [filteredAgencies])
 
@@ -296,6 +412,99 @@ export default function DiscoverAgenciesPage() {
           )}
         </div>
 
+        {/* My Network / All Agencies toggle */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewMode("all")}
+            className={cn(
+              "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+              viewMode === "all"
+                ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
+                : "border-gray-200 text-gray-600 hover:border-gray-300"
+            )}
+          >
+            <Globe className="w-3 h-3" />
+            All Agencies
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("network")}
+            className={cn(
+              "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+              viewMode === "network"
+                ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
+                : "border-gray-200 text-gray-600 hover:border-gray-300"
+            )}
+          >
+            <Users className="w-3 h-3" />
+            My Network
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          {/* Discipline Filter */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[10px] text-gray-500 mr-2">Discipline:</span>
+            {dynamicDisciplineFilters.map((discipline) => (
+              <button
+                key={discipline}
+                type="button"
+                onClick={() => setSelectedDiscipline(discipline)}
+                className={cn(
+                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                  selectedDiscipline === discipline
+                    ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
+                    : "border-gray-200 text-gray-600 hover:border-gray-300"
+                )}
+              >
+                {discipline}
+              </button>
+            ))}
+          </div>
+
+          {/* Business Criteria: Designations */}
+          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-gray-200">
+            <span className="font-mono text-[10px] text-gray-500 mr-2">Designations:</span>
+            {DESIGNATION_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleDesignationFilter(key)}
+                className={cn(
+                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                  selectedDesignationFilters.includes(key)
+                    ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
+                    : "border-gray-200 text-gray-600 hover:border-gray-300"
+                )}
+              >
+                {DESIGNATION_LABELS[key]}
+              </button>
+            ))}
+          </div>
+
+          {/* Business Criteria: Insurance */}
+          <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-gray-200">
+            <span className="font-mono text-[10px] text-gray-500 mr-2">Insurance:</span>
+            {INSURANCE_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleInsuranceFilter(key)}
+                className={cn(
+                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                  selectedInsuranceFilters.includes(key)
+                    ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
+                    : "border-gray-200 text-gray-600 hover:border-gray-300"
+                )}
+              >
+                {INSURANCE_LABELS[key]}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Agency Directory */}
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -310,7 +519,11 @@ export default function DiscoverAgenciesPage() {
               No Agencies Found
             </h3>
             <p className="text-gray-500 max-w-md mx-auto">
-              {searchQuery ? "No agencies match your search. Try different keywords." : "No lead agencies are currently accepting partner requests."}
+              {searchQuery
+                ? "No agencies match your search. Try different keywords."
+                : viewMode === "network"
+                  ? "You do not have any agencies in your network yet. Switch to All Agencies to discover and connect with new ones."
+                  : "No lead agencies are currently accepting partner requests."}
             </p>
           </div>
         ) : (

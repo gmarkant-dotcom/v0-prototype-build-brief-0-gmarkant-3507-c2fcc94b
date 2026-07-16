@@ -17,12 +17,20 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     console.log("[api/marketplace/discoverable] start", { roleFilter: role, userId: user.id })
 
-    const { data, error } = await supabase
+    // Dual-role accounts keep their original `role` forever - a partner-primary user granted
+    // agency access never becomes role="agency", only active_role="agency" while they're using
+    // that portal. Discoverability must include both, or dual-role agencies/partners who are
+    // is_discoverable never surface to the other side at all.
+    let discoverableQuery = supabase
       .from("profiles")
-      .select("id, role, company_name, full_name, bio, location, company_website, avatar_url, company_logo_url, company_linkedin_url, agency_type, email, reel_url, capabilities, work_examples")
-      .eq("role", role)
+      .select(
+        "id, role, active_role, company_name, full_name, bio, location, company_website, avatar_url, company_logo_url, company_linkedin_url, agency_type, email, reel_url, capabilities, work_examples, business_criteria"
+      )
       .eq("is_discoverable", true)
       .order("company_name", { ascending: true })
+    discoverableQuery = discoverableQuery.or(`role.eq.${role},active_role.eq.${role}`)
+
+    const { data, error } = await discoverableQuery
 
     if (error) {
       console.error("[marketplace/discoverable] query failed", {
@@ -38,26 +46,30 @@ export async function GET(req: NextRequest) {
       discoverableCount: data?.length ?? 0,
     })
 
-    // Check for active partnerships — bidirectional: viewer may be agency or partner
-    // Only fetch partner_id/agency_id, never expose full list to either party
-    const { data: activePartnerships } = await supabase
+    // Check partnerships — bidirectional: viewer may be agency or partner. Only fetch
+    // partner_id/agency_id/status, never expose full list to either party.
+    const { data: allPartnerships } = await supabase
       .from("partnerships")
-      .select("agency_id, partner_id")
+      .select("agency_id, partner_id, status")
       .or(`agency_id.eq.${user.id},partner_id.eq.${user.id}`)
-      .eq("status", "active")
 
-    // Build set of profile IDs the viewer has an active partnership with
+    // "My Network" (any partnership status) vs email-unmask eligibility (active only).
+    const partnerIdsWithPartnership = new Set<string>()
     const activePartnerIds = new Set<string>()
-    for (const p of activePartnerships ?? []) {
+    for (const p of allPartnerships ?? []) {
       const otherId = (p.agency_id === user.id ? p.partner_id : p.agency_id) as string | null
-      if (otherId) activePartnerIds.add(otherId)
+      if (!otherId) continue
+      partnerIdsWithPartnership.add(otherId)
+      if (p.status === "active") activePartnerIds.add(otherId)
     }
 
     // Unmask email for self + anyone with an active partnership (bidirectional)
     const maskedProfiles = (data ?? []).map((row) => {
       const isOwn = row.id === user.id
       const hasPartnership = activePartnerIds.has(row.id as string)
-      return isOwn || hasPartnership ? row : { ...row, email: null as string | null }
+      return isOwn || hasPartnership
+        ? { ...row, has_partnership: partnerIdsWithPartnership.has(row.id as string) }
+        : { ...row, email: null as string | null, has_partnership: partnerIdsWithPartnership.has(row.id as string) }
     })
 
     // Fetch vouch counts (aggregate only — never expose individual voucher identities)
