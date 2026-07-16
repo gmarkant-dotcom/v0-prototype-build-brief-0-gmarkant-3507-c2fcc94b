@@ -14,6 +14,22 @@ import { validateUploadFile } from "@/lib/upload-validation"
 export async function POST(request: NextRequest) {
   const route = "/api/partner/documents/upload"
   try {
+    // put() throws an opaque error if this is unset (e.g. a local .env.local that was never
+    // synced with `vercel env pull`), which previously surfaced as a generic 500 with no
+    // indication of the actual cause. Check explicitly so the failure is diagnosable.
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      console.error("[api] failure", {
+        route,
+        method: "POST",
+        code: 500,
+        message: "BLOB_READ_WRITE_TOKEN is not configured in this environment",
+      })
+      return NextResponse.json(
+        { error: "File storage is not configured for this environment (BLOB_READ_WRITE_TOKEN missing)." },
+        { status: 500 }
+      )
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
@@ -88,12 +104,10 @@ export async function POST(request: NextRequest) {
       contentType: file.type,
     })
   } catch (error) {
-    console.error("[api] failure", {
-      route,
-      method: "POST",
-      code: 500,
-      message: error instanceof Error ? error.message : String(error),
-    })
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 })
+    const message = error instanceof Error ? error.message : String(error)
+    console.error("[api] failure", { route, method: "POST", code: 500, message })
+    // Surface the real failure reason (e.g. a put() error) instead of a generic string that
+    // hides what actually broke - this is what made the original bug hard to diagnose.
+    return NextResponse.json({ error: message || "Upload failed" }, { status: 500 })
   }
 }
