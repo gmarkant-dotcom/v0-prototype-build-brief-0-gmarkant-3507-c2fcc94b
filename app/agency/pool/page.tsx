@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { EmptyState } from "@/components/empty-state"
-import { cn } from "@/lib/utils"
+import { cn, formatDateTime } from "@/lib/utils"
 import { isDemoMode, demoPartners, disciplines, partnerTypes, type Partner, type PartnerNote, type ProjectRating, type PartnerAvailability } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { createClient } from "@/lib/supabase/client"
@@ -54,6 +54,20 @@ type Partnership = {
   partnerLogoUrl?: string | null
   partnerBusinessCriteria?: unknown
   msaConfirmedAt?: string | null
+}
+
+// Pending Profile (magic link auto-add to partner pool): a guest bidder who was either
+// auto-added to the pool as a ghost partnership (no Ligament account yet) or flagged for
+// manual review because their custom email domain matched an existing profile.
+type PendingProfile = {
+  id: string
+  kind: "ghost" | "domain_match"
+  vendorEmail: string
+  vendorName: string | null
+  bidSubmittedAt: string | null
+  projectId: string | null
+  projectName: string | null
+  domainMatchProfile: { id: string; company_name: string | null; full_name: string | null } | null
 }
 
 // Legacy Partner invitation type (for backward compatibility)
@@ -291,7 +305,10 @@ export default function PartnerPoolPage() {
   // Partnerships state (new closed ecosystem)
   const [partnerships, setPartnerships] = useState<Partnership[]>([])
   const [partnersWithActiveEngagements, setPartnersWithActiveEngagements] = useState(0)
-  
+  const [pendingProfiles, setPendingProfiles] = useState<PendingProfile[]>([])
+  const [resendingEmail, setResendingEmail] = useState<string | null>(null)
+  const [resendMsg, setResendMsg] = useState<string | null>(null)
+
   // Invitation state
   const [invitations, setInvitations] = useState<PartnerInvitation[]>([])
   const [showInviteModal, setShowInviteModal] = useState(false)
@@ -383,6 +400,7 @@ export default function PartnerPoolPage() {
       const response = await fetch('/api/partnerships')
       if (!response.ok) return
       const data = await response.json().catch(() => ({}))
+      setPendingProfiles((data.pendingProfiles || []) as PendingProfile[])
       let loaded: Partnership[] = (data.partnerships || []).map((p: Record<string, unknown>) => ({
         id: p.id as string,
         partnerId: (p.partner as { id?: string } | undefined)?.id || (p.partner_id as string),
@@ -399,6 +417,9 @@ export default function PartnerPoolPage() {
         invitationMessage: p.invitation_message as string | undefined,
         partnership_notes: p.partnership_notes,
       }))
+      // Ghost partnerships (no partner_id yet) are shown in the Pending Profiles section
+      // instead, not in the main partner list.
+      loaded = loaded.filter((row) => row.partnerId)
 
       const supabase = createClient()
       const {
@@ -466,7 +487,27 @@ export default function PartnerPoolPage() {
       console.error('Error loading partnerships:', error)
     }
   }
-  
+
+  const handleResendInvitation = async (profile: PendingProfile) => {
+    setResendMsg(null)
+    setResendingEmail(profile.vendorEmail)
+    try {
+      const res = await fetch('/api/agency/pool/resend-invitation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vendorEmail: profile.vendorEmail, vendorName: profile.vendorName }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || 'Failed to resend invitation')
+      setResendMsg(`Invitation resent to ${profile.vendorEmail}.`)
+    } catch (error) {
+      setResendMsg(error instanceof Error ? error.message : 'Failed to resend invitation.')
+    } finally {
+      setResendingEmail(null)
+      setTimeout(() => setResendMsg(null), 4000)
+    }
+  }
+
   const handleDeletePartner = async () => {
     if (!partnerToDelete) return
     
@@ -1261,6 +1302,68 @@ export default function PartnerPoolPage() {
             ))}
           </div>
         </GlassCard>
+
+        {pendingProfiles.length > 0 && (
+          <div className="mb-8 rounded-xl border border-border bg-card p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-display font-bold text-sm text-foreground">Pending Profiles</h2>
+              <span className="font-mono text-[10px] text-foreground-muted">{pendingProfiles.length}</span>
+            </div>
+            <p className="text-xs text-foreground-muted mb-4">
+              Vendors added to your pool from bid submissions. They haven&apos;t created a Ligament profile yet.
+            </p>
+            {resendMsg && <p className="text-xs text-accent mb-3">{resendMsg}</p>}
+            <div className="space-y-2">
+              {pendingProfiles.map((profile) => (
+                <div
+                  key={profile.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white/[0.03] p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-display font-bold text-sm text-foreground truncate">
+                        {profile.vendorName || profile.vendorEmail}
+                      </span>
+                      {profile.kind === "ghost" ? (
+                        <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-foreground-muted">
+                          Unactivated
+                        </span>
+                      ) : (
+                        <span
+                          className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300"
+                          title={
+                            profile.domainMatchProfile
+                              ? `Shares an email domain with an existing profile: ${
+                                  profile.domainMatchProfile.company_name || profile.domainMatchProfile.full_name || "an existing profile"
+                                }. Not auto-added - review before adding.`
+                              : "Shares an email domain with an existing profile. Not auto-added - review before adding."
+                          }
+                        >
+                          Domain Match - Review
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-mono text-[10px] text-foreground-muted mt-1 truncate">
+                      {profile.vendorEmail}
+                      {profile.projectName && <span> · {profile.projectName}</span>}
+                      {profile.bidSubmittedAt && <span> · Bid {formatDateTime(profile.bidSubmittedAt)}</span>}
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={resendingEmail === profile.vendorEmail}
+                    onClick={() => handleResendInvitation(profile)}
+                    className="border-border text-foreground hover:bg-white/5 shrink-0"
+                  >
+                    {resendingEmail === profile.vendorEmail ? "Sending…" : "Resend Invitation"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {(allNetworkRows.length > 0 || partners.length > 0) && (
           <p className="font-mono text-[11px] text-foreground-muted mb-6">

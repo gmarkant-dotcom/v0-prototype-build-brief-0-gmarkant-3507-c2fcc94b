@@ -1,14 +1,96 @@
 import { NextResponse } from "next/server"
-import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { createClient as createServiceClient, SupabaseClient } from "@supabase/supabase-js"
 import { serializeBudget, formatBudgetForDisplay } from "@/lib/rfp-response-fields"
 import {
   buildVendorConfirmationEmail,
   buildAgencyBidNotificationEmail,
+  buildAgencyPoolNotificationEmail,
   sendTransactionalEmail,
 } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults } from "@/lib/business-criteria"
+import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 
 export const dynamic = "force-dynamic"
+
+type PoolClassification = {
+  poolStatus: "existing_user_added" | "ghost_created" | "domain_match_flagged"
+  domainMatchProfileId: string | null
+}
+
+/**
+ * Auto-adds a guest bidder to the lead agency's partner pool (magic link auto-add).
+ * Callers must wrap this in try/catch - classification failures must never block or
+ * fail the bid submission itself, only be logged.
+ */
+async function classifyGuestVendorForPool(
+  supabase: SupabaseClient,
+  params: { agencyId: string; vendorEmail: string; matchedProfileId: string | null }
+): Promise<PoolClassification> {
+  const { agencyId, vendorEmail, matchedProfileId } = params
+
+  // Case 1: vendor email matches an existing profile.
+  if (matchedProfileId) {
+    const { data: existingPartnership, error: lookupErr } = await supabase
+      .from("partnerships")
+      .select("id")
+      .eq("agency_id", agencyId)
+      .eq("partner_id", matchedProfileId)
+      .limit(1)
+      .maybeSingle()
+    if (lookupErr) throw lookupErr
+    if (!existingPartnership) {
+      const { error: insertErr } = await supabase.from("partnerships").insert({
+        agency_id: agencyId,
+        partner_id: matchedProfileId,
+        partner_email: vendorEmail,
+        status: "active",
+        profile_status: "active",
+      })
+      if (insertErr) throw insertErr
+    }
+    return { poolStatus: "existing_user_added", domainMatchProfileId: null }
+  }
+
+  // Case 3: no exact profile match, but a custom (non-free) company domain shared with
+  // another existing profile - flag for manual review instead of auto-adding.
+  if (!isFreeEmailDomain(vendorEmail)) {
+    const domain = getEmailDomain(vendorEmail)
+    if (domain) {
+      const { data: domainMatch, error: domainErr } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("email", `%@${domain}`)
+        .limit(1)
+        .maybeSingle()
+      if (domainErr) throw domainErr
+      if (domainMatch?.id) {
+        return { poolStatus: "domain_match_flagged", domainMatchProfileId: domainMatch.id as string }
+      }
+    }
+  }
+
+  // Case 2: no profile match (or a free email domain, which never counts as a domain
+  // match) - create a ghost partnership row so the vendor shows up in the pool.
+  const { data: existingGhost, error: ghostLookupErr } = await supabase
+    .from("partnerships")
+    .select("id")
+    .eq("agency_id", agencyId)
+    .ilike("partner_email", vendorEmail)
+    .limit(1)
+    .maybeSingle()
+  if (ghostLookupErr) throw ghostLookupErr
+  if (!existingGhost) {
+    const { error: insertErr } = await supabase.from("partnerships").insert({
+      agency_id: agencyId,
+      partner_id: null,
+      partner_email: vendorEmail,
+      profile_status: "unclaimed",
+      status: "pending",
+    })
+    if (insertErr) throw insertErr
+  }
+  return { poolStatus: "ghost_created", domainMatchProfileId: null }
+}
 
 function getServiceSupabase() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -168,6 +250,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
         console.error("[api] failure", { route, method: "GET", code: 500, message: responseErr.message })
         return NextResponse.json({ error: "Failed to load submitted bid" }, { status: 500 })
       }
+      const vendorEmail = (tokenRow.vendor_email || "").trim().toLowerCase()
+      const { data: matchedProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .ilike("email", vendorEmail)
+        .maybeSingle()
+      const is_existing_partner = Boolean(matchedProfile?.id)
       console.log("[api] success", { route, method: "GET", token, status: "submitted" })
       return NextResponse.json({
         status: "submitted",
@@ -177,6 +266,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
         agency,
         reference_materials: referenceMaterials,
         business_criteria_required: normalizeBusinessCriteriaRequired(tokenRow.business_criteria_required),
+        is_existing_partner,
         response: response
           ? {
               ...response,
@@ -353,6 +443,38 @@ export async function POST(req: Request) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: tokenUpdateErr.message })
     }
 
+    // Partner-pool auto-classification (magic link auto-add). Must never block or fail
+    // the bid submission response - any failure here is logged loudly and swallowed.
+    let poolClassification: PoolClassification | null = null
+    try {
+      poolClassification = await classifyGuestVendorForPool(supabase, {
+        agencyId: tokenRow.agency_id,
+        vendorEmail,
+        matchedProfileId: is_existing_partner ? matchedProfile!.id : null,
+      })
+      const { error: poolStatusErr } = await supabase
+        .from("rfp_magic_tokens")
+        .update({
+          pool_status: poolClassification.poolStatus,
+          domain_match_profile_id: poolClassification.domainMatchProfileId,
+        })
+        .eq("token", token)
+      if (poolStatusErr) {
+        console.error("[api] partner-pool classification: failed to persist pool_status", {
+          route,
+          token,
+          message: poolStatusErr.message,
+        })
+      }
+    } catch (classifyErr) {
+      console.error("[api] partner-pool classification failed", {
+        route,
+        token,
+        vendorEmail,
+        message: classifyErr instanceof Error ? classifyErr.message : String(classifyErr),
+      })
+    }
+
     const { data: project } = await supabase
       .from("projects")
       .select("name")
@@ -384,10 +506,11 @@ export async function POST(req: Request) {
       })
     }
 
+    const agencyRecipient =
+      agencyProfile?.company_name?.trim() || agencyProfile?.display_name?.trim() || agencyProfile?.full_name?.trim() || "there"
+
     try {
       if (agencyProfile?.email) {
-        const agencyRecipient =
-          agencyProfile.company_name?.trim() || agencyProfile.display_name?.trim() || agencyProfile.full_name?.trim() || "there"
         const notification = buildAgencyBidNotificationEmail({
           agencyRecipientName: agencyRecipient,
           vendorNameOrEmail: (tokenRow.vendor_name || "").trim() || vendorEmail,
@@ -405,7 +528,38 @@ export async function POST(req: Request) {
       })
     }
 
-    console.log("[api] success", { route, method: "POST", token, responseId: saved.id, is_existing_partner })
+    if (poolClassification && poolClassification.poolStatus !== "domain_match_flagged") {
+      try {
+        if (agencyProfile?.email) {
+          const poolNotification = buildAgencyPoolNotificationEmail({
+            agencyRecipientName: agencyRecipient,
+            vendorNameOrEmail: (tokenRow.vendor_name || "").trim() || vendorEmail,
+            vendorEmail,
+            proposalText: proposal_text,
+            budgetSummary,
+            timelineSummary: timeline_proposal,
+          })
+          const sent = await sendTransactionalEmail({ to: agencyProfile.email, ...poolNotification })
+          if (!sent) {
+            console.error("[api] agency pool notification email not sent", { route, token })
+          }
+        }
+      } catch (emailErr) {
+        console.error("[api] agency pool notification email failed", {
+          route,
+          message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+        })
+      }
+    }
+
+    console.log("[api] success", {
+      route,
+      method: "POST",
+      token,
+      responseId: saved.id,
+      is_existing_partner,
+      pool_status: poolClassification?.poolStatus ?? null,
+    })
     return NextResponse.json({ success: true, is_existing_partner })
   } catch (error) {
     console.error("[api] failure", {

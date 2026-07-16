@@ -185,6 +185,27 @@ export function buildVendorConfirmationEmail(opts: {
   }
 }
 
+export function buildAgencyPoolNotificationEmail(opts: {
+  agencyRecipientName: string
+  vendorNameOrEmail: string
+  vendorEmail: string
+  proposalText: string
+  budgetSummary: string
+  timelineSummary: string
+}): EmailPayload {
+  const subject = `${opts.vendorNameOrEmail} was added to your partner pool`
+  const trimmedProposal = opts.proposalText.trim()
+  const preview = trimmedProposal.slice(0, 150) + (trimmedProposal.length > 150 ? "..." : "")
+  const body = `${opts.vendorNameOrEmail} (${opts.vendorEmail}) submitted a bid via your magic link invitation and has been added to your partner pool.\n\n"${preview}"\n\nBudget: ${opts.budgetSummary}\nTimeline: ${opts.timelineSummary}`
+  const ctaUrl = `${siteBaseUrl()}/agency/pool`
+  const ctaText = "View Partner Pool"
+  return {
+    subject,
+    html: buildBrandedEmailHtml({ title: subject, recipientName: opts.agencyRecipientName, body, ctaText, ctaUrl }),
+    text: buildBrandedEmailText({ title: subject, recipientName: opts.agencyRecipientName, body, ctaText, ctaUrl }),
+  }
+}
+
 export function buildAgencyBidNotificationEmail(opts: {
   agencyRecipientName: string
   vendorNameOrEmail: string

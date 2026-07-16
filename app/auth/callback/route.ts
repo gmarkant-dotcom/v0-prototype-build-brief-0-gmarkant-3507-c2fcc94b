@@ -71,7 +71,7 @@ async function claimPartnershipInvitations(supabase: SupabaseClient, user: User)
 
   await supabase
     .from("partnerships")
-    .update({ partner_id: user.id, updated_at: new Date().toISOString() })
+    .update({ partner_id: user.id, profile_status: "active", updated_at: new Date().toISOString() })
     .is("partner_id", null)
     .in("status", ["pending", "active"])
     .ilike("partner_email", email)
@@ -116,12 +116,16 @@ export async function GET(request: Request) {
       // Sync profile and get role
       const role = await syncUserProfile(supabase, data.user)
 
+      // Claim any partnerships (including ghost partnerships auto-added from a magic-link
+      // guest bid) waiting on this email - unconditional, not just for invite_type=partnership
+      // signups, since a ghost vendor discovering Ligament on their own carries no such param.
+      await claimPartnershipInvitations(supabase, data.user)
+
       if (inviteType === "partnership") {
-        await claimPartnershipInvitations(supabase, data.user)
         const destination = next && next !== "/" ? next : "/partner/invitations"
         return NextResponse.redirect(`${origin}${destination}`)
       }
-      
+
       if (invite) {
         const claimUrl = new URL(`${origin}/api/partner/rfps/claim`)
         claimUrl.searchParams.set("token", invite)
@@ -143,17 +147,21 @@ export async function GET(request: Request) {
   // Handle PKCE code exchange flow (same browser only)
   if (code) {
     const { data, error: sessionError } = await supabase.auth.exchangeCodeForSession(code)
-    
+
     if (!sessionError && data.user) {
       // Sync profile and get role
       const role = await syncUserProfile(supabase, data.user)
 
+      // Claim any partnerships (including ghost partnerships auto-added from a magic-link
+      // guest bid) waiting on this email - unconditional, not just for invite_type=partnership
+      // signups, since a ghost vendor discovering Ligament on their own carries no such param.
+      await claimPartnershipInvitations(supabase, data.user)
+
       if (inviteType === "partnership") {
-        await claimPartnershipInvitations(supabase, data.user)
         const destination = next && next !== "/" ? next : "/partner/invitations"
         return NextResponse.redirect(`${origin}${destination}`)
       }
-      
+
       if (invite) {
         const claimUrl = new URL(`${origin}/api/partner/rfps/claim`)
         claimUrl.searchParams.set("token", invite)

@@ -87,7 +87,7 @@ type BasePayload = {
   business_criteria_required?: unknown
 }
 type ActivePayload = BasePayload & { status: "active" }
-type SubmittedPayload = BasePayload & { status: "submitted"; response: SubmittedResponse }
+type SubmittedPayload = BasePayload & { status: "submitted"; response: SubmittedResponse; is_existing_partner?: boolean }
 type GuestPayload = ActivePayload | SubmittedPayload
 
 type Attachment = { type: "file" | "link"; url: string; label: string }
@@ -390,6 +390,7 @@ export default function GuestRfpRespondPage() {
     submittedAt: response?.submitted_at ?? tokenRow.submitted_at ?? null,
     feedbackAt: response?.agency_feedback ? response.feedback_updated_at ?? null : null,
   })
+  const isExistingPartner = payload.status === "submitted" ? Boolean(payload.is_existing_partner) : false
   const requiredCriteria = normalizeBusinessCriteriaRequired(payload.business_criteria_required)
   const requiredDesignationKeysForBid = DESIGNATION_KEYS.filter((key) => requiredCriteria.designations[key] === true)
   const requiredInsuranceKeysForBid = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
@@ -1046,6 +1047,25 @@ export default function GuestRfpRespondPage() {
                   {statusLabel}
                 </span>
               </div>
+
+              {hasSubmittedBid && (
+                <div className="rounded-2xl border border-border/30 bg-white/5 p-5 text-center">
+                  {isExistingPartner ? (
+                    <p className="text-sm text-foreground-muted">
+                      You already have a Ligament account.{" "}
+                      <a href="/auth/login" className="text-accent hover:underline">
+                        Sign in
+                      </a>{" "}
+                      to view this bid in your portal.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-foreground-muted">
+                      You&apos;ve been added to {agencyDisplayName(agency)}&apos;s partner network. Create your
+                      profile to be discoverable to other agencies and track all your bids in one place.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {response?.agency_feedback && (
                 <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.05] p-5">
