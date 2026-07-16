@@ -186,8 +186,9 @@ export default function PartnerProfilePage() {
         router.push("/auth/login?redirect=%2Fpartner%2Fprofile")
         return
       }
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-      if (profile?.role !== "partner") {
+      const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).maybeSingle()
+      const isPartner = profile?.role === "partner" || profile?.active_role === "partner"
+      if (!isPartner) {
         router.push("/partner")
         return
       }
@@ -600,8 +601,9 @@ export default function PartnerProfilePage() {
           router.push("/auth/login?redirect=%2Fpartner%2Fprofile")
           return
         }
-        const { data: roleProfile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-        if (roleProfile?.role !== "partner") {
+        const { data: roleProfile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).maybeSingle()
+        const isPartner = roleProfile?.role === "partner" || roleProfile?.active_role === "partner"
+        if (!isPartner) {
           setMessage("Only partner users can save this profile.")
           return
         }
