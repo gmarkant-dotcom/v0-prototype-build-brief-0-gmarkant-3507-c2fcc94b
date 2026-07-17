@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, Suspense } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { useSelectedProjectSafe } from "@/contexts/selected-project-context"
 import { StageHeader } from "@/components/stage-header"
@@ -19,6 +19,7 @@ import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Ca
 import { Checkbox } from "@/components/ui/checkbox"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { MarketplaceContent } from "@/components/marketplace-content"
+import { EmailImportSheet } from "@/components/email-import-sheet"
 import {
   DESIGNATION_KEYS,
   DESIGNATION_LABELS,
@@ -270,8 +271,9 @@ const legalFilters = ["All", "NDA Signed", "MSA Approved", "No NDA", "No MSA"]
 const statusFilters = ["All", "Active", "Pending", "New", "Blacklisted"]
 const types = partnerTypes
 
-export default function PartnerPoolPage() {
+function PartnerPoolPageInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const projectContext = useSelectedProjectSafe()
   const selectedProject = projectContext?.selectedProject ?? null
   const isDemo = projectContext?.isDemo ?? isDemoMode()
@@ -301,6 +303,12 @@ export default function PartnerPoolPage() {
   // Discover New Partners sheet (embeds Marketplace)
   const [discoverSheetOpen, setDiscoverSheetOpen] = useState(false)
   const [marketplaceOpened, setMarketplaceOpened] = useState(false)
+
+  // Import from Email sheet
+  const [emailImportSheetOpen, setEmailImportSheetOpen] = useState(false)
+  useEffect(() => {
+    if (searchParams.get("import") === "email") setEmailImportSheetOpen(true)
+  }, [searchParams])
 
   // Partnerships state (new closed ecosystem)
   const [partnerships, setPartnerships] = useState<Partnership[]>([])
@@ -1110,6 +1118,14 @@ export default function PartnerPoolPage() {
             subtitle="Your curated roster of trusted partners. View credentials, track legal status, add notes, and manage relationships."
           />
           <div className="flex items-center gap-3">
+            <Button
+              onClick={() => setEmailImportSheetOpen(true)}
+              variant="outline"
+              className="border-border text-foreground hover:bg-white/5 flex items-center gap-2"
+            >
+              <Mail className="w-4 h-4" />
+              Import from Email
+            </Button>
             <Button
               onClick={() => {
                 setDiscoverSheetOpen(true)
@@ -2250,7 +2266,21 @@ export default function PartnerPoolPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <EmailImportSheet
+        open={emailImportSheetOpen}
+        onOpenChange={setEmailImportSheetOpen}
+        onImported={loadPartnerships}
+      />
     </AgencyLayout>
+  )
+}
+
+export default function PartnerPoolPage() {
+  return (
+    <Suspense fallback={null}>
+      <PartnerPoolPageInner />
+    </Suspense>
   )
 }
 
