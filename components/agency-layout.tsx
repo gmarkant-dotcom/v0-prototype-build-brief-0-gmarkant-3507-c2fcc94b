@@ -8,7 +8,7 @@ import { HolographicBlobs } from "./holographic-blobs"
 import { LigamentLogo } from "./ligament-logo"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditCard, Zap } from "lucide-react"
+import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditCard, Zap, Mail } from "lucide-react"
 import { SelectedProjectProvider, useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
@@ -32,7 +32,7 @@ const navSections = [
   {
     label: "BID REQUESTS",
     items: [
-      { number: "00", title: "Partner Pool", href: "/agency/pool", tooltip: "Your curated network of vetted vendors. Manage relationships and discover new partners." },
+      { number: "00", title: "Partner Pool", href: "/agency/pool", hasPoolDropdown: true, tooltip: "Your curated network of vetted vendors. Manage relationships and discover new partners." },
       { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Create and send scoped RFPs to your partner pool or any vendor via Lightning RFP Magic Link" },
       { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Review, shortlist, and award bids from partners and guest vendors" },
       { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track partner onboarding across active projects" },
@@ -131,6 +131,94 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
           >
             <Zap className="w-4 h-4 text-accent" />
             Lightning RFP Magic Link
+          </Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Partner Pool nav item: same dropdown pattern as RFP Broadcast above - desktop shows a
+ * HoverCard with the two pool paths; mobile lists both inline. Clicking the row itself
+ * always goes to /agency/pool.
+ */
+function PoolNavItem({ pathname }: { pathname: string | null }) {
+  const isActive = pathname === "/agency/pool" || Boolean(pathname?.startsWith("/agency/pool/"))
+
+  const link = (
+    <Link
+      href="/agency/pool"
+      className={cn(
+        "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
+        isActive
+          ? "bg-accent/10 border border-accent/30"
+          : "hover:bg-white/5 border border-transparent"
+      )}
+    >
+      <span className={cn(
+        "font-mono text-xs font-medium mt-0.5",
+        isActive ? "text-accent" : "text-foreground-muted"
+      )}>
+        00
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className={cn(
+          "font-display font-bold text-sm leading-tight",
+          isActive ? "text-accent" : "text-foreground group-hover:text-white"
+        )}>
+          Partner Pool
+        </div>
+      </div>
+      {isActive && (
+        <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />
+      )}
+    </Link>
+  )
+
+  return (
+    <div>
+      {/* Desktop: hover dropdown */}
+      <div className="hidden md:block">
+        <HoverCard openDelay={200}>
+          <HoverCardTrigger asChild>{link}</HoverCardTrigger>
+          <HoverCardContent side="right" align="start" className="w-64 p-1.5 bg-background border-border">
+            <p className="px-3 pt-1.5 pb-2 mb-1 border-b border-border text-xs text-foreground-muted">
+              Your curated network of vetted vendors. Manage relationships and discover new partners.
+            </p>
+            <Link
+              href="/agency/pool"
+              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
+            >
+              Partner Pool
+            </Link>
+            <Link
+              href="/agency/pool?import=email"
+              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
+            >
+              <Mail className="w-4 h-4 text-accent" />
+              Import from Email
+            </Link>
+          </HoverCardContent>
+        </HoverCard>
+      </div>
+
+      {/* Mobile: no hover, list both options inline */}
+      <div className="md:hidden">
+        {link}
+        <div className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
+          <Link
+            href="/agency/pool"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
+          >
+            Partner Pool
+          </Link>
+          <Link
+            href="/agency/pool?import=email"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
+          >
+            <Mail className="w-4 h-4 text-accent" />
+            Import from Email
           </Link>
         </div>
       </div>
@@ -457,6 +545,9 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                 {section.items.map((item) => {
                   if ('hasRfpDropdown' in item && item.hasRfpDropdown) {
                     return <RfpBroadcastNavItem key={item.href} pathname={pathname} />
+                  }
+                  if ('hasPoolDropdown' in item && item.hasPoolDropdown) {
+                    return <PoolNavItem key={item.href} pathname={pathname} />
                   }
                   const isActive = pathname === item.href ||
                     (item.href !== "/agency" && pathname?.startsWith(item.href))
