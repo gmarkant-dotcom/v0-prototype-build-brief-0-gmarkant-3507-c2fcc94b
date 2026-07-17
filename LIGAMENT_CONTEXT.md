@@ -61,6 +61,10 @@ bid management, onboarding, active engagements, and cash flow.
 4. Update this file with the new migration number and description
 5. Deploy code after migration is confirmed
 
+**Email import (Gmail, Phase 1) env vars** - required in Vercel (Production + Preview) before this feature works, in addition to applying migration 062:
+- `GOOGLE_EMAIL_CLIENT_ID` / `GOOGLE_EMAIL_CLIENT_SECRET` - Google Cloud OAuth client credentials, redirect URI `{siteBaseUrl}/api/auth/google-email/callback`, scope `gmail.readonly`.
+- `TOKEN_ENCRYPTION_KEY` - 32-byte hex string (64 hex chars, e.g. `openssl rand -hex 32`) used by `lib/token-encryption.ts` to encrypt/decrypt stored OAuth tokens. No plaintext fallback - encryption throws if this is missing or the wrong length.
+
 ---
 
 ## Critical Architecture Constraints
