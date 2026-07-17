@@ -16,6 +16,7 @@ type ScannedContact = {
   email: string
   name: string | null
   subjects: string[]
+  snippets?: string[]
   message_count: number
   has_attachments: boolean
   attachment_types: string[]
@@ -68,7 +69,11 @@ function MicrosoftIcon({ className }: { className?: string }) {
 
 function signalLabel(signal: string): string {
   if (signal.startsWith("keyword:")) {
-    return `"${signal.slice("keyword:".length).toUpperCase()}" in subject`
+    const rest = signal.slice("keyword:".length)
+    const separatorIndex = rest.lastIndexOf(":")
+    const keyword = separatorIndex >= 0 ? rest.slice(0, separatorIndex) : rest
+    const source = separatorIndex >= 0 ? rest.slice(separatorIndex + 1) : "subject"
+    return `"${keyword.toUpperCase()}" in ${source === "snippet" ? "preview" : "subject"}`
   }
   switch (signal) {
     case "pdf_or_docx_attachment":
@@ -422,7 +427,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
               </Tooltip>
             </div>
             <p className="text-xs text-foreground-muted leading-relaxed">
-              Ligament scans email metadata (subjects and contacts) to identify vendors. Message content is never
+              Ligament scans email subjects and brief previews to identify vendors. Full message content is never
               read or stored.
             </p>
           </div>

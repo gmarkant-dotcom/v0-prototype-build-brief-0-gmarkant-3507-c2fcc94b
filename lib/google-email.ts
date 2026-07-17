@@ -127,18 +127,33 @@ export async function revokeGoogleToken(accessToken: string): Promise<boolean> {
 // call-and-return-at-the-end function cannot do.
 
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
+// Covers formal procurement language plus how creative/production/event/experiential
+// agencies actually email vendors. 482 chars raw / ~704 URL-encoded - comfortably under
+// Gmail's practical query length limits (no documented hard cap; well within normal HTTP
+// GET bounds), so this is sent as one query rather than split into multiple searches.
 const VENDOR_SUBJECT_QUERY =
-  "subject:(proposal OR invoice OR SOW OR estimate OR bid OR quote OR RFP OR contract OR NDA OR scope OR deliverable OR production OR retainer OR freelance)"
+  'subject:(proposal OR invoice OR SOW OR estimate OR bid OR quote OR RFP OR contract OR NDA OR scope OR deliverable OR production OR retainer OR freelance OR "call sheet" OR shoot OR "rough cut" OR "final cut" OR revision OR selects OR "site visit" OR brief OR treatment OR storyboard OR "mood board" OR concept OR casting OR "day rate" OR buyout OR "usage rights" OR booking OR activation OR fabrication OR install OR "run of show" OR "purchase order" OR "rate card" OR "media plan")'
 
 export const MAX_MESSAGES = 200
 const LIST_PAGE_SIZE = 100
 const FETCH_CHUNK_SIZE = 20
+// Bounds how many snippet strings accumulate per contact - keyword scoring only needs "does
+// any snippet mention X", so this caps scan_results payload growth for a contact appearing
+// in many messages without losing scoring signal.
+const MAX_SNIPPETS_PER_CONTACT = 10
 
 type GmailHeader = { name: string; value: string }
 type GmailMessagePart = { filename?: string; parts?: GmailMessagePart[] }
-type GmailRawMessage = { id: string; payload?: { headers?: GmailHeader[]; parts?: GmailMessagePart[] } }
+type GmailRawMessage = {
+  id: string
+  snippet?: string
+  payload?: { headers?: GmailHeader[]; parts?: GmailMessagePart[] }
+}
 
-/** Already-parsed per-message metadata - nothing downstream touches Gmail's raw payload shape. */
+/** Already-parsed per-message data - nothing downstream touches Gmail's raw payload shape.
+ *  Fetched via format=full (needed for the snippet field and full part tree), but only
+ *  headers, attachment filenames, and the snippet are ever extracted - the message body
+ *  itself is never read into this type or stored anywhere. */
 export type GmailMetadataMessage = {
   id: string
   from: string | null
@@ -146,6 +161,7 @@ export type GmailMetadataMessage = {
   cc: string | null
   subject: string
   date: string | null
+  snippet: string
   hasAttachment: boolean
   attachmentTypes: string[]
 }
@@ -154,6 +170,7 @@ export type RawGmailContact = {
   email: string
   name: string | null
   subjects: string[]
+  snippets: string[]
   message_count: number
   has_attachments: boolean
   attachment_types: string[]
@@ -169,8 +186,23 @@ type AccumulatorEntry = {
   // 5 most recent only when converting to RawGmailContact, since Gmail's list order for a
   // search query isn't a documented guarantee of newest-first.
   subjectEntries: { subject: string; date: string | null }[]
+  snippets: string[]
   has_attachments: boolean
   attachment_types: string[]
+}
+
+/** Extracts a bare lowercase hostname from a URL or bare domain string ("www.Acme.com",
+ *  "https://acme.com/about" -> "acme.com"). Returns null for empty/unparseable input. */
+export function extractDomainFromUrl(raw: string | null | undefined): string | null {
+  const trimmed = (raw || "").trim().toLowerCase()
+  if (!trimmed) return null
+  const withProtocol = /^https?:\/\//.test(trimmed) ? trimmed : `https://${trimmed}`
+  try {
+    const hostname = new URL(withProtocol).hostname.replace(/^www\./, "")
+    return hostname || null
+  } catch {
+    return null
+  }
 }
 
 export type ContactAccumulator = Map<string, AccumulatorEntry>
@@ -237,14 +269,16 @@ export async function listGmailMessageIds(
   return { ids, nextPageToken: payload.nextPageToken || null }
 }
 
-function metadataQueryString(): string {
-  const params = new URLSearchParams({ format: "metadata" })
-  for (const header of ["From", "To", "Cc", "Subject", "Date"]) params.append("metadataHeaders", header)
-  return params.toString()
+// format=full (not metadata) so the snippet field is available - metadataHeaders only
+// applies to format=metadata, so it's dropped here. Only headers, attachment filenames,
+// and snippet are ever read out of the response below; the full body is never extracted
+// or stored past this function.
+function fullMessageQueryString(): string {
+  return new URLSearchParams({ format: "full" }).toString()
 }
 
 async function fetchOneMessage(accessToken: string, id: string, attempt = 0): Promise<GmailMetadataMessage> {
-  const res = await fetch(`${GMAIL_API_BASE}/messages/${id}?${metadataQueryString()}`, {
+  const res = await fetch(`${GMAIL_API_BASE}/messages/${id}?${fullMessageQueryString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   if (res.status === 429 && attempt === 0) {
@@ -266,6 +300,7 @@ async function fetchOneMessage(accessToken: string, id: string, attempt = 0): Pr
     cc: get("Cc"),
     subject: get("Subject") || "",
     date: get("Date"),
+    snippet: raw.snippet || "",
     hasAttachment,
     attachmentTypes: Array.from(attachmentTypes),
   }
@@ -300,14 +335,21 @@ export async function fetchGmailMessageBatch(
 }
 
 /** Pure - folds a batch of metadata messages into an accumulator (mutates + returns it).
- *  Excludes userEmail's own address and domain, per spec ("exclude userEmail's domain"). */
+ *  Excludes userEmail's exact address and its domain, per spec ("exclude userEmail's
+ *  domain"), plus any additional domains in excludedDomains (e.g. the agency's
+ *  profiles.company_website, when that differs from the login email's own domain -
+ *  resolved by the caller, which has DB access, and passed in here). */
 export function accumulateContactsFromMessages(
   messages: GmailMetadataMessage[],
   userEmail: string,
-  accumulator: ContactAccumulator
+  accumulator: ContactAccumulator,
+  excludedDomains: string[] = []
 ): ContactAccumulator {
   const userEmailLower = userEmail.trim().toLowerCase()
   const userDomain = userEmailLower.split("@")[1] || ""
+  const excludedDomainSet = new Set(
+    [userDomain, ...excludedDomains.map((d) => d.trim().toLowerCase())].filter(Boolean)
+  )
 
   for (const message of messages) {
     const dateMs = message.date ? new Date(message.date).getTime() : NaN
@@ -319,7 +361,7 @@ export function accumulateContactsFromMessages(
     for (const { email, name } of participants) {
       if (!email || email === userEmailLower) continue
       const domain = email.split("@")[1]
-      if (!domain || domain === userDomain) continue
+      if (!domain || excludedDomainSet.has(domain)) continue
 
       const existing = accumulator.get(email)
       if (!existing) {
@@ -329,6 +371,7 @@ export function accumulateContactsFromMessages(
           message_count: 1,
           last_contact_date: dateIso,
           subjectEntries: message.subject ? [{ subject: message.subject, date: dateIso }] : [],
+          snippets: message.snippet ? [message.snippet] : [],
           has_attachments: message.hasAttachment,
           attachment_types: [...message.attachmentTypes],
         })
@@ -346,6 +389,9 @@ export function accumulateContactsFromMessages(
       }
       if (message.subject) {
         existing.subjectEntries.push({ subject: message.subject, date: dateIso })
+      }
+      if (message.snippet && existing.snippets.length < MAX_SNIPPETS_PER_CONTACT) {
+        existing.snippets.push(message.snippet)
       }
     }
   }
@@ -368,6 +414,7 @@ export function contactsFromAccumulator(accumulator: ContactAccumulator): RawGma
       message_count: entry.message_count,
       last_contact_date: entry.last_contact_date,
       subjects,
+      snippets: entry.snippets,
       has_attachments: entry.has_attachments,
       attachment_types: entry.attachment_types,
     }
@@ -377,7 +424,11 @@ export function contactsFromAccumulator(accumulator: ContactAccumulator): RawGma
 /** All-at-once convenience wrapper matching the literal spec signature, composed from the
  *  primitives above. app/api/agency/email-scan/run/route.ts does NOT use this - it
  *  reimplements the same loop directly so it can checkpoint scan_results between chunks. */
-export async function scanGmailContacts(accessToken: string, userEmail: string): Promise<RawGmailContact[]> {
+export async function scanGmailContacts(
+  accessToken: string,
+  userEmail: string,
+  excludedDomains: string[] = []
+): Promise<RawGmailContact[]> {
   const accumulator = createContactAccumulator()
   let pageToken: string | null | undefined
   let processedCount = 0
@@ -388,7 +439,7 @@ export async function scanGmailContacts(accessToken: string, userEmail: string):
     const remaining = MAX_MESSAGES - processedCount
     const idsToFetch = ids.slice(0, remaining)
     const { messages } = await fetchGmailMessageBatch(accessToken, idsToFetch)
-    accumulateContactsFromMessages(messages, userEmail, accumulator)
+    accumulateContactsFromMessages(messages, userEmail, accumulator, excludedDomains)
     processedCount += idsToFetch.length
     pageToken = processedCount < MAX_MESSAGES ? nextPageToken : null
   } while (pageToken)

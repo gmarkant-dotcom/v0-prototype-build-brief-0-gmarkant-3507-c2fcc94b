@@ -4,30 +4,77 @@
 
 import { isFreeEmailDomain } from "@/lib/email-domains"
 
-const KEYWORD_MATCHES = [
+// Tier 1: highest-signal, formal procurement/legal terms.
+const TIER1_KEYWORDS = [
   "sow",
   "proposal",
   "invoice",
   "estimate",
   "bid",
   "quote",
-  "scope",
   "rfp",
   "contract",
   "nda",
+  "scope",
   "deliverable",
-  "production",
-  "creative brief",
-  "scope of work",
+  "purchase order",
   "statement of work",
   "msa",
   "master service",
   "retainer",
+]
+const TIER1_SUBJECT_BONUS = 15
+const TIER1_SUBJECT_MAX = 45
+const TIER1_SNIPPET_BONUS = 7
+const TIER1_SNIPPET_MAX = 21
+
+// Tier 2: creative/production workflow terms.
+const TIER2_KEYWORDS = [
+  "production",
   "freelance",
   "subcontract",
+  "call sheet",
+  "shoot",
+  "rough cut",
+  "final cut",
+  "brief",
+  "treatment",
+  "storyboard",
+  "casting",
+  "day rate",
+  "buyout",
+  "usage rights",
+  "activation",
+  "fabrication",
+  "rate card",
+  "media plan",
+  "change order",
 ]
-const KEYWORD_BONUS = 15
-const KEYWORD_MAX = 45
+const TIER2_SUBJECT_BONUS = 10
+const TIER2_SUBJECT_MAX = 30
+const TIER2_SNIPPET_BONUS = 5
+const TIER2_SNIPPET_MAX = 15
+
+// Tier 3: lighter-weight/supporting terms.
+const TIER3_KEYWORDS = [
+  "revision",
+  "selects",
+  "site visit",
+  "mood board",
+  "concept",
+  "booking",
+  "install",
+  "run of show",
+  "wrap",
+  "load-in",
+  "proof",
+  "artwork",
+  "kill fee",
+]
+const TIER3_SUBJECT_BONUS = 5
+const TIER3_SUBJECT_MAX = 15
+const TIER3_SNIPPET_BONUS = 3
+const TIER3_SNIPPET_MAX = 9
 
 const NEWSLETTER_TERMS = ["unsubscribe", "newsletter", "digest", "weekly update"]
 const NEWSLETTER_PENALTY = 20
@@ -43,7 +90,6 @@ const SYSTEM_ADDRESS_PREFIXES = [
   "mailer-daemon@",
   "info@",
 ]
-const SYSTEM_ADDRESS_PENALTY = 50
 
 const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6
 const THREE_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 3
@@ -51,6 +97,7 @@ const THREE_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 3
 export type VendorSignalContact = {
   email: string
   subjects: string[]
+  snippets: string[]
   message_count: number
   has_attachments: boolean
   attachment_types: string[]
@@ -59,21 +106,53 @@ export type VendorSignalContact = {
 
 export type VendorSignalScore = { score: number; signals: string[] }
 
-export function scoreVendorSignal(contact: VendorSignalContact): VendorSignalScore {
-  let score = 0
-  const signals: string[] = []
-  const email = contact.email.toLowerCase()
-  const subjectHaystack = contact.subjects.join(" \n ").toLowerCase()
-
-  let keywordMatches = 0
-  for (const keyword of KEYWORD_MATCHES) {
-    if (keywordMatches * KEYWORD_BONUS >= KEYWORD_MAX) break
-    if (subjectHaystack.includes(keyword)) {
-      keywordMatches += 1
-      signals.push(`keyword:${keyword}`)
+/** Scans haystack for keywords, adding bonus per distinct match (capped at max), pushing a
+ *  "keyword:<word>:<source>" signal per match so the UI can label "X in subject" vs
+ *  "X in preview" differently. */
+function scoreKeywordsInHaystack(
+  haystack: string,
+  keywords: string[],
+  bonus: number,
+  max: number,
+  source: "subject" | "snippet",
+  signals: string[]
+): number {
+  let total = 0
+  for (const keyword of keywords) {
+    if (total >= max) break
+    if (haystack.includes(keyword)) {
+      total += bonus
+      signals.push(`keyword:${keyword}:${source}`)
     }
   }
-  score += Math.min(keywordMatches * KEYWORD_BONUS, KEYWORD_MAX)
+  return Math.min(total, max)
+}
+
+export function scoreVendorSignal(contact: VendorSignalContact): VendorSignalScore {
+  const email = contact.email.toLowerCase()
+
+  // Hard filter, not a penalty - a system/no-reply address must never appear in results
+  // regardless of how many keyword hits it happens to have.
+  const isSystemAddress = SYSTEM_ADDRESS_PREFIXES.some((prefix) => email.startsWith(prefix))
+  if (isSystemAddress) {
+    return { score: 0, signals: ["system_address"] }
+  }
+
+  let score = 0
+  const signals: string[] = []
+  const subjectHaystack = contact.subjects.join(" \n ").toLowerCase()
+  const snippetHaystack = (contact.snippets || []).join(" \n ").toLowerCase()
+
+  score += scoreKeywordsInHaystack(subjectHaystack, TIER1_KEYWORDS, TIER1_SUBJECT_BONUS, TIER1_SUBJECT_MAX, "subject", signals)
+  score += scoreKeywordsInHaystack(subjectHaystack, TIER2_KEYWORDS, TIER2_SUBJECT_BONUS, TIER2_SUBJECT_MAX, "subject", signals)
+  score += scoreKeywordsInHaystack(subjectHaystack, TIER3_KEYWORDS, TIER3_SUBJECT_BONUS, TIER3_SUBJECT_MAX, "subject", signals)
+
+  // Body-preview mentions are a weaker signal than subject mentions, scored at half value -
+  // an email with "estimate" in the subject AND "deliverable" in the snippet scores higher
+  // than either alone.
+  score += scoreKeywordsInHaystack(snippetHaystack, TIER1_KEYWORDS, TIER1_SNIPPET_BONUS, TIER1_SNIPPET_MAX, "snippet", signals)
+  score += scoreKeywordsInHaystack(snippetHaystack, TIER2_KEYWORDS, TIER2_SNIPPET_BONUS, TIER2_SNIPPET_MAX, "snippet", signals)
+  score += scoreKeywordsInHaystack(snippetHaystack, TIER3_KEYWORDS, TIER3_SNIPPET_BONUS, TIER3_SNIPPET_MAX, "snippet", signals)
 
   const hasDocAttachment = contact.attachment_types.some((t) => {
     const ext = t.toLowerCase()
@@ -112,12 +191,6 @@ export function scoreVendorSignal(contact: VendorSignalContact): VendorSignalSco
   if (isNewsletter) {
     score -= NEWSLETTER_PENALTY
     signals.push("newsletter_or_marketing")
-  }
-
-  const isSystemAddress = SYSTEM_ADDRESS_PREFIXES.some((prefix) => email.startsWith(prefix))
-  if (isSystemAddress) {
-    score -= SYSTEM_ADDRESS_PENALTY
-    signals.push("system_address")
   }
 
   return { score: Math.max(0, Math.min(100, score)), signals }

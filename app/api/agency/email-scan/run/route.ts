@@ -8,6 +8,7 @@ import {
   accumulateContactsFromMessages,
   contactsFromAccumulator,
   refreshGoogleToken,
+  extractDomainFromUrl,
   MAX_MESSAGES,
   type RawGmailContact,
 } from "@/lib/google-email"
@@ -92,13 +93,22 @@ async function requireAgency() {
   if (!user) return { ok: false as const, status: 401, error: "Unauthorized" }
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, active_role, email")
+    .select("role, active_role, email, company_website")
     .eq("id", user.id)
     .maybeSingle()
   if (profile?.role !== "agency" && profile?.active_role !== "agency") {
     return { ok: false as const, status: 403, error: "Agency only" }
   }
-  return { ok: true as const, userId: user.id, userEmail: profile?.email || "" }
+  // Exclude the agency's own business domain from results, not just the login email's
+  // domain - the two can differ (e.g. a personal-looking login address with a distinct
+  // registered company_website).
+  const companyDomain = extractDomainFromUrl(profile?.company_website)
+  return {
+    ok: true as const,
+    userId: user.id,
+    userEmail: profile?.email || "",
+    excludedDomains: companyDomain ? [companyDomain] : [],
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -202,7 +212,7 @@ export async function GET(request: NextRequest) {
       for (let i = 0; i < idsToProcess.length; i += CHECKPOINT_CHUNK_SIZE) {
         const chunk = idsToProcess.slice(i, i + CHECKPOINT_CHUNK_SIZE)
         const { messages, failedIds } = await fetchGmailMessageBatch(accessToken, chunk)
-        accumulateContactsFromMessages(messages, auth.userEmail, accumulator)
+        accumulateContactsFromMessages(messages, auth.userEmail, accumulator, auth.excludedDomains)
         processedCount += chunk.length
         failedTotal += failedIds.length
 
