@@ -134,8 +134,8 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                           <span>{item.title}</span>
                         </Link>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom">
-                        <p>{item.tooltip}</p>
+                      <TooltipContent side="bottom" showArrow={false} className="w-64 p-3 bg-white border border-gray-200 shadow-xl">
+                        <p className="text-xs text-gray-600">{item.tooltip}</p>
                       </TooltipContent>
                     </Tooltip>
                   )

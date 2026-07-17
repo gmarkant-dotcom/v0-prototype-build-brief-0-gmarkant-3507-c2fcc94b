@@ -403,8 +403,8 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                     )}
                   </Link>
                 </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Overview of your active projects, pipeline, and platform activity</p>
+                <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                  <p className="text-xs text-foreground-muted">Overview of your active projects, pipeline, and platform activity</p>
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -593,8 +593,8 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                   return (
                     <Tooltip key={item.href}>
                       <TooltipTrigger asChild>{link}</TooltipTrigger>
-                      <TooltipContent side="right">
-                        <p>{item.tooltip}</p>
+                      <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                        <p className="text-xs text-foreground-muted">{item.tooltip}</p>
                       </TooltipContent>
                     </Tooltip>
                   )
