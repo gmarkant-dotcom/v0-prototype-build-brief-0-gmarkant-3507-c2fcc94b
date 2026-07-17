@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
 import {
   createContactAccumulator,
   listGmailMessageIds,
@@ -9,8 +9,66 @@ import {
   contactsFromAccumulator,
   refreshGoogleToken,
   MAX_MESSAGES,
+  type RawGmailContact,
 } from "@/lib/google-email"
 import { encrypt, decrypt } from "@/lib/token-encryption"
+import { scoreAndFilterContacts, type ScoredVendorContact } from "@/lib/vendor-signal-scoring"
+
+type EnrichedContact = ScoredVendorContact<RawGmailContact> & {
+  has_ligament_account: boolean
+  profile_id: string | null
+  already_in_pool: boolean
+}
+
+/** Cross-references scored contacts against profiles (has_ligament_account, profile_id)
+ *  and this agency's partnerships (already_in_pool). Mirrors the partner_id-then-
+ *  partner_email lookup pattern in classifyGuestVendorForPool
+ *  (app/api/rfp/guest/[token]/route.ts). Only called on the final "complete" write, not
+ *  every checkpoint - it costs 2 extra round-trips and isn't needed until a human is
+ *  actually reviewing finished results; a scan that times out before completing simply
+ *  shows scored contacts without these three fields. */
+async function enrichWithLigamentData(
+  contacts: ScoredVendorContact<RawGmailContact>[],
+  agencyId: string,
+  service: SupabaseClient
+): Promise<EnrichedContact[]> {
+  if (contacts.length === 0) return []
+
+  const profileByEmail = new Map<string, string>()
+  const profileFilter = contacts.map((c) => `email.ilike.${c.email}`).join(",")
+  const { data: profiles } = await service.from("profiles").select("id, email").or(profileFilter)
+  for (const p of profiles || []) {
+    if (p.email) profileByEmail.set(String(p.email).toLowerCase(), p.id as string)
+  }
+
+  const profileIds = Array.from(new Set(Array.from(profileByEmail.values())))
+  const partnershipFilterParts = contacts.map((c) => `partner_email.ilike.${c.email}`)
+  if (profileIds.length > 0) {
+    partnershipFilterParts.push(`partner_id.in.(${profileIds.join(",")})`)
+  }
+  const partnerIdSet = new Set<string>()
+  const partnerEmailSet = new Set<string>()
+  const { data: partnerships } = await service
+    .from("partnerships")
+    .select("partner_id, partner_email")
+    .eq("agency_id", agencyId)
+    .or(partnershipFilterParts.join(","))
+  for (const row of partnerships || []) {
+    if (row.partner_id) partnerIdSet.add(row.partner_id as string)
+    if (row.partner_email) partnerEmailSet.add(String(row.partner_email).toLowerCase())
+  }
+
+  return contacts.map((contact) => {
+    const profileId = profileByEmail.get(contact.email) || null
+    const alreadyInPool = (profileId != null && partnerIdSet.has(profileId)) || partnerEmailSet.has(contact.email)
+    return {
+      ...contact,
+      has_ligament_account: Boolean(profileId),
+      profile_id: profileId,
+      already_in_pool: alreadyInPool,
+    }
+  })
+}
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -149,12 +207,15 @@ export async function GET(request: NextRequest) {
         failedTotal += failedIds.length
 
         // Checkpoint - awaited synchronously before continuing, not fire-and-forget, so a
-        // function killed mid-loop has already landed its last write.
+        // function killed mid-loop has already landed its last write. Scored/filtered/
+        // sorted (cheap, pure) but not yet cross-referenced against profiles/partnerships
+        // (that's 2 extra DB round-trips, deferred to the final write - see
+        // enrichWithLigamentData's comment).
         const { error: checkpointErr } = await service
           .from("email_connections")
           .update({
             scan_results: {
-              contacts: contactsFromAccumulator(accumulator),
+              contacts: scoreAndFilterContacts(contactsFromAccumulator(accumulator)),
               processed_count: processedCount,
               failed_count: failedTotal,
               complete: false,
@@ -171,7 +232,8 @@ export async function GET(request: NextRequest) {
       pageToken = processedCount < MAX_MESSAGES ? nextPageToken : null
     } while (pageToken)
 
-    const finalContacts = contactsFromAccumulator(accumulator)
+    const scoredContacts = scoreAndFilterContacts(contactsFromAccumulator(accumulator))
+    const finalContacts = await enrichWithLigamentData(scoredContacts, auth.userId, service)
     const { error: finalErr } = await service
       .from("email_connections")
       .update({
