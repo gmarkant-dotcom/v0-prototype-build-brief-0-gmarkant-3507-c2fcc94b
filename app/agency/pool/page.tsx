@@ -313,7 +313,6 @@ function PartnerPoolPageInner() {
   const [resendingEmail, setResendingEmail] = useState<string | null>(null)
   const [resendMsg, setResendMsg] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
-  const [contactSearchQuery, setContactSearchQuery] = useState("")
 
   // Invitation state
   const [invitations, setInvitations] = useState<PartnerInvitation[]>([])
@@ -1080,21 +1079,26 @@ function PartnerPoolPageInner() {
     [partnerships],
   )
 
+  // General search (company name, contact name, or email) - shared with the Active
+  // Partners search above, so one search bar filters all three pool columns at once.
   const contactMatchesSearch = (row: Partnership, q: string) => {
     if (!q) return true
-    const hay = [row.partnerEmail, row.vendorName].filter(Boolean).join(" ").toLowerCase()
+    const hay = [row.partnerCompany, row.partnerName, row.vendorName, row.partnerEmail]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
     return hay.includes(q)
   }
 
   const filteredInvitedRows = useMemo(() => {
-    const q = contactSearchQuery.trim().toLowerCase()
+    const q = searchQuery.trim().toLowerCase()
     return invitedRows.filter((row) => contactMatchesSearch(row, q))
-  }, [invitedRows, contactSearchQuery])
+  }, [invitedRows, searchQuery])
 
   const filteredDiscoveredRows = useMemo(() => {
-    const q = contactSearchQuery.trim().toLowerCase()
+    const q = searchQuery.trim().toLowerCase()
     return discoveredRows.filter((row) => contactMatchesSearch(row, q))
-  }, [discoveredRows, contactSearchQuery])
+  }, [discoveredRows, searchQuery])
 
   const dynamicDisciplineFilters = useMemo(() => {
     const seen = new Map<string, string>()
@@ -1234,7 +1238,7 @@ function PartnerPoolPageInner() {
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex-1 min-w-[200px]">
               <Input
-                placeholder="Search partners..."
+                placeholder="Search by company, contact, or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
@@ -1388,8 +1392,13 @@ function PartnerPoolPageInner() {
           </p>
         )}
 
-        {hasNetworkSource && (
-          <div className="mb-8 rounded-xl border border-border bg-card p-5">
+        {resendMsg && <p className="text-xs text-accent mb-4">{resendMsg}</p>}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {/* Column A - Active Partners. Filter chips (Status/Legal/Discipline/Designations/
+              Insurance) and the search bar above apply to this column only for chips, and to
+              all three columns for search. */}
+          <div className="rounded-xl border border-border bg-card p-5 flex flex-col">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-display font-bold text-sm text-foreground">Active Partners</h2>
               <span className="font-mono text-[10px] text-foreground-muted">{filteredNetworkRows.length}</span>
@@ -1397,11 +1406,11 @@ function PartnerPoolPageInner() {
             <p className="text-xs text-foreground-muted mb-4">
               Partners you can send RFPs to and collaborate with directly.
             </p>
-            {filteredNetworkRows.length === 0 ? (
-                  <p className="mt-2 text-sm text-foreground-muted">No active partners match your filters.</p>
+            <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
+              {filteredNetworkRows.length === 0 ? (
+                  <p className="text-sm text-foreground-muted">No active partners match your search or filters.</p>
                 ) : (
-                  <div className="space-y-2">
-                    {filteredNetworkRows.map((row) => {
+                    filteredNetworkRows.map((row) => {
                   if (row.mode === "demo") {
                     const { inv, partner } = row
                     const bl = partner?.status === "blacklisted"
@@ -1616,27 +1625,13 @@ function PartnerPoolPageInner() {
                       </div>
                     </div>
                   )
-                })}
-              </div>
-                )}
-          </div>
-        )}
-
-        {/* Invited + Discovered sections - ghost/unclaimed pool contacts, replacing the old
-            flat Pending Profiles list with two states distinguished by invitationSentAt. */}
-        {(invitedRows.length > 0 || discoveredRows.length > 0) && (
-          <div className="mb-8 space-y-6">
-            <div className="max-w-sm">
-              <Input
-                placeholder="Search by email..."
-                value={contactSearchQuery}
-                onChange={(e) => setContactSearchQuery(e.target.value)}
-                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-              />
+                })
+              )}
             </div>
-            {resendMsg && <p className="text-xs text-accent">{resendMsg}</p>}
+          </div>
 
-            <div className="rounded-xl border border-border bg-card p-5">
+          {/* Column B - Invited */}
+          <div className="rounded-xl border border-border bg-card p-5 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-display font-bold text-sm text-foreground">Invited</h2>
                 <span className="font-mono text-[10px] text-foreground-muted">{filteredInvitedRows.length}</span>
@@ -1644,11 +1639,11 @@ function PartnerPoolPageInner() {
               <p className="text-xs text-foreground-muted mb-4">
                 Contacts who have been sent an invitation to join your partner network.
               </p>
+              <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
               {filteredInvitedRows.length === 0 ? (
                 <p className="text-sm text-foreground-muted">No invited contacts match your search.</p>
               ) : (
-                <div className="space-y-2">
-                  {filteredInvitedRows.map((row) => (
+                  filteredInvitedRows.map((row) => (
                     <div
                       key={row.id}
                       className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white/[0.03] p-3"
@@ -1692,12 +1687,13 @@ function PartnerPoolPageInner() {
                         {resendingEmail === row.partnerEmail ? "Sending..." : "Resend Invitation"}
                       </Button>
                     </div>
-                  ))}
-                </div>
+                  ))
               )}
-            </div>
+              </div>
+          </div>
 
-            <div className="rounded-xl border border-border bg-card p-5">
+          {/* Column C - Discovered */}
+          <div className="rounded-xl border border-border bg-card p-5 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-display font-bold text-sm text-foreground">Discovered</h2>
                 <span className="font-mono text-[10px] text-foreground-muted">{filteredDiscoveredRows.length}</span>
@@ -1705,11 +1701,11 @@ function PartnerPoolPageInner() {
               <p className="text-xs text-foreground-muted mb-4">
                 Contacts added to your pool who have not been invited to join your network yet.
               </p>
+              <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
               {filteredDiscoveredRows.length === 0 ? (
                 <p className="text-sm text-foreground-muted">No discovered contacts match your search.</p>
               ) : (
-                <div className="space-y-2">
-                  {filteredDiscoveredRows.map((row) => (
+                  filteredDiscoveredRows.map((row) => (
                     <div
                       key={row.id}
                       className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white/[0.03] p-3"
@@ -1768,12 +1764,11 @@ function PartnerPoolPageInner() {
                         </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  ))
               )}
-            </div>
+              </div>
           </div>
-        )}
+        </div>
 
         {/* Discovery grid */}
         {partners.length > 0 ? (
