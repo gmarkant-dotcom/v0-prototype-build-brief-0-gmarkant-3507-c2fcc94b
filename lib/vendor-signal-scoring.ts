@@ -2,7 +2,7 @@
 // DB cross-referencing (has_ligament_account, profile_id, already_in_pool) is done by the
 // caller (app/api/agency/email-scan/run/route.ts), which has DB access.
 
-import { isFreeEmailDomain } from "@/lib/email-domains"
+import { isFreeEmailDomain, isSystemEmailDomain, getEmailDomain } from "@/lib/email-domains"
 
 // Tier 1: highest-signal, formal procurement/legal terms.
 const TIER1_KEYWORDS = [
@@ -88,8 +88,28 @@ const SYSTEM_ADDRESS_PREFIXES = [
   "billing@",
   "donotreply@",
   "mailer-daemon@",
-  "info@",
 ]
+
+// A generic noreply/no-reply pattern can show up in either the local part (caught above)
+// or the domain (e.g. a sender routed through a "noreply.example.com" subdomain) - checked
+// against both.
+const NOREPLY_PATTERN = /no-?reply/
+
+// Generic role addresses are a weaker signal than a true system address - some small
+// vendors legitimately operate out of info@/hello@, so this is a penalty, not a hard filter.
+const GENERIC_ROLE_PREFIXES = [
+  "marketing@",
+  "newsletter@",
+  "info@",
+  "hello@",
+  "contact@",
+  "sales@",
+  "team@",
+  "press@",
+  "events@",
+  "noreply@",
+]
+const GENERIC_ROLE_PENALTY = 15
 
 const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 6
 const THREE_MONTHS_MS = 1000 * 60 * 60 * 24 * 30 * 3
@@ -130,12 +150,23 @@ function scoreKeywordsInHaystack(
 
 export function scoreVendorSignal(contact: VendorSignalContact): VendorSignalScore {
   const email = contact.email.toLowerCase()
+  const domain = getEmailDomain(email)
+  const localPart = email.split("@")[0] || ""
 
   // Hard filter, not a penalty - a system/no-reply address must never appear in results
-  // regardless of how many keyword hits it happens to have.
+  // regardless of how many keyword hits it happens to have. Checked against both the local
+  // part (support@, noreply@, ...) and the domain (e.g. bounces routed through a
+  // "noreply.example.com" subdomain).
   const isSystemAddress = SYSTEM_ADDRESS_PREFIXES.some((prefix) => email.startsWith(prefix))
-  if (isSystemAddress) {
+  const isNoReplyPattern = NOREPLY_PATTERN.test(localPart) || NOREPLY_PATTERN.test(domain)
+  if (isSystemAddress || isNoReplyPattern) {
     return { score: 0, signals: ["system_address"] }
+  }
+
+  // Hard filter - known automated-sender domains (job boards, ATS platforms, marketing
+  // tooling, payment processors) are never a real vendor contact.
+  if (isSystemEmailDomain(email)) {
+    return { score: 0, signals: ["system_domain"] }
   }
 
   let score = 0
@@ -191,6 +222,12 @@ export function scoreVendorSignal(contact: VendorSignalContact): VendorSignalSco
   if (isNewsletter) {
     score -= NEWSLETTER_PENALTY
     signals.push("newsletter_or_marketing")
+  }
+
+  const isGenericRoleAddress = GENERIC_ROLE_PREFIXES.some((prefix) => email.startsWith(prefix))
+  if (isGenericRoleAddress) {
+    score -= GENERIC_ROLE_PENALTY
+    signals.push("generic_role_address")
   }
 
   return { score: Math.max(0, Math.min(100, score)), signals }

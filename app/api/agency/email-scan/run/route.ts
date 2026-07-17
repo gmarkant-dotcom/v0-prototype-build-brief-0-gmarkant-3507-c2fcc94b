@@ -14,6 +14,7 @@ import {
 } from "@/lib/google-email"
 import { encrypt, decrypt } from "@/lib/token-encryption"
 import { scoreAndFilterContacts, type ScoredVendorContact } from "@/lib/vendor-signal-scoring"
+import { getEmailDomain } from "@/lib/email-domains"
 
 type EnrichedContact = ScoredVendorContact<RawGmailContact> & {
   has_ligament_account: boolean
@@ -99,15 +100,20 @@ async function requireAgency() {
   if (profile?.role !== "agency" && profile?.active_role !== "agency") {
     return { ok: false as const, status: 403, error: "Agency only" }
   }
-  // Exclude the agency's own business domain from results, not just the login email's
-  // domain - the two can differ (e.g. a personal-looking login address with a distinct
-  // registered company_website).
+  // Exclude the agency's own business domain from results. Derived directly from the
+  // scanning user's actual auth email (authoritative, always present) rather than relying
+  // solely on profiles.email (can be blank/stale) or company_website (may not match the
+  // login domain, and may be unset) - either alone previously let the agency's own domain
+  // slip through when the two didn't line up.
+  const userEmail = profile?.email || user.email || ""
+  const authEmailDomain = getEmailDomain(user.email || "")
   const companyDomain = extractDomainFromUrl(profile?.company_website)
+  const excludedDomains = Array.from(new Set([authEmailDomain, companyDomain].filter((d): d is string => Boolean(d))))
   return {
     ok: true as const,
     userId: user.id,
-    userEmail: profile?.email || "",
-    excludedDomains: companyDomain ? [companyDomain] : [],
+    userEmail,
+    excludedDomains,
   }
 }
 

@@ -26,3 +26,39 @@ export function isFreeEmailDomain(email: string): boolean {
   const domain = getEmailDomain(email)
   return domain.length > 0 && FREE_EMAIL_DOMAINS.includes(domain)
 }
+
+// Known automated-sender / non-vendor domains (job boards, ATS platforms, marketing
+// tooling, payment processors) - a match here is never a real vendor contact, so
+// scoreVendorSignal hard-filters it to score 0 regardless of keyword hits.
+export const SYSTEM_EMAIL_DOMAINS = [
+  "github.com",
+  "linkedin.com",
+  "indeed.com",
+  "workablemail.com",
+  "amazon.com",
+  "enterprise.com",
+  "theatlantic.com",
+  "glassdoor.com",
+  "ziprecruiter.com",
+  "monster.com",
+  "lever.co",
+  "greenhouse.io",
+  "ashbyhq.com",
+  "mailchimp.com",
+  "constantcontact.com",
+  "hubspot.com",
+  "salesforce.com",
+  "eventbrite.com",
+  "squarespace.com",
+  "wix.com",
+  "stripe.com",
+  "paypal.com",
+  "intuit.com",
+  "angelikafilmcenter.com",
+  "vailresortsmail.com",
+]
+
+export function isSystemEmailDomain(email: string): boolean {
+  const domain = getEmailDomain(email)
+  return domain.length > 0 && SYSTEM_EMAIL_DOMAINS.includes(domain)
+}
