@@ -52,7 +52,7 @@ bid management, onboarding, active engagements, and cash flow.
 | 059 | Added reference_materials jsonb (default '[]') to rfp_magic_tokens; Lightning RFP files/links shown on the guest response page |
 | 060 | Business Criteria / Procurement Requirements: added business_criteria jsonb (default '{}') to profiles, business_criteria_required jsonb (default '{}') to rfp_magic_tokens, business_criteria_responses jsonb (default '{}') to partner_rfp_responses. Shape shared via lib/business-criteria.ts. Applied and verified - all three columns confirmed jsonb. |
 | 061 | Magic link auto-add to partner pool: added profile_status text (default 'active') to partnerships (partner_email already existed pre-migration-log, not re-added); added pool_status text and domain_match_profile_id uuid (references profiles) to rfp_magic_tokens. WRITTEN, NOT YET APPLIED - run in Supabase SQL Editor before deploying app/api/rfp/guest/[token]/route.ts's classification logic. |
-| 062 | Email import (partner pool seeding), Phase 1 Google/Gmail: created email_connections table (user_id references auth.users, provider check 'google'/'microsoft', encrypted token columns, scan_status/scan_results/status enums), RLS policy user_id = auth.uid(). WRITTEN, NOT YET APPLIED. |
+| 062 | Email import (partner pool seeding), Phase 1 Google/Gmail: created email_connections table (user_id references auth.users, provider check 'google'/'microsoft', encrypted token columns, scan_status/scan_results/status enums, scan_run_token uuid for guarding against overlapping scan runs), RLS policy user_id = auth.uid(). WRITTEN, NOT YET APPLIED. |
 
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql

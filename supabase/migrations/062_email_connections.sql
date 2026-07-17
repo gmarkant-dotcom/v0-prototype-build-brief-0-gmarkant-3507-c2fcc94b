@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS email_connections (
   scan_status text default 'idle' check (scan_status in ('idle', 'scanning', 'complete', 'error')),
   scan_results jsonb,
   status text default 'active' check (status in ('active', 'revoked', 'expired')),
+  -- Set by POST /api/agency/email-scan alongside scan_status='scanning'; the run endpoint
+  -- must be called with this exact token and bails out (409) otherwise. Guards against two
+  -- overlapping scan runs (retry, double-click, reopened tab) interleaving checkpoint writes.
+  scan_run_token uuid,
   unique(user_id, provider)
 );
 
