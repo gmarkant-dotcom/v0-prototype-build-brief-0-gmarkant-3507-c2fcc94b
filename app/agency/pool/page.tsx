@@ -15,7 +15,7 @@ import { cn, formatDateTime } from "@/lib/utils"
 import { isDemoMode, demoPartners, disciplines, partnerTypes, type Partner, type PartnerNote, type ProjectRating, type PartnerAvailability } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { createClient } from "@/lib/supabase/client"
-import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Clock, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass } from "lucide-react"
+import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { MarketplaceContent } from "@/components/marketplace-content"
@@ -32,15 +32,20 @@ import {
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
 
-// Partnership type (Tier 1 - business relationship)
+// Partnership type (Tier 1 - business relationship). Covers all three pool states: an
+// Active Partner (partnerId set), an Invited contact (partnerId null, invitationSentAt
+// set), or a Discovered contact (partnerId null, invitationSentAt null).
 type Partnership = {
   id: string
-  partnerId: string
+  partnerId?: string
   partnerEmail: string
   partnerName?: string
   partnerCompany?: string
-  status: "pending" | "active" | "suspended" | "terminated"
+  status: "pending" | "active" | "suspended" | "terminated" | "removed"
   invitedAt: string
+  /** Raw partnerships.created_at - distinct from invitedAt (which falls back to created_at
+   *  when invited_at is unset); used for the Discovered section's "Added" timestamp. */
+  partnershipCreatedAt: string
   acceptedAt?: string
   ndaConfirmedAt?: string | null
   ndaConfirmedBy?: string | null
@@ -53,22 +58,15 @@ type Partnership = {
   partnerBio?: string | null
   partnerCapabilities?: string[]
   partnerLogoUrl?: string | null
+  partnerJoinedAt?: string | null
   partnerBusinessCriteria?: unknown
   msaConfirmedAt?: string | null
-}
-
-// Pending Profile (magic link auto-add to partner pool): a guest bidder who was either
-// auto-added to the pool as a ghost partnership (no Ligament account yet) or flagged for
-// manual review because their custom email domain matched an existing profile.
-type PendingProfile = {
-  id: string
-  kind: "ghost" | "domain_match"
-  vendorEmail: string
-  vendorName: string | null
-  bidSubmittedAt: string | null
-  projectId: string | null
-  projectName: string | null
-  domainMatchProfile: { id: string; company_name: string | null; full_name: string | null } | null
+  /** Ghost/unclaimed rows only (partnerId unset) - when the invite email actually sent. */
+  invitationSentAt?: string | null
+  /** Ghost/unclaimed rows only - cross-referenced from rfp_magic_tokens by email. */
+  vendorName?: string | null
+  poolStatus?: string | null
+  domainMatchProfile?: { id: string; company_name: string | null; full_name: string | null } | null
 }
 
 // Legacy Partner invitation type (for backward compatibility)
@@ -284,7 +282,6 @@ function PartnerPoolPageInner() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedDiscipline, setSelectedDiscipline] = useState("All")
   const [selectedType, setSelectedType] = useState("All")
-  const [poolTab, setPoolTab] = useState<"network" | "invitations">("network")
   const [selectedLegal, setSelectedLegal] = useState("All")
   const [selectedStatus, setSelectedStatus] = useState("All")
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false)
@@ -313,9 +310,10 @@ function PartnerPoolPageInner() {
   // Partnerships state (new closed ecosystem)
   const [partnerships, setPartnerships] = useState<Partnership[]>([])
   const [partnersWithActiveEngagements, setPartnersWithActiveEngagements] = useState(0)
-  const [pendingProfiles, setPendingProfiles] = useState<PendingProfile[]>([])
   const [resendingEmail, setResendingEmail] = useState<string | null>(null)
   const [resendMsg, setResendMsg] = useState<string | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [contactSearchQuery, setContactSearchQuery] = useState("")
 
   // Invitation state
   const [invitations, setInvitations] = useState<PartnerInvitation[]>([])
@@ -408,26 +406,28 @@ function PartnerPoolPageInner() {
       const response = await fetch('/api/partnerships')
       if (!response.ok) return
       const data = await response.json().catch(() => ({}))
-      setPendingProfiles((data.pendingProfiles || []) as PendingProfile[])
       let loaded: Partnership[] = (data.partnerships || []).map((p: Record<string, unknown>) => ({
         id: p.id as string,
-        partnerId: (p.partner as { id?: string } | undefined)?.id || (p.partner_id as string),
+        partnerId: (p.partner as { id?: string } | undefined)?.id || (p.partner_id as string | undefined) || undefined,
         partnerEmail:
           (p.partner as { email?: string } | undefined)?.email || (p.partner_email as string),
         partnerName: (p.partner as { full_name?: string } | undefined)?.full_name,
         partnerCompany: (p.partner as { company_name?: string } | undefined)?.company_name,
         status: p.status as Partnership["status"],
         invitedAt: (p.invited_at || p.created_at) as string,
+        partnershipCreatedAt: p.created_at as string,
         acceptedAt: p.accepted_at as string | undefined,
         ndaConfirmedAt: (p.nda_confirmed_at as string | null) ?? null,
         ndaConfirmedBy: (p.nda_confirmed_by as string | null) ?? null,
         msaConfirmedAt: (p.msa_confirmed_at as string | null) ?? null,
         invitationMessage: p.invitation_message as string | undefined,
         partnership_notes: p.partnership_notes,
+        invitationSentAt: (p.invitation_sent_at as string | null) ?? null,
+        vendorName: (p.vendor_name as string | null) ?? null,
+        poolStatus: (p.pool_status as string | null) ?? null,
+        domainMatchProfile:
+          (p.domain_match_profile as { id: string; company_name: string | null; full_name: string | null } | null) ?? null,
       }))
-      // Ghost partnerships (no partner_id yet) are shown in the Pending Profiles section
-      // instead, not in the main partner list.
-      loaded = loaded.filter((row) => row.partnerId)
 
       const supabase = createClient()
       const {
@@ -452,12 +452,13 @@ function PartnerPoolPageInner() {
             capabilities: unknown
             company_logo_url: string | null
             business_criteria: unknown
+            created_at: string | null
           }
         > = {}
         if (partnerIds.length > 0) {
           const { data: profs } = await supabase
             .from("profiles")
-            .select("id, company_name, full_name, display_name, agency_type, bio, capabilities, company_logo_url, business_criteria")
+            .select("id, company_name, full_name, display_name, agency_type, bio, capabilities, company_logo_url, business_criteria, created_at")
             .in("id", partnerIds)
           for (const pr of profs || []) {
             profileById[pr.id as string] = {
@@ -469,6 +470,7 @@ function PartnerPoolPageInner() {
               capabilities: (pr as { capabilities?: unknown }).capabilities ?? null,
               company_logo_url: (pr as { company_logo_url?: string | null }).company_logo_url ?? null,
               business_criteria: (pr as { business_criteria?: unknown }).business_criteria ?? null,
+              created_at: (pr as { created_at?: string | null }).created_at ?? null,
             }
           }
         }
@@ -482,6 +484,7 @@ function PartnerPoolPageInner() {
             partnerCapabilities: extractCapabilityValues(prof?.capabilities),
             partnerLogoUrl: prof?.company_logo_url ?? null,
             partnerBusinessCriteria: prof?.business_criteria ?? null,
+            partnerJoinedAt: prof?.created_at ?? null,
             partnerName: row.partnerName || prof?.full_name || undefined,
             partnerCompany: row.partnerCompany || prof?.company_name || undefined,
             // msaConfirmedAt already set from API response
@@ -496,23 +499,52 @@ function PartnerPoolPageInner() {
     }
   }
 
-  const handleResendInvitation = async (profile: PendingProfile) => {
+  /** Sends the invitation email for a Discovered or Invited pool row - the same endpoint
+   *  covers both "Send Invitation" (first touch) and "Resend Invitation" (repeat); either
+   *  way, a successful send stamps invitation_sent_at and the row lands in Invited. */
+  const handleSendOrResendInvitation = async (row: Partnership) => {
     setResendMsg(null)
-    setResendingEmail(profile.vendorEmail)
+    setResendingEmail(row.partnerEmail)
     try {
       const res = await fetch('/api/agency/pool/resend-invitation', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vendorEmail: profile.vendorEmail, vendorName: profile.vendorName }),
+        body: JSON.stringify({ vendorEmail: row.partnerEmail, vendorName: row.vendorName }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || 'Failed to resend invitation')
-      setResendMsg(`Invitation resent to ${profile.vendorEmail}.`)
+      if (!res.ok) throw new Error(data?.error || 'Failed to send invitation')
+      setResendMsg(`Invitation sent to ${row.partnerEmail}.`)
+      await loadPartnerships()
     } catch (error) {
-      setResendMsg(error instanceof Error ? error.message : 'Failed to resend invitation.')
+      setResendMsg(error instanceof Error ? error.message : 'Failed to send invitation.')
     } finally {
       setResendingEmail(null)
       setTimeout(() => setResendMsg(null), 4000)
+    }
+  }
+
+  /** Discovered-section "Remove" action - hides the row from every pool section without
+   *  deleting it (associated rfp_magic_tokens/bid history may still be worth keeping). */
+  const handleRemovePartnership = async (row: Partnership) => {
+    setRemovingId(row.id)
+    try {
+      const res = await fetch('/api/partnerships', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnershipId: row.id, status: 'removed' }),
+      })
+      if (res.ok) {
+        await loadPartnerships()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        alert((data?.error as string) || 'Failed to remove contact')
+      }
+    } catch (error) {
+      console.error('Error removing partnership:', error)
+      alert('Failed to remove contact')
+    } finally {
+      setRemovingId(null)
     }
   }
 
@@ -930,7 +962,9 @@ function PartnerPoolPageInner() {
           partner: partners.find((x) => x.email.toLowerCase() === inv.partnerEmail.toLowerCase()),
         }))
     }
-    return partnerships.map((p) => ({ mode: "prod" as const, p }))
+    // Active Partners only - ghost/unclaimed rows (no partnerId) surface in the
+    // Invited/Discovered sections instead, computed separately from `partnerships`.
+    return partnerships.filter((p) => p.partnerId).map((p) => ({ mode: "prod" as const, p }))
   }, [isDemo, isLoaded, invitations, partners, partnerships])
 
   const filteredNetworkRows = useMemo(() => {
@@ -1033,21 +1067,34 @@ function PartnerPoolPageInner() {
     showBookmarkedOnly,
   ])
 
-  const filteredPendingNetworkRows = useMemo(
-    () =>
-      filteredNetworkRows.filter((r) =>
-        r.mode === "demo" ? r.inv.status === "pending" : r.p.status === "pending",
-      ),
-    [filteredNetworkRows],
+  // Invited: a ghost/unclaimed contact who was actually sent an invitation email.
+  const invitedRows = useMemo(
+    () => partnerships.filter((p) => !p.partnerId && p.partnerEmail && p.invitationSentAt),
+    [partnerships],
   )
 
-  const filteredActiveNetworkRows = useMemo(
-    () =>
-      filteredNetworkRows.filter((r) =>
-        r.mode === "demo" ? r.inv.status !== "pending" : r.p.status !== "pending",
-      ),
-    [filteredNetworkRows],
+  // Discovered: a ghost/unclaimed contact added to the pool (email import, or a guest bid
+  // via a shared magic link) with nobody invited yet.
+  const discoveredRows = useMemo(
+    () => partnerships.filter((p) => !p.partnerId && p.partnerEmail && !p.invitationSentAt),
+    [partnerships],
   )
+
+  const contactMatchesSearch = (row: Partnership, q: string) => {
+    if (!q) return true
+    const hay = [row.partnerEmail, row.vendorName].filter(Boolean).join(" ").toLowerCase()
+    return hay.includes(q)
+  }
+
+  const filteredInvitedRows = useMemo(() => {
+    const q = contactSearchQuery.trim().toLowerCase()
+    return invitedRows.filter((row) => contactMatchesSearch(row, q))
+  }, [invitedRows, contactSearchQuery])
+
+  const filteredDiscoveredRows = useMemo(() => {
+    const q = contactSearchQuery.trim().toLowerCase()
+    return discoveredRows.filter((row) => contactMatchesSearch(row, q))
+  }, [discoveredRows, contactSearchQuery])
 
   const dynamicDisciplineFilters = useMemo(() => {
     const seen = new Map<string, string>()
@@ -1079,7 +1126,11 @@ function PartnerPoolPageInner() {
   // Already-loaded partnerships data, reused so the Discover sheet doesn't need its own
   // duplicate fetch to know who's already an active partner.
   const activePartnerIds = useMemo(
-    () => partnerships.filter((p) => p.status === "active").map((p) => p.partnerId).filter(Boolean),
+    () =>
+      partnerships
+        .filter((p) => p.status === "active")
+        .map((p) => p.partnerId)
+        .filter((id): id is string => Boolean(id)),
     [partnerships]
   )
 
@@ -1319,68 +1370,6 @@ function PartnerPoolPageInner() {
           </div>
         </GlassCard>
 
-        {pendingProfiles.length > 0 && (
-          <div className="mb-8 rounded-xl border border-border bg-card p-5">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="font-display font-bold text-sm text-foreground">Pending Profiles</h2>
-              <span className="font-mono text-[10px] text-foreground-muted">{pendingProfiles.length}</span>
-            </div>
-            <p className="text-xs text-foreground-muted mb-4">
-              Vendors added to your pool from bid submissions. They haven&apos;t created a Ligament profile yet.
-            </p>
-            {resendMsg && <p className="text-xs text-accent mb-3">{resendMsg}</p>}
-            <div className="space-y-2">
-              {pendingProfiles.map((profile) => (
-                <div
-                  key={profile.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white/[0.03] p-3"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-display font-bold text-sm text-foreground truncate">
-                        {profile.vendorName || profile.vendorEmail}
-                      </span>
-                      {profile.kind === "ghost" ? (
-                        <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-foreground-muted">
-                          Unactivated
-                        </span>
-                      ) : (
-                        <span
-                          className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300"
-                          title={
-                            profile.domainMatchProfile
-                              ? `Shares an email domain with an existing profile: ${
-                                  profile.domainMatchProfile.company_name || profile.domainMatchProfile.full_name || "an existing profile"
-                                }. Not auto-added - review before adding.`
-                              : "Shares an email domain with an existing profile. Not auto-added - review before adding."
-                          }
-                        >
-                          Domain Match - Review
-                        </span>
-                      )}
-                    </div>
-                    <div className="font-mono text-[10px] text-foreground-muted mt-1 truncate">
-                      {profile.vendorEmail}
-                      {profile.projectName && <span> · {profile.projectName}</span>}
-                      {profile.bidSubmittedAt && <span> · Bid {formatDateTime(profile.bidSubmittedAt)}</span>}
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={resendingEmail === profile.vendorEmail}
-                    onClick={() => handleResendInvitation(profile)}
-                    className="border-border text-foreground hover:bg-white/5 shrink-0"
-                  >
-                    {resendingEmail === profile.vendorEmail ? "Sending…" : "Resend Invitation"}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {(allNetworkRows.length > 0 || partners.length > 0) && (
           <p className="font-mono text-[11px] text-foreground-muted mb-6">
             Showing {totalFilteredMatches} result{totalFilteredMatches !== 1 ? "s" : ""}
@@ -1400,53 +1389,19 @@ function PartnerPoolPageInner() {
         )}
 
         {hasNetworkSource && (
-          <div className="mb-8 rounded-lg border border-border bg-white/[0.03] p-4">
-            {/* Tab toggle: Partner Network / Invitations Awaiting Response */}
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setPoolTab("network")}
-                className={cn(
-                  "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
-                  poolTab === "network"
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-border text-foreground/90 hover:border-white/30"
-                )}
-              >
-                <Building2 className="w-3 h-3" />
-                Partner Network
-              </button>
-              <button
-                type="button"
-                onClick={() => setPoolTab("invitations")}
-                className={cn(
-                  "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
-                  poolTab === "invitations"
-                    ? "border-amber-500 bg-amber-500/10 text-amber-300"
-                    : "border-border text-foreground/90 hover:border-white/30"
-                )}
-              >
-                <Clock className="w-3 h-3" />
-                Invitations Awaiting Response
-                {filteredPendingNetworkRows.length > 0 && (
-                  <span className={cn(
-                    "ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold",
-                    poolTab === "invitations"
-                      ? "bg-amber-500/30 text-amber-200"
-                      : "bg-amber-500/20 text-amber-400"
-                  )}>
-                    {filteredPendingNetworkRows.length}
-                  </span>
-                )}
-              </button>
+          <div className="mb-8 rounded-xl border border-border bg-card p-5">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-display font-bold text-sm text-foreground">Active Partners</h2>
+              <span className="font-mono text-[10px] text-foreground-muted">{filteredNetworkRows.length}</span>
             </div>
-            {poolTab === "network" && (
-              <>
-                {filteredActiveNetworkRows.length === 0 ? (
+            <p className="text-xs text-foreground-muted mb-4">
+              Partners you can send RFPs to and collaborate with directly.
+            </p>
+            {filteredNetworkRows.length === 0 ? (
                   <p className="mt-2 text-sm text-foreground-muted">No active partners match your filters.</p>
                 ) : (
                   <div className="space-y-2">
-                    {filteredActiveNetworkRows.map((row) => {
+                    {filteredNetworkRows.map((row) => {
                   if (row.mode === "demo") {
                     const { inv, partner } = row
                     const bl = partner?.status === "blacklisted"
@@ -1663,55 +1618,160 @@ function PartnerPoolPageInner() {
                   )
                 })}
               </div>
-            )}
-              </>
-            )}
-            {poolTab === "invitations" && (
-              <div className="space-y-2 mt-1">
-                {filteredPendingNetworkRows.length === 0 ? (
-                  <p className="mt-2 text-sm text-foreground-muted">No pending invitations match your filters.</p>
-                ) : (
-                  filteredPendingNetworkRows.map((row) => {
-                    if (row.mode === "demo") {
-                      const inv = row.inv
-                      return (
-                        <div key={inv.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                              <Mail className="w-4 h-4 text-amber-400" />
-                            </div>
-                            <div>
-                              <div className="font-medium text-foreground">{inv.partnerName || inv.partnerEmail}</div>
-                              <div className="font-mono text-[10px] text-foreground-muted">
-                                Invited {new Date(inv.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                              </div>
-                            </div>
-                          </div>
-                          <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-900/30 text-amber-100">Pending</span>
-                        </div>
-                      )
-                    }
-                    const p = row.p
-                    return (
-                      <div key={p.id} className="flex items-center justify-between bg-white/5 rounded-lg p-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center">
-                            <Mail className="w-4 h-4 text-amber-400" />
-                          </div>
-                          <div>
-                            <div className="font-medium text-foreground">{p.partnerCompany || p.partnerName || p.partnerEmail}</div>
-                            <div className="font-mono text-[10px] text-foreground-muted">
-                              Invited {new Date(p.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                            </div>
-                          </div>
-                        </div>
-                        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-900/30 text-amber-100">Pending</span>
-                      </div>
-                    )
-                  })
                 )}
+          </div>
+        )}
+
+        {/* Invited + Discovered sections - ghost/unclaimed pool contacts, replacing the old
+            flat Pending Profiles list with two states distinguished by invitationSentAt. */}
+        {(invitedRows.length > 0 || discoveredRows.length > 0) && (
+          <div className="mb-8 space-y-6">
+            <div className="max-w-sm">
+              <Input
+                placeholder="Search by email..."
+                value={contactSearchQuery}
+                onChange={(e) => setContactSearchQuery(e.target.value)}
+                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+              />
+            </div>
+            {resendMsg && <p className="text-xs text-accent">{resendMsg}</p>}
+
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-display font-bold text-sm text-foreground">Invited</h2>
+                <span className="font-mono text-[10px] text-foreground-muted">{filteredInvitedRows.length}</span>
               </div>
-            )}
+              <p className="text-xs text-foreground-muted mb-4">
+                Contacts who have been sent an invitation to join your partner network.
+              </p>
+              {filteredInvitedRows.length === 0 ? (
+                <p className="text-sm text-foreground-muted">No invited contacts match your search.</p>
+              ) : (
+                <div className="space-y-2">
+                  {filteredInvitedRows.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white/[0.03] p-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display font-bold text-sm text-foreground truncate">
+                            {row.vendorName || row.partnerEmail}
+                          </span>
+                          <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300">
+                            Invited
+                          </span>
+                          {row.poolStatus === "domain_match_flagged" && (
+                            <span
+                              className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300"
+                              title={
+                                row.domainMatchProfile
+                                  ? `Shares an email domain with an existing profile: ${
+                                      row.domainMatchProfile.company_name || row.domainMatchProfile.full_name || "an existing profile"
+                                    }. Review before treating as a new vendor.`
+                                  : "Shares an email domain with an existing profile. Review before treating as a new vendor."
+                              }
+                            >
+                              Domain Match - Review
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-[10px] text-foreground-muted mt-1 truncate">
+                          {row.partnerEmail}
+                          {row.invitationSentAt && <span> · Invited {formatDateTime(row.invitationSentAt)}</span>}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={resendingEmail === row.partnerEmail}
+                        onClick={() => handleSendOrResendInvitation(row)}
+                        className="border-border text-foreground hover:bg-white/5 shrink-0"
+                      >
+                        {resendingEmail === row.partnerEmail ? "Sending..." : "Resend Invitation"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="font-display font-bold text-sm text-foreground">Discovered</h2>
+                <span className="font-mono text-[10px] text-foreground-muted">{filteredDiscoveredRows.length}</span>
+              </div>
+              <p className="text-xs text-foreground-muted mb-4">
+                Contacts added to your pool who have not been invited to join your network yet.
+              </p>
+              {filteredDiscoveredRows.length === 0 ? (
+                <p className="text-sm text-foreground-muted">No discovered contacts match your search.</p>
+              ) : (
+                <div className="space-y-2">
+                  {filteredDiscoveredRows.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white/[0.03] p-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display font-bold text-sm text-foreground truncate">
+                            {row.vendorName || row.partnerEmail}
+                          </span>
+                          <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-foreground-muted">
+                            Not Yet Invited
+                          </span>
+                          {row.poolStatus === "domain_match_flagged" && (
+                            <span
+                              className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300"
+                              title={
+                                row.domainMatchProfile
+                                  ? `Shares an email domain with an existing profile: ${
+                                      row.domainMatchProfile.company_name || row.domainMatchProfile.full_name || "an existing profile"
+                                    }. Review before inviting.`
+                                  : "Shares an email domain with an existing profile. Review before inviting."
+                              }
+                            >
+                              Domain Match - Review
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-[10px] text-foreground-muted mt-1 truncate">
+                          {row.partnerEmail}
+                          <span> · Added {formatDateTime(row.partnershipCreatedAt)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={resendingEmail === row.partnerEmail}
+                          onClick={() => handleSendOrResendInvitation(row)}
+                          className="bg-accent text-accent-foreground hover:bg-accent/90"
+                        >
+                          {resendingEmail === row.partnerEmail ? "Sending..." : "Send Invitation"}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={removingId === row.id}
+                          onClick={() => {
+                            if (window.confirm(`Remove ${row.partnerEmail} from your pool?`)) {
+                              handleRemovePartnership(row)
+                            }
+                          }}
+                          className="border-border text-foreground-muted hover:bg-white/5"
+                        >
+                          {removingId === row.id ? "Removing..." : "Remove"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

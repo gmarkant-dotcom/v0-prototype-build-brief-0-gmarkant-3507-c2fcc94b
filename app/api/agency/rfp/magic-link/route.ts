@@ -3,6 +3,7 @@ import { createClient as createAnonClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
+import { markPartnershipInvited } from "@/lib/partnership-invitations"
 
 export const dynamic = "force-dynamic"
 
@@ -201,6 +202,23 @@ export async function POST(request: NextRequest) {
         vendorEmail,
         message: emailErr instanceof Error ? emailErr.message : String(emailErr),
       })
+    }
+
+    if (emailSent) {
+      try {
+        await markPartnershipInvited(service, {
+          agencyId: auth.userId,
+          vendorEmail,
+          partnerId: matchedProfile?.id ?? null,
+        })
+      } catch (partnershipErr) {
+        console.error("[api] failed to mark partnership invited", {
+          route,
+          method: "POST",
+          vendorEmail,
+          message: partnershipErr instanceof Error ? partnershipErr.message : String(partnershipErr),
+        })
+      }
     }
 
     console.log("[api] success", { route, method: "POST", userId: auth.userId, projectId, is_existing_partner, emailSent })

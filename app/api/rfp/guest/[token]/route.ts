@@ -106,7 +106,13 @@ async function classifyGuestVendorForPool(
   }
 
   // Case 3: no exact profile match, but a custom (non-free) company domain shared with
-  // another existing profile - flag for manual review instead of auto-adding.
+  // another existing profile - flag for manual review. A ghost partnership row is still
+  // created below (same as Case 2) so the vendor shows up in the pool's Discovered/Invited
+  // sections either way; the "Domain Match - Review" badge (driven by poolStatus, cross-
+  // referenced from rfp_magic_tokens on read) is what flags it for manual review, not
+  // whether it gets a pool row at all.
+  let poolStatus: PoolClassification["poolStatus"] = "ghost_created"
+  let domainMatchProfileId: string | null = null
   if (!isFreeEmailDomain(vendorEmail)) {
     const domain = getEmailDomain(vendorEmail)
     if (domain) {
@@ -118,13 +124,16 @@ async function classifyGuestVendorForPool(
         .maybeSingle()
       if (domainErr) throw domainErr
       if (domainMatch?.id) {
-        return { poolStatus: "domain_match_flagged", domainMatchProfileId: domainMatch.id as string }
+        poolStatus = "domain_match_flagged"
+        domainMatchProfileId = domainMatch.id as string
       }
     }
   }
 
-  // Case 2: no profile match (or a free email domain, which never counts as a domain
-  // match) - create a ghost partnership row so the vendor shows up in the pool.
+  // Case 2 (and the domain-match-flagged case above) - create a ghost partnership row so
+  // the vendor shows up in the pool. No invitation_sent_at here: the vendor bid via a magic
+  // link they already had, nobody sent them an invitation to join the network, so this
+  // lands in Discovered, not Invited.
   const { data: existingGhost, error: ghostLookupErr } = await supabase
     .from("partnerships")
     .select("id")
@@ -143,7 +152,7 @@ async function classifyGuestVendorForPool(
     })
     if (insertErr) throw insertErr
   }
-  return { poolStatus: "ghost_created", domainMatchProfileId: null }
+  return { poolStatus, domainMatchProfileId }
 }
 
 function getServiceSupabase() {

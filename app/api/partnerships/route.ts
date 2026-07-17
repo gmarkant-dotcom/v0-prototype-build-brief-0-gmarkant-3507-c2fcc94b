@@ -42,19 +42,21 @@ export async function GET(request: NextRequest) {
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null })
 
     let partnerships
-    let pendingProfiles: unknown[] = []
 
     if (profile?.role === 'agency') {
-      // Agency sees rows where they are agency_id (not partner_id).
+      // Agency sees rows where they are agency_id (not partner_id). 'removed' rows are
+      // hidden entirely - the agency explicitly dismissed them from the pool, but the row
+      // is kept (not deleted) for any associated rfp_magic_tokens/bid history.
       const rich = await supabase
         .from('partnerships')
         .select(`
           *,
           partner:profiles!partnerships_partner_id_fkey(
-            id, email, full_name, company_name, capabilities
+            id, email, full_name, company_name, capabilities, company_logo_url, created_at
           )
         `)
         .eq('agency_id', user.id)
+        .neq('status', 'removed')
         .order('created_at', { ascending: false })
 
       if (!rich.error && rich.data) {
@@ -73,103 +75,68 @@ export async function GET(request: NextRequest) {
           .from('partnerships')
           .select('*')
           .eq('agency_id', user.id)
+          .neq('status', 'removed')
           .order('created_at', { ascending: false })
         if (simple.error) throw simple.error
         partnerships = simple.data
       }
 
-      // Pending Profiles (magic link auto-add to partner pool): ghost partnerships with no
-      // linked profile yet, plus guest bids flagged for manual review because the vendor's
-      // custom email domain matched an existing profile. Neither is a real partner_id row
-      // to embed-join against, so they're assembled separately from rfp_magic_tokens.
+      // Ghost/unclaimed rows (partner_id IS NULL - the Invited/Discovered sections on
+      // /agency/pool) carry no rfp_magic_tokens link of their own, so pool_status and
+      // domain-match info (the "Domain Match - Review" badge) are cross-referenced by email
+      // from the latest matching token, mirroring the classification write path in
+      // app/api/rfp/guest/[token]/route.ts.
       const ghostRows = ((partnerships || []) as Record<string, unknown>[]).filter(
         (p) => !p.partner_id && p.partner_email
       )
-
-      const { data: flaggedTokens, error: flaggedErr } = await supabase
-        .from('rfp_magic_tokens')
-        .select('token, vendor_email, vendor_name, project_id, submitted_at, created_at, domain_match_profile_id')
-        .eq('agency_id', user.id)
-        .eq('pool_status', 'domain_match_flagged')
-        .order('created_at', { ascending: false })
-      if (flaggedErr) {
-        console.error('[api] GET /partnerships domain-match token lookup failed', {
-          route,
-          userId: user.id,
-          message: flaggedErr.message,
-          code: flaggedErr.code,
-        })
-      }
-
-      const neededEmails = [
-        ...ghostRows.map((r) => String(r.partner_email || '').toLowerCase()),
-        ...(flaggedTokens || []).map((t) => String(t.vendor_email || '').toLowerCase()),
-      ].filter(Boolean)
-      const uniqueEmails = [...new Set(neededEmails)]
-
-      const latestTokenByEmail = new Map<
-        string,
-        { vendor_name: string | null; project_id: string | null; submitted_at: string | null; created_at: string }
-      >()
-      if (uniqueEmails.length > 0) {
+      if (ghostRows.length > 0) {
+        const ghostEmails = [...new Set(ghostRows.map((r) => String(r.partner_email || '').toLowerCase()))]
         const { data: tokenRows } = await supabase
           .from('rfp_magic_tokens')
-          .select('vendor_email, vendor_name, project_id, submitted_at, created_at')
+          .select('vendor_email, vendor_name, pool_status, domain_match_profile_id, created_at')
           .eq('agency_id', user.id)
-          .in('vendor_email', uniqueEmails)
-          .order('submitted_at', { ascending: false, nullsFirst: false })
+          .in('vendor_email', ghostEmails)
+          .order('created_at', { ascending: false })
+
+        const latestTokenByEmail = new Map<
+          string,
+          { vendor_name: string | null; pool_status: string | null; domain_match_profile_id: string | null }
+        >()
         for (const t of tokenRows || []) {
           const key = String(t.vendor_email || '').toLowerCase()
-          if (!latestTokenByEmail.has(key)) latestTokenByEmail.set(key, t)
+          if (!latestTokenByEmail.has(key)) {
+            latestTokenByEmail.set(key, {
+              vendor_name: t.vendor_name as string | null,
+              pool_status: t.pool_status as string | null,
+              domain_match_profile_id: t.domain_match_profile_id as string | null,
+            })
+          }
+        }
+
+        const domainProfileIds = [
+          ...new Set([...latestTokenByEmail.values()].map((t) => t.domain_match_profile_id).filter(Boolean)),
+        ] as string[]
+        const domainProfileById = new Map<string, { id: string; company_name: string | null; full_name: string | null }>()
+        if (domainProfileIds.length > 0) {
+          const { data: domainProfiles } = await supabase
+            .from('profiles')
+            .select('id, company_name, full_name')
+            .in('id', domainProfileIds)
+          for (const p of domainProfiles || []) {
+            domainProfileById.set(p.id as string, p as { id: string; company_name: string | null; full_name: string | null })
+          }
+        }
+
+        for (const row of ghostRows) {
+          const key = String(row.partner_email || '').toLowerCase()
+          const tok = latestTokenByEmail.get(key)
+          row.vendor_name = tok?.vendor_name || null
+          row.pool_status = tok?.pool_status || null
+          row.domain_match_profile = tok?.domain_match_profile_id
+            ? domainProfileById.get(tok.domain_match_profile_id) || null
+            : null
         }
       }
-
-      const projectIds = [...new Set([...latestTokenByEmail.values()].map((t) => t.project_id).filter(Boolean))] as string[]
-      const projectNameById = new Map<string, string>()
-      if (projectIds.length > 0) {
-        const { data: projRows } = await supabase.from('projects').select('id, name').in('id', projectIds)
-        for (const p of projRows || []) projectNameById.set(p.id as string, p.name as string)
-      }
-
-      const domainProfileIds = [
-        ...new Set((flaggedTokens || []).map((t) => t.domain_match_profile_id).filter(Boolean)),
-      ] as string[]
-      const domainProfileById = new Map<string, { id: string; company_name: string | null; full_name: string | null }>()
-      if (domainProfileIds.length > 0) {
-        const { data: domainProfiles } = await supabase
-          .from('profiles')
-          .select('id, company_name, full_name')
-          .in('id', domainProfileIds)
-        for (const p of domainProfiles || []) domainProfileById.set(p.id as string, p as { id: string; company_name: string | null; full_name: string | null })
-      }
-
-      const ghostProfiles = ghostRows.map((r) => {
-        const key = String(r.partner_email || '').toLowerCase()
-        const tok = latestTokenByEmail.get(key)
-        return {
-          id: r.id,
-          kind: 'ghost' as const,
-          vendorEmail: r.partner_email,
-          vendorName: tok?.vendor_name || null,
-          bidSubmittedAt: tok?.submitted_at || tok?.created_at || null,
-          projectId: tok?.project_id || null,
-          projectName: tok?.project_id ? projectNameById.get(tok.project_id) || null : null,
-          domainMatchProfile: null as { id: string; company_name: string | null; full_name: string | null } | null,
-        }
-      })
-
-      const domainMatchProfiles = (flaggedTokens || []).map((t) => ({
-        id: `token:${t.token}`,
-        kind: 'domain_match' as const,
-        vendorEmail: t.vendor_email,
-        vendorName: t.vendor_name || null,
-        bidSubmittedAt: t.submitted_at || t.created_at || null,
-        projectId: t.project_id || null,
-        projectName: t.project_id ? projectNameById.get(t.project_id as string) || null : null,
-        domainMatchProfile: t.domain_match_profile_id ? domainProfileById.get(t.domain_match_profile_id as string) || null : null,
-      }))
-
-      pendingProfiles = [...ghostProfiles, ...domainMatchProfiles]
     } else {
       // Partner sees agencies that invited them (by partner_id OR by email)
       // First get the partner's email from their profile
@@ -283,9 +250,8 @@ export async function GET(request: NextRequest) {
       userId: user.id,
       role: profile?.role ?? null,
       rowCount: Array.isArray(partnerships) ? partnerships.length : 0,
-      pendingProfileCount: pendingProfiles.length,
     })
-    return NextResponse.json({ partnerships, pendingProfiles }, { headers: revalidateHeaders })
+    return NextResponse.json({ partnerships }, { headers: revalidateHeaders })
   } catch (error) {
     console.error('[api] failure', {
       route: '/api/partnerships',
@@ -466,7 +432,7 @@ export async function POST(request: NextRequest) {
           reinviteBody += `\n\nPersonal message:\n${String(message).trim()}`
         }
         try {
-          await sendTransactionalEmail({
+          const reinviteSent = await sendTransactionalEmail({
             to: normalizedPartnerEmail,
             subject: `${agencyName} has re-invited you to their partner network on Ligament`,
             html: buildBrandedEmailHtml({
@@ -477,11 +443,17 @@ export async function POST(request: NextRequest) {
               ctaUrl: acceptUrl,
             }),
           })
+          if (reinviteSent) {
+            await supabase
+              .from('partnerships')
+              .update({ invitation_sent_at: new Date().toISOString() })
+              .eq('id', reactivated.id)
+          }
         } catch (emailErr) {
           console.error('Error sending partnership re-invitation email:', emailErr)
         }
-        
-        return NextResponse.json({ 
+
+        return NextResponse.json({
           partnership: reactivated, 
           message: 'Partnership invitation re-sent successfully' 
         })
@@ -544,7 +516,7 @@ export async function POST(request: NextRequest) {
       if (message && String(message).trim()) {
         inviteBody += `\n\nPersonal message:\n${String(message).trim()}`
       }
-      await sendTransactionalEmail({
+      const inviteSent = await sendTransactionalEmail({
         to: normalizedPartnerEmail,
         subject: `${agencyName} has invited you to join their partner network on Ligament`,
         html: buildBrandedEmailHtml({
@@ -555,6 +527,12 @@ export async function POST(request: NextRequest) {
           ctaUrl: acceptUrl,
         }),
       })
+      if (inviteSent) {
+        await supabase
+          .from('partnerships')
+          .update({ invitation_sent_at: new Date().toISOString() })
+          .eq('id', partnership.id)
+      }
     } catch (emailErr) {
       console.error('Error sending partnership invitation email:', emailErr)
       // Don't fail the whole request if email fails
@@ -755,7 +733,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Status required' }, { status: 400 })
     }
 
-    if (!['active', 'suspended', 'terminated'].includes(status)) {
+    if (!['active', 'suspended', 'terminated', 'removed'].includes(status)) {
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
     }
 
