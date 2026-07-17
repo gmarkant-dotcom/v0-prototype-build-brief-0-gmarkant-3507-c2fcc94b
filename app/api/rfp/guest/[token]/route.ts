@@ -30,15 +30,51 @@ async function classifyGuestVendorForPool(
 
   // Case 1: vendor email matches an existing profile.
   if (matchedProfileId) {
-    const { data: existingPartnership, error: lookupErr } = await supabase
+    console.error("[debug] case1 trace: before partnership check (by partner_id)", { agencyId, vendorEmail, matchedProfileId })
+    const byId = await supabase
       .from("partnerships")
-      .select("id")
+      .select("id, partner_id")
       .eq("agency_id", agencyId)
       .eq("partner_id", matchedProfileId)
       .limit(1)
       .maybeSingle()
-    if (lookupErr) throw lookupErr
+    console.error("[debug] case1 trace: after partnership check (by partner_id)", {
+      found: !!byId.data,
+      partnershipId: byId.data?.id ?? null,
+      error: byId.error ? { code: byId.error.code, message: byId.error.message, details: byId.error.details, hint: byId.error.hint } : null,
+    })
+    if (byId.error) throw byId.error
+
+    let existingPartnership = byId.data as { id: string; partner_id: string | null } | null
+
+    // A partnership between this agency and this email may already exist with no
+    // partner_id yet - e.g. a manual invite-by-email sent before the vendor had an
+    // account, or an older unclaimed magic-link ghost row. The partner_id-only lookup
+    // above misses it, and inserting a new row for the same (agency_id, partner_email)
+    // would collide with it. Check by email too before deciding to insert.
     if (!existingPartnership) {
+      console.error("[debug] case1 trace: before partnership check (by partner_email)", { agencyId, vendorEmail })
+      const byEmail = await supabase
+        .from("partnerships")
+        .select("id, partner_id")
+        .eq("agency_id", agencyId)
+        .ilike("partner_email", vendorEmail)
+        .limit(1)
+        .maybeSingle()
+      console.error("[debug] case1 trace: after partnership check (by partner_email)", {
+        found: !!byEmail.data,
+        partnershipId: byEmail.data?.id ?? null,
+        existingPartnerId: byEmail.data?.partner_id ?? null,
+        error: byEmail.error
+          ? { code: byEmail.error.code, message: byEmail.error.message, details: byEmail.error.details, hint: byEmail.error.hint }
+          : null,
+      })
+      if (byEmail.error) throw byEmail.error
+      existingPartnership = byEmail.data as { id: string; partner_id: string | null } | null
+    }
+
+    if (!existingPartnership) {
+      console.error("[debug] case1 trace: before partnership create", { agencyId, vendorEmail, matchedProfileId })
       const { error: insertErr } = await supabase.from("partnerships").insert({
         agency_id: agencyId,
         partner_id: matchedProfileId,
@@ -46,7 +82,25 @@ async function classifyGuestVendorForPool(
         status: "active",
         profile_status: "active",
       })
+      console.error("[debug] case1 trace: after partnership create", {
+        error: insertErr ? { code: insertErr.code, message: insertErr.message, details: insertErr.details, hint: insertErr.hint } : null,
+      })
       if (insertErr) throw insertErr
+    } else if (!existingPartnership.partner_id) {
+      // Found by email, unclaimed - claim it onto this profile instead of inserting a
+      // duplicate row for the same (agency_id, partner_email).
+      console.error("[debug] case1 trace: before claiming existing unclaimed partnership", {
+        partnershipId: existingPartnership.id,
+        matchedProfileId,
+      })
+      const { error: claimErr } = await supabase
+        .from("partnerships")
+        .update({ partner_id: matchedProfileId, profile_status: "active", updated_at: new Date().toISOString() })
+        .eq("id", existingPartnership.id)
+      console.error("[debug] case1 trace: after claiming existing unclaimed partnership", {
+        error: claimErr ? { code: claimErr.code, message: claimErr.message, details: claimErr.details, hint: claimErr.hint } : null,
+      })
+      if (claimErr) throw claimErr
     }
     return { poolStatus: "existing_user_added", domainMatchProfileId: null }
   }
@@ -363,11 +417,21 @@ export async function POST(req: Request) {
     }
 
     const vendorEmail = (tokenRow.vendor_email || "").trim().toLowerCase()
-    const { data: matchedProfile } = await supabase
+    console.error("[debug] case1 trace: before profile lookup", { route, token, vendorEmail })
+    const { data: matchedProfile, error: matchedProfileErr } = await supabase
       .from("profiles")
       .select("id, company_name, full_name, display_name")
       .ilike("email", vendorEmail)
       .maybeSingle()
+    console.error("[debug] case1 trace: after profile lookup", {
+      route,
+      token,
+      vendorEmail,
+      foundProfileId: matchedProfile?.id ?? null,
+      error: matchedProfileErr
+        ? { code: matchedProfileErr.code, message: matchedProfileErr.message, details: matchedProfileErr.details }
+        : null,
+    })
     const is_existing_partner = Boolean(matchedProfile?.id)
 
     const payment_terms = normalizeGuestPaymentTerms(body.payment_terms)
@@ -461,6 +525,7 @@ export async function POST(req: Request) {
         vendorEmail,
         matchedProfileId: is_existing_partner ? matchedProfile!.id : null,
       })
+      console.error("[debug] case1 trace: before pool_status update", { route, token, poolClassification })
       const { error: poolStatusErr } = await supabase
         .from("rfp_magic_tokens")
         .update({
@@ -468,6 +533,13 @@ export async function POST(req: Request) {
           domain_match_profile_id: poolClassification.domainMatchProfileId,
         })
         .eq("token", token)
+      console.error("[debug] case1 trace: after pool_status update", {
+        route,
+        token,
+        error: poolStatusErr
+          ? { code: poolStatusErr.code, message: poolStatusErr.message, details: poolStatusErr.details, hint: poolStatusErr.hint }
+          : null,
+      })
       if (poolStatusErr) {
         console.error("[api] partner-pool classification: failed to persist pool_status", {
           route,
