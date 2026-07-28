@@ -92,6 +92,55 @@ export function formatBidContextForPrompt(ctx: BidAnalysisContext): string {
   return lines.join("\n")
 }
 
+export type ResponseScope = {
+  projectId: string | null
+  scopeItemName: string | null
+  scopeItemDescription: string | null
+}
+
+/** Same partner_rfp_inbox / rfp_magic_tokens resolution as loadBidAnalysisContext, but
+ *  also returns project_id - needed to hash a ranking group, which loadBidAnalysisContext
+ *  has no reason to expose. */
+export async function resolveResponseScope(
+  supabase: SupabaseServerClient,
+  responseId: string,
+  agencyId: string
+): Promise<ResponseScope | null> {
+  const { data: response } = await supabase
+    .from("partner_rfp_responses")
+    .select("inbox_item_id")
+    .eq("id", responseId)
+    .eq("agency_id", agencyId)
+    .maybeSingle()
+  if (!response) return null
+
+  if (response.inbox_item_id) {
+    const { data: inbox } = await supabase
+      .from("partner_rfp_inbox")
+      .select("project_id, scope_item_name, scope_item_description")
+      .eq("id", response.inbox_item_id)
+      .eq("agency_id", agencyId)
+      .maybeSingle()
+    return {
+      projectId: (inbox?.project_id as string | null) ?? null,
+      scopeItemName: (inbox?.scope_item_name as string | null) ?? null,
+      scopeItemDescription: (inbox?.scope_item_description as string | null) ?? null,
+    }
+  }
+
+  const { data: magicToken } = await supabase
+    .from("rfp_magic_tokens")
+    .select("project_id, scope_item_name, scope_item_description")
+    .eq("response_id", responseId)
+    .eq("agency_id", agencyId)
+    .maybeSingle()
+  return {
+    projectId: (magicToken?.project_id as string | null) ?? null,
+    scopeItemName: (magicToken?.scope_item_name as string | null) ?? null,
+    scopeItemDescription: (magicToken?.scope_item_description as string | null) ?? null,
+  }
+}
+
 /** Sorted, comma-joined, SHA-256 hex hash - stable regardless of selection order. */
 export function hashResponseIds(responseIds: string[]): string {
   const sorted = [...responseIds].sort()

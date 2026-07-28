@@ -323,9 +323,45 @@ export async function GET(request: Request) {
       }
     }
 
+    // Ranking eligibility (Phase 2 scoring) needs evaluation status, not just
+    // composite_score - a bid can have a composite score while still 'in_progress'.
+    // ranked_recommendation/_group let the pipeline show a cached ranking narrative
+    // without an extra round-trip to /api/agency/bids/rank on every render.
+    let evaluationByResponseId: Record<
+      string,
+      { status: string; ranked_recommendation: string | null; ranked_recommendation_group: string | null }
+    > = {}
+    if (responseIds.length > 0) {
+      const { data: evaluations, error: evaluationsErr } = await supabase
+        .from("bid_evaluations")
+        .select("response_id, status, ranked_recommendation, ranked_recommendation_group")
+        .in("response_id", responseIds)
+      if (evaluationsErr) {
+        console.error("[agency/rfp-responses] bid_evaluations select error", {
+          route,
+          userId: user.id,
+          message: evaluationsErr.message,
+          code: evaluationsErr.code,
+        })
+      } else {
+        evaluationByResponseId = Object.fromEntries(
+          (evaluations || []).map((e) => [
+            e.response_id as string,
+            {
+              status: e.status as string,
+              ranked_recommendation: e.ranked_recommendation as string | null,
+              ranked_recommendation_group: e.ranked_recommendation_group as string | null,
+            },
+          ])
+        )
+      }
+    }
+
     const mergedWithVersions = mergedWithAwardedAt.map((r) => ({
       ...r,
       versions: versionsByResponseId[r.id as string] || [],
+      evaluation_status: evaluationByResponseId[r.id as string]?.status ?? null,
+      ranked_recommendation: evaluationByResponseId[r.id as string]?.ranked_recommendation ?? null,
     }))
 
     const existingInboxIds = new Set(mergedWithVersions.map((r) => r.inbox_item_id as string))

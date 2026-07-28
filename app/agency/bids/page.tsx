@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useEffect } from "react"
 import { mutate } from "swr"
 import { AgencyLayout } from "@/components/agency-layout"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
@@ -16,7 +16,11 @@ import {
   formatDeadline,
   bestBudgetDisplay,
   scopeKeyForRow,
+  buildRankedBlocks,
+  sortRankedGroup,
 } from "@/lib/bid-shared"
+import { compositeScoreColorClass } from "@/lib/bid-scoring"
+import { AiMarkdown } from "@/components/ai-markdown"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, Users, AlertTriangle, Clock, XCircle,
@@ -124,13 +128,14 @@ function BidSummaryStrip({
 // ── Bid card ─────────────────────────────────────────────────────────────────
 
 function BidCard({
-  row, groupBy, onView, selected, onToggleSelect,
+  row, groupBy, onView, selected, onToggleSelect, rank,
 }: {
   row: BidRow
   groupBy: "client" | "partner"
   onView: (row: BidRow) => void
   selected: boolean
   onToggleSelect: (id: string) => void
+  rank?: number | null
 }) {
   const [summaryGenerating, setSummaryGenerating] = useState(false)
   const [summaryError, setSummaryError] = useState<string | null>(null)
@@ -163,6 +168,11 @@ function BidCard({
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
+          {rank != null && (
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-accent/40 bg-accent/10 text-accent shrink-0">
+              #{rank}
+            </span>
+          )}
           <span className="font-display font-bold text-foreground truncate">{scope}</span>
           <span className={cn(
             "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
@@ -170,6 +180,19 @@ function BidCard({
           )}>
             {badge.label}
           </span>
+          {row.composite_score != null && (
+            <span
+              className={cn(
+                "flex items-center justify-center w-6 h-6 rounded-full border font-mono text-[9px] font-bold shrink-0",
+                compositeScoreColorClass(row.composite_score).bg,
+                compositeScoreColorClass(row.composite_score).text,
+                compositeScoreColorClass(row.composite_score).border
+              )}
+              title="Composite evaluation score"
+            >
+              {Math.round(row.composite_score)}
+            </span>
+          )}
           {!row.partner_id && row.response_exists && (
             <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider shrink-0">
               Guest Submission
@@ -254,6 +277,115 @@ function BidCard({
           </DropdownMenu>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Ranked group ──────────────────────────────────────────────────────────────
+
+async function requestRanking(responseIds: string[], force: boolean): Promise<{ ok: true; narrative: string } | { ok: false; error: string }> {
+  try {
+    const res = await fetch("/api/agency/bids/rank", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ response_ids: responseIds, force }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data?.error || "Analysis unavailable" }
+    return { ok: true, narrative: data.narrative }
+  } catch {
+    return { ok: false, error: "Analysis unavailable" }
+  }
+}
+
+function RankedGroup({
+  rows, groupBy, onView, selectedIds, onToggleSelect,
+}: {
+  rows: BidRow[]
+  groupBy: "client" | "partner"
+  onView: (row: BidRow) => void
+  selectedIds: Set<string>
+  onToggleSelect: (id: string) => void
+}) {
+  const ranked = useMemo(() => sortRankedGroup(rows), [rows])
+  const cachedNarrative = rows.map((r) => r.ranked_recommendation).find(Boolean) || null
+  const [narrative, setNarrative] = useState<string | null>(cachedNarrative)
+  const [generating, setGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const responseIds = useMemo(() => ranked.filter((r) => r.rank != null).map((r) => r.row.id), [ranked])
+
+  const generate = async (force: boolean) => {
+    setGenerating(true)
+    setError(null)
+    const result = await requestRanking(responseIds, force)
+    setGenerating(false)
+    if (!result.ok) {
+      setError("Analysis unavailable - try again")
+      return
+    }
+    setNarrative(result.narrative)
+    void mutate(RFP_RESPONSES_URL)
+  }
+
+  // Generate once, the first time this scope group reaches 2+ complete+scored bids
+  // and no cached recommendation exists yet.
+  useEffect(() => {
+    if (!cachedNarrative && !generating) {
+      void generate(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cachedNarrative])
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 px-1">
+        <span className="font-mono text-[10px] uppercase tracking-wider text-accent">Ranked</span>
+        <span className="text-foreground-muted/40">·</span>
+        <span className="font-mono text-[10px] text-foreground-muted">
+          {ranked.filter((r) => r.rank != null).length} scored
+        </span>
+      </div>
+
+      {generating ? (
+        <div className="rounded-lg border border-border/40 bg-white/5 p-3 space-y-1.5">
+          <p className="text-xs text-foreground-muted">Analyzing bid...</p>
+          <Skeleton className="h-3 w-full bg-white/10" />
+          <Skeleton className="h-3 w-2/3 bg-white/10" />
+        </div>
+      ) : error ? (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 flex items-center gap-2 text-xs text-red-300">
+          <span>{error}</span>
+          <button type="button" onClick={() => void generate(true)} className="underline hover:text-red-200">
+            Retry
+          </button>
+        </div>
+      ) : narrative ? (
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-3">
+          <div className="font-mono text-[9px] uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
+            <Sparkles className="w-3 h-3 text-accent" /> Ranking Recommendation
+          </div>
+          <AiMarkdown content={narrative} />
+          <button
+            type="button"
+            onClick={() => void generate(true)}
+            className="mt-1.5 font-mono text-[10px] text-accent hover:underline"
+          >
+            Regenerate Rankings
+          </button>
+        </div>
+      ) : null}
+
+      {ranked.map(({ row, rank }) => (
+        <BidCard
+          key={row.id}
+          row={row}
+          groupBy={groupBy}
+          onView={onView}
+          selected={selectedIds.has(row.id)}
+          onToggleSelect={onToggleSelect}
+          rank={rank}
+        />
+      ))}
     </div>
   )
 }
@@ -344,16 +476,27 @@ function GroupSection({
             {filtered.length === 0 ? (
               <p className="text-sm text-foreground-muted py-4 text-center">No bids match this filter.</p>
             ) : (
-              filtered.map(row => (
-                <BidCard
-                  key={row.id}
-                  row={row}
-                  groupBy={groupBy}
-                  onView={onView}
-                  selected={selectedIds.has(row.id)}
-                  onToggleSelect={onToggleSelect}
-                />
-              ))
+              buildRankedBlocks(filtered).map((block) =>
+                block.type === "single" ? (
+                  <BidCard
+                    key={block.row.id}
+                    row={block.row}
+                    groupBy={groupBy}
+                    onView={onView}
+                    selected={selectedIds.has(block.row.id)}
+                    onToggleSelect={onToggleSelect}
+                  />
+                ) : (
+                  <RankedGroup
+                    key={block.scopeKey}
+                    rows={block.rows}
+                    groupBy={groupBy}
+                    onView={onView}
+                    selectedIds={selectedIds}
+                    onToggleSelect={onToggleSelect}
+                  />
+                )
+              )
             )}
           </div>
         </div>

@@ -46,6 +46,9 @@ export type BidRow = {
   ai_summary_short?: string | null
   ai_summary_detailed?: string | null
   ai_summary_generated_at?: string | null
+  composite_score?: number | null
+  evaluation_status?: string | null
+  ranked_recommendation?: string | null
 }
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -135,4 +138,66 @@ export function scopeKeyForRow(row: BidRow): string | null {
   const scopeItemName = row.inbox?.scope_item_name
   if (!projectId || !scopeItemName) return null
   return `${projectId}::${scopeItemName}`
+}
+
+// ── Ranking (Phase 2 scoring) ─────────────────────────────────────────────────
+
+export type RankedBlock =
+  | { type: "single"; row: BidRow }
+  | { type: "ranked"; scopeKey: string; rows: BidRow[] }
+
+function isScoredComplete(row: BidRow): boolean {
+  return row.evaluation_status === "complete" && row.composite_score != null
+}
+
+/**
+ * Groups rows into ranked clusters (2+ complete+scored bids sharing a scope key) and
+ * singles (everything else), preserving each cluster's/row's original first-appearance
+ * position in the input array.
+ */
+export function buildRankedBlocks(rows: BidRow[]): RankedBlock[] {
+  const order: string[] = []
+  const byScopeKey = new Map<string, BidRow[]>()
+
+  rows.forEach((row) => {
+    const key = scopeKeyForRow(row)
+    if (!key) return
+    if (!byScopeKey.has(key)) {
+      byScopeKey.set(key, [])
+      order.push(key)
+    }
+    byScopeKey.get(key)!.push(row)
+  })
+
+  const groupedRowIds = new Set<string>()
+  for (const key of order) {
+    const groupRows = byScopeKey.get(key)!
+    if (groupRows.filter(isScoredComplete).length >= 2) {
+      for (const r of groupRows) groupedRowIds.add(r.id)
+    }
+  }
+
+  const positioned: { firstIndex: number; block: RankedBlock }[] = []
+  const handledKeys = new Set<string>()
+
+  rows.forEach((row, index) => {
+    if (groupedRowIds.has(row.id)) {
+      const key = scopeKeyForRow(row) as string
+      if (handledKeys.has(key)) return
+      handledKeys.add(key)
+      positioned.push({ firstIndex: index, block: { type: "ranked", scopeKey: key, rows: byScopeKey.get(key)! } })
+    } else {
+      positioned.push({ firstIndex: index, block: { type: "single", row } })
+    }
+  })
+
+  return positioned.sort((a, b) => a.firstIndex - b.firstIndex).map((p) => p.block)
+}
+
+/** Within a ranked block: scored+complete bids sorted desc by composite_score first
+ *  (assigned rank numbers), then unscored bids after, in their original relative order. */
+export function sortRankedGroup(rows: BidRow[]): { row: BidRow; rank: number | null }[] {
+  const scored = rows.filter(isScoredComplete).sort((a, b) => (b.composite_score as number) - (a.composite_score as number))
+  const unscored = rows.filter((r) => !isScoredComplete(r))
+  return [...scored.map((row, i) => ({ row, rank: i + 1 })), ...unscored.map((row) => ({ row, rank: null }))]
 }
