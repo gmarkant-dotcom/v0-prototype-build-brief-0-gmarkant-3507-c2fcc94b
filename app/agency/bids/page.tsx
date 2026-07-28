@@ -7,15 +7,33 @@ import { AgencyLayout } from "@/components/agency-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn, formatSubmittedAt } from "@/lib/utils"
 import { buildBidTimeline } from "@/lib/bid-timeline"
-import { isVercelBlobStorageUrl, parseGuestUploadBlobPathFromUrl } from "@/lib/vercel-blob-url"
+import {
+  type BidRow,
+  BID_STATUSES,
+  type BidStatusKey,
+  statusBadge,
+  formatDeadline,
+  attachmentHref,
+  bestBudgetDisplay,
+  scopeKeyForRow,
+} from "@/lib/bid-shared"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, Users, AlertTriangle, Clock, CheckCircle, XCircle,
   Paperclip, ExternalLink, Link as LinkIcon, Star, CalendarDays, Loader2,
+  MoreVertical, Sparkles, X,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Dialog,
   DialogContent,
@@ -34,7 +52,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
+import { formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import {
   DESIGNATION_KEYS,
   DESIGNATION_LABELS,
@@ -48,129 +66,132 @@ import { meetsInsuranceMinimum } from "@/lib/insurance-limit-parser"
 
 const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── AI summary strip ─────────────────────────────────────────────────────────
 
-type PaymentTerms = {
-  deposit_required_pct?: number | null
-  payment_schedule_preference?: string | null
-  additional_notes?: string | null
-} | null
-
-type BidAttachment = { type?: string; label: string; url: string }
-
-type BidRow = {
-  id: string
-  response_id: string | null
-  response_exists: boolean
-  inbox_item_id: string
-  partner_id?: string | null
-  vendor_email?: string | null
-  partner_display_name: string
-  project_name: string | null
-  client_name: string | null
-  status: string
-  budget_proposal?: string
-  proposal_text?: string
-  timeline_proposal?: string
-  payment_terms?: PaymentTerms
-  attachments?: BidAttachment[] | null
-  business_criteria_responses?: unknown
-  business_criteria_required?: unknown
-  agency_feedback?: string | null
-  feedback_updated_at?: string | null
-  submitted_at?: string | null
-  rfp_sent_at?: string | null
-  awarded_at?: string | null
-  created_at: string
-  updated_at: string
-  inbox: {
-    scope_item_name?: string | null
-    response_deadline?: string | null
-    project_id?: string | null
-    created_at?: string | null
-  } | null
-  versions?: { budget?: string | null; budget_currency?: string | null }[]
-}
-
-// ── Status config ─────────────────────────────────────────────────────────────
-
-const BID_STATUSES = [
-  { key: "all",               label: "All RFPs" },
-  { key: "awaiting_response", label: "New" },
-  { key: "submitted",         label: "Submitted" },
-  { key: "under_review",      label: "Changes Requested" },
-  { key: "shortlisted",       label: "Shortlisted" },
-  { key: "meeting_requested", label: "Meeting Requested" },
-  { key: "awarded",           label: "Awarded" },
-  { key: "declined",          label: "Declined" },
-] as const
-
-type BidStatusKey = (typeof BID_STATUSES)[number]["key"]
-
-const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-  awaiting_response: { bg: "bg-white/10",      text: "text-foreground-muted", label: "New" },
-  submitted:         { bg: "bg-sky-500/15",    text: "text-sky-300",          label: "Submitted" },
-  under_review:      { bg: "bg-amber-500/15",  text: "text-amber-300",        label: "Changes Requested" },
-  shortlisted:       { bg: "bg-violet-500/15", text: "text-violet-300",       label: "Shortlisted" },
-  meeting_requested: { bg: "bg-cyan-500/15",   text: "text-cyan-300",         label: "Meeting Requested" },
-  awarded:           { bg: "bg-emerald-500/15",text: "text-emerald-300",       label: "Awarded" },
-  declined:          { bg: "bg-red-500/15",    text: "text-red-300",          label: "Declined" },
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function statusBadge(status: string) {
-  return STATUS_BADGE[status] ?? STATUS_BADGE.awaiting_response
-}
-
-function formatDeadline(raw: string | null | undefined): string | null {
-  if (!raw) return null
-  const d = new Date(raw)
-  if (isNaN(d.getTime())) return null
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-}
-
-/** Guest RFP bid uploads are stored as private blobs - route them through the
- *  authenticated agency blob-download proxy instead of linking the raw blob URL directly. */
-function attachmentHref(url: string): string {
-  if (isVercelBlobStorageUrl(url) && parseGuestUploadBlobPathFromUrl(url)) {
-    return `/api/agency/blob-download?url=${encodeURIComponent(url)}`
+/** Generates (or regenerates) the AI summary for one bid, then patches the shared SWR
+ *  cache directly (no revalidate round-trip) so every card/sheet showing this response
+ *  picks up the fresh columns immediately instead of flashing back to "Generate". */
+async function requestSummaryGeneration(responseId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`/api/agency/bids/${responseId}/generate-summary`, { method: "POST" })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data?.error || "Analysis unavailable" }
+    void mutate(
+      RFP_RESPONSES_URL,
+      (current: { responses: BidRow[] } | undefined) =>
+        current
+          ? {
+              responses: current.responses.map((r) =>
+                r.id === responseId
+                  ? {
+                      ...r,
+                      ai_summary_short: data.ai_summary_short ?? r.ai_summary_short,
+                      ai_summary_detailed: data.ai_summary_detailed ?? r.ai_summary_detailed,
+                      ai_summary_generated_at: data.ai_summary_generated_at ?? r.ai_summary_generated_at,
+                    }
+                  : r
+              ),
+            }
+          : current,
+      { revalidate: false }
+    )
+    return { ok: true }
+  } catch {
+    return { ok: false, error: "Analysis unavailable" }
   }
-  return url
 }
 
-function bestBudgetDisplay(row: BidRow): string | null {
-  const v = row.versions?.[0]
-  if (v?.budget && v.budget_currency) {
-    const n = parseFloat(v.budget)
-    if (!isNaN(n)) return `$${n.toLocaleString("en-US")} ${v.budget_currency}`
+function BidSummaryStrip({
+  row, generating, error, onGenerate,
+}: {
+  row: BidRow
+  generating: boolean
+  error: string | null
+  onGenerate: () => void
+}) {
+  if (generating) {
+    return (
+      <div className="mt-2 space-y-1.5">
+        <Skeleton className="h-3 w-full max-w-[420px] bg-white/10" />
+        <Skeleton className="h-3 w-2/3 max-w-[280px] bg-white/10" />
+      </div>
+    )
   }
-  // No version history (e.g. guest bids never get a partner_rfp_response_versions row) —
-  // fall back to the response's own budget_proposal column.
-  if (row.budget_proposal) {
-    const display = formatBudgetForDisplay(row.budget_proposal)
-    return display === "—" ? null : display
+
+  if (error) {
+    return (
+      <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-red-300">
+        <span>{error}</span>
+        <button type="button" onClick={(e) => { e.stopPropagation(); onGenerate() }} className="underline hover:text-red-200">
+          Retry
+        </button>
+      </div>
+    )
   }
-  return null
+
+  if (row.ai_summary_short) {
+    return (
+      <p className="mt-2 text-xs text-foreground/80 leading-relaxed flex items-start gap-1.5">
+        <Sparkles className="w-3 h-3 text-accent shrink-0 mt-0.5" />
+        <span>{row.ai_summary_short}</span>
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <Skeleton className="h-3 w-full max-w-[320px] bg-white/5" />
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onGenerate() }}
+        className="shrink-0 font-mono text-[10px] text-accent hover:underline whitespace-nowrap"
+      >
+        Generate
+      </button>
+    </div>
+  )
 }
 
 // ── Bid card ─────────────────────────────────────────────────────────────────
 
 function BidCard({
-  row, groupBy, onView,
+  row, groupBy, onView, selected, onToggleSelect,
 }: {
   row: BidRow
   groupBy: "client" | "partner"
   onView: (row: BidRow) => void
+  selected: boolean
+  onToggleSelect: (id: string) => void
 }) {
+  const [summaryGenerating, setSummaryGenerating] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+
   const badge = statusBadge(row.status)
   const scope = row.inbox?.scope_item_name || row.project_name || "Scope"
   const deadline = formatDeadline(row.inbox?.response_deadline)
   const budget = bestBudgetDisplay(row)
   const submittedAt = formatSubmittedAt(row.submitted_at)
+  const canSelect = row.response_exists && Boolean(row.response_id)
+
+  const generateSummary = async () => {
+    setSummaryGenerating(true)
+    setSummaryError(null)
+    const result = await requestSummaryGeneration(row.id)
+    setSummaryGenerating(false)
+    if (!result.ok) setSummaryError("Analysis unavailable - try again")
+  }
 
   return (
-    <div className="flex items-start gap-4 p-4 rounded-lg border border-border/40 bg-white/5 hover:bg-white/8 transition-colors">
+    <div className="flex items-start gap-3 p-4 rounded-lg border border-border/40 bg-white/5 hover:bg-white/8 transition-colors">
+      {canSelect && (
+        <Checkbox
+          checked={selected}
+          onCheckedChange={() => onToggleSelect(row.id)}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-1 shrink-0 border-border data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+          aria-label={`Select ${row.partner_display_name} bid for comparison`}
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <span className="font-display font-bold text-foreground truncate">{scope}</span>
@@ -224,14 +245,46 @@ function BidCard({
             Submitted {submittedAt}
           </div>
         )}
+        {row.response_exists && (
+          <BidSummaryStrip
+            row={row}
+            generating={summaryGenerating}
+            error={summaryError}
+            onGenerate={() => void generateSummary()}
+          />
+        )}
       </div>
-      <button
-        type="button"
-        onClick={() => onView(row)}
-        className="shrink-0 flex items-center gap-1 font-mono text-[10px] text-accent border border-accent/30 hover:bg-accent/10 rounded-md px-2 py-1 transition-colors"
-      >
-        View <ChevronRight className="w-3 h-3" />
-      </button>
+      <div className="shrink-0 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onView(row)}
+          className="flex items-center gap-1 font-mono text-[10px] text-accent border border-accent/30 hover:bg-accent/10 rounded-md px-2 py-1 transition-colors"
+        >
+          View <ChevronRight className="w-3 h-3" />
+        </button>
+        {row.response_exists && row.ai_summary_short && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => e.stopPropagation()}
+                className="p-1 rounded-md text-foreground-muted hover:bg-white/10 hover:text-foreground transition-colors"
+                aria-label="Bid actions"
+              >
+                <MoreVertical className="w-3.5 h-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-background border-border">
+              <DropdownMenuItem
+                onClick={() => void generateSummary()}
+                className="text-foreground focus:bg-white/5 focus:text-foreground"
+              >
+                Regenerate Summary
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
     </div>
   )
 }
@@ -744,13 +797,15 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
 // ── Group section ─────────────────────────────────────────────────────────────
 
 function GroupSection({
-  label, rows, defaultOpen, groupBy, onView,
+  label, rows, defaultOpen, groupBy, onView, selectedIds, onToggleSelect,
 }: {
   label: string
   rows: BidRow[]
   defaultOpen: boolean
   groupBy: "client" | "partner"
   onView: (row: BidRow) => void
+  selectedIds: Set<string>
+  onToggleSelect: (id: string) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [activeStatus, setActiveStatus] = useState<BidStatusKey>("all")
@@ -826,7 +881,14 @@ function GroupSection({
               <p className="text-sm text-foreground-muted py-4 text-center">No bids match this filter.</p>
             ) : (
               filtered.map(row => (
-                <BidCard key={row.id} row={row} groupBy={groupBy} onView={onView} />
+                <BidCard
+                  key={row.id}
+                  row={row}
+                  groupBy={groupBy}
+                  onView={onView}
+                  selected={selectedIds.has(row.id)}
+                  onToggleSelect={onToggleSelect}
+                />
               ))
             )}
           </div>
@@ -844,8 +906,34 @@ export default function AgencyBidsPage() {
   const [search, setSearch] = useState("")
   const [groupBy, setGroupBy] = useState<GroupBy>("client")
   const [viewingBid, setViewingBid] = useState<BidRow | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [compareIds, setCompareIds] = useState<string[] | null>(null)
 
   const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(RFP_RESPONSES_URL)
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const allRowsById = useMemo(
+    () => new Map((data?.responses ?? []).map((r) => [r.id, r])),
+    [data]
+  )
+  const selectedRows = useMemo(
+    () => Array.from(selectedIds).map((id) => allRowsById.get(id)).filter((r): r is BidRow => Boolean(r)),
+    [selectedIds, allRowsById]
+  )
+  const selectedScopeKeys = useMemo(
+    () => new Set(selectedRows.map((r) => scopeKeyForRow(r))),
+    [selectedRows]
+  )
+  const compareEligible =
+    selectedRows.length >= 2 && selectedScopeKeys.size === 1 && !selectedScopeKeys.has(null)
 
   const groups = useMemo(() => {
     const all = data?.responses ?? []
@@ -893,9 +981,30 @@ export default function AgencyBidsPage() {
   const totalRfps = data?.responses?.length ?? 0
   const totalGroups = groups.length
 
+  // Compare mode is built out fully in Part 3 (CompareView, at-a-glance + AI comparison).
+  // This placeholder keeps "Compare N Bids" functional end-to-end for this part.
+  if (compareIds) {
+    return (
+      <AgencyLayout>
+        <div className="p-8 max-w-5xl space-y-6">
+          <button
+            type="button"
+            onClick={() => setCompareIds(null)}
+            className="flex items-center gap-1 font-mono text-xs text-accent hover:underline"
+          >
+            <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back to Bids
+          </button>
+          <p className="text-sm text-foreground-muted">
+            Comparing {compareIds.length} bids. Full comparison view lands in Part 3.
+          </p>
+        </div>
+      </AgencyLayout>
+    )
+  }
+
   return (
     <AgencyLayout>
-      <div className="p-8 max-w-5xl space-y-6">
+      <div className="p-8 max-w-5xl space-y-6 pb-24">
         {/* Header */}
         <div>
           <h1 className="font-display font-bold text-3xl text-foreground">Bid Management</h1>
@@ -969,12 +1078,44 @@ export default function AgencyBidsPage() {
                 defaultOpen={i === 0}
                 groupBy={groupBy}
                 onView={setViewingBid}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
               />
             ))}
           </div>
         )}
       </div>
       <BidDetailDialog row={viewingBid} onClose={() => setViewingBid(null)} />
+
+      {selectedRows.length >= 2 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 rounded-full border border-border bg-background/95 backdrop-blur px-5 py-3 shadow-2xl">
+          <span className="font-mono text-xs text-foreground-muted">
+            {selectedRows.length} bid{selectedRows.length !== 1 ? "s" : ""} selected
+          </span>
+          {compareEligible ? (
+            <Button
+              size="sm"
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+              onClick={() => setCompareIds(selectedRows.map((r) => r.id))}
+            >
+              Compare {selectedRows.length} Bids
+            </Button>
+          ) : (
+            <span className="font-mono text-[10px] text-amber-300 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              Select bids from the same RFP to compare
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="text-foreground-muted hover:text-foreground transition-colors"
+            aria-label="Clear selection"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </AgencyLayout>
   )
 }

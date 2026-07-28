@@ -9,6 +9,7 @@ import {
 } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults } from "@/lib/business-criteria"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
+import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 
 export const dynamic = "force-dynamic"
 
@@ -452,6 +453,15 @@ export async function POST(req: Request) {
         console.error("[api] failure", { route, method: "POST", code: 500, message: tokenUpdateErr.message })
       }
 
+      // Fire-and-forget: AI summary generation must never fail the bid submission itself.
+      void generateAndSaveBidSummary(supabase, tokenRow.response_id as string, tokenRow.agency_id as string).catch((err) => {
+        console.error("[api] fire-and-forget summary generation failed", {
+          route,
+          responseId: tokenRow.response_id,
+          message: err instanceof Error ? err.message : String(err),
+        })
+      })
+
       console.log("[api] success", { route, method: "POST", token, is_existing_partner, is_edit: true })
       return NextResponse.json({ success: true, is_existing_partner, is_edit: true })
     }
@@ -488,6 +498,15 @@ export async function POST(req: Request) {
     if (tokenUpdateErr) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: tokenUpdateErr.message })
     }
+
+    // Fire-and-forget: AI summary generation must never fail the bid submission itself.
+    void generateAndSaveBidSummary(supabase, saved.id as string, tokenRow.agency_id as string).catch((err) => {
+      console.error("[api] fire-and-forget summary generation failed", {
+        route,
+        responseId: saved.id,
+        message: err instanceof Error ? err.message : String(err),
+      })
+    })
 
     // Partner-pool auto-classification (magic link auto-add). Must never block or fail
     // the bid submission response - any failure here is logged loudly and swallowed.

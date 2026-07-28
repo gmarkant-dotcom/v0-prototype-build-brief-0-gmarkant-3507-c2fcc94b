@@ -4,6 +4,7 @@ import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { withBusinessCriteriaDefaults } from "@/lib/business-criteria"
+import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 
 export const dynamic = "force-dynamic"
 
@@ -300,6 +301,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           message: versionErr.message,
         })
       }
+
+      // Fire-and-forget: AI summary generation must never fail the bid submission itself.
+      void generateAndSaveBidSummary(supabase, saved.id, inbox.agency_id).catch((err) => {
+        console.error("[api] fire-and-forget summary generation failed", {
+          route,
+          responseId: saved.id,
+          message: err instanceof Error ? err.message : String(err),
+        })
+      })
 
       if (wasUpdate) {
         const [{ data: agencyProfile }, { data: inboxDetail }] = await Promise.all([
