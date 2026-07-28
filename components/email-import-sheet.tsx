@@ -41,7 +41,7 @@ type ConnectionInfo = {
   last_scan_at: string | null
 }
 
-type View = "loading" | "no_connection" | "ready_to_scan" | "scanning" | "results" | "error"
+type View = "loading" | "no_connection" | "expired" | "ready_to_scan" | "scanning" | "results" | "error"
 
 const MAX_MESSAGES_ESTIMATE = 200
 
@@ -242,7 +242,19 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
         .eq("provider", "google")
         .maybeSingle()
 
-      if (!conn || conn.status !== "active") {
+      if (!conn) {
+        setConnection(null)
+        setView("no_connection")
+        return
+      }
+
+      if (conn.status === "expired") {
+        setConnection(null)
+        setView("expired")
+        return
+      }
+
+      if (conn.status !== "active") {
         setConnection(null)
         setView("no_connection")
         return
@@ -430,6 +442,22 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
               Ligament scans email subjects and brief previews to identify vendors. Full message content is never
               read or stored.
             </p>
+          </div>
+        )}
+
+        {view === "expired" && (
+          <div className="space-y-5 px-4 pb-4">
+            <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-5 text-center space-y-3">
+              <Mail className="w-8 h-8 text-yellow-400 mx-auto" />
+              <p className="text-sm text-foreground">Connection expired. Reconnect your Gmail account to continue.</p>
+            </div>
+            <Button
+              onClick={connectGmail}
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 flex items-center justify-center gap-2"
+            >
+              <GoogleIcon className="w-4 h-4" />
+              Reconnect Gmail
+            </Button>
           </div>
         )}
 

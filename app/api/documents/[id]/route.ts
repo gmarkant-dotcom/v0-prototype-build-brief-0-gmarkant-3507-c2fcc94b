@@ -1,6 +1,7 @@
 import { get } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getSafeContentTypeForFilename, isSafeToRenderInline } from '@/lib/upload-validation'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,16 +86,24 @@ export async function GET(
       })
     }
 
-    // Determine if this should be a download or inline view
+    // Never trust the stored/client-supplied file_type for the response header, since it
+    // may predate validation or have been set by an attacker. Re-derive a safe
+    // Content-Type from the filename extension instead.
+    const safeContentType = getSafeContentTypeForFilename(document.name)
+
+    // Determine if this should be a download or inline view. Only image/PDF types
+    // are ever rendered inline; everything else is forced to download regardless
+    // of the `download` query param, since inline rendering of arbitrary content
+    // types (e.g. HTML) in an authenticated origin is a stored-XSS vector.
     const download = request.nextUrl.searchParams.get('download') === 'true'
-    const disposition = download 
-      ? `attachment; filename="${document.name}"`
+    const disposition = download || !isSafeToRenderInline(safeContentType)
+      ? `attachment; filename="${document.name.replace(/"/g, "'")}"`
       : 'inline'
 
     console.log('[api] success', { route, method: 'GET', userId: user.id, role: null, recordId: id })
     return new NextResponse(result.stream, {
       headers: {
-        'Content-Type': result.blob.contentType || document.file_type || 'application/octet-stream',
+        'Content-Type': safeContentType,
         'Content-Disposition': disposition,
         ETag: result.blob.etag,
         'Cache-Control': 'private, no-cache',

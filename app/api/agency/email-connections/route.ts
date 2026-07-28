@@ -28,8 +28,9 @@ async function requireAgency() {
   return { ok: true as const, userId: user.id }
 }
 
-// GET - list the user's connections. Never selects token columns or scan_results (that
-// stays behind GET /api/agency/email-scan, keeping payload size/concerns separate).
+// GET - list the user's connections. Token columns are selected only to verify they can
+// still be decrypted (e.g. after a TOKEN_ENCRYPTION_KEY rotation); they are never included
+// in the response - that stays behind GET /api/agency/email-scan.
 export async function GET() {
   const route = "/api/agency/email-connections"
   const auth = await requireAgency()
@@ -38,14 +39,56 @@ export async function GET() {
   const supabase = await createClient()
   const { data: connections, error } = await supabase
     .from("email_connections")
-    .select("provider, status, connected_at, last_scan_at, scan_status")
+    .select("id, provider, status, connected_at, last_scan_at, scan_status, access_token_encrypted")
     .eq("user_id", auth.userId)
   if (error) {
     console.error("[api] failure", { route, method: "GET", message: error.message })
     return NextResponse.json({ error: "Failed to load connections" }, { status: 500 })
   }
 
-  return NextResponse.json({ connections: connections || [] })
+  const service = getServiceSupabase()
+  const result = []
+  for (const connection of connections || []) {
+    let status = connection.status
+
+    // A connection can have a token that no longer decrypts if TOKEN_ENCRYPTION_KEY was
+    // rotated after it was stored. Detect that here rather than letting a later scan
+    // crash, and flip the connection to 'expired' so the UI can prompt a reconnect.
+    if (status === "active" && connection.access_token_encrypted) {
+      try {
+        decrypt(connection.access_token_encrypted)
+      } catch {
+        status = "expired"
+        if (service) {
+          const { error: expireErr } = await service
+            .from("email_connections")
+            .update({
+              status: "expired",
+              access_token_encrypted: null,
+              refresh_token_encrypted: null,
+            })
+            .eq("id", connection.id)
+          if (expireErr) {
+            console.error("[api] failed to mark connection expired", {
+              route,
+              connectionId: connection.id,
+              message: expireErr.message,
+            })
+          }
+        }
+      }
+    }
+
+    result.push({
+      provider: connection.provider,
+      status,
+      connected_at: connection.connected_at,
+      last_scan_at: connection.last_scan_at,
+      scan_status: connection.scan_status,
+    })
+  }
+
+  return NextResponse.json({ connections: result })
 }
 
 // DELETE { provider } - revokes (best-effort) and clears tokens/scan_results locally.

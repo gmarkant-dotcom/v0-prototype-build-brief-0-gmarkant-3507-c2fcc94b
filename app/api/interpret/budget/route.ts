@@ -1,6 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic"
 import { generateText } from "ai"
 import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 90
@@ -9,6 +10,25 @@ const SYSTEM = `You are a senior executive producer and creative consultant with
 
 export async function POST(req: NextRequest) {
   try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, active_role")
+      .eq("id", user.id)
+      .single()
+
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
+      return NextResponse.json({ error: "Only lead agencies can use this feature" }, { status: 403 })
+    }
+
     const { brief_text } = await req.json()
     if (!brief_text?.trim()) {
       return NextResponse.json({ error: "brief_text required" }, { status: 400 })

@@ -19,6 +19,31 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Invalid active_role" }, { status: 400 })
     }
 
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role, secondary_role, is_admin")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile) {
+      return NextResponse.json({ error: "Profile not found" }, { status: 404 })
+    }
+
+    const primaryRole = profile.role as string
+    const secondaryRole = profile.secondary_role as string | null
+
+    const canAccessRole =
+      active_role === "partner"
+        ? primaryRole === "partner" || secondaryRole === "partner" || profile.is_admin === true
+        : primaryRole === "agency" || secondaryRole === "agency" || profile.is_admin === true
+
+    if (!canAccessRole) {
+      return NextResponse.json(
+        { error: "upgrade_required", message: `You do not have access to the ${active_role} portal.` },
+        { status: 403 }
+      )
+    }
+
     const { error } = await supabase
       .from("profiles")
       .update({ active_role })

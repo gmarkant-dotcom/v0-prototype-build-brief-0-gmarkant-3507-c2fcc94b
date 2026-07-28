@@ -1,6 +1,7 @@
 import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { validateDocumentUploadFile } from '@/lib/upload-validation'
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +21,11 @@ export async function POST(request: NextRequest) {
 
     if (!file || !projectId || !documentType) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    const validation = validateDocumentUploadFile(file)
+    if (!validation.ok) {
+      return NextResponse.json({ error: validation.message }, { status: 400 })
     }
 
     // Verify user has access to this project
@@ -95,7 +101,7 @@ export async function POST(request: NextRequest) {
         assignment_id: assignmentId || null,
         uploaded_by: user.id,
         name: file.name,
-        file_type: file.type,
+        file_type: validation.mimeType,
         file_size: file.size,
         blob_url: blob.url,
         blob_path: blob.pathname,

@@ -3,6 +3,39 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { validateUploadFile } from '@/lib/upload-validation'
 
+// Folders routed to the public Supabase 'avatars' bucket (images only, public by design)
+const SUPABASE_AVATAR_FOLDERS = new Set(['avatars', 'logos', 'agency-logos', 'partner-logos'])
+
+// Folders routed to private Vercel Blob storage
+const PRIVATE_BLOB_FOLDERS = new Set([
+  'documents',
+  'agency-documents',
+  'agency-library',
+  'agency-onboarding',
+  'onboarding-project',
+  'partner-legal',
+  'partner-onboarding',
+  'partner-reels',
+])
+
+// Reference materials are shared with unauthenticated guest vendors on the RFP
+// response page, so they need a publicly-fetchable blob URL (no signed token),
+// unlike NDAs/contracts/other agency documents, which stay private by default.
+// Callers pass "reference-materials/{agencyId}" or "reference-materials/{agencyId}/{projectId}".
+const REFERENCE_MATERIALS_PREFIX = 'reference-materials'
+const REFERENCE_MATERIALS_PATTERN = /^reference-materials\/[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)?$/
+
+type FolderRouting = { storage: 'supabase-avatar' } | { storage: 'blob-private' } | { storage: 'blob-public' }
+
+function resolveFolderRouting(folder: string): FolderRouting | null {
+  if (SUPABASE_AVATAR_FOLDERS.has(folder)) return { storage: 'supabase-avatar' }
+  if (PRIVATE_BLOB_FOLDERS.has(folder)) return { storage: 'blob-private' }
+  if (folder.startsWith(REFERENCE_MATERIALS_PREFIX) && REFERENCE_MATERIALS_PATTERN.test(folder)) {
+    return { storage: 'blob-public' }
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const route = '/api/upload'
@@ -39,15 +72,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
+    const routing = resolveFolderRouting(folder)
+    if (!routing) {
+      return NextResponse.json({ error: 'Invalid folder' }, { status: 400 })
+    }
+
     const validation = validateUploadFile(file)
     if (!validation.ok) {
       return NextResponse.json({ error: validation.message }, { status: 400 })
     }
 
     const timestamp = Date.now()
-    const isAvatar = folder === 'avatars' || folder === 'logos' || folder === 'agency-logos' || folder === 'partner-logos'
 
-    if (isAvatar) {
+    if (routing.storage === 'supabase-avatar') {
       const ext = file.name.split('.').pop() || 'jpg'
       const filename = `${user.id}/${timestamp}.${ext}`
       const { data, error } = await supabase.storage
@@ -73,13 +110,8 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Reference materials are shared with unauthenticated guest vendors on the RFP
-    // response page, so they need a publicly-fetchable blob URL (no signed token) —
-    // unlike NDAs/contracts/other agency documents, which stay private by default.
-    const isPubliclySharedDocument = folder.startsWith('reference-materials')
-
     const filename = `${folder}/${user.id}/${timestamp}-${file.name}`
-    const blob = await put(filename, file, { access: isPubliclySharedDocument ? 'public' : 'private' })
+    const blob = await put(filename, file, { access: routing.storage === 'blob-public' ? 'public' : 'private' })
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, pathname: blob.pathname })
     return NextResponse.json({
