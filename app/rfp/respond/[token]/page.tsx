@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { HolographicBlobs } from "@/components/holographic-blobs"
 import { formatSubmittedAt, cn } from "@/lib/utils"
 import { buildBidTimeline } from "@/lib/bid-timeline"
+import { isVercelBlobStorageUrl, parseGuestUploadBlobPathFromUrl } from "@/lib/vercel-blob-url"
 import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal } from "@/lib/rfp-response-fields"
 import type { ReferenceMaterial } from "@/components/reference-materials-input"
 import {
@@ -105,6 +106,15 @@ function labelFromUrl(url: string): string {
   } catch {
     return url
   }
+}
+
+/** Guest RFP bid uploads are stored as private blobs - route them through the
+ *  token-validated guest file proxy instead of linking the raw blob URL directly. */
+function guestAttachmentHref(token: string, url: string): string {
+  if (isVercelBlobStorageUrl(url) && parseGuestUploadBlobPathFromUrl(url)) {
+    return `/api/rfp/guest/file?token=${encodeURIComponent(token)}&url=${encodeURIComponent(url)}`
+  }
+  return url
 }
 
 function agencyDisplayName(agency: AgencyData | null | undefined): string {
@@ -1030,7 +1040,7 @@ export default function GuestRfpRespondPage() {
                         {response.attachments.map((a, i) => (
                           <li key={`${a.url}-${i}`}>
                             <a
-                              href={a.url}
+                              href={guestAttachmentHref(token, a.url)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 font-mono text-xs text-accent hover:underline"

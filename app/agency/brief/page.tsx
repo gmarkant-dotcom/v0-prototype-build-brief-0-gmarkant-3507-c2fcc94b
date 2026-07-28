@@ -485,15 +485,6 @@ function BriefInterpretationContent() {
       const user = session?.user ?? null
       if (!user) { router.push("/auth/login"); return }
 
-      // Diagnostic: visible in browser DevTools console
-      console.log("[brief/interpret] auth state", {
-        userId: user.id,
-        email: user.email,
-        hasToken: !!session?.access_token,
-        tokenPreview: session?.access_token ? session.access_token.slice(0, 20) + "..." : "MISSING",
-        expiresAt: session?.expires_at,
-      })
-
       const briefTitle = deriveBriefTitle(briefFileName || null, effectiveBriefText)
       const selectedAnalyses = (Object.keys(checks) as AnalysisType[]).filter((k) => checks[k])
 

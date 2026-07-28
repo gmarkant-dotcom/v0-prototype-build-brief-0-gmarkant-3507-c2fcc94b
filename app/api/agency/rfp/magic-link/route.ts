@@ -286,7 +286,7 @@ export async function GET(request: NextRequest) {
         const { data: matchedProfiles } = await service
           .from("profiles")
           .select("email")
-          .or(emails.map((e) => `email.ilike.${e}`).join(","))
+          .in("email", emails)
         partnerEmailSet = new Set((matchedProfiles || []).map((p) => (p.email as string || "").toLowerCase()))
       }
       const enriched = (invites || []).map((i) => ({

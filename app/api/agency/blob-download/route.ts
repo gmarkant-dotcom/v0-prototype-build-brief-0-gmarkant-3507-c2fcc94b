@@ -5,6 +5,7 @@ import {
   isVercelBlobStorageUrl,
   parsePartnerRfpBlobPathFromUrl,
   parseProjectBlobPathFromUrl,
+  parseGuestUploadBlobPathFromUrl,
   displayFilenameFromBlobUrl,
 } from "@/lib/vercel-blob-url"
 
@@ -41,7 +42,8 @@ export async function GET(request: NextRequest) {
 
     const parsedRfp = parsePartnerRfpBlobPathFromUrl(blobUrl)
     const parsedProject = parseProjectBlobPathFromUrl(blobUrl)
-    if (!parsedRfp && !parsedProject) {
+    const parsedGuestUpload = parseGuestUploadBlobPathFromUrl(blobUrl)
+    if (!parsedRfp && !parsedProject && !parsedGuestUpload) {
       return NextResponse.json({ error: "Unrecognized blob path" }, { status: 400 })
     }
 
@@ -92,6 +94,18 @@ export async function GET(request: NextRequest) {
         .maybeSingle()
 
       if (projectErr || !project || project.agency_id !== user.id) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 })
+      }
+    }
+
+    if (parsedGuestUpload) {
+      const { data: tokenRow, error: tokenErr } = await supabase
+        .from("rfp_magic_tokens")
+        .select("agency_id")
+        .eq("token", parsedGuestUpload.token)
+        .maybeSingle()
+
+      if (tokenErr || !tokenRow || tokenRow.agency_id !== user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
     }

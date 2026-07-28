@@ -7,6 +7,7 @@ import { AgencyLayout } from "@/components/agency-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn, formatSubmittedAt } from "@/lib/utils"
 import { buildBidTimeline } from "@/lib/bid-timeline"
+import { isVercelBlobStorageUrl, parseGuestUploadBlobPathFromUrl } from "@/lib/vercel-blob-url"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, Users, AlertTriangle, Clock, CheckCircle, XCircle,
@@ -127,6 +128,15 @@ function formatDeadline(raw: string | null | undefined): string | null {
   const d = new Date(raw)
   if (isNaN(d.getTime())) return null
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
+/** Guest RFP bid uploads are stored as private blobs - route them through the
+ *  authenticated agency blob-download proxy instead of linking the raw blob URL directly. */
+function attachmentHref(url: string): string {
+  if (isVercelBlobStorageUrl(url) && parseGuestUploadBlobPathFromUrl(url)) {
+    return `/api/agency/blob-download?url=${encodeURIComponent(url)}`
+  }
+  return url
 }
 
 function bestBudgetDisplay(row: BidRow): string | null {
@@ -380,7 +390,7 @@ function BidDetailDialogInner({ initialRow, onClose }: { initialRow: BidRow; onC
                       {row.attachments.map((a, i) => (
                         <li key={`${a.url}-${i}`}>
                           <a
-                            href={a.url}
+                            href={attachmentHref(a.url)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1.5 font-mono text-xs text-accent hover:underline"

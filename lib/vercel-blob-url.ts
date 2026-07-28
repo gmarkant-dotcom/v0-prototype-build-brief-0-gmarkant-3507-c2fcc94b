@@ -57,3 +57,21 @@ export function parseProjectBlobPathFromUrl(blobUrl: string): {
     return null
   }
 }
+
+/** Path shape from guest RFP bid upload: `rfp-guest-uploads/{token}/{safeName}` */
+export function parseGuestUploadBlobPathFromUrl(blobUrl: string): {
+  token: string
+  fileSegment: string
+} | null {
+  try {
+    const pathname = new URL(blobUrl).pathname.replace(/^\//, "")
+    const parts = pathname.split("/").filter(Boolean)
+    if (parts.length < 3 || parts[0] !== "rfp-guest-uploads") return null
+    return {
+      token: parts[1],
+      fileSegment: parts.slice(2).join("/"),
+    }
+  } catch {
+    return null
+  }
+}

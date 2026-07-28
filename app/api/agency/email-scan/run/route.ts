@@ -37,27 +37,39 @@ async function enrichWithLigamentData(
   if (contacts.length === 0) return []
 
   const profileByEmail = new Map<string, string>()
-  const profileFilter = contacts.map((c) => `email.ilike.${c.email}`).join(",")
-  const { data: profiles } = await service.from("profiles").select("id, email").or(profileFilter)
+  const contactEmails = Array.from(new Set(contacts.map((c) => c.email)))
+  const { data: profiles } = await service.from("profiles").select("id, email").in("email", contactEmails)
   for (const p of profiles || []) {
     if (p.email) profileByEmail.set(String(p.email).toLowerCase(), p.id as string)
   }
 
   const profileIds = Array.from(new Set(Array.from(profileByEmail.values())))
-  const partnershipFilterParts = contacts.map((c) => `partner_email.ilike.${c.email}`)
-  if (profileIds.length > 0) {
-    partnershipFilterParts.push(`partner_id.in.(${profileIds.join(",")})`)
-  }
   const partnerIdSet = new Set<string>()
   const partnerEmailSet = new Set<string>()
-  const { data: partnerships } = await service
+
+  // Two separate .in() queries instead of a single .or() built from interpolated,
+  // externally-influenced email strings (Gmail message headers) - each .in() call is
+  // safely parameterized by the client, unlike a hand-built PostgREST filter string.
+  const { data: partnershipsByEmail } = await service
     .from("partnerships")
     .select("partner_id, partner_email")
     .eq("agency_id", agencyId)
-    .or(partnershipFilterParts.join(","))
-  for (const row of partnerships || []) {
+    .in("partner_email", contactEmails)
+  for (const row of partnershipsByEmail || []) {
     if (row.partner_id) partnerIdSet.add(row.partner_id as string)
     if (row.partner_email) partnerEmailSet.add(String(row.partner_email).toLowerCase())
+  }
+
+  if (profileIds.length > 0) {
+    const { data: partnershipsByPartnerId } = await service
+      .from("partnerships")
+      .select("partner_id, partner_email")
+      .eq("agency_id", agencyId)
+      .in("partner_id", profileIds)
+    for (const row of partnershipsByPartnerId || []) {
+      if (row.partner_id) partnerIdSet.add(row.partner_id as string)
+      if (row.partner_email) partnerEmailSet.add(String(row.partner_email).toLowerCase())
+    }
   }
 
   return contacts.map((contact) => {

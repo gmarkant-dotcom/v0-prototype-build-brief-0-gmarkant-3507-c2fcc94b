@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     }
 
     const filename = sanitizeFilename(file.name)
-    const blob = await put(`rfp-guest-uploads/${token}/${filename}`, file, { access: "public" })
+    const blob = await put(`rfp-guest-uploads/${token}/${filename}`, file, { access: "private" })
 
     console.log("[api] success", { route, method: "POST", pathname: blob.pathname })
     return NextResponse.json({ url: blob.url, filename: file.name, size: file.size })

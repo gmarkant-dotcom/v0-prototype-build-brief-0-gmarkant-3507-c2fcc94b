@@ -4,8 +4,17 @@ import { generateGrantAccessToken } from "@/lib/grant-access-token"
 import { createClient } from "@/lib/supabase/server"
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 
+// This route is intended to be called only by the Supabase DB webhook on new-user
+// insert, never directly by a client. Require a shared secret so an unauthenticated
+// caller cannot mint a signed grant-access token for an arbitrary user id.
 export async function POST(req: Request) {
   try {
+    const expectedSecret = process.env.WEBHOOK_SECRET
+    const providedSecret = req.headers.get("x-webhook-secret")
+    if (!expectedSecret || providedSecret !== expectedSecret) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     const body = await req.json()
     const record = body?.record as
       | {
