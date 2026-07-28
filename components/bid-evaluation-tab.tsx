@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { forwardRef, useEffect, useImperativeHandle, useState } from "react"
 import { mutate } from "swr"
 import { computeCompositeScore, compositeScoreColorClass } from "@/lib/bid-scoring"
 import { AiMarkdown } from "@/components/ai-markdown"
@@ -42,7 +42,16 @@ type Evaluation = {
 
 type Draft = { humanScore: string; humanNotes: string }
 
-export function BidEvaluationTab({ responseId }: { responseId: string }) {
+export type BidEvaluationTabHandle = {
+  /** Saves the current draft and returns whether it succeeded - used by compare
+   *  mode's "Evaluate All" flow to save-then-advance to the next vendor. */
+  save: () => Promise<boolean>
+}
+
+export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId: string }>(function BidEvaluationTab(
+  { responseId },
+  ref
+) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [criteria, setCriteria] = useState<Criterion[]>([])
@@ -189,6 +198,8 @@ export function BidEvaluationTab({ responseId }: { responseId: string }) {
       setSaving(false)
     }
   }
+
+  useImperativeHandle(ref, () => ({ save: saveEvaluation }))
 
   if (loading) {
     return <p className="text-sm text-foreground-muted">Loading...</p>
@@ -396,4 +407,4 @@ export function BidEvaluationTab({ responseId }: { responseId: string }) {
       </div>
     </div>
   )
-}
+})

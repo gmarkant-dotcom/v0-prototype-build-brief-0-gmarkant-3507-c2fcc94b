@@ -18,6 +18,7 @@ import {
   scopeKeyForRow,
   buildRankedBlocks,
   sortRankedGroup,
+  requestRanking,
 } from "@/lib/bid-shared"
 import { compositeScoreColorClass } from "@/lib/bid-scoring"
 import { AiMarkdown } from "@/components/ai-markdown"
@@ -282,21 +283,6 @@ function BidCard({
 }
 
 // ── Ranked group ──────────────────────────────────────────────────────────────
-
-async function requestRanking(responseIds: string[], force: boolean): Promise<{ ok: true; narrative: string } | { ok: false; error: string }> {
-  try {
-    const res = await fetch("/api/agency/bids/rank", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ response_ids: responseIds, force }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) return { ok: false, error: data?.error || "Analysis unavailable" }
-    return { ok: true, narrative: data.narrative }
-  } catch {
-    return { ok: false, error: "Analysis unavailable" }
-  }
-}
 
 function RankedGroup({
   rows, groupBy, onView, selectedIds, onToggleSelect,

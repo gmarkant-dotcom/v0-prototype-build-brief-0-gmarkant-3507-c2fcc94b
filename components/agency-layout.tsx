@@ -32,9 +32,9 @@ const navSections = [
   {
     label: "BID REQUESTS",
     items: [
-      { number: "00", title: "Partner Pool", href: "/agency/pool", hasPoolDropdown: true, tooltip: "Your curated network of vetted vendors. Manage relationships and discover new partners." },
+      { number: "00", title: "Partner Pool", href: "/agency/pool", hasPoolDropdown: true, tooltip: "Manage your vendor network across active partners, invited contacts, and discovered vendors" },
       { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Create and send scoped RFPs to your partner pool or any vendor via Lightning RFP Magic Link" },
-      { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Review, shortlist, and award bids from partners and guest vendors" },
+      { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Compare, evaluate, and score vendor bids with AI-powered analysis and side-by-side cost breakdowns" },
       { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track partner onboarding across active projects" },
     ]
   },
@@ -184,7 +184,7 @@ function PoolNavItem({ pathname }: { pathname: string | null }) {
           <HoverCardTrigger asChild>{link}</HoverCardTrigger>
           <HoverCardContent side="right" align="start" className="w-64 p-1.5 bg-background border-border">
             <p className="px-3 pt-1.5 pb-2 mb-1 border-b border-border text-xs text-foreground-muted">
-              Your curated network of vetted vendors. Manage relationships and discover new partners.
+              Manage your vendor network across active partners, invited contacts, and discovered vendors
             </p>
             <Link
               href="/agency/pool"

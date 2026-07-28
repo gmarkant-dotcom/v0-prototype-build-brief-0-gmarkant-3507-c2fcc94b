@@ -201,3 +201,23 @@ export function sortRankedGroup(rows: BidRow[]): { row: BidRow; rank: number | n
   const unscored = rows.filter((r) => !isScoredComplete(r))
   return [...scored.map((row, i) => ({ row, rank: i + 1 })), ...unscored.map((row) => ({ row, rank: null }))]
 }
+
+/** Calls POST /api/agency/bids/rank - shared by the pipeline's ranked-group card and
+ *  compare mode's ranking narrative, both of which just need the resulting text. */
+export async function requestRanking(
+  responseIds: string[],
+  force: boolean
+): Promise<{ ok: true; narrative: string } | { ok: false; error: string }> {
+  try {
+    const res = await fetch("/api/agency/bids/rank", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ response_ids: responseIds, force }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data?.error || "Analysis unavailable" }
+    return { ok: true, narrative: data.narrative }
+  } catch {
+    return { ok: false, error: "Analysis unavailable" }
+  }
+}

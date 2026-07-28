@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { mutate } from "swr"
 import {
@@ -23,7 +23,7 @@ import {
 } from "@/lib/business-criteria"
 import { meetsInsuranceMinimum } from "@/lib/insurance-limit-parser"
 import { AiMarkdown } from "@/components/ai-markdown"
-import { BidEvaluationTab } from "@/components/bid-evaluation-tab"
+import { BidEvaluationTab, type BidEvaluationTabHandle } from "@/components/bid-evaluation-tab"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -51,14 +51,33 @@ const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 type LineItem = { category: string; amount: number; percentage_of_total: number; description: string }
 type Decomposition = { line_items: LineItem[]; narrative_summary: string | null }
 
-export function BidDetailSheet({ row, onClose }: { row: BidRow | null; onClose: () => void }) {
+type BidDetailSheetProps = {
+  row: BidRow | null
+  onClose: () => void
+  /** Opens directly to a given tab - used by compare mode's "Evaluate"/"Evaluate All". */
+  initialTab?: "analysis" | "cost" | "evaluate"
+  /** When set, shows a "Save & Next: {label}" action that saves the current evaluation
+   *  before advancing - compare mode's "Evaluate All" sequential flow. */
+  onNext?: { label: string; onClick: () => void } | null
+}
+
+export function BidDetailSheet({ row, onClose, initialTab, onNext }: BidDetailSheetProps) {
   if (!row) return null
   // Key by id so switching to a different bid gets a fresh instance - local action/feedback
   // state below must not leak from one bid's sheet session into another's.
-  return <BidDetailSheetInner key={row.id} initialRow={row} onClose={onClose} />
+  return (
+    <BidDetailSheetInner key={row.id} initialRow={row} onClose={onClose} initialTab={initialTab} onNext={onNext} />
+  )
 }
 
-function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onClose: () => void }) {
+function BidDetailSheetInner({
+  initialRow, onClose, initialTab, onNext,
+}: {
+  initialRow: BidRow
+  onClose: () => void
+  initialTab?: "analysis" | "cost" | "evaluate"
+  onNext?: { label: string; onClick: () => void } | null
+}) {
   const [row, setRow] = useState(initialRow)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -68,8 +87,11 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
   const [awardConfirmOpen, setAwardConfirmOpen] = useState(false)
   const [shortlistHover, setShortlistHover] = useState(false)
   const [meetingHover, setMeetingHover] = useState(false)
+  const evaluationTabRef = useRef<BidEvaluationTabHandle>(null)
+  const [nextSaving, setNextSaving] = useState(false)
+  const [nextError, setNextError] = useState<string | null>(null)
 
-  const [activeTab, setActiveTab] = useState("analysis")
+  const [activeTab, setActiveTab] = useState(initialTab || "analysis")
   const [analysisGenerating, setAnalysisGenerating] = useState(false)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [decomposition, setDecomposition] = useState<Decomposition | null>(null)
@@ -135,6 +157,22 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
     }
   }
 
+  const handleNext = async () => {
+    if (!onNext) return
+    setNextSaving(true)
+    setNextError(null)
+    try {
+      const ok = await evaluationTabRef.current?.save()
+      if (ok === false) {
+        setNextError("Failed to save evaluation")
+        return
+      }
+      onNext.onClick()
+    } finally {
+      setNextSaving(false)
+    }
+  }
+
   const generateAnalysis = async () => {
     setAnalysisGenerating(true)
     setAnalysisError(null)
@@ -186,7 +224,7 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
 
   // Lazy: only fetch the cost breakdown the first time that tab is actually viewed.
   const handleTabChange = (value: string) => {
-    setActiveTab(value)
+    setActiveTab(value as "analysis" | "cost" | "evaluate")
     if (value === "cost" && row.response_exists && !decomposeFetched && !decomposing) {
       void loadDecomposition(false)
     }
@@ -221,7 +259,7 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
             </SheetDescription>
 
             {/* Actions pinned at the top, always visible without scrolling. */}
-            {(canMutate || projectId) && (
+            {(canMutate || projectId || onNext) && (
               <div className="flex flex-wrap gap-2 pt-2">
                 {canMutate && (
                   <>
@@ -333,7 +371,22 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
                     <Link href={`/agency/projects/${projectId}`}>Go to Project</Link>
                   </Button>
                 )}
+                {onNext && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-accent text-accent-foreground hover:bg-accent/90"
+                    onClick={() => void handleNext()}
+                    disabled={nextSaving}
+                  >
+                    {nextSaving && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                    Save &amp; Next: {onNext.label}
+                  </Button>
+                )}
               </div>
+            )}
+            {nextError && (
+              <p className="px-0 pb-2 text-xs text-red-300">{nextError}</p>
             )}
           </SheetHeader>
 
@@ -683,7 +736,7 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
               </TabsContent>
 
               <TabsContent value="evaluate" className="flex-1 overflow-y-auto px-6 py-4">
-                {canMutate && <BidEvaluationTab responseId={row.id} />}
+                {canMutate && <BidEvaluationTab ref={evaluationTabRef} responseId={row.id} />}
               </TabsContent>
             </Tabs>
           )}

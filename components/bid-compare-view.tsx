@@ -6,7 +6,9 @@ import {
   type BidRow,
   bestBudgetDisplay,
   bestBudgetAmount,
+  requestRanking,
 } from "@/lib/bid-shared"
+import { compositeScoreColorClass } from "@/lib/bid-scoring"
 import { formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import {
   DESIGNATION_KEYS,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/business-criteria"
 import { cn } from "@/lib/utils"
 import { AiMarkdown } from "@/components/ai-markdown"
+import { BidDetailSheet } from "@/components/bid-detail-sheet"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
@@ -63,6 +66,14 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
   const [comparisonRequested, setComparisonRequested] = useState(false)
 
   const [generatingSummaryIds, setGeneratingSummaryIds] = useState<Set<string>>(new Set())
+
+  const [evaluateQueue, setEvaluateQueue] = useState<BidRow[] | null>(null)
+  const [evaluateIndex, setEvaluateIndex] = useState(0)
+
+  const [rankingNarrative, setRankingNarrative] = useState<string | null>(null)
+  const [rankingGenerating, setRankingGenerating] = useState(false)
+  const [rankingError, setRankingError] = useState<string | null>(null)
+  const [rankingRequested, setRankingRequested] = useState(false)
 
   const responseIds = useMemo(() => rows.map((r) => r.id), [rows])
   const maxBudget = useMemo(
@@ -204,6 +215,30 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDecompositionsReady])
 
+  const allScored = rows.every((r) => r.composite_score != null)
+
+  const runRanking = async (force: boolean) => {
+    setRankingGenerating(true)
+    setRankingError(null)
+    setRankingRequested(true)
+    const result = await requestRanking(rows.map((r) => r.id), force)
+    setRankingGenerating(false)
+    if (!result.ok) {
+      setRankingError("Analysis unavailable - try again")
+      return
+    }
+    setRankingNarrative(result.narrative)
+  }
+
+  // Once every compared vendor has a composite score, show the ranking narrative
+  // (cached server-side, so this is nearly instant on repeat views).
+  useEffect(() => {
+    if (allScored && !rankingRequested) {
+      void runRanking(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allScored])
+
   const categoryUnion = useMemo(() => {
     const set = new Set<string>()
     for (const items of decompositions.values()) {
@@ -251,8 +286,22 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
 
       {/* At a Glance - existing data only, no AI, renders instantly */}
       <div className="rounded-xl border border-border/40 bg-white/[0.02] overflow-hidden">
-        <div className="px-5 pt-5 pb-1">
+        <div className="px-5 pt-5 pb-1 flex items-center justify-between gap-3 flex-wrap">
           <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider">At a Glance</div>
+          {rows.filter((r) => r.composite_score == null).length >= 2 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px] border-accent/40 bg-accent/10 text-accent hover:bg-accent/20"
+              onClick={() => {
+                const unscored = rows.filter((r) => r.composite_score == null)
+                setEvaluateQueue(unscored)
+                setEvaluateIndex(0)
+              }}
+            >
+              Evaluate All
+            </Button>
+          )}
         </div>
         <div className="overflow-x-auto p-5 pt-3">
           <Table>
@@ -297,6 +346,17 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                         >
                           Decline
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-[10px] border-border text-foreground hover:bg-white/5"
+                          onClick={() => {
+                            setEvaluateQueue([row])
+                            setEvaluateIndex(0)
+                          }}
+                        >
+                          Evaluate
+                        </Button>
                       </div>
                     </div>
                   </TableHead>
@@ -304,6 +364,27 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
               </TableRow>
             </TableHeader>
             <TableBody>
+              <TableRow className="border-border/30">
+                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Score</TableCell>
+                {rows.map((row) => (
+                  <TableCell key={row.id}>
+                    {row.composite_score != null ? (
+                      <span
+                        className={cn(
+                          "inline-flex items-center justify-center w-9 h-9 rounded-full border font-mono text-xs font-bold",
+                          compositeScoreColorClass(row.composite_score).bg,
+                          compositeScoreColorClass(row.composite_score).text,
+                          compositeScoreColorClass(row.composite_score).border
+                        )}
+                      >
+                        {Math.round(row.composite_score)}
+                      </span>
+                    ) : (
+                      <span className="text-foreground-muted text-xs">Not scored</span>
+                    )}
+                  </TableCell>
+                ))}
+              </TableRow>
               <TableRow className="border-border/30">
                 <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Budget</TableCell>
                 {rows.map((row) => {
@@ -495,6 +576,58 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
           )}
         </div>
       </div>
+
+      {allScored && (
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-4">
+          <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
+            <Sparkles className="w-3 h-3 text-accent" /> Ranking Recommendation
+          </div>
+          {rankingGenerating ? (
+            <div className="space-y-2">
+              <p className="text-xs text-foreground-muted">Analyzing bid...</p>
+              <Skeleton className="h-3 w-full bg-white/10" />
+              <Skeleton className="h-3 w-2/3 bg-white/10" />
+            </div>
+          ) : rankingError ? (
+            <div className="flex items-center gap-2 font-mono text-[10px] text-red-300">
+              <span>{rankingError}</span>
+              <button type="button" onClick={() => void runRanking(true)} className="underline hover:text-red-200">
+                Retry
+              </button>
+            </div>
+          ) : rankingNarrative ? (
+            <>
+              <AiMarkdown content={rankingNarrative} />
+              <button
+                type="button"
+                onClick={() => void runRanking(true)}
+                className="mt-1.5 font-mono text-[10px] text-accent hover:underline"
+              >
+                Regenerate Rankings
+              </button>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {evaluateQueue && (
+        <BidDetailSheet
+          row={evaluateQueue[evaluateIndex]}
+          initialTab="evaluate"
+          onNext={
+            evaluateIndex < evaluateQueue.length - 1
+              ? {
+                  label: evaluateQueue[evaluateIndex + 1].partner_display_name,
+                  onClick: () => setEvaluateIndex((i) => i + 1),
+                }
+              : null
+          }
+          onClose={() => {
+            setEvaluateQueue(null)
+            setEvaluateIndex(0)
+          }}
+        />
+      )}
 
       <AlertDialog open={Boolean(awardTarget)} onOpenChange={(open) => { if (!open) setAwardTarget(null) }}>
         <AlertDialogContent className="border border-white/15 bg-[#081F1F] text-foreground shadow-2xl sm:max-w-md">
