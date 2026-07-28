@@ -5,6 +5,7 @@ import { mutate } from "swr"
 import { AgencyLayout } from "@/components/agency-layout"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
 import { BidCompareView } from "@/components/bid-compare-view"
+import { ScoringSettingsSheet } from "@/components/scoring-settings-sheet"
 import { useFetch } from "@/hooks/useFetch"
 import { cn, formatSubmittedAt } from "@/lib/utils"
 import {
@@ -19,7 +20,7 @@ import {
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, Users, AlertTriangle, Clock, XCircle,
-  MoreVertical, Sparkles, X,
+  MoreVertical, Sparkles, X, Settings,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -371,6 +372,7 @@ export default function AgencyBidsPage() {
   const [viewingBid, setViewingBid] = useState<BidRow | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [compareRows, setCompareRows] = useState<BidRow[] | null>(null)
+  const [scoringSettingsOpen, setScoringSettingsOpen] = useState(false)
 
   const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(RFP_RESPONSES_URL)
 
@@ -456,14 +458,25 @@ export default function AgencyBidsPage() {
     <AgencyLayout>
       <div className="p-8 max-w-5xl space-y-6 pb-24">
         {/* Header */}
-        <div>
-          <h1 className="font-display font-bold text-3xl text-foreground">Bid Management</h1>
-          <p className="text-foreground-muted mt-1">
-            {isLoading
-              ? "Loading…"
-              : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "client" ? "client" : "partner agency"}${totalGroups !== 1 ? "s" : ""}`
-            }
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="font-display font-bold text-3xl text-foreground">Bid Management</h1>
+            <p className="text-foreground-muted mt-1">
+              {isLoading
+                ? "Loading…"
+                : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "client" ? "client" : "partner agency"}${totalGroups !== 1 ? "s" : ""}`
+              }
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setScoringSettingsOpen(true)}
+            className="shrink-0 p-2 rounded-md text-foreground-muted hover:bg-white/10 hover:text-foreground transition-colors"
+            aria-label="Scoring settings"
+            title="Scoring settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Search + group-by toggle */}
@@ -536,6 +549,7 @@ export default function AgencyBidsPage() {
         )}
       </div>
       <BidDetailSheet row={viewingBid} onClose={() => setViewingBid(null)} />
+      <ScoringSettingsSheet open={scoringSettingsOpen} onOpenChange={setScoringSettingsOpen} />
 
       {selectedRows.length >= 2 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 rounded-full border border-border bg-background/95 backdrop-blur px-5 py-3 shadow-2xl">
