@@ -1,4 +1,5 @@
-import { createHash } from "crypto"
+// No Node built-ins here (e.g. "crypto") - this file is imported from client components
+// for live composite-score calculation, not just from API routes.
 
 export type ScoreForComposite = {
   weight: number
@@ -30,10 +31,4 @@ export function compositeScoreColorClass(score: number): { bg: string; text: str
   if (score >= 80) return { bg: "bg-emerald-500/15", text: "text-emerald-300", border: "border-emerald-400/40" }
   if (score >= 60) return { bg: "bg-amber-500/15", text: "text-amber-300", border: "border-amber-400/40" }
   return { bg: "bg-red-500/15", text: "text-red-300", border: "border-red-400/40" }
-}
-
-/** Same "{projectId}::{scopeItemName}" shape as lib/bid-shared.ts's scopeKeyForRow, hashed
- *  so it can be stored in bid_evaluations.ranked_recommendation_group without a new table. */
-export function hashScopeGroup(projectId: string, scopeItemName: string): string {
-  return createHash("sha256").update(`${projectId}::${scopeItemName}`).digest("hex")
 }

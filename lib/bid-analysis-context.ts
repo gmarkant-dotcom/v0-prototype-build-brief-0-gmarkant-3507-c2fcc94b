@@ -97,3 +97,9 @@ export function hashResponseIds(responseIds: string[]): string {
   const sorted = [...responseIds].sort()
   return createHash("sha256").update(sorted.join(",")).digest("hex")
 }
+
+/** Same "{projectId}::{scopeItemName}" shape as lib/bid-shared.ts's scopeKeyForRow, hashed
+ *  so it can be stored in bid_evaluations.ranked_recommendation_group without a new table. */
+export function hashScopeGroup(projectId: string, scopeItemName: string): string {
+  return createHash("sha256").update(`${projectId}::${scopeItemName}`).digest("hex")
+}

@@ -23,6 +23,7 @@ import {
 } from "@/lib/business-criteria"
 import { meetsInsuranceMinimum } from "@/lib/insurance-limit-parser"
 import { AiMarkdown } from "@/components/ai-markdown"
+import { BidEvaluationTab } from "@/components/bid-evaluation-tab"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -346,6 +347,7 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
                 <TabsList>
                   <TabsTrigger value="analysis">Analysis</TabsTrigger>
                   <TabsTrigger value="cost">Cost Breakdown</TabsTrigger>
+                  <TabsTrigger value="evaluate">Evaluate</TabsTrigger>
                 </TabsList>
               </div>
 
@@ -678,6 +680,10 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
                 ) : (
                   <p className="text-sm text-foreground-muted">No cost breakdown available yet.</p>
                 )}
+              </TabsContent>
+
+              <TabsContent value="evaluate" className="flex-1 overflow-y-auto px-6 py-4">
+                {canMutate && <BidEvaluationTab responseId={row.id} />}
               </TabsContent>
             </Tabs>
           )}
