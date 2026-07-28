@@ -16,6 +16,7 @@ import {
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
 import { cn } from "@/lib/utils"
+import { AiMarkdown } from "@/components/ai-markdown"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
@@ -61,11 +62,60 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
   const [comparisonError, setComparisonError] = useState<string | null>(null)
   const [comparisonRequested, setComparisonRequested] = useState(false)
 
+  const [generatingSummaryIds, setGeneratingSummaryIds] = useState<Set<string>>(new Set())
+
   const responseIds = useMemo(() => rows.map((r) => r.id), [rows])
   const maxBudget = useMemo(
     () => Math.max(0, ...rows.map((r) => bestBudgetAmount(r) ?? 0)),
     [rows]
   )
+
+  // At a Glance renders instantly from already-loaded data; missing AI short summaries
+  // are backfilled in parallel afterward without blocking the rest of the table.
+  useEffect(() => {
+    const missingSummaryIds = initialRows.filter((r) => !r.ai_summary_short).map((r) => r.id)
+    if (missingSummaryIds.length === 0) return
+    setGeneratingSummaryIds(new Set(missingSummaryIds))
+    let cancelled = false
+    Promise.all(
+      missingSummaryIds.map(async (id) => {
+        try {
+          const res = await fetch(`/api/agency/bids/${id}/generate-summary`, { method: "POST" })
+          const data = await res.json().catch(() => ({}))
+          if (res.ok && !cancelled) {
+            setRows((prev) =>
+              prev.map((r) =>
+                r.id === id
+                  ? {
+                      ...r,
+                      ai_summary_short: data.ai_summary_short ?? r.ai_summary_short,
+                      ai_summary_detailed: data.ai_summary_detailed ?? r.ai_summary_detailed,
+                      ai_summary_generated_at: data.ai_summary_generated_at ?? r.ai_summary_generated_at,
+                    }
+                  : r
+              )
+            )
+          }
+        } catch {
+          // Leave ai_summary_short null - the row falls back to "Not generated yet".
+        } finally {
+          if (!cancelled) {
+            setGeneratingSummaryIds((prev) => {
+              const next = new Set(prev)
+              next.delete(id)
+              return next
+            })
+          }
+        }
+      })
+    ).then(() => {
+      if (!cancelled) void mutate(RFP_RESPONSES_URL)
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Check (not generate) which selected bids already have a decomposition on mount.
   useEffect(() => {
@@ -317,7 +367,14 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 <TableCell className="text-foreground-muted font-mono text-[10px] uppercase align-top">AI Summary</TableCell>
                 {rows.map((row) => (
                   <TableCell key={row.id} className="whitespace-normal text-xs text-foreground/80 align-top">
-                    {row.ai_summary_short || "Not generated yet"}
+                    {generatingSummaryIds.has(row.id) ? (
+                      <div className="space-y-1.5 max-w-[200px]">
+                        <Skeleton className="h-2.5 w-full bg-white/10" />
+                        <Skeleton className="h-2.5 w-2/3 bg-white/10" />
+                      </div>
+                    ) : (
+                      row.ai_summary_short || "Not generated yet"
+                    )}
                   </TableCell>
                 ))}
               </TableRow>
@@ -421,7 +478,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                   </div>
                 ) : comparison ? (
                   <>
-                    <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">{comparison.narrative}</p>
+                    <AiMarkdown content={comparison.narrative} />
                     <button
                       type="button"
                       onClick={() => void runComparison(true)}

@@ -22,6 +22,7 @@ import {
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
 import { meetsInsuranceMinimum } from "@/lib/insurance-limit-parser"
+import { AiMarkdown } from "@/components/ai-markdown"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
@@ -368,9 +369,7 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
                       </button>
                     </div>
                   ) : row.ai_summary_detailed ? (
-                    <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                      {row.ai_summary_detailed}
-                    </p>
+                    <AiMarkdown content={row.ai_summary_detailed} />
                   ) : (
                     <p className="text-sm text-foreground-muted">No analysis available yet.</p>
                   )}
@@ -664,9 +663,7 @@ function BidDetailSheetInner({ initialRow, onClose }: { initialRow: BidRow; onCl
                         <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
                           <Sparkles className="w-3 h-3 text-accent" /> Cost Structure Notes
                         </div>
-                        <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                          {decomposition.narrative_summary}
-                        </p>
+                        <AiMarkdown content={decomposition.narrative_summary} />
                       </div>
                     )}
 
