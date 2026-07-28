@@ -58,7 +58,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ respons
   return NextResponse.json({ evaluation: { ...evaluation, scores: scores || [] } })
 }
 
-type ScoreInput = { criterion_id?: unknown; human_score?: unknown; human_notes?: unknown }
+type ScoreInput = { criterion_id?: unknown; human_score?: unknown; human_notes?: unknown; weight?: unknown }
+
+const MIN_WEIGHT = 0.5
+const MAX_WEIGHT = 3.0
 
 // PUT - create the evaluation shell (first "Start Evaluation" click, scores: []) or save
 // human scores/notes and recompute the composite. Body: { scores, status }.
@@ -128,10 +131,19 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
           const humanNotes = typeof s.human_notes === "string" ? s.human_notes.trim() || null : null
           const aiScore = (existing?.ai_score as number | null) ?? null
           const isOverridden = humanScore != null && humanScore !== aiScore
+          // Per-evaluation weight customization: use the value sent by the client if
+          // present and valid, otherwise keep whatever this row already has (or the
+          // criterion's agency-wide default for a brand new row). This never touches
+          // bid_scoring_criteria.default_weight itself.
+          const requestedWeight = typeof s.weight === "number" ? s.weight : parseFloat(String(s.weight ?? ""))
+          const weight =
+            Number.isFinite(requestedWeight) && requestedWeight >= MIN_WEIGHT && requestedWeight <= MAX_WEIGHT
+              ? requestedWeight
+              : (existing?.weight as number | undefined) ?? defaultWeightByCriterion.get(criterionId) ?? 1.0
           return {
             evaluation_id: evaluation.id,
             criterion_id: criterionId,
-            weight: (existing?.weight as number | undefined) ?? defaultWeightByCriterion.get(criterionId) ?? 1.0,
+            weight,
             ai_score: aiScore,
             human_score: humanScore,
             human_notes: humanNotes,

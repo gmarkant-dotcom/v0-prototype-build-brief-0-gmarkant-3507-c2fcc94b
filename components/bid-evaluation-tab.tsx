@@ -4,12 +4,22 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from "react"
 import { mutate } from "swr"
 import { computeCompositeScore, compositeScoreColorClass } from "@/lib/bid-scoring"
 import { AiMarkdown } from "@/components/ai-markdown"
+import { ScoringSettingsSheet } from "@/components/scoring-settings-sheet"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { Sparkles, Loader2, CheckCircle } from "lucide-react"
+import { Sparkles, Loader2, CheckCircle, Settings } from "lucide-react"
+
+const STATUS_HELPER_TEXT: Record<Evaluation["status"], string> = {
+  draft: "Evaluation started, scores are tentative",
+  in_progress: "Partially scored, not yet finalized",
+  complete: "All scores finalized, counts toward rankings",
+}
+
+const MIN_WEIGHT = 0.5
+const MAX_WEIGHT = 3.0
 
 const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 
@@ -57,7 +67,9 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
   const [criteria, setCriteria] = useState<Criterion[]>([])
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [draft, setDraft] = useState<Record<string, Draft>>({})
+  const [weightDraft, setWeightDraft] = useState<Record<string, string>>({})
   const [status, setStatus] = useState<Evaluation["status"]>("draft")
+  const [scoringSettingsOpen, setScoringSettingsOpen] = useState(false)
 
   const [starting, setStarting] = useState(false)
   const [generating, setGenerating] = useState(false)
@@ -152,13 +164,27 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
     })
   }
 
+  /** Current weight for a criterion as a string for the input: the in-session edit if
+   *  there is one, else whatever's already saved on this evaluation, else the
+   *  criterion's agency-wide default. Never mutates bid_scoring_criteria itself. */
+  const weightFor = (criterion: Criterion): string => {
+    if (weightDraft[criterion.id] !== undefined) return weightDraft[criterion.id]
+    const existing = evaluation?.scores.find((s) => s.criterion_id === criterion.id)
+    return String(existing?.weight ?? criterion.default_weight)
+  }
+
+  const updateWeight = (criterionId: string, value: string) => {
+    setWeightDraft((prev) => ({ ...prev, [criterionId]: value }))
+  }
+
   const liveComposite = computeCompositeScore(
     criteria.map((c) => {
       const existing = evaluation?.scores.find((s) => s.criterion_id === c.id)
       const d = draft[c.id]
       const humanScore = d?.humanScore ? parseFloat(d.humanScore) : null
+      const weightNum = parseFloat(weightFor(c))
       return {
-        weight: existing?.weight ?? c.default_weight,
+        weight: Number.isFinite(weightNum) && weightNum > 0 ? weightNum : c.default_weight,
         ai_score: existing?.ai_score ?? null,
         human_score: humanScore,
         is_overridden: humanScore != null,
@@ -173,10 +199,12 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
     try {
       const scores = criteria.map((c) => {
         const d = draft[c.id]
+        const weightNum = parseFloat(weightFor(c))
         return {
           criterion_id: c.id,
           human_score: d?.humanScore ? parseFloat(d.humanScore) : null,
           human_notes: d?.humanNotes || null,
+          weight: Number.isFinite(weightNum) && weightNum > 0 ? weightNum : c.default_weight,
         }
       })
       const res = await fetch(`/api/agency/bids/${responseId}/evaluation`, {
@@ -229,16 +257,49 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
 
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setScoringSettingsOpen(true)}
+          className="flex items-center gap-1.5 font-mono text-[10px] text-foreground-muted hover:text-foreground transition-colors"
+        >
+          <Settings className="w-3.5 h-3.5" /> Scoring Settings
+        </button>
+      </div>
+
       {criteria.map((c) => {
         const existing = evaluation.scores.find((s) => s.criterion_id === c.id)
         const d = draft[c.id] || { humanScore: "", humanNotes: "" }
         const hasHuman = d.humanScore !== ""
+        const currentWeight = weightFor(c)
+        const currentWeightNum = parseFloat(currentWeight)
+        const isCustomWeight = Number.isFinite(currentWeightNum) && currentWeightNum !== c.default_weight
         return (
           <div key={c.id} className="rounded-lg border border-border/40 bg-white/5 p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-display font-bold text-sm text-foreground">{c.name}</span>
-                <span className="font-mono text-[10px] text-foreground-muted">weight {c.default_weight}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[10px] text-foreground-muted">weight</span>
+                  <Input
+                    type="number"
+                    min={MIN_WEIGHT}
+                    max={MAX_WEIGHT}
+                    step={0.5}
+                    value={currentWeight}
+                    onChange={(e) => updateWeight(c.id, e.target.value)}
+                    className="w-16 h-6 px-1.5 text-xs bg-white/5 border-border text-foreground"
+                  />
+                  {isCustomWeight && (
+                    <button
+                      type="button"
+                      onClick={() => updateWeight(c.id, String(c.default_weight))}
+                      className="font-mono text-[9px] text-foreground-muted hover:text-accent underline transition-colors"
+                    >
+                      Reset to default
+                    </button>
+                  )}
+                </div>
               </div>
               {c.description && <p className="text-xs text-foreground-muted mt-1">{c.description}</p>}
             </div>
@@ -346,16 +407,19 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
             </div>
           </div>
 
-          <Select value={status} onValueChange={(v) => setStatus(v as Evaluation["status"])}>
-            <SelectTrigger className="w-[150px] bg-white/5 border-border text-foreground">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="complete">Complete</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="text-right">
+            <Select value={status} onValueChange={(v) => setStatus(v as Evaluation["status"])}>
+              <SelectTrigger className="w-[150px] bg-white/5 border-border text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="complete">Complete</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[10px] text-foreground-muted max-w-[150px]">{STATUS_HELPER_TEXT[status]}</p>
+          </div>
         </div>
 
         {evaluation.ai_recommendation && evaluation.status === "complete" && (
@@ -405,6 +469,8 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
         {generateError && <p className="text-xs text-red-300">{generateError}</p>}
         {saveError && <p className="text-xs text-red-300">{saveError}</p>}
       </div>
+
+      <ScoringSettingsSheet open={scoringSettingsOpen} onOpenChange={setScoringSettingsOpen} />
     </div>
   )
 })

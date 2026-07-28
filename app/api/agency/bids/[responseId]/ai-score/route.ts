@@ -196,6 +196,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "AI scoring failed, please try again." }, { status: 502 })
     }
 
+    // Preserve any weight the agency already customized for this evaluation - a
+    // (re)generate must never silently reset a per-evaluation weight override back to
+    // the criterion's agency-wide default.
+    const { data: existingWeightRows } = await supabase
+      .from("bid_evaluation_scores")
+      .select("criterion_id, weight")
+      .eq("evaluation_id", evaluation.id)
+    const existingWeightByCriterion = new Map(
+      (existingWeightRows || []).map((r) => [r.criterion_id as string, r.weight as number])
+    )
+
     const criteriaByName = new Map(activeCriteria.map((c) => [c.name.trim().toLowerCase(), c]))
     const now = new Date().toISOString()
     const scoreRows: { criterion_id: string; weight: number; ai_score: number; ai_rationale: string }[] = []
@@ -209,7 +220,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       const clamped = Math.min(10, Math.max(1, scoreNum))
       scoreRows.push({
         criterion_id: criterion.id,
-        weight: criterion.default_weight,
+        weight: existingWeightByCriterion.get(criterion.id) ?? criterion.default_weight,
         ai_score: clamped,
         ai_rationale: String(entry.rationale ?? "").trim(),
       })
