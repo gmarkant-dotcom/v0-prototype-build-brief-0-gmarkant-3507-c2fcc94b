@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from "react"
 import { mutate } from "swr"
 import { AgencyLayout } from "@/components/agency-layout"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
+import { BidCompareView } from "@/components/bid-compare-view"
 import { useFetch } from "@/hooks/useFetch"
 import { cn, formatSubmittedAt } from "@/lib/utils"
 import {
@@ -369,7 +370,7 @@ export default function AgencyBidsPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>("client")
   const [viewingBid, setViewingBid] = useState<BidRow | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [compareIds, setCompareIds] = useState<string[] | null>(null)
+  const [compareRows, setCompareRows] = useState<BidRow[] | null>(null)
 
   const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(RFP_RESPONSES_URL)
 
@@ -443,23 +444,10 @@ export default function AgencyBidsPage() {
   const totalRfps = data?.responses?.length ?? 0
   const totalGroups = groups.length
 
-  // Compare mode is built out fully in Part 3 (CompareView, at-a-glance + AI comparison).
-  // This placeholder keeps "Compare N Bids" functional end-to-end for this part.
-  if (compareIds) {
+  if (compareRows) {
     return (
       <AgencyLayout>
-        <div className="p-8 max-w-5xl space-y-6">
-          <button
-            type="button"
-            onClick={() => setCompareIds(null)}
-            className="flex items-center gap-1 font-mono text-xs text-accent hover:underline"
-          >
-            <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Back to Bids
-          </button>
-          <p className="text-sm text-foreground-muted">
-            Comparing {compareIds.length} bids. Full comparison view lands in Part 3.
-          </p>
-        </div>
+        <BidCompareView initialRows={compareRows} onBack={() => setCompareRows(null)} />
       </AgencyLayout>
     )
   }
@@ -558,7 +546,7 @@ export default function AgencyBidsPage() {
             <Button
               size="sm"
               className="bg-accent text-accent-foreground hover:bg-accent/90"
-              onClick={() => setCompareIds(selectedRows.map((r) => r.id))}
+              onClick={() => setCompareRows(selectedRows)}
             >
               Compare {selectedRows.length} Bids
             </Button>

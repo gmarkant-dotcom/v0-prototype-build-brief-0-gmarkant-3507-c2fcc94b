@@ -44,6 +44,52 @@ function normalizeLineItems(raw: unknown): LineItem[] {
   return out
 }
 
+// Read-only existence check used by compare mode to find bids that still need a
+// decomposition, without ever triggering an AI call as a side effect of checking.
+export async function GET(_req: Request, { params }: { params: Promise<{ responseId: string }> }) {
+  const route = "/api/agency/bids/[responseId]/decompose"
+  try {
+    const { responseId } = await params
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, active_role")
+      .eq("id", user.id)
+      .single()
+    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
+      return NextResponse.json({ error: "Agency only" }, { status: 403 })
+    }
+
+    const { data: existing } = await supabase
+      .from("bid_decompositions")
+      .select("line_items, narrative_summary, generated_at")
+      .eq("response_id", responseId)
+      .eq("agency_id", user.id)
+      .maybeSingle()
+
+    if (!existing) return NextResponse.json({ exists: false }, { status: 404 })
+    return NextResponse.json({
+      exists: true,
+      line_items: existing.line_items,
+      narrative_summary: existing.narrative_summary,
+      generated_at: existing.generated_at,
+    })
+  } catch (error) {
+    console.error("[api] failure", {
+      route,
+      method: "GET",
+      code: 500,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return NextResponse.json({ error: "Failed to check cost breakdown" }, { status: 500 })
+  }
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ responseId: string }> }) {
   const route = "/api/agency/bids/[responseId]/decompose"
   try {
