@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { requirePartnerRole } from "@/lib/api-auth"
 
 function isSameEmail(a: string | null | undefined, b: string | null | undefined) {
   return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase()
@@ -9,26 +9,19 @@ function isSameEmail(a: string | null | undefined, b: string | null | undefined)
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const auth = await requirePartnerRole()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role, email, company_name, full_name")
+      .select("email, company_name, full_name")
       .eq("id", user.id)
       .maybeSingle<{
-        role: string | null
-        active_role: string | null
         email: string | null
         company_name: string | null
         full_name: string | null
       }>()
-    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partners only" }, { status: 403 })
-    }
 
     const { data: inbox, error: inboxError } = await supabase
       .from("partner_rfp_inbox")

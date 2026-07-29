@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { requireAgencyRole } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -9,20 +9,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const route = "/api/agency/scoring/criteria/[id]"
   try {
     const { id } = await params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role")
-      .eq("id", user.id)
-      .maybeSingle()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    const auth = await requireAgencyRole()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const { data: updated, error: updateErr } = await supabase
       .from("bid_scoring_criteria")

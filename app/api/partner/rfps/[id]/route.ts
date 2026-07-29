@@ -1,26 +1,17 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
+import { requirePartnerRole } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+    const auth = await requirePartnerRole()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: profile } = await supabase.from("profiles").select("role, active_role, email").eq("id", user.id).single()
-
-    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partners only" }, { status: 403 })
-    }
+    const { data: profile } = await supabase.from("profiles").select("email").eq("id", user.id).maybeSingle()
 
     const { data: inbox, error: inboxError } = await supabase
       .from("partner_rfp_inbox")

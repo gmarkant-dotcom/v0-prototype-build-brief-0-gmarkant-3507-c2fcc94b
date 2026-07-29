@@ -1,33 +1,17 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { DEFAULT_SCORING_CRITERIA, DEFAULT_TEMPLATE_NAME, DEFAULT_TEMPLATE_DESCRIPTION } from "@/lib/bid-scoring-defaults"
+import { requireAgencyRole } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
-
-async function requireAgency() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { ok: false as const, status: 401, error: "Unauthorized" }
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, active_role")
-    .eq("id", user.id)
-    .maybeSingle()
-  if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-    return { ok: false as const, status: 403, error: "Agency only" }
-  }
-  return { ok: true as const, supabase, userId: user.id }
-}
 
 // GET - list the agency's active scoring criteria and templates, seeding the 7 defaults
 // (plus a default template grouping them) the first time an agency has none at all.
 export async function GET() {
   const route = "/api/agency/scoring/criteria"
-  const auth = await requireAgency()
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
-  const { supabase, userId } = auth
+  const auth = await requireAgencyRole()
+  if (!auth.authorized) return auth.response
+  const { supabase, user } = auth
+  const userId = user.id
 
   const { count, error: countErr } = await supabase
     .from("bid_scoring_criteria")
@@ -98,9 +82,10 @@ export async function GET() {
 // POST - create a new criterion, or update an existing one when `id` is provided.
 export async function POST(req: Request) {
   const route = "/api/agency/scoring/criteria"
-  const auth = await requireAgency()
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
-  const { supabase, userId } = auth
+  const auth = await requireAgencyRole()
+  if (!auth.authorized) return auth.response
+  const { supabase, user } = auth
+  const userId = user.id
 
   const body = await req.json().catch(() => ({}))
   const id = typeof body?.id === "string" ? body.id : null

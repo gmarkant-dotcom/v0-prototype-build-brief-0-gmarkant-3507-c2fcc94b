@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { requireAgencyRole } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -9,16 +9,9 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    const auth = await requireAgencyRole()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const body = await request.json()
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -55,16 +48,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    const auth = await requireAgencyRole()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const { error } = await supabase.from("agency_library_documents").delete().eq("id", id).eq("agency_id", user.id)
 

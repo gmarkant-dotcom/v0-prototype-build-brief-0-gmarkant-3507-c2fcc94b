@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
+import { requireAgencyRole } from "@/lib/api-auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -10,20 +10,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
   const route = "/api/agency/bids/[responseId]/generate-summary"
   try {
     const { responseId } = await params
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role")
-      .eq("id", user.id)
-      .single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    const auth = await requireAgencyRole()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const result = await generateAndSaveBidSummary(supabase, responseId, user.id)
     if (!result.ok) {

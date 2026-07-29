@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@/lib/supabase/server"
 import { buildBrandedEmailHtml, buildBrandedEmailText, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
+import { requireAgencyRole } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -18,20 +18,15 @@ export const dynamic = "force-dynamic"
 export async function POST(request: NextRequest) {
   const route = "/api/agency/pool/resend-invitation"
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const auth = await requireAgencyRole()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role, company_name, full_name, display_name")
+      .select("company_name, full_name, display_name")
       .eq("id", user.id)
       .maybeSingle()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
 
     const body = await request.json().catch(() => ({}))
     const vendorEmail = String(body.vendorEmail || "").trim().toLowerCase()
