@@ -4,86 +4,175 @@ import Link from "next/link"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { LigamentLogo } from "@/components/ligament-logo"
-import { Check } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Check, ChevronDown } from "lucide-react"
 
-const tiers = [
+// ── Types ────────────────────────────────────────────────────────────────────
+
+type BillingCycle = "monthly" | "annual"
+
+type Tier = {
+  id: string
+  name: string
+  tagline: string
+  monthlyPrice: number | null
+  annualPrice: number | null
+  annualSavings: number | null
+  priceLabel?: string
+  popular?: boolean
+  features: string[]
+  ctaLabel: string
+  ctaHref: string
+}
+
+type ComparisonValue = string | boolean
+
+type ComparisonRow = {
+  label: string
+  starter: ComparisonValue
+  professional: ComparisonValue
+  enterprise: ComparisonValue
+}
+
+type FAQ = { q: string; a: string }
+
+// ── Data ─────────────────────────────────────────────────────────────────────
+
+const tiers: Tier[] = [
   {
-    id: "solo",
-    name: "Solo",
-    price: "$1,800 / year",
-    description: "For independent consultants or collectives beginning to scale.",
-    features: ["1 lead agency user seat", "Up to 6 partner agency collaborations", "Email support"],
-  },
-  {
-    id: "core",
-    name: "Core",
-    price: "$3,600 / year",
-    description: "For smaller teams getting started with vendor orchestration.",
-    features: ["4 lead agency user seats", "Up to 12 partner agency collaborations", "Full visibility into all public partner agency profiles", "Basic AI tools", "Email support"],
-  },
-  {
-    id: "studio",
-    name: "Studio",
-    price: "$7,200 / year",
-    description: "For growing agencies running multiple active projects.",
+    id: "starter",
+    name: "Starter",
+    tagline: "For independent agencies managing a handful of active productions",
+    monthlyPrice: 150,
+    annualPrice: 1500,
+    annualSavings: 300,
     features: [
-      "8 lead agency user seats",
-      "Up to 24 partner agency collaborations",
-      "Full visibility into all public partner agency profiles",
-      "Full AI suite",
-      "Priority support",
-      "Best-Practice Consultations",
+      "Up to 5 active projects",
+      "50 AI analyses per month",
+      "Unlimited partner pool",
+      "Unlimited user seats",
+      "Full AI suite (bid analysis, comparison, scoring, vendor intelligence)",
+      "Business criteria and compliance tracking",
+      "Lightning RFP Magic Links",
+      "Delivery performance reviews",
+      "Email support",
     ],
+    ctaLabel: "Get Started",
+    ctaHref: "/auth/sign-up",
   },
   {
-    id: "network",
-    name: "Network",
-    price: "Custom",
-    description: "For enterprise teams needing white-label and API access.",
+    id: "professional",
+    name: "Professional",
+    tagline: "For growing agencies running multiple concurrent client engagements",
+    monthlyPrice: 400,
+    annualPrice: 4000,
+    annualSavings: 800,
+    popular: true,
     features: [
-      "Unlimited partner agency collaborations",
-      "Full visibility into all public partner agency profiles",
+      "Up to 20 active projects",
+      "250 AI analyses per month",
+      "Everything in Starter, plus:",
+      "Gmail and Outlook email import for pool building",
+      "Priority support",
+    ],
+    ctaLabel: "Get Started",
+    ctaHref: "/auth/sign-up",
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    tagline: "For agency networks and holding companies with complex vendor operations",
+    monthlyPrice: null,
+    annualPrice: null,
+    annualSavings: null,
+    priceLabel: "Custom",
+    features: [
+      "Unlimited projects and AI analyses",
+      "Everything in Professional, plus:",
       "White-label infrastructure",
       "API access",
       "Dedicated success manager",
+      "Custom integrations",
       "Enterprise onboarding",
     ],
+    ctaLabel: "Contact Sales",
+    ctaHref: "mailto:greg@withligament.com",
   },
 ]
 
-const benefits = [
+const comparisonRows: ComparisonRow[] = [
+  { label: "Active projects", starter: "5", professional: "20", enterprise: "Unlimited" },
+  { label: "AI analyses per month", starter: "50", professional: "250", enterprise: "Unlimited" },
+  { label: "User seats", starter: "Unlimited", professional: "Unlimited", enterprise: "Unlimited" },
+  { label: "Partner pool size", starter: "Unlimited", professional: "Unlimited", enterprise: "Unlimited" },
+  { label: "RFP Broadcast", starter: true, professional: true, enterprise: true },
+  { label: "Lightning RFP Magic Links", starter: true, professional: true, enterprise: true },
+  { label: "AI Bid Analysis & Comparison", starter: true, professional: true, enterprise: true },
+  { label: "AI Bid Scoring & Evaluation", starter: true, professional: true, enterprise: true },
+  { label: "Business Criteria Tracking", starter: true, professional: true, enterprise: true },
+  { label: "Delivery Performance Reviews", starter: true, professional: true, enterprise: true },
+  { label: "Vendor Reliability Intelligence", starter: true, professional: true, enterprise: true },
+  { label: "Email Import (Gmail/Outlook)", starter: false, professional: true, enterprise: true },
+  { label: "White-label Infrastructure", starter: false, professional: false, enterprise: true },
+  { label: "API Access", starter: false, professional: false, enterprise: true },
+  { label: "Support", starter: "Email", professional: "Priority", enterprise: "Dedicated" },
+]
+
+const pricingFaqs: FAQ[] = [
   {
-    title: "One source of truth.",
-    body: "Briefs, bids, contracts, onboarding docs, and payments in one place. No more chasing information across email and shared drives.",
+    q: "What counts as an active project?",
+    a: "A project is active from the moment you create it until you mark it complete. Completed projects don't count toward your limit.",
   },
   {
-    title: "Structure that bends without breaking.",
-    body: "Best-practice process across every vendor workflow, flexible enough to fit every client and scope.",
+    q: "What counts as an AI analysis?",
+    a: "Each AI-generated summary, cost decomposition, bid comparison, or scoring evaluation counts as one analysis. Viewing previously generated analyses does not count again.",
   },
   {
-    title: "Never start from zero again.",
-    body: "Every RFP, scope, and bid becomes a reusable template. The platform gets smarter as your agency does.",
+    q: "Can I upgrade or downgrade anytime?",
+    a: "Yes. Upgrades take effect immediately. Downgrades take effect at the end of your current billing period.",
   },
   {
-    title: "Institutional knowledge that sticks.",
-    body: "Every decision and engagement logged builds a searchable record. What used to live in someone's head becomes a durable agency asset.",
+    q: "Is there really no cost for partner agencies?",
+    a: "Correct. Partners access the platform for free, permanently. They can receive RFPs, submit bids, manage onboarding, and track project delivery at no cost.",
   },
   {
-    title: "The right partner for every scope.",
-    body: "A curated, discoverable pool of vetted partners with capabilities and track records on file. Match fit-for-purpose talent with confidence.",
+    q: "What happens if I hit my project or analysis limit?",
+    a: "You'll see a notification at 80% usage. At the limit, you can complete existing projects to free up capacity or upgrade your plan. You never lose access to existing data or analyses.",
   },
 ]
 
-const roiRows = [
-  { year: "Year 1", value: "$7,440" },
-  { year: "Year 2", value: "$11,160" },
-  { year: "Year 3", value: "$13,392" },
-  { year: "Year 4", value: "$15,376" },
-  { year: "Year 5", value: "$16,368" },
-]
+// ── Small components ─────────────────────────────────────────────────────────
+
+function ComparisonCell({ value }: { value: ComparisonValue }) {
+  if (value === true) return <Check className="w-4 h-4 text-[#C8F53C] mx-auto" />
+  if (value === false) return <span className="text-white/30">-</span>
+  return <span className="text-white/85">{value}</span>
+}
+
+function FAQItem({ item }: { item: FAQ }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border border-white/15 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-4 px-6 py-5 text-left hover:bg-white/5 transition-colors"
+      >
+        <span className="font-display font-semibold text-white text-base leading-snug">{item.q}</span>
+        <ChevronDown className={cn("w-5 h-5 text-white/50 shrink-0 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="px-6 pb-5 text-white/75 text-sm leading-relaxed border-t border-white/10 pt-4">{item.a}</div>
+      )}
+    </div>
+  )
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PricingPage() {
-  const [selectedTier, setSelectedTier] = useState("studio")
+  const [cycle, setCycle] = useState<BillingCycle>("annual")
+  const [showComparison, setShowComparison] = useState(false)
 
   return (
     <div className="min-h-screen bg-[#081F1F] text-white">
@@ -95,121 +184,177 @@ export default function PricingPage() {
           Back to Home
         </Link>
       </header>
+
       <main className="max-w-6xl mx-auto px-6 py-20">
-        <div className="text-center mb-14">
+        <div className="text-center mb-10">
           <h1 className="font-display font-black text-5xl mb-4">Become a Lead Agency</h1>
           <p className="text-white/70 max-w-2xl mx-auto">
             Unlock full platform access with plans designed for modern agency operations.
           </p>
-          <p className="text-white/50 max-w-2xl mx-auto mt-2 text-sm italic">
-            There is no fee for partner agency users to access the platform.
-          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {tiers.map((tier) => (
-            <div
-              key={tier.name}
-              onClick={() => setSelectedTier(tier.id)}
-              className={`rounded-2xl border p-6 cursor-pointer ${
-                selectedTier === tier.id
-                  ? "border-[#C8F53C] bg-[#0C3535]"
-                  : "border-white/20 bg-white/5 hover:border-white/40"
-              }`}
-            >
-              <h2 className="font-display font-bold text-2xl">{tier.name}</h2>
-              {tier.price ? <div className="font-display font-black text-3xl mt-2">{tier.price}</div> : null}
-              <p className="text-white/70 mt-3 text-sm">{tier.description}</p>
-              <ul className="space-y-2 mt-6">
-                {tier.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2 text-sm text-white/85">
-                    <Check className="w-4 h-4 mt-0.5 text-[#C8F53C]" />
-                    {feature}
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-8">
-                {tier.name === "Network" ? (
-                  <Button asChild variant="outline" className="w-full border-white/30 text-white hover:bg-white/10">
-                    <Link href={`/contact?plan=${tier.id}`}>Contact Sales</Link>
-                  </Button>
-                ) : (
-                  <Button asChild className="w-full bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90">
-                    <Link href={`/contact?plan=${tier.id}`}>Get Started</Link>
-                  </Button>
+        {/* Partner free callout */}
+        <div className="max-w-3xl mx-auto mb-10 rounded-2xl border border-[#C8F53C]/40 bg-[#C8F53C]/10 px-6 py-5 text-center">
+          <p className="font-display font-bold text-lg text-white">Partner agencies always access Ligament for free.</p>
+          <p className="text-white/75 text-sm mt-1">No fees, no limits, no catch.</p>
+        </div>
+
+        {/* Monthly / Annual toggle */}
+        <div className="flex items-center justify-center gap-3 mb-10">
+          <span className={cn("text-sm transition-colors", cycle === "monthly" ? "text-white font-semibold" : "text-white/50")}>
+            Monthly
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={cycle === "annual"}
+            onClick={() => setCycle((c) => (c === "annual" ? "monthly" : "annual"))}
+            className="relative w-12 h-6 rounded-full bg-white/10 border border-white/20 transition-colors shrink-0"
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-[#C8F53C] transition-transform",
+                cycle === "annual" && "translate-x-6"
+              )}
+            />
+          </button>
+          <span className={cn("text-sm transition-colors", cycle === "annual" ? "text-white font-semibold" : "text-white/50")}>
+            Annual
+          </span>
+        </div>
+
+        {/* Pricing cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
+          {tiers.map((tier) => {
+            const isCustom = tier.priceLabel != null
+            const amount = isCustom
+              ? tier.priceLabel
+              : cycle === "monthly"
+                ? `$${tier.monthlyPrice}`
+                : `$${tier.annualPrice?.toLocaleString("en-US")}`
+            const period = isCustom ? null : cycle === "monthly" ? "/month" : "/year"
+            const showSavings = !isCustom && cycle === "annual" && tier.annualSavings != null
+            const isMailto = tier.ctaHref.startsWith("mailto:")
+
+            return (
+              <div
+                key={tier.id}
+                className={cn(
+                  "relative rounded-2xl border p-6 flex flex-col",
+                  tier.popular ? "border-[#C8F53C] bg-[#0C3535] md:-translate-y-2 shadow-2xl shadow-black/20" : "border-white/20 bg-white/5"
                 )}
+              >
+                {tier.popular && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-wider px-3 py-1 rounded-full bg-[#C8F53C] text-[#0C3535] font-bold whitespace-nowrap">
+                    Most Popular
+                  </span>
+                )}
+
+                <h2 className="font-display font-bold text-2xl">{tier.name}</h2>
+                <p className="text-white/70 mt-2 text-sm">{tier.tagline}</p>
+
+                <div className="mt-4 flex items-baseline gap-2 flex-wrap">
+                  <span className="font-display font-black text-4xl">{amount}</span>
+                  {period && <span className="text-white/50 text-sm">{period}</span>}
+                  {showSavings && (
+                    <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#C8F53C]/15 text-[#C8F53C] border border-[#C8F53C]/40">
+                      Save ${tier.annualSavings}/yr
+                    </span>
+                  )}
+                </div>
+
+                <ul className="space-y-2 mt-6 flex-1">
+                  {tier.features.map((feature, i) => {
+                    const isDivider = feature.startsWith("Everything in")
+                    return (
+                      <li
+                        key={i}
+                        className={cn(
+                          "flex items-start gap-2 text-sm",
+                          isDivider ? "text-white/50 italic pt-1" : "text-white/85"
+                        )}
+                      >
+                        {!isDivider && <Check className="w-4 h-4 mt-0.5 text-[#C8F53C] shrink-0" />}
+                        <span>{feature}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+
+                <div className="mt-8">
+                  {isMailto ? (
+                    <Button asChild variant="outline" className="w-full border-white/30 text-white hover:bg-white/10">
+                      <a href={tier.ctaHref}>{tier.ctaLabel}</a>
+                    </Button>
+                  ) : (
+                    <Button
+                      asChild
+                      className={cn(
+                        "w-full",
+                        tier.popular
+                          ? "bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90"
+                          : "bg-white/10 text-white hover:bg-white/20 border border-white/20"
+                      )}
+                    >
+                      <Link href={tier.ctaHref}>{tier.ctaLabel}</Link>
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
-        <section className="mt-16 pt-12 border-t border-white/15">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-            <div>
-              <h2 className="font-display font-black text-3xl mb-6">Why Ligament</h2>
-              <div className="space-y-5">
-                {benefits.map((item) => (
-                  <div key={item.title} className="rounded-xl border border-white/15 bg-white/5 p-4">
-                    <p className="text-white font-semibold">{item.title}</p>
-                    <p className="text-white/75 text-sm mt-1 leading-relaxed">{item.body}</p>
-                  </div>
+        {/* Feature comparison table */}
+        <div className="mt-14 text-center">
+          <button
+            type="button"
+            onClick={() => setShowComparison((s) => !s)}
+            className="font-mono text-xs text-[#C8F53C] hover:underline inline-flex items-center gap-1.5"
+          >
+            {showComparison ? "Hide feature comparison" : "Compare all features"}
+            <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showComparison && "rotate-180")} />
+          </button>
+        </div>
+
+        {showComparison && (
+          <div className="mt-6 overflow-x-auto rounded-xl border border-white/15">
+            <table className="w-full text-sm border-collapse min-w-[640px]">
+              <thead>
+                <tr className="border-b border-white/15 bg-white/5">
+                  <th className="text-left font-mono text-[10px] uppercase tracking-wider text-white/60 px-4 py-3">Feature</th>
+                  <th className="text-center font-mono text-[10px] uppercase tracking-wider text-white/60 px-4 py-3">Starter</th>
+                  <th className="text-center font-mono text-[10px] uppercase tracking-wider text-white/60 px-4 py-3">Professional</th>
+                  <th className="text-center font-mono text-[10px] uppercase tracking-wider text-white/60 px-4 py-3">Enterprise</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonRows.map((row) => (
+                  <tr key={row.label} className="border-b border-white/10 last:border-0">
+                    <td className="px-4 py-3 text-white/85 whitespace-nowrap">{row.label}</td>
+                    <td className="px-4 py-3 text-center">
+                      <ComparisonCell value={row.starter} />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <ComparisonCell value={row.professional} />
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <ComparisonCell value={row.enterprise} />
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            </div>
+              </tbody>
+            </table>
+          </div>
+        )}
 
-            <div>
-              <h2 className="font-display font-black text-3xl mb-3">The ROI Case</h2>
-              <p className="text-white/80 text-sm mb-6">
-                Benchmark: Account Director. $110-130k fully loaded. ~$62/hr.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                <div className="rounded-xl border border-white/15 bg-white/5 p-5">
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-[#C8F53C] mb-2">Year 1</p>
-                  <p className="font-display font-black text-2xl text-white mb-2">10 hrs/month recovered</p>
-                  <p className="text-[#C8F53C] font-semibold text-sm mb-3">
-                    $7,440 in annual labor value recovered
-                  </p>
-                  <p className="text-white/70 text-sm leading-relaxed">
-                    The agency is building its partner pool and learning the platform. Savings are real and immediate.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-white/15 bg-white/5 p-5">
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-[#C8F53C] mb-2">Year 5</p>
-                  <p className="font-display font-black text-2xl text-white mb-2">18 to 22 hrs/month recovered</p>
-                  <p className="text-[#C8F53C] font-semibold text-sm mb-3">
-                    $13,392 to $16,368 in annual labor value recovered
-                  </p>
-                  <p className="text-white/70 text-sm leading-relaxed">
-                    Historical bid data provides instant rate benchmarks. RFP templates are tuned from dozens of past
-                    scopes. The partner pool is fully built. Compounding efficiency kicks in.
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-white/15 bg-white/5 p-5">
-                <h3 className="font-display font-bold text-xl mb-4">5-Year Cumulative Labor Value Recovered</h3>
-                <div className="divide-y divide-white/10">
-                  {roiRows.map((row) => (
-                    <div key={row.year} className="flex items-center justify-between py-2 text-sm">
-                      <span className="text-white/80">{row.year}</span>
-                      <span className="font-semibold text-white">{row.value}</span>
-                    </div>
-                  ))}
-                  <div className="flex items-center justify-between py-3 text-sm">
-                    <span className="text-white font-semibold">Total</span>
-                    <span className="font-display font-bold text-[#C8F53C]">
-                      ~$63,700 in recovered Account Director labor value
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <p className="mt-5 text-lg font-display font-bold text-white">
-                The platform pays for itself in Year 1 and compounds from there.
-              </p>
-            </div>
+        {/* Pricing FAQ */}
+        <section className="mt-16 pt-12 border-t border-white/15">
+          <h2 className="font-display font-black text-3xl mb-6 text-center">Pricing Questions</h2>
+          <div className="max-w-2xl mx-auto space-y-3">
+            {pricingFaqs.map((item) => (
+              <FAQItem key={item.q} item={item} />
+            ))}
           </div>
         </section>
 

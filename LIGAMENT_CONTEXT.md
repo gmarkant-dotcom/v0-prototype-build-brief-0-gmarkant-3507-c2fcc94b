@@ -320,21 +320,19 @@ All use `anthropic("claude-sonnet-4-20250514")` from `@ai-sdk/anthropic`. Requir
 ### Pricing
 | File | Purpose |
 |------|---------|
-| `app/pricing/page.tsx` | 4-tier pricing: Solo ($1,800), Core ($3,600), Studio ($7,200, featured), Network (custom) |
+| `app/pricing/page.tsx` | 3-tier pricing: Starter ($150/mo or $1,500/yr), Professional ($400/mo or $4,000/yr, featured), Enterprise (custom). Monthly/annual toggle defaults to annual. Collapsed feature-comparison table and pricing FAQ below the cards. |
 
 ---
 
 ## Pricing Tiers (current)
 
-| Tier | Price | Seats | Projects/year | Features |
-|------|-------|-------|---------------|---------|
-| Solo | $1,800/year | 1 lead agency seat | 24 | Basic AI, email support |
-| Core | $3,600/year | 4 lead agency seats | 60 | Basic AI, email support |
-| Studio | $7,200/year | 8 lead agency seats | 200 | Full AI suite, priority support, consultations |
-| Network | Custom | Unlimited | Unlimited | Everything + custom |
+| Tier | Price | Projects | AI analyses/mo | Seats | Partner pool | Features |
+|------|-------|----------|-----------------|-------|---------------|----------|
+| Starter | $150/mo or $1,500/yr (save $300) | 5 | 50 | Unlimited | Unlimited | Full AI suite, business criteria tracking, Lightning RFP Magic Links, delivery performance reviews, email support |
+| Professional | $400/mo or $4,000/yr (save $800) | 20 | 250 | Unlimited | Unlimited | Everything in Starter + Gmail/Outlook email import, priority support |
+| Enterprise | Custom | Unlimited | Unlimited | Unlimited | Unlimited | Everything in Professional + white-label infrastructure, API access, dedicated success manager, custom integrations |
 
-Banner: "Founding Member Annual Pricing - Available Until July 1, 2026"
-Studio is the featured/highlighted tier.
+Professional is the featured/highlighted tier. Partner agencies always access the platform for free (no tier applies to them).
 
 ---
 
