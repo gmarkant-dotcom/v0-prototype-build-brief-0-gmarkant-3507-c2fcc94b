@@ -1,6 +1,7 @@
 "use client"
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react"
+import Link from "next/link"
 import { mutate } from "swr"
 import { computeCompositeScore, compositeScoreColorClass } from "@/lib/bid-scoring"
 import { AiMarkdown } from "@/components/ai-markdown"
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { Sparkles, Loader2, CheckCircle, Settings } from "lucide-react"
+import { Sparkles, Loader2, CheckCircle, Settings, History } from "lucide-react"
 
 const STATUS_HELPER_TEXT: Record<Evaluation["status"], string> = {
   draft: "Evaluation started, scores are tentative",
@@ -52,16 +53,21 @@ type Evaluation = {
 
 type Draft = { humanScore: string; humanNotes: string }
 
+type TrackRecordStats = {
+  total_projects_reviewed: number
+  avg_delivery_score: number | null
+  avg_bid_to_delivery_delta: number | null
+  on_time_rate: number | null
+}
+
 export type BidEvaluationTabHandle = {
   /** Saves the current draft and returns whether it succeeded - used by compare
    *  mode's "Evaluate All" flow to save-then-advance to the next vendor. */
   save: () => Promise<boolean>
 }
 
-export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId: string }>(function BidEvaluationTab(
-  { responseId },
-  ref
-) {
+export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId: string; partnerId?: string | null }>(
+  function BidEvaluationTab({ responseId, partnerId }, ref) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [criteria, setCriteria] = useState<Criterion[]>([])
@@ -77,6 +83,32 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+
+  const [trackRecord, setTrackRecord] = useState<TrackRecordStats | null>(null)
+
+  useEffect(() => {
+    if (!partnerId) {
+      setTrackRecord(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/agency/pool/${encodeURIComponent(partnerId)}/performance`)
+        const data = await res.json().catch(() => ({}))
+        if (!cancelled && res.ok && data?.stats?.total_projects_reviewed > 0) {
+          setTrackRecord(data.stats as TrackRecordStats)
+        } else if (!cancelled) {
+          setTrackRecord(null)
+        }
+      } catch {
+        if (!cancelled) setTrackRecord(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [partnerId])
 
   const load = async () => {
     setLoading(true)
@@ -266,6 +298,26 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
           <Settings className="w-3.5 h-3.5" /> Scoring Settings
         </button>
       </div>
+
+      {trackRecord && (
+        <div className="rounded-lg border border-accent/30 bg-accent/5 p-4 space-y-1.5">
+          <div className="font-mono text-[10px] uppercase text-foreground-muted flex items-center gap-1.5">
+            <History className="w-3 h-3 text-accent" /> Vendor Track Record
+          </div>
+          <p className="text-sm text-foreground/90 leading-relaxed">
+            {trackRecord.total_projects_reviewed} project{trackRecord.total_projects_reviewed !== 1 ? "s" : ""} reviewed.
+            {trackRecord.avg_delivery_score != null && ` Avg delivery: ${Math.round(trackRecord.avg_delivery_score)}/100.`}
+            {trackRecord.on_time_rate != null && ` On-time: ${trackRecord.on_time_rate}%.`}
+            {trackRecord.avg_bid_to_delivery_delta != null &&
+              ` Bids typically score ${Math.abs(trackRecord.avg_bid_to_delivery_delta)} points ${trackRecord.avg_bid_to_delivery_delta >= 0 ? "below" : "above"} actual delivery.`}
+          </p>
+          {partnerId && (
+            <Link href={`/agency/pool/${partnerId}`} className="font-mono text-[10px] text-accent hover:underline">
+              View full performance history
+            </Link>
+          )}
+        </div>
+      )}
 
       {criteria.map((c) => {
         const existing = evaluation.scores.find((s) => s.criterion_id === c.id)

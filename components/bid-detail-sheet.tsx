@@ -736,7 +736,7 @@ function BidDetailSheetInner({
               </TabsContent>
 
               <TabsContent value="evaluate" className="flex-1 overflow-y-auto px-6 py-4">
-                {canMutate && <BidEvaluationTab ref={evaluationTabRef} responseId={row.id} />}
+                {canMutate && <BidEvaluationTab ref={evaluationTabRef} responseId={row.id} partnerId={row.partner_id ?? null} />}
               </TabsContent>
             </Tabs>
           )}

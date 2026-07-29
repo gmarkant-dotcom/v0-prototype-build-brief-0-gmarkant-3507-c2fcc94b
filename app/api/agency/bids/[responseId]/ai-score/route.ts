@@ -64,7 +64,62 @@ async function loadVendorTrackRecord(
   const avgPastScore =
     pastScores.length > 0 ? Math.round((pastScores.reduce((a, b) => a + b, 0) / pastScores.length) * 10) / 10 : null
 
-  if (assignmentCount === 0 && pastScores.length === 0) {
+  // Delivery Performance (Phase 3): actual post-project outcomes, not just prior bid
+  // scores - lets the "Vendor Track Record" criterion reference real delivery history
+  // (average delivery score, on-time rate, bid-vs-delivery accuracy) instead of only
+  // predicted/scored bids.
+  let deliveryText = ""
+  if (partnershipIds.length > 0) {
+    const { data: reviews } = await supabase
+      .from("delivery_reviews")
+      .select("composite_score, on_time, response_id")
+      .in("partnership_id", partnershipIds)
+      .eq("status", "complete")
+      .neq("response_id", currentResponseId)
+    const completedReviews = reviews || []
+
+    const deliveryScores = completedReviews
+      .map((r) => r.composite_score as number | null)
+      .filter((s): s is number => s != null)
+    const avgDeliveryScore =
+      deliveryScores.length > 0 ? Math.round((deliveryScores.reduce((a, b) => a + b, 0) / deliveryScores.length) * 10) / 10 : null
+
+    const onTimeCount = completedReviews.filter((r) => r.on_time === "yes").length
+    const onTimeRate = completedReviews.length > 0 ? Math.round((onTimeCount / completedReviews.length) * 100) : null
+
+    const deliveryResponseIds = completedReviews
+      .map((r) => r.response_id as string | null)
+      .filter((id): id is string => Boolean(id))
+    let avgDelta: number | null = null
+    if (deliveryResponseIds.length > 0) {
+      const { data: evalRows } = await supabase
+        .from("bid_evaluations")
+        .select("response_id, composite_score")
+        .in("response_id", deliveryResponseIds)
+      const bidCompositeByResponse = new Map(
+        (evalRows || []).map((e) => [e.response_id as string, e.composite_score as number | null])
+      )
+      const deltas: number[] = []
+      for (const r of completedReviews) {
+        const bidScore = r.response_id ? bidCompositeByResponse.get(r.response_id as string) : null
+        if (bidScore != null && r.composite_score != null) deltas.push((r.composite_score as number) - bidScore)
+      }
+      avgDelta = deltas.length > 0 ? Math.round((deltas.reduce((a, b) => a + b, 0) / deltas.length) * 10) / 10 : null
+    }
+
+    if (deliveryScores.length > 0) {
+      const deliveryParts = [`${deliveryScores.length} completed delivery review(s), average delivery score ${avgDeliveryScore}/100`]
+      if (onTimeRate != null) deliveryParts.push(`on-time rate ${onTimeRate}%`)
+      if (avgDelta != null) {
+        deliveryParts.push(
+          `bids have historically scored ${Math.abs(avgDelta)} points ${avgDelta >= 0 ? "below" : "above"} actual delivery performance on average`
+        )
+      }
+      deliveryText = ` Delivery performance history: ${deliveryParts.join("; ")}.`
+    }
+  }
+
+  if (assignmentCount === 0 && pastScores.length === 0 && !deliveryText) {
     return "Vendor track record: no prior project assignments or evaluations with this agency - this appears to be a new relationship."
   }
 
@@ -72,7 +127,7 @@ async function loadVendorTrackRecord(
   if (pastScores.length > 0) {
     parts.push(`${pastScores.length} prior evaluation(s), average composite score ${avgPastScore}/100`)
   }
-  return `Vendor track record: ${parts.join("; ")}.`
+  return `Vendor track record: ${parts.join("; ")}.${deliveryText}`
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ responseId: string }> }) {

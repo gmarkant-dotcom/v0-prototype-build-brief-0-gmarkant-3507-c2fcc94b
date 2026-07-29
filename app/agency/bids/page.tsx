@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useEffect } from "react"
+import Link from "next/link"
 import { mutate } from "swr"
 import { AgencyLayout } from "@/components/agency-layout"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
@@ -248,6 +249,15 @@ function BidCard({
         )}
       </div>
       <div className="shrink-0 flex items-center gap-1.5">
+        {row.status === "awarded" && row.inbox?.project_id && (
+          <Link
+            href={`/agency/project?projectId=${encodeURIComponent(row.inbox.project_id)}&responseId=${encodeURIComponent(row.id)}`}
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 font-mono text-[10px] text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/10 rounded-md px-2 py-1 transition-colors"
+          >
+            Review Delivery
+          </Link>
+        )}
         <button
           type="button"
           onClick={() => onView(row)}
