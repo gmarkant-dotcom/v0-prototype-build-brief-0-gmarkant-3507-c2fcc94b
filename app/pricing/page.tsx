@@ -169,11 +169,11 @@ const benefits: { title: string; body: string }[] = [
 ]
 
 const roiRows: { year: string; value: string }[] = [
-  { year: "Year 1", value: "$7,440" },
-  { year: "Year 2", value: "$11,160" },
-  { year: "Year 3", value: "$13,392" },
-  { year: "Year 4", value: "$15,376" },
-  { year: "Year 5", value: "$16,368" },
+  { year: "Year 1", value: "$3,720" },
+  { year: "Year 2", value: "$5,208" },
+  { year: "Year 3", value: "$6,696" },
+  { year: "Year 4", value: "$8,184" },
+  { year: "Year 5", value: "$9,672" },
 ]
 
 // ── Small components ─────────────────────────────────────────────────────────
@@ -418,9 +418,9 @@ export default function PricingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div className="rounded-xl border border-white/15 bg-white/5 p-5">
                   <p className="font-mono text-[10px] uppercase tracking-wider text-[#C8F53C] mb-2">Year 1</p>
-                  <p className="font-display font-black text-2xl text-white mb-2">10 hrs/month recovered</p>
+                  <p className="font-display font-black text-2xl text-white mb-2">5 hrs/month recovered</p>
                   <p className="text-[#C8F53C] font-semibold text-sm mb-3">
-                    $7,440 in annual labor value recovered
+                    $3,720 in annual labor value recovered
                   </p>
                   <p className="text-white/70 text-sm leading-relaxed">
                     Your partner pool is built, your first RFP templates are in place, and you've stopped recreating
@@ -430,9 +430,9 @@ export default function PricingPage() {
 
                 <div className="rounded-xl border border-white/15 bg-white/5 p-5">
                   <p className="font-mono text-[10px] uppercase tracking-wider text-[#C8F53C] mb-2">Year 5</p>
-                  <p className="font-display font-black text-2xl text-white mb-2">18 to 22 hrs/month recovered</p>
+                  <p className="font-display font-black text-2xl text-white mb-2">12 to 15 hrs/month recovered</p>
                   <p className="text-[#C8F53C] font-semibold text-sm mb-3">
-                    $13,392 to $16,368 in annual labor value recovered
+                    $8,928 to $11,160 in annual labor value recovered
                   </p>
                   <p className="text-white/70 text-sm leading-relaxed">
                     Bid history provides instant benchmarks. Templates are tuned from dozens of past scopes. AI
@@ -453,15 +453,15 @@ export default function PricingPage() {
                   <div className="flex items-center justify-between py-3 text-sm">
                     <span className="text-white font-semibold">Total</span>
                     <span className="font-display font-bold text-[#C8F53C]">
-                      ~$63,700 in recovered Account Director labor value
+                      ~$33,500 in recovered Account Director labor value
                     </span>
                   </div>
                 </div>
               </div>
 
               <p className="mt-5 text-lg font-display font-bold text-white">
-                At $1,500 a year on Starter, the platform pays for itself many times over in Year 1 alone, and the
-                return compounds from there.
+                At $1,500 a year on Starter, the platform pays for itself more than twice over in Year 1 alone, and
+                the return compounds from there.
               </p>
             </div>
           </div>
