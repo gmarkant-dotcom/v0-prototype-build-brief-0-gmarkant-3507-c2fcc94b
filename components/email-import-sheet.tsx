@@ -563,6 +563,31 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
     </div>
   )
 
+  const inactiveProviders = (["google", "microsoft"] as const).filter((p) => !activeProviders.includes(p))
+
+  // Connecting one provider must never be the only way to see the other - shown on every
+  // view that has an active connection (ready_to_scan, results, error), not just the
+  // all-disconnected "connect" view, so a user with one cached/scanned provider always has
+  // a path to add the second without disconnecting the first.
+  const ConnectMoreProviders = () =>
+    inactiveProviders.length === 0 ? null : (
+      <div className="space-y-2">
+        {inactiveProviders.map((provider) => (
+          <button
+            key={provider}
+            type="button"
+            onClick={() => connectProvider(provider)}
+            className="w-full text-center text-xs text-foreground-muted hover:text-foreground transition-colors flex items-center justify-center gap-2"
+          >
+            <ProviderIcon provider={provider} className="w-3.5 h-3.5" />
+            {connections[provider]?.status === "expired"
+              ? `Reconnect ${providerLabel(provider)}`
+              : `Connect ${providerLabel(provider)}`}
+          </button>
+        ))}
+      </div>
+    )
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
@@ -669,22 +694,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
             )}
 
             <DisconnectLinks />
-
-            {(["google", "microsoft"] as const)
-              .filter((p) => !activeProviders.includes(p))
-              .map((provider) => (
-                <button
-                  key={provider}
-                  type="button"
-                  onClick={() => connectProvider(provider)}
-                  className="w-full text-center text-xs text-foreground-muted hover:text-foreground transition-colors flex items-center justify-center gap-2"
-                >
-                  <ProviderIcon provider={provider} className="w-3.5 h-3.5" />
-                  {connections[provider]?.status === "expired"
-                    ? `Reconnect ${providerLabel(provider)}`
-                    : `Connect ${providerLabel(provider)}`}
-                </button>
-              ))}
+            <ConnectMoreProviders />
           </div>
         )}
 
@@ -766,6 +776,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
                 )}
                 <DisconnectLinks />
               </div>
+              <ConnectMoreProviders />
             </div>
           </div>
         )}
@@ -818,6 +829,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
               Retry Scan
             </Button>
             <DisconnectLinks />
+            <ConnectMoreProviders />
           </div>
         )}
       </SheetContent>
