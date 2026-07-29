@@ -23,6 +23,7 @@ import {
 } from "@/lib/business-criteria"
 import { meetsInsuranceMinimum } from "@/lib/insurance-limit-parser"
 import { AiMarkdown } from "@/components/ai-markdown"
+import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { BidEvaluationTab, type BidEvaluationTabHandle } from "@/components/bid-evaluation-tab"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -97,6 +98,7 @@ function BidDetailSheetInner({
   const [decomposition, setDecomposition] = useState<Decomposition | null>(null)
   const [decomposeFetched, setDecomposeFetched] = useState(false)
   const [decomposing, setDecomposing] = useState(false)
+  const { guardAction, handleUsageLimitError } = useUsageLimitModal()
   const [decomposeError, setDecomposeError] = useState<string | null>(null)
 
   const badge = statusBadge(row.status)
@@ -173,13 +175,22 @@ function BidDetailSheetInner({
     }
   }
 
-  const generateAnalysis = async () => {
+  // isManualRetry distinguishes a deliberate click (the Retry link, or the tab's explicit
+  // regenerate button) from the automatic run on sheet open below - a usage-limit hit opens
+  // the blocking modal only for the former, since popping it just from opening a bid
+  // (before the user asked for anything) would be jarring, especially when browsing several
+  // bids in a row while already at the cap. The automatic path still shows the inline error.
+  const generateAnalysis = async (isManualRetry = false) => {
+    if (isManualRetry && !guardAction("ai_analyses")) return
     setAnalysisGenerating(true)
     setAnalysisError(null)
     try {
       const res = await fetch(`/api/agency/bids/${row.id}/generate-summary`, { method: "POST" })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || "Analysis unavailable")
+      if (!res.ok) {
+        if (isManualRetry && handleUsageLimitError(res.status, data)) return
+        throw new Error(data?.error || "Analysis unavailable")
+      }
       setRow((prev) => ({
         ...prev,
         ai_summary_short: data.ai_summary_short ?? prev.ai_summary_short,
@@ -197,12 +208,15 @@ function BidDetailSheetInner({
   // Auto-generate the detailed summary on sheet open if it doesn't exist yet.
   useEffect(() => {
     if (row.response_exists && !row.ai_summary_detailed) {
-      void generateAnalysis()
+      void generateAnalysis(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadDecomposition = async (force: boolean) => {
+    // Same reasoning as generateAnalysis: force=true only ever comes from a deliberate
+    // click (Retry / regenerate), force=false is the automatic first-view-of-the-tab load.
+    if (force && !guardAction("ai_analyses")) return
     setDecomposing(true)
     setDecomposeError(null)
     try {
@@ -212,7 +226,10 @@ function BidDetailSheetInner({
         body: JSON.stringify({ force }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || "Analysis unavailable")
+      if (!res.ok) {
+        if (force && handleUsageLimitError(res.status, data)) return
+        throw new Error(data?.error || "Analysis unavailable")
+      }
       setDecomposition({ line_items: data.line_items || [], narrative_summary: data.narrative_summary || null })
     } catch {
       setDecomposeError("Analysis unavailable - try again")
@@ -419,7 +436,7 @@ function BidDetailSheetInner({
                   ) : analysisError ? (
                     <div className="flex items-center gap-2 font-mono text-[10px] text-red-300">
                       <span>{analysisError}</span>
-                      <button type="button" onClick={() => void generateAnalysis()} className="underline hover:text-red-200">
+                      <button type="button" onClick={() => void generateAnalysis(true)} className="underline hover:text-red-200">
                         Retry
                       </button>
                     </div>

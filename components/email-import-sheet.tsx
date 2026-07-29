@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
 import { cn, formatDateTime } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 
 type Provider = "google" | "microsoft"
 
@@ -205,6 +206,7 @@ interface EmailImportSheetProps {
 }
 
 export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImportSheetProps) {
+  const { guardAction, handleUsageLimitError } = useUsageLimitModal()
   const [view, setView] = useState<View>("loading")
   const [connections, setConnections] = useState<Connections>(EMPTY_CONNECTIONS)
   const [scanResults, setScanResults] = useState<ScanResults>(null)
@@ -376,7 +378,10 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
       body: JSON.stringify({ provider }),
     })
     const startData = await startRes.json().catch(() => ({}))
-    if (!startRes.ok) throw new Error(startData?.error || `Failed to start ${providerLabel(provider)} scan`)
+    if (!startRes.ok) {
+      if (handleUsageLimitError(startRes.status, startData)) throw new Error("usage_limit_reached")
+      throw new Error(startData?.error || `Failed to start ${providerLabel(provider)} scan`)
+    }
 
     const token = startData.scan_run_token
     // Fired but not awaited - the run request can take up to 120s. Progress comes from
@@ -389,6 +394,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
   }
 
   const startScan = async (provider: Provider) => {
+    if (!guardAction("ai_analyses")) return
     setView("scanning")
     setErrorMessage(null)
     setScanResults(null)
@@ -400,7 +406,13 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
         body: JSON.stringify({ provider }),
       })
       const startData = await startRes.json().catch(() => ({}))
-      if (!startRes.ok) throw new Error(startData?.error || "Failed to start scan")
+      if (!startRes.ok) {
+        if (handleUsageLimitError(startRes.status, startData)) {
+          setView("ready_to_scan")
+          return
+        }
+        throw new Error(startData?.error || "Failed to start scan")
+      }
 
       const token = startData.scan_run_token
       fetch(`/api/agency/email-scan/run?token=${encodeURIComponent(token)}&provider=${provider}`).catch((err) => {
@@ -417,6 +429,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
    *  checkpointing/polling live, then start the next. Avoids two long-running serverless
    *  scans racing against maxDuration at the same time. */
   const runScanAll = async () => {
+    if (!guardAction("ai_analyses")) return
     stopPolling()
     setView("scanning")
     setErrorMessage(null)
@@ -451,9 +464,13 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
         resultsByProvider[provider] = results
       } catch (err) {
         console.error(`${provider} scan failed during Scan All:`, err)
+        // usage_limit_reached is a sentinel thrown after the modal is already showing
+        // (see startProviderScan) - stop here instead of trying the next provider, since
+        // it would just hit the same limit and pop the same modal again for no benefit.
+        if (err instanceof Error && err.message === "usage_limit_reached") break
         setErrorMessage(err instanceof Error ? err.message : `The ${providerLabel(provider)} scan failed`)
-        // Continue to the next provider rather than aborting the whole run - partial
-        // results from a failed provider are still worth showing.
+        // Otherwise continue to the next provider rather than aborting the whole run -
+        // partial results from a failed provider are still worth showing.
       }
     }
 

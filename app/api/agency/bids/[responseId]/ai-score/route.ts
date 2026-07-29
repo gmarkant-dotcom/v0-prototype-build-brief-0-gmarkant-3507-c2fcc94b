@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { computeCompositeScore } from "@/lib/bid-scoring"
-import { incrementAiAnalysis } from "@/lib/usage-tracking"
+import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -149,6 +149,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
+
+    const usageCheck = await checkUsageLimit(user.id, supabase, "ai_analyses")
+    if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const { data: response, error: responseErr } = await supabase
       .from("partner_rfp_responses")

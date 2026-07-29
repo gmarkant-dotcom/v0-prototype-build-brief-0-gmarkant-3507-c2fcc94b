@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { loadBidDeltaComparison } from "@/lib/delivery-review"
-import { incrementAiAnalysis } from "@/lib/usage-tracking"
+import { checkUsageLimit, incrementAiAnalysis } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -271,7 +271,14 @@ export async function POST(req: Request) {
       (allScores || []).map((s) => ({ criterion_id: s.criterion_id as string, score: s.score as number | null }))
     )
 
-    if (status === "complete" && comparison.hasEvaluation) {
+    // Unlike the other AI-gated endpoints, an exhausted usage limit here does not block the
+    // request (this is a delivery-review save; the AI delta summary is an optional side
+    // effect of it, not the thing the caller is asking for) - it just skips generating the
+    // summary, same as any other best-effort failure of this block already does.
+    const usageCheck = status === "complete" && comparison.hasEvaluation
+      ? await checkUsageLimit(userId, supabase, "ai_analyses")
+      : null
+    if (status === "complete" && comparison.hasEvaluation && usageCheck?.allowed) {
       const { data: evalRow } = await supabase
         .from("bid_evaluations")
         .select("composite_score")

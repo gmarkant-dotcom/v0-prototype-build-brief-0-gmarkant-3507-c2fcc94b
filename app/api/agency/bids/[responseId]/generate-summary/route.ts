@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { requireAgencyRole } from "@/lib/api-auth"
-import { incrementAiAnalysis } from "@/lib/usage-tracking"
+import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -14,6 +14,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     const auth = await requireAgencyRole()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
+
+    const usageCheck = await checkUsageLimit(user.id, supabase, "ai_analyses")
+    if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const result = await generateAndSaveBidSummary(supabase, responseId, user.id)
     if (!result.ok) {

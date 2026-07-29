@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, hashResponseIds } from "@/lib/bid-analysis-context"
-import { incrementAiAnalysis } from "@/lib/usage-tracking"
+import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -103,6 +103,9 @@ export async function POST(req: Request) {
         { status: 400 }
       )
     }
+
+    const usageCheck = await checkUsageLimit(user.id, supabase, "ai_analyses")
+    if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     // Scope description is shared across all selected bids (compare is only offered for
     // bids on the same RFP scope item), so the first bid's context is representative.

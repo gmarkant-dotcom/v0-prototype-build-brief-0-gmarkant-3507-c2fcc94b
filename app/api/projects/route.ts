@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
+import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
 
 export const dynamic = 'force-dynamic'
 
@@ -474,6 +475,9 @@ export async function POST(request: NextRequest) {
     if (!isDemo && !profile?.is_paid && !profile?.is_admin) {
       return NextResponse.json({ error: 'Active subscription required' }, { status: 403 })
     }
+
+    const usageCheck = await checkUsageLimit(user.id, supabase, 'projects')
+    if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const body = await request.json()
     const { name, clientName, description, budgetRange, startDate, endDate } = body

@@ -12,6 +12,8 @@ import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, CreditC
 import { SelectedProjectProvider, useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
+import { UsageLimitBanner } from "@/components/usage-limit-banner"
+import { UsageLimitModalProvider } from "@/contexts/usage-limit-modal-context"
 import { RoleToggle } from "@/components/role-toggle"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -43,6 +45,7 @@ const navSections = [
     label: "Resources",
     items: [
       { icon: "□", title: "Master Documents", href: "/agency/documents", tooltip: "Central repository for project documents and reference files" },
+      { icon: "▤", title: "Usage", href: "/agency/usage", tooltip: "Track active-project and AI-analysis usage against your plan" },
       { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
     ]
   }
@@ -713,7 +716,10 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
       
       {/* Main Content */}
       <main className="ml-[260px] min-h-screen relative z-10">
-        {children}
+        <UsageLimitModalProvider>
+          <UsageLimitBanner />
+          {children}
+        </UsageLimitModalProvider>
       </main>
     </div>
   )

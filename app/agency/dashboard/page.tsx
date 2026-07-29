@@ -14,6 +14,7 @@ import { mapDbProjectToMaster } from "@/lib/project-mapper"
 import { budgetStatusLabel, workflowStatusLabel } from "@/lib/partner-status"
 import { useFetch } from "@/hooks/useFetch"
 import { toast } from "sonner"
+import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import {
   Search,
   Filter,
@@ -162,6 +163,7 @@ function DashboardContent() {
   const { refreshProjects, addProject, setSelectedProject, projects: contextProjects, isLoadingProjects } =
     useSelectedProject()
   const { checkFeatureAccess } = usePaidUser()
+  const { guardAction, handleUsageLimitError } = useUsageLimitModal()
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "all">("all")
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false)
@@ -393,6 +395,8 @@ function DashboardContent() {
         return
       }
 
+      if (!guardAction("projects")) return
+
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -407,6 +411,7 @@ function DashboardContent() {
       })
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))
+        if (handleUsageLimitError(res.status, payload)) return
         const statusHint = res.status ? ` (HTTP ${res.status})` : ""
         setCreateProjectError((payload?.error || "Project creation failed. Please try again.") + statusHint)
         return
@@ -436,6 +441,7 @@ function DashboardContent() {
   }
 
   const handleDuplicateProject = async (projectId: string) => {
+    if (!guardAction("projects")) return
     try {
       const res = await fetch("/api/agency/projects/duplicate", {
         method: "POST",
@@ -444,6 +450,7 @@ function DashboardContent() {
       })
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))
+        if (handleUsageLimitError(res.status, payload)) return
         toast.error(payload?.error || "Failed to duplicate project")
         return
       }

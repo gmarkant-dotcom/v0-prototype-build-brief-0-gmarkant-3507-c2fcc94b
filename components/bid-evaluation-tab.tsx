@@ -6,6 +6,7 @@ import { mutate } from "swr"
 import { computeCompositeScore, compositeScoreColorClass } from "@/lib/bid-scoring"
 import { AiMarkdown } from "@/components/ai-markdown"
 import { ScoringSettingsSheet } from "@/components/scoring-settings-sheet"
+import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -80,6 +81,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
   const [starting, setStarting] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
+  const { guardAction, handleUsageLimitError } = useUsageLimitModal()
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -172,12 +174,16 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
   }
 
   const generateAiScores = async () => {
+    if (!guardAction("ai_analyses")) return
     setGenerating(true)
     setGenerateError(null)
     try {
       const res = await fetch(`/api/agency/bids/${responseId}/ai-score`, { method: "POST" })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || "AI scoring failed, please try again.")
+      if (!res.ok) {
+        if (handleUsageLimitError(res.status, data)) return
+        throw new Error(data?.error || "AI scoring failed, please try again.")
+      }
       setEvaluation((prev) =>
         prev ? { ...prev, composite_score: data.composite_score, scores: data.scores } : prev
       )

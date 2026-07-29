@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
+import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { InlineProjectSelector } from "@/components/agency-project-selector"
 import { AgencyRfpMagicLinkInvite } from "@/components/agency-rfp-magic-link-invite"
 import { Upload, FileText, Link2, Type, Plus, Trash2, Building2, Users, ChevronRight, ChevronDown, Check, Send, Shield, FileCheck, Loader2, Sparkles, X, Zap } from "lucide-react"
@@ -138,6 +139,7 @@ const MASTER_BRIEF_LOADING_MESSAGES = [
 function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
   const { selectedProject, setSelectedProject, isLoadingProjects, projects, refreshProjects } = useSelectedProject()
+  const { guardAction, handleUsageLimitError } = useUsageLimitModal()
   const [isDuplicatingProject, setIsDuplicatingProject] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -1233,6 +1235,7 @@ function AgencyRFPContent() {
 
   const handleDuplicateProject = async () => {
     if (!selectedProject?.id || isDuplicatingProject) return
+    if (!guardAction("projects")) return
     setIsDuplicatingProject(true)
     try {
       const res = await fetch("/api/agency/projects/duplicate", {
@@ -1242,6 +1245,7 @@ function AgencyRFPContent() {
       })
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))
+        if (handleUsageLimitError(res.status, payload)) return
         toast.error(payload?.error || "Failed to duplicate project")
         return
       }

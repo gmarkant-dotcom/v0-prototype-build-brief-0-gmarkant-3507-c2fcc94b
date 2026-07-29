@@ -5,6 +5,7 @@ import { createClient as createServiceClient, type SupabaseClient } from "@supab
 import { refreshGoogleToken } from "@/lib/google-email"
 import { refreshMicrosoftToken } from "@/lib/microsoft-email"
 import { encrypt, decrypt } from "@/lib/token-encryption"
+import { checkUsageLimit, usageLimitResponse } from "@/lib/usage-tracking"
 
 type EmailProvider = "google" | "microsoft"
 
@@ -64,6 +65,12 @@ export async function POST(request: NextRequest) {
     if (!service) {
       return NextResponse.json({ error: "Missing Supabase service configuration" }, { status: 500 })
     }
+
+    // Gated here (the "start scan" endpoint) rather than in /run - blocking before a scan
+    // ever starts avoids burning a Gmail/Graph API round trip on a scan whose completion
+    // would just be rejected anyway.
+    const usageCheck = await checkUsageLimit(auth.userId, service, "ai_analyses")
+    if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const provider: EmailProvider = requestedProvider
       ? (requestedProvider as EmailProvider)

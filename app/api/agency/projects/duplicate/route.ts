@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { checkUsageLimit, usageLimitResponse } from "@/lib/usage-tracking"
 
 export const dynamic = "force-dynamic"
 
@@ -35,6 +36,9 @@ export async function POST(request: NextRequest) {
     if (!isDemo && !profile?.is_paid && !profile?.is_admin) {
       return NextResponse.json({ error: "Active subscription required" }, { status: 403 })
     }
+
+    const usageCheck = await checkUsageLimit(user.id, supabase, "projects")
+    if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const { data: sourceProject, error: sourceErr } = await supabase
       .from("projects")

@@ -8,6 +8,7 @@ import { BidDetailSheet } from "@/components/bid-detail-sheet"
 import { BidCompareView } from "@/components/bid-compare-view"
 import { ScoringSettingsSheet } from "@/components/scoring-settings-sheet"
 import { useFetch } from "@/hooks/useFetch"
+import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { cn, formatSubmittedAt } from "@/lib/utils"
 import {
   type BidRow,
@@ -46,11 +47,13 @@ const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 /** Generates (or regenerates) the AI summary for one bid, then patches the shared SWR
  *  cache directly (no revalidate round-trip) so every card/sheet showing this response
  *  picks up the fresh columns immediately instead of flashing back to "Generate". */
-async function requestSummaryGeneration(responseId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+async function requestSummaryGeneration(
+  responseId: string
+): Promise<{ ok: true } | { ok: false; error: string; status: number; data: unknown }> {
   try {
     const res = await fetch(`/api/agency/bids/${responseId}/generate-summary`, { method: "POST" })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) return { ok: false, error: data?.error || "Analysis unavailable" }
+    if (!res.ok) return { ok: false, error: data?.error || "Analysis unavailable", status: res.status, data }
     void mutate(
       RFP_RESPONSES_URL,
       (current: { responses: BidRow[] } | undefined) =>
@@ -72,7 +75,7 @@ async function requestSummaryGeneration(responseId: string): Promise<{ ok: true 
     )
     return { ok: true }
   } catch {
-    return { ok: false, error: "Analysis unavailable" }
+    return { ok: false, error: "Analysis unavailable", status: 0, data: null }
   }
 }
 
@@ -141,6 +144,7 @@ function BidCard({
 }) {
   const [summaryGenerating, setSummaryGenerating] = useState(false)
   const [summaryError, setSummaryError] = useState<string | null>(null)
+  const { guardAction, handleUsageLimitError } = useUsageLimitModal()
 
   const badge = statusBadge(row.status)
   const scope = row.inbox?.scope_item_name || row.project_name || "Scope"
@@ -150,11 +154,15 @@ function BidCard({
   const canSelect = row.response_exists && Boolean(row.response_id)
 
   const generateSummary = async () => {
+    if (!guardAction("ai_analyses")) return
     setSummaryGenerating(true)
     setSummaryError(null)
     const result = await requestSummaryGeneration(row.id)
     setSummaryGenerating(false)
-    if (!result.ok) setSummaryError("Analysis unavailable - try again")
+    if (!result.ok) {
+      if (handleUsageLimitError(result.status, result.data)) return
+      setSummaryError("Analysis unavailable - try again")
+    }
   }
 
   return (

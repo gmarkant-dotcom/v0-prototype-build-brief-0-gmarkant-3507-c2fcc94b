@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
-import { incrementAiAnalysis } from "@/lib/usage-tracking"
+import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -129,6 +129,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
         })
       }
     }
+
+    const usageCheck = await checkUsageLimit(user.id, supabase, "ai_analyses")
+    if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const ctx = await loadBidAnalysisContext(supabase, responseId, user.id)
     if (!ctx) return NextResponse.json({ error: "Bid not found" }, { status: 404 })

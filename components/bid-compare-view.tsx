@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils"
 import { AiMarkdown } from "@/components/ai-markdown"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
+import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
@@ -74,6 +75,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
   const [rankingGenerating, setRankingGenerating] = useState(false)
   const [rankingError, setRankingError] = useState<string | null>(null)
   const [rankingRequested, setRankingRequested] = useState(false)
+  const { guardAction, handleUsageLimitError } = useUsageLimitModal()
 
   const responseIds = useMemo(() => rows.map((r) => r.id), [rows])
   const maxBudget = useMemo(
@@ -158,6 +160,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
   const allDecompositionsReady = !checkingDecompositions && missingIds.length === 0
 
   const analyzeAllBids = async () => {
+    if (!guardAction("ai_analyses")) return
     setDecomposeError(null)
     setAnalyzingIds(new Set(missingIds))
     await Promise.all(
@@ -171,7 +174,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
           const data = await res.json().catch(() => ({}))
           if (res.ok) {
             setDecompositions((prev) => new Map(prev).set(id, data.line_items || []))
-          } else {
+          } else if (!handleUsageLimitError(res.status, data)) {
             setDecomposeError("Analysis unavailable - try again")
           }
         } catch {
@@ -188,6 +191,11 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
   }
 
   const runComparison = async (force: boolean) => {
+    // force=true only ever comes from a deliberate retry click, force=false is the
+    // automatic run once every selected bid has a decomposition - same distinction as
+    // bid-detail-sheet's generateAnalysis/loadDecomposition, and for the same reason: don't
+    // pop the blocking modal from an effect the user didn't directly trigger.
+    if (force && !guardAction("ai_analyses")) return
     setComparing(true)
     setComparisonError(null)
     setComparisonRequested(true)
@@ -198,7 +206,10 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
         body: JSON.stringify({ response_ids: responseIds, force }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || "Analysis unavailable")
+      if (!res.ok) {
+        if (force && handleUsageLimitError(res.status, data)) return
+        throw new Error(data?.error || "Analysis unavailable")
+      }
       setComparison({ narrative: data.narrative })
     } catch {
       setComparisonError("Analysis unavailable - try again")
