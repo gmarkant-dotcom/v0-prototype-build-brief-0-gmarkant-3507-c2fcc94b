@@ -588,9 +588,9 @@ function GroupSection({ label, projects, defaultOpen, onProjectClick }: {
 // ── Performance Scores section ──────────────────────────────────────────────────
 
 function PerformanceScoresSection({ reviews, projectNameById }: {
-  reviews: PartnerDeliveryReview[]; projectNameById: Map<string, string>
+  reviews: PartnerDeliveryReview[] | null | undefined; projectNameById: Map<string, string>
 }) {
-  if (reviews.length === 0) return null
+  if (!reviews?.length) return null
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
@@ -604,13 +604,14 @@ function PerformanceScoresSection({ reviews, projectNameById }: {
         </p>
       </div>
       <div className="space-y-2">
-        {reviews.map((review) => {
-          const projectName = projectNameById.get(review.project_id) || "Project"
+        {reviews.map((review, i) => {
+          if (!review) return null
+          const projectName = projectNameById.get(review.project_id ?? "") || "Project"
           const onTime = review.on_time ? ON_TIME_BADGE[review.on_time] : null
           const onBudget = review.on_budget ? ON_BUDGET_BADGE[review.on_budget] : null
           const scoreColor = review.composite_score != null ? compositeScoreColorClass(review.composite_score) : null
           return (
-            <div key={review.id} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 flex-wrap">
+            <div key={review.id ?? i} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 flex-wrap">
               <div className="flex-1 min-w-0">
                 <div className="font-display font-bold text-sm text-[#0C3535] truncate">{projectName}</div>
               </div>
@@ -655,14 +656,20 @@ export default function PartnerProjectsPage() {
   const [activeProject, setActiveProject] = useState<PartnerProject|null>(null)
 
   const { data, isLoading, error } = useFetch<{ projects: PartnerProject[] }>("/api/partner/projects")
-  const allProjects: PartnerProject[] = data?.projects ?? []
+  // Memoized so this array has a stable reference across renders while `data` is
+  // unchanged (including the whole loading phase, where `data` is `undefined`).
+  // `data?.projects ?? []` evaluated inline would mint a brand-new [] every render,
+  // which fed straight into the effect below as an always-different dependency -
+  // useEffect fired every render, called setDeliveryReviews on an empty-partnerships
+  // partner, which re-rendered, which made a new [], forever (React error #185).
+  const allProjects: PartnerProject[] = useMemo(() => data?.projects ?? [], [data])
 
   const [deliveryReviews, setDeliveryReviews] = useState<PartnerDeliveryReview[]>([])
 
   useEffect(() => {
-    const partnershipIds = [...new Set(allProjects.map((p) => p.partnership_id).filter(Boolean))]
+    const partnershipIds = [...new Set(allProjects.map((p) => p?.partnership_id).filter(Boolean))]
     if (partnershipIds.length === 0) {
-      setDeliveryReviews([])
+      setDeliveryReviews((prev) => (prev.length === 0 ? prev : []))
       return
     }
     let cancelled = false
@@ -670,13 +677,23 @@ export default function PartnerProjectsPage() {
       try {
         const supabase = createClient()
         // RLS (migration 066): partners may only read their own rows where status = 'complete'.
-        const { data: reviews } = await supabase
+        // Also defensive against the migration not being applied yet in this environment -
+        // any query error (missing table, RLS not yet granting access, network failure) just
+        // means the section doesn't render, never a crash.
+        const { data: reviews, error: reviewsError } = await supabase
           .from("delivery_reviews")
           .select("id, project_id, composite_score, on_time, on_budget, overall_satisfaction")
           .in("partnership_id", partnershipIds)
           .eq("status", "complete")
-        if (!cancelled) setDeliveryReviews((reviews || []) as PartnerDeliveryReview[])
-      } catch {
+        if (cancelled) return
+        if (reviewsError) {
+          console.error("[partner/projects] delivery_reviews load failed", reviewsError.message)
+          setDeliveryReviews([])
+          return
+        }
+        setDeliveryReviews(Array.isArray(reviews) ? (reviews as PartnerDeliveryReview[]) : [])
+      } catch (e) {
+        console.error("[partner/projects] delivery_reviews load exception", e)
         if (!cancelled) setDeliveryReviews([])
       }
     })()
