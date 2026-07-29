@@ -43,7 +43,6 @@ const navSections = [
     label: "Resources",
     items: [
       { icon: "□", title: "Master Documents", href: "/agency/documents", tooltip: "Central repository for project documents and reference files" },
-      { icon: "$", title: "Cash Flow", href: "/agency/cashflow", tooltip: "Track client payments and partner milestones with AI payment scheduling" },
       { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
     ]
   }
@@ -106,12 +105,6 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
             </Link>
             <div className="border-b border-border my-1" />
             <Link
-              href="/agency"
-              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
-            >
-              Vendor RFP Broadcast
-            </Link>
-            <Link
               href="/agency/magic-rfp"
               className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
             >
@@ -134,12 +127,6 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
             Creative Treatment Analysis
           </Link>
           <div className="border-b border-border" />
-          <Link
-            href="/agency"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
-          >
-            Vendor RFP Broadcast
-          </Link>
           <Link
             href="/agency/magic-rfp"
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
