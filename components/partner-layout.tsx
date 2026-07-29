@@ -256,6 +256,39 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               </div>
             </div>
           </div>
+
+          {/* Mobile nav: the grouped/tooltip nav above is `hidden md:flex` (disappears
+              entirely below md) - extend rather than rebuild with a flat, horizontally
+              scrollable row so every item (including the 00-03 step numbers) stays
+              reachable on small screens. No hover, so no tooltips here. */}
+          <nav className="flex md:hidden items-center gap-1 overflow-x-auto -mx-6 px-6 pb-1 mt-3">
+            {navItems.map((item) => {
+              const isActive = pathname === item.href ||
+                (item.href !== "/partner" && pathname?.startsWith(item.href))
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-2 rounded-lg font-mono text-[11px] whitespace-nowrap shrink-0 transition-colors",
+                    isActive
+                      ? "bg-white/10 text-[#C8F53C]"
+                      : "text-white/90 hover:text-white hover:bg-white/5"
+                  )}
+                >
+                  {item.number ? (
+                    <span className={cn("font-mono text-[11px] font-medium", isActive ? "text-[#C8F53C]" : "text-white/60")}>
+                      {item.number}
+                    </span>
+                  ) : (
+                    <span>{item.icon}</span>
+                  )}
+                  <span>{item.title}</span>
+                </Link>
+              )
+            })}
+          </nav>
+
           <div className="mt-3 max-w-[220px]">
             <RoleToggle />
           </div>
