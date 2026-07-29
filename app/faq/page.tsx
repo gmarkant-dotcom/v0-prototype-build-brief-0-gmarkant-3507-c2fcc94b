@@ -13,54 +13,70 @@ type FAQ = { q: string; a: string }
 const generalFAQs: FAQ[] = [
   {
     q: "What is Ligament?",
-    a: "Ligament is an AI-powered vendor orchestration platform for independent creative agencies. It helps lead agencies identify, mobilize, and manage partner vendors across every project scope, and gives partner agencies a structured way to receive RFPs, submit bids, and manage active engagements.",
+    a: "Ligament is an AI-powered vendor orchestration platform for independent creative agencies. Lead agencies build a partner pool, broadcast RFPs, compare and score bids with AI, and review delivery performance. Partner agencies get discovered, submit bids, and build a track record, all in one platform.",
   },
   {
     q: "Who is Ligament for?",
-    a: "Ligament is built for two types of users. Lead Agencies use it to manage their vendor pool, create projects, broadcast RFPs, review bids, manage onboarding, and track payments. Partner Agencies use it to receive RFP invitations, submit bids with payment terms, complete onboarding, submit status updates, and manage their profile and credentials.",
-  },
-  {
-    q: "Is my data secure?",
-    a: "Data is stored on Supabase hosted on AWS US-East. AI processing uses the Anthropic API. File storage uses Vercel Blob with private access controls. Row-level security ensures each agency and partner only sees their own data. All connections use HTTPS.",
+    a: "Two types of users. Lead Agencies manage their partner pool, broadcast RFPs, evaluate bids, run onboarding, and review delivery performance. Partner Agencies receive RFP invitations, submit bids, complete onboarding, and track their engagements and reliability score.",
   },
   {
     q: "Is Ligament free for partner agencies?",
     a: "Yes, completely free. Ligament charges lead agencies for platform access. Partner agencies, the vendors receiving RFPs and submitting bids, always use Ligament at no cost.",
   },
   {
+    q: "How much does Ligament cost for lead agencies?",
+    a: "Starter is $150/month or $1,500/year for up to 5 active projects and 50 AI analyses a month. Professional is $400/month or $4,000/year for up to 20 active projects and 250 AI analyses a month. Enterprise is custom pricing with unlimited projects and AI analyses. See the pricing page for the full feature comparison.",
+  },
+  {
     q: "Do I need to create an account to submit a bid?",
-    a: "No. If a lead agency sends you a Lightning RFP Magic Link, you can view the full project brief and submit a complete bid including payment terms and file attachments without creating a Ligament account. Your link stays active for 72 hours so you can return to check your bid status and see agency feedback. Creating an account is optional but unlocks bid tracking across all projects, profile discoverability, and direct RFP invitations from agencies in the network.",
+    a: "No. If a lead agency sends you a Lightning RFP Magic Link, you can view the full project brief and submit a complete bid without creating a Ligament account. Your link stays active for 72 hours so you can return to check status and feedback. Creating an account afterward is optional but unlocks bid tracking, profile discoverability, and direct RFP invitations.",
+  },
+  {
+    q: "Is my data secure?",
+    a: "Data is stored on Supabase hosted on AWS US-East. AI processing uses the Anthropic API. File storage uses Vercel Blob with private access controls. Row-level security ensures each agency and partner only sees their own data, and all connections use HTTPS.",
   },
 ]
 
 const leadFAQs: FAQ[] = [
   {
     q: "What is the Partner Pool?",
-    a: "Your Partner Pool is your curated network of vetted vendor partners. You can manage existing relationships, track NDA and MSA status, and discover new partners through the built-in Marketplace. Partners in your pool can be invited to bid on any project scope.",
+    a: "Your Partner Pool is organized into three columns: Active Partners you already work with, partners you have Invited but who have not yet joined, and partners you have Discovered but not yet reached out to. Build it by inviting partners directly, importing contacts from your email, or discovering new agencies on the marketplace.",
+  },
+  {
+    q: "Can I import my vendor contacts from email?",
+    a: "Yes. Connect Gmail and Ligament scans subject lines and message previews (never full email content) to identify likely vendor contacts, scoring each one by signals like attachments and message frequency. Review the results and choose which contacts to add to your pool. Outlook import is coming soon.",
   },
   {
     q: "How does RFP Broadcast work?",
-    a: "Start by uploading or creating a client brief. Optionally set output template preferences including style, sensitivity scrubbing, and format. The platform uses AI to map your brief into a structured master RFP. You then allocate scope items to internal teams or external partners, select recipients from your partner pool, and broadcast. Each partner receives a scoped RFP tailored to their deliverable.",
+    a: "Upload or create a client brief and Ligament's AI analyzes it into a structured master RFP with scope items. Allocate scope items to partners in your pool or send them via Lightning RFP Magic Link to any vendor, no account required on their end. Each recipient gets a scoped RFP tailored to their deliverable.",
   },
   {
     q: "What is Lightning RFP Magic Link?",
-    a: "Lightning RFP Magic Link is the fastest way to get a bid from any vendor. No Ligament account required. Create a brief, add vendor email addresses and names, and send instant personalized invitations. Each vendor receives a unique secure link valid for 72 hours. They can view the full project brief, upload files, add reference links, and submit their bid including payment terms, all without creating an account. After submitting, vendors are invited to create a Ligament profile to track their bid status, receive future RFPs, and get discovered by other agencies.",
+    a: "The fastest way to get a bid from any vendor, no Ligament account required. Add a vendor's email and name and send an instant, secure, personalized link valid for 72 hours. They can view the brief, upload files, and submit a complete bid, then are invited to create a profile afterward to keep tracking it.",
   },
   {
     q: "How does Bid Management work?",
-    a: "All bids from partner pool vendors and Lightning RFP Magic Link guest submissions appear in one place. Review proposals, budgets, payment terms, and attachments side by side. Shortlist bids, request meetings, provide feedback, award scopes, or decline. Guest submissions from vendors without Ligament accounts are clearly labeled and support all the same actions except awarding, which requires the vendor to create an account to complete onboarding.",
+    a: "All bids, from partner pool vendors and Magic Link guests alike, appear in one pipeline. Generate an AI summary and cost decomposition for any bid, or select several to compare side by side with an AI narrative that surfaces pricing gaps and scope risks. Shortlist, request meetings, leave feedback, award, or decline from the same view.",
+  },
+  {
+    q: "How does AI bid scoring work?",
+    a: "Score bids against configurable criteria, seven by default (creative approach, production capability, budget, timeline, business criteria compliance, vendor track record, and risk). AI pre-scores each criterion 1-10 with a written rationale you can accept or override with your own score and notes. The weighted scores roll up into a single 0-100 composite for ranking bids against each other.",
+  },
+  {
+    q: "What is Delivery Performance?",
+    a: "After a project wraps, rate the vendor's actual delivery against the same criteria you scored their bid on, plus on-time, on-budget, and satisfaction ratings. Ligament compares the delivery score to the original bid score and generates an AI summary of where the vendor over-delivered or under-delivered. This builds a reliability record that surfaces on the partner's profile and informs AI scoring on their future bids.",
   },
   {
     q: "What is Onboarding?",
-    a: "After awarding a bid, send a structured onboarding package to the partner. The package includes kickoff details, key documents, and MSA tracking. Partners acknowledge receipt through their Ligament portal. Track acknowledgment status across all active partnerships from the Onboarding page.",
+    a: "After awarding a bid, send a structured onboarding package with kickoff details, brand guidelines, and key project documents. Partners acknowledge receipt through their portal, and you can track acknowledgment status across every active partnership from the Onboarding page.",
   },
   {
-    q: "How does Cash Flow & Payments work?",
-    a: "The Cash Flow & Payments page lets you track client cash inflows and partner payment milestones per project. Add expected client payments with amounts and dates, then use AI Payment Synthesis to generate a recommended partner payment schedule that protects your margin and minimizes cash flow risk. Accept the AI recommendation to save it as your official milestone schedule, or adjust manually.",
+    q: "What are business criteria and procurement requirements?",
+    a: "Track each partner's business designations (MBE, WBE, veteran-owned, and others), insurance coverage, and certificate of insurance on file. Set requirements on an RFP and Ligament flags any bidder who does not meet them, so compliance gaps surface automatically during bid review.",
   },
   {
     q: "How do I get started as a Lead Agency?",
-    a: "Sign up, create your first project, and either invite partners from your existing network using Lightning RFP Magic Link or build your Partner Pool by inviting vendors to join Ligament. No setup fee required during the current beta period.",
+    a: "Sign up, create your first project, and either invite partners from your existing network or build your Partner Pool by importing contacts, inviting directly, or discovering new agencies on the marketplace. No setup fee.",
   },
 ]
 
@@ -71,31 +87,39 @@ const partnerFAQs: FAQ[] = [
   },
   {
     q: "How do I join Ligament as a partner agency?",
-    a: "You can join in two ways. If a lead agency invites you to bid on a project, you will receive either a direct platform invitation or a Lightning RFP Magic Link, both let you respond immediately. You can also sign up directly at withligament.com and complete your profile to become discoverable to agencies actively looking for partners.",
+    a: "If a lead agency invites you to bid, you will get a direct platform invitation or a Lightning RFP Magic Link, either lets you respond right away. You can also sign up directly and complete your profile to become discoverable to agencies looking for partners.",
+  },
+  {
+    q: "What is the Agency Network page?",
+    a: "Agency Network brings your agency relationships into one place across three tabs. My Agencies shows partnerships you already have. Invitations shows pending invitations from lead agencies waiting on your response. Discover lets you search and filter lead agencies and request access to their network.",
   },
   {
     q: "How do I make my profile discoverable to agencies?",
-    a: "On your Partner Profile page, toggle on \"Make my profile discoverable\" to opt in to public visibility. Once discoverable, your profile appears in the Partner Pool and Marketplace that lead agencies browse when looking for new vendors. A complete profile with capabilities, credentials, a reel or work examples, and a filled-in bio significantly increases the likelihood of receiving unsolicited RFP invitations.",
+    a: "On your Partner Profile page, toggle on \"Make my profile discoverable.\" Once on, your profile appears in the marketplaces lead agencies browse when looking for new vendors. A complete profile with capabilities, credentials, business criteria, and work examples increases your odds of getting invited to bid.",
   },
   {
     q: "What information should I include in my profile?",
-    a: "Focus on your capabilities (the types of work you do), credentials and portfolio (past projects with relevant context), and reel or work examples (links or uploaded files showing your best work). You can also upload a capabilities overview document. Add your legal entity information and payment preferences when you are ready to formalize engagements. The more complete your profile, the more credible you appear to lead agencies.",
+    a: "Your capabilities, credentials and portfolio, and a reel or work examples showing your best work. Fill in your business criteria too, designations you hold and insurance coverage on file, since agencies filter and score bids against these. The more complete your profile, the more credible you appear.",
   },
   {
     q: "How do I track my bid submissions?",
-    a: "Your partner dashboard shows all active RFP invitations and bid submissions in one place. For each bid you can see the current status (submitted, under review, shortlisted, awarded, or declined), any feedback the agency has left, and key dates. If you submitted a bid via a Lightning RFP Magic Link, you can return to that same link within 72 hours to check status and see agency feedback without needing a Ligament account. After 72 hours, create a profile to continue tracking.",
-  },
-  {
-    q: "Can I share my Ligament profile with agencies outside the platform?",
-    a: "Yes. Once your profile is set to discoverable, it has a public URL you can share directly with potential clients or include in proposals and pitches. Agencies who click your profile link can see your capabilities, portfolio, and work examples without needing a Ligament account themselves.",
+    a: "Open RFPs & Bids has three tabs: Open RFPs for invitations waiting on a response, My Bids for submissions still awaiting a decision, and History for every bid you have ever submitted with its final outcome. Each shows the agency, scope, budget, and current status.",
   },
   {
     q: "What happens after I win a bid?",
-    a: "When a lead agency awards your bid, you will receive an onboarding package through Ligament containing kickoff details, key project documents, and any MSA or legal agreements to review. Acknowledge receipt through your partner portal. From there, your active project appears in your Active Projects view where you can submit status updates, track milestones, and manage payment schedules.",
+    a: "You will receive an onboarding package with kickoff details, brand guidelines, and project documents. Acknowledge it through your portal, and the engagement appears in Delivery & Projects where you submit status updates and track the project through to completion.",
+  },
+  {
+    q: "Can agencies see how I performed on past projects?",
+    a: "Yes. After a project completes, the lead agency rates your delivery, on-time, on-budget, satisfaction, and the same criteria they scored your bid on. You can see your own completed scores under Delivery & Projects. This reliability record is what makes a strong track record valuable when bidding on future work.",
+  },
+  {
+    q: "Can I share my Ligament profile with agencies outside the platform?",
+    a: "Yes. Once your profile is discoverable, it has a public URL you can share in proposals and pitches. Anyone who clicks it sees your capabilities, portfolio, and work examples without needing a Ligament account themselves.",
   },
   {
     q: "What if I submitted a bid via Magic Link but want to create an account?",
-    a: "After submitting a bid via Lightning RFP Magic Link, you will see a prompt to create a Ligament profile. Click it and your email will be pre-filled. Once your account is created, your submitted bid is automatically associated with your new profile so you can track it, receive the agency's decision, and access onboarding if awarded, all without resubmitting anything.",
+    a: "You will see a prompt to create a profile with your email pre-filled. Once created, your submitted bid is automatically linked to your new profile, so you keep tracking it, receive the agency's decision, and access onboarding if awarded without resubmitting anything.",
   },
 ]
 
