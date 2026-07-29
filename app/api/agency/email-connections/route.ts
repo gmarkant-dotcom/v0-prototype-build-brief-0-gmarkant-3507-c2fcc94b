@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { revokeGoogleToken } from "@/lib/google-email"
+import { revokeMicrosoftToken } from "@/lib/microsoft-email"
 import { decrypt } from "@/lib/token-encryption"
 
 export const dynamic = "force-dynamic"
@@ -124,9 +125,7 @@ export async function DELETE(request: NextRequest) {
 
   // Revoke is provider-specific and best-effort - a locally-revoked connection with a
   // still-technically-valid remote token is far less bad than a stuck "can't disconnect"
-  // state, so a revoke failure never blocks the local cleanup below. Providers with no
-  // revoke function yet (e.g. a future 'microsoft' row, Phase 2) simply skip this step -
-  // the schema already accommodates them via the provider CHECK constraint.
+  // state, so a revoke failure never blocks the local cleanup below.
   if (provider === "google" && connection.access_token_encrypted) {
     try {
       const accessToken = decrypt(connection.access_token_encrypted)
@@ -141,6 +140,10 @@ export async function DELETE(request: NextRequest) {
         message: revokeErr instanceof Error ? revokeErr.message : String(revokeErr),
       })
     }
+  } else if (provider === "microsoft") {
+    // No remote revoke call exists for Microsoft - see revokeMicrosoftToken's comment.
+    // Local token cleanup below is all that happens here.
+    await revokeMicrosoftToken()
   }
 
   const { error: updateErr } = await service
