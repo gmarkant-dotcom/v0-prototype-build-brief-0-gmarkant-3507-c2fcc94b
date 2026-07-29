@@ -1,9 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { randomUUID } from "crypto"
 import { createClient } from "@/lib/supabase/server"
-import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
 import { refreshGoogleToken } from "@/lib/google-email"
+import { refreshMicrosoftToken } from "@/lib/microsoft-email"
 import { encrypt, decrypt } from "@/lib/token-encryption"
+
+type EmailProvider = "google" | "microsoft"
+
+/** No provider specified in the request body - scan whichever single connection the user
+ *  has. If both are connected, the client is expected to specify one explicitly (the UI's
+ *  provider selector / "Scan All" always does); google is the documented fallback for the
+ *  ambiguous case since it was Phase 1. */
+async function inferProvider(service: SupabaseClient, userId: string): Promise<EmailProvider> {
+  const { data: connections } = await service
+    .from("email_connections")
+    .select("provider")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .order("provider", { ascending: true })
+  const providers = (connections || []).map((c) => c.provider as EmailProvider)
+  if (providers.length === 1) return providers[0]
+  return providers.includes("google") || providers.length === 0 ? "google" : providers[0]
+}
 
 export const dynamic = "force-dynamic"
 
@@ -36,8 +55,8 @@ export async function POST(request: NextRequest) {
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
     const body = await request.json().catch(() => ({}))
-    const provider = String(body.provider || "")
-    if (provider !== "google") {
+    const requestedProvider = String(body.provider || "")
+    if (requestedProvider && requestedProvider !== "google" && requestedProvider !== "microsoft") {
       return NextResponse.json({ error: "Unsupported provider" }, { status: 400 })
     }
 
@@ -46,11 +65,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing Supabase service configuration" }, { status: 500 })
     }
 
+    const provider: EmailProvider = requestedProvider
+      ? (requestedProvider as EmailProvider)
+      : await inferProvider(service, auth.userId)
+    const providerLabel = provider === "google" ? "Gmail" : "Outlook"
+
     const { data: connection, error: connErr } = await service
       .from("email_connections")
       .select("*")
       .eq("user_id", auth.userId)
-      .eq("provider", "google")
+      .eq("provider", provider)
       .maybeSingle()
     if (connErr) {
       console.error("[api] failure", { route, method: "POST", message: connErr.message })
@@ -58,13 +82,13 @@ export async function POST(request: NextRequest) {
     }
     if (!connection) {
       return NextResponse.json(
-        { error: "No email connection found. Connect your Gmail account first." },
+        { error: `No email connection found. Connect your ${providerLabel} account first.` },
         { status: 404 }
       )
     }
     if (connection.status !== "active") {
       return NextResponse.json(
-        { error: "This connection is not active. Reconnect your Gmail account." },
+        { error: `This connection is not active. Reconnect your ${providerLabel} account.` },
         { status: 400 }
       )
     }
@@ -76,13 +100,14 @@ export async function POST(request: NextRequest) {
       if (!connection.refresh_token_encrypted) {
         await service.from("email_connections").update({ status: "expired" }).eq("id", connection.id)
         return NextResponse.json(
-          { error: "Your Gmail connection has expired. Please reconnect." },
+          { error: `Your ${providerLabel} connection has expired. Please reconnect.` },
           { status: 401 }
         )
       }
       try {
         const refreshToken = decrypt(connection.refresh_token_encrypted)
-        const refreshed = await refreshGoogleToken(refreshToken)
+        const refreshed =
+          provider === "google" ? await refreshGoogleToken(refreshToken) : await refreshMicrosoftToken(refreshToken)
         const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
         const { error: updateErr } = await service
           .from("email_connections")
@@ -98,7 +123,7 @@ export async function POST(request: NextRequest) {
         })
         await service.from("email_connections").update({ status: "expired" }).eq("id", connection.id)
         return NextResponse.json(
-          { error: "Your Gmail connection has expired. Please reconnect." },
+          { error: `Your ${providerLabel} connection has expired. Please reconnect.` },
           { status: 401 }
         )
       }
@@ -114,8 +139,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to start scan" }, { status: 500 })
     }
 
-    console.log("[api] success", { route, method: "POST", userId: auth.userId, connectionId: connection.id })
-    return NextResponse.json({ scan_id: connection.id, scan_run_token: scanRunToken, status: "scanning" })
+    console.log("[api] success", { route, method: "POST", userId: auth.userId, connectionId: connection.id, provider })
+    return NextResponse.json({ scan_id: connection.id, scan_run_token: scanRunToken, status: "scanning", provider })
   } catch (error) {
     console.error("[api] failure", {
       route,

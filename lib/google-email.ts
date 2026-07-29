@@ -139,8 +139,9 @@ const LIST_PAGE_SIZE = 100
 const FETCH_CHUNK_SIZE = 20
 // Bounds how many snippet strings accumulate per contact - keyword scoring only needs "does
 // any snippet mention X", so this caps scan_results payload growth for a contact appearing
-// in many messages without losing scoring signal.
-const MAX_SNIPPETS_PER_CONTACT = 10
+// in many messages without losing scoring signal. Exported so lib/microsoft-email.ts's
+// accumulateContactsFromMicrosoftMessages can fold into the same shared accumulator shape.
+export const MAX_SNIPPETS_PER_CONTACT = 10
 
 type GmailHeader = { name: string; value: string }
 type GmailMessagePart = { filename?: string; parts?: GmailMessagePart[] }
@@ -177,14 +178,18 @@ export type RawGmailContact = {
   last_contact_date: string | null
 }
 
-type AccumulatorEntry = {
+// Exported so lib/microsoft-email.ts's accumulateContactsFromMicrosoftMessages can build
+// entries of the same shape into the same shared ContactAccumulator Map - one accumulator,
+// folded from either provider's messages, is what makes cross-provider dedup (and "Scan
+// All") just work without extra merge logic.
+export type AccumulatorEntry = {
   email: string
   name: string | null
   message_count: number
   last_contact_date: string | null
-  // Every subject seen, paired with its message's Date header - sorted and capped to the
-  // 5 most recent only when converting to RawGmailContact, since Gmail's list order for a
-  // search query isn't a documented guarantee of newest-first.
+  // Every subject seen, paired with its message's date - sorted and capped to the 5 most
+  // recent only when converting to RawGmailContact, since neither provider's search-query
+  // list order is a documented guarantee of newest-first.
   subjectEntries: { subject: string; date: string | null }[]
   snippets: string[]
   has_attachments: boolean

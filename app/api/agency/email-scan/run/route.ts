@@ -12,10 +12,18 @@ import {
   MAX_MESSAGES,
   type RawGmailContact,
 } from "@/lib/google-email"
+import {
+  fetchOutlookMessageBatch,
+  accumulateContactsFromMicrosoftMessages,
+  refreshMicrosoftToken,
+  MAX_OUTLOOK_MESSAGES,
+} from "@/lib/microsoft-email"
 import { encrypt, decrypt } from "@/lib/token-encryption"
 import { scoreAndFilterContacts, type ScoredVendorContact } from "@/lib/vendor-signal-scoring"
 import { getEmailDomain } from "@/lib/email-domains"
 import { incrementAiAnalysis } from "@/lib/usage-tracking"
+
+type EmailProvider = "google" | "microsoft"
 
 type EnrichedContact = ScoredVendorContact<RawGmailContact> & {
   has_ligament_account: boolean
@@ -141,12 +149,18 @@ export async function GET(request: NextRequest) {
   }
 
   const scanRunToken = request.nextUrl.searchParams.get("token") || ""
+  const providerParam = request.nextUrl.searchParams.get("provider") || "google"
+  if (providerParam !== "google" && providerParam !== "microsoft") {
+    return NextResponse.json({ error: "Unsupported provider" }, { status: 400 })
+  }
+  const provider: EmailProvider = providerParam
+  const providerLabel = provider === "google" ? "Gmail" : "Outlook"
 
   const { data: connection, error: connErr } = await service
     .from("email_connections")
     .select("*")
     .eq("user_id", auth.userId)
-    .eq("provider", "google")
+    .eq("provider", provider)
     .maybeSingle()
   if (connErr) {
     console.error("[api] failure", { route, method: "GET", message: connErr.message })
@@ -169,7 +183,7 @@ export async function GET(request: NextRequest) {
   }
   if (!connection.access_token_encrypted) {
     await service.from("email_connections").update({ scan_status: "error", status: "expired" }).eq("id", connection.id)
-    return NextResponse.json({ error: "No access token on file. Reconnect your Gmail account." }, { status: 401 })
+    return NextResponse.json({ error: `No access token on file. Reconnect your ${providerLabel} account.` }, { status: 401 })
   }
 
   let accessToken: string
@@ -193,10 +207,13 @@ export async function GET(request: NextRequest) {
   if ((Number.isNaN(expiresAt) ? 0 : expiresAt) <= Date.now()) {
     if (!connection.refresh_token_encrypted) {
       await service.from("email_connections").update({ scan_status: "error", status: "expired" }).eq("id", connection.id)
-      return NextResponse.json({ error: "Your Gmail connection has expired. Please reconnect." }, { status: 401 })
+      return NextResponse.json({ error: `Your ${providerLabel} connection has expired. Please reconnect.` }, { status: 401 })
     }
     try {
-      const refreshed = await refreshGoogleToken(decrypt(connection.refresh_token_encrypted))
+      const refreshed =
+        provider === "google"
+          ? await refreshGoogleToken(decrypt(connection.refresh_token_encrypted))
+          : await refreshMicrosoftToken(decrypt(connection.refresh_token_encrypted))
       accessToken = refreshed.access_token
       const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
       await service
@@ -211,7 +228,7 @@ export async function GET(request: NextRequest) {
         detail: refreshErr instanceof Error ? refreshErr.message : String(refreshErr),
       })
       await service.from("email_connections").update({ scan_status: "error", status: "expired" }).eq("id", connection.id)
-      return NextResponse.json({ error: "Your Gmail connection has expired. Please reconnect." }, { status: 401 })
+      return NextResponse.json({ error: `Your ${providerLabel} connection has expired. Please reconnect.` }, { status: 401 })
     }
   }
 
@@ -221,45 +238,82 @@ export async function GET(request: NextRequest) {
   let failedTotal = 0
 
   try {
-    do {
-      const { ids, nextPageToken } = await listGmailMessageIds(accessToken, pageToken)
-      if (ids.length === 0) break
+    if (provider === "google") {
+      do {
+        const { ids, nextPageToken } = await listGmailMessageIds(accessToken, pageToken)
+        if (ids.length === 0) break
 
-      const remaining = MAX_MESSAGES - processedCount
-      const idsToProcess = ids.slice(0, remaining)
+        const remaining = MAX_MESSAGES - processedCount
+        const idsToProcess = ids.slice(0, remaining)
 
-      for (let i = 0; i < idsToProcess.length; i += CHECKPOINT_CHUNK_SIZE) {
-        const chunk = idsToProcess.slice(i, i + CHECKPOINT_CHUNK_SIZE)
-        const { messages, failedIds } = await fetchGmailMessageBatch(accessToken, chunk)
-        accumulateContactsFromMessages(messages, auth.userEmail, accumulator, auth.excludedDomains)
-        processedCount += chunk.length
-        failedTotal += failedIds.length
+        for (let i = 0; i < idsToProcess.length; i += CHECKPOINT_CHUNK_SIZE) {
+          const chunk = idsToProcess.slice(i, i + CHECKPOINT_CHUNK_SIZE)
+          const { messages, failedIds } = await fetchGmailMessageBatch(accessToken, chunk)
+          accumulateContactsFromMessages(messages, auth.userEmail, accumulator, auth.excludedDomains)
+          processedCount += chunk.length
+          failedTotal += failedIds.length
 
-        // Checkpoint - awaited synchronously before continuing, not fire-and-forget, so a
-        // function killed mid-loop has already landed its last write. Scored/filtered/
-        // sorted (cheap, pure) but not yet cross-referenced against profiles/partnerships
-        // (that's 2 extra DB round-trips, deferred to the final write - see
-        // enrichWithLigamentData's comment).
-        const { error: checkpointErr } = await service
-          .from("email_connections")
-          .update({
-            scan_results: {
-              contacts: scoreAndFilterContacts(contactsFromAccumulator(accumulator)),
-              processed_count: processedCount,
-              failed_count: failedTotal,
-              complete: false,
-            },
-          })
-          .eq("id", connection.id)
-        if (checkpointErr) {
-          console.error("[api] partial-scan checkpoint failed", { route, message: checkpointErr.message })
+          // Checkpoint - awaited synchronously before continuing, not fire-and-forget, so a
+          // function killed mid-loop has already landed its last write. Scored/filtered/
+          // sorted (cheap, pure) but not yet cross-referenced against profiles/partnerships
+          // (that's 2 extra DB round-trips, deferred to the final write - see
+          // enrichWithLigamentData's comment).
+          const { error: checkpointErr } = await service
+            .from("email_connections")
+            .update({
+              scan_results: {
+                contacts: scoreAndFilterContacts(contactsFromAccumulator(accumulator)),
+                processed_count: processedCount,
+                failed_count: failedTotal,
+                complete: false,
+              },
+            })
+            .eq("id", connection.id)
+          if (checkpointErr) {
+            console.error("[api] partial-scan checkpoint failed", { route, message: checkpointErr.message })
+          }
+
+          if (processedCount >= MAX_MESSAGES) break
         }
 
-        if (processedCount >= MAX_MESSAGES) break
-      }
+        pageToken = processedCount < MAX_MESSAGES ? nextPageToken : null
+      } while (pageToken)
+    } else {
+      // Outlook: $search already returns full selected fields per message, so each page
+      // fetched IS a checkpoint chunk (OUTLOOK_PAGE_SIZE=20, same granularity as Gmail's
+      // CHECKPOINT_CHUNK_SIZE) - no separate list-then-fetch step needed. Inbox first, then
+      // Sent Items, each capped at MAX_OUTLOOK_MESSAGES; both fold into the same
+      // accumulator so a contact seen in both is one entry.
+      for (const folder of ["inbox", "sent"] as const) {
+        let outlookNextLink: string | null | undefined
+        let folderProcessedCount = 0
+        do {
+          const { messages, nextLink } = await fetchOutlookMessageBatch(accessToken, folder, outlookNextLink)
+          if (messages.length === 0) break
 
-      pageToken = processedCount < MAX_MESSAGES ? nextPageToken : null
-    } while (pageToken)
+          accumulateContactsFromMicrosoftMessages(messages, auth.userEmail, accumulator, auth.excludedDomains)
+          processedCount += messages.length
+          folderProcessedCount += messages.length
+
+          const { error: checkpointErr } = await service
+            .from("email_connections")
+            .update({
+              scan_results: {
+                contacts: scoreAndFilterContacts(contactsFromAccumulator(accumulator)),
+                processed_count: processedCount,
+                failed_count: failedTotal,
+                complete: false,
+              },
+            })
+            .eq("id", connection.id)
+          if (checkpointErr) {
+            console.error("[api] partial-scan checkpoint failed", { route, message: checkpointErr.message })
+          }
+
+          outlookNextLink = folderProcessedCount < MAX_OUTLOOK_MESSAGES ? nextLink : null
+        } while (outlookNextLink)
+      }
+    }
 
     const scoredContacts = scoreAndFilterContacts(contactsFromAccumulator(accumulator))
     const finalContacts = await enrichWithLigamentData(scoredContacts, auth.userId, service)
