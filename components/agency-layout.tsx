@@ -36,12 +36,12 @@ const navSections = [
       { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Create and send scoped RFPs to your partner pool or any vendor via Lightning RFP Magic Link" },
       { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Compare, evaluate, and score vendor bids with AI-powered analysis and side-by-side cost breakdowns" },
       { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track partner onboarding across active projects" },
+      { number: "04", title: "Delivery Performance", href: "/agency/project", tooltip: "Track project delivery, evaluate vendor performance, and build institutional intelligence" },
     ]
   },
   {
     label: "Additional Resources",
     items: [
-      { icon: "▤", title: "Vendor Engagement Tracking", href: "/agency/project", tooltip: "Monitor active project progress, status updates, and utilization" },
       { icon: "□", title: "Master Documents", href: "/agency/documents", tooltip: "Central repository for project documents and reference files" },
       { icon: "◆", title: "Creative Treatment Analysis", href: "/agency/brief", tooltip: "AI-powered analysis of client briefs to extract scope and structure" },
       { icon: "$", title: "Cash Flow", href: "/agency/cashflow", tooltip: "Track client payments and partner milestones with AI payment scheduling" },
