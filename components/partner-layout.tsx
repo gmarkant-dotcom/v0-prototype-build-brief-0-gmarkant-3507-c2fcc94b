@@ -19,16 +19,32 @@ declare global {
   }
 }
 
-const navItems = [
-  { icon: "◇", title: "Dashboard", href: "/partner", tooltip: "Overview of your bid submissions, active projects, and agency relationships" },
-  { icon: "✉", title: "Invitations", href: "/partner/invitations", tooltip: "Partnership invitations from lead agencies" },
-  { icon: "🔍", title: "Discover Agencies", href: "/partner/discover", tooltip: "Browse and connect with lead agencies open to new vendor relationships" },
-  { icon: "◈", title: "Open RFPs", href: "/partner/rfps", tooltip: "Active RFP invitations waiting for your bid submission" },
-  { icon: "□", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your agency partners" },
-  { icon: "▣", title: "Active Projects", href: "/partner/projects", tooltip: "Your currently active project engagements and status updates" },
-  { icon: "◎", title: "Legal & Compliance", href: "/partner/legal", tooltip: "Your legal entity information and compliance documentation" },
-  { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
+type NavItem = { icon?: string; number?: string; title: string; href: string; tooltip: string }
+
+/**
+ * Grouped to mirror the lead agency's workflow-stage nav (components/agency-layout.tsx):
+ * Summary Dashboard, then the 00-03 engagement stages, then Resources. Rendered with a
+ * vertical divider between groups instead of inline section labels - horizontal top bar
+ * has no room for both step numbers and text labels.
+ */
+const navGroups: NavItem[][] = [
+  [
+    { icon: "◇", title: "Summary Dashboard", href: "/partner", tooltip: "Overview of your bid submissions, active projects, and agency relationships" },
+  ],
+  [
+    { number: "00", title: "Agency Network", href: "/partner/network", tooltip: "Your agency partnerships, pending invitations, and discover new agencies" },
+    { number: "01", title: "Open RFPs & Bids", href: "/partner/rfps", tooltip: "Active RFP invitations, submit bids, and track your bid history" },
+    { number: "02", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your agency partners" },
+    { number: "03", title: "Delivery & Projects", href: "/partner/projects", tooltip: "Your active project engagements, status updates, and delivery performance" },
+  ],
+  [
+    { icon: "◎", title: "Legal & Compliance", href: "/partner/legal", tooltip: "Business designations, insurance coverage, and legal entity information" },
+    { icon: "$", title: "Payments", href: "/partner/payments", tooltip: "View payment schedules from your lead agencies and save rate details for each relationship" },
+    { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
+  ],
 ]
+
+const navItems = navGroups.flat()
 
 interface PartnerLayoutProps {
   children: React.ReactNode
@@ -115,31 +131,42 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               
               {/* Navigation */}
               <nav className="hidden md:flex items-center gap-1">
-                {navItems.map((item) => {
-                  const isActive = pathname === item.href ||
-                    (item.href !== "/partner" && pathname?.startsWith(item.href))
-                  return (
-                    <Tooltip key={item.href}>
-                      <TooltipTrigger asChild>
-                        <Link
-                          href={item.href}
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
-                            isActive
-                              ? "bg-white/10 text-[#C8F53C]"
-                              : "text-white/90 hover:text-white hover:bg-white/5"
-                          )}
-                        >
-                          <span>{item.icon}</span>
-                          <span>{item.title}</span>
-                        </Link>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" showArrow={false} className="w-64 p-3 bg-white border border-gray-200 shadow-xl">
-                        <p className="text-xs text-gray-600">{item.tooltip}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )
-                })}
+                {navGroups.map((group, groupIndex) => (
+                  <div key={groupIndex} className="flex items-center gap-1">
+                    {groupIndex > 0 && <div className="w-px h-6 bg-white/15 mx-2" aria-hidden="true" />}
+                    {group.map((item) => {
+                      const isActive = pathname === item.href ||
+                        (item.href !== "/partner" && pathname?.startsWith(item.href))
+                      return (
+                        <Tooltip key={item.href}>
+                          <TooltipTrigger asChild>
+                            <Link
+                              href={item.href}
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-colors",
+                                isActive
+                                  ? "bg-white/10 text-[#C8F53C]"
+                                  : "text-white/90 hover:text-white hover:bg-white/5"
+                              )}
+                            >
+                              {item.number ? (
+                                <span className={cn("font-mono text-xs font-medium", isActive ? "text-[#C8F53C]" : "text-white/60")}>
+                                  {item.number}
+                                </span>
+                              ) : (
+                                <span>{item.icon}</span>
+                              )}
+                              <span>{item.title}</span>
+                            </Link>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" showArrow={false} className="w-64 p-3 bg-white border border-gray-200 shadow-xl">
+                            <p className="text-xs text-gray-600">{item.tooltip}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )
+                    })}
+                  </div>
+                ))}
               </nav>
             </div>
             
