@@ -141,77 +141,44 @@ export async function revokeMicrosoftToken(): Promise<boolean> {
 // scanner: a Vercel function killed at the maxDuration ceiling must still leave partial
 // results behind.
 //
+// No $search: personal Microsoft accounts (outlook.com/hotmail.com) have much weaker
+// Graph API support than organizational (Azure AD / Microsoft 365) accounts, and $search
+// with ConsistencyLevel: eventual on /me/messages reliably 400s on personal tenants. There
+// is no reliable way to detect account type up front, so the fix is to never depend on
+// $search at all: fetch the most recent messages (ordered newest-first, optionally
+// date-bounded via $filter) and do 100% of the vendor-signal keyword matching in
+// lib/vendor-signal-scoring.ts, same as it already does for the score/rank/filter step
+// downstream. This fetches more messages than a keyword-prefiltered query would (nothing
+// is excluded server-side), so MAX_OUTLOOK_MESSAGES is what keeps this bounded, not a
+// subject match.
+//
 // Unlike Gmail (messages.list returns bare ids, then a separate messages.get per id),
-// Graph's $search on /me/messages returns full selected fields in the same response - no
-// separate list-then-fetch round trip is needed for the message body/headers themselves.
-// The one unavoidable second call is per-message attachment metadata: $select on the
-// message resource cannot return attachment filenames, only the hasAttachments flag, so
-// any message with hasAttachments=true gets one follow-up call to its /attachments
-// endpoint.
+// Graph's /me/messages returns full selected fields directly - no separate list-then-fetch
+// round trip is needed for the message body/headers themselves. The one unavoidable second
+// call is per-message attachment metadata: $select on the message resource cannot return
+// attachment filenames, only the hasAttachments flag, so any message with
+// hasAttachments=true gets one follow-up call to its /attachments endpoint.
 
 const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
 // Graph has no top-level /me/sentItems resource - Sent Items is a well-known mail folder,
 // reached via /me/mailFolders/{wellKnownName}/messages same as any other folder.
 const SENT_ITEMS_PATH = "/me/mailFolders/sentitems/messages"
 
-// Same vendor-signal keyword set as Gmail's VENDOR_SUBJECT_QUERY, adapted to Microsoft
-// Graph's $search syntax (KQL): each term becomes its own `subject:term` clause (quoted
-// when it contains a space) joined by OR - Graph's $search does not support Gmail's
-// grouped "subject:(a OR b OR c)" shorthand.
-const VENDOR_SUBJECT_TERMS = [
-  "proposal",
-  "invoice",
-  "SOW",
-  "estimate",
-  "bid",
-  "quote",
-  "RFP",
-  "contract",
-  "NDA",
-  "scope",
-  "deliverable",
-  "production",
-  "retainer",
-  "freelance",
-  "call sheet",
-  "shoot",
-  "rough cut",
-  "final cut",
-  "revision",
-  "selects",
-  "site visit",
-  "brief",
-  "treatment",
-  "storyboard",
-  "mood board",
-  "concept",
-  "casting",
-  "day rate",
-  "buyout",
-  "usage rights",
-  "booking",
-  "activation",
-  "fabrication",
-  "install",
-  "run of show",
-  "purchase order",
-  "rate card",
-  "media plan",
-]
-
-// $search requires its whole value wrapped in one pair of quotes (Graph parses everything
-// inside as one KQL expression); URLSearchParams handles percent-encoding those quotes
-// correctly when the query string is built below.
-function buildOutlookSearchQuery(): string {
-  const clauses = VENDOR_SUBJECT_TERMS.map((term) => (term.includes(" ") ? `subject:"${term}"` : `subject:${term}`))
-  return `"${clauses.join(" OR ")}"`
-}
-
 export const MAX_OUTLOOK_MESSAGES = 200
-// $search already returns full selected fields per message (no separate list-then-fetch
-// step like Gmail), so the page size doubles as the checkpoint chunk size directly.
+// No $search-based pre-filtering, so each page is just "the next N most recent messages" -
+// kept at the same size as before so checkpointing (see run/route.ts) still happens every
+// ~20 messages.
 const OUTLOOK_PAGE_SIZE = 20
 const OUTLOOK_SELECT_FIELDS = "from,toRecipients,ccRecipients,subject,receivedDateTime,hasAttachments,bodyPreview"
+// $filter bound - only used on the first-choice query (see fetchOutlookMessageBatch's
+// fallback). Not load-bearing for correctness (the scan already caps at
+// MAX_OUTLOOK_MESSAGES via $top + $orderby=receivedDateTime desc), just keeps the
+// $filter-capable path from asking Graph to consider a user's entire mail history.
+const OUTLOOK_FILTER_LOOKBACK_DAYS = 365
+
+function outlookFilterCutoffIso(): string {
+  return new Date(Date.now() - OUTLOOK_FILTER_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString()
+}
 
 type MicrosoftEmailAddress = { emailAddress?: { address?: string; name?: string } }
 type MicrosoftRawMessage = {
@@ -265,7 +232,15 @@ async function fetchOutlookAttachmentTypes(accessToken: string, messageId: strin
   const res = await fetch(`${GRAPH_API_BASE}/me/messages/${messageId}/attachments?${params.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
-  if (!res.ok) return []
+  if (!res.ok) {
+    const rawText = await res.text().catch(() => "")
+    console.error("[microsoft-email] Graph attachments request failed", {
+      messageId,
+      status: res.status,
+      body: rawText,
+    })
+    return []
+  }
   const payload = await res.json().catch(() => ({}))
   const types = new Set<string>()
   for (const attachment of (payload.value || []) as { name?: string }[]) {
@@ -275,44 +250,102 @@ async function fetchOutlookAttachmentTypes(accessToken: string, messageId: strin
   return Array.from(types)
 }
 
-/** One page of vendor-signal-matching messages from either the inbox or Sent Items,
- *  already enriched with attachment types. Pass `nextLink` (the previous page's
- *  @odata.nextLink) to continue pagination - it is a complete, ready-to-fetch URL, so no
- *  query params are rebuilt when following it. */
+function outlookMessagesUrl(basePath: string, useFilter: boolean): string {
+  const params = new URLSearchParams({
+    $select: OUTLOOK_SELECT_FIELDS,
+    $top: String(OUTLOOK_PAGE_SIZE),
+    $orderby: "receivedDateTime desc",
+  })
+  if (useFilter) {
+    params.set("$filter", `receivedDateTime ge ${outlookFilterCutoffIso()}`)
+  }
+  return `${GRAPH_API_BASE}${basePath}?${params.toString()}`
+}
+
+/** Fetches one Graph messages URL and returns the parsed JSON body regardless of status -
+ *  callers decide what a non-ok response means. Always logs the full response body (not
+ *  just the status code) on failure: Graph's error payloads carry the actual reason
+ *  (invalid $filter/$orderby combination, throttling, auth failure, ...) and status codes
+ *  alone are not enough to debug this from Vercel logs after the fact. */
+async function fetchOutlookGraphPage(
+  url: string,
+  accessToken: string
+): Promise<{ ok: boolean; status: number; payload: Record<string, unknown> }> {
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
+  const rawText = await res.text()
+  let payload: Record<string, unknown> = {}
+  try {
+    payload = rawText ? JSON.parse(rawText) : {}
+  } catch {
+    payload = { rawText }
+  }
+  if (!res.ok) {
+    console.error("[microsoft-email] Graph messages request failed", {
+      url,
+      status: res.status,
+      body: rawText,
+    })
+  }
+  return { ok: res.ok, status: res.status, payload }
+}
+
+/** One page of recent messages from either the inbox or Sent Items, already enriched with
+ *  attachment types. Pass `nextLink` (the previous page's @odata.nextLink) to continue
+ *  pagination - it is a complete, ready-to-fetch URL reflecting whichever query variant
+ *  succeeded on the first page, so no query params are rebuilt when following it.
+ *
+ *  First page only: tries the $filter-bounded query first, and if Graph rejects it (some
+ *  personal accounts reject certain $filter/$orderby combinations even though $orderby
+ *  alone works fine), retries without $filter before giving up. This handles both
+ *  organizational and personal accounts without needing to know in advance which kind a
+ *  given connection is. Every page (regardless of which variant fetched it) is also
+ *  date-bounded client-side against the same cutoff, and pagination stops once a whole
+ *  page comes back older than it - the no-$filter fallback has no server-side date bound
+ *  at all, so this is the only thing keeping it from walking the entire mailbox. */
 export async function fetchOutlookMessageBatch(
   accessToken: string,
   folder: "inbox" | "sent",
   nextLink?: string | null
 ): Promise<{ messages: MicrosoftMetadataMessage[]; nextLink: string | null }> {
-  let url: string
+  const basePath = folder === "sent" ? SENT_ITEMS_PATH : "/me/messages"
+
+  let result: { ok: boolean; status: number; payload: Record<string, unknown> }
   if (nextLink) {
-    url = nextLink
+    result = await fetchOutlookGraphPage(nextLink, accessToken)
   } else {
-    const basePath = folder === "sent" ? SENT_ITEMS_PATH : "/me/messages"
-    const params = new URLSearchParams({
-      $search: buildOutlookSearchQuery(),
-      $select: OUTLOOK_SELECT_FIELDS,
-      $top: String(OUTLOOK_PAGE_SIZE),
-      $count: "true",
-    })
-    url = `${GRAPH_API_BASE}${basePath}?${params.toString()}`
+    result = await fetchOutlookGraphPage(outlookMessagesUrl(basePath, true), accessToken)
+    if (!result.ok) {
+      result = await fetchOutlookGraphPage(outlookMessagesUrl(basePath, false), accessToken)
+    }
   }
 
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      // Required by Graph whenever $search is used on messages, together with $count=true
-      // above - omitting either one silently returns an empty result set rather than an
-      // error, so both are non-negotiable here.
-      ConsistencyLevel: "eventual",
-    },
-  })
-  const payload = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    throw new Error(payload?.error?.message || `Microsoft Graph messages request failed (${res.status})`)
+  if (!result.ok) {
+    const errorBody = result.payload?.error as { message?: string } | undefined
+    throw new Error(errorBody?.message || `Microsoft Graph messages request failed (${result.status})`)
   }
 
-  const rawMessages = (payload.value || []) as MicrosoftRawMessage[]
+  const rawMessagesFull = (result.payload.value || []) as MicrosoftRawMessage[]
+
+  // The $filter=receivedDateTime ge ... query already bounds this server-side when it
+  // succeeds, but the no-$filter fallback (used whenever Graph rejects the filtered query -
+  // see the two-tier fallback above) has no server-side date bound at all, so this must run
+  // unconditionally regardless of which variant fetched this page. A message with no
+  // parseable receivedDateTime is kept rather than dropped - there is no basis to call it
+  // "older than the cutoff" either way.
+  const cutoffMs = new Date(outlookFilterCutoffIso()).getTime()
+  const isOlderThanCutoff = (raw: MicrosoftRawMessage): boolean => {
+    if (!raw.receivedDateTime) return false
+    const ms = new Date(raw.receivedDateTime).getTime()
+    return !Number.isNaN(ms) && ms < cutoffMs
+  }
+  const rawMessages = rawMessagesFull.filter((raw) => !isOlderThanCutoff(raw))
+
+  // Results are ordered newest-first ($orderby=receivedDateTime desc), so once a whole page
+  // is older than the cutoff, every subsequent page will be too - stop paginating instead
+  // of burning further Graph calls (and MAX_OUTLOOK_MESSAGES budget) on messages that would
+  // just be filtered out anyway.
+  const pageEntirelyStale = rawMessagesFull.length > 0 && rawMessagesFull.every(isOlderThanCutoff)
+
   const messages = await Promise.all(
     rawMessages.map(async (raw) => {
       const attachmentTypes = raw.hasAttachments ? await fetchOutlookAttachmentTypes(accessToken, raw.id) : []
@@ -328,7 +361,10 @@ export async function fetchOutlookMessageBatch(
     })
   )
 
-  return { messages, nextLink: payload["@odata.nextLink"] || null }
+  return {
+    messages,
+    nextLink: pageEntirelyStale ? null : (result.payload["@odata.nextLink"] as string | undefined) || null,
+  }
 }
 
 /** Pure - folds a batch of parsed messages into an accumulator (mutates + returns it).
