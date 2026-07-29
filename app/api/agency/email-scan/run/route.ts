@@ -15,6 +15,7 @@ import {
 import { encrypt, decrypt } from "@/lib/token-encryption"
 import { scoreAndFilterContacts, type ScoredVendorContact } from "@/lib/vendor-signal-scoring"
 import { getEmailDomain } from "@/lib/email-domains"
+import { incrementAiAnalysis } from "@/lib/usage-tracking"
 
 type EnrichedContact = ScoredVendorContact<RawGmailContact> & {
   has_ligament_account: boolean
@@ -278,6 +279,8 @@ export async function GET(request: NextRequest) {
       .eq("id", connection.id)
     if (finalErr) {
       console.error("[api] failure", { route, method: "GET", message: finalErr.message })
+    } else {
+      await incrementAiAnalysis(auth.userId, service)
     }
 
     console.log("[api] success", {

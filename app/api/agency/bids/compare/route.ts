@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, hashResponseIds } from "@/lib/bid-analysis-context"
+import { incrementAiAnalysis } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -152,6 +153,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to save comparison" }, { status: 500 })
     }
 
+    await incrementAiAnalysis(user.id, supabase)
     return NextResponse.json({
       narrative: saved.narrative,
       response_ids: saved.response_ids,

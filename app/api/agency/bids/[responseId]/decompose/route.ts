@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
+import { incrementAiAnalysis } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -175,6 +176,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "Failed to save cost breakdown" }, { status: 500 })
     }
 
+    await incrementAiAnalysis(user.id, supabase)
     return NextResponse.json({
       line_items: saved.line_items,
       narrative_summary: saved.narrative_summary,

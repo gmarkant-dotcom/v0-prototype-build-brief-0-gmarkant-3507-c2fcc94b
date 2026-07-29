@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { incrementAiAnalysis } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,6 +23,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error }, { status })
     }
 
+    await incrementAiAnalysis(user.id, supabase)
     return NextResponse.json(result)
   } catch (error) {
     console.error("[api] failure", {

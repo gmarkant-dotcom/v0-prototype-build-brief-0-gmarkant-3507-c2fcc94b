@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { computeCompositeScore } from "@/lib/bid-scoring"
+import { incrementAiAnalysis } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -319,6 +320,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       supabase.from("partner_rfp_responses").update({ composite_score: composite }).eq("id", responseId),
     ])
 
+    await incrementAiAnalysis(user.id, supabase)
     return NextResponse.json({ scores: allScores || [], composite_score: composite })
   } catch (error) {
     console.error("[api] failure", {

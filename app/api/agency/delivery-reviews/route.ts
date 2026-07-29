@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { loadBidDeltaComparison } from "@/lib/delivery-review"
+import { incrementAiAnalysis } from "@/lib/usage-tracking"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -297,7 +298,10 @@ export async function POST(req: Request) {
         userContent,
         maxTokens: 800,
       })
-      if (result.success) aiDeltaSummary = result.text.trim()
+      if (result.success) {
+        aiDeltaSummary = result.text.trim()
+        await incrementAiAnalysis(userId, supabase)
+      }
     }
 
     const reviewPatch2: Record<string, unknown> = { composite_score: composite, updated_at: new Date().toISOString() }
