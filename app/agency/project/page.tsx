@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo, useCallback, Suspense } from "react"
+import { useState, useMemo, useCallback, useEffect, useRef, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { InlineProjectSelector } from "@/components/agency-project-selector"
 import { useSelectedProject } from "@/contexts/selected-project-context"
@@ -8,10 +9,11 @@ import { GlassCard } from "@/components/glass-card"
 import { cn } from "@/lib/utils"
 import { useFetch } from "@/hooks/useFetch"
 import { AgencyCashFlowContent } from "@/app/agency/msa/page"
+import { DeliveryReviewSheet } from "@/components/delivery-review-sheet"
 import {
   AlertTriangle, CheckCircle, Loader2, Users, Shield,
   X, ChevronDown, ChevronRight, DollarSign, Activity,
-  Search, TrendingUp, TrendingDown, Building2,
+  Search, TrendingUp, TrendingDown, Building2, ClipboardList,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -57,6 +59,8 @@ type ProjectEngagement = {
 
 type GroupBy = "client" | "partner"
 type SlideTab = "status" | "cashflow"
+
+type ReviewSummary = { id: string; partnership_id: string; status: "draft" | "in_progress" | "complete"; composite_score: number | null }
 
 // ── Status config ──────────────────────────────────────────────────────────────
 
@@ -460,7 +464,9 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
 
 // ── Engagement row (compact, clickable) ────────────────────────────────────────
 
-function EngagementRow({ row, onClick }: { row: PartnerRow; onClick: () => void }) {
+function EngagementRow({ row, onClick, review, onReview }: {
+  row: PartnerRow; onClick: () => void; review: ReviewSummary | null; onReview: () => void
+}) {
   const name = partnerDisplayName(row)
   const sk = statusKey(row)
   const badge = STATUS_BADGE[sk]
@@ -471,55 +477,65 @@ function EngagementRow({ row, onClick }: { row: PartnerRow; onClick: () => void 
   const lastTs = row.latest_partner_update?.created_at
 
   return (
-    <button type="button" onClick={onClick}
-      className="w-full text-left flex items-center gap-4 p-4 rounded-lg border border-border/40 bg-white/5 hover:bg-white/10 transition-colors group">
-      <div className="flex-1 min-w-0">
-        {/* Line 1: name + badges */}
-        <div className="flex items-center gap-2 flex-wrap mb-1.5">
-          <span className="font-display font-bold text-sm text-foreground truncate">{name}</span>
-          {row.scopeItemName && (
-            <span className="font-mono text-[9px] text-foreground-muted px-1.5 py-0.5 rounded bg-white/5 border border-border/40 shrink-0">
-              {row.scopeItemName}
+    <div className="w-full flex items-center gap-3 p-4 rounded-lg border border-border/40 bg-white/5 hover:bg-white/10 transition-colors group">
+      <button type="button" onClick={onClick} className="flex-1 min-w-0 flex items-center gap-4 text-left">
+        <div className="flex-1 min-w-0">
+          {/* Line 1: name + badges */}
+          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+            <span className="font-display font-bold text-sm text-foreground truncate">{name}</span>
+            {row.scopeItemName && (
+              <span className="font-mono text-[9px] text-foreground-muted px-1.5 py-0.5 rounded bg-white/5 border border-border/40 shrink-0">
+                {row.scopeItemName}
+              </span>
+            )}
+            <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0", badge.bg, badge.text, badge.border)}>
+              {badgeLabel}
             </span>
-          )}
-          <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0", badge.bg, badge.text, badge.border)}>
-            {badgeLabel}
-          </span>
-          {agencySet && (
-            <span className="flex items-center gap-1 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-sky-500/40 bg-sky-500/15 text-sky-300 shrink-0">
-              <Shield className="w-2.5 h-2.5" />Agency
-            </span>
-          )}
-          {row.alert_count > 0 && (
-            <span className="flex items-center gap-1 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 text-amber-200 shrink-0">
-              <AlertTriangle className="w-2.5 h-2.5" />{row.alert_count}
-            </span>
-          )}
-        </div>
-        {/* Line 2: completion bar + meta */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="w-20 h-1.5 bg-white/10 rounded-full overflow-hidden shrink-0">
-              <div className={cn("h-full rounded-full", sk === "complete" ? "bg-cyan-400/80" : "bg-accent/80")}
-                style={{ width: `${row.completion_pct}%` }} />
+            {agencySet && (
+              <span className="flex items-center gap-1 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-sky-500/40 bg-sky-500/15 text-sky-300 shrink-0">
+                <Shield className="w-2.5 h-2.5" />Agency
+              </span>
+            )}
+            {row.alert_count > 0 && (
+              <span className="flex items-center gap-1 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 text-amber-200 shrink-0">
+                <AlertTriangle className="w-2.5 h-2.5" />{row.alert_count}
+              </span>
+            )}
+          </div>
+          {/* Line 2: completion bar + meta */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <div className="w-20 h-1.5 bg-white/10 rounded-full overflow-hidden shrink-0">
+                <div className={cn("h-full rounded-full", sk === "complete" ? "bg-cyan-400/80" : "bg-accent/80")}
+                  style={{ width: `${row.completion_pct}%` }} />
+              </div>
+              <span className="font-mono text-[10px] text-foreground-muted shrink-0">{row.completion_pct}%</span>
             </div>
-            <span className="font-mono text-[10px] text-foreground-muted shrink-0">{row.completion_pct}%</span>
-          </div>
-          <div className="flex items-center gap-3 font-mono text-[10px] text-foreground-muted shrink-0">
-            {budgetAmt != null && <span className="text-accent">{formatMoney(budgetAmt, budgetCur)}</span>}
-            {lastTs && <span>{fmtTime(lastTs)}</span>}
+            <div className="flex items-center gap-3 font-mono text-[10px] text-foreground-muted shrink-0">
+              {budgetAmt != null && <span className="text-accent">{formatMoney(budgetAmt, budgetCur)}</span>}
+              {lastTs && <span>{fmtTime(lastTs)}</span>}
+            </div>
           </div>
         </div>
-      </div>
-      <ChevronRight className="w-4 h-4 text-foreground-muted group-hover:text-accent transition-colors shrink-0" />
-    </button>
+        <ChevronRight className="w-4 h-4 text-foreground-muted group-hover:text-accent transition-colors shrink-0" />
+      </button>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onReview() }}
+        className="shrink-0 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-accent/30 text-accent hover:bg-accent/10 transition-colors"
+      >
+        <ClipboardList className="w-3 h-3" />
+        {review ? (review.status === "complete" ? "View Review" : "Edit Review") : "Write Review"}
+      </button>
+    </div>
   )
 }
 
 // ── Group section ──────────────────────────────────────────────────────────────
 
-function GroupSection({ label, rows, defaultOpen, onRowClick }: {
+function GroupSection({ label, rows, defaultOpen, onRowClick, reviewsByPartnership, onReviewClick }: {
   label: string; rows: PartnerRow[]; defaultOpen: boolean; onRowClick: (row: PartnerRow) => void
+  reviewsByPartnership: Map<string, ReviewSummary>; onReviewClick: (row: PartnerRow) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [activeStatus, setActiveStatus] = useState<StatusKey>("all")
@@ -581,6 +597,8 @@ function GroupSection({ label, rows, defaultOpen, onRowClick }: {
                   key={`${row.assignmentId}-${row.awardedResponseId ?? ""}`}
                   row={row}
                   onClick={() => onRowClick(row)}
+                  review={reviewsByPartnership.get(row.partnershipId) ?? null}
+                  onReview={() => onReviewClick(row)}
                 />
               ))
             )}
@@ -597,24 +615,58 @@ function ActiveEngagementsContent() {
   const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
   const projectId = selectedProject?.id ?? null
 
+  const searchParams = useSearchParams()
+  const highlightProjectId = searchParams.get("projectId")
+  const highlightResponseId = searchParams.get("responseId")
+  const highlightHandled = useRef(false)
+
   const [refreshKey, setRefreshKey] = useState(0)
   const refresh = useCallback(() => setRefreshKey(k => k + 1), [])
 
   const [groupBy, setGroupBy] = useState<GroupBy>("client")
   const [search, setSearch] = useState("")
   const [activeRow, setActiveRow] = useState<PartnerRow | null>(null)
+  const [reviewRow, setReviewRow] = useState<PartnerRow | null>(null)
   const [resolving, setResolving] = useState<string | null>(null)
+
+  // Deep link from the bid pipeline's "Review Delivery" action: select the target
+  // project, then once its engagements load, jump straight into that bid's review.
+  useEffect(() => {
+    if (!highlightProjectId || isLoadingProjects) return
+    if (selectedProject?.id === highlightProjectId) return
+    const match = projects.find(p => p.id === highlightProjectId)
+    if (match) setSelectedProject(match)
+  }, [highlightProjectId, isLoadingProjects, projects, selectedProject, setSelectedProject])
 
   const engUrl = projectId
     ? `/api/agency/active-engagements?projectId=${encodeURIComponent(projectId)}&_k=${refreshKey}`
     : ""
   const { data: engData, isLoading: engLoading } = useFetch<{ projects: ProjectEngagement[] }>(engUrl)
 
+  const reviewsUrl = projectId
+    ? `/api/agency/delivery-reviews?project_id=${encodeURIComponent(projectId)}&_k=${refreshKey}`
+    : ""
+  const { data: reviewsData } = useFetch<{ reviews: ReviewSummary[] }>(reviewsUrl)
+  const reviewsByPartnership = useMemo(() => {
+    const map = new Map<string, ReviewSummary>()
+    for (const r of reviewsData?.reviews ?? []) map.set(r.partnership_id, r)
+    return map
+  }, [reviewsData])
+
   const currentProject = useMemo(
     () => engData?.projects?.find(p => p.id === projectId) ?? null,
     [engData, projectId]
   )
   const partners = useMemo(() => currentProject?.partners ?? [], [currentProject])
+
+  useEffect(() => {
+    if (!highlightResponseId || highlightHandled.current || partners.length === 0) return
+    const match = partners.find(p => p.awardedResponseId === highlightResponseId)
+    if (match) {
+      highlightHandled.current = true
+      setReviewRow(match)
+    }
+  }, [highlightResponseId, partners])
 
   // Resolve: preserved exactly
   const handleResolve = useCallback(async (alertId: string) => {
@@ -651,13 +703,19 @@ function ActiveEngagementsContent() {
 
   return (
     <div className="p-8 max-w-6xl space-y-6">
+      {/* Page header */}
+      <div>
+        <h1 className="font-display font-bold text-3xl text-foreground">Delivery Performance</h1>
+        <p className="text-foreground-muted mt-1">Track project delivery and evaluate vendor performance</p>
+      </div>
+
       {/* Project selector */}
       <InlineProjectSelector
         selectedProject={selectedProject}
         projects={projects}
         isLoadingProjects={isLoadingProjects}
         onSelect={p => { setSelectedProject(p); setActiveRow(null) }}
-        label="Active Engagements"
+        label="Select Project"
       />
 
       {!selectedProject && !isLoadingProjects && (
@@ -713,6 +771,8 @@ function ActiveEngagementsContent() {
                 <GroupSection
                   key={g.label} label={g.label} rows={g.rows}
                   defaultOpen={i === 0} onRowClick={setActiveRow}
+                  reviewsByPartnership={reviewsByPartnership}
+                  onReviewClick={setReviewRow}
                 />
               ))}
             </div>
@@ -732,6 +792,20 @@ function ActiveEngagementsContent() {
           onClose={() => setActiveRow(null)}
         />
       )}
+
+      {/* Delivery review sheet */}
+      {reviewRow && projectId && (
+        <DeliveryReviewSheet
+          projectId={projectId}
+          partnershipId={reviewRow.partnershipId}
+          responseId={reviewRow.awardedResponseId ?? null}
+          projectName={currentProject?.title || "Project"}
+          partnerName={partnerDisplayName(reviewRow)}
+          scopeItemName={reviewRow.scopeItemName}
+          onClose={() => setReviewRow(null)}
+          onSaved={refresh}
+        />
+      )}
     </div>
   )
 }
@@ -739,7 +813,9 @@ function ActiveEngagementsContent() {
 export default function ActiveEngagementsPage() {
   return (
     <AgencyLayout>
-      <ActiveEngagementsContent />
+      <Suspense fallback={<div className="p-8 flex items-center gap-2 text-foreground-muted"><Loader2 className="w-5 h-5 animate-spin" />Loading…</div>}>
+        <ActiveEngagementsContent />
+      </Suspense>
     </AgencyLayout>
   )
 }
