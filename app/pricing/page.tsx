@@ -144,23 +144,27 @@ const pricingFaqs: FAQ[] = [
 const benefits: { title: string; body: string }[] = [
   {
     title: "One source of truth.",
-    body: "Briefs, bids, contracts, onboarding docs, and payments in one place. No more chasing information across email and shared drives.",
+    body: "Briefs, bids, vendor profiles, and onboarding docs in one place. No more reconstructing project history from email threads and spreadsheets.",
   },
   {
-    title: "Structure that bends without breaking.",
-    body: "Best-practice process across every vendor workflow, flexible enough to fit every client and scope.",
+    title: "Structure that scales with you.",
+    body: "A repeatable workflow from brief analysis to delivery review that adapts to every client, scope, and team size.",
   },
   {
     title: "Never start from zero again.",
-    body: "Every RFP, scope, and bid becomes a reusable template. The platform gets smarter as your agency does.",
+    body: "Every RFP, scope breakdown, and vendor bid becomes a reusable template. AI scoring draws on your own bid and delivery history, so each project builds on the last.",
   },
   {
     title: "Institutional knowledge that sticks.",
-    body: "Delivery performance reviews and vendor reliability intelligence turn every engagement into a searchable record. What used to live in someone's head becomes a durable agency asset.",
+    body: "Delivery performance reviews and vendor reliability scores turn every engagement into a searchable record. What used to live in one person's head becomes a durable agency asset.",
   },
   {
     title: "The right partner for every scope.",
-    body: "A curated, discoverable pool of vetted partners with capabilities and track records on file. Match fit-for-purpose talent with confidence.",
+    body: "A curated pool of vetted vendors with performance track records, business credentials, and bid history on file. Match the right talent to the right scope with confidence.",
+  },
+  {
+    title: "See what others miss.",
+    body: "AI-powered bid analysis deconstructs vendor proposals into comparable line items and scores them against your criteria. Side-by-side comparisons surface pricing gaps, scope risks, and the strongest value in seconds.",
   },
 ]
 
@@ -407,7 +411,8 @@ export default function PricingPage() {
             <div>
               <h2 className="font-display font-black text-3xl mb-3">The ROI Case</h2>
               <p className="text-white/80 text-sm mb-6">
-                Benchmark: Account Director. $110-130k fully loaded. ~$62/hr.
+                How much time does your Account Director spend wrangling vendors, chasing bids, and rebuilding scope
+                docs? At $62/hour fully loaded, the math is simple.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
@@ -418,7 +423,8 @@ export default function PricingPage() {
                     $7,440 in annual labor value recovered
                   </p>
                   <p className="text-white/70 text-sm leading-relaxed">
-                    The agency is building its partner pool and learning the platform. Savings are real and immediate.
+                    Your partner pool is built, your first RFP templates are in place, and you've stopped recreating
+                    work from scratch.
                   </p>
                 </div>
 
@@ -429,8 +435,8 @@ export default function PricingPage() {
                     $13,392 to $16,368 in annual labor value recovered
                   </p>
                   <p className="text-white/70 text-sm leading-relaxed">
-                    Historical bid data provides instant rate benchmarks. RFP templates are tuned from dozens of past
-                    scopes. The partner pool is fully built. Compounding efficiency kicks in.
+                    Bid history provides instant benchmarks. Templates are tuned from dozens of past scopes. AI
+                    scoring draws on real delivery outcomes across your project history.
                   </p>
                 </div>
               </div>
