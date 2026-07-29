@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { GlassCard } from "@/components/glass-card"
+import { VendorPerformanceHistory } from "@/components/vendor-performance-history"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -648,6 +649,9 @@ export default function AgencyPartnerProfilePage() {
             )}
           </GlassCard>
         </div>
+
+        {/* Performance History */}
+        <VendorPerformanceHistory partnerId={partnerId} partnershipId={profile.partnership.id} partnerName={headerTitle} />
 
         {/* Agency notes */}
         <GlassCard className="p-6 md:p-8 border-amber-500/20">
