@@ -20,6 +20,8 @@ import { FileUpload } from "@/components/file-upload"
 import { ReferenceMaterialsInput, type ReferenceMaterial } from "@/components/reference-materials-input"
 import { RfpOutputTemplate, type SensitivityOptions } from "@/components/rfp-output-template"
 import { readTextStream } from "@/lib/read-text-stream"
+import { mapDbProjectToMaster } from "@/lib/project-mapper"
+import { toast } from "sonner"
 import {
   DESIGNATION_KEYS,
   DESIGNATION_LABELS,
@@ -135,7 +137,8 @@ const MASTER_BRIEF_LOADING_MESSAGES = [
 
 function AgencyRFPContent() {
   const { checkFeatureAccess } = usePaidUser()
-  const { selectedProject, setSelectedProject, isLoadingProjects, projects } = useSelectedProject()
+  const { selectedProject, setSelectedProject, isLoadingProjects, projects, refreshProjects } = useSelectedProject()
+  const [isDuplicatingProject, setIsDuplicatingProject] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isDemo = isDemoMode()
@@ -1227,7 +1230,32 @@ function AgencyRFPContent() {
     const selectedIds = new Set(Object.values(selectedPartners).flat())
     return existingPartners.filter(p => selectedIds.has(p.id) && !p.ndaSigned).length
   }
-  
+
+  const handleDuplicateProject = async () => {
+    if (!selectedProject?.id || isDuplicatingProject) return
+    setIsDuplicatingProject(true)
+    try {
+      const res = await fetch("/api/agency/projects/duplicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: selectedProject.id }),
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        toast.error(payload?.error || "Failed to duplicate project")
+        return
+      }
+      const payload = await res.json()
+      await refreshProjects()
+      setSelectedProject(mapDbProjectToMaster(payload.project))
+      toast.success("Project duplicated")
+    } catch {
+      toast.error("Failed to duplicate project")
+    } finally {
+      setIsDuplicatingProject(false)
+    }
+  }
+
   const steps = [
     { number: 1, label: "Upload Brief", icon: Upload },
     { number: 2, label: "Master RFP + Business Criteria", icon: FileText },
@@ -1247,6 +1275,21 @@ function AgencyRFPContent() {
             isLoadingProjects={isLoadingProjects}
             onSelect={setSelectedProject}
           />
+        )}
+        {!isDemo && currentStep === 1 && selectedProject && (
+          <div className="flex justify-end -mt-4 mb-4">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDuplicateProject}
+              disabled={isDuplicatingProject}
+              className="gap-2"
+            >
+              {isDuplicatingProject ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+              Duplicate This Project
+            </Button>
+          </div>
         )}
         <StageHeader
           stageNumber="01"

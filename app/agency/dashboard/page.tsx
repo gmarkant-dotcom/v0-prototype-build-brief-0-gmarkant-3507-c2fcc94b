@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/empty-state"
 import { mapDbProjectToMaster } from "@/lib/project-mapper"
 import { budgetStatusLabel, workflowStatusLabel } from "@/lib/partner-status"
 import { useFetch } from "@/hooks/useFetch"
+import { toast } from "sonner"
 import {
   Search,
   Filter,
@@ -29,9 +30,16 @@ import {
   ArrowUpRight,
   Plus,
   ChevronRight,
+  Copy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
 import {
   Tooltip,
   TooltipContent,
@@ -426,7 +434,29 @@ function DashboardContent() {
       setIsSubmitting(false)
     }
   }
-  
+
+  const handleDuplicateProject = async (projectId: string) => {
+    try {
+      const res = await fetch("/api/agency/projects/duplicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: projectId }),
+      })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}))
+        toast.error(payload?.error || "Failed to duplicate project")
+        return
+      }
+      const payload = await res.json()
+      await refreshProjects()
+      setSelectedProject(mapDbProjectToMaster(payload.project))
+      toast.success("Project duplicated")
+      router.push("/agency")
+    } catch {
+      toast.error("Failed to duplicate project")
+    }
+  }
+
   // Show empty state for production users with no projects (after loading)
   if (!isDemo && !isLoadingProjects && !isLoading && projects.length === 0) {
     return (
@@ -914,6 +944,33 @@ function DashboardContent() {
                         </Tooltip>
                       </TooltipProvider>
                     )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                          }}
+                          className="shrink-0 p-1 rounded-md hover:bg-white/10 transition-colors text-foreground-muted hover:text-foreground"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="bg-card border border-border rounded-xl"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
+                      >
+                        <DropdownMenuItem onClick={() => handleDuplicateProject(project.id)}>
+                          <Copy className="w-3.5 h-3.5" />
+                          Duplicate
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-foreground-muted mb-4">
                     <span>{project.client}</span>
