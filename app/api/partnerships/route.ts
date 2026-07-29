@@ -209,11 +209,14 @@ export async function GET(request: NextRequest) {
       // Manually fetch agency profiles for each partnership
       const agencyIds = [...new Set(allPartnerships.map(p => p.agency_id).filter(Boolean))]
       
-      let agencyProfiles: Record<string, { id: string; email: string; full_name: string; company_name: string }> = {}
+      let agencyProfiles: Record<
+        string,
+        { id: string; email: string; full_name: string; company_name: string; company_logo_url: string | null; capabilities: unknown }
+      > = {}
       if (agencyIds.length > 0) {
         const { data: agencies, error: agenciesErr } = await supabase
           .from('profiles')
-          .select('id, email, full_name, company_name')
+          .select('id, email, full_name, company_name, company_logo_url, capabilities')
           .in('id', agencyIds)
 
         if (agenciesErr) {
