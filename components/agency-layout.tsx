@@ -33,17 +33,16 @@ const navSections = [
     label: "BID REQUESTS",
     items: [
       { number: "00", title: "Partner Pool", href: "/agency/pool", hasPoolDropdown: true, tooltip: "Manage your vendor network across active partners, invited contacts, and discovered vendors" },
-      { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Create and send scoped RFPs to your partner pool or any vendor via Lightning RFP Magic Link" },
+      { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Analyze client briefs, build scoped RFPs, and send to your partner pool or any vendor via Magic Link" },
       { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Compare, evaluate, and score vendor bids with AI-powered analysis and side-by-side cost breakdowns" },
       { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track partner onboarding across active projects" },
       { number: "04", title: "Delivery Performance", href: "/agency/project", tooltip: "Track project delivery, evaluate vendor performance, and build institutional intelligence" },
     ]
   },
   {
-    label: "Additional Resources",
+    label: "Resources",
     items: [
       { icon: "□", title: "Master Documents", href: "/agency/documents", tooltip: "Central repository for project documents and reference files" },
-      { icon: "◆", title: "Creative Treatment Analysis", href: "/agency/brief", tooltip: "AI-powered analysis of client briefs to extract scope and structure" },
       { icon: "$", title: "Cash Flow", href: "/agency/cashflow", tooltip: "Track client payments and partner milestones with AI payment scheduling" },
       { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
     ]
@@ -96,8 +95,16 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
           <HoverCardTrigger asChild>{link}</HoverCardTrigger>
           <HoverCardContent side="right" align="start" className="w-64 p-1.5 bg-background border-border">
             <p className="px-3 pt-1.5 pb-2 mb-1 border-b border-border text-xs text-foreground-muted">
-              Create and send scoped RFPs to your partner pool or any vendor via Lightning RFP Magic Link
+              Analyze client briefs, build scoped RFPs, and send to your partner pool or any vendor via Magic Link
             </p>
+            <Link
+              href="/agency/brief"
+              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
+            >
+              <span className="text-sm">◆</span>
+              Creative Treatment Analysis
+            </Link>
+            <div className="border-b border-border my-1" />
             <Link
               href="/agency"
               className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
@@ -119,6 +126,14 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
       <div className="md:hidden">
         {link}
         <div className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
+          <Link
+            href="/agency/brief"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
+          >
+            <span className="text-sm">◆</span>
+            Creative Treatment Analysis
+          </Link>
+          <div className="border-b border-border" />
           <Link
             href="/agency"
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
