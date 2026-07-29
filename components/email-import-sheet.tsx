@@ -8,9 +8,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn, formatDateTime } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+
+type Provider = "google" | "microsoft"
 
 type ScannedContact = {
   email: string
@@ -36,14 +37,24 @@ type ScanResults = {
   complete: boolean
 } | null
 
-type ConnectionInfo = {
+type ConnectionRow = {
+  status: "active" | "expired" | "revoked" | null
   connected_at: string | null
   last_scan_at: string | null
+  scan_status: string | null
+  scan_results: ScanResults
 }
 
-type View = "loading" | "no_connection" | "expired" | "ready_to_scan" | "scanning" | "results" | "error"
+type Connections = Record<Provider, ConnectionRow | null>
+
+type View = "loading" | "connect" | "ready_to_scan" | "scanning" | "results" | "error"
 
 const MAX_MESSAGES_ESTIMATE = 200
+const EMPTY_CONNECTIONS: Connections = { google: null, microsoft: null }
+
+function providerLabel(provider: Provider): string {
+  return provider === "google" ? "Gmail" : "Outlook"
+}
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -65,6 +76,10 @@ function MicrosoftIcon({ className }: { className?: string }) {
       <rect x="12" y="12" width="10" height="10" fill="#FFB900" />
     </svg>
   )
+}
+
+function ProviderIcon({ provider, className }: { provider: Provider; className?: string }) {
+  return provider === "google" ? <GoogleIcon className={className} /> : <MicrosoftIcon className={className} />
 }
 
 function signalLabel(signal: string): string {
@@ -172,6 +187,17 @@ function ContactRow({
   )
 }
 
+/** Merges two contact lists by email, keeping whichever side scored higher for a contact
+ *  seen in both - used to combine Gmail + Outlook results after "Scan All". */
+function mergeContactLists(a: ScannedContact[], b: ScannedContact[]): ScannedContact[] {
+  const byEmail = new Map<string, ScannedContact>()
+  for (const contact of [...a, ...b]) {
+    const existing = byEmail.get(contact.email)
+    if (!existing || contact.score > existing.score) byEmail.set(contact.email, contact)
+  }
+  return Array.from(byEmail.values()).sort((x, y) => y.score - x.score)
+}
+
 interface EmailImportSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -180,13 +206,16 @@ interface EmailImportSheetProps {
 
 export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImportSheetProps) {
   const [view, setView] = useState<View>("loading")
-  const [connection, setConnection] = useState<ConnectionInfo | null>(null)
+  const [connections, setConnections] = useState<Connections>(EMPTY_CONNECTIONS)
   const [scanResults, setScanResults] = useState<ScanResults>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [importing, setImporting] = useState(false)
   const [importedCount, setImportedCount] = useState<number | null>(null)
-  const [disconnecting, setDisconnecting] = useState(false)
+  const [disconnectingProvider, setDisconnectingProvider] = useState<Provider | null>(null)
+  // Live label during a scan - "Scanning Gmail..." / "Scanning Outlook..." for Scan All,
+  // just "Scanning your inbox..." for a single-provider scan.
+  const [scanningLabel, setScanningLabel] = useState<string | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const stopPolling = useCallback(() => {
@@ -199,29 +228,61 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
   const preselect = (contacts: ScannedContact[]) =>
     new Set(contacts.filter((c) => c.score >= 60 && !c.already_in_pool).map((c) => c.email))
 
-  const beginPolling = useCallback(() => {
-    stopPolling()
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch("/api/agency/email-scan?provider=google", { cache: "no-store" })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) return
-        setScanResults(data.scan_results ?? null)
-        if (data.scan_status === "complete") {
-          stopPolling()
-          const results = data.scan_results as ScanResults
-          setSelected(preselect(results?.contacts || []))
-          setView("results")
-        } else if (data.scan_status === "error") {
-          stopPolling()
-          setErrorMessage("The scan encountered an error.")
-          setView("error")
+  /** Polls GET /api/agency/email-scan?provider=X until scan_status is complete or error.
+   *  onTick fires on every poll with the latest (possibly partial) results, so callers can
+   *  drive a live progress bar. Resolves with the final results, or rejects on error. */
+  const pollUntilDone = useCallback(
+    (provider: Provider, onTick: (results: ScanResults) => void): Promise<ScanResults> => {
+      return new Promise((resolve, reject) => {
+        const interval = setInterval(async () => {
+          try {
+            const res = await fetch(`/api/agency/email-scan?provider=${provider}`, { cache: "no-store" })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) return
+            const results = (data.scan_results ?? null) as ScanResults
+            onTick(results)
+            if (data.scan_status === "complete") {
+              clearInterval(interval)
+              resolve(results)
+            } else if (data.scan_status === "error") {
+              clearInterval(interval)
+              reject(new Error(`The ${providerLabel(provider)} scan encountered an error.`))
+            }
+          } catch (err) {
+            console.error(`${provider} scan poll failed:`, err)
+          }
+        }, 3000)
+      })
+    },
+    []
+  )
+
+  const beginSingleProviderPolling = useCallback(
+    (provider: Provider) => {
+      stopPolling()
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/agency/email-scan?provider=${provider}`, { cache: "no-store" })
+          const data = await res.json().catch(() => ({}))
+          if (!res.ok) return
+          setScanResults(data.scan_results ?? null)
+          if (data.scan_status === "complete") {
+            stopPolling()
+            const results = data.scan_results as ScanResults
+            setSelected(preselect(results?.contacts || []))
+            setView("results")
+          } else if (data.scan_status === "error") {
+            stopPolling()
+            setErrorMessage(`The ${providerLabel(provider)} scan encountered an error.`)
+            setView("error")
+          }
+        } catch (err) {
+          console.error("Scan status poll failed:", err)
         }
-      } catch (err) {
-        console.error("Scan status poll failed:", err)
-      }
-    }, 3000)
-  }, [stopPolling])
+      }, 3000)
+    },
+    [stopPolling]
+  )
 
   const loadConnectionState = useCallback(async () => {
     setView("loading")
@@ -232,56 +293,68 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
         data: { user },
       } = await supabase.auth.getUser()
       if (!user) {
-        setView("no_connection")
+        setView("connect")
         return
       }
-      const { data: conn } = await supabase
+      const { data: rows } = await supabase
         .from("email_connections")
-        .select("status, connected_at, last_scan_at, scan_status, scan_results")
+        .select("provider, status, connected_at, last_scan_at, scan_status, scan_results")
         .eq("user_id", user.id)
-        .eq("provider", "google")
-        .maybeSingle()
 
-      if (!conn) {
-        setConnection(null)
-        setView("no_connection")
+      const next: Connections = { google: null, microsoft: null }
+      for (const row of rows || []) {
+        const provider = row.provider as Provider
+        if (provider !== "google" && provider !== "microsoft") continue
+        next[provider] = {
+          status: row.status,
+          connected_at: row.connected_at,
+          last_scan_at: row.last_scan_at,
+          scan_status: row.scan_status,
+          scan_results: row.scan_results,
+        }
+      }
+      setConnections(next)
+
+      const activeProviders = (["google", "microsoft"] as const).filter((p) => next[p]?.status === "active")
+      if (activeProviders.length === 0) {
+        setView("connect")
         return
       }
 
-      if (conn.status === "expired") {
-        setConnection(null)
-        setView("expired")
-        return
-      }
-
-      if (conn.status !== "active") {
-        setConnection(null)
-        setView("no_connection")
-        return
-      }
-      setConnection({ connected_at: conn.connected_at, last_scan_at: conn.last_scan_at })
-
-      const results = conn.scan_results as ScanResults
-      if (conn.scan_status === "scanning") {
-        setScanResults(results)
+      const scanningProvider = activeProviders.find((p) => next[p]?.scan_status === "scanning")
+      if (scanningProvider) {
+        setScanningLabel(`Scanning ${providerLabel(scanningProvider)}...`)
+        setScanResults(next[scanningProvider]?.scan_results ?? null)
         setView("scanning")
-        beginPolling()
-      } else if (conn.scan_status === "error") {
-        setScanResults(results)
-        setErrorMessage("The last scan didn't complete.")
-        setView("error")
-      } else if (conn.scan_status === "complete" && results?.contacts?.length) {
-        setScanResults(results)
-        setSelected(preselect(results.contacts))
-        setView("results")
-      } else {
-        setView("ready_to_scan")
+        beginSingleProviderPolling(scanningProvider)
+        return
       }
+
+      const completedResults = activeProviders
+        .map((p) => next[p]?.scan_results)
+        .filter((r): r is NonNullable<ScanResults> => Boolean(r?.contacts?.length))
+      if (completedResults.length > 0) {
+        const merged =
+          completedResults.length === 1
+            ? completedResults[0]
+            : {
+                contacts: mergeContactLists(completedResults[0].contacts, completedResults[1].contacts),
+                processed_count: completedResults.reduce((sum, r) => sum + r.processed_count, 0),
+                failed_count: completedResults.reduce((sum, r) => sum + r.failed_count, 0),
+                complete: true,
+              }
+        setScanResults(merged)
+        setSelected(preselect(merged.contacts))
+        setView("results")
+        return
+      }
+
+      setView("ready_to_scan")
     } catch (err) {
       console.error("Failed to load email connection state:", err)
-      setView("no_connection")
+      setView("connect")
     }
-  }, [beginPolling])
+  }, [beginSingleProviderPolling])
 
   useEffect(() => {
     if (open) {
@@ -294,55 +367,138 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const startScan = async () => {
+  /** Starts a scan for one provider and returns once it completes (or throws). Used both
+   *  for a plain single-provider scan and as one step of runScanAll. */
+  const startProviderScan = async (provider: Provider, onTick: (results: ScanResults) => void): Promise<ScanResults> => {
+    const startRes = await fetch("/api/agency/email-scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider }),
+    })
+    const startData = await startRes.json().catch(() => ({}))
+    if (!startRes.ok) throw new Error(startData?.error || `Failed to start ${providerLabel(provider)} scan`)
+
+    const token = startData.scan_run_token
+    // Fired but not awaited - the run request can take up to 120s. Progress comes from
+    // polling GET /api/agency/email-scan instead, which reflects the checkpoints the run
+    // endpoint writes as it works through the inbox.
+    fetch(`/api/agency/email-scan/run?token=${encodeURIComponent(token)}&provider=${provider}`).catch((err) => {
+      console.error("Scan run request failed:", err)
+    })
+    return pollUntilDone(provider, onTick)
+  }
+
+  const startScan = async (provider: Provider) => {
     setView("scanning")
     setErrorMessage(null)
     setScanResults(null)
+    setScanningLabel(`Scanning your ${providerLabel(provider)} inbox...`)
     try {
       const startRes = await fetch("/api/agency/email-scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "google" }),
+        body: JSON.stringify({ provider }),
       })
       const startData = await startRes.json().catch(() => ({}))
       if (!startRes.ok) throw new Error(startData?.error || "Failed to start scan")
 
       const token = startData.scan_run_token
-      // Fired but not awaited - the run request can take up to 120s. Progress comes from
-      // polling GET /api/agency/email-scan instead, which reflects the checkpoints the run
-      // endpoint writes as it works through the inbox.
-      fetch(`/api/agency/email-scan/run?token=${encodeURIComponent(token)}`).catch((err) => {
+      fetch(`/api/agency/email-scan/run?token=${encodeURIComponent(token)}&provider=${provider}`).catch((err) => {
         console.error("Scan run request failed:", err)
       })
-      beginPolling()
+      beginSingleProviderPolling(provider)
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to start scan")
       setView("error")
     }
   }
 
-  const handleDisconnect = async () => {
-    setDisconnecting(true)
+  /** Runs both providers sequentially (not in parallel) - scan one to completion,
+   *  checkpointing/polling live, then start the next. Avoids two long-running serverless
+   *  scans racing against maxDuration at the same time. */
+  const runScanAll = async () => {
+    stopPolling()
+    setView("scanning")
+    setErrorMessage(null)
+    setScanResults(null)
+    const providers: Provider[] = ["google", "microsoft"]
+    const resultsByProvider: Partial<Record<Provider, ScanResults>> = {}
+
+    for (const provider of providers) {
+      setScanningLabel(
+        providers
+          .map((p) => {
+            if (p === provider) return `Scanning ${providerLabel(p)}...`
+            if (resultsByProvider[p]) return `${providerLabel(p)} done.`
+            return null
+          })
+          .filter(Boolean)
+          .join(" ")
+      )
+      try {
+        const results = await startProviderScan(provider, (partial) => {
+          // Live progress for the provider currently scanning, keeping any already-
+          // completed provider's contacts visible underneath rather than blanking them.
+          const already = Object.values(resultsByProvider).filter((r): r is NonNullable<ScanResults> => Boolean(r))
+          const combined = already.reduce<ScannedContact[]>((acc, r) => mergeContactLists(acc, r.contacts), [])
+          setScanResults({
+            contacts: mergeContactLists(combined, partial?.contacts || []),
+            processed_count: already.reduce((sum, r) => sum + r.processed_count, 0) + (partial?.processed_count || 0),
+            failed_count: already.reduce((sum, r) => sum + r.failed_count, 0) + (partial?.failed_count || 0),
+            complete: false,
+          })
+        })
+        resultsByProvider[provider] = results
+      } catch (err) {
+        console.error(`${provider} scan failed during Scan All:`, err)
+        setErrorMessage(err instanceof Error ? err.message : `The ${providerLabel(provider)} scan failed`)
+        // Continue to the next provider rather than aborting the whole run - partial
+        // results from a failed provider are still worth showing.
+      }
+    }
+
+    const completed = providers
+      .map((p) => resultsByProvider[p])
+      .filter((r): r is NonNullable<ScanResults> => Boolean(r))
+    if (completed.length === 0) {
+      setView("error")
+      return
+    }
+    const merged =
+      completed.length === 1
+        ? completed[0]
+        : {
+            contacts: mergeContactLists(completed[0].contacts, completed[1].contacts),
+            processed_count: completed.reduce((sum, r) => sum + r.processed_count, 0),
+            failed_count: completed.reduce((sum, r) => sum + r.failed_count, 0),
+            complete: true,
+          }
+    setScanResults(merged)
+    setSelected(preselect(merged.contacts))
+    setView("results")
+  }
+
+  const handleDisconnect = async (provider: Provider) => {
+    setDisconnectingProvider(provider)
     try {
       const res = await fetch("/api/agency/email-connections", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "google" }),
+        body: JSON.stringify({ provider }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         throw new Error(data?.error || "Failed to disconnect")
       }
       stopPolling()
-      setConnection(null)
       setScanResults(null)
       setSelected(new Set())
-      setView("no_connection")
+      await loadConnectionState()
     } catch (err) {
       console.error("Disconnect failed:", err)
       setErrorMessage(err instanceof Error ? err.message : "Failed to disconnect")
     } finally {
-      setDisconnecting(false)
+      setDisconnectingProvider(null)
     }
   }
 
@@ -383,10 +539,29 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
     }
   }
 
-  const connectGmail = () => {
+  const connectProvider = (provider: Provider) => {
     const returnUrl = encodeURIComponent("/agency/pool?import=email")
-    window.location.href = `/api/auth/google-email?returnUrl=${returnUrl}`
+    const path = provider === "google" ? "/api/auth/google-email" : "/api/auth/microsoft-email"
+    window.location.href = `${path}?returnUrl=${returnUrl}`
   }
+
+  const activeProviders = (["google", "microsoft"] as const).filter((p) => connections[p]?.status === "active")
+
+  const DisconnectLinks = () => (
+    <div className="flex items-center justify-center gap-4">
+      {activeProviders.map((provider) => (
+        <button
+          key={provider}
+          type="button"
+          onClick={() => handleDisconnect(provider)}
+          disabled={disconnectingProvider === provider}
+          className="text-xs text-foreground-muted hover:text-red-400 transition-colors"
+        >
+          {disconnectingProvider === provider ? "Disconnecting..." : `Disconnect ${providerLabel(provider)}`}
+        </button>
+      ))}
+    </div>
+  )
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
@@ -406,37 +581,32 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
           </div>
         )}
 
-        {view === "no_connection" && (
+        {view === "connect" && (
           <div className="space-y-5 px-4 pb-4">
             <div className="rounded-xl border border-border bg-card p-5 text-center space-y-3">
               <Mail className="w-8 h-8 text-accent mx-auto" />
               <p className="text-sm text-foreground">Connect your email to discover vendors in your inbox.</p>
             </div>
             <div className="space-y-2">
-              <Button
-                onClick={connectGmail}
-                className="w-full bg-accent text-accent-foreground hover:bg-accent/90 flex items-center justify-center gap-2"
-              >
-                <GoogleIcon className="w-4 h-4" />
-                Connect Gmail
-              </Button>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="block">
-                    <Button
-                      disabled
-                      variant="outline"
-                      className="w-full flex items-center justify-center gap-2 opacity-60 cursor-not-allowed border-border text-foreground"
-                    >
-                      <MicrosoftIcon className="w-4 h-4" />
-                      Connect Outlook
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>Coming soon</p>
-                </TooltipContent>
-              </Tooltip>
+              {(["google", "microsoft"] as const).map((provider) => {
+                const row = connections[provider]
+                const isExpired = row?.status === "expired"
+                return (
+                  <Button
+                    key={provider}
+                    onClick={() => connectProvider(provider)}
+                    variant={provider === "google" ? "default" : "outline"}
+                    className={cn(
+                      "w-full flex items-center justify-center gap-2",
+                      provider === "google" && "bg-accent text-accent-foreground hover:bg-accent/90",
+                      provider === "microsoft" && "border-border text-foreground"
+                    )}
+                  >
+                    <ProviderIcon provider={provider} className="w-4 h-4" />
+                    {isExpired ? `Reconnect ${providerLabel(provider)}` : `Connect ${providerLabel(provider)}`}
+                  </Button>
+                )
+              })}
             </div>
             <p className="text-xs text-foreground-muted leading-relaxed">
               Ligament scans email subjects and brief previews to identify vendors. Full message content is never
@@ -445,45 +615,76 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
           </div>
         )}
 
-        {view === "expired" && (
-          <div className="space-y-5 px-4 pb-4">
-            <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-5 text-center space-y-3">
-              <Mail className="w-8 h-8 text-yellow-400 mx-auto" />
-              <p className="text-sm text-foreground">Connection expired. Reconnect your Gmail account to continue.</p>
-            </div>
-            <Button
-              onClick={connectGmail}
-              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 flex items-center justify-center gap-2"
-            >
-              <GoogleIcon className="w-4 h-4" />
-              Reconnect Gmail
-            </Button>
-          </div>
-        )}
-
         {view === "ready_to_scan" && (
           <div className="space-y-5 px-4 pb-4">
-            <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-              <GoogleIcon className="w-6 h-6 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-display font-bold text-foreground">Gmail connected</div>
-                <div className="text-xs text-foreground-muted">
-                  {connection?.connected_at ? `Connected ${formatDateTime(connection.connected_at)}` : "Connected"}
-                  {connection?.last_scan_at ? ` · Last scanned ${formatDateTime(connection.last_scan_at)}` : ""}
-                </div>
-              </div>
+            <div className="space-y-2">
+              {activeProviders.map((provider) => {
+                const row = connections[provider]
+                return (
+                  <div key={provider} className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+                    <ProviderIcon provider={provider} className="w-6 h-6 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-display font-bold text-foreground">
+                        {providerLabel(provider)} connected
+                      </div>
+                      <div className="text-xs text-foreground-muted">
+                        {row?.connected_at ? `Connected ${formatDateTime(row.connected_at)}` : "Connected"}
+                        {row?.last_scan_at ? ` · Last scanned ${formatDateTime(row.last_scan_at)}` : ""}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-            <Button onClick={startScan} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-              Scan Inbox
-            </Button>
-            <button
-              type="button"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-              className="w-full text-center text-xs text-foreground-muted hover:text-red-400 transition-colors"
-            >
-              {disconnecting ? "Disconnecting..." : "Disconnect Gmail"}
-            </button>
+
+            {activeProviders.length === 1 ? (
+              <Button
+                onClick={() => startScan(activeProviders[0])}
+                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                Scan Inbox
+              </Button>
+            ) : (
+              <div className="space-y-2">
+                <Button
+                  onClick={() => startScan("google")}
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2 border-border text-foreground"
+                >
+                  <GoogleIcon className="w-4 h-4" />
+                  Scan Gmail
+                </Button>
+                <Button
+                  onClick={() => startScan("microsoft")}
+                  variant="outline"
+                  className="w-full flex items-center justify-center gap-2 border-border text-foreground"
+                >
+                  <MicrosoftIcon className="w-4 h-4" />
+                  Scan Outlook
+                </Button>
+                <Button onClick={runScanAll} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+                  Scan All
+                </Button>
+              </div>
+            )}
+
+            <DisconnectLinks />
+
+            {(["google", "microsoft"] as const)
+              .filter((p) => !activeProviders.includes(p))
+              .map((provider) => (
+                <button
+                  key={provider}
+                  type="button"
+                  onClick={() => connectProvider(provider)}
+                  className="w-full text-center text-xs text-foreground-muted hover:text-foreground transition-colors flex items-center justify-center gap-2"
+                >
+                  <ProviderIcon provider={provider} className="w-3.5 h-3.5" />
+                  {connections[provider]?.status === "expired"
+                    ? `Reconnect ${providerLabel(provider)}`
+                    : `Connect ${providerLabel(provider)}`}
+                </button>
+              ))}
           </div>
         )}
 
@@ -491,7 +692,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
           <div className="space-y-5 px-4 pb-4">
             <div className="rounded-xl border border-border bg-card p-6 text-center space-y-4">
               <Spinner className="w-6 h-6 mx-auto text-accent" />
-              <p className="text-sm text-foreground">Scanning your inbox for vendor contacts...</p>
+              <p className="text-sm text-foreground">{scanningLabel || "Scanning your inbox for vendor contacts..."}</p>
               <Progress
                 value={Math.min(100, ((scanResults?.processed_count || 0) / MAX_MESSAGES_ESTIMATE) * 100)}
                 className="h-1.5"
@@ -546,21 +747,24 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
                   : `Add ${selected.size} vendor${selected.size !== 1 ? "s" : ""} to Pool`}
               </Button>
               <div className="flex items-center justify-center gap-4">
-                <button
-                  type="button"
-                  onClick={startScan}
-                  className="text-xs text-foreground-muted hover:text-foreground transition-colors"
-                >
-                  Rescan Inbox
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDisconnect}
-                  disabled={disconnecting}
-                  className="text-xs text-foreground-muted hover:text-red-400 transition-colors"
-                >
-                  {disconnecting ? "Disconnecting..." : "Disconnect Gmail"}
-                </button>
+                {activeProviders.length > 1 ? (
+                  <button
+                    type="button"
+                    onClick={runScanAll}
+                    className="text-xs text-foreground-muted hover:text-foreground transition-colors"
+                  >
+                    Rescan All
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => startScan(activeProviders[0])}
+                    className="text-xs text-foreground-muted hover:text-foreground transition-colors"
+                  >
+                    Rescan Inbox
+                  </button>
+                )}
+                <DisconnectLinks />
               </div>
             </div>
           </div>
@@ -607,17 +811,13 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
                 </div>
               </div>
             ) : null}
-            <Button onClick={startScan} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+            <Button
+              onClick={() => (activeProviders.length > 1 ? runScanAll() : startScan(activeProviders[0]))}
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+            >
               Retry Scan
             </Button>
-            <button
-              type="button"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-              className="w-full text-center text-xs text-foreground-muted hover:text-red-400 transition-colors"
-            >
-              {disconnecting ? "Disconnecting..." : "Disconnect Gmail"}
-            </button>
+            <DisconnectLinks />
           </div>
         )}
       </SheetContent>
