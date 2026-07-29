@@ -3,10 +3,13 @@ import type { UsageLimitsSummary } from "@/lib/usage-tracking"
 
 export type UsageSeverity = "ok" | "warning" | "blocked"
 
-/** Severity for a single metric's percentage (0-100+). Pass usage.analyses.percentage or
- *  usage.projects.percentage - Enterprise's percentage is always 0 (see checkUsageLimits),
- *  so this naturally returns "ok" for unlimited plans without a separate tier check. */
-export function getUsageSeverity(percentage: number): UsageSeverity {
+/** Severity for a single metric. `limit` is checked first and is authoritative: null
+ *  (unlimited - Enterprise, per checkUsageLimits) always returns "ok" regardless of
+ *  whatever `percentage` happens to be, so no caller needs its own null-limit guard before
+ *  calling this - that guard used to live ad hoc in each consumer, which is exactly how a
+ *  stale percentage was able to leak through in one of them and not another. */
+export function getUsageSeverity(limit: number | null, percentage: number): UsageSeverity {
+  if (limit == null) return "ok"
   if (percentage >= 100) return "blocked"
   if (percentage >= 80) return "warning"
   return "ok"

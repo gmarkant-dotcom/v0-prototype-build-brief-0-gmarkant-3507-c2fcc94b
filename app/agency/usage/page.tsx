@@ -47,7 +47,7 @@ function MetricBar({
   resetDate?: string
 }) {
   const percentage = limit == null ? 0 : Math.min(100, Math.round((current / Math.max(limit, 1)) * 100))
-  const severity = getUsageSeverity(limit == null ? 0 : percentage)
+  const severity = getUsageSeverity(limit, percentage)
 
   return (
     <div className="space-y-2">

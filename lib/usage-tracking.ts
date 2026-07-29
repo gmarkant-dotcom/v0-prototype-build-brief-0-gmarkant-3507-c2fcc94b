@@ -76,7 +76,7 @@ export async function getOrCreateMonthlyUsage(
         month_start: monthStart,
         ai_analyses_count: 0,
         plan_tier: tier,
-        analyses_limit: getPlanLimits(tier).analysesLimit,
+        analyses_limit: analysesLimitColumnValue(tier),
       },
       { onConflict: "agency_id,month_start" }
     )
@@ -86,6 +86,21 @@ export async function getOrCreateMonthlyUsage(
     throw new Error(error?.message || "Failed to create monthly usage row")
   }
   return created as UsageRow
+}
+
+/**
+ * analyses_limit is a NOT NULL integer column - Infinity would serialize to `null` over
+ * the wire (JSON.stringify(Infinity) === "null") and violate that constraint, which would
+ * make row creation fail outright for a fresh Enterprise agency. Postgres integer also has
+ * no way to represent "unlimited" natively, so this stores int4's max value as a sentinel
+ * instead. This value is never trusted as authoritative for Enterprise - every reader of
+ * analyses_limit (checkUsageLimit, checkUsageLimits) checks plan_tier first and ignores
+ * the column entirely once tier is "enterprise"; this is only what gets physically stored
+ * so the row can exist at all.
+ */
+function analysesLimitColumnValue(tier: PlanTier): number {
+  const limit = getPlanLimits(tier).analysesLimit
+  return Number.isFinite(limit) ? limit : 2147483647
 }
 
 export async function incrementAiAnalysis(
@@ -154,34 +169,40 @@ export async function checkUsageLimits(
   supabase: SupabaseServerClient
 ): Promise<UsageLimitsSummary> {
   const usage = await getOrCreateMonthlyUsage(agencyId, supabase)
-  const { count: projectsCount, limit: projectsLimit } = await getActiveProjectsCount(agencyId, supabase)
+  const tier: PlanTier = (usage.plan_tier as PlanTier) || "starter"
+  const { count: projectsCount, limit: projectsLimitRaw } = await getActiveProjectsCount(agencyId, supabase)
 
   const analysesCount = usage.ai_analyses_count
-  const analysesLimit = usage.analyses_limit
+  const analysesLimitRaw = usage.analyses_limit
 
-  const projectsPct = percentageOf(projectsCount, projectsLimit)
-  const analysesPct = percentageOf(analysesCount, analysesLimit)
+  // plan_tier is authoritative - analyses_limit is a persisted column that can go stale
+  // (e.g. an agency's tier changed without this row being touched again) while
+  // projectsLimitRaw is derived live from getPlanLimits and could theoretically say
+  // Infinity for reasons unrelated to the *current* tier if that ever changes shape. For
+  // Enterprise, both metrics are forced to "unlimited" here regardless of what either raw
+  // value says, so every consumer of this response - not just ones that happen to also
+  // check tier themselves - gets the correct answer.
+  const isEnterprise = tier === "enterprise"
+  const projectsPct = isEnterprise ? 0 : percentageOf(projectsCount, projectsLimitRaw)
+  const analysesPct = isEnterprise ? 0 : percentageOf(analysesCount, analysesLimitRaw)
 
   return {
-    tier: (usage.plan_tier as PlanTier) || "starter",
-    // NextResponse.json/JSON.stringify already turns Infinity into null on the wire, but
-    // typing this as number meant TypeScript never caught a caller treating it as always
-    // finite - number | null makes "unlimited" explicit end to end.
+    tier,
     projects: {
       count: projectsCount,
-      limit: Number.isFinite(projectsLimit) ? projectsLimit : null,
+      limit: isEnterprise ? null : Number.isFinite(projectsLimitRaw) ? projectsLimitRaw : null,
       percentage: projectsPct,
     },
     analyses: {
       count: analysesCount,
-      limit: Number.isFinite(analysesLimit) ? analysesLimit : null,
+      limit: isEnterprise ? null : Number.isFinite(analysesLimitRaw) ? analysesLimitRaw : null,
       percentage: analysesPct,
       resetDate: nextMonthStartIso(),
     },
-    nearProjectLimit: projectsPct > 80,
-    nearAnalysisLimit: analysesPct > 80,
-    atProjectLimit: Number.isFinite(projectsLimit) && projectsCount >= projectsLimit,
-    atAnalysisLimit: Number.isFinite(analysesLimit) && analysesCount >= analysesLimit,
+    nearProjectLimit: !isEnterprise && projectsPct > 80,
+    nearAnalysisLimit: !isEnterprise && analysesPct > 80,
+    atProjectLimit: !isEnterprise && Number.isFinite(projectsLimitRaw) && projectsCount >= projectsLimitRaw,
+    atAnalysisLimit: !isEnterprise && Number.isFinite(analysesLimitRaw) && analysesCount >= analysesLimitRaw,
   }
 }
 
@@ -226,6 +247,16 @@ export async function checkUsageLimit(
 }
 
 function buildUsageLimitCheck(metric: UsageMetric, current: number, limit: number, tier: PlanTier): UsageLimitCheck {
+  // plan_tier is authoritative and checked first, before ever looking at `limit` - the
+  // persisted analyses_limit column can be stale (e.g. carried over from before a tier
+  // change) and, being a NOT NULL integer column, can never actually equal Infinity for
+  // Enterprise even when it's supposed to represent "unlimited" - see
+  // analysesLimitColumnValue. Relying on Number.isFinite(limit) alone to detect
+  // "unlimited" was the bug: a stale-but-finite column value would incorrectly block a
+  // real request.
+  if (tier === "enterprise") {
+    return { allowed: true, metric, current, limit: null, percentage: 0, tier }
+  }
   const unlimited = !Number.isFinite(limit)
   return {
     allowed: unlimited || current < limit,

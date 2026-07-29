@@ -41,3 +41,21 @@ export function formatSubmittedAt(iso: string | null | undefined): string | null
   const timePart = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
   return `${datePart} at ${timePart}`
 }
+
+/** "2h ago" / "3d ago" style relative timestamp for activity feeds - falls back to
+ *  formatDateTime past 30 days, since "47d ago" is less useful than an actual date. */
+export function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return "Unknown"
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return "Unknown"
+  const diffMs = Date.now() - d.getTime()
+  if (diffMs < 0) return formatDateTime(iso)
+  const minutes = Math.floor(diffMs / 60000)
+  if (minutes < 1) return "just now"
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  return formatDateTime(iso)
+}

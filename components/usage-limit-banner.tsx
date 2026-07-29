@@ -69,7 +69,7 @@ export function UsageLimitBanner() {
   )
     .map((metric) => {
       const summary = usage[metric]
-      return { metric, severity: getUsageSeverity(summary.percentage), current: summary.count, limit: summary.limit }
+      return { metric, severity: getUsageSeverity(summary.limit, summary.percentage), current: summary.count, limit: summary.limit }
     })
     .filter((c) => c.severity !== "ok")
     .filter((c) => c.severity === "blocked" || !isDismissed(c.metric, c.severity))
