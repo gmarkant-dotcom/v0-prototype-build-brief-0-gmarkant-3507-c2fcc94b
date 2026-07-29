@@ -10,7 +10,7 @@ import {
   refreshGoogleToken,
   extractDomainFromUrl,
   MAX_MESSAGES,
-  type RawGmailContact,
+  type RawEmailContact,
 } from "@/lib/google-email"
 import {
   fetchOutlookMessageBatch,
@@ -25,7 +25,7 @@ import { incrementAiAnalysis } from "@/lib/usage-tracking"
 
 type EmailProvider = "google" | "microsoft"
 
-type EnrichedContact = ScoredVendorContact<RawGmailContact> & {
+type EnrichedContact = ScoredVendorContact<RawEmailContact> & {
   has_ligament_account: boolean
   profile_id: string | null
   already_in_pool: boolean
@@ -39,7 +39,7 @@ type EnrichedContact = ScoredVendorContact<RawGmailContact> & {
  *  actually reviewing finished results; a scan that times out before completing simply
  *  shows scored contacts without these three fields. */
 async function enrichWithLigamentData(
-  contacts: ScoredVendorContact<RawGmailContact>[],
+  contacts: ScoredVendorContact<RawEmailContact>[],
   agencyId: string,
   service: SupabaseClient
 ): Promise<EnrichedContact[]> {

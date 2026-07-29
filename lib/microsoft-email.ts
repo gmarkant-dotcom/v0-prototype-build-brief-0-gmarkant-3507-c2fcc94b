@@ -5,7 +5,7 @@ import {
   MAX_SNIPPETS_PER_CONTACT,
   type ContactAccumulator,
   type AccumulatorEntry,
-  type RawGmailContact,
+  type RawEmailContact,
 } from "@/lib/google-email"
 
 // Microsoft OAuth (email import, Phase 2). Standalone functions only - same pattern as
@@ -402,7 +402,7 @@ export async function scanOutlookContacts(
   accessToken: string,
   userEmail: string,
   excludedDomains: string[] = []
-): Promise<RawGmailContact[]> {
+): Promise<RawEmailContact[]> {
   const accumulator = createContactAccumulator()
 
   for (const folder of ["inbox", "sent"] as const) {

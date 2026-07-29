@@ -167,7 +167,7 @@ export type GmailMetadataMessage = {
   attachmentTypes: string[]
 }
 
-export type RawGmailContact = {
+export type RawEmailContact = {
   email: string
   name: string | null
   subjects: string[]
@@ -188,7 +188,7 @@ export type AccumulatorEntry = {
   message_count: number
   last_contact_date: string | null
   // Every subject seen, paired with its message's date - sorted and capped to the 5 most
-  // recent only when converting to RawGmailContact, since neither provider's search-query
+  // recent only when converting to RawEmailContact, since neither provider's search-query
   // list order is a documented guarantee of newest-first.
   subjectEntries: { subject: string; date: string | null }[]
   snippets: string[]
@@ -405,7 +405,7 @@ export function accumulateContactsFromMessages(
 
 /** Converts the accumulator to the final output shape, resolving each contact's "last 5
  *  subjects" by sorting subjectEntries newest-first on their own Date header. */
-export function contactsFromAccumulator(accumulator: ContactAccumulator): RawGmailContact[] {
+export function contactsFromAccumulator(accumulator: ContactAccumulator): RawEmailContact[] {
   return Array.from(accumulator.values()).map((entry) => {
     const sorted = [...entry.subjectEntries].sort((a, b) => (b.date || "").localeCompare(a.date || ""))
     const subjects: string[] = []
@@ -433,7 +433,7 @@ export async function scanGmailContacts(
   accessToken: string,
   userEmail: string,
   excludedDomains: string[] = []
-): Promise<RawGmailContact[]> {
+): Promise<RawEmailContact[]> {
   const accumulator = createContactAccumulator()
   let pageToken: string | null | undefined
   let processedCount = 0
