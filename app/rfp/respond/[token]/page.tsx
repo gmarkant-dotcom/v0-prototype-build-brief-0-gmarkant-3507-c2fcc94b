@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic"
 
 import { useCallback, useEffect, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react"
+import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -151,8 +152,25 @@ function CenteredCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden px-4">
       <HolographicBlobs />
-      <div className="w-full max-w-md relative z-10 bg-white/5 backdrop-blur-xl border border-border/30 rounded-2xl p-8 text-center">
-        {children}
+      <div className="w-full max-w-md relative z-10">
+        <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-2xl p-8 text-center">
+          {children}
+        </div>
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <Link
+            href="/terms"
+            className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+          >
+            Terms of Service
+          </Link>
+          <span className="text-foreground-muted/30">|</span>
+          <Link
+            href="/privacy"
+            className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+          >
+            Privacy Policy
+          </Link>
+        </div>
       </div>
     </div>
   )
@@ -1130,6 +1148,22 @@ export default function GuestRfpRespondPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <Link
+            href="/terms"
+            className="text-[11px] text-foreground-muted hover:text-foreground transition-colors"
+          >
+            Terms of Service
+          </Link>
+          <span className="text-foreground-muted/30">|</span>
+          <Link
+            href="/privacy"
+            className="text-[11px] text-foreground-muted hover:text-foreground transition-colors"
+          >
+            Privacy Policy
+          </Link>
+        </div>
       </div>
     </div>
   )

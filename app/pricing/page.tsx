@@ -219,6 +219,18 @@ export default function PricingPage() {
           </Link>
         </div>
       </main>
+
+      <footer className="border-t border-white/10 py-6">
+        <div className="max-w-6xl mx-auto px-6 flex items-center justify-center gap-3">
+          <Link href="/terms" className="font-mono text-[10px] text-white/50 hover:text-white transition-colors">
+            Terms
+          </Link>
+          <span className="text-white/25">|</span>
+          <Link href="/privacy" className="font-mono text-[10px] text-white/50 hover:text-white transition-colors">
+            Privacy
+          </Link>
+        </div>
+      </footer>
     </div>
   )
 }

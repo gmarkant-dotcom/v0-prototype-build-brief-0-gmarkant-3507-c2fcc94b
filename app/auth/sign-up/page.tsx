@@ -408,9 +408,9 @@ function SignUpContent() {
                         />
                         <label htmlFor="terms" className="text-sm text-foreground-secondary leading-relaxed cursor-pointer">
                           I have read and agree to the{" "}
-                          <Link 
-                            href="/legal/terms" 
-                            target="_blank" 
+                          <Link
+                            href="/terms"
+                            target="_blank"
                             className="text-accent hover:underline"
                           >
                             Terms of Service
@@ -438,9 +438,9 @@ function SignUpContent() {
                         />
                         <label htmlFor="privacy" className="text-sm text-foreground-secondary leading-relaxed cursor-pointer">
                           I have read and agree to the{" "}
-                          <Link 
-                            href="/legal/privacy" 
-                            target="_blank" 
+                          <Link
+                            href="/privacy"
+                            target="_blank"
                             className="text-accent hover:underline"
                           >
                             Privacy Policy

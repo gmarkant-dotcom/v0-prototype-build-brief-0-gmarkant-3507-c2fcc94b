@@ -409,8 +409,19 @@ export default function HomePage() {
           </div>
           
           <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="font-mono text-[10px] text-foreground-muted/50">
-              LIGAMENT is a product of Liveligood, Inc.
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
+              <div className="font-mono text-[10px] text-foreground-muted/50">
+                LIGAMENT is a product of Liveligood, Inc.
+              </div>
+              <div className="flex items-center gap-3">
+                <Link href="/terms" className="font-mono text-[10px] text-foreground-muted hover:text-foreground transition-colors">
+                  Terms
+                </Link>
+                <span className="text-foreground-muted/30">|</span>
+                <Link href="/privacy" className="font-mono text-[10px] text-foreground-muted hover:text-foreground transition-colors">
+                  Privacy
+                </Link>
+              </div>
             </div>
             <div className="font-mono text-[10px] text-foreground-muted border border-white/20 rounded-full px-3 py-1">
               Q2 · 2026
