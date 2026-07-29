@@ -5,9 +5,10 @@ import { PartnerLayout } from "@/components/partner-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { compositeScoreColorClass } from "@/lib/bid-scoring"
 import {
   Search, Filter, ChevronDown, ChevronRight, Building2,
-  X, Loader2, CheckCircle, AlertTriangle, DollarSign, Clock,
+  X, Loader2, CheckCircle, AlertTriangle, DollarSign, Clock, Award,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -38,6 +39,22 @@ type Group = {
   label: string
   groupId: string | null
   projects: PartnerProject[]
+}
+
+/**
+ * Read-only, structured scores only - no agency private notes, human override notes,
+ * AI delta summary, or draft reviews. Row visibility is also enforced at the RLS level
+ * (migration 066: partners can only SELECT delivery_reviews where status = 'complete'
+ * and the row's partnership belongs to them) - this column list is a second, app-layer
+ * guard against ever selecting the sensitive fields in the first place.
+ */
+type PartnerDeliveryReview = {
+  id: string
+  project_id: string
+  composite_score: number | null
+  on_time: "yes" | "no" | "partial" | null
+  on_budget: "yes" | "no" | "over" | "under" | null
+  overall_satisfaction: number | null
 }
 
 type MilestoneRow = {
@@ -90,6 +107,18 @@ const MILESTONE_LABEL: Record<string,string> = {
   pending:"Pending", invoiced:"Invoice Sent", payment_received:"Payment Received",
   payment_delayed:"Payment Delayed", invoice_received:"Invoice Received",
   payment_sent:"Payment Sent", need_more_info:"Need More Info",
+}
+
+const ON_TIME_BADGE: Record<string, { label: string; className: string }> = {
+  yes:     { label: "On Time",         className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  partial: { label: "Partially On Time", className: "bg-amber-50 text-amber-700 border-amber-200" },
+  no:      { label: "Not On Time",     className: "bg-red-50 text-red-700 border-red-200" },
+}
+const ON_BUDGET_BADGE: Record<string, { label: string; className: string }> = {
+  yes:   { label: "On Budget",    className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  under: { label: "Under Budget", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  over:  { label: "Over Budget",  className: "bg-red-50 text-red-700 border-red-200" },
+  no:    { label: "Not On Budget", className: "bg-red-50 text-red-700 border-red-200" },
 }
 
 const STATUS_BADGE: Record<string,{bg:string;text:string;border:string}> = {
@@ -556,6 +585,68 @@ function GroupSection({ label, projects, defaultOpen, onProjectClick }: {
   )
 }
 
+// ── Performance Scores section ──────────────────────────────────────────────────
+
+function PerformanceScoresSection({ reviews, projectNameById }: {
+  reviews: PartnerDeliveryReview[]; projectNameById: Map<string, string>
+}) {
+  if (reviews.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+      <div>
+        <h2 className="font-display font-bold text-lg text-[#0C3535] flex items-center gap-2">
+          <Award className="w-5 h-5 text-[#0C3535]" />
+          Performance Scores
+        </h2>
+        <p className="font-mono text-[10px] text-gray-500 mt-0.5">
+          Delivery reviews completed by your lead agencies. Read-only.
+        </p>
+      </div>
+      <div className="space-y-2">
+        {reviews.map((review) => {
+          const projectName = projectNameById.get(review.project_id) || "Project"
+          const onTime = review.on_time ? ON_TIME_BADGE[review.on_time] : null
+          const onBudget = review.on_budget ? ON_BUDGET_BADGE[review.on_budget] : null
+          const scoreColor = review.composite_score != null ? compositeScoreColorClass(review.composite_score) : null
+          return (
+            <div key={review.id} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 flex-wrap">
+              <div className="flex-1 min-w-0">
+                <div className="font-display font-bold text-sm text-[#0C3535] truncate">{projectName}</div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {review.composite_score != null && scoreColor && (
+                  <span className={cn(
+                    "flex items-center justify-center w-9 h-9 rounded-full border-2 font-display font-bold text-sm shrink-0",
+                    scoreColor.bg, scoreColor.text, scoreColor.border
+                  )}>
+                    {Math.round(review.composite_score)}
+                  </span>
+                )}
+                {onTime && (
+                  <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider", onTime.className)}>
+                    {onTime.label}
+                  </span>
+                )}
+                {onBudget && (
+                  <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider", onBudget.className)}>
+                    {onBudget.label}
+                  </span>
+                )}
+                {review.overall_satisfaction != null && (
+                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600 uppercase tracking-wider">
+                    Satisfaction {review.overall_satisfaction}/10
+                  </span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function PartnerProjectsPage() {
@@ -565,6 +656,42 @@ export default function PartnerProjectsPage() {
 
   const { data, isLoading, error } = useFetch<{ projects: PartnerProject[] }>("/api/partner/projects")
   const allProjects: PartnerProject[] = data?.projects ?? []
+
+  const [deliveryReviews, setDeliveryReviews] = useState<PartnerDeliveryReview[]>([])
+
+  useEffect(() => {
+    const partnershipIds = [...new Set(allProjects.map((p) => p.partnership_id).filter(Boolean))]
+    if (partnershipIds.length === 0) {
+      setDeliveryReviews([])
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        // RLS (migration 066): partners may only read their own rows where status = 'complete'.
+        const { data: reviews } = await supabase
+          .from("delivery_reviews")
+          .select("id, project_id, composite_score, on_time, on_budget, overall_satisfaction")
+          .in("partnership_id", partnershipIds)
+          .eq("status", "complete")
+        if (!cancelled) setDeliveryReviews((reviews || []) as PartnerDeliveryReview[])
+      } catch {
+        if (!cancelled) setDeliveryReviews([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [allProjects])
+
+  const projectNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const p of allProjects) {
+      if (!map.has(p.project_id)) map.set(p.project_id, p.project_name)
+    }
+    return map
+  }, [allProjects])
 
   const groups = useMemo<Group[]>(() => {
     const q = search.trim().toLowerCase()
@@ -584,17 +711,15 @@ export default function PartnerProjectsPage() {
       .map(([label, val]) => ({ label, groupId: val.groupId, projects: val.projects }))
   }, [allProjects, groupBy, search])
 
-  const totalEngagements = groups.reduce((s, g) => s + g.projects.length, 0)
-
   return (
     <PartnerLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Active Projects</h1>
-          <p className="text-gray-600 mt-1">
-            {isLoading ? "Loading…" : `${totalEngagements} engagement${totalEngagements!==1?"s":""} across ${groups.length} ${groupBy==="client"?"client":"agency partner"}${groups.length!==1?"s":""}`}
-          </p>
+          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Delivery & Projects</h1>
+          <p className="text-gray-600 mt-1">Your active project engagements and delivery performance</p>
         </div>
+
+        <PerformanceScoresSection reviews={deliveryReviews} projectNameById={projectNameById} />
 
         <div className="flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 min-w-[220px] max-w-md">

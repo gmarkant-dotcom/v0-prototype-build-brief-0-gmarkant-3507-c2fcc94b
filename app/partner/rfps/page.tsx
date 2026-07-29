@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation"
 import { PartnerLayout } from "@/components/partner-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn } from "@/lib/utils"
+import { formatBudgetForDisplay } from "@/lib/rfp-response-fields"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, FileText, AlertTriangle, Clock, Loader2,
@@ -30,6 +31,25 @@ type PartnerInboxRow = {
   nda_confirmed_at?: string | null
   client_name?: string | null
 }
+
+type PartnerBidRow = {
+  id: string
+  inbox_item_id: string | null
+  status: string
+  budget_proposal: string
+  submitted_at: string | null
+  updated_at: string | null
+  scope_item_name: string | null
+  client_name: string | null
+  agency_company_name: string | null
+  agency_full_name: string | null
+}
+
+type RfpTab = "open" | "my-bids" | "history"
+
+/** Bids still awaiting a final outcome - the "My Bids" tab's scope. "History" shows every
+ *  bid regardless of status, awarded/declined included. */
+const TERMINAL_BID_STATUSES = new Set(["awarded", "declined"])
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -152,6 +172,97 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
       </div>
       <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#0C3535] transition-colors shrink-0 mt-1" />
     </Link>
+  )
+}
+
+// ── Bid row (My Bids / History tabs) ────────────────────────────────────────────
+
+function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean }) {
+  const b = badge(bid.status)
+  const budget = formatBudgetForDisplay(bid.budget_proposal)
+  const submitted = formatDate(bid.submitted_at)
+  const agencyName = bid.agency_company_name || bid.agency_full_name || "Agency"
+  const isTerminal = TERMINAL_BID_STATUSES.has(bid.status)
+
+  const content = (
+    <div className="flex-1 min-w-0">
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <span className="font-display font-bold text-[#0C3535] truncate">{bid.scope_item_name || "Scope"}</span>
+        <span className={cn(
+          "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+          b.bg, b.border, b.text
+        )}>
+          {b.label}
+        </span>
+        {showOutcome && (
+          <span className={cn(
+            "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+            !isTerminal
+              ? "bg-gray-100 border-gray-200 text-gray-500"
+              : bid.status === "awarded"
+                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                : "bg-red-50 border-red-200 text-red-700"
+          )}>
+            {!isTerminal ? "In Progress" : bid.status === "awarded" ? "Won" : "Lost"}
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 font-mono text-[10px] text-gray-500 flex-wrap">
+        <span className="flex items-center gap-1">
+          <Building2 className="w-3 h-3" />
+          {agencyName}
+        </span>
+        {bid.client_name && (
+          <>
+            <span className="text-gray-300">·</span>
+            <span>{bid.client_name}</span>
+          </>
+        )}
+        {budget !== "—" && (
+          <>
+            <span className="text-gray-300">·</span>
+            <span>{budget}</span>
+          </>
+        )}
+        {submitted && (
+          <>
+            <span className="text-gray-300">·</span>
+            <span>Submitted {submitted}</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+
+  if (bid.inbox_item_id) {
+    return (
+      <Link
+        href={`/partner/rfps/${bid.inbox_item_id}`}
+        className="flex items-start gap-4 p-4 rounded-xl border border-gray-200 bg-white hover:border-[#0C3535]/40 hover:shadow-sm transition-all group"
+      >
+        {content}
+        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#0C3535] transition-colors shrink-0 mt-1" />
+      </Link>
+    )
+  }
+  return <div className="flex items-start gap-4 p-4 rounded-xl border border-gray-200 bg-white">{content}</div>
+}
+
+function BidsList({ bids, showOutcome, emptyMessage }: { bids: PartnerBidRow[]; showOutcome: boolean; emptyMessage: string }) {
+  if (bids.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+        <div className="font-display font-bold text-xl text-[#0C3535] mb-2">No bids yet</div>
+        <p className="text-gray-600">{emptyMessage}</p>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      {bids.map((bid) => (
+        <BidRow key={bid.id} bid={bid} showOutcome={showOutcome} />
+      ))}
+    </div>
   )
 }
 
@@ -317,6 +428,7 @@ function PartnerRFPsContent() {
 
   const [search, setSearch] = useState("")
   const [groupBy, setGroupBy] = useState<GroupBy>("agency")
+  const [activeTab, setActiveTab] = useState<RfpTab>("open")
 
   // Auto-claim invite token for already-logged-in partners arriving via email CTA
   useEffect(() => {
@@ -348,6 +460,10 @@ function PartnerRFPsContent() {
 
   const { data, isLoading, error } = useFetch<{ rfps: PartnerInboxRow[] }>("/api/partner/rfps")
   const allRows: PartnerInboxRow[] = data?.rfps ?? []
+
+  const { data: bidsData, isLoading: bidsLoading, error: bidsError } = useFetch<{ bids: PartnerBidRow[] }>("/api/partner/rfps/bids")
+  const allBids: PartnerBidRow[] = bidsData?.bids ?? []
+  const myBids = useMemo(() => allBids.filter((b) => !TERMINAL_BID_STATUSES.has(b.status)), [allBids])
 
   const groups = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -383,91 +499,164 @@ function PartnerRFPsContent() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Open RFPs</h1>
+          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Open RFPs & Bids</h1>
           <p className="text-gray-600 mt-1">
-            {isLoading
-              ? "Loading…"
-              : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "agency" ? "agency partner" : groupBy === "client" ? "client" : "status"}${totalGroups !== 1 ? "s" : ""}`
+            {activeTab === "open"
+              ? isLoading
+                ? "Loading…"
+                : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "agency" ? "agency partner" : groupBy === "client" ? "client" : "status"}${totalGroups !== 1 ? "s" : ""}`
+              : activeTab === "my-bids"
+                ? "Bids you've submitted that are still awaiting an outcome"
+                : "Every bid you've submitted, including awarded and declined"
             }
           </p>
         </div>
 
-        {inviteStatus === "failed" && (
+        {/* Tabs */}
+        <div className="flex rounded-lg overflow-hidden border border-gray-200 w-fit">
+          {([
+            { key: "open", label: "Open RFPs" },
+            { key: "my-bids", label: "My Bids" },
+            { key: "history", label: "History" },
+          ] as { key: RfpTab; label: string }[]).map(t => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              className={cn(
+                "px-4 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                activeTab === t.key
+                  ? "bg-[#0C3535] text-white"
+                  : "bg-white text-gray-500 hover:bg-gray-50"
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {inviteStatus === "failed" && activeTab === "open" && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
             Your invite may have expired or already been claimed. Active RFPs are still shown below.
           </div>
         )}
 
-        {/* Search + group-by */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <Input
-              placeholder="Search agency or scope…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
-            />
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Group by</span>
-            <div className="flex rounded-lg overflow-hidden border border-gray-200">
-              {(["agency", "client", "status"] as GroupBy[]).map(g => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setGroupBy(g)}
-                  className={cn(
-                    "px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                    groupBy === g
-                      ? "bg-[#0C3535] text-white"
-                      : "bg-white text-gray-500 hover:bg-gray-50"
-                  )}
-                >
-                  {g === "agency" ? "Agency" : g === "client" ? "Client" : "Status"}
-                </button>
-              ))}
+        {activeTab === "open" && (
+          <>
+            {/* Search + group-by */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="relative flex-1 min-w-[220px] max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Input
+                  placeholder="Search agency or scope…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                />
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Group by</span>
+                <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                  {(["agency", "client", "status"] as GroupBy[]).map(g => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setGroupBy(g)}
+                      className={cn(
+                        "px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                        groupBy === g
+                          ? "bg-[#0C3535] text-white"
+                          : "bg-white text-gray-500 hover:bg-gray-50"
+                      )}
+                    >
+                      {g === "agency" ? "Agency" : g === "client" ? "Client" : "Status"}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Content */}
-        {isLoading && (
-          <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
-            <Loader2 className="w-5 h-5 animate-spin text-[#0C3535]" />
-            <span className="font-mono text-sm">Loading RFPs…</span>
-          </div>
+            {/* Content */}
+            {isLoading && (
+              <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
+                <Loader2 className="w-5 h-5 animate-spin text-[#0C3535]" />
+                <span className="font-mono text-sm">Loading RFPs…</span>
+              </div>
+            )}
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Failed to load RFPs. Please refresh.
+              </div>
+            )}
+            {!isLoading && !error && groups.length === 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="font-display font-bold text-xl text-[#0C3535] mb-2">
+                  {search ? "No results" : "No RFPs yet"}
+                </div>
+                <p className="text-gray-600">
+                  {search ? "Try a different search term." : "When a lead agency broadcasts an RFP to you, it will appear here."}
+                </p>
+              </div>
+            )}
+            {!isLoading && groups.length > 0 && groupBy !== "status" && (
+              <div className="space-y-4">
+                {groups.map((g, i) => (
+                  <GroupSection
+                    key={g.label}
+                    label={g.label}
+                    rows={g.rows}
+                    defaultOpen={i === 0}
+                    groupBy={groupBy}
+                  />
+                ))}
+              </div>
+            )}
+            {!isLoading && groups.length > 0 && groupBy === "status" && (
+              <FlatStatusView allRows={groups.flatMap(g => g.rows)} />
+            )}
+          </>
         )}
-        {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            Failed to load RFPs. Please refresh.
-          </div>
-        )}
-        {!isLoading && !error && groups.length === 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <div className="font-display font-bold text-xl text-[#0C3535] mb-2">
-              {search ? "No results" : "No RFPs yet"}
-            </div>
-            <p className="text-gray-600">
-              {search ? "Try a different search term." : "When a lead agency broadcasts an RFP to you, it will appear here."}
-            </p>
-          </div>
-        )}
-        {!isLoading && groups.length > 0 && groupBy !== "status" && (
-          <div className="space-y-4">
-            {groups.map((g, i) => (
-              <GroupSection
-                key={g.label}
-                label={g.label}
-                rows={g.rows}
-                defaultOpen={i === 0}
-                groupBy={groupBy}
+
+        {activeTab === "my-bids" && (
+          <>
+            {bidsLoading && (
+              <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
+                <Loader2 className="w-5 h-5 animate-spin text-[#0C3535]" />
+                <span className="font-mono text-sm">Loading bids…</span>
+              </div>
+            )}
+            {bidsError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Failed to load bids. Please refresh.
+              </div>
+            )}
+            {!bidsLoading && !bidsError && (
+              <BidsList
+                bids={myBids}
+                showOutcome={false}
+                emptyMessage="Bids you submit will appear here until the agency makes a decision."
               />
-            ))}
-          </div>
+            )}
+          </>
         )}
-        {!isLoading && groups.length > 0 && groupBy === "status" && (
-          <FlatStatusView allRows={groups.flatMap(g => g.rows)} />
+
+        {activeTab === "history" && (
+          <>
+            {bidsLoading && (
+              <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
+                <Loader2 className="w-5 h-5 animate-spin text-[#0C3535]" />
+                <span className="font-mono text-sm">Loading bids…</span>
+              </div>
+            )}
+            {bidsError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Failed to load bids. Please refresh.
+              </div>
+            )}
+            {!bidsLoading && !bidsError && (
+              <BidsList bids={allBids} showOutcome emptyMessage="Every bid you've ever submitted will appear here." />
+            )}
+          </>
         )}
       </div>
     </PartnerLayout>

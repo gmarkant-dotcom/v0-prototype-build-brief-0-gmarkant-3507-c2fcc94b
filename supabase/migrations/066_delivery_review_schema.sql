@@ -6,6 +6,14 @@
 -- delivery_reviews is agency_id = auth.uid() directly; delivery_review_scores has no
 -- agency_id column, so it reaches through an EXISTS subquery against
 -- delivery_reviews.agency_id, same as bid_evaluation_scores does for bid_evaluations.
+--
+-- Also grants partners read access to their own COMPLETE reviews only (Delivery &
+-- Projects "Performance Scores" section, app/partner/projects/page.tsx) - reached
+-- through partnerships.partner_id since delivery_reviews has no partner_id column of
+-- its own. Drafts/in-progress reviews stay invisible to partners at the RLS level, not
+-- just hidden by the UI - the app layer additionally never selects or renders
+-- on_time_notes/on_budget_notes/client_feedback/ai_delta_summary for partners, only the
+-- structured scores (composite_score, on_time, on_budget, overall_satisfaction).
 
 CREATE TABLE IF NOT EXISTS delivery_reviews (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,6 +67,19 @@ CREATE POLICY "Agencies manage own delivery reviews"
   TO authenticated
   USING (agency_id = auth.uid())
   WITH CHECK (agency_id = auth.uid());
+
+CREATE POLICY "Partners view own complete delivery reviews"
+  ON delivery_reviews
+  FOR SELECT
+  TO authenticated
+  USING (
+    status = 'complete'
+    AND EXISTS (
+      SELECT 1 FROM partnerships p
+      WHERE p.id = delivery_reviews.partnership_id
+        AND p.partner_id = auth.uid()
+    )
+  );
 
 ALTER TABLE delivery_review_scores ENABLE ROW LEVEL SECURITY;
 
