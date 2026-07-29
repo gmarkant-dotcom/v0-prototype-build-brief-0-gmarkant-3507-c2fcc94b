@@ -8,52 +8,55 @@ import { Button } from "@/components/ui/button"
 import { GlassCard } from "@/components/glass-card"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { User, Settings } from "lucide-react"
+import { User, Building2, Users } from "lucide-react"
 
 const stages = [
-  { number: "01", title: "RFP Broadcast", description: "AI generates sanitized RFPs, protecting client identity", ai: true },
-  { number: "02", title: "Bid Management", description: "Score vendors 0-100, flag gaps, recommend action", ai: true },
-  { number: "03", title: "Onboarding", description: "Brand rules, ways of working, seamless integration", ai: false },
-  { number: "04", title: "Project Dashboard", description: "Command view linking to your existing PM tools", ai: false },
-  { number: "05", title: "Utilization", description: "Track scope drift, trigger change order alerts", ai: true },
-  { number: "06", title: "MSA + Payments", description: "Two-tier contracts, milestone-based payments", ai: true },
+  { number: "00", title: "Partner Pool", oneLiner: "Build your network. Get discovered.", ai: false },
+  { number: "01", title: "RFP Broadcast", oneLiner: "Send scoped RFPs. Submit competitive bids.", ai: true },
+  { number: "02", title: "Bid Management", oneLiner: "AI compares and scores. You decide and award.", ai: true },
+  { number: "03", title: "Onboarding", oneLiner: "Share docs and guidelines. Get project-ready.", ai: false },
+  { number: "04", title: "Delivery Performance", oneLiner: "Evaluate delivery. Build lasting intelligence.", ai: true },
 ]
 
 const agencyFeatures = [
   {
-    title: "Vendor Pool Management",
-    description: "Build and manage a curated roster of trusted partners. Bookmark favorites for quick access.",
+    title: "00 - Partner Pool",
+    description: "Build your vendor network by importing contacts from email, inviting directly, or discovering new partners on the marketplace.",
   },
   {
-    title: "AI-Powered RFPs",
-    description: "Generate professional, sanitized RFPs in seconds. Client identity masked, budget withheld.",
+    title: "01 - RFP Broadcast",
+    description: "Analyze client briefs with AI, then send scoped RFPs to your pool or any vendor via Magic Link. They can respond without creating an account.",
   },
   {
-    title: "Vendor Scoring",
-    description: "Objective 0-100 scoring on experience, team, approach, timeline, and value.",
+    title: "02 - Bid Management",
+    description: "Compare bids side by side with AI cost decomposition. Score against configurable criteria with AI pre-scoring and human override. Surface pricing gaps, scope risks, and the best value in seconds.",
   },
   {
-    title: "Margin Protection",
-    description: "Track vendor spend vs. client budget. Protect your margin automatically.",
+    title: "03 - Onboarding",
+    description: "Send kickoff packages and brand guidelines. Track partner onboarding across active projects.",
+  },
+  {
+    title: "04 - Delivery Performance",
+    description: "Rate vendor delivery against the same criteria you scored their bid on. Build a reliability index that turns every project into lasting intelligence.",
   },
 ]
 
 const partnerFeatures = [
   {
-    title: "Respond to RFPs",
-    description: "Raise your hand for opportunities from agencies in your network.",
+    title: "Agency Network",
+    description: "Connect with lead agencies, respond to partnership invitations, and discover new agency relationships.",
   },
   {
-    title: "Showcase Capabilities",
-    description: "Profile your expertise, credentials, and portfolio to attract the right projects.",
+    title: "Open RFPs & Bids",
+    description: "Receive scoped RFPs, submit competitive bids, and track your status from submission to award.",
   },
   {
-    title: "Legal & Compliance",
-    description: "Upload insurance, contracts, and compliance docs once. Reuse across engagements.",
+    title: "Onboarding",
+    description: "Access kickoff packages, brand guidelines, and project documents from your agency partners.",
   },
   {
-    title: "Get Paid Faster",
-    description: "Set up payment preferences and track milestones. Automatic invoicing.",
+    title: "Delivery & Projects",
+    description: "Track your active engagements, submit status updates, and see your delivery performance scores. Your track record is your reputation.",
   },
 ]
 
@@ -61,18 +64,18 @@ export default function HomePage() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [isDemo, setIsDemo] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  
+
   useEffect(() => {
     setIsDemo(isDemoMode())
-    
+
     const checkUserRole = async () => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       if (user) {
         // Check user_metadata first
         let role = user.user_metadata?.role as string | undefined
-        
+
         // If not in metadata, check profiles table
         if (!role) {
           const { data: profile } = await supabase
@@ -82,19 +85,19 @@ export default function HomePage() {
             .single()
           role = profile?.role
         }
-        
+
         setUserRole(role || null)
       }
       setIsLoading(false)
     }
-    
+
     checkUserRole()
   }, [])
-  
+
   return (
     <div className="min-h-screen relative bg-background">
       <HolographicBlobs />
-      
+
       {/* Header */}
       <header className="relative z-10 glass border-b border-border">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -106,14 +109,14 @@ export default function HomePage() {
             >
               FAQ
             </Link>
-            <Link 
+            <Link
               href="/pricing"
               className="font-mono text-xs text-foreground/90 hover:text-foreground transition-colors"
             >
               Pricing
             </Link>
             {!isLoading && userRole ? (
-              <Link 
+              <Link
                 href={userRole === 'agency' ? '/agency' : '/partner'}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent/10 border border-accent/30 hover:bg-accent/20 transition-colors"
               >
@@ -130,7 +133,7 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-      
+
       <main className="relative z-10">
         {/* Hero */}
         <section className="max-w-6xl mx-auto px-6 pt-24 pb-20">
@@ -138,211 +141,223 @@ export default function HomePage() {
             <div className="font-mono text-xs text-accent tracking-wider uppercase mb-6 flex items-center gap-3">
               <span className="ai-badge">✦</span> Best Practice Vendor Procurement & Orchestration for Independent Creative Agencies
             </div>
-            <h1 className="font-display font-black text-6xl md:text-7xl text-foreground leading-[0.9] mb-6">
-              From brief<br />
-              to signed SOW,<br />
-              <span className="text-accent">Without the Chaos.</span>
+            <h1 className="font-display font-black text-5xl md:text-7xl text-foreground leading-[0.95] mb-10">
+              From <span className="text-accent">brief</span> to <span className="text-accent">final delivery</span>.<br />
+              Smarter procurement at every step.
             </h1>
             <p className="text-lg text-foreground-muted max-w-xl mb-8 leading-relaxed">
-              Identify, mobilize, and manage your preferred vendors for every scope. Organize engagements to make smarter decisions, faster.
+              Build your vendor network. Broadcast RFPs. Compare bids with AI. Track delivery. One platform that gets smarter with every engagement.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold text-lg px-8 py-6">
                 <Link href="/auth/login">Launch Lead Agency Portal</Link>
               </Button>
-              <Button 
-                asChild 
-                variant="outline" 
+              <Button
+                asChild
+                variant="outline"
                 className="border-border text-foreground hover:bg-white/10 font-display font-bold text-lg px-8 py-6 bg-transparent"
               >
-                <Link href="/auth/login">I&apos;m a Partner Vendor</Link>
+                <Link href="/auth/login">I&apos;m a Partner Agency</Link>
               </Button>
             </div>
           </div>
         </section>
-        
-        {/* Two Sides */}
-        <section className="border-y border-border py-20">
+
+        {/* Two Portals */}
+        <section className="border-y border-border py-20 md:py-32">
           <div className="max-w-6xl mx-auto px-6">
-            <div className="text-center mb-12">
+            <div className="text-center mb-8">
               <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
                 Two Portals. One Platform.
               </div>
-              <h2 className="font-display font-black text-4xl text-foreground mb-4">
-                Built for both sides of the partnership.
+              <h2 className="font-display font-black text-4xl text-foreground mb-8">
+                Built for both sides of every vendor relationship.
               </h2>
-              <p className="text-foreground-muted max-w-2xl mx-auto">
-                Lead agencies manage their vendor pool and orchestrate projects. 
-                Partner vendors showcase capabilities, respond to RFPs, and facilitate payment.
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Agency Side */}
-              <GlassCard highlight className="p-8">
-                <div className="font-mono text-[10px] text-accent mb-3">For Lead Agencies</div>
-                <h3 className="font-display font-bold text-3xl text-accent mb-4">
-                  Lead Agency Portal
-                </h3>
-                <p className="text-foreground-muted mb-6">
-                  Build a roster of trusted vendors. Broadcast RFPs to your bookmarked partners. 
-                  Review bids, onboard teams, and manage payments, all from one dashboard.
-                </p>
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  {agencyFeatures.map((feature) => (
-                    <div key={feature.title} className="p-4 rounded-lg bg-accent/5 border border-accent/20">
-                      <h4 className="font-display font-bold text-sm text-foreground mb-1">
-                        {feature.title}
-                      </h4>
-                      <p className="text-xs text-foreground-muted">
-                        {feature.description}
-                      </p>
-                    </div>
-                  ))}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-10 max-w-3xl mx-auto">
+                <div className="flex items-center gap-2 text-foreground-muted">
+                  <Building2 className="w-5 h-5 text-accent shrink-0" />
+                  <span>Lead agencies manage their vendor network and procurement lifecycle.</span>
                 </div>
-                <Button asChild className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold">
-                  <Link href="/auth/login">Enter Lead Agency Portal →</Link>
-                </Button>
-              </GlassCard>
-              
-              {/* Partner Side */}
-              <GlassCard className="p-8">
-                <div className="font-mono text-[10px] text-foreground-muted mb-3">For External Resources</div>
-                <h3 className="font-display font-bold text-3xl text-foreground mb-4">
-                  Partner Vendor Portal
-                </h3>
-                <p className="text-foreground-muted mb-6">
-                  Join agency networks. Get discovered for the right projects. 
-                  Submit bids, complete onboarding, and track your payments, all in one place.
-                </p>
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  {partnerFeatures.map((feature) => (
-                    <div key={feature.title} className="p-4 rounded-lg bg-white/5 border border-border">
-                      <h4 className="font-display font-bold text-sm text-foreground mb-1">
-                        {feature.title}
-                      </h4>
-                      <p className="text-xs text-foreground-muted">
-                        {feature.description}
-                      </p>
-                    </div>
-                  ))}
+                <div className="flex items-center gap-2 text-foreground-muted">
+                  <Users className="w-5 h-5 text-foreground-muted shrink-0" />
+                  <span>Partner agencies showcase their work, respond to opportunities, and build their reputation.</span>
                 </div>
-                <Button asChild variant="outline" className="w-full border-border text-foreground hover:bg-white/10 font-display font-bold bg-transparent">
-                  <Link href="/auth/login">Enter Partner Vendor Portal →</Link>
-                </Button>
-              </GlassCard>
+              </div>
             </div>
           </div>
         </section>
-        
-        {/* 6-Stage Workflow */}
-        <section className="py-20">
+
+        {/* For Lead Agencies */}
+        <section className="py-20 md:py-32">
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-12">
+              <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
+                For Lead Agencies
+              </div>
+              <h3 className="font-display font-bold text-4xl text-accent mb-4">
+                Lead Agency Portal
+              </h3>
+              <p className="text-foreground-muted max-w-2xl mx-auto">
+                Build, evaluate, and optimize your vendor relationships from RFP to delivery review.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+              {agencyFeatures.map((feature) => (
+                <div
+                  key={feature.title}
+                  className="p-5 rounded-lg bg-accent/5 border border-border border-l-4 border-l-accent hover:scale-[1.02] transition-transform duration-200"
+                >
+                  <h4 className="font-display font-bold text-sm text-foreground mb-2">
+                    {feature.title}
+                  </h4>
+                  <p className="text-xs text-foreground-muted leading-relaxed">
+                    {feature.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center">
+              <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold px-8">
+                <Link href="/auth/login">Enter Lead Agency Portal →</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* For Partner Agencies */}
+        <section className="border-t border-border py-20 md:py-32">
+          <div className="max-w-6xl mx-auto px-6">
+            <div className="text-center mb-12">
+              <div className="font-mono text-xs text-foreground-muted tracking-wider uppercase mb-4">
+                For Partner Agencies
+              </div>
+              <h3 className="font-display font-bold text-4xl text-foreground mb-4">
+                Partner Agency Portal
+              </h3>
+              <p className="text-foreground-muted max-w-2xl mx-auto">
+                Get discovered, win work, and build your track record.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+              {partnerFeatures.map((feature) => (
+                <div
+                  key={feature.title}
+                  className="p-5 rounded-lg bg-white/5 border border-border border-l-4 border-l-foreground-muted/60 hover:scale-[1.02] transition-transform duration-200"
+                >
+                  <h4 className="font-display font-bold text-sm text-foreground mb-2">
+                    {feature.title}
+                  </h4>
+                  <p className="text-xs text-foreground-muted leading-relaxed">
+                    {feature.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center">
+              <Button asChild variant="outline" className="border-border text-foreground hover:bg-white/10 font-display font-bold px-8 bg-transparent">
+                <Link href="/auth/login">Enter Partner Agency Portal →</Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* Workflow */}
+        <section className="border-t border-border py-20 md:py-32">
+          <div className="max-w-6xl mx-auto px-6">
+            <div className="text-center mb-16">
               <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
                 The Workflow
               </div>
               <h2 className="font-display font-black text-4xl text-foreground mb-4">
-                6 stages. End to end.
+                5 stages. End to end.
               </h2>
               <p className="text-foreground-muted max-w-xl mx-auto">
-                Every engagement flows through 6 stages. AI assists at key decision points. 
-                Human review where it matters most.
+                Every vendor engagement flows through 5 stages. AI assists at key decision points. You stay in control.
               </p>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {stages.map((stage) => (
-                <GlassCard 
-                  key={stage.number} 
-                  highlight={stage.ai}
-                  className="group hover:border-accent/50 transition-colors"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <span className="font-mono text-xs text-foreground-muted">
-                      {stage.number}
-                    </span>
+
+            {/* Desktop: horizontal connected timeline */}
+            <div className="hidden md:grid grid-cols-5">
+              {stages.map((stage, i) => (
+                <div key={stage.number} className="relative flex flex-col items-center text-center px-2">
+                  {i > 0 && <div className="absolute left-0 top-7 w-1/2 h-px bg-border" aria-hidden="true" />}
+                  {i < stages.length - 1 && <div className="absolute right-0 top-7 w-1/2 h-px bg-border" aria-hidden="true" />}
+                  <div className="relative z-10 w-14 h-14 rounded-full border-2 border-accent bg-background flex items-center justify-center mb-4">
+                    <span className="font-mono text-sm font-bold text-foreground">{stage.number}</span>
                     {stage.ai && (
-                      <span className="font-mono text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/30 flex items-center gap-1">
-                        <span className="ai-badge">✦</span> AI
+                      <span className="ai-badge absolute -top-2 -right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-[10px] font-bold">
+                        ✦
                       </span>
                     )}
                   </div>
-                  <h3 className="font-display font-bold text-xl text-foreground mb-2 group-hover:text-accent transition-colors">
+                  <h3 className="font-display font-bold text-base text-foreground mb-1">
                     {stage.title}
                   </h3>
-                  <p className="text-sm text-foreground-muted">
-                    {stage.description}
+                  <p className="text-xs text-foreground-muted leading-relaxed max-w-[150px]">
+                    {stage.oneLiner}
                   </p>
-                </GlassCard>
+                </div>
               ))}
             </div>
-          </div>
-        </section>
-        
-        {/* How It Works */}
-        <section className="border-t border-border py-20">
-          <div className="max-w-6xl mx-auto px-6">
-            <div className="text-center mb-12">
-              <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
-                How It Works
-              </div>
-              <h2 className="font-display font-black text-4xl text-foreground mb-4">
-                From brief to billable in one workflow.
-              </h2>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {[
-                { step: "1", title: "Build Your Pool", description: "Curate a roster of trusted vendors. Bookmark your favorites for quick access." },
-                { step: "2", title: "Broadcast RFPs", description: "Generate AI-powered RFPs and send to selected vendors from your pool." },
-                { step: "3", title: "Review & Onboard", description: "Score bids, select partners, and onboard them to your brand standards." },
-                { step: "4", title: "Deliver & Pay", description: "Track utilization, manage milestones, and process payments automatically." },
-              ].map((item) => (
-                <div key={item.step} className="text-center">
-                  <div className="w-12 h-12 rounded-full bg-accent/10 border border-accent/30 flex items-center justify-center mx-auto mb-4">
-                    <span className="font-mono text-lg text-accent">{item.step}</span>
+
+            {/* Mobile: vertical connected timeline */}
+            <div className="md:hidden">
+              {stages.map((stage, i) => (
+                <div key={stage.number} className="relative flex gap-4 pb-10 last:pb-0">
+                  {i < stages.length - 1 && <div className="absolute left-7 top-14 bottom-0 w-px bg-border" aria-hidden="true" />}
+                  <div className="relative z-10 w-14 h-14 rounded-full border-2 border-accent bg-background flex items-center justify-center shrink-0">
+                    <span className="font-mono text-sm font-bold text-foreground">{stage.number}</span>
+                    {stage.ai && (
+                      <span className="ai-badge absolute -top-2 -right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-[10px] font-bold">
+                        ✦
+                      </span>
+                    )}
                   </div>
-                  <h3 className="font-display font-bold text-lg text-foreground mb-2">
-                    {item.title}
-                  </h3>
-                  <p className="text-sm text-foreground-muted">
-                    {item.description}
-                  </p>
+                  <div className="pt-2">
+                    <h3 className="font-display font-bold text-base text-foreground mb-1">
+                      {stage.title}
+                    </h3>
+                    <p className="text-xs text-foreground-muted leading-relaxed">
+                      {stage.oneLiner}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         </section>
-        
-        {/* CTA */}
-        <section className="py-20">
+
+        {/* Closing CTA */}
+        <section className="py-20 md:py-32 bg-gradient-to-b from-transparent to-accent/5">
           <div className="max-w-6xl mx-auto px-6">
             <GlassCard className="p-12 text-center">
               <h2 className="font-display font-black text-4xl text-foreground mb-4">
                 Ready to orchestrate?
               </h2>
               <p className="text-foreground-muted max-w-xl mx-auto mb-8">
-                Whether you&apos;re a lead agency looking to scale or a partner vendor looking for opportunities, 
-                LIGAMENT connects both sides of the equation.
+                Sign up, import your vendors, and send your first RFP in under 10 minutes.
               </p>
-<div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold px-8">
-                <Link href="/auth/login">Launch Lead Agency Portal</Link>
-              </Button>
-              <Button 
-                asChild 
-                variant="outline" 
-                className="border-border text-foreground hover:bg-white/10 font-display font-bold px-8 bg-transparent"
-              >
-                <Link href="/auth/login">I&apos;m a Partner Vendor</Link>
-              </Button>
-            </div>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold text-lg px-10 py-7">
+                  <Link href="/auth/login">Launch Lead Agency Portal</Link>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-border text-foreground hover:bg-white/10 font-display font-bold text-lg px-10 py-7 bg-transparent"
+                >
+                  <Link href="/auth/login">I&apos;m a Partner Agency</Link>
+                </Button>
+              </div>
             </GlassCard>
           </div>
         </section>
       </main>
-      
+
       {/* Footer */}
       <footer className="relative z-10 border-t border-border">
         <div className="max-w-6xl mx-auto px-6 py-12">
@@ -353,7 +368,7 @@ export default function HomePage() {
                 Best Practice Vendor Procurement & Orchestration for Independent Creative Agencies
               </p>
             </div>
-            
+
             <div className="grid grid-cols-2 md:grid-cols-3 gap-12">
               <div>
                 <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-4">
@@ -374,14 +389,14 @@ export default function HomePage() {
                   </Link>
                 </div>
               </div>
-              
+
               <div>
                 <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-4">
-                  Partner Vendors
+                  Partner Agencies
                 </div>
                 <div className="space-y-2">
                   <Link href="/partner" className="block text-sm text-foreground-secondary hover:text-foreground transition-colors">
-                    Partner Vendor Portal
+                    Partner Agency Portal
                   </Link>
                   <Link href="/partner/rfps" className="block text-sm text-foreground-secondary hover:text-foreground transition-colors">
                     Open RFPs
@@ -394,7 +409,7 @@ export default function HomePage() {
                   </Link>
                 </div>
               </div>
-              
+
               <div>
                 <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-4">
                   Contact
@@ -407,7 +422,7 @@ export default function HomePage() {
               </div>
             </div>
           </div>
-          
+
           <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
               <div className="font-mono text-[10px] text-foreground-muted/50">
