@@ -142,11 +142,11 @@ export default function HomePage() {
               <span className="ai-badge">✦</span> Best Practice Vendor Procurement & Orchestration for Independent Creative Agencies
             </div>
             <h1 className="font-display font-black text-5xl md:text-7xl text-foreground leading-[0.95] mb-10">
-              From <span className="text-accent">brief</span> to <span className="text-accent">final delivery</span>.<br />
-              Smarter procurement at every step.
+              Brief to <span className="text-accent">bid</span> to <span className="text-accent">award</span>.<br />
+              Without the chaos.
             </h1>
             <p className="text-lg text-foreground-muted max-w-xl mb-8 leading-relaxed">
-              Build your vendor network. Broadcast RFPs. Compare bids with AI. Track delivery. One platform that gets smarter with every engagement.
+              Smarter vendor procurement at every step. Build your network. Broadcast RFPs. Compare bids with AI. Award with confidence. One platform that gets smarter with every engagement.
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold text-lg px-8 py-6">
@@ -198,7 +198,7 @@ export default function HomePage() {
                 Lead Agency Portal
               </h3>
               <p className="text-foreground-muted max-w-2xl mx-auto">
-                Build, evaluate, and optimize your vendor relationships from RFP to delivery review.
+                Stop chasing vendors across email, spreadsheets, and shared drives. Go from brief to awarded vendor in one streamlined workflow.
               </p>
             </div>
 
@@ -276,7 +276,7 @@ export default function HomePage() {
                 5 stages. End to end.
               </h2>
               <p className="text-foreground-muted max-w-xl mx-auto">
-                Every vendor engagement flows through 5 stages. AI assists at key decision points. You stay in control.
+                Every vendor engagement flows through 5 stages. From brief to bid to award, AI assists at key decision points. You stay in control.
               </p>
             </div>
 
@@ -339,7 +339,7 @@ export default function HomePage() {
                 Ready to orchestrate?
               </h2>
               <p className="text-foreground-muted max-w-xl mx-auto mb-8">
-                Sign up, import your vendors, and send your first RFP in under 10 minutes.
+                The chaos is optional. Sign up, import your vendors, and send your first RFP in under 10 minutes.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90 font-display font-bold text-lg px-10 py-7">
