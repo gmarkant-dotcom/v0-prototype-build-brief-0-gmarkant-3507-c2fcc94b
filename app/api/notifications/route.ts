@@ -1,3 +1,11 @@
+// TODO: GET and PATCH here have zero callers anywhere in the codebase (verified via
+// repo-wide search for "/api/notifications" - no fetch/useFetch call sites in app/,
+// components/, lib/, or hooks/). The write side (lib/notifications.ts's
+// createNotification()) is still actively called from app/api/partnerships/route.ts
+// and app/api/projects/[id]/onboarding-packages/route.ts, so the notifications table
+// is being populated with no UI ever reading it back. Removal candidate once a product
+// decision is made on whether to build the read-side UI or drop the feature - do not
+// delete without re-checking the write side first.
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 

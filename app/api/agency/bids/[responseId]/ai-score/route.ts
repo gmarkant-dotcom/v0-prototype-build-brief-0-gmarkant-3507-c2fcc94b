@@ -229,25 +229,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       .filter(Boolean)
       .join("\n")
 
-    const callOnce = () =>
-      callAnthropicAnalysis({
-        systemPrompt: SCORING_SYSTEM_PROMPT,
-        userContent,
-        maxTokens: 4000,
-        timeoutMs: 55_000,
-      })
-
-    let result = await callOnce()
-    let parsed = result.success ? tryParseJsonObject<AiScoreResponse>(result.text) : null
-
-    // Malformed JSON: retry once before giving up, per spec.
-    if (result.success && !parsed) {
-      result = await callOnce()
-      parsed = result.success ? tryParseJsonObject<AiScoreResponse>(result.text) : null
-    }
+    // No retry on malformed JSON: two 55s-timeout calls would not fit inside this route's
+    // 60s maxDuration anyway, so fail fast and let the agency click "Regenerate AI Scores"
+    // (components/bid-evaluation-tab.tsx) instead of burning the function budget on a
+    // second attempt that could never complete in time.
+    const result = await callAnthropicAnalysis({
+      systemPrompt: SCORING_SYSTEM_PROMPT,
+      userContent,
+      maxTokens: 4000,
+      timeoutMs: 55_000,
+    })
+    const parsed = result.success ? tryParseJsonObject<AiScoreResponse>(result.text) : null
 
     if (!result.success || !parsed || !Array.isArray(parsed.scores)) {
-      console.error("[api] failure", { route, method: "POST", responseId, message: "AI scoring parse failed after retry" })
+      console.error("[api] failure", { route, method: "POST", responseId, message: "AI scoring parse failed" })
       return NextResponse.json({ error: "AI scoring failed, please try again." }, { status: 502 })
     }
 

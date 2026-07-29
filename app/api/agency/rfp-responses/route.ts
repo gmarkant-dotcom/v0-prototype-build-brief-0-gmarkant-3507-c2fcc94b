@@ -80,9 +80,12 @@ export async function GET(request: Request) {
 
     let responsesQuery = supabase
       .from("partner_rfp_responses")
-      .select("*")
+      .select(
+        "id, inbox_item_id, partner_id, partner_display_name, status, budget_proposal, proposal_text, timeline_proposal, payment_terms, attachments, business_criteria_responses, agency_feedback, feedback_updated_at, submitted_at, created_at, updated_at, ai_summary_short, ai_summary_detailed, ai_summary_generated_at, composite_score"
+      )
       .eq("agency_id", user.id)
       .order("updated_at", { ascending: false })
+      .limit(500)
     if (inboxIdsForProject) {
       const orFilters: string[] = []
       if (inboxIdsForProject.length > 0) orFilters.push(`inbox_item_id.in.(${inboxIdsForProject.join(",")})`)

@@ -29,7 +29,7 @@ bid management, onboarding, active engagements, and cash flow.
 
 ---
 
-## Migrations Applied (001-055)
+## Migrations Applied (001-066)
 
 | Migration | Description |
 |-----------|-------------|
@@ -43,10 +43,15 @@ bid management, onboarding, active engagements, and cash flow.
 | 045 | RLS policy - partners can claim partnership by email |
 | 046 | CREATE INDEX IF NOT EXISTS idx_projects_agency_id ON projects(agency_id) |
 | 047 | Added secondary_role text, active_role text to profiles. Backfilled active_role = role |
-| 048 | Added company_logo_url text to profiles |
+| 048 | **MISSING FROM DISK** - no `048_*.sql` file exists in `supabase/migrations/`, despite this row and a "migration 048" prose reference elsewhere in this doc claiming it added `company_logo_url text` to `profiles`. That column does exist live (used throughout `agency-layout.tsx`/`partner-layout.tsx`), so the change was almost certainly applied directly in the Supabase SQL Editor without ever being committed as a file - a real gap between this doc's migration history and what the repo can reproduce from source. If this is ever rebuilt from scratch, add `ALTER TABLE profiles ADD COLUMN IF NOT EXISTS company_logo_url text;` back as a real migration file before relying on the numbered sequence again. |
 | 049 | Added company_linkedin_url text, personal_linkedin_url text to profiles |
 | 050 | Added default_nda_url text to profiles |
 | 051 | Added msa_confirmed_at timestamptz, msa_confirmed_by uuid to partnerships |
+| 052 | Added payment_terms_requests jsonb (default '[]') to partnerships |
+| 053 | Created partner_vouches table for the "Triple-Vouched" feature (voucher_agency_id, vouched_partner_id, unique pair). RLS: open SELECT for counting (no identifying info exposed), agencies can INSERT/DELETE only their own vouch |
+| 054 | Created brief_interpretations table (Creative Treatment Analysis results: timeline/budget/campaigns/directors jsonb results per brief, owned by user_id). RLS: users manage their own rows. Added interpretation_id uuid (references brief_interpretations) to rfps |
+| 055 | Added project_id uuid (references projects, on delete set null) to brief_interpretations, plus an index on it |
+| 056 | Replaced the handle_new_user() trigger so every new signup defaults to role='agency', active_role='agency', secondary_role='partner', is_paid=true (dual-role access by default); backfilled the same defaults onto existing profiles missing secondary_role or with is_paid false/null |
 | 057 | Magic link guest RFP flow: dropped NOT NULL on partner_rfp_responses.inbox_item_id and .partner_id; added scope_item_name/scope_item_description text to rfp_magic_tokens; unique index on rfp_magic_tokens(agency_id, project_id, vendor_email) |
 | 058 | Added submitted_at timestamptz to partner_rfp_responses (backfilled from updated_at); required for the guest "Edit Bid" flow to re-stamp submission time |
 | 059 | Added reference_materials jsonb (default '[]') to rfp_magic_tokens; Lightning RFP files/links shown on the guest response page |
