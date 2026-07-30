@@ -102,6 +102,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body.agency_feedback !== undefined || declineReason) patch.feedback_updated_at = new Date().toISOString()
     if (existing.status !== nextStatus) patch.feedback_updated_at = new Date().toISOString()
 
+    // Bid action timestamps (migration 069) - only stamped on the transition into that
+    // status, mirroring the awarded_at/decline-email guards below. No timestamp is ever
+    // overwritten by a later transition away from and back to the same status.
+    if (existing.status !== "shortlisted" && nextStatus === "shortlisted") {
+      patch.shortlisted_at = patch.updated_at
+    }
+    if (existing.status !== "meeting_requested" && nextStatus === "meeting_requested") {
+      patch.meeting_requested_at = patch.updated_at
+    }
+    if (existing.status !== "declined" && nextStatus === "declined") {
+      patch.declined_at = patch.updated_at
+    }
+
     /**
      * Award requires a project_assignment row keyed by (project_id, partnership_id) from partner_rfp_inbox.
      * partner_rfp_responses links to inbox only via inbox_item_id → partner_rfp_inbox.id (there is no inbox_id on responses).

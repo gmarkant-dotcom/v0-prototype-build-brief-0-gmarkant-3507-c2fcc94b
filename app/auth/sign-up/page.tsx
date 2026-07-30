@@ -38,7 +38,11 @@ function SignUpContent() {
   const ndaRequired = searchParams.get("nda") === "required"
   const scopeName = (searchParams.get("scope") || "").trim()
   const agencyName = (searchParams.get("agency") || "").trim()
-  const isMagicLinkSource = (searchParams.get("source") || "").trim().toLowerCase() === "magic_link"
+  // Both the guest-bid magic link and the pool "Send/Resend Invitation" email prefill an
+  // email and always mean "this person is a partner" - same existing-account check and
+  // role/step defaulting apply to either source.
+  const sourceParam = (searchParams.get("source") || "").trim().toLowerCase()
+  const isMagicLinkSource = sourceParam === "magic_link" || sourceParam === "pool_resend"
   const hasRfpInviteContext = inviteToken.length > 0
   const hasPartnershipInviteContext = inviteType === "partnership"
   const hasInviteContext = hasRfpInviteContext || hasPartnershipInviteContext

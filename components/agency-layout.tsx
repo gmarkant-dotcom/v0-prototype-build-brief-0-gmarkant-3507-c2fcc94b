@@ -8,13 +8,14 @@ import { HolographicBlobs } from "./holographic-blobs"
 import { LigamentLogo } from "./ligament-logo"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, Zap, Mail } from "lucide-react"
+import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, Zap, Mail, Plus } from "lucide-react"
 import { SelectedProjectProvider, useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
 import { UsageLimitBanner } from "@/components/usage-limit-banner"
 import { UsageLimitModalProvider } from "@/contexts/usage-limit-modal-context"
 import { RoleToggle } from "@/components/role-toggle"
+import { NewProjectDialog } from "@/components/new-project-dialog"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -354,9 +355,10 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   }
 
   return (
+    <UsageLimitModalProvider>
     <div className="min-h-screen relative">
       <HolographicBlobs />
-      
+
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 bottom-0 w-[260px] glass border-r border-border z-20 flex flex-col">
         {/* Logo */}
@@ -372,6 +374,24 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
         
         {/* Navigation */}
         <nav className="flex-1 p-4 overflow-y-auto">
+          {/* Global "New Project" affordance - same guarded flow as the dashboard's own
+              button (components/new-project-dialog.tsx), so every agency page (mobile
+              included, since this sidebar is the only agency nav) can start a project
+              without navigating to the dashboard first. */}
+          <div className="mb-5">
+            <NewProjectDialog
+              trigger={
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-accent text-accent-foreground font-mono text-sm font-medium hover:bg-accent/90 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Project
+                </button>
+              }
+            />
+          </div>
+
           {/* Overview Section */}
           <div className="mb-4">
             <div className="font-mono text-[10px] text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
@@ -708,12 +728,11 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
       
       {/* Main Content */}
       <main className="ml-[260px] min-h-screen relative z-10">
-        <UsageLimitModalProvider>
-          <UsageLimitBanner />
-          {children}
-        </UsageLimitModalProvider>
+        <UsageLimitBanner />
+        {children}
       </main>
     </div>
+    </UsageLimitModalProvider>
   )
 }
 

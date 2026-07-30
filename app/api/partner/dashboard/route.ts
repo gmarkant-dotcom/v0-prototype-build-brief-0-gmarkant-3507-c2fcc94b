@@ -59,7 +59,7 @@ export async function GET() {
         ),
       supabase
         .from("partner_rfp_responses")
-        .select("id, inbox_item_id, status, submitted_at")
+        .select("id, inbox_item_id, status, submitted_at, shortlisted_at, meeting_requested_at, declined_at")
         .eq("partner_id", partnerId),
       supabase.from("partnerships").select("id, agency_id, status, reliability_summary, reliability_summary_generated_at").eq("partner_id", partnerId),
     ])
@@ -307,11 +307,11 @@ export async function GET() {
     }
 
     // ── Recent activity - union of every partner-attributable event with a real
-    // timestamp. Bid status changes to shortlisted/meeting_requested/declined are NOT
-    // included - partner_rfp_responses has no timestamp column for when status changed
-    // (only current status), so those transitions can't be placed on a timeline (see
-    // LIGAMENT_CONTEXT.md backlog item P14). Awarded is included via
-    // project_assignments.awarded_at, which does exist.
+    // timestamp. shortlisted_at/meeting_requested_at/declined_at (migration 069) are only
+    // ever set going forward from the transition that produced them - see
+    // app/api/agency/rfp-responses/[id]/route.ts - so older bids that transitioned before
+    // this migration simply have no such event, not a wrong one. Awarded is included via
+    // project_assignments.awarded_at, which predates this and already had a real timestamp.
     const activity: ActivityItem[] = []
 
     for (const row of inboxRows) {
@@ -333,15 +333,42 @@ export async function GET() {
       }
     }
     for (const r of responses) {
-      if (!r.submitted_at) continue
       const inbox = inboxRows.find((row) => row.id === r.inbox_item_id)
       const scopeName = (inbox?.scope_item_name as string | null) || "a scope item"
-      activity.push({
-        id: `bid:${r.id}`,
-        text: `You submitted a bid for ${scopeName}`,
-        href: inbox ? `/partner/rfps/${inbox.id}` : "/partner/rfps",
-        timestamp: r.submitted_at as string,
-      })
+      const href = inbox ? `/partner/rfps/${inbox.id}` : "/partner/rfps"
+
+      if (r.submitted_at) {
+        activity.push({
+          id: `bid:${r.id}`,
+          text: `You submitted a bid for ${scopeName}`,
+          href,
+          timestamp: r.submitted_at as string,
+        })
+      }
+      if (r.shortlisted_at) {
+        activity.push({
+          id: `shortlisted:${r.id}`,
+          text: `Your bid for ${scopeName} was shortlisted`,
+          href,
+          timestamp: r.shortlisted_at as string,
+        })
+      }
+      if (r.meeting_requested_at) {
+        activity.push({
+          id: `meeting:${r.id}`,
+          text: `A meeting was requested for your bid on ${scopeName}`,
+          href,
+          timestamp: r.meeting_requested_at as string,
+        })
+      }
+      if (r.declined_at) {
+        activity.push({
+          id: `declined:${r.id}`,
+          text: `Your bid for ${scopeName} was declined`,
+          href,
+          timestamp: r.declined_at as string,
+        })
+      }
     }
     for (const a of awardedAssignments) {
       if (!a.awarded_at) continue
