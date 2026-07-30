@@ -189,7 +189,7 @@ function AttentionQueue({ data, onCreateProject }: { data: DashboardData["attent
     rows.push({
       key: `rfp:${r.projectId}:${r.scopeItemName}`,
       icon: Send,
-      text: `RFP for ${r.scopeItemName} on ${r.projectName} - ${r.pending} of ${r.invited} partners haven't responded`,
+      text: `RFP for ${r.scopeItemName} on ${r.projectName} - ${r.pending} of ${r.invited} partner${r.invited === 1 ? "" : "s"} ${r.pending === 1 ? "hasn't" : "haven't"} responded`,
       timeframe: `closes ${formatDeadlineRelative(r.deadline)}`,
       href: r.href,
     })
@@ -206,7 +206,7 @@ function AttentionQueue({ data, onCreateProject }: { data: DashboardData["attent
     rows.push({
       key: `alert:${r.projectId}`,
       icon: FileWarning,
-      text: `${r.count} partner update${r.count === 1 ? "" : "s"} need attention on ${r.projectName}`,
+      text: `${r.count} partner update${r.count === 1 ? "" : "s"} ${r.count === 1 ? "needs" : "need"} attention on ${r.projectName}`,
       href: r.href,
     })
   }

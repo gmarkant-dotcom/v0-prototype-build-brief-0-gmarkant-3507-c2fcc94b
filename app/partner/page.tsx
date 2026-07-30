@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
+import { summarizePartnerMilestones } from "@/lib/partner-payments"
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -30,6 +31,10 @@ import {
   FolderOpen,
   Briefcase,
 } from "lucide-react"
+
+function formatUsdWhole(amount: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount)
+}
 
 // Demo data - only shown when NEXT_PUBLIC_IS_DEMO=true
 const demoProfileChecklist = {
@@ -160,6 +165,8 @@ export default function PartnerDashboardPage() {
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [fetchedActiveProjects, setFetchedActiveProjects] = useState<DashboardActiveProject[]>([])
   const [activeProjectsLoading, setActiveProjectsLoading] = useState(!isDemo)
+  const [paymentSummary, setPaymentSummary] = useState<{ paid: number; pending: number; count: number } | null>(null)
+  const [paymentsLoading, setPaymentsLoading] = useState(!isDemo)
   const [profileChecklist, setProfileChecklist] = useState<ProfileChecklist>({
     capabilities: false,
     credentials: false,
@@ -357,6 +364,44 @@ export default function PartnerDashboardPage() {
     }
   }, [isDemo])
 
+  // Paid to Date / Pending tiles - same data source and paid-vs-pending derivation as
+  // app/api/partner/payments (this is the same GET route app/partner/payments/page.tsx
+  // fetches), so the two surfaces can never disagree.
+  useEffect(() => {
+    if (isDemo) {
+      setPaymentSummary(null)
+      setPaymentsLoading(false)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      setPaymentsLoading(true)
+      try {
+        const res = await fetch("/api/partner/payments", { credentials: "same-origin", cache: "no-store" })
+        const data = (await res.json().catch(() => ({}))) as { milestones?: unknown }
+        const list = Array.isArray(data.milestones) ? data.milestones : []
+        if (!cancelled && res.ok) {
+          const summary = summarizePartnerMilestones(
+            list
+              .filter((m): m is Record<string, unknown> => Boolean(m) && typeof m === "object")
+              .map((m) => ({ amount: Number(m.amount) || 0, status: String(m.status || "") }))
+          )
+          setPaymentSummary({ ...summary, count: list.length })
+        } else if (!cancelled) {
+          setPaymentSummary({ paid: 0, pending: 0, count: 0 })
+        }
+      } catch (e) {
+        console.error("[partner/dashboard] /api/partner/payments", e)
+        if (!cancelled) setPaymentSummary({ paid: 0, pending: 0, count: 0 })
+      } finally {
+        if (!cancelled) setPaymentsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemo])
+
   const executiveSummaryCards = (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <div className="rounded-xl p-5 text-center border border-white/10 !bg-[#0C3535] shadow-sm text-white">
@@ -440,6 +485,13 @@ export default function PartnerDashboardPage() {
   const activeProjects: DashboardActiveProject[] = isDemo ? demoActiveProjects : fetchedActiveProjects
   const upcomingPayments = isDemo ? demoUpcomingPayments : []
   const projectAlerts = isDemo ? demoProjectAlerts : []
+
+  // Paid to Date / Pending tiles - illustrative numbers only in demo mode; real partners
+  // never see placeholder dollars, only real payment_milestones totals or an honest empty
+  // state when they have none yet.
+  const hasNoPayments = !isDemo && !paymentsLoading && (paymentSummary?.count ?? 0) === 0
+  const paidTileValue = isDemo ? "$58,200" : paymentsLoading ? "—" : formatUsdWhole(paymentSummary?.paid ?? 0)
+  const pendingTileValue = isDemo ? "$29,100" : paymentsLoading ? "—" : formatUsdWhole(paymentSummary?.pending ?? 0)
   
   // Show simplified empty state for production users (after awarded projects load)
   if (!isDemo && !activeProjectsLoading && activeProjects.length === 0 && openRFPs.length === 0) {
@@ -508,13 +560,43 @@ export default function PartnerDashboardPage() {
             </div>
             <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Active Projects</div>
           </div>
-          <div className="bg-white rounded-xl border border-green-200 p-5 text-center bg-green-50">
-            <div className="font-display font-bold text-3xl text-green-600">$58,200</div>
-            <div className="font-mono text-[10px] text-green-600 uppercase tracking-wider mt-1">Paid to Date</div>
+          <div
+            className={cn(
+              "bg-white rounded-xl border p-5 text-center",
+              hasNoPayments ? "border-gray-200" : "border-green-200 bg-green-50"
+            )}
+          >
+            <div className={cn("font-display font-bold text-3xl", hasNoPayments ? "text-gray-400" : "text-green-600")}>
+              {paidTileValue}
+            </div>
+            <div
+              className={cn(
+                "font-mono text-[10px] uppercase tracking-wider mt-1",
+                hasNoPayments ? "text-gray-400" : "text-green-600"
+              )}
+            >
+              Paid to Date
+            </div>
+            {hasNoPayments && <div className="text-[10px] text-gray-400 mt-0.5">No payments yet</div>}
           </div>
-          <div className="bg-white rounded-xl border border-yellow-200 p-5 text-center bg-yellow-50">
-            <div className="font-display font-bold text-3xl text-yellow-600">$29,100</div>
-            <div className="font-mono text-[10px] text-yellow-600 uppercase tracking-wider mt-1">Pending</div>
+          <div
+            className={cn(
+              "bg-white rounded-xl border p-5 text-center",
+              hasNoPayments ? "border-gray-200" : "border-yellow-200 bg-yellow-50"
+            )}
+          >
+            <div className={cn("font-display font-bold text-3xl", hasNoPayments ? "text-gray-400" : "text-yellow-600")}>
+              {pendingTileValue}
+            </div>
+            <div
+              className={cn(
+                "font-mono text-[10px] uppercase tracking-wider mt-1",
+                hasNoPayments ? "text-gray-400" : "text-yellow-600"
+              )}
+            >
+              Pending
+            </div>
+            {hasNoPayments && <div className="text-[10px] text-gray-400 mt-0.5">No payments yet</div>}
           </div>
         </div>
         

@@ -85,7 +85,7 @@ export async function GET() {
         .eq("agency_id", agencyId),
       supabase
         .from("partner_rfp_responses")
-        .select("id, inbox_item_id, partner_id, partner_display_name, status, submitted_at, created_at, updated_at")
+        .select("id, inbox_item_id, partner_id, partner_display_name, status, submitted_at, created_at, updated_at, budget_proposal")
         .eq("agency_id", agencyId)
         .order("created_at", { ascending: false })
         .limit(500),
@@ -234,7 +234,9 @@ export async function GET() {
 
     // ── Funnel metrics ──────────────────────────────────────────────────────────
     const activePartners = partnerships.filter((p) => p.status === "active").length
-    const openRfps = openRfpGroups.length
+    // Distinct projects with at least one open RFP scope item, not a count of open scope
+    // items themselves - a project broadcasting 3 open scopes should read as 1 open RFP.
+    const openRfps = new Set(openRfpGroups.map((g) => g.projectId)).size
     const monthStart = monthStartIso()
     const quarterStart = quarterStartIso()
     const bidsReceivedThisMonth = responses.filter(
