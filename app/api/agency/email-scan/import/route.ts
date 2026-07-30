@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
+import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
 
 export const dynamic = "force-dynamic"
 
@@ -23,14 +24,22 @@ async function requireAgency() {
   if (profile?.role !== "agency" && profile?.active_role !== "agency") {
     return { ok: false as const, status: 403, error: "Agency only" }
   }
-  return { ok: true as const, userId: user.id }
+  return { ok: true as const, userId: user.id, userEmail: user.email }
 }
 
+type ImportOutcome = "added" | "skipped" | "self"
+
 /**
- * Adds one contact to the agency's pool - same Case 1/Case 2 pattern as
- * classifyGuestVendorForPool in app/api/rfp/guest/[token]/route.ts (the magic-link
- * auto-add feature): check by partner_id then partner_email before inserting, claim an
- * existing-but-unclaimed row instead of duplicating it.
+ * Adds one contact to the agency's pool as a Discovered row - check by partner_id then
+ * partner_email before inserting, enrich an existing-but-unclaimed row instead of
+ * duplicating it.
+ *
+ * CONSENT RULE: an exact profiles email match never activates a partnership on its own -
+ * it only links the matched profile id into partnership_notes (pool_flag
+ * "already_on_ligament") so /agency/pool can badge it. Activation happens only through the
+ * existing invite -> accept flow. If the matched profile is the agency's own account, the
+ * contact is skipped entirely (self-partnership must be impossible) - see
+ * lib/server/partner-import-guard.ts, shared with the spreadsheet/manual import path.
  *
  * Deliberately does NOT trust the client's has_ligament_account/profile_id - those are
  * re-derived here from a fresh profiles lookup by email. A client could otherwise pass an
@@ -40,62 +49,61 @@ async function requireAgency() {
 async function importContact(
   service: SupabaseClient,
   agencyId: string,
+  agencyOwnDomains: string[],
   email: string,
   name: string | null
-): Promise<"added" | "skipped"> {
+): Promise<ImportOutcome> {
   const { data: matchedProfile } = await service.from("profiles").select("id").ilike("email", email).maybeSingle()
+  const matchedProfileId = (matchedProfile?.id as string | undefined) || null
 
-  if (matchedProfile?.id) {
-    const byId = await service
-      .from("partnerships")
-      .select("id, partner_id")
-      .eq("agency_id", agencyId)
-      .eq("partner_id", matchedProfile.id)
-      .limit(1)
-      .maybeSingle()
-    let existing = byId.data as { id: string; partner_id: string | null } | null
+  const guard = evaluateImportGuard({ agencyId, agencyOwnDomains, matchedProfileId, contactEmail: email })
+  if (guard === "self_account") return "self"
+  const poolFlag = guard === "same_domain_flag" ? "domain_match_flagged" : matchedProfileId ? "already_on_ligament" : null
 
-    if (!existing) {
-      const byEmail = await service
+  const byId = matchedProfileId
+    ? await service
         .from("partnerships")
-        .select("id, partner_id")
+        .select("id, partner_id, status, partnership_notes")
         .eq("agency_id", agencyId)
-        .ilike("partner_email", email)
+        .eq("partner_id", matchedProfileId)
         .limit(1)
         .maybeSingle()
-      existing = byEmail.data as { id: string; partner_id: string | null } | null
-    }
+    : { data: null }
+  let existing = byId.data as
+    | { id: string; partner_id: string | null; status: string | null; partnership_notes: Record<string, unknown> | null }
+    | null
 
-    if (existing) {
-      if (!existing.partner_id) {
-        const { error } = await service
-          .from("partnerships")
-          .update({ partner_id: matchedProfile.id, profile_status: "active", updated_at: new Date().toISOString() })
-          .eq("id", existing.id)
-        if (error) throw error
-      }
-      return "skipped"
-    }
-
-    const { error } = await service.from("partnerships").insert({
-      agency_id: agencyId,
-      partner_id: matchedProfile.id,
-      partner_email: email,
-      status: "active",
-      profile_status: "active",
-    })
-    if (error) throw error
-    return "added"
+  if (!existing) {
+    const byEmail = await service
+      .from("partnerships")
+      .select("id, partner_id, status, partnership_notes")
+      .eq("agency_id", agencyId)
+      .ilike("partner_email", email)
+      .limit(1)
+      .maybeSingle()
+    existing = byEmail.data as typeof existing
   }
 
-  const { data: existingGhost } = await service
-    .from("partnerships")
-    .select("id")
-    .eq("agency_id", agencyId)
-    .ilike("partner_email", email)
-    .limit(1)
-    .maybeSingle()
-  if (existingGhost) return "skipped"
+  const mergedNotes = (): Record<string, unknown> | null => {
+    const base: Record<string, unknown> = { ...(existing?.partnership_notes || {}) }
+    if (matchedProfileId) base.matched_profile_id = matchedProfileId
+    if (poolFlag) base.pool_flag = poolFlag
+    return Object.keys(base).length > 0 ? base : null
+  }
+
+  if (existing) {
+    if (existing.status === "active") return "skipped"
+    // Existing Discovered/pending ghost row - link the matched profile id (if any) and
+    // flag, but never touch status/profile_status/partner_id here.
+    if (matchedProfileId || poolFlag) {
+      const { error } = await service
+        .from("partnerships")
+        .update({ partnership_notes: mergedNotes(), updated_at: new Date().toISOString() })
+        .eq("id", existing.id)
+      if (error) throw error
+    }
+    return "added"
+  }
 
   const { error } = await service.from("partnerships").insert({
     agency_id: agencyId,
@@ -104,6 +112,7 @@ async function importContact(
     profile_status: "unclaimed",
     status: "pending",
     contact_name: name,
+    partnership_notes: mergedNotes(),
   })
   if (error) throw error
   return "added"
@@ -140,14 +149,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No valid contacts provided" }, { status: 400 })
   }
 
+  const agencyOwnDomains = await resolveAgencyOwnDomains(service, auth.userId, auth.userEmail)
+
   let added = 0
   let skipped = 0
+  let self = 0
   let errors = 0
 
   for (const email of emails) {
     try {
-      const result = await importContact(service, auth.userId, email, nameByEmail.get(email) ?? null)
+      const result = await importContact(service, auth.userId, agencyOwnDomains, email, nameByEmail.get(email) ?? null)
       if (result === "added") added += 1
+      else if (result === "self") self += 1
       else skipped += 1
     } catch (err) {
       errors += 1
@@ -160,6 +173,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  console.log("[api] success", { route, method: "POST", userId: auth.userId, added, skipped, errors })
-  return NextResponse.json({ added, skipped, errors })
+  console.log("[api] success", { route, method: "POST", userId: auth.userId, added, skipped, self, errors })
+  return NextResponse.json({ added, skipped, self, errors })
 }

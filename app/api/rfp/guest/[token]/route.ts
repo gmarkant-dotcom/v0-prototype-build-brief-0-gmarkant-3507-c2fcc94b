@@ -14,7 +14,7 @@ import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 export const dynamic = "force-dynamic"
 
 type PoolClassification = {
-  poolStatus: "existing_user_added" | "ghost_created" | "domain_match_flagged"
+  poolStatus: "existing_user_added" | "ghost_created" | "domain_match_flagged" | "self_account_skipped"
   domainMatchProfileId: string | null
 }
 
@@ -22,12 +22,23 @@ type PoolClassification = {
  * Auto-adds a guest bidder to the lead agency's partner pool (magic link auto-add).
  * Callers must wrap this in try/catch - classification failures must never block or
  * fail the bid submission itself, only be logged.
+ *
+ * Activation here (Case 1) stays partner-initiated by design - the vendor is submitting a
+ * real bid on this agency's RFP, an affirmative act, unlike an agency-side import matching
+ * an email with no consent from the matched person. Self-partnership must still be
+ * impossible either way (shared self-guard concern with lib/server/partner-import-guard.ts,
+ * even though this route doesn't import that module - the domain-match logic below is
+ * specific to this flow and intentionally untouched).
  */
 async function classifyGuestVendorForPool(
   supabase: SupabaseClient,
   params: { agencyId: string; vendorEmail: string; matchedProfileId: string | null }
 ): Promise<PoolClassification> {
   const { agencyId, vendorEmail, matchedProfileId } = params
+
+  if (matchedProfileId && matchedProfileId === agencyId) {
+    return { poolStatus: "self_account_skipped", domainMatchProfileId: null }
+  }
 
   // Case 1: vendor email matches an existing profile.
   if (matchedProfileId) {

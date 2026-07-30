@@ -40,6 +40,9 @@ type OnboardingItem = {
   agencyName: string
 }
 
+type ActivityItem = { id: string; text: string; href: string; timestamp: string }
+const ACTIVITY_LIMIT = 15
+
 export async function GET() {
   const route = "/api/partner/dashboard"
   try {
@@ -54,7 +57,10 @@ export async function GET() {
         .select(
           "id, agency_id, project_id, scope_item_name, status, response_deadline, nda_gate_enforced, nda_confirmed_at, created_at"
         ),
-      supabase.from("partner_rfp_responses").select("id, inbox_item_id, status").eq("partner_id", partnerId),
+      supabase
+        .from("partner_rfp_responses")
+        .select("id, inbox_item_id, status, submitted_at")
+        .eq("partner_id", partnerId),
       supabase.from("partnerships").select("id, agency_id, status, reliability_summary, reliability_summary_generated_at").eq("partner_id", partnerId),
     ])
 
@@ -86,16 +92,60 @@ export async function GET() {
     for (const row of inboxRows) if (row.agency_id) agencyIds.add(row.agency_id as string)
     for (const row of partnerships) if (row.agency_id) agencyIds.add(row.agency_id as string)
 
+    const partnershipIds = partnerships.map((p) => p.id as string)
+
+    // Activity feed sources with real timestamps, attributable to this partner - see
+    // report for which event types were and weren't derivable this way.
+    const [assignmentsRes, paidMilestonesRes, statusUpdatesRes] = await Promise.all([
+      partnershipIds.length > 0
+        ? supabase
+            .from("project_assignments")
+            .select("id, project_id, partnership_id, status, awarded_at")
+            .in("partnership_id", partnershipIds)
+            .eq("status", "awarded")
+        : Promise.resolve({ data: [], error: null }),
+      partnershipIds.length > 0
+        ? supabase
+            .from("payment_milestones")
+            .select("id, project_id, title, paid_at")
+            .in("partnership_id", partnershipIds)
+            .not("paid_at", "is", null)
+        : Promise.resolve({ data: [], error: null }),
+      partnershipIds.length > 0
+        ? supabase
+            .from("partner_status_updates")
+            .select("id, project_id, status, created_at")
+            .in("partnership_id", partnershipIds)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    for (const [label, res] of [
+      ["project_assignments", assignmentsRes],
+      ["payment_milestones", paidMilestonesRes],
+      ["partner_status_updates", statusUpdatesRes],
+    ] as const) {
+      if (res.error) {
+        console.error("[api] failure", { route, method: "GET", table: label, message: (res.error as { message: string }).message })
+      }
+    }
+
+    const awardedAssignments = assignmentsRes.data || []
+    const paidMilestones = paidMilestonesRes.data || []
+    const statusUpdates = statusUpdatesRes.data || []
+
     const projectIds = new Set<string>()
     for (const row of inboxRows) if (row.project_id) projectIds.add(row.project_id as string)
+    for (const row of awardedAssignments) if (row.project_id) projectIds.add(row.project_id as string)
+    for (const row of paidMilestones) if (row.project_id) projectIds.add(row.project_id as string)
+    for (const row of statusUpdates) if (row.project_id) projectIds.add(row.project_id as string)
 
     const [agenciesRes, projectsRes] = await Promise.all([
       agencyIds.size > 0
         ? supabase.from("profiles").select("id, company_name, full_name").in("id", Array.from(agencyIds))
         : Promise.resolve({ data: [] as { id: string; company_name: string | null; full_name: string | null }[], error: null }),
       projectIds.size > 0
-        ? supabase.from("projects").select("id, client_name").in("id", Array.from(projectIds))
-        : Promise.resolve({ data: [] as { id: string; client_name: string | null }[], error: null }),
+        ? supabase.from("projects").select("id, name, client_name").in("id", Array.from(projectIds))
+        : Promise.resolve({ data: [] as { id: string; name: string | null; client_name: string | null }[], error: null }),
     ])
 
     const agencyNameById = new Map<string, string>()
@@ -104,8 +154,10 @@ export async function GET() {
       agencyNameById.set(a.id as string, name || "Lead agency")
     }
     const clientNameByProjectId = new Map<string, string | null>()
+    const projectNameById = new Map<string, string>()
     for (const p of projectsRes.data || []) {
       clientNameByProjectId.set(p.id as string, (p.client_name as string | null) ?? null)
+      projectNameById.set(p.id as string, (p.name as string | null) || "Project")
     }
 
     // ── Needs Your Response ──────────────────────────────────────────────────────
@@ -149,7 +201,6 @@ export async function GET() {
     })
 
     // ── Onboarding steps pending on the partner's side ───────────────────────────
-    const partnershipIds = partnerships.map((p) => p.id as string)
     let onboardingPending: OnboardingItem[] = []
     if (partnershipIds.length > 0) {
       const { data: packages, error: pkgErr } = await supabase
@@ -255,6 +306,77 @@ export async function GET() {
       }
     }
 
+    // ── Recent activity - union of every partner-attributable event with a real
+    // timestamp. Bid status changes to shortlisted/meeting_requested/declined are NOT
+    // included - partner_rfp_responses has no timestamp column for when status changed
+    // (only current status), so those transitions can't be placed on a timeline (see
+    // LIGAMENT_CONTEXT.md backlog item P14). Awarded is included via
+    // project_assignments.awarded_at, which does exist.
+    const activity: ActivityItem[] = []
+
+    for (const row of inboxRows) {
+      if (!row.created_at) continue
+      const agencyName = agencyNameById.get(row.agency_id as string) || "A lead agency"
+      activity.push({
+        id: `rfp:${row.id}`,
+        text: `${agencyName} sent an RFP for ${(row.scope_item_name as string | null) || "a scope item"}`,
+        href: `/partner/rfps/${row.id}`,
+        timestamp: row.created_at as string,
+      })
+      if (row.nda_confirmed_at) {
+        activity.push({
+          id: `nda:${row.id}`,
+          text: `NDA confirmed for ${(row.scope_item_name as string | null) || "a scope item"}`,
+          href: `/partner/rfps/${row.id}`,
+          timestamp: row.nda_confirmed_at as string,
+        })
+      }
+    }
+    for (const r of responses) {
+      if (!r.submitted_at) continue
+      const inbox = inboxRows.find((row) => row.id === r.inbox_item_id)
+      const scopeName = (inbox?.scope_item_name as string | null) || "a scope item"
+      activity.push({
+        id: `bid:${r.id}`,
+        text: `You submitted a bid for ${scopeName}`,
+        href: inbox ? `/partner/rfps/${inbox.id}` : "/partner/rfps",
+        timestamp: r.submitted_at as string,
+      })
+    }
+    for (const a of awardedAssignments) {
+      if (!a.awarded_at) continue
+      const projectId = a.project_id as string
+      activity.push({
+        id: `awarded:${a.id}`,
+        text: `You were awarded ${projectNameById.get(projectId) || "a project"}`,
+        href: `/partner/projects/${encodeURIComponent(projectId)}`,
+        timestamp: a.awarded_at as string,
+      })
+    }
+    for (const m of paidMilestones) {
+      if (!m.paid_at) continue
+      const projectId = m.project_id as string
+      activity.push({
+        id: `paid:${m.id}`,
+        text: `Payment received for ${(m.title as string | null) || "a milestone"} on ${projectNameById.get(projectId) || "a project"}`,
+        href: "/partner/payments",
+        timestamp: m.paid_at as string,
+      })
+    }
+    for (const s of statusUpdates) {
+      if (!s.created_at) continue
+      const projectId = s.project_id as string
+      activity.push({
+        id: `status:${s.id}`,
+        text: `You submitted a status update on ${projectNameById.get(projectId) || "a project"}`,
+        href: `/partner/projects/${encodeURIComponent(projectId)}`,
+        timestamp: s.created_at as string,
+      })
+    }
+
+    activity.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    const recentActivity = activity.slice(0, ACTIVITY_LIMIT)
+
     return NextResponse.json(
       {
         needsResponse: { items: needsResponse, expiredCount, onboardingPending },
@@ -266,6 +388,7 @@ export async function GET() {
           agencyRelationships,
         },
         reliability,
+        activity: recentActivity,
       },
       { headers: noStoreHeaders }
     )

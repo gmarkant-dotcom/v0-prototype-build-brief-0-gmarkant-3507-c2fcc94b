@@ -1,11 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
 
 /**
  * Shared write path for adding a ghost/unclaimed contact to an agency's partner pool -
  * used by both the manual "Add Partner" route and the spreadsheet import route (Discovered
  * column, same table/status the email-scan importer writes to). Not used by the email-scan
  * importer itself, which has its own longer-standing implementation in
- * app/api/agency/email-scan/import/route.ts.
+ * app/api/agency/email-scan/import/route.ts (mirrors the same consent rule below).
+ *
+ * CONSENT RULE: an exact profiles email match never activates a partnership on its own.
+ * It only determines whether the resulting Discovered row is linked (partnership_notes.
+ * matched_profile_id + pool_flag "already_on_ligament") so the pool UI can badge it -
+ * activation only ever happens through the existing invite -> accept flow
+ * (app/api/partnerships POST/PATCH). If the agency's own profile is the match, the row is
+ * skipped entirely (self-partnership must be impossible). If the contact shares the
+ * agency's own (non-public) email domain without being an exact match, the row still lands
+ * Discovered but flagged ("domain_match_flagged", reusing the same pool_status value and
+ * badge the guest-bid domain-match flow already renders on /agency/pool).
  */
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -27,10 +38,13 @@ export type PartnerImportRow = {
 
 export type PartnerImportSource = "manual" | "spreadsheet"
 
+export type PartnerImportFlag = "already_on_ligament" | "domain_match_flagged"
+
 export type PartnerImportRowResult = {
   email: string
-  outcome: "added" | "duplicate" | "invalid" | "error"
+  outcome: "added" | "duplicate" | "invalid" | "error" | "self"
   reason?: string
+  flag?: PartnerImportFlag
 }
 
 type PartnershipNotesShape = {
@@ -43,28 +57,50 @@ type PartnershipNotesShape = {
     discipline?: string
     type?: string
   }
+  matched_profile_id?: string
+  pool_flag?: PartnerImportFlag
 }
 
-function buildPartnershipNotes(row: PartnerImportRow, source: PartnerImportSource): PartnershipNotesShape | null {
+type ExistingPoolRow = {
+  id: string
+  partner_id: string | null
+  partner_email: string | null
+  status: string | null
+  contact_name: string | null
+  company_name: string | null
+  phone: string | null
+  website: string | null
+  partnership_notes: PartnershipNotesShape | null
+}
+
+function mergeNotes(
+  existing: PartnershipNotesShape | null | undefined,
+  row: PartnerImportRow,
+  source: PartnerImportSource,
+  matchedProfileId: string | null,
+  flag: PartnerImportFlag | undefined
+): PartnershipNotesShape | null {
+  const base: PartnershipNotesShape = { ...(existing || {}) }
   const notes = (row.notes || "").trim()
   const discipline = (row.discipline || "").trim()
   const type = (row.type || "").trim()
-  if (!notes && !discipline && !type) return null
 
-  const result: PartnershipNotesShape = {}
   if (notes) {
-    result.notes = notes
-    result.notes_log = [{ text: notes, timestamp: new Date().toISOString() }]
+    base.notes = notes
+    base.notes_log = [...(base.notes_log || []), { text: notes, timestamp: new Date().toISOString() }]
   }
   if (discipline || type) {
-    result.imported_meta = {
+    base.imported_meta = {
       source,
       imported_at: new Date().toISOString(),
       ...(discipline ? { discipline } : {}),
       ...(type ? { type } : {}),
     }
   }
-  return result
+  if (matchedProfileId) base.matched_profile_id = matchedProfileId
+  if (flag) base.pool_flag = flag
+
+  return Object.keys(base).length > 0 ? base : null
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -104,15 +140,19 @@ function normalizeRow(raw: unknown): { row: PartnerImportRow | null; email: stri
 }
 
 /**
- * Batch-imports contacts into an agency's pool as ghost partnerships rows (or claims/links
- * an existing ghost row to a matched profile, exactly like the email-scan importer does).
+ * Batch-imports contacts into an agency's pool as ghost partnerships rows (or enriches/
+ * links an existing Discovered ghost row to a matched profile) - never as an active
+ * partnership, regardless of whether the contact has a Ligament account (see CONSENT RULE
+ * above). Pass `dryRun: true` to classify every row (flags, dedup, self/domain-guard)
+ * without writing anything - used by the spreadsheet review step so the UI can show
+ * accurate badges before the agency commits to an import.
  *
  * Lookups (existing pool, matched profiles) run once for the whole request rather than
  * per-chunk - existing-pool matching is done case-insensitively in JS against the agency's
  * own rows rather than a DB `ilike`/`in` filter, since historical partner_email casing isn't
  * guaranteed and building one query per email would be exactly the "per-row request"
- * anti-pattern this is meant to avoid. Only the actual inserts are chunked (~200 rows),
- * falling back to per-row inserts within a chunk if the batch insert itself fails, so a
+ * anti-pattern this is meant to avoid. Only the actual inserts/updates are chunked (~200
+ * rows), falling back to per-row writes within a chunk if the batch write itself fails, so a
  * single bad row's error can be attributed instead of failing the whole chunk.
  *
  * agencyId must come from the caller's authenticated session - never accept it from the
@@ -123,8 +163,10 @@ export async function importPartnerRows(
   agencyId: string,
   rawRows: unknown[],
   source: PartnerImportSource,
-  maxRows = 2000
+  maxRows = 2000,
+  options?: { dryRun?: boolean; agencyAuthEmail?: string | null }
 ): Promise<PartnerImportRowResult[]> {
+  const dryRun = options?.dryRun === true
   const results: PartnerImportRowResult[] = []
   const capped = rawRows.slice(0, maxRows)
 
@@ -148,21 +190,22 @@ export async function importPartnerRows(
 
   if (validRows.length === 0) return results
 
+  const agencyOwnDomains = await resolveAgencyOwnDomains(service, agencyId, options?.agencyAuthEmail)
+
   const { data: existingPoolRows, error: poolErr } = await service
     .from("partnerships")
-    .select("id, partner_id, partner_email")
+    .select("id, partner_id, partner_email, status, contact_name, company_name, phone, website, partnership_notes")
     .eq("agency_id", agencyId)
   if (poolErr) {
     for (const r of validRows) results.push({ email: r.email, outcome: "error", reason: "Failed to check existing pool" })
     return results
   }
-  const existingByEmail = new Map<string, { id: string; partner_id: string | null }>()
-  const existingByPartnerId = new Map<string, { id: string; partner_id: string | null }>()
-  for (const row of existingPoolRows || []) {
-    const e = String((row as { partner_email?: string | null }).partner_email || "").toLowerCase()
-    if (e) existingByEmail.set(e, row as { id: string; partner_id: string | null })
-    const pid = (row as { partner_id?: string | null }).partner_id
-    if (pid) existingByPartnerId.set(pid, row as { id: string; partner_id: string | null })
+  const existingByEmail = new Map<string, ExistingPoolRow>()
+  const existingByPartnerId = new Map<string, ExistingPoolRow>()
+  for (const row of (existingPoolRows || []) as ExistingPoolRow[]) {
+    const e = String(row.partner_email || "").toLowerCase()
+    if (e) existingByEmail.set(e, row)
+    if (row.partner_id) existingByPartnerId.set(row.partner_id, row)
   }
 
   const allEmails = validRows.map((r) => r.email)
@@ -180,51 +223,86 @@ export async function importPartnerRows(
   }
 
   const toInsert: Record<string, unknown>[] = []
+  const insertEmailOrder: string[] = []
+  const insertFlagByEmail = new Map<string, PartnerImportFlag | undefined>()
 
   for (const row of validRows) {
     if (results.some((r) => r.email === row.email)) continue // profile-lookup error already recorded
 
-    const matchedProfileId = profileByEmail.get(row.email)
+    const matchedProfileId = profileByEmail.get(row.email) || null
+    const guard = evaluateImportGuard({ agencyId, agencyOwnDomains, matchedProfileId, contactEmail: row.email })
+
+    if (guard === "self_account") {
+      results.push({ email: row.email, outcome: "self", reason: "This is your own account" })
+      continue
+    }
+
+    const flag: PartnerImportFlag | undefined =
+      guard === "same_domain_flag" ? "domain_match_flagged" : matchedProfileId ? "already_on_ligament" : undefined
+
     const existing = matchedProfileId
       ? existingByPartnerId.get(matchedProfileId) || existingByEmail.get(row.email)
       : existingByEmail.get(row.email)
 
     if (existing) {
-      if (matchedProfileId && !existing.partner_id) {
-        const { error } = await service
-          .from("partnerships")
-          .update({ partner_id: matchedProfileId, profile_status: "active", updated_at: new Date().toISOString() })
-          .eq("id", existing.id)
-        results.push(
-          error
-            ? { email: row.email, outcome: "error", reason: "Failed to link matched account" }
-            : { email: row.email, outcome: "added" }
-        )
-      } else {
+      if (existing.status === "active") {
         results.push({ email: row.email, outcome: "duplicate", reason: "Already in your pool" })
+        continue
       }
+
+      // Existing Discovered/pending ghost row - enrich and link, but status/profile_status
+      // (and partner_id) never change here. Activation only happens via invite -> accept.
+      if (dryRun) {
+        results.push({ email: row.email, outcome: "added", flag })
+        continue
+      }
+      const patch: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+        partnership_notes: mergeNotes(existing.partnership_notes, row, source, matchedProfileId, flag),
+      }
+      if (!existing.contact_name && row.contactName) patch.contact_name = row.contactName
+      if (!existing.company_name && row.companyName) patch.company_name = row.companyName
+      if (!existing.phone && row.phone) patch.phone = row.phone
+      if (!existing.website && row.website) patch.website = row.website
+
+      const { error } = await service.from("partnerships").update(patch).eq("id", existing.id)
+      results.push(
+        error
+          ? { email: row.email, outcome: "error", reason: "Failed to update existing contact" }
+          : { email: row.email, outcome: "added", flag }
+      )
       continue
     }
 
-    const notes = buildPartnershipNotes(row, source)
+    if (dryRun) {
+      results.push({ email: row.email, outcome: "added", flag })
+      continue
+    }
+
+    const notes = mergeNotes(null, row, source, matchedProfileId, flag)
     toInsert.push({
       agency_id: agencyId,
-      partner_id: matchedProfileId || null,
+      partner_id: null,
       partner_email: row.email,
-      status: matchedProfileId ? "active" : "pending",
-      profile_status: matchedProfileId ? "active" : "unclaimed",
+      status: "pending",
+      profile_status: "unclaimed",
       contact_name: row.contactName,
       company_name: row.companyName,
       phone: row.phone,
       website: row.website,
       partnership_notes: notes,
     })
+    insertEmailOrder.push(row.email)
+    insertFlagByEmail.set(row.email, flag)
   }
 
   for (const insertChunk of chunk(toInsert, CHUNK_SIZE)) {
     const { error: insertErr } = await service.from("partnerships").insert(insertChunk)
     if (!insertErr) {
-      for (const record of insertChunk) results.push({ email: String((record as { partner_email: string }).partner_email), outcome: "added" })
+      for (const record of insertChunk) {
+        const email = String((record as { partner_email: string }).partner_email)
+        results.push({ email, outcome: "added", flag: insertFlagByEmail.get(email) })
+      }
       continue
     }
     // Batch insert failed - fall back to one-at-a-time within this chunk only, so we can
@@ -232,7 +310,11 @@ export async function importPartnerRows(
     for (const record of insertChunk) {
       const { error } = await service.from("partnerships").insert(record)
       const email = String((record as { partner_email: string }).partner_email)
-      results.push(error ? { email, outcome: "error", reason: error.message } : { email, outcome: "added" })
+      results.push(
+        error
+          ? { email, outcome: "error", reason: error.message }
+          : { email, outcome: "added", flag: insertFlagByEmail.get(email) }
+      )
     }
   }
 

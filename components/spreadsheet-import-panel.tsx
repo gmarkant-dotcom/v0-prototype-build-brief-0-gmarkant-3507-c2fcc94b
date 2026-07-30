@@ -30,13 +30,24 @@ type MappedRow = {
 }
 
 type ReviewBucket = "new" | "existing" | "invalid"
-type ReviewItem = { row: MappedRow; bucket: ReviewBucket; reason?: string }
+type ImportFlag = "already_on_ligament" | "domain_match_flagged"
+type ReviewItem = { row: MappedRow; bucket: ReviewBucket; reason?: string; flag?: ImportFlag }
 
 type ImportResponse = {
   added: number
   duplicates: number
   invalid: number
+  self?: number
   errors: { email: string; reason?: string }[]
+  flags?: Record<string, string>
+}
+
+type DryRunResponse = {
+  flags?: Record<string, string>
+}
+
+function flagBadgeLabel(flag: ImportFlag): string {
+  return flag === "already_on_ligament" ? "Already on Ligament" : "Same domain as your agency"
 }
 
 function hasAcceptedExtension(filename: string): boolean {
@@ -109,6 +120,7 @@ export function SpreadsheetImportPanel({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [importError, setImportError] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<ImportResponse | null>(null)
+  const [checkingRows, setCheckingRows] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -179,10 +191,49 @@ export function SpreadsheetImportPanel({
 
   const emailMapped = Object.values(columnMap).includes("email")
 
-  const goToReview = () => {
+  /** Runs a dryRun classification against /api/agency/pool/import-spreadsheet before
+   *  showing the review stage - this is the only way to know whether a "new" row (per the
+   *  client-only existingStatusByEmail check) actually matches a Ligament profile, is the
+   *  agency's own account, or shares the agency's own email domain, since profiles lookups
+   *  can only happen server-side. Self-account rows are moved into the same "invalid"
+   *  section shown for malformed rows - they were never importable in the first place. */
+  const goToReview = async () => {
     if (!parsed || !emailMapped) return
     const mapped = buildMappedRows(parsed, columnMap)
     const items = classifyRows(mapped, existingStatusByEmail)
+
+    setCheckingRows(true)
+    setUploadError(null)
+    try {
+      const newRows = items.filter((it) => it.bucket === "new")
+      if (newRows.length > 0) {
+        const res = await fetch("/api/agency/pool/import-spreadsheet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dryRun: true,
+            rows: newRows.map((it) => ({ email: it.row.email })),
+          }),
+        })
+        const data = (await res.json().catch(() => ({}))) as DryRunResponse
+        const flags = data.flags || {}
+        for (const it of items) {
+          const flag = flags[it.row.email.trim().toLowerCase()]
+          if (flag === "self") {
+            it.bucket = "invalid"
+            it.reason = "This is your own account"
+          } else if (flag === "already_on_ligament" || flag === "domain_match_flagged") {
+            it.flag = flag
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[spreadsheet-import] dry-run classification failed", err)
+      // Fall through - rows just won't show Ligament-match badges, still importable.
+    } finally {
+      setCheckingRows(false)
+    }
+
     setReviewItems(items)
     setSelected(new Set(items.filter((it) => it.bucket === "new").map((it) => it.row.key)))
     setStage("review")
@@ -326,11 +377,11 @@ export function SpreadsheetImportPanel({
                 Back
               </Button>
               <Button
-                onClick={goToReview}
-                disabled={!emailMapped}
+                onClick={() => void goToReview()}
+                disabled={!emailMapped || checkingRows}
                 className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
               >
-                Continue
+                {checkingRows ? "Checking..." : "Continue"}
               </Button>
             </div>
           </div>
@@ -355,6 +406,13 @@ export function SpreadsheetImportPanel({
                     onToggle={() => toggleSelected(it.row.key)}
                     title={it.row.companyName || it.row.contactName || it.row.email}
                     subtitle={it.row.companyName || it.row.contactName ? it.row.email : undefined}
+                    badges={
+                      it.flag ? (
+                        <ReviewBadge tone={it.flag === "already_on_ligament" ? "accent" : "warning"}>
+                          {flagBadgeLabel(it.flag)}
+                        </ReviewBadge>
+                      ) : undefined
+                    }
                   />
                 ))}
               </div>

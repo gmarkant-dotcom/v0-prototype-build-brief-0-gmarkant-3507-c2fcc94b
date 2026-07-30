@@ -22,6 +22,7 @@ import { encrypt, decrypt } from "@/lib/token-encryption"
 import { scoreAndFilterContacts, type ScoredVendorContact } from "@/lib/vendor-signal-scoring"
 import { getEmailDomain } from "@/lib/email-domains"
 import { incrementAiAnalysis } from "@/lib/usage-tracking"
+import { evaluateImportGuard } from "@/lib/server/partner-import-guard"
 
 type EmailProvider = "google" | "microsoft"
 
@@ -29,18 +30,23 @@ type EnrichedContact = ScoredVendorContact<RawEmailContact> & {
   has_ligament_account: boolean
   profile_id: string | null
   already_in_pool: boolean
+  is_self_account: boolean
+  is_same_domain_flag: boolean
 }
 
 /** Cross-references scored contacts against profiles (has_ligament_account, profile_id)
- *  and this agency's partnerships (already_in_pool). Mirrors the partner_id-then-
- *  partner_email lookup pattern in classifyGuestVendorForPool
+ *  and this agency's partnerships (already_in_pool), plus the shared self-partnership
+ *  guard (is_self_account, is_same_domain_flag - see lib/server/partner-import-guard.ts)
+ *  so the review panel can badge/disable rows before import even considers them. Mirrors
+ *  the partner_id-then-partner_email lookup pattern in classifyGuestVendorForPool
  *  (app/api/rfp/guest/[token]/route.ts). Only called on the final "complete" write, not
  *  every checkpoint - it costs 2 extra round-trips and isn't needed until a human is
  *  actually reviewing finished results; a scan that times out before completing simply
- *  shows scored contacts without these three fields. */
+ *  shows scored contacts without these fields. */
 async function enrichWithLigamentData(
   contacts: ScoredVendorContact<RawEmailContact>[],
   agencyId: string,
+  agencyOwnDomains: string[],
   service: SupabaseClient
 ): Promise<EnrichedContact[]> {
   if (contacts.length === 0) return []
@@ -84,11 +90,19 @@ async function enrichWithLigamentData(
   return contacts.map((contact) => {
     const profileId = profileByEmail.get(contact.email) || null
     const alreadyInPool = (profileId != null && partnerIdSet.has(profileId)) || partnerEmailSet.has(contact.email)
+    const guard = evaluateImportGuard({
+      agencyId,
+      agencyOwnDomains,
+      matchedProfileId: profileId,
+      contactEmail: contact.email,
+    })
     return {
       ...contact,
       has_ligament_account: Boolean(profileId),
       profile_id: profileId,
       already_in_pool: alreadyInPool,
+      is_self_account: guard === "self_account",
+      is_same_domain_flag: guard === "same_domain_flag",
     }
   })
 }
@@ -316,7 +330,7 @@ export async function GET(request: NextRequest) {
     }
 
     const scoredContacts = scoreAndFilterContacts(contactsFromAccumulator(accumulator))
-    const finalContacts = await enrichWithLigamentData(scoredContacts, auth.userId, service)
+    const finalContacts = await enrichWithLigamentData(scoredContacts, auth.userId, auth.excludedDomains, service)
     const { error: finalErr } = await service
       .from("email_connections")
       .update({

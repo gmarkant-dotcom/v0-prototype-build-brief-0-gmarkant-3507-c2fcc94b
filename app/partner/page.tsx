@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn, formatRelativeTime } from "@/lib/utils"
 import { useFetch } from "@/hooks/useFetch"
 import {
   isDemoMode,
@@ -13,14 +13,18 @@ import {
   demoOnboardingPending,
   demoFunnelMetrics,
   demoReliability,
+  demoPartnerActivity,
 } from "@/lib/demo-data"
 import { summarizePartnerMilestones } from "@/lib/partner-payments"
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
 import { createClient } from "@/lib/supabase/client"
+import { useSectionCollapse, useCappedList } from "@/lib/dashboard-section-state"
+import { DashboardShowMoreToggle } from "@/components/dashboard-show-more"
 import {
   AlertTriangle,
   Clock,
   ChevronRight,
+  ChevronDown,
   Building2,
   Check,
   X,
@@ -29,6 +33,8 @@ import {
   Award,
   Briefcase,
 } from "lucide-react"
+
+const SECTION_LIST_CAP = 5
 
 function formatUsdWhole(amount: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(amount)
@@ -71,6 +77,8 @@ type BidsByStatus = {
   declined: number
 }
 
+type ActivityItem = { id: string; text: string; href: string; timestamp: string }
+
 type DashboardData = {
   needsResponse: {
     items: NeedsResponseItem[]
@@ -91,7 +99,15 @@ type DashboardData = {
     reliabilitySummary: string | null
     reliabilitySummaryAgencyName: string | null
   }
+  activity: ActivityItem[]
 }
+
+/** Needs Your Response renders two row kinds (RFP queue items and onboarding steps) as one
+ *  capped list - this discriminated union lets useCappedList treat them uniformly while
+ *  keeping each row's own render branch. */
+type QueueRow =
+  | { kind: "rfp"; key: string; item: NeedsResponseItem }
+  | { kind: "onboarding"; key: string; item: OnboardingPendingItem }
 
 type DashboardActiveProject = {
   id: string
@@ -366,6 +382,38 @@ export default function PartnerDashboardPage() {
 
   const funnel = isDemo ? demoFunnelMetrics : dashboardData?.funnel
   const reliability = isDemo ? demoReliability : dashboardData?.reliability
+  const activityItems: ActivityItem[] = isDemo ? demoPartnerActivity : dashboardData?.activity ?? []
+
+  const { collapsed: needsResponseCollapsed, toggle: toggleNeedsResponse } = useSectionCollapse(
+    "partner",
+    "needs-response"
+  )
+  const { collapsed: activityCollapsed, toggle: toggleActivity } = useSectionCollapse("partner", "recent-activity")
+
+  const queueRows: QueueRow[] = useMemo(
+    () => [
+      ...needsResponseItems.map((item): QueueRow => ({ kind: "rfp", key: `rfp:${item.id}`, item })),
+      ...onboardingPending.map((item): QueueRow => ({ kind: "onboarding", key: `onboarding:${item.id}`, item })),
+    ],
+    [needsResponseItems, onboardingPending]
+  )
+  const queueIsUrgent = (row: QueueRow) =>
+    row.kind === "rfp" && ((row.item.daysLeft != null && row.item.daysLeft <= 7) || row.item.ndaPending)
+  const {
+    visible: visibleQueueRows,
+    hasMore: queueHasMore,
+    expanded: queueExpanded,
+    toggle: toggleQueueExpanded,
+    total: queueTotal,
+  } = useCappedList(queueRows, SECTION_LIST_CAP, queueIsUrgent)
+
+  const {
+    visible: visibleActivity,
+    hasMore: activityHasMore,
+    expanded: activityExpanded,
+    toggle: toggleActivityExpanded,
+    total: activityTotal,
+  } = useCappedList(activityItems, SECTION_LIST_CAP)
 
   const hasNoPayments = !isDemo && !paymentsLoading && (paymentSummary?.count ?? 0) === 0
   const paidTileValue = isDemo ? "$58,200" : paymentsLoading ? "—" : formatUsdWhole(paymentSummary?.paid ?? 0)
@@ -422,14 +470,24 @@ export default function PartnerDashboardPage() {
 
         {/* Needs Your Response */}
         <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-bold text-lg text-[#0C3535]">Needs Your Response</h2>
-            <Link href="/partner/rfps" className="font-mono text-xs text-[#0C3535] hover:underline">
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <button type="button" onClick={toggleNeedsResponse} className="flex items-center gap-2 min-w-0 group">
+              <ChevronDown
+                className={cn(
+                  "w-4 h-4 text-gray-400 shrink-0 transition-transform",
+                  needsResponseCollapsed && "-rotate-90"
+                )}
+              />
+              <h2 className="font-display font-bold text-lg text-[#0C3535] truncate group-hover:text-[#0C3535]/80">
+                Needs Your Response ({queueRows.length})
+              </h2>
+            </button>
+            <Link href="/partner/rfps" className="font-mono text-xs text-[#0C3535] hover:underline shrink-0">
               View All RFPs →
             </Link>
           </div>
 
-          {!isDemo && dashboardLoading ? (
+          {needsResponseCollapsed ? null : !isDemo && dashboardLoading ? (
             <div className="space-y-2">
               <SectionSkeleton className="h-16" />
               <SectionSkeleton className="h-16" />
@@ -440,11 +498,31 @@ export default function PartnerDashboardPage() {
             </p>
           ) : (
             <div className="space-y-2">
-              {needsResponseItems.map((item) => {
+              {visibleQueueRows.map((row) => {
+                if (row.kind === "onboarding") {
+                  const item = row.item
+                  return (
+                    <Link
+                      key={row.key}
+                      href="/partner/onboarding"
+                      className="flex items-center justify-between gap-4 p-4 rounded-lg border border-gray-200 hover:border-[#0C3535]/40 hover:shadow-sm transition-all"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-display font-bold text-sm text-[#0C3535] truncate">
+                          Onboarding step pending - {item.projectName}
+                        </div>
+                        <div className="font-mono text-[10px] text-gray-500 mt-1">{item.agencyName}</div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                    </Link>
+                  )
+                }
+
+                const item = row.item
                 const soon = item.daysLeft != null && item.daysLeft <= 7
                 return (
                   <Link
-                    key={item.id}
+                    key={row.key}
                     href={`/partner/rfps/${item.id}`}
                     className="flex items-start justify-between gap-4 p-4 rounded-lg border border-gray-200 hover:border-[#0C3535]/40 hover:shadow-sm transition-all"
                   >
@@ -492,25 +570,19 @@ export default function PartnerDashboardPage() {
                 )
               })}
 
-              {onboardingPending.map((item) => (
-                <Link
-                  key={item.id}
-                  href="/partner/onboarding"
-                  className="flex items-center justify-between gap-4 p-4 rounded-lg border border-gray-200 hover:border-[#0C3535]/40 hover:shadow-sm transition-all"
-                >
-                  <div className="min-w-0">
-                    <div className="font-display font-bold text-sm text-[#0C3535] truncate">
-                      Onboarding step pending - {item.projectName}
-                    </div>
-                    <div className="font-mono text-[10px] text-gray-500 mt-1">{item.agencyName}</div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
-                </Link>
-              ))}
+              {queueHasMore && (
+                <DashboardShowMoreToggle
+                  hasMore={queueHasMore}
+                  expanded={queueExpanded}
+                  total={queueTotal}
+                  onToggle={toggleQueueExpanded}
+                  className="text-[#0C3535] pt-1"
+                />
+              )}
             </div>
           )}
 
-          {expiredCount > 0 && (
+          {!needsResponseCollapsed && expiredCount > 0 && (
             <div className="mt-3 pt-3 border-t border-gray-100">
               <Link href="/partner/rfps" className="text-xs text-gray-400 hover:text-gray-600 hover:underline">
                 {expiredCount} request{expiredCount === 1 ? "" : "s"} expired unanswered
@@ -841,6 +913,51 @@ export default function PartnerDashboardPage() {
                   </div>
                 </Link>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <button type="button" onClick={toggleActivity} className="flex items-center gap-2 min-w-0 group">
+              <ChevronDown
+                className={cn(
+                  "w-4 h-4 text-gray-400 shrink-0 transition-transform",
+                  activityCollapsed && "-rotate-90"
+                )}
+              />
+              <h2 className="font-display font-bold text-lg text-[#0C3535] truncate group-hover:text-[#0C3535]/80">
+                Recent Activity ({activityItems.length})
+              </h2>
+            </button>
+          </div>
+
+          {activityCollapsed ? null : !isDemo && dashboardLoading ? (
+            <SectionSkeleton className="h-24" />
+          ) : activityItems.length === 0 ? (
+            <p className="text-sm text-gray-500 py-2">No activity yet.</p>
+          ) : (
+            <div className="space-y-1">
+              {visibleActivity.map((item) => (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className="flex items-center justify-between gap-3 py-2 border-b border-gray-100 last:border-0 hover:bg-gray-50/60 -mx-2 px-2 rounded"
+                >
+                  <span className="text-sm text-gray-700 min-w-0 truncate">{item.text}</span>
+                  <span className="font-mono text-[10px] text-gray-400 shrink-0">{formatRelativeTime(item.timestamp)}</span>
+                </Link>
+              ))}
+              {activityHasMore && (
+                <DashboardShowMoreToggle
+                  hasMore={activityHasMore}
+                  expanded={activityExpanded}
+                  total={activityTotal}
+                  onToggle={toggleActivityExpanded}
+                  className="text-[#0C3535] pt-2"
+                />
+              )}
             </div>
           )}
         </div>

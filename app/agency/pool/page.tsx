@@ -1743,6 +1743,14 @@ function PartnerPoolPageInner() {
                               Domain Match - Review
                             </span>
                           )}
+                          {row.poolStatus === "already_on_ligament" && (
+                            <span
+                              className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-sky-400/40 bg-sky-400/10 text-sky-300"
+                              title="This contact's email already matches a Ligament account."
+                            >
+                              Already on Ligament
+                            </span>
+                          )}
                         </div>
                         <div className="font-mono text-[10px] text-foreground-muted mt-1 truncate">
                           {row.partnerEmail}

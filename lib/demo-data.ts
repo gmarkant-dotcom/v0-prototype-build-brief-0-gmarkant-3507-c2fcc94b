@@ -806,6 +806,41 @@ export const demoReliability = {
   reliabilitySummaryAgencyName: "Electric Animal",
 }
 
+export type DemoActivityItem = { id: string; text: string; href: string; timestamp: string }
+
+export const demoPartnerActivity: DemoActivityItem[] = [
+  {
+    id: "demo-activity-1",
+    text: "Electric Animal sent an RFP for Video Production Partner - Sports Creator Series",
+    href: "/partner/rfps/demo-inbox-1",
+    timestamp: "2026-07-28T15:00:00Z",
+  },
+  {
+    id: "demo-activity-2",
+    text: "You submitted a bid for Paid media",
+    href: "/partner/rfps",
+    timestamp: "2026-07-26T12:00:00Z",
+  },
+  {
+    id: "demo-activity-3",
+    text: "You were awarded NWSL Creator Content Series",
+    href: "/partner/projects/demo-project-nwsl",
+    timestamp: "2026-07-20T09:00:00Z",
+  },
+  {
+    id: "demo-activity-4",
+    text: "Payment received for Mid-point delivery on NWSL Creator Content Series",
+    href: "/partner/payments",
+    timestamp: "2026-02-28T12:00:00Z",
+  },
+  {
+    id: "demo-activity-5",
+    text: "You submitted a status update on NWSL Creator Content Series",
+    href: "/partner/projects/demo-project-nwsl",
+    timestamp: "2026-02-15T12:00:00Z",
+  },
+]
+
 export type DemoUpcomingPaymentRow = {
   id: string
   project: string

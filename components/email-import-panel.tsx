@@ -28,6 +28,8 @@ type ScannedContact = {
   has_ligament_account: boolean
   profile_id: string | null
   already_in_pool: boolean
+  is_self_account: boolean
+  is_same_domain_flag: boolean
 }
 
 type ScanResults = {
@@ -128,12 +130,13 @@ function ContactRow({
   readOnly?: boolean
 }) {
   const domain = contact.email.split("@")[1] || ""
+  const notSelectable = readOnly || contact.already_in_pool || contact.is_self_account
   return (
     <PoolReviewRow
       checked={checked}
       onToggle={onToggle}
-      disabled={readOnly || contact.already_in_pool}
-      dimmed={contact.already_in_pool}
+      disabled={notSelectable}
+      dimmed={contact.already_in_pool || contact.is_self_account}
       title={
         <>
           {contact.name || contact.email}{" "}
@@ -146,9 +149,13 @@ function ContactRow({
           {contact.signals.slice(0, 4).map((signal) => (
             <ReviewBadge key={signal}>{signalLabel(signal)}</ReviewBadge>
           ))}
-          {contact.already_in_pool && <ReviewBadge>Already in pool</ReviewBadge>}
-          {contact.has_ligament_account && !contact.already_in_pool && (
-            <ReviewBadge tone="accent">Has Ligament account</ReviewBadge>
+          {contact.is_self_account && <ReviewBadge tone="warning">This is your own account</ReviewBadge>}
+          {!contact.is_self_account && contact.already_in_pool && <ReviewBadge>Already in pool</ReviewBadge>}
+          {!contact.is_self_account && contact.has_ligament_account && !contact.already_in_pool && (
+            <ReviewBadge tone="accent">Already on Ligament</ReviewBadge>
+          )}
+          {!contact.is_self_account && contact.is_same_domain_flag && (
+            <ReviewBadge tone="warning">Same domain as your agency</ReviewBadge>
           )}
           {contact.is_free_email && <ReviewBadge>Freelancer ({domain})</ReviewBadge>}
         </>
@@ -201,7 +208,7 @@ export function EmailImportPanel({ active, onDone, onImported }: EmailImportPane
   }, [])
 
   const preselect = (contacts: ScannedContact[]) =>
-    new Set(contacts.filter((c) => c.score >= 60 && !c.already_in_pool).map((c) => c.email))
+    new Set(contacts.filter((c) => c.score >= 60 && !c.already_in_pool && !c.is_self_account).map((c) => c.email))
 
   /** Polls GET /api/agency/email-scan?provider=X until scan_status is complete or error.
    *  onTick fires on every poll with the latest (possibly partial) results, so callers can
@@ -501,7 +508,7 @@ export function EmailImportPanel({ active, onDone, onImported }: EmailImportPane
     })
   }
 
-  const eligibleContacts = (scanResults?.contacts || []).filter((c) => !c.already_in_pool)
+  const eligibleContacts = (scanResults?.contacts || []).filter((c) => !c.already_in_pool && !c.is_self_account)
   const selectAll = () => setSelected(new Set(eligibleContacts.map((c) => c.email)))
   const deselectAll = () => setSelected(new Set())
 

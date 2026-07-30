@@ -113,8 +113,23 @@ export async function GET(request: NextRequest) {
           }
         }
 
+        // partnership_notes.matched_profile_id/pool_flag - the import-path equivalent of the
+        // rfp_magic_tokens-based domain match above (email-scan import, spreadsheet/manual
+        // import via lib/server/partner-pool-import.ts). A token-based flag always takes
+        // precedence when both exist; otherwise falls back to the notes-based one so the
+        // same "Domain Match - Review" badge (and a new "Already on Ligament" badge) render
+        // regardless of which import path produced the row.
+        const notesProfileIds = new Set<string>()
+        for (const row of ghostRows) {
+          const notes = (row.partnership_notes as { matched_profile_id?: string } | null) || null
+          if (notes?.matched_profile_id) notesProfileIds.add(notes.matched_profile_id)
+        }
+
         const domainProfileIds = [
-          ...new Set([...latestTokenByEmail.values()].map((t) => t.domain_match_profile_id).filter(Boolean)),
+          ...new Set([
+            ...[...latestTokenByEmail.values()].map((t) => t.domain_match_profile_id).filter(Boolean),
+            ...notesProfileIds,
+          ]),
         ] as string[]
         const domainProfileById = new Map<string, { id: string; company_name: string | null; full_name: string | null }>()
         if (domainProfileIds.length > 0) {
@@ -130,11 +145,12 @@ export async function GET(request: NextRequest) {
         for (const row of ghostRows) {
           const key = String(row.partner_email || '').toLowerCase()
           const tok = latestTokenByEmail.get(key)
+          const notes = (row.partnership_notes as { matched_profile_id?: string; pool_flag?: string } | null) || null
+
           row.vendor_name = tok?.vendor_name || null
-          row.pool_status = tok?.pool_status || null
-          row.domain_match_profile = tok?.domain_match_profile_id
-            ? domainProfileById.get(tok.domain_match_profile_id) || null
-            : null
+          row.pool_status = tok?.pool_status || notes?.pool_flag || null
+          const matchedProfileId = tok?.domain_match_profile_id || notes?.matched_profile_id || null
+          row.domain_match_profile = matchedProfileId ? domainProfileById.get(matchedProfileId) || null : null
         }
       }
     } else {

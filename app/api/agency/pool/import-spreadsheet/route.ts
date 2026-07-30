@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const rawRows = Array.isArray(body.rows) ? body.rows : []
+  const dryRun = body.dryRun === true
   if (rawRows.length === 0) {
     return NextResponse.json({ error: "No rows provided" }, { status: 400 })
   }
@@ -36,17 +37,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Too many rows - maximum is ${MAX_ROWS} per import` }, { status: 400 })
   }
 
-  const results = await importPartnerRows(service, auth.user.id, rawRows, "spreadsheet", MAX_ROWS)
+  const results = await importPartnerRows(service, auth.user.id, rawRows, "spreadsheet", MAX_ROWS, {
+    dryRun,
+    agencyAuthEmail: auth.user.email,
+  })
 
   const added = results.filter((r) => r.outcome === "added").length
   const duplicates = results.filter((r) => r.outcome === "duplicate").length
   const invalid = results.filter((r) => r.outcome === "invalid").length
+  const self = results.filter((r) => r.outcome === "self").length
   const errors = results.filter((r) => r.outcome === "error")
+
+  // Per-email flag map (already_on_ligament / domain_match_flagged / self) - the review UI
+  // (dryRun) uses this to badge rows before import; the done screen (!dryRun) doesn't need
+  // it today but it's harmless to include either way.
+  const flags = Object.fromEntries(
+    results.filter((r) => r.flag || r.outcome === "self").map((r) => [r.email, r.flag || "self"])
+  )
 
   return NextResponse.json({
     added,
     duplicates,
     invalid,
+    self,
     errors: errors.map((e) => ({ email: e.email, reason: e.reason })),
+    flags,
   })
 }

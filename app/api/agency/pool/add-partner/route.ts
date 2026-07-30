@@ -25,7 +25,9 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const results = await importPartnerRows(service, auth.user.id, [body], "manual")
+  const results = await importPartnerRows(service, auth.user.id, [body], "manual", undefined, {
+    agencyAuthEmail: auth.user.email,
+  })
   const result = results[0]
 
   if (!result || result.outcome === "invalid") {
@@ -34,9 +36,12 @@ export async function POST(request: NextRequest) {
   if (result.outcome === "error") {
     return NextResponse.json({ error: result.reason || "Failed to add partner" }, { status: 500 })
   }
+  if (result.outcome === "self") {
+    return NextResponse.json({ error: result.reason || "This is your own account" }, { status: 400 })
+  }
   if (result.outcome === "duplicate") {
     return NextResponse.json({ error: "This email is already in your pool" }, { status: 409 })
   }
 
-  return NextResponse.json({ added: true })
+  return NextResponse.json({ added: true, flag: result.flag ?? null })
 }

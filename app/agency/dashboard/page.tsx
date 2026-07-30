@@ -13,6 +13,8 @@ import { mapDbProjectToMaster } from "@/lib/project-mapper"
 import { useFetch } from "@/hooks/useFetch"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { useAgencyUsage, getUsageSeverity, type UsageSeverity } from "@/hooks/use-agency-usage"
+import { useSectionCollapse, useCappedList } from "@/lib/dashboard-section-state"
+import { DashboardShowMoreToggle } from "@/components/dashboard-show-more"
 import {
   Search,
   AlertTriangle,
@@ -24,6 +26,7 @@ import {
   FileWarning,
   Plus,
   ChevronRight,
+  ChevronDown,
   UserPlus,
   FolderOpen,
 } from "lucide-react"
@@ -104,6 +107,8 @@ const STAGE_STYLES: Record<string, { color: string; bg: string }> = {
 }
 
 const RECENT_PROJECTS_PREVIEW_COUNT = 5
+const SECTION_LIST_CAP = 5
+const URGENT_DAYS_THRESHOLD = 3
 
 function formatUsdWhole(amount: number): string {
   try {
@@ -172,9 +177,10 @@ function ProjectSearch({
 
 // ── Attention queue ───────────────────────────────────────────────────────────
 
-type AttentionRow = { key: string; icon: typeof AlertTriangle; text: string; timeframe?: string; href: string }
+type AttentionRow = { key: string; icon: typeof AlertTriangle; text: string; timeframe?: string; href: string; urgent: boolean }
 
 function AttentionQueue({ data, onCreateProject }: { data: DashboardData["attention"]; onCreateProject: () => void }) {
+  const { collapsed, toggle } = useSectionCollapse("agency", "needs-attention")
   const rows: AttentionRow[] = []
 
   for (const r of data.bidsAwaitingReview) {
@@ -183,15 +189,18 @@ function AttentionQueue({ data, onCreateProject }: { data: DashboardData["attent
       icon: Gavel,
       text: `${r.count} bid${r.count === 1 ? "" : "s"} awaiting review on ${r.projectName}`,
       href: r.href,
+      urgent: false,
     })
   }
   for (const r of data.rfpsClosingSoon) {
+    const daysLeft = Math.ceil((new Date(r.deadline).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
     rows.push({
       key: `rfp:${r.projectId}:${r.scopeItemName}`,
       icon: Send,
       text: `RFP for ${r.scopeItemName} on ${r.projectName} - ${r.pending} of ${r.invited} partner${r.invited === 1 ? "" : "s"} ${r.pending === 1 ? "hasn't" : "haven't"} responded`,
       timeframe: `closes ${formatDeadlineRelative(r.deadline)}`,
       href: r.href,
+      urgent: Number.isFinite(daysLeft) && daysLeft <= URGENT_DAYS_THRESHOLD,
     })
   }
   for (const r of data.pendingDeliveryEvaluations) {
@@ -200,6 +209,7 @@ function AttentionQueue({ data, onCreateProject }: { data: DashboardData["attent
       icon: ClipboardCheck,
       text: `${r.count} delivery evaluation${r.count === 1 ? "" : "s"} pending on ${r.projectName}`,
       href: r.href,
+      urgent: false,
     })
   }
   for (const r of data.alerts) {
@@ -208,54 +218,85 @@ function AttentionQueue({ data, onCreateProject }: { data: DashboardData["attent
       icon: FileWarning,
       text: `${r.count} partner update${r.count === 1 ? "" : "s"} ${r.count === 1 ? "needs" : "need"} attention on ${r.projectName}`,
       href: r.href,
+      urgent: false,
     })
   }
 
+  const { visible, hasMore, expanded, toggle: toggleShowAll, total } = useCappedList(
+    rows,
+    SECTION_LIST_CAP,
+    (r) => r.urgent
+  )
+
   return (
     <div>
-      <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted mb-3">Needs your attention</h2>
-      <div className="glass rounded-xl divide-y divide-border/50 overflow-hidden">
-        {data.isBrandNew ? (
-          <>
-            <button
-              type="button"
-              onClick={onCreateProject}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
-            >
-              <Plus className="w-4 h-4 text-accent shrink-0" />
-              <span className="flex-1 text-sm text-foreground">Create your first project</span>
-              <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
-            </button>
-            <Link href="/agency/pool" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
-              <UserPlus className="w-4 h-4 text-accent shrink-0" />
-              <span className="flex-1 text-sm text-foreground">Invite partners to your pool</span>
-              <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
-            </Link>
-          </>
-        ) : rows.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-foreground-muted">You're all caught up.</div>
-        ) : (
-          rows.map((row) => {
-            const Icon = row.icon
-            return (
-              <Link
-                key={row.key}
-                href={row.href}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+      <div className="flex items-center justify-between mb-3">
+        <button type="button" onClick={toggle} className="flex items-center gap-1.5 group">
+          <ChevronDown
+            className={cn("w-3.5 h-3.5 text-foreground-muted transition-transform", collapsed && "-rotate-90")}
+          />
+          <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
+            Needs your attention{!data.isBrandNew ? ` (${rows.length})` : ""}
+          </h2>
+        </button>
+      </div>
+      {!collapsed && (
+        <div className="glass rounded-xl divide-y divide-border/50 overflow-hidden">
+          {data.isBrandNew ? (
+            <>
+              <button
+                type="button"
+                onClick={onCreateProject}
+                className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
               >
-                <Icon className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="flex-1 text-sm text-foreground min-w-0 truncate">{row.text}</span>
-                {row.timeframe && (
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted shrink-0">
-                    {row.timeframe}
-                  </span>
-                )}
+                <Plus className="w-4 h-4 text-accent shrink-0" />
+                <span className="flex-1 text-sm text-foreground">Create your first project</span>
+                <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
+              </button>
+              <Link href="/agency/pool" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
+                <UserPlus className="w-4 h-4 text-accent shrink-0" />
+                <span className="flex-1 text-sm text-foreground">Invite partners to your pool</span>
                 <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
               </Link>
-            )
-          })
-        )}
-      </div>
+            </>
+          ) : rows.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-foreground-muted">You're all caught up.</div>
+          ) : (
+            <>
+              {visible.map((row) => {
+                const Icon = row.icon
+                return (
+                  <Link
+                    key={row.key}
+                    href={row.href}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                  >
+                    <Icon className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="flex-1 text-sm text-foreground min-w-0 truncate">{row.text}</span>
+                    {row.timeframe && (
+                      <span className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted shrink-0">
+                        {row.timeframe}
+                      </span>
+                    )}
+                    <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
+                  </Link>
+                )
+              })}
+              {hasMore && (
+                <div className="px-4 py-2.5">
+                  <DashboardShowMoreToggle
+                    hasMore={hasMore}
+                    expanded={expanded}
+                    total={total}
+                    onToggle={toggleShowAll}
+                    className="text-accent"
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -361,21 +402,48 @@ function UsageCard() {
 // ── Activity feed ─────────────────────────────────────────────────────────────
 
 function ActivityFeed({ items }: { items: DashboardData["activity"] }) {
+  const { collapsed, toggle } = useSectionCollapse("agency", "recent-activity")
+  const { visible, hasMore, expanded, toggle: toggleShowAll, total } = useCappedList(items, SECTION_LIST_CAP)
+
   return (
     <div>
-      <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted mb-3">Recent activity</h2>
-      <div className="glass rounded-xl divide-y divide-border/50 overflow-hidden">
-        {items.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-foreground-muted">No activity yet.</div>
-        ) : (
-          items.map((item) => (
-            <Link key={item.id} href={item.href} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors">
-              <span className="flex-1 text-sm text-foreground min-w-0 truncate">{item.text}</span>
-              <span className="font-mono text-[10px] text-foreground-muted shrink-0">{formatRelativeTime(item.timestamp)}</span>
-            </Link>
-          ))
-        )}
+      <div className="flex items-center justify-between mb-3">
+        <button type="button" onClick={toggle} className="flex items-center gap-1.5 group">
+          <ChevronDown
+            className={cn("w-3.5 h-3.5 text-foreground-muted transition-transform", collapsed && "-rotate-90")}
+          />
+          <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
+            Recent activity ({items.length})
+          </h2>
+        </button>
       </div>
+      {!collapsed && (
+        <div className="glass rounded-xl divide-y divide-border/50 overflow-hidden">
+          {items.length === 0 ? (
+            <div className="px-4 py-3 text-sm text-foreground-muted">No activity yet.</div>
+          ) : (
+            <>
+              {visible.map((item) => (
+                <Link key={item.id} href={item.href} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors">
+                  <span className="flex-1 text-sm text-foreground min-w-0 truncate">{item.text}</span>
+                  <span className="font-mono text-[10px] text-foreground-muted shrink-0">{formatRelativeTime(item.timestamp)}</span>
+                </Link>
+              ))}
+              {hasMore && (
+                <div className="px-4 py-2.5">
+                  <DashboardShowMoreToggle
+                    hasMore={hasMore}
+                    expanded={expanded}
+                    total={total}
+                    onToggle={toggleShowAll}
+                    className="text-accent"
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
