@@ -12,14 +12,13 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { EmptyState } from "@/components/empty-state"
 import { cn, formatDateTime } from "@/lib/utils"
-import { isDemoMode, demoPartners, disciplines, partnerTypes, type Partner, type PartnerNote, type ProjectRating, type PartnerAvailability } from "@/lib/demo-data"
+import { isDemoMode, demoPartners, partnerTypes, type Partner, type PartnerNote, type ProjectRating, type PartnerAvailability } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { createClient } from "@/lib/supabase/client"
-import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass } from "lucide-react"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass, Upload } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { MarketplaceContent } from "@/components/marketplace-content"
-import { EmailImportSheet } from "@/components/email-import-sheet"
+import { PartnerImportSheet } from "@/components/partner-import-sheet"
 import {
   DESIGNATION_KEYS,
   DESIGNATION_LABELS,
@@ -67,6 +66,15 @@ type Partnership = {
   vendorName?: string | null
   poolStatus?: string | null
   domainMatchProfile?: { id: string; company_name: string | null; full_name: string | null } | null
+  /** Ghost/unclaimed rows only - partnerships' own contact_name/company_name/phone/website
+   *  columns (migration 068). There is no profiles row to join for an unclaimed contact, so
+   *  these are the only place manual Add Partner / spreadsheet import / email-scan-name can
+   *  persist that data pre-claim. Once claimed, profiles data (partnerName/partnerCompany
+   *  above) takes precedence in the UI - these are not merged into those fields. */
+  contactName?: string | null
+  companyName?: string | null
+  phone?: string | null
+  website?: string | null
 }
 
 // Legacy Partner invitation type (for backward compatibility)
@@ -96,6 +104,19 @@ type AccessRequest = {
 type NetworkRow =
   | { mode: "demo"; inv: PartnerInvitation; partner?: Partner }
   | { mode: "prod"; p: Partnership }
+
+/** Add/Edit Partner modal fields - trimmed to what the real partnerships schema can
+ *  persist for a ghost contact (migration 068). Demo-only concepts (rate, rating, tags,
+ *  credentials, bio, NDA/MSA checkboxes) are not offered here since they were never wired
+ *  to real persistence and this modal now is. */
+type PoolContactFormData = {
+  companyName: string
+  contactName: string
+  email: string
+  phone: string
+  website: string
+  notes: string
+}
 
 // Demo invitations
 const demoInvitations: PartnerInvitation[] = [
@@ -331,16 +352,7 @@ function PartnerPoolPageInner() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [partnerToDelete, setPartnerToDelete] = useState<Partner | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  
-  // Custom disciplines state (persisted to localStorage)
-  const [customDisciplines, setCustomDisciplines] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('customDisciplines')
-      return saved ? JSON.parse(saved) : []
-    }
-    return []
-  })
-  
+
   // Success notification state
   const [successModal, setSuccessModal] = useState<{
     show: boolean
@@ -426,6 +438,10 @@ function PartnerPoolPageInner() {
         poolStatus: (p.pool_status as string | null) ?? null,
         domainMatchProfile:
           (p.domain_match_profile as { id: string; company_name: string | null; full_name: string | null } | null) ?? null,
+        contactName: (p.contact_name as string | null) ?? null,
+        companyName: (p.company_name as string | null) ?? null,
+        phone: (p.phone as string | null) ?? null,
+        website: (p.website as string | null) ?? null,
       }))
 
       const supabase = createClient()
@@ -906,44 +922,82 @@ function PartnerPoolPageInner() {
     }
   }, [isDemo, partners.length, isLoaded])
   
-  const handleAddPartner = (partnerData: Partial<Partner>) => {
-    const newPartner: Partner = {
-      id: `partner-${Date.now()}`,
-      name: partnerData.name || "New Partner",
-      discipline: partnerData.discipline || "General",
-      type: (partnerData.type as "agency" | "freelancer" | "production") || "agency",
-      location: partnerData.location || "",
-      email: partnerData.email || "",
-      website: partnerData.website || "",
-      rate: (partnerData.rate as "$" | "$$" | "$$$" | undefined) || "$",
-      experience: partnerData.experience || "",
-      rating: partnerData.rating || 0,
-      status: "active",
-      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-      bookmarked: false,
-      ndaSigned: partnerData.ndaSigned || false,
-      msaApproved: partnerData.msaApproved || false,
-      tags: partnerData.tags || [],
-      credentials: partnerData.credentials || [],
-      pastProjects: [],
-      availability: { notes: "" },
-      notes: [],
+  const [addPartnerSaving, setAddPartnerSaving] = useState(false)
+  const [addPartnerError, setAddPartnerError] = useState<string | null>(null)
+
+  // Add Partner writes to the same ghost-partnerships write path the spreadsheet importer
+  // uses (see lib/server/partner-pool-import.ts) - it shows up in the Discovered column,
+  // same as an email-scan or spreadsheet import would. Demo mode keeps the old local-state
+  // fixture behavior since there's no real per-visitor agency pool to write to there.
+  const handleAddPartner = async (data: PoolContactFormData) => {
+    if (isDemo) {
+      const newPartner: Partner = {
+        id: `partner-${Date.now()}`,
+        name: data.companyName || data.contactName || "New Partner",
+        discipline: "General",
+        type: "agency",
+        location: "",
+        email: data.email,
+        website: data.website,
+        rate: "$",
+        experience: "",
+        rating: 0,
+        status: "active",
+        joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        bookmarked: false,
+        ndaSigned: false,
+        msaApproved: false,
+        tags: [],
+        credentials: [],
+        pastProjects: [],
+        availability: { notes: "" },
+        notes: [],
+      }
+      setPartners(prev => [...prev, newPartner])
+      setShowAddPartnerModal(false)
+      setEditingPartner(null)
+      return
     }
-    setPartners(prev => [...prev, newPartner])
-    setShowAddPartnerModal(false)
-    setEditingPartner(null)
+
+    setAddPartnerSaving(true)
+    setAddPartnerError(null)
+    try {
+      const res = await fetch('/api/agency/pool/add-partner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: data.email,
+          contactName: data.contactName,
+          companyName: data.companyName,
+          phone: data.phone,
+          website: data.website,
+          notes: data.notes,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'Failed to add partner')
+      await loadPartnerships()
+      setShowAddPartnerModal(false)
+      setEditingPartner(null)
+    } catch (err) {
+      setAddPartnerError(err instanceof Error ? err.message : 'Failed to add partner')
+    } finally {
+      setAddPartnerSaving(false)
+    }
   }
-  
+
   const handleEditPartner = (partner: Partner) => {
     setEditingPartner(partner)
     setShowAddPartnerModal(true)
   }
-  
-  const handleUpdatePartner = (partnerData: Partial<Partner>) => {
+
+  // Demo-fixture edit only (see AddEditPartnerModal comment) - real partnerships never
+  // populate `partners`, so this path only ever touches local demo state.
+  const handleUpdatePartner = (data: PoolContactFormData) => {
     if (!editingPartner?.id) return
-    setPartners(prev => prev.map(p => 
-      p.id === editingPartner.id 
-        ? { ...p, ...partnerData }
+    setPartners(prev => prev.map(p =>
+      p.id === editingPartner.id
+        ? { ...p, name: data.companyName || data.contactName || p.name, email: data.email, website: data.website }
         : p
     ))
     setShowAddPartnerModal(false)
@@ -1138,6 +1192,25 @@ function PartnerPoolPageInner() {
     [partnerships]
   )
 
+  // Spreadsheet import's dedup-against-existing-pool step needs every email already in the
+  // pool, across all statuses (Active, Invited, Discovered) - not just active partners.
+  const existingStatusByEmail = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const p of partnerships) {
+      const email = (p.partnerEmail || "").trim().toLowerCase()
+      if (!email) continue
+      const label = p.partnerId
+        ? p.status === "active"
+          ? "Active partner"
+          : "Partner (pending)"
+        : p.invitationSentAt
+          ? "Invited"
+          : "Discovered"
+      map.set(email, label)
+    }
+    return map
+  }, [partnerships])
+
   const totalFilteredMatches = filteredNetworkRows.length + filteredPartners.length
   const hasNetworkSource = allNetworkRows.length > 0
 
@@ -1178,8 +1251,8 @@ function PartnerPoolPageInner() {
               variant="outline"
               className="border-border text-foreground hover:bg-white/5 flex items-center gap-2"
             >
-              <Mail className="w-4 h-4" />
-              Import from Email
+              <Upload className="w-4 h-4" />
+              Import Partners
             </Button>
             <Button
               onClick={() => {
@@ -1713,7 +1786,7 @@ function PartnerPoolPageInner() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-display font-bold text-sm text-foreground truncate">
-                            {row.vendorName || row.partnerEmail}
+                            {row.companyName || row.contactName || row.vendorName || row.partnerEmail}
                           </span>
                           <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-foreground-muted">
                             Not Yet Invited
@@ -1734,6 +1807,7 @@ function PartnerPoolPageInner() {
                           )}
                         </div>
                         <div className="font-mono text-[10px] text-foreground-muted mt-1 truncate">
+                          {row.companyName && row.contactName ? `${row.contactName} · ` : ""}
                           {row.partnerEmail}
                           <span> · Added {formatDateTime(row.partnershipCreatedAt)}</span>
                         </div>
@@ -2241,15 +2315,12 @@ function PartnerPoolPageInner() {
           <AddEditPartnerModal
             partner={editingPartner}
             onSave={editingPartner?.id ? handleUpdatePartner : handleAddPartner}
+            saving={addPartnerSaving}
+            error={addPartnerError}
             onClose={() => {
               setShowAddPartnerModal(false)
               setEditingPartner(null)
-            }}
-            customDisciplines={customDisciplines}
-            onAddCustomDiscipline={(discipline) => {
-              const updated = [...customDisciplines, discipline]
-              setCustomDisciplines(updated)
-              localStorage.setItem('customDisciplines', JSON.stringify(updated))
+              setAddPartnerError(null)
             }}
           />
         )}
@@ -2322,10 +2393,11 @@ function PartnerPoolPageInner() {
         </SheetContent>
       </Sheet>
 
-      <EmailImportSheet
+      <PartnerImportSheet
         open={emailImportSheetOpen}
         onOpenChange={setEmailImportSheetOpen}
         onImported={loadPartnerships}
+        existingStatusByEmail={existingStatusByEmail}
       />
     </AgencyLayout>
   )
@@ -2340,78 +2412,37 @@ export default function PartnerPoolPage() {
 }
 
 // Add/Edit Partner Modal Component
-function AddEditPartnerModal({ 
-  partner, 
-  onSave, 
+function AddEditPartnerModal({
+  partner,
+  onSave,
   onClose,
-  customDisciplines,
-  onAddCustomDiscipline 
-}: { 
+  saving,
+  error,
+}: {
   partner: Partial<Partner> | null
-  onSave: (data: Partial<Partner>) => void
+  onSave: (data: PoolContactFormData) => void
   onClose: () => void
-  customDisciplines: string[]
-  onAddCustomDiscipline: (discipline: string) => void
+  saving?: boolean
+  error?: string | null
 }) {
-  const [formData, setFormData] = useState<Partial<Partner>>({
-    name: partner?.name || "",
-    discipline: partner?.discipline || "Video Production",
-    type: partner?.type || "agency",
-    location: partner?.location || "",
+  // Editing only ever applies to a demo fixture (see handleUpdatePartner) - its single
+  // `name` field is split across companyName/contactName here for editing convenience,
+  // with companyName taking the value since that's what the pool cards display.
+  const [formData, setFormData] = useState<PoolContactFormData>({
+    companyName: partner?.name || "",
+    contactName: "",
     email: partner?.email || "",
+    phone: "",
     website: partner?.website || "",
-      rate: (partner?.rate as "$" | "$$" | "$$$" | undefined) || "$",
-    experience: partner?.experience || "",
-    rating: partner?.rating || 0,
-    ndaSigned: partner?.ndaSigned || false,
-    msaApproved: partner?.msaApproved || false,
-    tags: partner?.tags || [],
-    credentials: partner?.credentials || [],
+    notes: "",
   })
-  
-  const [newTag, setNewTag] = useState("")
-  const [newCredential, setNewCredential] = useState("")
-  const [showCustomDiscipline, setShowCustomDiscipline] = useState(false)
-  const [customDisciplineInput, setCustomDisciplineInput] = useState("")
-  
-  // Combined disciplines list (default + custom)
-  const allDisciplines = [...disciplines.filter(d => d !== "All"), ...customDisciplines]
-  
-  const addCustomDiscipline = () => {
-    if (customDisciplineInput.trim() && !allDisciplines.includes(customDisciplineInput.trim())) {
-      const newDiscipline = customDisciplineInput.trim()
-      onAddCustomDiscipline(newDiscipline)
-      setFormData(prev => ({ ...prev, discipline: newDiscipline }))
-      setCustomDisciplineInput("")
-      setShowCustomDiscipline(false)
-    }
-  }
-  
-  const addTag = () => {
-    if (newTag.trim() && !formData.tags?.includes(newTag.trim())) {
-      setFormData(prev => ({ ...prev, tags: [...(prev.tags || []), newTag.trim()] }))
-      setNewTag("")
-    }
-  }
-  
-  const removeTag = (tag: string) => {
-    setFormData(prev => ({ ...prev, tags: (prev.tags || []).filter(t => t !== tag) }))
-  }
-  
-  const addCredential = () => {
-    if (newCredential.trim() && !formData.credentials?.includes(newCredential.trim())) {
-      setFormData(prev => ({ ...prev, credentials: [...(prev.credentials || []), newCredential.trim()] }))
-      setNewCredential("")
-    }
-  }
-  
-  const removeCredential = (cred: string) => {
-    setFormData(prev => ({ ...prev, credentials: (prev.credentials || []).filter(c => c !== cred) }))
-  }
+
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())
+  const canSave = Boolean(formData.companyName.trim() || formData.contactName.trim()) && isEmailValid
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <GlassCard className="w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <GlassCard className="w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -2430,9 +2461,8 @@ function AddEditPartnerModal({
             <X className="w-5 h-5" />
           </button>
         </div>
-        
+
         <div className="space-y-6">
-          {/* Basic Info Section */}
           <div>
             <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3 flex items-center gap-2">
               <User className="w-3 h-3" /> Basic Information
@@ -2440,103 +2470,37 @@ function AddEditPartnerModal({
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
-                  Partner Name *
+                  Company Name
                 </label>
                 <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Your production company"
+                  value={formData.companyName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, companyName: e.target.value }))}
+                  placeholder="e.g., Studio X Productions"
                   className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 />
               </div>
-              
-              <div>
+              <div className="col-span-2">
                 <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
-                  Partner Type
+                  Contact Name
                 </label>
-                <select
-                  value={formData.type}
-                  onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as "agency" | "freelancer" | "production" }))}
-                  className="w-full bg-white/5 border border-border rounded-md px-3 py-2 text-foreground text-sm"
-                >
-                  <option value="agency">Agency</option>
-                  <option value="freelancer">Freelancer</option>
-                  <option value="production">Production Company</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
-                  Discipline
-                </label>
-                {showCustomDiscipline ? (
-                  <div className="flex gap-2">
-                    <Input
-                      value={customDisciplineInput}
-                      onChange={(e) => setCustomDisciplineInput(e.target.value)}
-                      placeholder="Enter custom discipline"
-                      className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 flex-1"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          addCustomDiscipline()
-                        }
-                      }}
-                      autoFocus
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={addCustomDiscipline}
-                      className="bg-accent text-accent-foreground hover:bg-accent/90"
-                    >
-                      Add
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setShowCustomDiscipline(false)
-                        setCustomDisciplineInput("")
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <select
-                      value={formData.discipline}
-                      onChange={(e) => {
-                        if (e.target.value === "__custom__") {
-                          setShowCustomDiscipline(true)
-                        } else {
-                          setFormData(prev => ({ ...prev, discipline: e.target.value }))
-                        }
-                      }}
-                      className="flex-1 bg-white/5 border border-border rounded-md px-3 py-2 text-foreground text-sm"
-                    >
-                      {allDisciplines.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                      <option value="__custom__">+ Add Custom Discipline</option>
-                    </select>
-                  </div>
-                )}
+                <Input
+                  value={formData.contactName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, contactName: e.target.value }))}
+                  placeholder="e.g., Jamie Rivera"
+                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                />
               </div>
             </div>
           </div>
-          
-          {/* Contact Info Section */}
+
           <div>
             <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3 flex items-center gap-2">
               <Mail className="w-3 h-3" /> Contact Information
             </h3>
             <div className="grid grid-cols-2 gap-4">
-              <div>
+              <div className="col-span-2">
                 <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
-                  Email
+                  Email *
                 </label>
                 <Input
                   type="email"
@@ -2546,20 +2510,18 @@ function AddEditPartnerModal({
                   className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 />
               </div>
-              
               <div>
                 <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
-                  Location
+                  Phone
                 </label>
                 <Input
-                  value={formData.location}
-                  onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
-                  placeholder="New York, NY"
+                  value={formData.phone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="(555) 123-4567"
                   className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 />
               </div>
-              
-              <div className="col-span-2">
+              <div>
                 <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
                   Website
                 </label>
@@ -2572,139 +2534,20 @@ function AddEditPartnerModal({
               </div>
             </div>
           </div>
-          
-          {/* Professional Info Section */}
+
           <div>
-            <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3 flex items-center gap-2">
-              <Briefcase className="w-3 h-3" /> Professional Details
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
-                  Rate Range
-                </label>
-                <Input
-                  value={formData.rate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, rate: e.target.value as "$" | "$$" | "$$$" }))}
-                  placeholder="$100-150/hr"
-                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                />
-              </div>
-              
-              <div>
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
-                  Rating (0-5)
-                </label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="5"
-                  step="0.1"
-                  value={formData.rating}
-                  onChange={(e) => setFormData(prev => ({ ...prev, rating: parseFloat(e.target.value) || 0 }))}
-                  placeholder="4.5"
-                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                />
-              </div>
-              
-              <div className="col-span-2">
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
-                  Experience / Bio
-                </label>
-                <Textarea
-                  value={formData.experience}
-                  onChange={(e) => setFormData(prev => ({ ...prev, experience: e.target.value }))}
-                  placeholder="Describe their experience, specialties, and notable work..."
-                  rows={3}
-                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 resize-none"
-                />
-              </div>
-            </div>
+            <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3">Notes</h3>
+            <Textarea
+              value={formData.notes}
+              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+              placeholder="Anything worth remembering about this contact..."
+              rows={3}
+              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 resize-none"
+            />
           </div>
-          
-          {/* Legal Status Section */}
-          <div>
-            <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3 flex items-center gap-2">
-              <Shield className="w-3 h-3" /> Legal Status
-            </h3>
-            <div className="flex gap-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <Checkbox
-                  checked={formData.ndaSigned}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, ndaSigned: !!checked }))}
-                />
-                <span className="font-mono text-sm text-foreground">NDA Signed</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <Checkbox
-                  checked={formData.msaApproved}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, msaApproved: !!checked }))}
-                />
-                <span className="font-mono text-sm text-foreground">MSA Approved</span>
-              </label>
-            </div>
-          </div>
-          
-          {/* Tags Section */}
-          <div>
-            <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3">
-              Tags / Specialties
-            </h3>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {formData.tags?.map(tag => (
-                <span key={tag} className="font-mono text-xs px-3 py-1 rounded-full bg-white/10 text-foreground flex items-center gap-1">
-                  {tag}
-                  <button onClick={() => removeTag(tag)} className="text-foreground hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={newTag}
-                onChange={(e) => setNewTag(e.target.value)}
-                placeholder="Add a tag..."
-                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
-              />
-              <Button variant="outline" onClick={addTag} className="border-border text-foreground hover:text-foreground">
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-          
-          {/* Credentials Section */}
-          <div>
-            <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3 flex items-center gap-2">
-              <Award className="w-3 h-3" /> Credentials / Awards
-            </h3>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {formData.credentials?.map(cred => (
-                <span key={cred} className="font-mono text-xs px-3 py-1 rounded-full bg-accent/10 text-accent flex items-center gap-1">
-                  <Award className="w-3 h-3" />
-                  {cred}
-                  <button onClick={() => removeCredential(cred)} className="text-accent hover:text-red-400">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={newCredential}
-                onChange={(e) => setNewCredential(e.target.value)}
-                placeholder="Add a credential or award..."
-                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCredential())}
-              />
-              <Button variant="outline" onClick={addCredential} className="border-border text-foreground hover:text-foreground">
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-          
-          {/* Actions */}
+
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
           <div className="flex gap-3 pt-4 border-t border-border">
             <Button
               variant="outline"
@@ -2715,10 +2558,10 @@ function AddEditPartnerModal({
             </Button>
             <Button
               onClick={() => onSave(formData)}
-              disabled={!formData.name?.trim()}
+              disabled={!canSave || saving}
               className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              {partner?.id ? "Update Partner" : "Add Partner"}
+              {saving ? "Saving..." : partner?.id ? "Update Partner" : "Add Partner"}
             </Button>
           </div>
         </div>

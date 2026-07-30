@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Mail, Check } from "lucide-react"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Spinner } from "@/components/ui/spinner"
 import { cn, formatDateTime } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
+import { PoolReviewRow, ReviewBadge } from "@/components/pool-review-row"
 
 type Provider = "google" | "microsoft"
 
@@ -130,61 +129,31 @@ function ContactRow({
 }) {
   const domain = contact.email.split("@")[1] || ""
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-border p-3 flex items-start gap-3",
-        contact.already_in_pool && "opacity-60"
-      )}
-    >
-      {!readOnly && (
-        <Checkbox
-          checked={checked}
-          onCheckedChange={onToggle}
-          disabled={contact.already_in_pool}
-          className="mt-1"
-        />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-display font-bold text-foreground truncate">
-            {contact.name || contact.email}
-          </span>
+    <PoolReviewRow
+      checked={checked}
+      onToggle={onToggle}
+      disabled={readOnly || contact.already_in_pool}
+      dimmed={contact.already_in_pool}
+      title={
+        <>
+          {contact.name || contact.email}{" "}
           <Badge className={cn("border", scoreBadgeClass(contact.score))}>{contact.score}</Badge>
-        </div>
-        {contact.name && <div className="text-xs text-foreground-muted truncate">{contact.email}</div>}
-        {contact.signals.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {contact.signals.slice(0, 4).map((signal) => (
-              <span
-                key={signal}
-                className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border text-foreground-muted"
-              >
-                {signalLabel(signal)}
-              </span>
-            ))}
-          </div>
-        )}
-        {(contact.already_in_pool || contact.has_ligament_account || contact.is_free_email) && (
-          <div className="flex flex-wrap gap-1 mt-1.5">
-            {contact.already_in_pool && (
-              <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border text-foreground-muted">
-                Already in pool
-              </span>
-            )}
-            {contact.has_ligament_account && !contact.already_in_pool && (
-              <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-accent/40 bg-accent/10 text-accent">
-                Has Ligament account
-              </span>
-            )}
-            {contact.is_free_email && (
-              <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-border text-foreground-muted">
-                Freelancer ({domain})
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+        </>
+      }
+      subtitle={contact.name ? contact.email : undefined}
+      badges={
+        <>
+          {contact.signals.slice(0, 4).map((signal) => (
+            <ReviewBadge key={signal}>{signalLabel(signal)}</ReviewBadge>
+          ))}
+          {contact.already_in_pool && <ReviewBadge>Already in pool</ReviewBadge>}
+          {contact.has_ligament_account && !contact.already_in_pool && (
+            <ReviewBadge tone="accent">Has Ligament account</ReviewBadge>
+          )}
+          {contact.is_free_email && <ReviewBadge>Freelancer ({domain})</ReviewBadge>}
+        </>
+      }
+    />
   )
 }
 
@@ -199,13 +168,17 @@ function mergeContactLists(a: ScannedContact[], b: ScannedContact[]): ScannedCon
   return Array.from(byEmail.values()).sort((x, y) => y.score - x.score)
 }
 
-interface EmailImportSheetProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+interface EmailImportPanelProps {
+  /** True while this panel's tab is the active, open one - drives the load-on-open effect
+   *  (in place of the old standalone sheet's `open` prop). */
+  active: boolean
+  /** Called when the user is finished (the old "Done" button used to close the sheet
+   *  directly via onOpenChange(false); the wrapping sheet owns that now). */
+  onDone: () => void
   onImported?: () => void
 }
 
-export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImportSheetProps) {
+export function EmailImportPanel({ active, onDone, onImported }: EmailImportPanelProps) {
   const { guardAction, handleUsageLimitError } = useUsageLimitModal()
   const [view, setView] = useState<View>("loading")
   const [connections, setConnections] = useState<Connections>(EMPTY_CONNECTIONS)
@@ -359,7 +332,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
   }, [beginSingleProviderPolling])
 
   useEffect(() => {
-    if (open) {
+    if (active) {
       setImportedCount(null)
       loadConnectionState()
     } else {
@@ -367,7 +340,7 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
     }
     return () => stopPolling()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [active])
 
   /** Starts a scan for one provider and returns once it completes (or throws). Used both
    *  for a plain single-provider scan and as one step of runScanAll. */
@@ -606,250 +579,239 @@ export function EmailImportSheet({ open, onOpenChange, onImported }: EmailImport
     )
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
-      <SheetContent
-        side="right"
-        overlay={false}
-        onInteractOutside={(e) => e.preventDefault()}
-        className="w-full sm:max-w-[520px] flex flex-col"
-      >
-        <SheetHeader>
-          <SheetTitle>Import from Email</SheetTitle>
-        </SheetHeader>
+    <div className="flex flex-col flex-1 min-h-0">
+      {view === "loading" && (
+        <div className="flex items-center justify-center py-16">
+          <Spinner className="w-6 h-6 text-accent" />
+        </div>
+      )}
 
-        {view === "loading" && (
-          <div className="flex items-center justify-center py-16">
-            <Spinner className="w-6 h-6 text-accent" />
+      {view === "connect" && (
+        <div className="space-y-5 px-4 pb-4">
+          <div className="rounded-xl border border-border bg-card p-5 text-center space-y-3">
+            <Mail className="w-8 h-8 text-accent mx-auto" />
+            <p className="text-sm text-foreground">Connect your email to discover vendors in your inbox.</p>
           </div>
-        )}
-
-        {view === "connect" && (
-          <div className="space-y-5 px-4 pb-4">
-            <div className="rounded-xl border border-border bg-card p-5 text-center space-y-3">
-              <Mail className="w-8 h-8 text-accent mx-auto" />
-              <p className="text-sm text-foreground">Connect your email to discover vendors in your inbox.</p>
-            </div>
-            <div className="space-y-2">
-              {(["google", "microsoft"] as const).map((provider) => {
-                const row = connections[provider]
-                const isExpired = row?.status === "expired"
-                return (
-                  <Button
-                    key={provider}
-                    onClick={() => connectProvider(provider)}
-                    variant={provider === "google" ? "default" : "outline"}
-                    className={cn(
-                      "w-full flex items-center justify-center gap-2",
-                      provider === "google" && "bg-accent text-accent-foreground hover:bg-accent/90",
-                      provider === "microsoft" && "border-border text-foreground"
-                    )}
-                  >
-                    <ProviderIcon provider={provider} className="w-4 h-4" />
-                    {isExpired ? `Reconnect ${providerLabel(provider)}` : `Connect ${providerLabel(provider)}`}
-                  </Button>
-                )
-              })}
-            </div>
-            <p className="text-xs text-foreground-muted leading-relaxed">
-              Ligament scans email subjects and brief previews to identify vendors. Full message content is never
-              read or stored.
-            </p>
+          <div className="space-y-2">
+            {(["google", "microsoft"] as const).map((provider) => {
+              const row = connections[provider]
+              const isExpired = row?.status === "expired"
+              return (
+                <Button
+                  key={provider}
+                  onClick={() => connectProvider(provider)}
+                  variant={provider === "google" ? "default" : "outline"}
+                  className={cn(
+                    "w-full flex items-center justify-center gap-2",
+                    provider === "google" && "bg-accent text-accent-foreground hover:bg-accent/90",
+                    provider === "microsoft" && "border-border text-foreground"
+                  )}
+                >
+                  <ProviderIcon provider={provider} className="w-4 h-4" />
+                  {isExpired ? `Reconnect ${providerLabel(provider)}` : `Connect ${providerLabel(provider)}`}
+                </Button>
+              )
+            })}
           </div>
-        )}
+          <p className="text-xs text-foreground-muted leading-relaxed">
+            Ligament scans email subjects and brief previews to identify vendors. Full message content is never
+            read or stored.
+          </p>
+        </div>
+      )}
 
-        {view === "ready_to_scan" && (
-          <div className="space-y-5 px-4 pb-4">
-            <div className="space-y-2">
-              {activeProviders.map((provider) => {
-                const row = connections[provider]
-                return (
-                  <div key={provider} className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-                    <ProviderIcon provider={provider} className="w-6 h-6 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-display font-bold text-foreground">
-                        {providerLabel(provider)} connected
-                      </div>
-                      <div className="text-xs text-foreground-muted">
-                        {row?.connected_at ? `Connected ${formatDateTime(row.connected_at)}` : "Connected"}
-                        {row?.last_scan_at ? ` · Last scanned ${formatDateTime(row.last_scan_at)}` : ""}
-                      </div>
+      {view === "ready_to_scan" && (
+        <div className="space-y-5 px-4 pb-4">
+          <div className="space-y-2">
+            {activeProviders.map((provider) => {
+              const row = connections[provider]
+              return (
+                <div key={provider} className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+                  <ProviderIcon provider={provider} className="w-6 h-6 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-display font-bold text-foreground">
+                      {providerLabel(provider)} connected
+                    </div>
+                    <div className="text-xs text-foreground-muted">
+                      {row?.connected_at ? `Connected ${formatDateTime(row.connected_at)}` : "Connected"}
+                      {row?.last_scan_at ? ` · Last scanned ${formatDateTime(row.last_scan_at)}` : ""}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-
-            {activeProviders.length === 1 ? (
-              <Button
-                onClick={() => startScan(activeProviders[0])}
-                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-              >
-                Scan Inbox
-              </Button>
-            ) : (
-              <div className="space-y-2">
-                <Button
-                  onClick={() => startScan("google")}
-                  variant="outline"
-                  className="w-full flex items-center justify-center gap-2 border-border text-foreground"
-                >
-                  <GoogleIcon className="w-4 h-4" />
-                  Scan Gmail
-                </Button>
-                <Button
-                  onClick={() => startScan("microsoft")}
-                  variant="outline"
-                  className="w-full flex items-center justify-center gap-2 border-border text-foreground"
-                >
-                  <MicrosoftIcon className="w-4 h-4" />
-                  Scan Outlook
-                </Button>
-                <Button onClick={runScanAll} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-                  Scan All
-                </Button>
-              </div>
-            )}
-
-            <DisconnectLinks />
-            <ConnectMoreProviders />
-          </div>
-        )}
-
-        {view === "scanning" && (
-          <div className="space-y-5 px-4 pb-4">
-            <div className="rounded-xl border border-border bg-card p-6 text-center space-y-4">
-              <Spinner className="w-6 h-6 mx-auto text-accent" />
-              <p className="text-sm text-foreground">{scanningLabel || "Scanning your inbox for vendor contacts..."}</p>
-              <Progress
-                value={Math.min(100, ((scanResults?.processed_count || 0) / MAX_MESSAGES_ESTIMATE) * 100)}
-                className="h-1.5"
-              />
-              <p className="text-xs text-foreground-muted">
-                {scanResults?.processed_count
-                  ? `${scanResults.processed_count} messages processed`
-                  : "Starting..."}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {view === "results" && importedCount == null && (
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="px-4 pb-2 flex items-center justify-between">
-              <p className="text-xs text-foreground-muted">
-                {scanResults?.contacts?.length || 0} vendor{scanResults?.contacts?.length !== 1 ? "s" : ""} found
-              </p>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={selectAll} className="text-xs text-accent hover:underline">
-                  Select All
-                </button>
-                <button
-                  type="button"
-                  onClick={deselectAll}
-                  className="text-xs text-foreground-muted hover:underline"
-                >
-                  Deselect All
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 space-y-2">
-              {(scanResults?.contacts || []).map((contact) => (
-                <ContactRow
-                  key={contact.email}
-                  contact={contact}
-                  checked={selected.has(contact.email)}
-                  onToggle={() => toggleContact(contact.email)}
-                />
-              ))}
-            </div>
-            {errorMessage && <p className="px-4 py-2 text-xs text-red-400">{errorMessage}</p>}
-            <div className="px-4 py-3 border-t border-border space-y-2">
-              <Button
-                onClick={handleImport}
-                disabled={selected.size === 0 || importing}
-                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-              >
-                {importing
-                  ? "Adding..."
-                  : `Add ${selected.size} vendor${selected.size !== 1 ? "s" : ""} to Pool`}
-              </Button>
-              <div className="flex items-center justify-center gap-4">
-                {activeProviders.length > 1 ? (
-                  <button
-                    type="button"
-                    onClick={runScanAll}
-                    className="text-xs text-foreground-muted hover:text-foreground transition-colors"
-                  >
-                    Rescan All
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => startScan(activeProviders[0])}
-                    className="text-xs text-foreground-muted hover:text-foreground transition-colors"
-                  >
-                    Rescan Inbox
-                  </button>
-                )}
-                <DisconnectLinks />
-              </div>
-              <ConnectMoreProviders />
-            </div>
-          </div>
-        )}
-
-        {view === "results" && importedCount != null && (
-          <div className="px-4 pb-4">
-            <div className="rounded-xl border border-accent/30 bg-accent/10 p-6 text-center space-y-3">
-              <Check className="w-8 h-8 text-accent mx-auto" />
-              <p className="text-sm font-display font-bold text-foreground">
-                Added {importedCount} vendor{importedCount !== 1 ? "s" : ""} to your pool
-              </p>
-              <p className="text-xs text-foreground-muted">
-                New vendors without a Ligament account appear in Pending Profiles.
-              </p>
-              <Button onClick={() => onOpenChange(false)} className="bg-accent text-accent-foreground hover:bg-accent/90">
-                Done
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {view === "error" && (
-          <div className="px-4 pb-4 space-y-4">
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5 text-center space-y-2">
-              <p className="text-sm text-foreground">{errorMessage || "The scan encountered an error."}</p>
-            </div>
-            {scanResults?.contacts?.length ? (
-              <div className="space-y-2">
-                <p className="text-xs text-foreground-muted">
-                  Scan partially completed - showing results from the {scanResults.processed_count} messages
-                  processed before the error.
-                </p>
-                <div className="max-h-64 overflow-y-auto space-y-2">
-                  {scanResults.contacts.map((contact) => (
-                    <ContactRow
-                      key={contact.email}
-                      contact={contact}
-                      checked={false}
-                      onToggle={() => {}}
-                      readOnly
-                    />
-                  ))}
                 </div>
-              </div>
-            ) : null}
+              )
+            })}
+          </div>
+
+          {activeProviders.length === 1 ? (
             <Button
-              onClick={() => (activeProviders.length > 1 ? runScanAll() : startScan(activeProviders[0]))}
+              onClick={() => startScan(activeProviders[0])}
               className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              Retry Scan
+              Scan Inbox
             </Button>
-            <DisconnectLinks />
+          ) : (
+            <div className="space-y-2">
+              <Button
+                onClick={() => startScan("google")}
+                variant="outline"
+                className="w-full flex items-center justify-center gap-2 border-border text-foreground"
+              >
+                <GoogleIcon className="w-4 h-4" />
+                Scan Gmail
+              </Button>
+              <Button
+                onClick={() => startScan("microsoft")}
+                variant="outline"
+                className="w-full flex items-center justify-center gap-2 border-border text-foreground"
+              >
+                <MicrosoftIcon className="w-4 h-4" />
+                Scan Outlook
+              </Button>
+              <Button onClick={runScanAll} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+                Scan All
+              </Button>
+            </div>
+          )}
+
+          <DisconnectLinks />
+          <ConnectMoreProviders />
+        </div>
+      )}
+
+      {view === "scanning" && (
+        <div className="space-y-5 px-4 pb-4">
+          <div className="rounded-xl border border-border bg-card p-6 text-center space-y-4">
+            <Spinner className="w-6 h-6 mx-auto text-accent" />
+            <p className="text-sm text-foreground">{scanningLabel || "Scanning your inbox for vendor contacts..."}</p>
+            <Progress
+              value={Math.min(100, ((scanResults?.processed_count || 0) / MAX_MESSAGES_ESTIMATE) * 100)}
+              className="h-1.5"
+            />
+            <p className="text-xs text-foreground-muted">
+              {scanResults?.processed_count
+                ? `${scanResults.processed_count} messages processed`
+                : "Starting..."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {view === "results" && importedCount == null && (
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="px-4 pb-2 flex items-center justify-between">
+            <p className="text-xs text-foreground-muted">
+              {scanResults?.contacts?.length || 0} vendor{scanResults?.contacts?.length !== 1 ? "s" : ""} found
+            </p>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={selectAll} className="text-xs text-accent hover:underline">
+                Select All
+              </button>
+              <button
+                type="button"
+                onClick={deselectAll}
+                className="text-xs text-foreground-muted hover:underline"
+              >
+                Deselect All
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 space-y-2">
+            {(scanResults?.contacts || []).map((contact) => (
+              <ContactRow
+                key={contact.email}
+                contact={contact}
+                checked={selected.has(contact.email)}
+                onToggle={() => toggleContact(contact.email)}
+              />
+            ))}
+          </div>
+          {errorMessage && <p className="px-4 py-2 text-xs text-red-400">{errorMessage}</p>}
+          <div className="px-4 py-3 border-t border-border space-y-2">
+            <Button
+              onClick={handleImport}
+              disabled={selected.size === 0 || importing}
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              {importing
+                ? "Adding..."
+                : `Add ${selected.size} vendor${selected.size !== 1 ? "s" : ""} to Pool`}
+            </Button>
+            <div className="flex items-center justify-center gap-4">
+              {activeProviders.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={runScanAll}
+                  className="text-xs text-foreground-muted hover:text-foreground transition-colors"
+                >
+                  Rescan All
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => startScan(activeProviders[0])}
+                  className="text-xs text-foreground-muted hover:text-foreground transition-colors"
+                >
+                  Rescan Inbox
+                </button>
+              )}
+              <DisconnectLinks />
+            </div>
             <ConnectMoreProviders />
           </div>
-        )}
-      </SheetContent>
-    </Sheet>
+        </div>
+      )}
+
+      {view === "results" && importedCount != null && (
+        <div className="px-4 pb-4">
+          <div className="rounded-xl border border-accent/30 bg-accent/10 p-6 text-center space-y-3">
+            <Check className="w-8 h-8 text-accent mx-auto" />
+            <p className="text-sm font-display font-bold text-foreground">
+              Added {importedCount} vendor{importedCount !== 1 ? "s" : ""} to your pool
+            </p>
+            <p className="text-xs text-foreground-muted">
+              New vendors without a Ligament account appear in Pending Profiles.
+            </p>
+            <Button onClick={onDone} className="bg-accent text-accent-foreground hover:bg-accent/90">
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {view === "error" && (
+        <div className="px-4 pb-4 space-y-4">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5 text-center space-y-2">
+            <p className="text-sm text-foreground">{errorMessage || "The scan encountered an error."}</p>
+          </div>
+          {scanResults?.contacts?.length ? (
+            <div className="space-y-2">
+              <p className="text-xs text-foreground-muted">
+                Scan partially completed - showing results from the {scanResults.processed_count} messages
+                processed before the error.
+              </p>
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {scanResults.contacts.map((contact) => (
+                  <ContactRow
+                    key={contact.email}
+                    contact={contact}
+                    checked={false}
+                    onToggle={() => {}}
+                    readOnly
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <Button
+            onClick={() => (activeProviders.length > 1 ? runScanAll() : startScan(activeProviders[0]))}
+            className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+          >
+            Retry Scan
+          </Button>
+          <DisconnectLinks />
+          <ConnectMoreProviders />
+        </div>
+      )}
+    </div>
   )
 }

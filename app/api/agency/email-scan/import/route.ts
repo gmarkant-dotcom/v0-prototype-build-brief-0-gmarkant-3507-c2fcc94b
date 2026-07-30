@@ -40,7 +40,8 @@ async function requireAgency() {
 async function importContact(
   service: SupabaseClient,
   agencyId: string,
-  email: string
+  email: string,
+  name: string | null
 ): Promise<"added" | "skipped"> {
   const { data: matchedProfile } = await service.from("profiles").select("id").ilike("email", email).maybeSingle()
 
@@ -102,6 +103,7 @@ async function importContact(
     partner_email: email,
     profile_status: "unclaimed",
     status: "pending",
+    contact_name: name,
   })
   if (error) throw error
   return "added"
@@ -119,6 +121,13 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json().catch(() => ({}))
   const rawContacts = Array.isArray(body.contacts) ? body.contacts : []
+  const nameByEmail = new Map<string, string | null>()
+  for (const c of rawContacts as { email?: unknown; name?: unknown }[]) {
+    const email = String(c?.email || "").trim().toLowerCase()
+    if (!email || nameByEmail.has(email)) continue
+    const name = typeof c?.name === "string" ? c.name.trim() : ""
+    nameByEmail.set(email, name || null)
+  }
   const emails = Array.from(
     new Set(
       rawContacts
@@ -137,7 +146,7 @@ export async function POST(request: NextRequest) {
 
   for (const email of emails) {
     try {
-      const result = await importContact(service, auth.userId, email)
+      const result = await importContact(service, auth.userId, email, nameByEmail.get(email) ?? null)
       if (result === "added") added += 1
       else skipped += 1
     } catch (err) {

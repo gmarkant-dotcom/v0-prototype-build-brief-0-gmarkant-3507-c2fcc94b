@@ -202,7 +202,7 @@ function PoolNavItem({ pathname }: { pathname: string | null }) {
               className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
             >
               <Mail className="w-4 h-4 text-accent" />
-              Import from Email
+              Import Partners
             </Link>
           </HoverCardContent>
         </HoverCard>
