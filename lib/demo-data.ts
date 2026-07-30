@@ -731,3 +731,105 @@ export const demoPartnerProjectsWithAgency: PartnerProjectWithAgency[] = [
     invoiced: "$28,000"
   }
 ]
+
+// ── Partner dashboard rebuild (Needs Your Response / funnel / reliability) ──────────
+
+export type DemoNeedsResponseItem = {
+  id: string
+  scopeItemName: string
+  agencyName: string
+  clientName: string | null
+  deadline: string | null
+  daysLeft: number | null
+  ndaPending: boolean
+}
+
+export const demoNeedsResponseItems: DemoNeedsResponseItem[] = [
+  {
+    id: "demo-inbox-1",
+    scopeItemName: "Video Production Partner - Sports Creator Series",
+    agencyName: "Electric Animal",
+    clientName: "NWSL",
+    deadline: "2026-08-06",
+    daysLeft: 3,
+    ndaPending: false,
+  },
+  {
+    id: "demo-inbox-2",
+    scopeItemName: "Documentary Series - Tech Startup Profile",
+    agencyName: "Momentum Worldwide",
+    clientName: "Vantage Robotics",
+    deadline: "2026-08-11",
+    daysLeft: 8,
+    ndaPending: false,
+  },
+  {
+    id: "demo-inbox-3",
+    scopeItemName: "Post-Production Support - Event Recap",
+    agencyName: "North Star Media",
+    clientName: null,
+    deadline: "2026-08-04",
+    daysLeft: 1,
+    ndaPending: true,
+  },
+]
+
+export const demoExpiredUnansweredCount = 2
+
+export type DemoOnboardingItem = { id: string; projectName: string; agencyName: string }
+
+export const demoOnboardingPending: DemoOnboardingItem[] = [
+  { id: "demo-onb-1", projectName: "NWSL Creator Content Series", agencyName: "Electric Animal" },
+]
+
+export const demoFunnelMetrics = {
+  openRfps: 3,
+  bidsSubmitted: 12,
+  bidsByStatus: {
+    submitted: 3,
+    under_review: 1,
+    shortlisted: 2,
+    meeting_requested: 1,
+    awarded: 4,
+    declined: 1,
+  },
+  winRate: { awarded: 4, declined: 1, rate: 4 / 5 },
+  agencyRelationships: 4,
+}
+
+export const demoReliability = {
+  hasCompletedReviews: true,
+  avgCompositeScore: 8.7,
+  reviewCount: 3,
+  reliabilitySummary:
+    "Consistently delivers on time and on budget across engagements, with strong creative execution noted by lead agencies.",
+  reliabilitySummaryAgencyName: "Electric Animal",
+}
+
+export type DemoUpcomingPaymentRow = {
+  id: string
+  project: string
+  milestone: string
+  amount: number
+  dueDate: string | null
+  status: string
+}
+
+export const demoUpcomingPaymentRows: DemoUpcomingPaymentRow[] = [
+  {
+    id: "demo-pay-1",
+    project: "NWSL Creator Content Series",
+    milestone: "Final delivery",
+    amount: 29100,
+    dueDate: "2026-08-15",
+    status: "invoiced",
+  },
+  {
+    id: "demo-pay-2",
+    project: "NWSL Creator Content Series",
+    milestone: "Wrap & reporting",
+    amount: 9700,
+    dueDate: "2026-09-01",
+    status: "pending",
+  },
+]
