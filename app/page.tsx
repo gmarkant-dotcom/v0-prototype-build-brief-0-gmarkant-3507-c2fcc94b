@@ -10,6 +10,25 @@ import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { User, Building2, Users } from "lucide-react"
 
+const differentiators = [
+  {
+    title: "No-signup vendor bidding",
+    description: "Send an RFP link any vendor can open, review, and bid on with zero account creation. Live for 72 hours, tracked end to end.",
+  },
+  {
+    title: "Your network, imported in minutes",
+    description: "Scan your email or upload your existing vendor spreadsheet and your partner pool builds itself. No manual data entry.",
+  },
+  {
+    title: "AI-decomposed bids",
+    description: "Every bid broken into comparable cost components, scored against your criteria, compared side by side.",
+  },
+  {
+    title: "A track record on every vendor",
+    description: "Delivery performance scores accumulate with every engagement, so you award on evidence, not memory.",
+  },
+]
+
 const stages = [
   { number: "00", title: "Partner Pool", oneLiner: "Build your network. Get discovered.", ai: false },
   { number: "01", title: "RFP Broadcast", oneLiner: "Send scoped RFPs. Submit competitive bids.", ai: true },
@@ -136,7 +155,7 @@ export default function HomePage() {
 
       <main className="relative z-10">
         {/* Hero */}
-        <section className="max-w-6xl mx-auto px-6 pt-24 pb-20">
+        <section className="max-w-6xl mx-auto px-6 pt-16 md:pt-20 pb-10 md:pb-14">
           <div className="max-w-3xl">
             <div className="font-mono text-xs text-accent tracking-wider uppercase mb-6 flex items-center gap-3">
               <span className="ai-badge">✦</span> Best Practice Vendor Procurement & Orchestration for Independent Creative Agencies
@@ -163,8 +182,34 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* Differentiators */}
+        <section className="py-10 md:py-14">
+          <div className="max-w-6xl mx-auto px-6">
+            <div className="text-center mb-8">
+              <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
+                Why Ligament
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {differentiators.map((item) => (
+                <div
+                  key={item.title}
+                  className="p-5 rounded-lg bg-accent/5 border border-border border-l-4 border-l-accent hover:scale-[1.02] transition-transform duration-200"
+                >
+                  <h4 className="font-display font-bold text-sm text-foreground mb-2">
+                    {item.title}
+                  </h4>
+                  <p className="text-xs text-foreground-muted leading-relaxed">
+                    {item.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* Two Portals */}
-        <section className="border-y border-border py-20 md:py-32">
+        <section className="border-y border-border py-10 md:py-14">
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-8">
               <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
@@ -188,7 +233,7 @@ export default function HomePage() {
         </section>
 
         {/* For Lead Agencies */}
-        <section className="py-20 md:py-32">
+        <section className="py-10 md:py-14">
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-12">
               <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
@@ -227,7 +272,7 @@ export default function HomePage() {
         </section>
 
         {/* For Partner Agencies */}
-        <section className="border-t border-border py-20 md:py-32">
+        <section className="border-t border-border py-10 md:py-14">
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-12">
               <div className="font-mono text-xs text-foreground-muted tracking-wider uppercase mb-4">
@@ -266,7 +311,7 @@ export default function HomePage() {
         </section>
 
         {/* Workflow */}
-        <section className="border-t border-border py-20 md:py-32">
+        <section className="border-t border-border py-10 md:py-14">
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-16">
               <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
@@ -332,7 +377,7 @@ export default function HomePage() {
         </section>
 
         {/* Closing CTA */}
-        <section className="py-20 md:py-32 bg-gradient-to-b from-transparent to-accent/5">
+        <section className="py-10 md:py-14 bg-gradient-to-b from-transparent to-accent/5">
           <div className="max-w-6xl mx-auto px-6">
             <GlassCard className="p-12 text-center">
               <h2 className="font-display font-black text-4xl text-foreground mb-4">

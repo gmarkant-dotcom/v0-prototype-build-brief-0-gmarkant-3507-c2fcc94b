@@ -27,12 +27,12 @@ const ibmPlexMono = IBM_Plex_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'LIGAMENT — Vendor Procurement & Orchestration Engine',
-  description: 'The AI-powered vendor orchestration engine for independent agencies. Assemble, manage, align, and pay external vendor partners as one unified team.',
+  title: 'LIGAMENT: Best Practice Vendor Procurement & Orchestration',
+  description: 'Best practice vendor procurement and orchestration for independent creative agencies. Brief to bid to award, without the chaos.',
   metadataBase: new URL('https://withligament.com'),
   openGraph: {
-    title: 'LIGAMENT — Vendor Procurement & Orchestration Engine',
-    description: 'The AI-powered vendor orchestration engine for independent agencies. Assemble, manage, align, and pay external vendor partners as one unified team.',
+    title: 'LIGAMENT: Best Practice Vendor Procurement & Orchestration',
+    description: 'Best practice vendor procurement and orchestration for independent creative agencies. Brief to bid to award, without the chaos.',
     url: 'https://withligament.com',
     siteName: 'Ligament',
     images: [
@@ -48,8 +48,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary',
-    title: 'LIGAMENT — Vendor Procurement & Orchestration Engine',
-    description: 'The AI-powered vendor orchestration engine for independent agencies.',
+    title: 'LIGAMENT: Best Practice Vendor Procurement & Orchestration',
+    description: 'Best practice vendor procurement and orchestration for independent creative agencies. Brief to bid to award, without the chaos.',
     images: ['https://withligament.com/ligament-linkedin-icon.png'],
   },
   icons: {
