@@ -34,7 +34,7 @@ const stages = [
   { number: "01", title: "RFP Broadcast", oneLiner: "Send scoped RFPs. Submit competitive bids.", ai: true },
   { number: "02", title: "Bid Management", oneLiner: "AI compares and scores. You decide and award.", ai: true },
   { number: "03", title: "Onboarding", oneLiner: "Share docs and guidelines. Get project-ready.", ai: false },
-  { number: "04", title: "Delivery Performance", oneLiner: "Evaluate delivery. Build lasting intelligence.", ai: true },
+  { number: "04", title: "Delivery Performance", oneLiner: "Evaluate vendor delivery. Build lasting intelligence.", ai: true },
 ]
 
 const agencyFeatures = [
