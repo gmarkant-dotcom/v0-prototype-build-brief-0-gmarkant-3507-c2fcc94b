@@ -90,13 +90,25 @@ export function HelpTerm({ term, children, theme = "dark", className, stopPropag
     }
     closeTimer.current = setTimeout(() => {
       closeTimer.current = null
+      // Belt and suspenders: a stale open timer (from some future code path that doesn't
+      // go through handlePointerEnter's own guard) must not resurrect the popover this
+      // close is about to dismiss.
+      if (openTimer.current) {
+        clearTimeout(openTimer.current)
+        openTimer.current = null
+      }
       setOpen(false)
     }, CLOSE_DELAY_MS)
   }
 
-  // Keyboard focus opens immediately - no open-intent delay. That delay exists purely to
-  // filter accidental mouse grazes; a Tab landing on the trigger is always deliberate.
-  const handleFocus = () => {
+  // Keyboard focus opens immediately - no open-intent delay, since that delay exists purely
+  // to filter accidental mouse grazes and a deliberate Tab shouldn't wait on it. Gated to
+  // :focus-visible specifically: a mouse click also focuses the trigger (handled already by
+  // Radix's own click-toggle) and, more importantly, Radix returns focus to the trigger
+  // when the popover closes - without this gate that programmatic refocus would itself
+  // call setOpen(true) again, reopening a popover that had just legitimately closed.
+  const handleFocus = (e: React.FocusEvent<HTMLButtonElement>) => {
+    if (!e.target.matches(":focus-visible")) return
     clearTimers()
     setOpen(true)
   }
@@ -152,6 +164,16 @@ export function HelpTerm({ term, children, theme = "dark", className, stopPropag
         role="tooltip"
         onMouseEnter={handlePointerEnter}
         onMouseLeave={handlePointerLeave}
+        // This is a lightweight hover-driven info popover, not a modal dialog - it must
+        // never yank focus around. Without these two, Radix's defaults (move focus into the
+        // content on open since it has no focusable children of its own, then return focus
+        // to the trigger on close) blur the trigger the instant it opens, which - via
+        // handlePointerLeave bound to the trigger's onBlur - schedules an unwanted close,
+        // and closing returns focus to the trigger, which - via handleFocus - reopens it.
+        // That bounce is what produced the "flashes when the cursor moves away" symptom
+        // (the strobing kept going regardless of the pointer once this loop was running).
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => e.preventDefault()}
         // Wider gap and edge padding than the primitive's default (sideOffset 4) - less
         // overlap with the trigger means less surface for the occlusion-driven flicker to
         // occur on in the first place, independent of the hover-intent timing above. Radix
