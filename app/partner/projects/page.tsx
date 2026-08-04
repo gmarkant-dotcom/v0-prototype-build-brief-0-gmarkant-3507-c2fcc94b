@@ -6,6 +6,7 @@ import { useFetch } from "@/hooks/useFetch"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { compositeScoreColorClass } from "@/lib/bid-scoring"
+import { isMilestoneOverdue, isMilestonePaid } from "@/lib/partner-payments"
 import {
   Search, Filter, ChevronDown, ChevronRight, Building2,
   X, Loader2, CheckCircle, AlertTriangle, DollarSign, Clock, Award,
@@ -438,17 +439,18 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
         ) : (
           <div className="space-y-2">
             {milestones.map(m => {
-              const isPaid = m.status === "payment_received"
+              const isPaid = isMilestonePaid(m.status)
+              const overdue = isMilestoneOverdue({ amount: m.amount, status: m.status, due_date: m.due_date })
               return (
-                <div key={m.id} className={cn("rounded-lg border p-3 space-y-1.5", isPaid ? "border-success/30 bg-success/15" : "border-vendor-border bg-vendor-surface")}>
+                <div key={m.id} className={cn("rounded-lg border p-3 space-y-1.5", isPaid ? "border-success/30 bg-success/15" : overdue ? "border-destructive/30 bg-destructive/15" : "border-vendor-border bg-vendor-surface")}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="font-display font-bold text-sm text-vendor-foreground">{m.title}</div>
                       <div className="flex items-center gap-2 mt-0.5 font-mono text-[10px] text-vendor-muted flex-wrap">
                         <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />{m.currency} {m.amount.toLocaleString("en-US")}</span>
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Due {fmtDate(m.due_date)}</span>
-                        <span className={cn("px-1.5 py-0.5 rounded font-mono text-[9px] uppercase", isPaid ? "bg-success/15 text-success" : "bg-gray-100 text-vendor-muted-strong")}>
-                          {MILESTONE_LABEL[m.status]||m.status}
+                        <span className={cn("flex items-center gap-1", overdue && "text-destructive")}><Clock className="w-3 h-3" />Due {fmtDate(m.due_date)}</span>
+                        <span className={cn("px-1.5 py-0.5 rounded font-mono text-[9px] uppercase", isPaid ? "bg-success/15 text-success" : overdue ? "bg-destructive/15 text-destructive" : "bg-gray-100 text-vendor-muted-strong")}>
+                          {overdue ? "Overdue" : MILESTONE_LABEL[m.status]||m.status}
                         </span>
                       </div>
                       {m.notes && <p className="text-xs text-vendor-muted mt-1 italic">{m.notes}</p>}

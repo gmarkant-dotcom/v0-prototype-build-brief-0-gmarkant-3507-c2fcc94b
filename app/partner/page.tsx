@@ -15,7 +15,7 @@ import {
   demoReliability,
   demoPartnerActivity,
 } from "@/lib/demo-data"
-import { summarizePartnerMilestones } from "@/lib/partner-payments"
+import { summarizePartnerMilestones, isMilestonePaid, isMilestoneOverdue } from "@/lib/partner-payments"
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
 import { createClient } from "@/lib/supabase/client"
 import { useSectionCollapse, useCappedList } from "@/lib/dashboard-section-state"
@@ -33,6 +33,7 @@ import {
   Send,
   Award,
   Briefcase,
+  DollarSign,
 } from "lucide-react"
 
 const SECTION_LIST_CAP = 5
@@ -109,6 +110,7 @@ type DashboardData = {
 type QueueRow =
   | { kind: "rfp"; key: string; item: NeedsResponseItem }
   | { kind: "onboarding"; key: string; item: OnboardingPendingItem }
+  | { kind: "overdue-milestone"; key: string; item: MilestoneApiRow }
 
 type DashboardActiveProject = {
   id: string
@@ -156,7 +158,7 @@ export default function PartnerDashboardPage() {
 
   const [fetchedActiveProjects, setFetchedActiveProjects] = useState<DashboardActiveProject[]>([])
   const [activeProjectsLoading, setActiveProjectsLoading] = useState(!isDemo)
-  const [paymentSummary, setPaymentSummary] = useState<{ paid: number; pending: number; count: number } | null>(null)
+  const [paymentSummary, setPaymentSummary] = useState<{ paid: number; pending: number; overdue: number; count: number } | null>(null)
   const [paymentMilestones, setPaymentMilestones] = useState<MilestoneApiRow[]>([])
   const [paymentsLoading, setPaymentsLoading] = useState(!isDemo)
   const [profileChecklist, setProfileChecklist] = useState<ProfileChecklist>({
@@ -321,18 +323,18 @@ export default function PartnerDashboardPage() {
         const list = Array.isArray(data.milestones) ? (data.milestones as MilestoneApiRow[]) : []
         if (!cancelled && res.ok) {
           const summary = summarizePartnerMilestones(
-            list.map((m) => ({ amount: Number(m.amount) || 0, status: String(m.status || "") }))
+            list.map((m) => ({ amount: Number(m.amount) || 0, status: String(m.status || ""), due_date: m.due_date }))
           )
           setPaymentSummary({ ...summary, count: list.length })
           setPaymentMilestones(list)
         } else if (!cancelled) {
-          setPaymentSummary({ paid: 0, pending: 0, count: 0 })
+          setPaymentSummary({ paid: 0, pending: 0, overdue: 0, count: 0 })
           setPaymentMilestones([])
         }
       } catch (e) {
         console.error("[partner/dashboard] /api/partner/payments", e)
         if (!cancelled) {
-          setPaymentSummary({ paid: 0, pending: 0, count: 0 })
+          setPaymentSummary({ paid: 0, pending: 0, overdue: 0, count: 0 })
           setPaymentMilestones([])
         }
       } finally {
@@ -391,15 +393,23 @@ export default function PartnerDashboardPage() {
   )
   const { collapsed: activityCollapsed, toggle: toggleActivity } = useSectionCollapse("partner", "recent-activity")
 
+  // Derived strictly from the real paymentMilestones fetch (empty in demo mode, per the
+  // effect above) - never fabricated, so this can never leak a fake overdue row.
+  const overdueMilestones = useMemo(
+    () => paymentMilestones.filter((m) => isMilestoneOverdue({ amount: m.amount, status: m.status, due_date: m.due_date })),
+    [paymentMilestones]
+  )
+
   const queueRows: QueueRow[] = useMemo(
     () => [
       ...needsResponseItems.map((item): QueueRow => ({ kind: "rfp", key: `rfp:${item.id}`, item })),
       ...onboardingPending.map((item): QueueRow => ({ kind: "onboarding", key: `onboarding:${item.id}`, item })),
+      ...overdueMilestones.map((item): QueueRow => ({ kind: "overdue-milestone", key: `overdue:${item.id}`, item })),
     ],
-    [needsResponseItems, onboardingPending]
+    [needsResponseItems, onboardingPending, overdueMilestones]
   )
   const queueIsUrgent = (row: QueueRow) =>
-    row.kind === "rfp" && ((row.item.daysLeft != null && row.item.daysLeft <= 7) || row.item.ndaPending)
+    row.kind === "overdue-milestone" || (row.kind === "rfp" && ((row.item.daysLeft != null && row.item.daysLeft <= 7) || row.item.ndaPending))
   const {
     visible: visibleQueueRows,
     hasMore: queueHasMore,
@@ -423,7 +433,7 @@ export default function PartnerDashboardPage() {
   const upcomingPaymentRows = useMemo(() => {
     if (isDemo) return []
     return paymentMilestones
-      .filter((m) => String(m.status || "").toLowerCase() !== "paid")
+      .filter((m) => !isMilestonePaid(m.status))
       .sort((a, b) => String(a.due_date || "").localeCompare(String(b.due_date || "")))
   }, [isDemo, paymentMilestones])
 
@@ -500,6 +510,30 @@ export default function PartnerDashboardPage() {
           ) : (
             <div className="space-y-2">
               {visibleQueueRows.map((row) => {
+                if (row.kind === "overdue-milestone") {
+                  const item = row.item
+                  return (
+                    <Link
+                      key={row.key}
+                      href="/partner/projects"
+                      className="flex items-center justify-between gap-4 p-4 rounded-lg border border-destructive/30 bg-destructive/5 hover:border-destructive/50 hover:shadow-sm transition-all"
+                    >
+                      <div className="min-w-0 flex items-center gap-3">
+                        <DollarSign className="w-4 h-4 text-destructive shrink-0" />
+                        <div>
+                          <div className="font-display font-bold text-sm text-vendor-foreground truncate">
+                            Overdue payment - {item.title}
+                          </div>
+                          <div className="font-mono text-[10px] text-destructive mt-1">
+                            {formatUsdWhole(item.amount)} - {item.project_name}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-vendor-muted/70 shrink-0" />
+                    </Link>
+                  )
+                }
+
                 if (row.kind === "onboarding") {
                   const item = row.item
                   return (
@@ -754,19 +788,25 @@ export default function PartnerDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {upcomingPaymentRows.map((payment) => (
+                  {upcomingPaymentRows.map((payment) => {
+                    const overdue = isMilestoneOverdue({ amount: payment.amount, status: payment.status, due_date: payment.due_date })
+                    return (
                     <tr key={payment.id} className="border-b border-vendor-border/50">
                       <td className="py-4 font-display font-bold text-sm text-vendor-foreground">{payment.project_name}</td>
                       <td className="py-4 text-sm text-vendor-muted-strong">{payment.title}</td>
                       <td className="py-4 text-right font-mono text-sm text-vendor-foreground">{formatUsdWhole(payment.amount)}</td>
-                      <td className="py-4 text-right font-mono text-xs text-vendor-muted">{formatDueDate(payment.due_date)}</td>
+                      <td className={cn("py-4 text-right font-mono text-xs", overdue ? "text-destructive" : "text-vendor-muted")}>{formatDueDate(payment.due_date)}</td>
                       <td className="py-4 text-right">
-                        <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 capitalize">
-                          {payment.status}
+                        <span className={cn(
+                          "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize",
+                          overdue ? "bg-destructive/15 text-destructive" : "bg-yellow-100 text-yellow-700"
+                        )}>
+                          {overdue ? "Overdue" : payment.status}
                         </span>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

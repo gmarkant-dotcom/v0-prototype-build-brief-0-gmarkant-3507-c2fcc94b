@@ -15,7 +15,7 @@ import { cn, formatDateTime } from "@/lib/utils"
 import { isDemoMode, demoPartners, partnerTypes, type Partner, type PartnerNote, type ProjectRating, type PartnerAvailability } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { createClient } from "@/lib/supabase/client"
-import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass, Upload } from "lucide-react"
+import { Star, Shield, Building2, User, Users, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass, Upload } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { MarketplaceContent } from "@/components/marketplace-content"
@@ -1291,20 +1291,29 @@ function PartnerPoolPageInner() {
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-foreground">{activePartnersStat}</div>
+          <GlassCard className="p-4">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
+              <Users className="w-4 h-4 text-accent" />
+            </div>
+            <div className="font-display font-bold text-2xl text-foreground">{activePartnersStat}</div>
             <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
-              Active Partners
+              Active partners
             </div>
           </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-accent">{partnersWithActiveEngagementsStat}</div>
+          <GlassCard className="p-4">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
+              <Briefcase className="w-4 h-4 text-accent" />
+            </div>
+            <div className="font-display font-bold text-2xl text-foreground">{partnersWithActiveEngagementsStat}</div>
             <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
-              Partners with Active Engagements
+              Partners with active engagements
             </div>
           </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-red-400">{blacklistedPartnersStat}</div>
+          <GlassCard className="p-4">
+            <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center mb-3">
+              <Ban className="w-4 h-4 text-red-400" />
+            </div>
+            <div className="font-display font-bold text-2xl text-red-400">{blacklistedPartnersStat}</div>
             <div className="font-mono text-[10px] text-red-400 uppercase tracking-wider mt-1">Blacklisted</div>
           </GlassCard>
         </div>

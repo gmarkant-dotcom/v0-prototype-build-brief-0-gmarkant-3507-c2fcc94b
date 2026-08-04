@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
+import { isMilestoneOverdue, isMilestonePaid } from "@/lib/partner-payments"
 
 
 // Redirect to Active Projects where payments are now managed
@@ -215,10 +216,10 @@ function formatDueDate(iso: string) {
   }
 }
 
-function statusBadgeClass(status: string) {
-  const s = status.toLowerCase()
-  if (s === "paid") return "bg-success/15 text-success"
-  if (s === "invoiced") return "bg-amber-100 text-amber-800"
+function statusBadgeClass(status: string, overdue: boolean) {
+  if (overdue) return "bg-destructive/15 text-destructive"
+  if (isMilestonePaid(status)) return "bg-success/15 text-success"
+  if (status.toLowerCase() === "invoiced") return "bg-amber-100 text-amber-800"
   return "bg-gray-100 text-vendor-muted-strong"
 }
 
@@ -752,27 +753,30 @@ function PartnerPaymentsPageLegacy() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {ms.map((m) => (
+                                          {ms.map((m) => {
+                                            const overdue = isMilestoneOverdue({ amount: m.amount, status: m.status, due_date: m.due_date })
+                                            return (
                                             <tr key={m.id} className="border-b border-vendor-border/50">
                                               <td className="py-2 pr-2 text-vendor-foreground font-medium">{m.title}</td>
                                               <td className="py-2 text-right font-mono text-vendor-foreground">
                                                 {formatMoney(m.amount, m.currency)}
                                               </td>
-                                              <td className="py-2 text-right font-mono text-xs text-vendor-muted">
+                                              <td className={cn("py-2 text-right font-mono text-xs", overdue ? "text-destructive" : "text-vendor-muted")}>
                                                 {formatDueDate(m.due_date)}
                                               </td>
                                               <td className="py-2 text-right">
                                                 <span
                                                   className={cn(
                                                     "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize inline-block",
-                                                    statusBadgeClass(m.status)
+                                                    statusBadgeClass(m.status, overdue)
                                                   )}
                                                 >
-                                                  {m.status}
+                                                  {overdue ? "Overdue" : m.status}
                                                 </span>
                                               </td>
                                             </tr>
-                                          ))}
+                                            )
+                                          })}
                                         </tbody>
                                       </table>
                                     </div>

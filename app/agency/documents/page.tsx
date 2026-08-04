@@ -12,6 +12,7 @@ import { isDemoMode } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
 import { AgencyDocumentLibraryManager } from "@/components/agency-document-library-manager"
+import { FileText, FileLock2, Send, ClipboardCheck, Copy } from "lucide-react"
 
 type Document = {
   id: string
@@ -274,26 +275,41 @@ export default function DocumentsPage() {
         />
         
         {/* Stats */}
-        <div className="grid grid-cols-5 gap-4 mb-8">
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-foreground">{allDocuments.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">Total Documents</div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+          <GlassCard className="p-4">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
+              <FileText className="w-4 h-4 text-accent" />
+            </div>
+            <div className="font-display font-bold text-2xl text-foreground">{allDocuments.length}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Total documents</div>
           </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-foreground">{masterBriefs.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">Master Briefs</div>
+          <GlassCard className="p-4">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
+              <FileLock2 className="w-4 h-4 text-accent" />
+            </div>
+            <div className="font-display font-bold text-2xl text-foreground">{masterBriefs.length}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Master briefs</div>
           </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-accent">{partnerBriefs.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">Partner Briefs</div>
+          <GlassCard className="p-4">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
+              <Send className="w-4 h-4 text-accent" />
+            </div>
+            <div className="font-display font-bold text-2xl text-accent">{partnerBriefs.length}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Partner briefs</div>
           </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-warning">{requirements.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">Requirements</div>
+          <GlassCard className="p-4">
+            <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center mb-3">
+              <ClipboardCheck className="w-4 h-4 text-warning" />
+            </div>
+            <div className="font-display font-bold text-2xl text-warning">{requirements.length}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Requirements</div>
           </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-foreground">{templates.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase">Templates</div>
+          <GlassCard className="p-4">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
+              <Copy className="w-4 h-4 text-accent" />
+            </div>
+            <div className="font-display font-bold text-2xl text-foreground">{templates.length}</div>
+            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Templates</div>
           </GlassCard>
         </div>
         

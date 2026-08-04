@@ -186,11 +186,11 @@ function SummaryBar({ partners, project, loading }: {
           "flex-1 min-w-[100px] p-4 border-r border-border/30 last:border-r-0",
           s.highlight && "bg-amber-500/5"
         )}>
-          <div className="flex items-center gap-1.5 mb-1">
+          <div className="w-6 h-6 rounded-md bg-white/5 flex items-center justify-center mb-2">
             {s.icon}
-            <span className="font-mono text-[9px] uppercase tracking-wider text-foreground-muted whitespace-nowrap">{s.label}</span>
           </div>
           <div className={cn("font-display font-bold text-base tabular-nums", s.highlight ? "text-amber-200" : "text-foreground")}>{s.value}</div>
+          <span className="font-mono text-[9px] uppercase tracking-wider text-foreground-muted whitespace-nowrap mt-1 block">{s.label}</span>
         </div>
       ))}
     </div>
