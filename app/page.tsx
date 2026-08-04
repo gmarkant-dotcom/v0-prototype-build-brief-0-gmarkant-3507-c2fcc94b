@@ -10,25 +10,6 @@ import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { User, Building2, Users } from "lucide-react"
 
-const differentiators = [
-  {
-    title: "No-signup vendor bidding",
-    description: "Send an RFP link any vendor can open, review, and bid on with zero account creation. Live for 72 hours, tracked end to end.",
-  },
-  {
-    title: "Your network, imported in minutes",
-    description: "Scan your email or upload your existing vendor spreadsheet and your partner pool builds itself. No manual data entry.",
-  },
-  {
-    title: "AI-decomposed bids",
-    description: "Every bid broken into comparable cost components, scored against your criteria, compared side by side.",
-  },
-  {
-    title: "A track record on every vendor",
-    description: "Delivery performance scores accumulate with every engagement, so you award on evidence, not memory.",
-  },
-]
-
 const stages = [
   { number: "00", title: "Partner Pool", oneLiner: "Build your network. Get discovered.", ai: false },
   { number: "01", title: "RFP Broadcast", oneLiner: "Send scoped RFPs. Submit competitive bids.", ai: true },
@@ -41,14 +22,26 @@ const agencyFeatures = [
   {
     title: "00 - Partner Pool",
     description: "Build your vendor network by importing contacts from email, inviting directly, or discovering new partners on the marketplace.",
+    callout: {
+      title: "Your network, imported in minutes",
+      description: "Scan your email or upload your existing vendor spreadsheet and your partner pool builds itself. No manual data entry.",
+    },
   },
   {
     title: "01 - RFP Broadcast",
     description: "Analyze client briefs with AI, then send scoped RFPs to your pool or any vendor via Magic Link. They can respond without creating an account.",
+    callout: {
+      title: "No-signup vendor bidding",
+      description: "Send an RFP link any vendor can open, review, and bid on with zero account creation. Live for 72 hours, tracked end to end.",
+    },
   },
   {
     title: "02 - Bid Management",
     description: "Compare bids side by side with AI cost decomposition. Score against configurable criteria with AI pre-scoring and human override. Surface pricing gaps, scope risks, and the best value in seconds.",
+    callout: {
+      title: "AI-decomposed bids",
+      description: "Every bid broken into comparable cost components, scored against your criteria, compared side by side.",
+    },
   },
   {
     title: "03 - Onboarding",
@@ -57,6 +50,10 @@ const agencyFeatures = [
   {
     title: "04 - Delivery Performance",
     description: "Rate vendor delivery against the same criteria you scored their bid on. Build a reliability index that turns every project into lasting intelligence.",
+    callout: {
+      title: "A track record on every vendor",
+      description: "Delivery performance scores accumulate with every engagement, so you award on evidence, not memory.",
+    },
   },
 ]
 
@@ -182,32 +179,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Differentiators */}
-        <section className="py-10 md:py-14">
-          <div className="max-w-6xl mx-auto px-6">
-            <div className="text-center mb-8">
-              <div className="font-mono text-xs text-accent tracking-wider uppercase mb-4">
-                Why Ligament
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {differentiators.map((item) => (
-                <div
-                  key={item.title}
-                  className="p-5 rounded-lg bg-accent/5 border border-border border-l-4 border-l-accent hover:scale-[1.02] transition-transform duration-200"
-                >
-                  <h4 className="font-display font-bold text-sm text-foreground mb-2">
-                    {item.title}
-                  </h4>
-                  <p className="text-xs text-foreground-muted leading-relaxed">
-                    {item.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* Two Portals */}
         <section className="border-y border-border py-10 md:py-14">
           <div className="max-w-6xl mx-auto px-6">
@@ -259,6 +230,14 @@ export default function HomePage() {
                   <p className="text-xs text-foreground-muted leading-relaxed">
                     {feature.description}
                   </p>
+                  {feature.callout && (
+                    <div className="mt-3 pl-3 border-l-2 border-l-accent/50">
+                      <p className="text-xs text-foreground-muted leading-relaxed">
+                        <span className="font-bold text-foreground">{feature.callout.title}:</span>{" "}
+                        {feature.callout.description}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
