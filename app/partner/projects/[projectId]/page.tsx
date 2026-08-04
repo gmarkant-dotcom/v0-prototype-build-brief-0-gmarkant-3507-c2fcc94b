@@ -351,11 +351,11 @@ function PartnerActiveEngagementInner() {
               <dl className="space-y-2 text-sm">
                 <div>
                   <dt className="font-mono text-[10px] uppercase text-gray-500">Company</dt>
-                  <dd className="text-gray-900">{pageData.leadAgency?.companyName || "—"}</dd>
+                  <dd className="text-gray-900">{pageData.leadAgency?.companyName || "-"}</dd>
                 </div>
                 <div>
                   <dt className="font-mono text-[10px] uppercase text-gray-500">Contact name</dt>
-                  <dd className="text-gray-900">{pageData.leadAgency?.fullName || "—"}</dd>
+                  <dd className="text-gray-900">{pageData.leadAgency?.fullName || "-"}</dd>
                 </div>
                 <div>
                   <dt className="font-mono text-[10px] uppercase text-gray-500">Email</dt>
@@ -368,7 +368,7 @@ function PartnerActiveEngagementInner() {
                         {pageData.leadAgency.email}
                       </a>
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </dd>
                 </div>
@@ -443,7 +443,7 @@ function PartnerActiveEngagementInner() {
                         <div>
                           <h4 className="font-mono text-[10px] uppercase text-gray-500 mb-2">Proposal</h4>
                           <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                            {(eng.proposalText || "").trim() || "—"}
+                            {(eng.proposalText || "").trim() || "-"}
                           </p>
                         </div>
 
@@ -587,7 +587,7 @@ function PartnerActiveEngagementInner() {
                                             </div>
                                             {!cardOpen && (
                                               <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap">
-                                                {(u.notes || "").trim() || "—"}
+                                                {(u.notes || "").trim() || "-"}
                                               </p>
                                             )}
                                           </div>
@@ -610,7 +610,7 @@ function PartnerActiveEngagementInner() {
                                             <div>
                                               <div className="font-mono text-[10px] uppercase text-gray-500 mb-1">Notes</div>
                                               <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                                                {(u.notes || "").trim() || "—"}
+                                                {(u.notes || "").trim() || "-"}
                                               </p>
                                             </div>
                                           </div>

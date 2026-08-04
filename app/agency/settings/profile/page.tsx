@@ -611,7 +611,7 @@ export default function AgencyProfileSettingsPage() {
               className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
             <p className="text-xs text-foreground-muted mt-1">
-              Paste your Calendly or scheduling link here — partners will see this when you request a meeting.
+              Paste your Calendly or scheduling link here - partners will see this when you request a meeting.
             </p>
           </div>
           <label className="flex items-start justify-between gap-4 cursor-pointer">

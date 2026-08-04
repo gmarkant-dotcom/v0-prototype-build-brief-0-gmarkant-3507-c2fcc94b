@@ -672,7 +672,7 @@ function AgencyRFPContent() {
       console.error("Master brief generation failed:", error)
       if (error instanceof Error && error.name === "AbortError") {
         setGenerateMasterBriefError(
-          "Request timed out or was cancelled. Claude can take 30–90s. On Vercel Hobby, serverless functions are limited to ~10s—increase max duration (Pro) or set export const maxDuration on this route."
+          "Request timed out or was cancelled. Claude can take 30–90s. On Vercel Hobby, serverless functions are limited to ~10s - increase max duration (Pro) or set export const maxDuration on this route."
         )
       } else {
         setGenerateMasterBriefError(
@@ -783,7 +783,7 @@ function AgencyRFPContent() {
             ? errorText.trim() || `HTTP ${res.status}`
             : null,
         ].filter(Boolean)
-        throw new Error(parts.join(" — ") || "Generation failed")
+        throw new Error(parts.join(" - ") || "Generation failed")
       }
 
       if (!res.body) {
@@ -801,7 +801,7 @@ function AgencyRFPContent() {
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") {
         setAiTemplateError(
-          "Request timed out (125s). On Vercel Hobby, functions may cap earlier—upgrade or check /api/ai/rfp-output-template logs."
+          "Request timed out (125s). On Vercel Hobby, functions may cap earlier - upgrade or check /api/ai/rfp-output-template logs."
         )
       } else {
         setAiTemplateError(
@@ -1415,7 +1415,7 @@ function AgencyRFPContent() {
               <GlassCardHeader
                 label="Step 1a"
                 title="Client brief (source)"
-                description="Upload the client’s brief or paste text. We extract the text so the model can use your real requirements—not just the file name."
+                description="Upload the client’s brief or paste text. We extract the text so the model can use your real requirements - not just the file name."
               />
               
               {/* Upload Options */}
@@ -1459,7 +1459,7 @@ function AgencyRFPContent() {
                       <div className="font-display font-bold text-foreground mb-1">
                         Drop your file here
                       </div>
-                      <div className="font-mono text-[10px] text-foreground-muted">PDF, Word, PowerPoint, or text — click to browse (max 50MB)</div>
+                      <div className="font-mono text-[10px] text-foreground-muted">PDF, Word, PowerPoint, or text - click to browse (max 50MB)</div>
                     </label>
                   )}
                   
@@ -1551,7 +1551,7 @@ function AgencyRFPContent() {
                       <div className="font-mono text-[10px] text-success">
                         {isExtractingBrief
                           ? "Extracting text from document…"
-                          : "Ready for AI — text extracted from your file"}
+                          : "Ready for AI - text extracted from your file"}
                       </div>
                       {!isExtractingBrief && briefSourceText.trim() && (
                         <div className="font-mono text-[10px] text-foreground-muted mt-1">
@@ -1753,7 +1753,7 @@ function AgencyRFPContent() {
                 onClick={handleSkipOutputTemplate}
                 className="border-border text-foreground-muted hover:bg-white/5"
               >
-                Skip — Use Client Brief As-Is
+                Skip - Use Client Brief As-Is
               </Button>
             </div>
 

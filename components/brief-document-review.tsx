@@ -24,7 +24,7 @@ export function BriefDocumentReview({ url, fileName, contentType }: BriefDocumen
       <GlassCardHeader
         label="Review"
         title="Full document"
-        description="Original file you uploaded. Compare this with the extracted character count and the paste box below — especially for scanned PDFs."
+        description="Original file you uploaded. Compare this with the extracted character count and the paste box below - especially for scanned PDFs."
       />
       <div className="mt-4 space-y-3">
         <Button asChild variant="outline" size="sm" className="border-border text-foreground hover:bg-white/5">

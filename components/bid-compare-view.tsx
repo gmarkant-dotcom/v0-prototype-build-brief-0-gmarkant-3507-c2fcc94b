@@ -542,7 +542,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                               {item ? (
                                 <>
                                   <div className="text-foreground">${item.amount.toLocaleString("en-US")}</div>
-                                  <div className="text-foreground-muted">{item.description || "—"}</div>
+                                  <div className="text-foreground-muted">{item.description || "-"}</div>
                                 </>
                               ) : (
                                 <span className="text-foreground-muted italic">Not itemized</span>

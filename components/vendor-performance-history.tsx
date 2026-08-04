@@ -164,21 +164,21 @@ export function VendorPerformanceHistory({
           <StatTile label="Projects Reviewed" value={String(stats.total_projects_reviewed)} />
           <StatTile
             label={<HelpTerm term="delivery_performance" theme="dark">Avg Delivery Score</HelpTerm>}
-            value={stats.avg_delivery_score != null ? `${Math.round(stats.avg_delivery_score)}/100` : "—"}
+            value={stats.avg_delivery_score != null ? `${Math.round(stats.avg_delivery_score)}/100` : "-"}
           />
           <StatTile
             label="Avg Bid→Delivery Delta"
             value={
               stats.avg_bid_to_delivery_delta != null
                 ? `${stats.avg_bid_to_delivery_delta > 0 ? "+" : ""}${stats.avg_bid_to_delivery_delta}`
-                : "—"
+                : "-"
             }
             tone={stats.avg_bid_to_delivery_delta == null ? "neutral" : stats.avg_bid_to_delivery_delta >= 0 ? "positive" : "negative"}
           />
-          <StatTile label="On-Time Rate" value={stats.on_time_rate != null ? `${stats.on_time_rate}%` : "—"} />
+          <StatTile label="On-Time Rate" value={stats.on_time_rate != null ? `${stats.on_time_rate}%` : "-"} />
           <StatTile
             label="Would Work Again"
-            value={stats.would_work_again_rate != null ? `${stats.would_work_again_rate}%` : "—"}
+            value={stats.would_work_again_rate != null ? `${stats.would_work_again_rate}%` : "-"}
           />
         </div>
 

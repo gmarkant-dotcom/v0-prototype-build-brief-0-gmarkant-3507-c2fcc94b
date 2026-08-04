@@ -218,7 +218,7 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
             <span>{bid.client_name}</span>
           </>
         )}
-        {budget !== "—" && (
+        {budget !== "-" && (
           <>
             <span className="text-gray-300">·</span>
             <span>{budget}</span>
@@ -479,7 +479,7 @@ function PartnerRFPsContent() {
       const key = groupBy === "agency"
         ? (r.agency_company_name || "Unknown Agency").trim()
         : groupBy === "client"
-          ? ((r.client_name || "").trim() || "—")
+          ? ((r.client_name || "").trim() || "-")
           : (RFP_STATUSES.find(s => s.key === normaliseForTab(rowStatus(r)))?.label ?? "New")
       const list = map.get(key) ?? []
       list.push(r)

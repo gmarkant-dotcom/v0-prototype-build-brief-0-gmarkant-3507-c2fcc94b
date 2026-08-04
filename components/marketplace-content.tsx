@@ -259,7 +259,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                   {partner.bio || "Discoverable partner agency on Ligament Marketplace."}
                 </p>
                 <div className="mt-3 space-y-1">
-                  <p className="font-mono text-xs text-foreground-muted">{partner.location || "—"}</p>
+                  <p className="font-mono text-xs text-foreground-muted">{partner.location || "-"}</p>
                   {partner.company_website && normalizeWebsiteUrl(partner.company_website) ? (
                     <a
                       href={normalizeWebsiteUrl(partner.company_website) as string}
@@ -272,7 +272,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                   ) : (
                     <p className="font-mono text-xs text-foreground-muted">-</p>
                   )}
-                  <p className="font-mono text-xs text-foreground-muted">{partner.agency_type || "—"}</p>
+                  <p className="font-mono text-xs text-foreground-muted">{partner.agency_type || "-"}</p>
                 </div>
                 <div className="mt-4 flex items-center gap-2 flex-wrap">
                   <Button

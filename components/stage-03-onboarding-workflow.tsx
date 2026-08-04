@@ -541,7 +541,7 @@ export function Stage03OnboardingWorkflow() {
       ) : (
         <div className="space-y-6 mt-6">
           <GlassCard className="p-6 space-y-4">
-            <GlassCardHeader title="Partner" description="One package per send — pick the partner (assignment or awarded bid)." />
+            <GlassCardHeader title="Partner" description="One package per send - pick the partner (assignment or awarded bid)." />
             <div className="space-y-2">
               <Label>Partner</Label>
               <Select value={partnerSelectionKey} onValueChange={setPartnerSelectionKey}>
@@ -648,7 +648,7 @@ export function Stage03OnboardingWorkflow() {
           <GlassCard className="p-6 space-y-4">
             <GlassCardHeader
               title="Project documents"
-              description="Up to 10 items — paste a link or upload PDF/DOCX (same pattern as partner bid attachments)."
+              description="Up to 10 items - paste a link or upload PDF/DOCX (same pattern as partner bid attachments)."
             />
             <div className="flex justify-end">
               <Button

@@ -61,7 +61,7 @@ const demoOnboardingPackets: OnboardingPacket[] = [
     projectName: "NWSL Creator Content Series",
     agencyName: "Electric Animal",
     sentAt: "Mar 18, 2024",
-    message: "Welcome to the team! We're excited to partner with you on this project. Please review and complete the onboarding documents below before our kickoff call. Let me know if you have any questions. — Agency contact",
+    message: "Welcome to the team! We're excited to partner with you on this project. Please review and complete the onboarding documents below before our kickoff call. Let me know if you have any questions. - Agency contact",
     kickoffScheduleLink: "https://calendly.com/sarah-chen-ea/nwsl-kickoff",
     status: "in_progress",
     documents: [

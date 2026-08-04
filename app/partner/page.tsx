@@ -417,8 +417,8 @@ export default function PartnerDashboardPage() {
   } = useCappedList(activityItems, SECTION_LIST_CAP)
 
   const hasNoPayments = !isDemo && !paymentsLoading && (paymentSummary?.count ?? 0) === 0
-  const paidTileValue = isDemo ? "$58,200" : paymentsLoading ? "—" : formatUsdWhole(paymentSummary?.paid ?? 0)
-  const pendingTileValue = isDemo ? "$29,100" : paymentsLoading ? "—" : formatUsdWhole(paymentSummary?.pending ?? 0)
+  const paidTileValue = isDemo ? "$58,200" : paymentsLoading ? "-" : formatUsdWhole(paymentSummary?.paid ?? 0)
+  const pendingTileValue = isDemo ? "$29,100" : paymentsLoading ? "-" : formatUsdWhole(paymentSummary?.pending ?? 0)
 
   const upcomingPaymentRows = useMemo(() => {
     if (isDemo) return []
@@ -615,7 +615,7 @@ export default function PartnerDashboardPage() {
             </Link>
             <Link href="/partner/rfps" className="bg-white rounded-xl border border-gray-200 p-5 text-center hover:border-[#0C3535]/30 transition-colors">
               <div className="font-display font-bold text-3xl text-[#0C3535]">
-                {funnel?.winRate.rate != null ? `${Math.round(funnel.winRate.rate * 100)}%` : "—"}
+                {funnel?.winRate.rate != null ? `${Math.round(funnel.winRate.rate * 100)}%` : "-"}
               </div>
               <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Win Rate</div>
               <div className="text-[10px] text-gray-400 mt-1">
@@ -626,7 +626,7 @@ export default function PartnerDashboardPage() {
             </Link>
             <Link href="/partner/projects" className="bg-white rounded-xl border border-gray-200 p-5 text-center hover:border-[#0C3535]/30 transition-colors">
               <div className="font-display font-bold text-3xl text-[#0C3535]">
-                {activeProjectsLoading ? "—" : fetchedActiveProjects.length}
+                {activeProjectsLoading ? "-" : fetchedActiveProjects.length}
               </div>
               <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mt-1">Active Engagements</div>
             </Link>
@@ -720,7 +720,7 @@ export default function PartnerDashboardPage() {
                   <p className="text-sm text-gray-700 mt-2 italic">
                     &quot;{reliability.reliabilitySummary}&quot;
                     {reliability.reliabilitySummaryAgencyName && (
-                      <span className="not-italic text-gray-400"> — {reliability.reliabilitySummaryAgencyName}</span>
+                      <span className="not-italic text-gray-400"> - {reliability.reliabilitySummaryAgencyName}</span>
                     )}
                   </p>
                 )}

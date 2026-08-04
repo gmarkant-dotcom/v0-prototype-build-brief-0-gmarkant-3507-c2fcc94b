@@ -276,7 +276,7 @@ function MagicRfpContent() {
     setBriefGenerateError(null)
     const sourceText = brief.scopeDescription.trim()
     if (!sourceText) {
-      setBriefGenerateError("Add a scope description first — AI needs that text to work from.")
+      setBriefGenerateError("Add a scope description first - AI needs that text to work from.")
       return
     }
     if (!checkFeatureAccess("AI brief structuring")) {
@@ -312,7 +312,7 @@ function MagicRfpContent() {
           typeof payload.detail === "string" ? payload.detail : null,
           !payload.error && !payload.detail && !payload.hint ? errorText.trim() || `HTTP ${res.status}` : null,
         ].filter(Boolean)
-        throw new Error(parts.join(" — ") || "Generation failed")
+        throw new Error(parts.join(" - ") || "Generation failed")
       }
       if (!res.body) throw new Error("No stream body returned from template route")
 
@@ -380,7 +380,7 @@ function MagicRfpContent() {
     setTemplateGenerateError(null)
     const sourceText = brief.scopeDescription.trim()
     if (!sourceText) {
-      setTemplateGenerateError("Add a scope description above first — AI needs that text to infer structure.")
+      setTemplateGenerateError("Add a scope description above first - AI needs that text to infer structure.")
       return
     }
     if (!checkFeatureAccess("AI output template")) {
@@ -422,7 +422,7 @@ function MagicRfpContent() {
           typeof payload.detail === "string" ? payload.detail : null,
           !payload.error && !payload.detail && !payload.hint ? errorText.trim() || `HTTP ${res.status}` : null,
         ].filter(Boolean)
-        throw new Error(parts.join(" — ") || "Generation failed")
+        throw new Error(parts.join(" - ") || "Generation failed")
       }
       if (!res.body) throw new Error("No stream body returned from template route")
 
@@ -533,7 +533,7 @@ function MagicRfpContent() {
           setRecipients((prev) => prev.map((x) => (x.id === r.id ? { ...x, sendStatus: "sent" } : x)))
         }
       } catch {
-        results.push({ email: r.email, name: r.name, success: false, error: "Network error — please try again" })
+        results.push({ email: r.email, name: r.name, success: false, error: "Network error - please try again" })
         setRecipients((prev) => prev.map((x) => (x.id === r.id ? { ...x, sendStatus: "error" } : x)))
       }
       if (i < recipients.length - 1) await sleep(100)
@@ -612,7 +612,7 @@ function MagicRfpContent() {
             </h1>
           </div>
           <p className="font-sans text-sm text-foreground-muted max-w-2xl leading-relaxed">
-            Create a brief and send instant bid invitations to any vendor — no account required.
+            Create a brief and send instant bid invitations to any vendor - no account required.
           </p>
         </div>
 
@@ -647,7 +647,7 @@ function MagicRfpContent() {
               <GlassCardHeader
                 label="Step 1"
                 title="Project Brief"
-                description="The essentials — this is what recipients will see when they open their invitation."
+                description="The essentials - this is what recipients will see when they open their invitation."
               />
 
               <div className="flex justify-end -mt-2 mb-2">
@@ -696,7 +696,7 @@ function MagicRfpContent() {
                   </label>
                   {briefImportedMessage && (
                     <p className="font-mono text-[10px] text-teal-300 mb-2">
-                      Brief imported — review and edit below
+                      Brief imported - review and edit below
                     </p>
                   )}
                   <Textarea
@@ -967,7 +967,7 @@ function MagicRfpContent() {
               <GlassCardHeader
                 label="Step 2"
                 title="Add Recipients"
-                description="Every recipient gets their own 72-hour link — no Ligament account needed to bid."
+                description="Every recipient gets their own 72-hour link - no Ligament account needed to bid."
               />
 
               <div className="space-y-3">
@@ -1099,7 +1099,7 @@ function MagicRfpContent() {
                         {r.name ? `${r.name} · ${r.email}` : r.email}
                       </div>
                       <div className={cn("font-mono text-[10px]", r.success ? "text-teal-300" : "text-red-400")}>
-                        {r.success ? "Invitation sent — expires in 72 hours" : r.error || "Failed to send invitation"}
+                        {r.success ? "Invitation sent - expires in 72 hours" : r.error || "Failed to send invitation"}
                       </div>
                     </div>
                   </div>

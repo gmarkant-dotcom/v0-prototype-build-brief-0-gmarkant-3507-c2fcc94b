@@ -134,7 +134,7 @@ export function bestBudgetDisplay(row: BidRow): string | null {
   // so fall back to the response's own budget_proposal column.
   if (row.budget_proposal) {
     const display = formatBudgetForDisplay(row.budget_proposal)
-    return display === "—" ? null : display
+    return display === "-" ? null : display
   }
   return null
 }

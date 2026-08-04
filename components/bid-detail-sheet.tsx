@@ -804,7 +804,7 @@ function BidDetailSheetInner({
                               <TableCell className="text-foreground font-medium whitespace-normal">{item.category}</TableCell>
                               <TableCell className="text-foreground">${item.amount.toLocaleString("en-US")}</TableCell>
                               <TableCell className="text-foreground">{item.percentage_of_total}%</TableCell>
-                              <TableCell className="text-foreground-muted whitespace-normal">{item.description || "—"}</TableCell>
+                              <TableCell className="text-foreground-muted whitespace-normal">{item.description || "-"}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

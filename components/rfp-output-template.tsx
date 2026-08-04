@@ -183,7 +183,7 @@ export function RfpOutputTemplate({
                     <div className="font-display font-bold text-sm text-foreground truncate">{uploadedTemplate.name}</div>
                     <div className="font-mono text-[10px] text-foreground-muted">
                       {generatedTemplateText
-                        ? `Format loaded — ${generatedTemplateText.length.toLocaleString()} characters`
+                        ? `Format loaded - ${generatedTemplateText.length.toLocaleString()} characters`
                         : "No readable format text"}
                     </div>
                   </div>
@@ -329,7 +329,7 @@ export function RfpOutputTemplate({
               <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 text-accent animate-spin shrink-0" />
                 <p className="font-mono text-[10px] text-foreground-muted">
-                  Still generating — this may take a moment…
+                  Still generating - this may take a moment…
                 </p>
               </div>
             )}
@@ -348,8 +348,8 @@ export function RfpOutputTemplate({
                 {isTemplateReady && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
                 <p className="font-mono text-[10px] text-foreground-muted">
                   {isTemplateReady
-                    ? `Template ready — ${generatedTemplateText.length.toLocaleString()} characters loaded`
-                    : `AI format loading — ${generatedTemplateText.length.toLocaleString()} characters so far`}
+                    ? `Template ready - ${generatedTemplateText.length.toLocaleString()} characters loaded`
+                    : `AI format loading - ${generatedTemplateText.length.toLocaleString()} characters so far`}
                 </p>
               </div>
             )}

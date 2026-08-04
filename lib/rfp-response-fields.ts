@@ -215,7 +215,7 @@ export function formatBudgetForDisplay(raw: string | Record<string, unknown> | n
     }
   }
   const t = typeof raw === "string" ? raw.trim() : ""
-  return t || "—"
+  return t || "-"
 }
 
 function parseStoredTimeline(raw: string | Record<string, unknown> | null | undefined): StoredTimeline | null {
@@ -242,7 +242,7 @@ export function formatTimelineForDisplay(raw: string | Record<string, unknown> |
     }
   }
   const t = typeof raw === "string" ? raw.trim() : ""
-  return t || "—"
+  return t || "-"
 }
 
 export function isBudgetValidForSubmit(stored: string): boolean {

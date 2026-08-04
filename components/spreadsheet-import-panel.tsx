@@ -364,7 +364,7 @@ export function SpreadsheetImportPanel({
                 <div className="font-mono text-[10px] text-foreground-muted truncate">
                   {parsed.rows
                     .slice(0, 3)
-                    .map((row) => row[i] || "—")
+                    .map((row) => row[i] || "-")
                     .join(" · ")}
                 </div>
               </div>

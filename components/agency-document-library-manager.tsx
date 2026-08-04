@@ -287,7 +287,7 @@ export function AgencyDocumentLibraryManager() {
       <GlassCard className="p-6">
         <GlassCardHeader
           title="Agency documents"
-          description="NDA, MSA, and SOW — upload, replace, or link. Used when building onboarding packages."
+          description="NDA, MSA, and SOW - upload, replace, or link. Used when building onboarding packages."
         />
         <div className="grid md:grid-cols-3 gap-4 mt-4">
           {AGENCY_SLOTS.map((s) => renderSlot("agency", s))}

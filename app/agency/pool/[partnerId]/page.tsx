@@ -52,7 +52,7 @@ const PAYMENT_TERM_LABELS: Record<string, string> = {
 }
 
 function formatMoney(amount: number | null, currency: string): string {
-  if (amount == null || !Number.isFinite(amount)) return "—"
+  if (amount == null || !Number.isFinite(amount)) return "-"
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -68,7 +68,7 @@ function paymentTermsLabel(ri: PartnerRateInfoPayload): string {
   if (ri.payment_terms === "custom" && ri.payment_terms_custom?.trim()) {
     return ri.payment_terms_custom.trim()
   }
-  return PAYMENT_TERM_LABELS[ri.payment_terms] || ri.payment_terms || "—"
+  return PAYMENT_TERM_LABELS[ri.payment_terms] || ri.payment_terms || "-"
 }
 
 function websiteHref(url: string | null | undefined): string | null {
@@ -610,11 +610,11 @@ export default function AgencyPartnerProfilePage() {
             <dl className="space-y-3 text-sm">
               <div>
                 <dt className="font-mono text-[10px] text-foreground-muted uppercase">Hourly rate</dt>
-                <dd className="text-foreground">{ri.hourly_rate?.trim() || "—"}</dd>
+                <dd className="text-foreground">{ri.hourly_rate?.trim() || "-"}</dd>
               </div>
               <div>
                 <dt className="font-mono text-[10px] text-foreground-muted uppercase">Project minimum</dt>
-                <dd className="text-foreground">{ri.project_minimum?.trim() || "—"}</dd>
+                <dd className="text-foreground">{ri.project_minimum?.trim() || "-"}</dd>
               </div>
               <div>
                 <dt className="font-mono text-[10px] text-foreground-muted uppercase">Payment terms</dt>
@@ -622,7 +622,7 @@ export default function AgencyPartnerProfilePage() {
               </div>
               <div>
                 <dt className="font-mono text-[10px] text-foreground-muted uppercase">Notes</dt>
-                <dd className="text-foreground whitespace-pre-wrap">{ri.notes?.trim() || "—"}</dd>
+                <dd className="text-foreground whitespace-pre-wrap">{ri.notes?.trim() || "-"}</dd>
               </div>
             </dl>
           </GlassCard>

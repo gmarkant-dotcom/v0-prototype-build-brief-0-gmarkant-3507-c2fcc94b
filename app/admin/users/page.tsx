@@ -320,7 +320,7 @@ export default function AdminUsersPage() {
                         )}
                       </button>
                     ) : (
-                      <span className="text-xs text-white/30 font-mono">—</span>
+                      <span className="text-xs text-white/30 font-mono">-</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-center">

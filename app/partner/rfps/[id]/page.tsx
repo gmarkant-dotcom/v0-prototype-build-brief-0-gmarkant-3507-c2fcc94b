@@ -338,7 +338,7 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
     <div className="space-y-6 text-sm text-gray-700">
       <div>
         <h4 className="font-display font-bold text-[#0C3535] mb-1">Project</h4>
-        <p>{projectName || "—"}</p>
+        <p>{projectName || "-"}</p>
         {client && <p className="text-gray-600 mt-1">Client: {client}</p>}
       </div>
       {overview && (
@@ -763,7 +763,7 @@ export default function PartnerRfpDetailPage() {
         setBidSubmittedModalIsRevision(["under_review", "shortlisted", "meeting_requested"].includes(pre))
         setBidSubmittedModalOpen(true)
       } else {
-        setSuccessMsg("Demo mode — draft not saved.")
+        setSuccessMsg("Demo mode - draft not saved.")
       }
       return
     }
@@ -839,7 +839,7 @@ export default function PartnerRfpDetailPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         const msg =
-          [data?.error, data?.detail].filter(Boolean).join(" — ") || `Request failed (HTTP ${res.status})`
+          [data?.error, data?.detail].filter(Boolean).join(" - ") || `Request failed (HTTP ${res.status})`
         throw new Error(msg)
       }
       if (data.response) {
@@ -1011,7 +1011,7 @@ export default function PartnerRfpDetailPage() {
                 className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
               >
                 {ndaNotifyBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                I have signed the NDA — notify the agency
+                I have signed the NDA - notify the agency
               </Button>
               {ndaLink && (
                 <Button variant="outline" asChild>
@@ -1311,7 +1311,7 @@ export default function PartnerRfpDetailPage() {
                       versions.map((v) => {
                         const isOriginal = v.version_number === 1
                         const preview =
-                          (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "—"
+                          (v.proposal_text || "").length > 100 ? `${v.proposal_text.slice(0, 100)}…` : v.proposal_text || "-"
                         const versionAttachments = Array.isArray(v.attachments) ? v.attachments : []
                         const budgetObj = parseVersionBudgetFields(v.budget_proposal)
                         const timelineObj = parseVersionTimelineFields(v.timeline_proposal)
@@ -1319,7 +1319,7 @@ export default function PartnerRfpDetailPage() {
                           <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
                             <div className="flex items-center justify-between gap-3">
                               <div className="font-display font-bold text-[#0C3535] text-base">
-                                V{v.version_number} {isOriginal ? "— Original" : ""}
+                                V{v.version_number} {isOriginal ? "- Original" : ""}
                               </div>
                               <div className="font-mono text-[10px] text-gray-500">
                                 {new Date(v.submitted_at).toLocaleString()}
@@ -1331,7 +1331,7 @@ export default function PartnerRfpDetailPage() {
                                 <div className="text-gray-900">
                                   {budgetObj?.amount != null && budgetObj?.currency
                                     ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
-                                    : "—"}
+                                    : "-"}
                                 </div>
                               </div>
                               <div>
@@ -1339,11 +1339,11 @@ export default function PartnerRfpDetailPage() {
                                 <div className="text-gray-900">
                                   {timelineObj?.duration != null && timelineObj?.unit
                                     ? `${timelineObj.duration} ${timelineObj.unit}`
-                                    : "—"}
+                                    : "-"}
                                 </div>
                               </div>
                             </div>
-                            <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap">{preview || "—"}</p>
+                            <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap">{preview || "-"}</p>
                             <div className="mt-3">
                               <div className="font-mono text-[10px] uppercase text-gray-500 mb-2">Attachments</div>
                               {versionAttachments.length === 0 ? (
@@ -1717,7 +1717,7 @@ export default function PartnerRfpDetailPage() {
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div>
                   <h3 className="font-display font-bold text-sm text-[#0C3535]">Attachments</h3>
-                  <p className="text-xs text-gray-600 mt-0.5">Up to 6 — link or file (PDF, PPTX, DOCX) per row.</p>
+                  <p className="text-xs text-gray-600 mt-0.5">Up to 6 - link or file (PDF, PPTX, DOCX) per row.</p>
                 </div>
                 {canEdit && (
                   <Button
@@ -1915,7 +1915,7 @@ export default function PartnerRfpDetailPage() {
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
                   <div>
                     <div className="font-mono text-[10px] uppercase text-gray-500">Proposal</div>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{proposalText || "—"}</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{proposalText || "-"}</p>
                   </div>
                   <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                     <div>
@@ -1923,7 +1923,7 @@ export default function PartnerRfpDetailPage() {
                       <div className="text-gray-900">
                         {budgetObj?.amount != null && budgetObj?.currency
                           ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
-                          : "—"}
+                          : "-"}
                       </div>
                     </div>
                     <div>
@@ -1931,7 +1931,7 @@ export default function PartnerRfpDetailPage() {
                       <div className="text-gray-900">
                         {timelineObj?.duration != null && timelineObj?.unit
                           ? `${timelineObj.duration} ${timelineObj.unit}`
-                          : "—"}
+                          : "-"}
                       </div>
                     </div>
                   </div>
@@ -2039,7 +2039,7 @@ export default function PartnerRfpDetailPage() {
             </p>
             {isDemoDetail ? (
               <p className="mt-2 text-center text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                Demo mode — this response was not saved to the server.
+                Demo mode - this response was not saved to the server.
               </p>
             ) : null}
             <Button

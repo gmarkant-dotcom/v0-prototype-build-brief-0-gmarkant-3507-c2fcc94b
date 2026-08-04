@@ -136,7 +136,7 @@ function formatDateRange(start:string|null|undefined, end:string|null|undefined)
   if (start && end) return `${fmt(start)} – ${fmt(end)}`
   if (start) return `From ${fmt(start)}`
   if (end) return `Until ${fmt(end)}`
-  return "—"
+  return "-"
 }
 function parseBudgetNumber(raw:string|null|undefined): number {
   if (!raw) return 0
@@ -540,7 +540,7 @@ function ProjectCard({ project, onClick }: { project: PartnerProject; onClick: (
         </div>
         <div className="flex items-center gap-3 font-mono text-[10px] text-gray-500 flex-wrap">
           {project.scope_item_name && project.project_name !== project.scope_item_name && <span>{project.project_name}</span>}
-          {dateRange !== "—" && <span>{dateRange}</span>}
+          {dateRange !== "-" && <span>{dateRange}</span>}
           {budget > 0 && <span className="text-[#0C3535]">{formatBudgetK(budget)}</span>}
           {project.client_name && <span>Client: {project.client_name}</span>}
         </div>

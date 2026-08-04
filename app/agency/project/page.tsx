@@ -164,11 +164,11 @@ function SummaryBar({ partners, project, loading }: {
   const margin = clientBudget != null ? clientBudget - totalVendorSpend : null
 
   const stats = [
-    { label: "Client Budget", value: clientBudget != null ? formatMoney(clientBudget) : "—", icon: <TrendingUp className="w-3.5 h-3.5 text-sky-400" />, highlight: false },
+    { label: "Client Budget", value: clientBudget != null ? formatMoney(clientBudget) : "-", icon: <TrendingUp className="w-3.5 h-3.5 text-sky-400" />, highlight: false },
     { label: "Vendor Spend",  value: totalVendorSpend > 0 ? formatMoney(totalVendorSpend) : "$0", icon: <TrendingDown className="w-3.5 h-3.5 text-accent" />, highlight: false },
     {
       label: "Margin",
-      value: margin != null ? formatMoney(margin) : "—",
+      value: margin != null ? formatMoney(margin) : "-",
       icon: <DollarSign className={cn("w-3.5 h-3.5", margin == null ? "text-foreground-muted" : margin >= 0 ? "text-emerald-400" : "text-red-400")} />,
       highlight: false,
     },
@@ -353,7 +353,7 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
                           {(() => {
                             const amt = parseBudgetAmount(row.budgetProposal)
                             const cur = parseBudgetCurrency(row.budgetProposal)
-                            return amt != null ? formatMoney(amt, cur) : "—"
+                            return amt != null ? formatMoney(amt, cur) : "-"
                           })()}
                         </div>
                       </div>
@@ -363,9 +363,9 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
                           {(() => {
                             const s = currentProject.startDate
                             const e = currentProject.endDate
-                            if (!s || !e) return "—"
+                            if (!s || !e) return "-"
                             const span = new Date(e).getTime() - new Date(s).getTime()
-                            if (span <= 0) return "—"
+                            if (span <= 0) return "-"
                             const today = new Date(); today.setHours(0,0,0,0)
                             const pct = Math.round(Math.min(100, Math.max(0, (today.getTime() - new Date(s).getTime()) / span * 100)))
                             return `${pct}%`
