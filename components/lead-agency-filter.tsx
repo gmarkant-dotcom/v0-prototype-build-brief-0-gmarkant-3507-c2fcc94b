@@ -27,7 +27,7 @@ export function LeadAgencyFilter({ className }: { className?: string }) {
 
   if (isLoading) {
     return (
-      <div className={cn("h-9 w-48 bg-white/5 rounded-lg animate-pulse", className)} />
+      <div className={cn("h-9 w-48 bg-gray-100 rounded-lg animate-pulse", className)} />
     )
   }
 
@@ -155,7 +155,7 @@ export function LeadAgencyFilterCompact({ className }: { className?: string }) {
       {selectedAgencyId && (
         <button
           onClick={() => setSelectedAgencyId(null)}
-          className="p-1 hover:bg-white/10 rounded transition-colors text-foreground"
+          className="p-1 hover:bg-gray-100 rounded transition-colors text-vendor-foreground"
           title="Clear filter"
         >
           <X className="w-3 h-3" />
