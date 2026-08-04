@@ -19,7 +19,7 @@ type MagicTokenRow = {
 }
 
 function statusPill(status: string) {
-  if (status === "submitted") return { label: "Submitted", className: "bg-emerald-500/15 text-emerald-300" }
+  if (status === "submitted") return { label: "Submitted", className: "bg-success/15 text-success" }
   if (status === "expired") return { label: "Expired", className: "bg-red-500/15 text-red-300" }
   return { label: "Pending", className: "bg-amber-500/15 text-amber-300" }
 }

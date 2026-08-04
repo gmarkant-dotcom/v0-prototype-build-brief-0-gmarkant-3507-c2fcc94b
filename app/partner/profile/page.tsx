@@ -769,10 +769,10 @@ export default function PartnerProfilePage() {
             onClick={handleSave}
             disabled={saving}
             className={cn(
-              "transition-all min-w-[140px] rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60",
-              saved 
-                ? "bg-green-600 hover:bg-green-600" 
-                : "bg-[#0C3535] hover:bg-[#0C3535]/90"
+              "transition-all min-w-[140px] rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60",
+              saved
+                ? "bg-success hover:bg-success text-accent-foreground"
+                : "bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
             )}
           >
             {saving ? "Saving..." : saved ? "Saved Successfully" : "Save Changes"}
@@ -1052,7 +1052,7 @@ export default function PartnerProfilePage() {
               disabled={!selectedPartnershipId || contextSaving}
               className={cn(
                 "min-w-[120px] bg-[#0C3535] text-white hover:bg-[#0C3535]/90",
-                contextSaved && "bg-green-600 hover:bg-green-600"
+                contextSaved && "bg-success hover:bg-success text-accent-foreground"
               )}
             >
               {contextSaving ? "Saving..." : contextSaved ? "Saved ✓" : "Save Context"}

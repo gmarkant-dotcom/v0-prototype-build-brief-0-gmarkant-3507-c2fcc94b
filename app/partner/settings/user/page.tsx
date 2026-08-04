@@ -226,7 +226,7 @@ export default function PartnerUserProfilePage() {
               {saving ? "Saving..." : "Save Changes"}
             </Button>
             {saveSuccess && (
-              <p className="text-sm mt-2 text-green-700">
+              <p className="text-sm mt-2 text-success">
                 Settings saved
               </p>
             )}
@@ -322,7 +322,7 @@ export default function PartnerUserProfilePage() {
           </Button>
         </div>
 
-        {message && <p className="text-sm text-green-700">{message}</p>}
+        {message && <p className="text-sm text-success">{message}</p>}
         {errorMessage && <p className="text-sm text-red-700">{errorMessage}</p>}
       </div>
     </PartnerLayout>

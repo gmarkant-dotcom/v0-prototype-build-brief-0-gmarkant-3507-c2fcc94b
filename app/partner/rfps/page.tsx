@@ -74,7 +74,7 @@ const STATUS_BADGE: Record<string, { bg: string; border: string; text: string; l
   under_review:      { bg: "bg-amber-50",         border: "border-amber-200",       text: "text-amber-700",  label: "Changes Requested" },
   shortlisted:       { bg: "bg-blue-50",          border: "border-blue-200",        text: "text-blue-700",   label: "Shortlisted" },
   meeting_requested: { bg: "bg-cyan-50",          border: "border-cyan-200",        text: "text-cyan-700",   label: "Meeting Requested" },
-  awarded:           { bg: "bg-emerald-50",       border: "border-emerald-200",     text: "text-emerald-700",label: "Awarded" },
+  awarded:           { bg: "bg-success/15",       border: "border-success/30",     text: "text-success",label: "Awarded" },
   declined:          { bg: "bg-red-50",           border: "border-red-200",         text: "text-red-700",    label: "Declined" },
   bid_submitted:     { bg: "bg-sky-50",           border: "border-sky-200",         text: "text-sky-700",    label: "Submitted" },
   feedback_received: { bg: "bg-amber-50",         border: "border-amber-200",       text: "text-amber-700",  label: "Feedback" },
@@ -200,7 +200,7 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
             !isTerminal
               ? "bg-gray-100 border-gray-200 text-gray-500"
               : bid.status === "awarded"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                ? "bg-success/15 border-success/30 text-success"
                 : "bg-red-50 border-red-200 text-red-700"
           )}>
             {!isTerminal ? "In Progress" : bid.status === "awarded" ? "Won" : "Lost"}
@@ -313,7 +313,7 @@ function GroupSection({
           <div className="font-mono text-[11px] text-gray-500 mt-0.5">
             {rows.length} RFP{rows.length !== 1 ? "s" : ""}
             {(counts["awarded"] ?? 0) > 0 && (
-              <span className="ml-2 text-emerald-600">· {counts["awarded"]} awarded</span>
+              <span className="ml-2 text-success">· {counts["awarded"]} awarded</span>
             )}
           </div>
         </div>

@@ -217,7 +217,7 @@ export function PartnerProjectProductionDetail({
                   <FileText className="w-4 h-4" />
                   <span className="font-display font-bold text-[#0C3535]">NDA</span>
                   {nda?.status === "signed" ? (
-                    <CheckCircle className="w-4 h-4 text-green-600 ml-auto" />
+                    <CheckCircle className="w-4 h-4 text-success ml-auto" />
                   ) : (
                     <Clock className="w-4 h-4 text-amber-500 ml-auto" />
                   )}
@@ -240,7 +240,7 @@ export function PartnerProjectProductionDetail({
                   <FileText className="w-4 h-4" />
                   <span className="font-display font-bold text-[#0C3535]">Scope of work</span>
                   {sow?.status === "signed" ? (
-                    <CheckCircle className="w-4 h-4 text-green-600 ml-auto" />
+                    <CheckCircle className="w-4 h-4 text-success ml-auto" />
                   ) : (
                     <Clock className="w-4 h-4 text-amber-500 ml-auto" />
                   )}

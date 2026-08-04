@@ -63,7 +63,7 @@ export function InlineProjectSelector({ selectedProject, projects, isLoadingProj
               onClick={() => { onSelect(project); setOpen(false) }}
               className={cn("w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left", selectedProject?.id === project.id && "bg-accent/10")}
             >
-              <div className={cn("w-2 h-2 rounded-full shrink-0", project.status === "active" ? "bg-green-400" : project.status === "on_hold" ? "bg-gray-400" : "bg-yellow-400")} />
+              <div className={cn("w-2 h-2 rounded-full shrink-0", project.status === "active" ? "bg-success" : project.status === "on_hold" ? "bg-gray-400" : "bg-yellow-400")} />
               <div className="flex-1 min-w-0">
                 <div className="font-display font-bold text-sm text-foreground truncate">{project.name}</div>
                 <div className="font-mono text-[10px] text-foreground-muted">{project.client}</div>

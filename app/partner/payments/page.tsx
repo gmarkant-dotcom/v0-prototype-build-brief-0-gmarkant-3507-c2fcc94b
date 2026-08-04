@@ -217,7 +217,7 @@ function formatDueDate(iso: string) {
 
 function statusBadgeClass(status: string) {
   const s = status.toLowerCase()
-  if (s === "paid") return "bg-green-100 text-green-800"
+  if (s === "paid") return "bg-success/15 text-success"
   if (s === "invoiced") return "bg-amber-100 text-amber-800"
   return "bg-gray-100 text-gray-600"
 }
@@ -883,7 +883,7 @@ function PartnerPaymentsPageLegacy() {
               </div>
 
               {saveSuccess ? (
-                <p className="text-sm text-green-700" role="status">
+                <p className="text-sm text-success" role="status">
                   Rate information saved for this agency.
                 </p>
               ) : null}

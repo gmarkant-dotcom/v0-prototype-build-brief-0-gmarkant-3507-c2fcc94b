@@ -269,7 +269,7 @@ function BidCard({
           <Link
             href={`/agency/project?projectId=${encodeURIComponent(row.inbox.project_id)}&responseId=${encodeURIComponent(row.id)}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 font-mono text-[10px] text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/10 rounded-md px-2 py-1 transition-colors"
+            className="flex items-center gap-1 font-mono text-[10px] text-success border border-success/30 hover:bg-success/10 rounded-md px-2 py-1 transition-colors"
           >
             Review Delivery
           </Link>
@@ -450,7 +450,7 @@ function GroupSection({
           <div className="font-mono text-[11px] text-foreground-muted mt-0.5">
             {rows.length} RFP{rows.length !== 1 ? "s" : ""}
             {counts["awarded"] > 0 && (
-              <span className="ml-2 text-emerald-400">· {counts["awarded"]} awarded</span>
+              <span className="ml-2 text-success">· {counts["awarded"]} awarded</span>
             )}
           </div>
         </div>

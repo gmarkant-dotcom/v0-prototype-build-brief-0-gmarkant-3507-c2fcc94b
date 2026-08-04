@@ -1515,7 +1515,7 @@ function PartnerPoolPageInner() {
                             : pending
                               ? "border-amber-500/25"
                               : showActiveUi
-                                ? "border-green-500/25"
+                                ? "border-success/25"
                                 : "border-border",
                         )}
                       >
@@ -1528,14 +1528,14 @@ function PartnerPoolPageInner() {
                                 : pending
                                   ? "bg-amber-500/20"
                                   : showActiveUi
-                                    ? "bg-green-500/20"
+                                    ? "bg-success/20"
                                     : "bg-white/10",
                             )}
                           >
                             <Building2
                               className={cn(
                                 "w-4 h-4",
-                                bl ? "text-red-400" : pending ? "text-amber-400" : showActiveUi ? "text-green-400" : "text-foreground-muted",
+                                bl ? "text-red-400" : pending ? "text-amber-400" : showActiveUi ? "text-success" : "text-foreground-muted",
                               )}
                             />
                           </div>
@@ -1545,7 +1545,7 @@ function PartnerPoolPageInner() {
                             {partner && (
                               <div className="font-mono text-[10px] mt-1 text-foreground-muted">
                                 {partner.ndaSigned ? (
-                                  <span className="text-green-400">NDA on file</span>
+                                  <span className="text-success">NDA on file</span>
                                 ) : (
                                   <span className="text-amber-300">NDA pending</span>
                                 )}
@@ -1563,7 +1563,7 @@ function PartnerPoolPageInner() {
                                   ? "bg-amber-500/10 text-amber-400"
                                   : eff === "New"
                                     ? "bg-accent/10 text-accent"
-                                    : "bg-green-500/10 text-green-400",
+                                    : "bg-success/10 text-success",
                             )}
                           >
                             {eff}
@@ -1604,7 +1604,7 @@ function PartnerPoolPageInner() {
                           : pending
                             ? "border-amber-500/25"
                             : isActive
-                              ? "border-green-500/25"
+                              ? "border-success/25"
                               : "border-border",
                       )}
                     >
@@ -1618,7 +1618,7 @@ function PartnerPoolPageInner() {
                                 : pending
                                   ? "bg-amber-500/20"
                                   : isActive
-                                    ? "bg-green-500/20"
+                                    ? "bg-success/20"
                                     : "bg-white/10"
                               : "bg-white/10",
                           )}
@@ -1629,7 +1629,7 @@ function PartnerPoolPageInner() {
                             <Building2
                               className={cn(
                                 "w-4 h-4",
-                                bl ? "text-red-400" : pending ? "text-amber-400" : isActive ? "text-green-400" : "text-foreground-muted",
+                                bl ? "text-red-400" : pending ? "text-amber-400" : isActive ? "text-success" : "text-foreground-muted",
                               )}
                             />
                           )}
@@ -1639,7 +1639,7 @@ function PartnerPoolPageInner() {
                           <div className="font-mono text-[10px] text-foreground-muted">{subLine}</div>
                           <div className="font-mono text-[10px] mt-1">
                             {p.ndaConfirmedAt ? (
-                              <span className="text-green-400">
+                              <span className="text-success">
                                 NDA signed{" "}
                                 {new Date(p.ndaConfirmedAt).toLocaleDateString("en-US", {
                                   month: "short",
@@ -1651,7 +1651,7 @@ function PartnerPoolPageInner() {
                               <span className="text-amber-300">NDA pending</span>
                             )}
                             {p.msaConfirmedAt ? (
-                              <span className="text-green-400 ml-2">MSA signed</span>
+                              <span className="text-success ml-2">MSA signed</span>
                             ) : (
                               <span className="text-foreground-muted ml-2">MSA open</span>
                             )}
@@ -1674,7 +1674,7 @@ function PartnerPoolPageInner() {
                             variant="outline"
                             disabled={confirmingNdaFor === p.id}
                             onClick={() => handleConfirmNdaSigned(p.id)}
-                            className="h-7 border-green-500/40 text-green-300 hover:bg-green-500/10"
+                            className="h-7 border-success/40 text-success hover:bg-success/10"
                           >
                             {confirmingNdaFor === p.id ? "Saving..." : "Confirm NDA Signed"}
                           </Button>
@@ -1700,7 +1700,7 @@ function PartnerPoolPageInner() {
                                 : isNew
                                   ? "bg-accent/10 text-accent"
                                   : p.status === "active"
-                                    ? "bg-green-500/10 text-green-400"
+                                    ? "bg-success/10 text-success"
                                     : "bg-white/10 text-foreground-muted",
                           )}
                         >
@@ -2376,12 +2376,12 @@ function PartnerPoolPageInner() {
                   "w-12 h-12 rounded-full flex items-center justify-center",
                   successModal.title.includes('Unable') 
                     ? "bg-red-500/10" 
-                    : "bg-green-500/10"
+                    : "bg-success/10"
                 )}>
                   {successModal.title.includes('Unable') ? (
                     <AlertCircle className="w-6 h-6 text-red-400" />
                   ) : (
-                    <CheckCircle className="w-6 h-6 text-green-400" />
+                    <CheckCircle className="w-6 h-6 text-success" />
                   )}
                 </div>
                 <div>

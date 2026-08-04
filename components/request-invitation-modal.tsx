@@ -87,8 +87,8 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
       >
         {success ? (
           <div className="text-center py-6">
-            <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-green-400" />
+            <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-success" />
             </div>
             <h2 className="font-display font-bold text-xl text-foreground mb-2">
               Request Sent!

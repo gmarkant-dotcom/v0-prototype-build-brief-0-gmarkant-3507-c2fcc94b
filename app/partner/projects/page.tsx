@@ -110,19 +110,19 @@ const MILESTONE_LABEL: Record<string,string> = {
 }
 
 const ON_TIME_BADGE: Record<string, { label: string; className: string }> = {
-  yes:     { label: "On Time",         className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  yes:     { label: "On Time",         className: "bg-success/15 text-success border-success/30" },
   partial: { label: "Partially On Time", className: "bg-amber-50 text-amber-700 border-amber-200" },
   no:      { label: "Not On Time",     className: "bg-red-50 text-red-700 border-red-200" },
 }
 const ON_BUDGET_BADGE: Record<string, { label: string; className: string }> = {
-  yes:   { label: "On Budget",    className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  under: { label: "Under Budget", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  yes:   { label: "On Budget",    className: "bg-success/15 text-success border-success/30" },
+  under: { label: "Under Budget", className: "bg-success/15 text-success border-success/30" },
   over:  { label: "Over Budget",  className: "bg-red-50 text-red-700 border-red-200" },
   no:    { label: "Not On Budget", className: "bg-red-50 text-red-700 border-red-200" },
 }
 
 const STATUS_BADGE: Record<string,{bg:string;text:string;border:string}> = {
-  on_track: {bg:"bg-emerald-500/15",text:"text-emerald-300",border:"border-emerald-500/40"},
+  on_track: {bg:"bg-success/15",text:"text-success",border:"border-success/40"},
   at_risk:  {bg:"bg-amber-500/15",  text:"text-amber-200",  border:"border-amber-500/40"},
   delayed:  {bg:"bg-red-500/15",    text:"text-red-300",    border:"border-red-500/40"},
   blocked:  {bg:"bg-red-500/15",    text:"text-red-300",    border:"border-red-500/40"},
@@ -263,7 +263,7 @@ function StatusTab({ project }: { project: PartnerProject }) {
             placeholder="Progress update, blockers, next steps…"
             className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 resize-none" />
         </div>
-        {submitMsg && <p className={cn("text-sm", submitMsg.includes("success") ? "text-emerald-600" : "text-red-600")}>{submitMsg}</p>}
+        {submitMsg && <p className={cn("text-sm", submitMsg.includes("success") ? "text-success" : "text-red-600")}>{submitMsg}</p>}
         <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
           {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
           {submitting ? "Submitting…" : "Submit Status Update"}
@@ -287,7 +287,7 @@ function StatusTab({ project }: { project: PartnerProject }) {
                     {b && <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider", b.bg, b.text, b.border)}>{WORKFLOW_LABEL[u.status]||u.status}</span>}
                     <span className="font-mono text-[9px] text-gray-500">{BUDGET_LABEL[u.budget_status]||u.budget_status}</span>
                     <span className="font-mono text-[9px] text-gray-500">{u.completion_pct}% complete</span>
-                    {u.is_resolved && <span className="flex items-center gap-1 font-mono text-[9px] text-emerald-600"><CheckCircle className="w-2.5 h-2.5" />Resolved</span>}
+                    {u.is_resolved && <span className="flex items-center gap-1 font-mono text-[9px] text-success"><CheckCircle className="w-2.5 h-2.5" />Resolved</span>}
                   </div>
                   {u.notes && <p className="text-xs text-gray-700">{u.notes}</p>}
                   <p className="font-mono text-[10px] text-gray-400">{fmtDate(u.created_at)}</p>
@@ -440,23 +440,23 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
             {milestones.map(m => {
               const isPaid = m.status === "payment_received"
               return (
-                <div key={m.id} className={cn("rounded-lg border p-3 space-y-1.5", isPaid ? "border-emerald-200 bg-emerald-50" : "border-gray-200 bg-white")}>
+                <div key={m.id} className={cn("rounded-lg border p-3 space-y-1.5", isPaid ? "border-success/30 bg-success/15" : "border-gray-200 bg-white")}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="font-display font-bold text-sm text-[#0C3535]">{m.title}</div>
                       <div className="flex items-center gap-2 mt-0.5 font-mono text-[10px] text-gray-500 flex-wrap">
                         <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />{m.currency} {m.amount.toLocaleString("en-US")}</span>
                         <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Due {fmtDate(m.due_date)}</span>
-                        <span className={cn("px-1.5 py-0.5 rounded font-mono text-[9px] uppercase", isPaid ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600")}>
+                        <span className={cn("px-1.5 py-0.5 rounded font-mono text-[9px] uppercase", isPaid ? "bg-success/15 text-success" : "bg-gray-100 text-gray-600")}>
                           {MILESTONE_LABEL[m.status]||m.status}
                         </span>
                       </div>
                       {m.notes && <p className="text-xs text-gray-500 mt-1 italic">{m.notes}</p>}
-                      {m.paid_at && <p className="font-mono text-[10px] text-emerald-600">Received {fmtDate(m.paid_at)}</p>}
+                      {m.paid_at && <p className="font-mono text-[10px] text-success">Received {fmtDate(m.paid_at)}</p>}
                     </div>
                     {!isPaid && m.status === "payment_sent" && (
                       <Button size="sm" variant="outline"
-                        className="h-7 border-emerald-300 text-emerald-700 hover:bg-emerald-50 shrink-0"
+                        className="h-7 border-success/30 text-success hover:bg-success/15 shrink-0"
                         disabled={confirmingMilestone === m.id}
                         onClick={() => handleConfirmPayment(m.id)}>
                         {confirmingMilestone === m.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <CheckCircle className="w-3 h-3 mr-1" />}
@@ -533,7 +533,7 @@ function ProjectCard({ project, onClick }: { project: PartnerProject; onClick: (
           <span className="font-display font-bold text-base text-[#0C3535] truncate">{project.scope_item_name || project.project_name}</span>
           {project.status && (
             <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
-              project.status==="active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-600 border-gray-200")}>
+              project.status==="active" ? "bg-success/15 text-success border-success/30" : "bg-gray-100 text-gray-600 border-gray-200")}>
               {project.status.replace(/_/g," ")}
             </span>
           )}

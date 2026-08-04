@@ -47,7 +47,7 @@ function StatTile({ label, value, tone = "neutral" }: { label: React.ReactNode; 
       <div
         className={cn(
           "font-display font-bold text-base",
-          tone === "positive" ? "text-emerald-300" : tone === "negative" ? "text-red-300" : "text-foreground"
+          tone === "positive" ? "text-success" : tone === "negative" ? "text-red-300" : "text-foreground"
         )}
       >
         {value}
@@ -209,7 +209,7 @@ export function VendorPerformanceHistory({
                     Bid {Math.round(r.bid_composite_score)}/100
                     {r.delta != null && r.delta !== 0 && (
                       r.delta > 0 ? (
-                        <TrendingUp className="w-3 h-3 text-emerald-400" />
+                        <TrendingUp className="w-3 h-3 text-success" />
                       ) : (
                         <TrendingDown className="w-3 h-3 text-red-400" />
                       )
@@ -221,7 +221,7 @@ export function VendorPerformanceHistory({
                     className={cn(
                       "px-2 py-0.5 rounded-full border uppercase",
                       r.on_time === "yes"
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                        ? "border-success/40 bg-success/10 text-success"
                         : r.on_time === "partial"
                           ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
                           : "border-red-500/40 bg-red-500/10 text-red-300"

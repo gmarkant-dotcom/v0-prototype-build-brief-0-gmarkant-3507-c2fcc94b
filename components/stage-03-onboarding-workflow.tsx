@@ -84,7 +84,7 @@ function libraryUrl(row: LibraryRow): string {
 function msaStatusBadge(status: string) {
   const s = status.toLowerCase()
   const base = "font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border"
-  if (s === "signed") return cn(base, "border-emerald-500/50 bg-emerald-500/15 text-emerald-200")
+  if (s === "signed") return cn(base, "border-success/50 bg-success/15 text-success")
   if (s === "sent") return cn(base, "border-amber-500/50 bg-amber-500/15 text-amber-200")
   if (s === "expired") return cn(base, "border-red-500/50 bg-red-500/15 text-red-200")
   return cn(base, "border-border bg-white/5 text-foreground-muted")
@@ -770,7 +770,7 @@ export function Stage03OnboardingWorkflow() {
                         )}
                       </Button>
                       {p.storedUrl && (
-                        <span className="text-xs text-emerald-300 font-mono inline-flex items-center gap-1">
+                        <span className="text-xs text-success font-mono inline-flex items-center gap-1">
                           <CheckCircle className="w-3.5 h-3.5" aria-hidden />
                           Uploaded
                         </span>
@@ -982,8 +982,8 @@ export function Stage03OnboardingWorkflow() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-center mb-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 border border-emerald-500/40">
-                <CheckCircle className="h-7 w-7 text-emerald-300" aria-hidden />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/15 border border-success/40">
+                <CheckCircle className="h-7 w-7 text-success" aria-hidden />
               </div>
             </div>
             <h2 id="onboarding-sent-title" className="font-display text-center text-lg font-bold text-foreground">

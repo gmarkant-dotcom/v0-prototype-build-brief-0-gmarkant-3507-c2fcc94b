@@ -93,7 +93,7 @@ type DashboardData = {
 }
 
 const STAGE_STYLES: Record<string, { color: string; bg: string }> = {
-  active_engagements: { color: "text-emerald-300", bg: "bg-emerald-500/15 border-emerald-500/35" },
+  active_engagements: { color: "text-teal-300", bg: "bg-teal-500/15 border-teal-500/35" },
   // Indigo: distinct from every other hue already in this map (emerald/sky/slate) and from
   // the reserved semantics (success/warning/destructive, role-identity purple, meeting-cyan).
   bid_management: { color: "text-indigo-300", bg: "bg-indigo-500/15 border-indigo-500/35" },
@@ -457,7 +457,7 @@ function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
 function indicatorClass(severity: UsageSeverity): string {
   if (severity === "blocked") return "[&>[data-slot=progress-indicator]]:bg-red-500"
   if (severity === "warning") return "[&>[data-slot=progress-indicator]]:bg-amber-500"
-  return "[&>[data-slot=progress-indicator]]:bg-emerald-500"
+  return "[&>[data-slot=progress-indicator]]:bg-success"
 }
 
 function UsageCard() {

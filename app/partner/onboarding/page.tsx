@@ -278,9 +278,9 @@ export default function PartnerOnboardingPage() {
   
   const getStatusColor = (status: DocumentStatus) => {
     switch (status) {
-      case "signed": return "bg-green-100 text-green-700 border-green-200"
-      case "uploaded": return "bg-green-100 text-green-700 border-green-200"
-      case "acknowledged": return "bg-green-100 text-green-700 border-green-200"
+      case "signed": return "bg-success/15 text-success border-success/30"
+      case "uploaded": return "bg-success/15 text-success border-success/30"
+      case "acknowledged": return "bg-success/15 text-success border-success/30"
       case "viewed": return "bg-blue-100 text-blue-700 border-blue-200"
       case "pending": return "bg-yellow-100 text-yellow-700 border-yellow-200"
       default: return "bg-gray-100 text-gray-600 border-gray-200"
@@ -519,7 +519,7 @@ export default function PartnerOnboardingPage() {
                             p.status === "reviewed"
                               ? isSel
                                 ? "bg-white/20"
-                                : "bg-green-100 text-green-800"
+                                : "bg-success/15 text-success"
                               : isSel
                                 ? "bg-white/20"
                                 : "bg-amber-100 text-amber-900"
@@ -616,7 +616,7 @@ export default function PartnerOnboardingPage() {
                       )}
                     </Button>
                   ) : (
-                    <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900 flex items-center gap-2">
+                    <div className="rounded-xl border border-success/30 bg-success/15 p-4 text-sm text-success flex items-center gap-2">
                       <CheckCircle className="w-5 h-5 shrink-0" />
                       You marked this package as reviewed
                       {selectedApi.partner_reviewed_at &&
@@ -673,7 +673,7 @@ export default function PartnerOnboardingPage() {
                         selectedPacket?.id === packet.id
                           ? "bg-white/20 text-white"
                           : packet.status === "complete" 
-                            ? "bg-green-100 text-green-700"
+                            ? "bg-success/15 text-success"
                             : "bg-yellow-100 text-yellow-700"
                       )}>
                         {packet.status.replace("_", " ")}
@@ -787,7 +787,7 @@ export default function PartnerOnboardingPage() {
                                   ? "bg-yellow-50 border-yellow-200"
                                   : doc.status === "pending"
                                   ? "bg-gray-50 border-gray-200"
-                                  : "bg-green-50 border-green-200"
+                                  : "bg-success/15 border-success/30"
                               )}
                             >
                               <div className="flex items-start gap-4">
@@ -896,8 +896,8 @@ export default function PartnerOnboardingPage() {
                 
                 {/* Completion Status */}
                 {requiredCompletedCount === requiredCount && (
-                  <div className="bg-green-50 rounded-xl border border-green-200 p-6 text-center">
-                    <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-600" />
+                  <div className="bg-success/15 rounded-xl border border-success/30 p-6 text-center">
+                    <CheckCircle className="w-12 h-12 mx-auto mb-3 text-success" />
                     <div className="font-display font-bold text-xl text-[#0C3535] mb-2">
                       Onboarding Complete!
                     </div>

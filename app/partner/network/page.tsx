@@ -213,11 +213,11 @@ function getStatusBadge(status: string, surface: "dark" | "light") {
       )
     case "active":
       return surface === "dark" ? (
-        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-emerald-500/25 text-emerald-100 ring-1 ring-emerald-400/50">
+        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-success/25 text-success ring-1 ring-success/50">
           Active Partnership
         </span>
       ) : (
-        <span className="bg-green-100 text-green-800 border border-green-200 font-medium text-xs px-2 py-1 rounded-full">
+        <span className="bg-success/15 text-success border border-success/30 font-medium text-xs px-2 py-1 rounded-full">
           Active Partnership
         </span>
       )
@@ -1003,7 +1003,7 @@ export default function AgencyNetworkPage() {
                               </div>
                             ) : request?.status === "approved" ? (
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-medium">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success/15 text-success text-xs font-medium">
                                   <CheckCircle className="w-3.5 h-3.5" />
                                   In Network
                                 </span>

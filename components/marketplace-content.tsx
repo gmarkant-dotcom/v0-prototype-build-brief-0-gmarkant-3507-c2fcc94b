@@ -445,7 +445,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                       className={cn(
                         "font-mono text-[10px] px-2 py-0.5 rounded-full",
                         selectedPartnerCriteria?.insurance.coi_on_file
-                          ? "bg-emerald-500/15 text-emerald-400"
+                          ? "bg-success/15 text-success"
                           : "bg-white/10 text-foreground-muted"
                       )}
                     >

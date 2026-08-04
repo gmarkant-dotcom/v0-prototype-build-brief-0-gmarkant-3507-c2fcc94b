@@ -333,7 +333,7 @@ export default function AgencyUserProfilePage() {
           </Button>
         </div>
 
-        {message && <p className="text-sm text-green-600">{message}</p>}
+        {message && <p className="text-sm text-success">{message}</p>}
         {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
       </div>
     </AgencyShell>

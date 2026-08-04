@@ -1686,7 +1686,7 @@ function AgencyRFPContent() {
                             : "border-border hover:border-white/30"
                         )}
                       >
-                        <FileText className="w-5 h-5 text-green-400" />
+                        <FileText className="w-5 h-5 text-success" />
                         <div className="flex-1">
                           <div className="font-display font-bold text-sm text-foreground">{uploadedSowTemplate.name}</div>
                           <div className="font-mono text-[10px] text-foreground-muted">Uploaded Template</div>
@@ -2482,7 +2482,7 @@ function AgencyRFPContent() {
                         <p className="font-mono text-[10px] text-red-300">{recipientAddErrors[item.id]}</p>
                       )}
                       {recipientAddSuccess[item.id] && !recipientAddErrors[item.id] && (
-                        <p className="font-mono text-[10px] text-green-300">{recipientAddSuccess[item.id]}</p>
+                        <p className="font-mono text-[10px] text-success">{recipientAddSuccess[item.id]}</p>
                       )}
                     </div>
                   </div>

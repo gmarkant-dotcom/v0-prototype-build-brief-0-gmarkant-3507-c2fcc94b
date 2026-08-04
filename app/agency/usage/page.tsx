@@ -26,13 +26,13 @@ const NEXT_TIER: Record<TierKey, TierKey | null> = {
 function indicatorClass(severity: UsageSeverity): string {
   if (severity === "blocked") return "[&>[data-slot=progress-indicator]]:bg-red-500"
   if (severity === "warning") return "[&>[data-slot=progress-indicator]]:bg-amber-500"
-  return "[&>[data-slot=progress-indicator]]:bg-emerald-500"
+  return "[&>[data-slot=progress-indicator]]:bg-success"
 }
 
 function severityTextClass(severity: UsageSeverity): string {
   if (severity === "blocked") return "text-red-400"
   if (severity === "warning") return "text-amber-400"
-  return "text-emerald-400"
+  return "text-success"
 }
 
 function MetricBar({

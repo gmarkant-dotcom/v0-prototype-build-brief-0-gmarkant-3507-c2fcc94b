@@ -78,7 +78,7 @@ function ProjectSwitcherDropdown({ projects, selectedProject }: { projects: Mast
                   <div
                     className={cn(
                       "w-2 h-2 rounded-full shrink-0",
-                      project.status === "active" ? "bg-green-400" : "bg-yellow-400"
+                      project.status === "active" ? "bg-success" : "bg-yellow-400"
                     )}
                   />
                   <div className="flex-1 min-w-0">
@@ -171,7 +171,7 @@ export function SelectedProjectHeader({ className, dropdown }: SelectedProjectHe
           <div className="flex items-center gap-2 mb-0.5">
             <div className={cn(
               "w-2 h-2 rounded-full",
-              selectedProject.status === "active" ? "bg-green-400" :
+              selectedProject.status === "active" ? "bg-success" :
               selectedProject.status === "onboarding" ? "bg-yellow-400" :
               selectedProject.status === "on_hold" ? "bg-gray-400" : "bg-blue-400"
             )} />

@@ -76,7 +76,7 @@ const PARTNER_STATUSES = [
 type StatusKey = (typeof PARTNER_STATUSES)[number]["key"]
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; border: string }> = {
-  on_track:  { bg: "bg-emerald-500/15", text: "text-emerald-300", border: "border-emerald-500/40" },
+  on_track:  { bg: "bg-success/15", text: "text-success", border: "border-success/40" },
   at_risk:   { bg: "bg-amber-500/15",   text: "text-amber-200",   border: "border-amber-500/40" },
   delayed:   { bg: "bg-red-500/15",     text: "text-red-300",     border: "border-red-500/40" },
   blocked:   { bg: "bg-red-500/15",     text: "text-red-300",     border: "border-red-500/40" },
@@ -169,13 +169,13 @@ function SummaryBar({ partners, project, loading }: {
     {
       label: "Margin",
       value: margin != null ? formatMoney(margin) : "-",
-      icon: <DollarSign className={cn("w-3.5 h-3.5", margin == null ? "text-foreground-muted" : margin >= 0 ? "text-emerald-400" : "text-red-400")} />,
+      icon: <DollarSign className={cn("w-3.5 h-3.5", margin == null ? "text-foreground-muted" : margin >= 0 ? "text-success" : "text-red-400")} />,
       highlight: false,
     },
     { label: "Partners",      value: String(totalPartners), icon: <Users className="w-3.5 h-3.5 text-sky-400" />, highlight: false },
     { label: "Avg Completion",value: `${avgCompletion}%`,  icon: <Activity className="w-3.5 h-3.5 text-accent" />, highlight: false },
     { label: "Open Alerts",   value: String(totalAlerts),  icon: <AlertTriangle className={cn("w-3.5 h-3.5", totalAlerts > 0 ? "text-amber-400" : "text-foreground-muted")} />, highlight: totalAlerts > 0 },
-    { label: "On Track",      value: String(onTrack),      icon: <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />, highlight: false },
+    { label: "On Track",      value: String(onTrack),      icon: <CheckCircle className="w-3.5 h-3.5 text-success" />, highlight: false },
     { label: "At Risk",       value: String(atRisk),       icon: <AlertTriangle className={cn("w-3.5 h-3.5", atRisk > 0 ? "text-red-400" : "text-foreground-muted")} />, highlight: atRisk > 0 },
   ]
 

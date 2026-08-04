@@ -390,7 +390,7 @@ export default function AgencyPartnerProfilePage() {
                 <span
                   className={cn(
                     "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider",
-                    ndaOk ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                    ndaOk ? "bg-success/15 text-success border border-success/30" : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
                   )}
                 >
                   <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
@@ -558,7 +558,7 @@ export default function AgencyPartnerProfilePage() {
                     className={cn(
                       "font-mono text-[10px] px-2 py-0.5 rounded-full",
                       businessCriteria.insurance.coi_on_file
-                        ? "bg-emerald-500/15 text-emerald-400"
+                        ? "bg-success/15 text-success"
                         : "bg-white/10 text-foreground-muted"
                     )}
                   >
@@ -646,7 +646,7 @@ export default function AgencyPartnerProfilePage() {
                       <span className="font-mono text-xs text-accent">
                         {formatMoney(row.awarded_amount, row.currency)}
                       </span>
-                      <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 capitalize">
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success capitalize">
                         {row.status}
                       </span>
                     </div>
@@ -779,7 +779,7 @@ export default function AgencyPartnerProfilePage() {
                 </Button>
               </div>
               <div className="flex items-center gap-2">
-                {notesSaved && <span className="text-xs text-emerald-400">Saved</span>}
+                {notesSaved && <span className="text-xs text-success">Saved</span>}
                 <Button
                   type="button"
                   onClick={saveNotes}

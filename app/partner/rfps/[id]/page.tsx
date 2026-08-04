@@ -1286,7 +1286,7 @@ export default function PartnerRfpDetailPage() {
                 </div>
               )}
               {currentStatus === "awarded" && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-green-900 font-medium">
+                <div className="bg-success/15 border border-success/30 rounded-xl p-4 text-success font-medium">
                   Congratulations! Your bid has been awarded.
                 </div>
               )}
@@ -1465,9 +1465,9 @@ export default function PartnerRfpDetailPage() {
           {successMsg && (
             <div
               role="status"
-              className="mb-4 flex items-start gap-3 text-green-900 bg-green-50 border-2 border-green-300 rounded-xl px-4 py-3 text-sm shadow-sm"
+              className="mb-4 flex items-start gap-3 text-success bg-success/15 border-2 border-success/30 rounded-xl px-4 py-3 text-sm shadow-sm"
             >
-              <CheckCircle className="w-5 h-5 shrink-0 text-green-700 mt-0.5" />
+              <CheckCircle className="w-5 h-5 shrink-0 text-success mt-0.5" />
               <span className="leading-relaxed font-medium">{successMsg}</span>
             </div>
           )}
@@ -1868,8 +1868,8 @@ export default function PartnerRfpDetailPage() {
                           )}
                         </Button>
                         {d.storedUrl && d.source === "file" && (
-                          <span className="ml-3 inline-flex items-center gap-2 text-sm text-green-900">
-                            <CheckCircle className="w-4 h-4 shrink-0 text-green-700" aria-hidden />
+                          <span className="ml-3 inline-flex items-center gap-2 text-sm text-success">
+                            <CheckCircle className="w-4 h-4 shrink-0 text-success" aria-hidden />
                             <span>
                               <span className="font-medium text-gray-900">{d.fileName || "Uploaded file"}</span>
                               <span className="text-gray-600 ml-1.5">Uploaded</span>
@@ -1888,8 +1888,8 @@ export default function PartnerRfpDetailPage() {
                       </p>
                     )}
                     {d.storedUrl && d.source === "url" && isLikelyPrivateBlobUrl(d.storedUrl) && (
-                      <div className="flex items-center gap-2 text-sm text-green-900 mt-1">
-                        <CheckCircle className="w-4 h-4 shrink-0 text-green-700" aria-hidden />
+                      <div className="flex items-center gap-2 text-sm text-success mt-1">
+                        <CheckCircle className="w-4 h-4 shrink-0 text-success" aria-hidden />
                         <span>
                           <span className="font-medium text-gray-900">
                             {d.fileName || displayNameFromBlobPath(d.storedUrl)}
@@ -2016,12 +2016,12 @@ export default function PartnerRfpDetailPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="bid-submitted-title"
-            className="w-full max-w-md rounded-xl border-2 border-green-300 bg-white p-6 shadow-xl"
+            className="w-full max-w-md rounded-xl border-2 border-success/30 bg-white p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-center mb-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-100 border border-green-300">
-                <CheckCircle className="h-8 w-8 text-green-700" aria-hidden />
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-success/15 border border-success/30">
+                <CheckCircle className="h-8 w-8 text-success" aria-hidden />
               </div>
             </div>
             <h2 id="bid-submitted-title" className="font-display text-center text-xl font-bold text-[#0C3535]">

@@ -87,7 +87,7 @@ function ContactFormContent() {
         <div className="mt-6 rounded-xl border border-border p-4 bg-white/5">
           {submitted ? (
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-500 mt-0.5" />
+              <CheckCircle2 className="w-5 h-5 text-success mt-0.5" />
               <div>
                 <p className="text-foreground font-medium">Message sent successfully.</p>
                 <p className="text-sm text-foreground-muted mt-1">Thanks! We&apos;ll be in touch within 1 business day.</p>

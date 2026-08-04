@@ -637,17 +637,17 @@ export default function PartnerDashboardPage() {
           <div
             className={cn(
               "rounded-xl p-5 text-center border",
-              hasNoPayments ? "border-gray-200 bg-white" : "border-green-200 bg-green-50"
+              hasNoPayments ? "border-gray-200 bg-white" : "border-success/30 bg-success/15"
             )}
           >
-            <div className={cn("font-display font-bold text-3xl", hasNoPayments ? "text-gray-400" : "text-green-600")}>
+            <div className={cn("font-display font-bold text-3xl", hasNoPayments ? "text-gray-400" : "text-success")}>
               {paidTileValue}
             </div>
             <Link
               href="/partner/payments"
               className={cn(
                 "font-mono text-[10px] uppercase tracking-wider mt-1 hover:underline block",
-                hasNoPayments ? "text-gray-400" : "text-green-600"
+                hasNoPayments ? "text-gray-400" : "text-success"
               )}
             >
               Paid to Date
@@ -782,7 +782,7 @@ export default function PartnerDashboardPage() {
                 <h2 className="font-display font-bold text-lg text-[#0C3535]">Lead Agency Connections</h2>
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-600">
+                <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success">
                   {connections.filter((c) => c.status === "confirmed").length} Confirmed
                 </span>
                 {connections.filter((c) => c.status === "pending").length > 0 && (
@@ -799,11 +799,11 @@ export default function PartnerDashboardPage() {
                   switch (connection.status) {
                     case "confirmed":
                       return {
-                        bg: "bg-green-50",
-                        border: "border-green-200",
-                        icon: <Check className="w-4 h-4 text-green-600" />,
+                        bg: "bg-success/15",
+                        border: "border-success/30",
+                        icon: <Check className="w-4 h-4 text-success" />,
                         label: "Confirmed",
-                        labelBg: "bg-green-100 text-green-700",
+                        labelBg: "bg-success/15 text-success",
                       }
                     case "accepted":
                       return {
@@ -874,8 +874,8 @@ export default function PartnerDashboardPage() {
                     )}
 
                     {connection.status === "confirmed" && (
-                      <div className="mt-3 pt-3 border-t border-green-200/50">
-                        <p className="font-mono text-[10px] text-green-600">
+                      <div className="mt-3 pt-3 border-t border-success/50">
+                        <p className="font-mono text-[10px] text-success">
                           Connected since{" "}
                           {connection.confirmedAt
                             ? new Date(connection.confirmedAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })

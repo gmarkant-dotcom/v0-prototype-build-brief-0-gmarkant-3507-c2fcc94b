@@ -328,7 +328,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                       <div className="flex items-center gap-1.5">
                         <Button
                           size="sm"
-                          className="h-6 px-2 text-[10px] bg-green-600 hover:bg-green-600/90 text-white"
+                          className="h-6 px-2 text-[10px] bg-success hover:bg-success/90 text-accent-foreground"
                           disabled={busyId === row.id || row.status === "awarded" || (!row.partner_id && row.response_exists)}
                           onClick={() => setAwardTarget(row)}
                         >
@@ -449,7 +449,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                       {required === 0 ? (
                         <span className="text-foreground-muted text-xs">None required</span>
                       ) : missing === 0 ? (
-                        <span className="text-emerald-300 text-xs">{required} of {required} met</span>
+                        <span className="text-success text-xs">{required} of {required} met</span>
                       ) : (
                         <span className="text-amber-300 text-xs">{required - missing} of {required} met</span>
                       )}
@@ -510,7 +510,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                     {analyzingIds.has(row.id) ? (
                       <Loader2 className="w-3 h-3 animate-spin text-accent" />
                     ) : decompositions.has(row.id) ? (
-                      <span className="w-3 h-3 rounded-full bg-emerald-400" />
+                      <span className="w-3 h-3 rounded-full bg-success" />
                     ) : (
                       <span className="w-3 h-3 rounded-full bg-red-400" />
                     )}

@@ -451,7 +451,7 @@ export function DeliveryReviewSheet({
                                   <span
                                     className={cn(
                                       "inline-flex items-center gap-1 font-mono text-xs",
-                                      r.delta > 0 ? "text-emerald-300" : r.delta < 0 ? "text-red-300" : "text-foreground-muted"
+                                      r.delta > 0 ? "text-success" : r.delta < 0 ? "text-red-300" : "text-foreground-muted"
                                     )}
                                   >
                                     {r.delta > 0 ? (
@@ -501,7 +501,7 @@ export function DeliveryReviewSheet({
                 </Select>
                 <div className="flex items-center gap-3">
                   {saved && (
-                    <span className="inline-flex items-center gap-1 text-xs text-green-500">
+                    <span className="inline-flex items-center gap-1 text-xs text-success">
                       <CheckCircle className="w-3.5 h-3.5" /> Saved
                     </span>
                   )}

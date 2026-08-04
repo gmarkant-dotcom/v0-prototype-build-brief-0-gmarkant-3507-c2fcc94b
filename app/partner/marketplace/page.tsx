@@ -200,7 +200,7 @@ export default function PartnerMarketplacePage() {
                           View Profile
                         </Button>
                         {status === "approved" ? (
-                          <span className="inline-flex text-xs px-3 py-1.5 rounded-lg bg-green-100 text-green-700">Connected</span>
+                          <span className="inline-flex text-xs px-3 py-1.5 rounded-lg bg-success/15 text-success">Connected</span>
                         ) : status === "pending" ? (
                           <span className="inline-flex text-xs px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700">Request Pending</span>
                         ) : (

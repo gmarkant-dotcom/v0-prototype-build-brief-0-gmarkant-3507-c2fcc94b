@@ -113,7 +113,7 @@ function signalLabel(signal: string): string {
 }
 
 function scoreBadgeClass(score: number): string {
-  if (score >= 70) return "bg-green-500/15 text-green-400 border-green-500/30"
+  if (score >= 70) return "bg-success/15 text-success border-success/30"
   if (score >= 40) return "bg-yellow-500/15 text-yellow-400 border-yellow-500/30"
   return "bg-white/5 text-foreground-muted border-border"
 }

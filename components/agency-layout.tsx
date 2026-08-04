@@ -500,7 +500,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                       >
                         <div className={cn(
                           "w-2 h-2 rounded-full shrink-0",
-                          project.status === "active" ? "bg-green-400" : "bg-yellow-400"
+                          project.status === "active" ? "bg-success" : "bg-yellow-400"
                         )} />
                         <div className="flex-1 min-w-0">
                           <div className="font-display font-bold text-sm text-foreground truncate">

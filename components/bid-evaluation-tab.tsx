@@ -522,7 +522,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
             Save Evaluation
           </Button>
           {saved && (
-            <span className="inline-flex items-center gap-1 text-xs text-green-500">
+            <span className="inline-flex items-center gap-1 text-xs text-success">
               <CheckCircle className="w-3.5 h-3.5" /> Saved
             </span>
           )}

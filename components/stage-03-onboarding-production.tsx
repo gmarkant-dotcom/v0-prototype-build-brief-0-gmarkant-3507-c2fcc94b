@@ -252,7 +252,7 @@ export function Stage03OnboardingProduction() {
             <p className="text-sm text-red-500">{deployError}</p>
           )}
           {deploySuccess && (
-            <p className="text-sm text-green-500">{deploySuccess}</p>
+            <p className="text-sm text-success">{deploySuccess}</p>
           )}
         </GlassCard>
       )}

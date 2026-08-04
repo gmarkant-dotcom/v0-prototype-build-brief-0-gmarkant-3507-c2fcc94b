@@ -71,7 +71,7 @@ function marginTone(margin: number | null): "green" | "amber" | "red" | "neutral
 function toneClass(tone: "green" | "amber" | "red" | "neutral"): string {
   switch (tone) {
     case "green":
-      return "text-emerald-400"
+      return "text-success"
     case "amber":
       return "text-amber-400"
     case "red":
@@ -288,7 +288,7 @@ function AgencyUtilizationPageInner({ filterProjectId, skipLayout = false }: { f
                   </GlassCard>
                   <GlassCard className="p-6">
                     <div className="flex items-center gap-2 text-foreground-muted mb-2">
-                      <Wallet className="w-4 h-4 text-emerald-400" />
+                      <Wallet className="w-4 h-4 text-success" />
                       <span className="font-mono text-[10px] uppercase tracking-wider">Total margin</span>
                     </div>
                     <div
@@ -344,7 +344,7 @@ function AgencyUtilizationPageInner({ filterProjectId, skipLayout = false }: { f
                 </GlassCard>
                 <GlassCard className="p-6">
                   <div className="flex items-center gap-2 text-foreground-muted mb-2">
-                    <Wallet className="w-4 h-4 text-emerald-400" />
+                    <Wallet className="w-4 h-4 text-success" />
                     <span className="font-mono text-[10px] uppercase tracking-wider">Total margin</span>
                   </div>
                   <div

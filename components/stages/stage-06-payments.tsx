@@ -78,7 +78,7 @@ const getStatusStyle = (status: string) => {
     case "paid":
     case "signed":
     case "received":
-      return "bg-green-900/30 text-green-100 border-green-400/40"
+      return "bg-success/30 text-success border-success/40"
     case "pending":
     case "sent":
     case "invoiced":
@@ -157,12 +157,12 @@ export function Stage06Payments() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Key Metrics */}
           <div className="space-y-4">
-            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
+            <div className="p-4 rounded-lg bg-success/10 border border-success/30">
               <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="w-4 h-4 text-green-400" />
-                <span className="font-mono text-[10px] text-green-400 uppercase tracking-wider">Client Received</span>
+                <TrendingUp className="w-4 h-4 text-success" />
+                <span className="font-mono text-[10px] text-success uppercase tracking-wider">Client Received</span>
               </div>
-              <div className="font-display font-bold text-2xl text-green-400">
+              <div className="font-display font-bold text-2xl text-success">
                 ${totalClientReceived.toLocaleString()}
               </div>
               <div className="font-mono text-[10px] text-foreground-muted mt-1">
@@ -201,7 +201,7 @@ export function Stage06Payments() {
           <div className="lg:col-span-3">
             <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-400" />
+                <div className="w-3 h-3 rounded-full bg-success" />
                 <span className="font-mono text-[10px] text-foreground-muted">Client Payments In</span>
               </div>
               <div className="flex items-center gap-2">
@@ -237,7 +237,7 @@ export function Stage06Payments() {
                     <div className="flex items-end gap-1 h-52">
                       {/* Client In Bar */}
                       <div 
-                        className="w-5 bg-green-400 rounded-t transition-all hover:bg-green-300"
+                        className="w-5 bg-success rounded-t transition-all hover:bg-success"
                         style={{ height: `${(data.clientIn / maxValue) * 100}%` }}
                         title={`Client: $${data.clientIn.toLocaleString()}`}
                       />
@@ -301,7 +301,7 @@ export function Stage06Payments() {
           {/* Payment Summary */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <GlassCard className="text-center py-4">
-              <div className="font-display font-bold text-2xl text-green-400 mb-1">
+              <div className="font-display font-bold text-2xl text-success mb-1">
                 ${totalPaid.toLocaleString()}
               </div>
               <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
@@ -355,7 +355,7 @@ export function Stage06Payments() {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-lg text-green-400">
+                      <span className="font-mono text-lg text-success">
                         ${payment.amount.toLocaleString()}
                       </span>
                       <span className="font-mono text-[10px] text-foreground-muted">
@@ -434,11 +434,11 @@ export function Stage06Payments() {
             />
             
             <div className="space-y-4">
-              <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-                <div className="font-mono text-[10px] text-green-400 uppercase tracking-wider mb-1">
+              <div className="p-4 rounded-lg bg-success/10 border border-success/30">
+                <div className="font-mono text-[10px] text-success uppercase tracking-wider mb-1">
                   Client Contract Value
                 </div>
-                <div className="font-display font-bold text-2xl text-green-400">
+                <div className="font-display font-bold text-2xl text-success">
                   $250,000
                 </div>
               </div>

@@ -178,7 +178,7 @@ export function RfpOutputTemplate({
             {uploadedTemplate && (
               <div className="space-y-2">
                 <div className="w-full text-left p-3 rounded-lg border border-accent bg-accent/10 flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-green-400" />
+                  <FileText className="w-5 h-5 text-success" />
                   <div className="flex-1 min-w-0">
                     <div className="font-display font-bold text-sm text-foreground truncate">{uploadedTemplate.name}</div>
                     <div className="font-mono text-[10px] text-foreground-muted">

@@ -429,7 +429,7 @@ export default function PartnerLegalPage() {
               <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Compliance</div>
               <div className={cn(
                 "font-display font-bold text-3xl",
-                completionPercentage === 100 ? "text-green-600" : "text-yellow-600"
+                completionPercentage === 100 ? "text-success" : "text-yellow-600"
               )}>
                 {completionPercentage}%
               </div>
@@ -552,7 +552,7 @@ export default function PartnerLegalPage() {
                 key={doc.id}
                 className={cn(
                   "p-4 rounded-lg border",
-                  doc.status === "complete" && "bg-green-50 border-green-200",
+                  doc.status === "complete" && "bg-success/15 border-success/30",
                   doc.status === "pending" && "bg-yellow-50 border-yellow-200",
                   doc.status === "not_started" && "bg-gray-50 border-gray-200"
                 )}
@@ -561,7 +561,7 @@ export default function PartnerLegalPage() {
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       "w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5",
-                      doc.status === "complete" && "bg-green-500 text-white",
+                      doc.status === "complete" && "bg-success text-accent-foreground",
                       doc.status === "pending" && "bg-yellow-500 text-white",
                       doc.status === "not_started" && "bg-gray-300 text-gray-600"
                     )}>
@@ -592,7 +592,7 @@ export default function PartnerLegalPage() {
                     {doc.status === "complete" ? (
                       <div className="flex items-center gap-2">
                         {doc.id === "coi" && coiSaved && (
-                          <span className="text-xs font-medium text-green-600">Saved</span>
+                          <span className="text-xs font-medium text-success">Saved</span>
                         )}
                         <Button variant="ghost" size="sm" className="text-gray-800 hover:text-[#0C3535]">
                           View
@@ -652,8 +652,8 @@ export default function PartnerLegalPage() {
               onClick={saveBusinessCriteria}
               disabled={savingBusinessCriteria}
               className={cn(
-                "shrink-0 min-w-[190px] text-white",
-                savedBusinessCriteria ? "bg-green-600 hover:bg-green-600" : "bg-[#0C3535] hover:bg-[#0C3535]/90"
+                "shrink-0 min-w-[190px]",
+                savedBusinessCriteria ? "bg-success hover:bg-success text-accent-foreground" : "bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
               )}
             >
               {savingBusinessCriteria ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
@@ -678,7 +678,7 @@ export default function PartnerLegalPage() {
                     <Checkbox
                       checked={designation.holds}
                       onCheckedChange={(checked) => updateDesignation(key, { holds: checked === true })}
-                      className="mt-0.5 border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                      className="mt-0.5 border-gray-400 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
                     />
                     <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-[#0C3535]">
                       {DESIGNATION_LABELS[key]}
@@ -719,7 +719,7 @@ export default function PartnerLegalPage() {
                                 ...(checked === true ? { certifying_body: null, certification_number: null } : {}),
                               })
                             }
-                            className="border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                            className="border-gray-400 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
                           />
                           <span className="text-sm text-gray-700">Self-certified (no third-party certification)</span>
                         </label>
@@ -801,7 +801,7 @@ export default function PartnerLegalPage() {
                     <Checkbox
                       checked={coverage.has_coverage}
                       onCheckedChange={(checked) => updateInsurance(key, { has_coverage: checked === true })}
-                      className="border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                      className="border-gray-400 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
                     />
                     <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-[#0C3535] truncate">
                       {INSURANCE_LABELS[key]}
@@ -823,7 +823,7 @@ export default function PartnerLegalPage() {
                     <span
                       className={cn(
                         "font-mono text-[10px] px-2 py-0.5 rounded-full",
-                        coverage.has_coverage ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                        coverage.has_coverage ? "bg-success/15 text-success" : "bg-gray-100 text-gray-600"
                       )}
                     >
                       {coverage.has_coverage ? "Covered" : "Not Covered"}
@@ -839,7 +839,7 @@ export default function PartnerLegalPage() {
               <Checkbox
                 checked={businessCriteria.insurance.coi_on_file}
                 onCheckedChange={(checked) => updateCoiOnFile(checked === true)}
-                className="border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
+                className="border-gray-400 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
               />
               <span className="text-sm text-gray-700">
                 <HelpTerm term="coi" theme="light">Certificate of Insurance (COI)</HelpTerm> on file

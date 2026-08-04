@@ -340,7 +340,7 @@ function BidDetailSheetInner({
                     <Button
                       type="button"
                       size="sm"
-                      className="bg-green-600 hover:bg-green-600/90 text-white"
+                      className="bg-success hover:bg-success/90 text-accent-foreground"
                       onClick={() => setAwardConfirmOpen(true)}
                       disabled={busy || isAwarded || isGuest}
                       title={isGuest ? "Award isn't available yet for guest submissions, since they aren't linked to a partner account." : undefined}
@@ -642,7 +642,7 @@ function BidDetailSheetInner({
                                   <span className="font-mono text-[9px] uppercase">Missing</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-emerald-300 shrink-0">
+                                <span className="inline-flex items-center gap-1 text-success shrink-0">
                                   <CheckCircle className="w-3.5 h-3.5" />
                                   <span className="font-mono text-[9px] uppercase">Met</span>
                                 </span>
@@ -687,7 +687,7 @@ function BidDetailSheetInner({
                                   <span className="font-mono text-[9px] uppercase">Missing</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-emerald-300 shrink-0">
+                                <span className="inline-flex items-center gap-1 text-success shrink-0">
                                   <CheckCircle className="w-3.5 h-3.5" />
                                   <span className="font-mono text-[9px] uppercase">Met</span>
                                 </span>
@@ -710,7 +710,7 @@ function BidDetailSheetInner({
                                 <span className="font-mono text-[9px] uppercase">Missing</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-emerald-300 shrink-0">
+                              <span className="inline-flex items-center gap-1 text-success shrink-0">
                                 <CheckCircle className="w-3.5 h-3.5" />
                                 <span className="font-mono text-[9px] uppercase">Met</span>
                               </span>
@@ -755,7 +755,7 @@ function BidDetailSheetInner({
                         Save Feedback
                       </Button>
                       {feedbackSaved && (
-                        <span className="inline-flex items-center gap-1 text-xs text-green-500">
+                        <span className="inline-flex items-center gap-1 text-xs text-success">
                           <CheckCircle className="w-3.5 h-3.5" />
                           Feedback submitted
                         </span>

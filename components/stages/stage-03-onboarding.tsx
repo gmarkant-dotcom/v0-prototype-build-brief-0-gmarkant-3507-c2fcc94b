@@ -355,7 +355,7 @@ export function Stage03Onboarding() {
             {partner.name}
             <span className={cn(
               "ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase border",
-              partner.onboardingStatus === "complete" && "bg-green-900/30 text-green-100 border-green-400/40",
+              partner.onboardingStatus === "complete" && "bg-success/30 text-success border-success/40",
               partner.onboardingStatus === "in_progress" && "bg-yellow-900/30 text-yellow-100 border-yellow-400/40",
               partner.onboardingStatus === "documents_sent" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
               partner.onboardingStatus === "not_started" && "bg-white/10 text-foreground-muted border-border"
@@ -379,14 +379,14 @@ export function Stage03Onboarding() {
                     currentStep === step.id
                       ? "bg-accent/20 text-accent border border-accent/30"
                       : index < currentStepIndex
-                      ? "bg-green-900/30 text-green-100 border border-green-400/40 cursor-pointer hover:bg-green-900/45"
+                      ? "bg-success/30 text-success border border-success/40 cursor-pointer hover:bg-success/45"
                       : "bg-white/5 text-foreground-muted border border-border"
                   )}
                 >
                   <span className={cn(
                     "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
                     currentStep === step.id ? "bg-accent text-accent-foreground" :
-                    index < currentStepIndex ? "bg-green-500 text-white" :
+                    index < currentStepIndex ? "bg-success text-accent-foreground" :
                     "bg-white/10"
                   )}>
                     {index < currentStepIndex ? <CheckCircle className="w-3 h-3" /> : step.number}
@@ -474,7 +474,7 @@ export function Stage03Onboarding() {
                         {/* Partner status badge */}
                         <div className="shrink-0">
                           {partnerStatus === "signed" && (
-                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-green-900/30 text-green-100 border border-green-400/40">
+                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-success/30 text-success border border-success/40">
                               <CheckCircle className="w-3 h-3" /> Already Signed
                             </span>
                           )}
@@ -555,7 +555,7 @@ export function Stage03Onboarding() {
                           doc.category === "legal" && "bg-slate-800/50 text-slate-200 border-slate-400/40",
                           doc.category === "brand" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
                           doc.category === "process" && "bg-cyan-900/30 text-cyan-100 border-cyan-400/40",
-                          doc.category === "scheduling" && "bg-green-900/30 text-green-100 border-green-400/40"
+                          doc.category === "scheduling" && "bg-teal-900/30 text-teal-100 border-teal-400/40"
                         )}>
                           {doc.category}
                         </span>
@@ -598,8 +598,8 @@ export function Stage03Onboarding() {
                 {/* Already Completed */}
                 <GlassCard>
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                      <CheckCircle className="w-5 h-5 text-green-400" />
+                    <div className="w-10 h-10 rounded-full bg-success/20 flex items-center justify-center">
+                      <CheckCircle className="w-5 h-5 text-success" />
                     </div>
                     <div>
                       <h4 className="font-display font-bold text-foreground">Already Completed</h4>
@@ -621,18 +621,18 @@ export function Stage03Onboarding() {
                         if (docId === "insurance") signedDate = `Expires ${currentPartner.insuranceExpiry}`
                         
                         return (
-                          <div key={docId} className="flex items-center justify-between p-3 rounded-lg bg-green-500/5 border border-green-500/20">
+                          <div key={docId} className="flex items-center justify-between p-3 rounded-lg bg-success/5 border border-success/20">
                             <div className="flex items-center gap-2">
-                              <CheckCircle className="w-4 h-4 text-green-400" />
+                              <CheckCircle className="w-4 h-4 text-success" />
                               <span className="text-sm text-foreground">{doc.name}</span>
                             </div>
-                            <span className="font-mono text-[10px] text-green-400">{signedDate}</span>
+                            <span className="font-mono text-[10px] text-success">{signedDate}</span>
                           </div>
                         )
                       })}
                       
-                      <div className="mt-4 p-3 rounded-lg bg-green-500/5 border border-green-500/20">
-                        <p className="text-sm text-green-400">
+                      <div className="mt-4 p-3 rounded-lg bg-success/5 border border-success/20">
+                        <p className="text-sm text-success">
                           These documents will be skipped since they&apos;re already on file.
                         </p>
                       </div>
@@ -709,7 +709,7 @@ export function Stage03Onboarding() {
                                   doc.category === "legal" && "bg-slate-800/50 text-slate-200",
                                   doc.category === "brand" && "bg-blue-900/30 text-blue-100",
                                   doc.category === "process" && "bg-cyan-900/30 text-cyan-100",
-                                  doc.category === "scheduling" && "bg-green-900/30 text-green-100"
+                                  doc.category === "scheduling" && "bg-teal-900/30 text-teal-100"
                                 )}>
                                   {doc.category}
                                 </span>
@@ -721,7 +721,7 @@ export function Stage03Onboarding() {
                     </div>
                   ) : (
                     <div className="text-center py-8 text-foreground-muted">
-                      <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-400 opacity-50" />
+                      <CheckCircle className="w-8 h-8 mx-auto mb-2 text-success opacity-50" />
                       <p className="text-sm">All selected documents are already on file!</p>
                     </div>
                   )}
@@ -739,15 +739,15 @@ export function Stage03Onboarding() {
                 <div className="grid grid-cols-3 gap-4">
                   <div className={cn(
                     "p-4 rounded-lg border",
-                    currentPartner.ndaSigned ? "bg-green-500/5 border-green-500/30" : "bg-yellow-500/5 border-yellow-500/30"
+                    currentPartner.ndaSigned ? "bg-success/5 border-success/30" : "bg-yellow-500/5 border-yellow-500/30"
                   )}>
                     <div className="flex items-center gap-2 mb-2">
-                      <Shield className={cn("w-5 h-5", currentPartner.ndaSigned ? "text-green-400" : "text-yellow-400")} />
+                      <Shield className={cn("w-5 h-5", currentPartner.ndaSigned ? "text-success" : "text-yellow-400")} />
                       <span className="font-mono text-sm font-medium text-foreground">NDA</span>
                     </div>
                     {currentPartner.ndaSigned ? (
                       <>
-                        <div className="text-sm text-green-400">Signed</div>
+                        <div className="text-sm text-success">Signed</div>
                         <div className="font-mono text-[10px] text-foreground-muted">
                           {currentPartner.ndaSignedDate} ({currentPartner.ndaVersion})
                         </div>
@@ -759,15 +759,15 @@ export function Stage03Onboarding() {
                   
                   <div className={cn(
                     "p-4 rounded-lg border",
-                    currentPartner.msaApproved ? "bg-green-500/5 border-green-500/30" : "bg-yellow-500/5 border-yellow-500/30"
+                    currentPartner.msaApproved ? "bg-success/5 border-success/30" : "bg-yellow-500/5 border-yellow-500/30"
                   )}>
                     <div className="flex items-center gap-2 mb-2">
-                      <FileCheck className={cn("w-5 h-5", currentPartner.msaApproved ? "text-green-400" : "text-yellow-400")} />
+                      <FileCheck className={cn("w-5 h-5", currentPartner.msaApproved ? "text-success" : "text-yellow-400")} />
                       <span className="font-mono text-sm font-medium text-foreground">MSA</span>
                     </div>
                     {currentPartner.msaApproved ? (
                       <>
-                        <div className="text-sm text-green-400">Approved</div>
+                        <div className="text-sm text-success">Approved</div>
                         <div className="font-mono text-[10px] text-foreground-muted">
                           {currentPartner.msaApprovedDate} ({currentPartner.msaVersion})
                         </div>
@@ -779,11 +779,11 @@ export function Stage03Onboarding() {
                   
                   <div className={cn(
                     "p-4 rounded-lg border",
-                    currentPartner.insuranceUploaded ? "bg-green-500/5 border-green-500/30" : "bg-yellow-500/5 border-yellow-500/30"
+                    currentPartner.insuranceUploaded ? "bg-success/5 border-success/30" : "bg-yellow-500/5 border-yellow-500/30"
                   )}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <FileText className={cn("w-5 h-5", currentPartner.insuranceUploaded ? "text-green-400" : "text-yellow-400")} />
+                        <FileText className={cn("w-5 h-5", currentPartner.insuranceUploaded ? "text-success" : "text-yellow-400")} />
                         <span className="font-mono text-sm font-medium text-foreground">Insurance</span>
                       </div>
                       {!currentPartner.insuranceUploaded && (
@@ -801,7 +801,7 @@ export function Stage03Onboarding() {
                     </div>
                     {currentPartner.insuranceUploaded ? (
                       <>
-                        <div className="text-sm text-green-400">On file</div>
+                        <div className="text-sm text-success">On file</div>
                         <div className="font-mono text-[10px] text-foreground-muted">
                           Expires {currentPartner.insuranceExpiry}
                         </div>
@@ -985,7 +985,7 @@ export function Stage03Onboarding() {
                       <div className="font-mono text-[10px] text-foreground-muted uppercase">Documents</div>
                     </div>
                     <div className="p-4 rounded-lg bg-white/5 border border-border text-center">
-                      <div className="font-display font-bold text-2xl text-green-400">{documentsAlreadySigned.length}</div>
+                      <div className="font-display font-bold text-2xl text-success">{documentsAlreadySigned.length}</div>
                       <div className="font-mono text-[10px] text-foreground-muted uppercase">Skipped</div>
                     </div>
                     <div className="p-4 rounded-lg bg-white/5 border border-border text-center">
