@@ -170,7 +170,7 @@ export default function AdminUsersPage() {
           <Button asChild variant="outline" className="border-white/20 text-white hover:bg-white/10 bg-transparent">
             <Link href="/">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Site
+              Back to site
             </Link>
           </Button>
         </div>
@@ -192,7 +192,7 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <div className="text-2xl font-display font-bold text-white">{users.length}</div>
-                <div className="text-xs text-white/50">Total Users</div>
+                <div className="text-xs text-white/50">Total users</div>
               </div>
             </div>
           </div>
@@ -203,7 +203,7 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <div className="text-2xl font-display font-bold text-white">{paidCount}</div>
-                <div className="text-xs text-white/50">Paid Users</div>
+                <div className="text-xs text-white/50">Paid users</div>
               </div>
             </div>
           </div>
@@ -214,7 +214,7 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <div className="text-2xl font-display font-bold text-white">{demoCount}</div>
-                <div className="text-xs text-white/50">Demo Access</div>
+                <div className="text-xs text-white/50">Demo access</div>
               </div>
             </div>
           </div>
@@ -225,7 +225,7 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <div className="text-2xl font-display font-bold text-white">{agencyCount}</div>
-                <div className="text-xs text-white/50">Lead Agencies</div>
+                <div className="text-xs text-white/50">Lead agencies</div>
               </div>
             </div>
           </div>

@@ -834,7 +834,7 @@ export default function PartnerProfilePage() {
         
         {/* Basic Info */}
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Company Profile & Basic Information</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Company profile & basic information</h2>
 
           <div className="flex items-center gap-5 mb-6">
             <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
@@ -864,7 +864,7 @@ export default function PartnerProfilePage() {
                 onClick={() => fileRef.current?.click()}
               >
                 {uploadingLogo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Camera className="w-4 h-4 mr-2" />}
-                Upload Logo
+                Upload logo
               </Button>
               <p className="text-xs text-vendor-muted">PNG, JPG, or WebP. Shown in your sidebar and on your public profile.</p>
             </div>
@@ -1041,7 +1041,7 @@ export default function PartnerProfilePage() {
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
-              <h2 className="font-display font-bold text-lg text-vendor-foreground">Partnership Context</h2>
+              <h2 className="font-display font-bold text-lg text-vendor-foreground">Partnership context</h2>
               <p className="text-sm text-vendor-muted-strong mt-1">
                 Tailor your profile details for each active lead agency partnership.
               </p>
@@ -1140,7 +1140,7 @@ export default function PartnerProfilePage() {
 
               <div className="space-y-4">
                 <div>
-                  <h3 className="font-display font-bold text-base text-vendor-foreground">Payment Terms</h3>
+                  <h3 className="font-display font-bold text-base text-vendor-foreground">Payment terms</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -1265,7 +1265,7 @@ export default function PartnerProfilePage() {
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="font-display font-bold text-lg text-vendor-foreground">Credentials & Portfolio</h2>
+              <h2 className="font-display font-bold text-lg text-vendor-foreground">Credentials & portfolio</h2>
               <p className="text-sm text-vendor-muted-strong">
                 Showcase your best work to potential agency partners.
               </p>
@@ -1275,13 +1275,13 @@ export default function PartnerProfilePage() {
               className="border-vendor-border text-vendor-foreground hover:bg-vendor-foreground/5"
               onClick={() => setShowAddProject(true)}
             >
-              + Add Project
+              + Add project
             </Button>
           </div>
           
           {showAddProject && (
             <div className="mb-6 p-4 rounded-lg border border-vendor-foreground/20 bg-vendor-foreground/5">
-              <h3 className="font-display font-bold text-sm text-vendor-foreground mb-4">Add New Project</h3>
+              <h3 className="font-display font-bold text-sm text-vendor-foreground mb-4">Add new project</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
                   <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
@@ -1333,7 +1333,7 @@ export default function PartnerProfilePage() {
                   onClick={addProject}
                   className="bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
                 >
-                  Add Project
+                  Add project
                 </Button>
                 <Button
                   variant="outline"
@@ -1423,7 +1423,7 @@ export default function PartnerProfilePage() {
 
         {/* Reel / Work Examples */}
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Reel & Work Examples</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Reel & work examples</h2>
 
           <div className="space-y-6">
             <div>
@@ -1529,7 +1529,7 @@ export default function PartnerProfilePage() {
                   className="border-vendor-border text-vendor-foreground hover:bg-vendor-foreground/5"
                   onClick={() => setShowAddWorkExample(true)}
                 >
-                  + Add Work Example
+                  + Add work example
                 </Button>
 
                 {showAddWorkExample ? (
@@ -1589,7 +1589,7 @@ export default function PartnerProfilePage() {
                         onClick={addWorkExample}
                         className="bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
                       >
-                        Add Work Example
+                        Add work example
                       </Button>
                       <Button
                         type="button"

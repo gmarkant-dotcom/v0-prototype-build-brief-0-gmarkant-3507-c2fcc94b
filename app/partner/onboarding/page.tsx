@@ -549,12 +549,12 @@ export default function PartnerOnboardingPage() {
                       </div>
                     )}
                     <div className="mt-6 border-t border-vendor-border/50 pt-6">
-                      <h3 className="font-display font-bold text-lg text-vendor-foreground mb-3">Schedule Meeting</h3>
+                      <h3 className="font-display font-bold text-lg text-vendor-foreground mb-3">Schedule meeting</h3>
                       {selectedApi.kickoff_type === "calendly" && selectedApi.kickoff_url && (
                         <Button className="bg-[#C8F53C] text-vendor-foreground hover:bg-[#C8F53C]/90 font-display font-bold" asChild>
                           <a href={normalizeMeetingUrlForHref(selectedApi.kickoff_url)} target="_blank" rel="noopener noreferrer">
                             <Calendar className="w-4 h-4 mr-2" />
-                            Schedule Meeting
+                            Schedule meeting
                           </a>
                         </Button>
                       )}
@@ -749,7 +749,7 @@ export default function PartnerOnboardingPage() {
                   >
                     <a href={normalizeMeetingUrlForHref(selectedPacket.kickoffScheduleLink)} target="_blank" rel="noopener noreferrer">
                       <Calendar className="w-4 h-4 mr-2" />
-                      Schedule Kickoff Call
+                      Schedule kickoff call
                     </a>
                   </Button>
                 </div>
@@ -909,7 +909,7 @@ export default function PartnerOnboardingPage() {
                       asChild
                     >
                       <a href="/partner/projects">
-                        Go to Active Projects →
+                        Go to active projects →
                       </a>
                     </Button>
                   </div>
@@ -930,7 +930,7 @@ export default function PartnerOnboardingPage() {
                 <Signature className="w-6 h-6 text-vendor-foreground" />
               </div>
               <div>
-                <h3 className="font-display font-bold text-xl text-vendor-foreground">Sign Document</h3>
+                <h3 className="font-display font-bold text-xl text-vendor-foreground">Sign document</h3>
                 <p className="text-sm text-vendor-muted">{signingDoc.name}</p>
               </div>
             </div>
@@ -963,7 +963,7 @@ export default function PartnerOnboardingPage() {
                 className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
               >
                 <Signature className="w-4 h-4 mr-2" />
-                Sign Document
+                Sign document
               </Button>
             </div>
           </div>

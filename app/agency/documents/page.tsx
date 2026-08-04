@@ -345,7 +345,7 @@ export default function DocumentsPage() {
         {(activeTab === "all" || activeTab === "master_briefs") && masterBriefs.length > 0 && (
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <h3 className="font-display font-bold text-lg text-foreground">Master Briefs</h3>
+              <h3 className="font-display font-bold text-lg text-foreground">Master briefs</h3>
               <span className="font-mono text-[10px] px-2 py-0.5 rounded-full border border-border text-foreground-muted uppercase">Internal Only</span>
             </div>
             <p className="font-mono text-xs text-foreground-muted mb-4">
@@ -387,7 +387,7 @@ export default function DocumentsPage() {
                       Preview
                     </Button>
                     <Button size="sm" className="flex-1 text-xs bg-accent text-accent-foreground hover:bg-accent/90">
-                      Create Partner Brief
+                      Create partner brief
                     </Button>
                   </div>
                 </GlassCard>
@@ -400,7 +400,7 @@ export default function DocumentsPage() {
         {(activeTab === "all" || activeTab === "partner_briefs") && partnerBriefs.length > 0 && (
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <h3 className="font-display font-bold text-lg text-foreground">Partner Briefs</h3>
+              <h3 className="font-display font-bold text-lg text-foreground">Partner briefs</h3>
               <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-accent/20 text-accent uppercase">Shareable</span>
             </div>
             <p className="font-mono text-xs text-foreground-muted mb-4">
@@ -455,7 +455,7 @@ export default function DocumentsPage() {
         {(activeTab === "all" || activeTab === "requirements") && requirements.length > 0 && (
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <h3 className="font-display font-bold text-lg text-foreground">Master Requirements</h3>
+              <h3 className="font-display font-bold text-lg text-foreground">Master requirements</h3>
               <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-warning/20 text-warning uppercase">Mandatory</span>
             </div>
             <p className="font-mono text-xs text-foreground-muted mb-4">
@@ -501,7 +501,7 @@ export default function DocumentsPage() {
         {/* Templates Section */}
         {(activeTab === "all" || activeTab === "templates") && (
           <div className="mb-8">
-            <h3 className="font-display font-bold text-lg text-foreground mb-4">Your Templates</h3>
+            <h3 className="font-display font-bold text-lg text-foreground mb-4">Your templates</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredDocs.filter(d => d.isTemplate).map((doc) => (
                 <GlassCard key={doc.id} className="group">
@@ -570,7 +570,7 @@ export default function DocumentsPage() {
         {/* Client Briefs Section */}
         {(activeTab === "all" || activeTab === "master_briefs") && (
           <div>
-            <h3 className="font-display font-bold text-lg text-foreground mb-4">Client Briefs</h3>
+            <h3 className="font-display font-bold text-lg text-foreground mb-4">Client briefs</h3>
             <div className="space-y-3">
               {filteredDocs.filter(d => d.type === "client_brief").map((doc) => (
                 <GlassCard key={doc.id} className="flex items-center gap-4">
@@ -617,29 +617,29 @@ export default function DocumentsPage() {
               {/* Upload Brief CTA */}
               <GlassCard className="border-dashed">
                 <GlassCardHeader
-                  title="Upload New Client Brief"
+                  title="Upload new client brief"
                   description="Upload PDF, Word, PowerPoint, or paste a Google Docs/Slides link to generate a Master RFP."
                 />
                 <div className="grid grid-cols-5 gap-3 mt-4">
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-red-400 font-mono text-xs mb-1">PDF</span>
-                    <span className="text-[10px] text-foreground-muted">Upload</span>
+                    <span className="text-[10px] text-foreground-muted">upload</span>
                   </Button>
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-blue-400 font-mono text-xs mb-1">DOCX</span>
-                    <span className="text-[10px] text-foreground-muted">Upload</span>
+                    <span className="text-[10px] text-foreground-muted">upload</span>
                   </Button>
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-orange-400 font-mono text-xs mb-1">PPTX</span>
-                    <span className="text-[10px] text-foreground-muted">Upload</span>
+                    <span className="text-[10px] text-foreground-muted">upload</span>
                   </Button>
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-green-400 font-mono text-xs mb-1">Google</span>
-                    <span className="text-[10px] text-foreground-muted">Paste Link</span>
+                    <span className="text-[10px] text-foreground-muted">paste link</span>
                   </Button>
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-accent font-mono text-xs mb-1">Text</span>
-                    <span className="text-[10px] text-foreground-muted">Copy/Paste</span>
+                    <span className="text-[10px] text-foreground-muted">copy/paste</span>
                   </Button>
                 </div>
               </GlassCard>
@@ -652,7 +652,7 @@ export default function DocumentsPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
             <GlassCard className="w-full max-w-lg">
               <GlassCardHeader
-                title="Upload Document"
+                title="Upload document"
                 description="Add a new document to your library."
               />
               
@@ -706,7 +706,7 @@ export default function DocumentsPage() {
                       disabled={!googleDocLink}
                       className="bg-accent text-accent-foreground hover:bg-accent/90"
                     >
-                      Add Link
+                      Add link
                     </Button>
                   </div>
                 </div>

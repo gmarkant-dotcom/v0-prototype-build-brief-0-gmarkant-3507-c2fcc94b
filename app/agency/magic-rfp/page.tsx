@@ -175,7 +175,7 @@ function MagicRfpContent() {
   const [recipients, setRecipients] = useState<RecipientRow[]>([newRecipientRow()])
   const [sending, setSending] = useState(false)
   const [sendResults, setSendResults] = useState<SendResult[]>([])
-  const [copyLabel, setCopyLabel] = useState("Copy All Links")
+  const [copyLabel, setCopyLabel] = useState("Copy all links")
 
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
@@ -576,10 +576,10 @@ function MagicRfpContent() {
     try {
       await navigator.clipboard.writeText(links)
       setCopyLabel("Copied!")
-      setTimeout(() => setCopyLabel("Copy All Links"), 2000)
+      setTimeout(() => setCopyLabel("Copy all links"), 2000)
     } catch {
       setCopyLabel("Copy failed")
-      setTimeout(() => setCopyLabel("Copy All Links"), 2000)
+      setTimeout(() => setCopyLabel("Copy all links"), 2000)
     }
   }
 
@@ -587,7 +587,7 @@ function MagicRfpContent() {
     setBrief(EMPTY_BRIEF)
     setRecipients([newRecipientRow()])
     setSendResults([])
-    setCopyLabel("Copy All Links")
+    setCopyLabel("Copy all links")
     setStep(1)
   }
 
@@ -646,7 +646,7 @@ function MagicRfpContent() {
             <GlassCard>
               <GlassCardHeader
                 label="Step 1"
-                title="Project Brief"
+                title="Project brief"
                 description="The essentials - this is what recipients will see when they open their invitation."
               />
 
@@ -841,7 +841,7 @@ function MagicRfpContent() {
                     className="w-full flex items-center justify-between px-4 py-3 text-left"
                   >
                     <div>
-                      <div className="font-display font-bold text-sm text-foreground">Additional Business Criteria</div>
+                      <div className="font-display font-bold text-sm text-foreground">Additional business criteria</div>
                       <p className="font-mono text-[10px] text-foreground-muted mt-0.5">
                         Require diversity designations or insurance coverage from this vendor.
                       </p>
@@ -966,7 +966,7 @@ function MagicRfpContent() {
             <GlassCard>
               <GlassCardHeader
                 label="Step 2"
-                title="Add Recipients"
+                title="Add recipients"
                 description="Every recipient gets their own 72-hour link - no Ligament account needed to bid."
               />
 
@@ -1037,7 +1037,7 @@ function MagicRfpContent() {
                 className="mt-4 border-border text-foreground-muted hover:bg-white/5 flex items-center gap-2"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add Recipient
+                Add recipient
               </Button>
             </GlassCard>
 
@@ -1109,7 +1109,7 @@ function MagicRfpContent() {
 
             <div className="flex flex-wrap items-center gap-3">
               <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90">
-                <Link href="/agency/bids">View Pending Invitations</Link>
+                <Link href="/agency/bids">View pending invitations</Link>
               </Button>
               <Button
                 type="button"
@@ -1117,7 +1117,7 @@ function MagicRfpContent() {
                 onClick={sendAnotherRound}
                 className="border-border text-foreground hover:bg-white/5"
               >
-                Send Another Round
+                Send another round
               </Button>
               <Button
                 type="button"

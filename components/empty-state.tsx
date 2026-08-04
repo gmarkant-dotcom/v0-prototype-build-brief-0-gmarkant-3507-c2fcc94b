@@ -27,19 +27,19 @@ const emptyStateConfig: Record<EmptyStateType, {
     icon: <FolderOpen className="w-12 h-12 text-foreground-muted/50" />,
     title: "No projects yet",
     description: "Create your first project to start managing vendor engagements and tracking deliverables.",
-    actionLabel: "Create Project"
+    actionLabel: "Create project"
   },
   partners: {
     icon: <Users className="w-12 h-12 text-foreground-muted/50" />,
     title: "No partners in your pool",
     description: "Add vendors, freelancers, and agencies to your partner pool to start building your network.",
-    actionLabel: "Add Partner"
+    actionLabel: "Add partner"
   },
   documents: {
     icon: <FileText className="w-12 h-12 text-foreground-muted/50" />,
     title: "No documents uploaded",
     description: "Upload contracts, briefs, and other project documents to keep everything organized.",
-    actionLabel: "Upload Document"
+    actionLabel: "Upload document"
   },
   rfps: {
     icon: <Briefcase className="w-12 h-12 text-foreground-muted/50" />,
@@ -49,21 +49,21 @@ const emptyStateConfig: Record<EmptyStateType, {
   },
   project: {
     icon: <LayoutDashboard className="w-12 h-12 text-foreground-muted/50" />,
-    title: "No Active Projects",
+    title: "No active projects",
     description: "When you award vendors and begin project work, your dashboard will appear here.",
-    actionLabel: "Start Project"
+    actionLabel: "Start project"
   },
   onboarding: {
     icon: <UserPlus className="w-12 h-12 text-foreground-muted/50" />,
-    title: "No Partners to Onboard",
+    title: "No partners to onboard",
     description: "When you award vendors from the Bids stage, you'll be able to onboard them here.",
-    actionLabel: "View Bids"
+    actionLabel: "View bids"
   },
   payments: {
     icon: <DollarSign className="w-12 h-12 text-foreground-muted/50" />,
-    title: "No Payment Activity",
+    title: "No payment activity",
     description: "Payment milestones and vendor invoices will appear here once projects are underway.",
-    actionLabel: "View Projects"
+    actionLabel: "View projects"
   }
 }
 
@@ -81,7 +81,7 @@ export function EmptyState({ type, title, description, icon, actionLabel, onActi
   const config = type ? emptyStateConfig[type] : null
   
   const displayIcon = icon ? iconMap[icon] || iconMap.projects : config?.icon
-  const displayTitle = title || config?.title || "No Data"
+  const displayTitle = title || config?.title || "No data"
   const displayDescription = description || config?.description || ""
   const displayActionLabel = actionLabel || config?.actionLabel
 

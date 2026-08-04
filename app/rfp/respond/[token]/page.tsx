@@ -477,7 +477,7 @@ export default function GuestRfpRespondPage() {
                   You already have a Ligament account. Sign in to view this bid in your portal.
                 </p>
                 <Button asChild variant="outline" className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0">
-                  <a href="/auth/login">Sign In</a>
+                  <a href="/auth/login">Sign in</a>
                 </Button>
               </>
             ) : (
@@ -492,7 +492,7 @@ export default function GuestRfpRespondPage() {
                   className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0"
                 >
                   <a href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link`}>
-                    Create Profile
+                    Create profile
                   </a>
                 </Button>
               </>
@@ -509,7 +509,7 @@ export default function GuestRfpRespondPage() {
               className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0"
             >
               <a href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link`}>
-                Create Profile
+                Create profile
               </a>
             </Button>
           </div>
@@ -620,7 +620,7 @@ export default function GuestRfpRespondPage() {
               )}
               {hasRequiredCriteriaForBid && (
                 <div className="pt-3 border-t border-border/30">
-                  <div className="font-display font-bold text-sm text-foreground mb-2">Business Criteria Required</div>
+                  <div className="font-display font-bold text-sm text-foreground mb-2">Business criteria required</div>
                   {requiredDesignationKeysForBid.length > 0 && (
                     <ul className="list-disc list-inside space-y-1 text-sm text-foreground-muted">
                       {requiredDesignationKeysForBid.map((key) => (
@@ -917,7 +917,7 @@ export default function GuestRfpRespondPage() {
                         className="border-border text-foreground-muted hover:bg-white/5 shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5 mr-1" />
-                        Add Link
+                        Add link
                       </Button>
                     </div>
 
@@ -1111,7 +1111,7 @@ export default function GuestRfpRespondPage() {
                       className="border-border text-foreground hover:bg-white/5 flex items-center gap-2"
                     >
                       <Pencil className="w-3.5 h-3.5" />
-                      Edit Bid
+                      Edit bid
                     </Button>
                   </div>
                 </div>

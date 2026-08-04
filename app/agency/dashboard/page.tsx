@@ -709,7 +709,7 @@ function DashboardContent() {
       trigger={
         <Button className="bg-accent text-accent-foreground hover:bg-accent/90 font-mono">
           <Plus className="w-4 h-4 mr-2" />
-          New Project
+          New project
         </Button>
       }
     />

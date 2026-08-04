@@ -456,7 +456,7 @@ export default function PartnerDashboardPage() {
               will appear here as soon as they send them.
             </p>
             <Button asChild variant="outline" className="mt-6 border-vendor-foreground/30 text-vendor-foreground hover:bg-vendor-foreground/5">
-              <Link href="/partner/rfps">Go to Open RFPs</Link>
+              <Link href="/partner/rfps">Go to open RFPs</Link>
             </Button>
           </div>
         </div>
@@ -480,11 +480,11 @@ export default function PartnerDashboardPage() {
                 )}
               />
               <h2 className="font-display font-bold text-lg text-vendor-foreground truncate group-hover:text-vendor-foreground/80">
-                Needs Your Response ({queueRows.length})
+                Needs your response ({queueRows.length})
               </h2>
             </button>
             <Link href="/partner/rfps" className="font-mono text-xs text-vendor-foreground hover:underline shrink-0">
-              View All RFPs →
+              View all RFPs →
             </Link>
           </div>
 
@@ -732,7 +732,7 @@ export default function PartnerDashboardPage() {
         {/* Upcoming Payments */}
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-bold text-lg text-vendor-foreground">Upcoming Payments</h2>
+            <h2 className="font-display font-bold text-lg text-vendor-foreground">Upcoming payments</h2>
             <Link href="/partner/payments" className="font-mono text-xs text-vendor-foreground hover:underline">
               Payment Settings →
             </Link>
@@ -779,7 +779,7 @@ export default function PartnerDashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
                 <Building2 className="w-5 h-5 text-vendor-foreground" />
-                <h2 className="font-display font-bold text-lg text-vendor-foreground">Lead Agency Connections</h2>
+                <h2 className="font-display font-bold text-lg text-vendor-foreground">Lead agency connections</h2>
               </div>
               <div className="flex items-center gap-3">
                 <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success">
@@ -893,7 +893,7 @@ export default function PartnerDashboardPage() {
         {/* Active Projects */}
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-display font-bold text-lg text-vendor-foreground">Active Projects</h2>
+            <h2 className="font-display font-bold text-lg text-vendor-foreground">Active projects</h2>
             <Link href="/partner/projects" className="font-mono text-xs text-vendor-foreground hover:underline">
               View All →
             </Link>

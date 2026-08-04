@@ -151,7 +151,7 @@ export function Stage06Payments() {
       <GlassCard className="mb-8">
         <GlassCardHeader
           label="Cashflow Analysis"
-          title="Client In vs. Partner Out"
+          title="Client in vs. partner out"
         />
         
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -338,7 +338,7 @@ export function Stage06Payments() {
           <GlassCard className="mb-6">
             <GlassCardHeader
               label="Client Billing"
-              title="Payments from Client"
+              title="Payments from client"
             />
             
             <div className="space-y-3">
@@ -379,7 +379,7 @@ export function Stage06Payments() {
           <GlassCard>
             <GlassCardHeader
               label="Contracts"
-              title="MSA Status"
+              title="MSA status"
             />
             
             <div className="space-y-3">
@@ -422,7 +422,7 @@ export function Stage06Payments() {
               variant="outline" 
               className="w-full mt-4 font-mono text-xs border-border text-foreground/80 hover:text-foreground bg-transparent"
             >
-              Generate New MSA
+              Generate new MSA
             </Button>
           </GlassCard>
           
@@ -430,7 +430,7 @@ export function Stage06Payments() {
           <GlassCard>
             <GlassCardHeader
               label="Summary"
-              title="Contract Breakdown"
+              title="Contract breakdown"
             />
             
             <div className="space-y-4">
@@ -469,7 +469,7 @@ export function Stage06Payments() {
         <GlassCard className="overflow-x-auto">
           <GlassCardHeader
             label="Milestone Payments"
-            title="Partner Payment Schedule"
+            title="Partner payment schedule"
           />
           
           <table className="w-full min-w-[500px]">
@@ -525,7 +525,7 @@ export function Stage06Payments() {
                   <td className="text-center py-3 px-2">
                     {payment.status === "pending" && (
                       <Button size="sm" className="font-mono text-[10px] h-6 px-2 bg-accent hover:bg-accent/90 text-accent-foreground">
-                        Pay Now
+                        Pay now
                       </Button>
                     )}
                   </td>

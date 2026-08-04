@@ -417,7 +417,7 @@ export function Stage03Onboarding() {
                   onClick={handleAutoSelectRequired}
                   className="border-accent/30 text-accent hover:bg-accent/10"
                 >
-                  Select All Required
+                  Select all required
                 </Button>
               </div>
               
@@ -426,7 +426,7 @@ export function Stage03Onboarding() {
                 <div className="flex items-center gap-3 mb-4">
                   <Building2 className="w-5 h-5 text-accent" />
                   <div>
-                    <h4 className="font-display font-bold text-foreground">Agency Documents</h4>
+                    <h4 className="font-display font-bold text-foreground">Agency documents</h4>
                     <p className="text-xs text-foreground-muted">Standard legal and operational documents</p>
                   </div>
                 </div>
@@ -500,7 +500,7 @@ export function Stage03Onboarding() {
                 <div className="flex items-center gap-3 mb-4">
                   <Briefcase className="w-5 h-5 text-accent" />
                   <div>
-                    <h4 className="font-display font-bold text-foreground">Project Documents</h4>
+                    <h4 className="font-display font-bold text-foreground">Project documents</h4>
                     <p className="text-xs text-foreground-muted">NWSL Creator Content Series specific materials</p>
                   </div>
                 </div>
@@ -602,7 +602,7 @@ export function Stage03Onboarding() {
                       <CheckCircle className="w-5 h-5 text-success" />
                     </div>
                     <div>
-                      <h4 className="font-display font-bold text-foreground">Already Completed</h4>
+                      <h4 className="font-display font-bold text-foreground">Already completed</h4>
                       <p className="text-xs text-foreground-muted">
                         {documentsAlreadySigned.length} document{documentsAlreadySigned.length !== 1 ? "s" : ""} already on file
                       </p>
@@ -652,7 +652,7 @@ export function Stage03Onboarding() {
                       <AlertCircle className="w-5 h-5 text-yellow-400" />
                     </div>
                     <div>
-                      <h4 className="font-display font-bold text-foreground">Will Be Sent</h4>
+                      <h4 className="font-display font-bold text-foreground">Will be sent</h4>
                       <p className="text-xs text-foreground-muted">
                         {documentsToSend.length} document{documentsToSend.length !== 1 ? "s" : ""} to send
                       </p>
@@ -849,7 +849,7 @@ export function Stage03Onboarding() {
                 <GlassCard>
                   <GlassCardHeader
                     label="Optional"
-                    title="Personal Message"
+                    title="Personal message"
                   />
                   
                   <textarea
@@ -863,7 +863,7 @@ export function Stage03Onboarding() {
                 <GlassCard>
                   <GlassCardHeader
                     label="Scheduling"
-                    title="Kickoff Call Link"
+                    title="Kickoff call link"
                   />
                   
                   <div className="space-y-4">
@@ -903,7 +903,7 @@ export function Stage03Onboarding() {
               <GlassCard>
                 <GlassCardHeader
                   label="Packet Preview"
-                  title={`${documentsToSend.length} Documents to Send`}
+                  title={`${documentsToSend.length} documents to send`}
                 />
                 
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -1047,13 +1047,13 @@ export function Stage03Onboarding() {
                   onClick={() => setCurrentStep("customize_packet")}
                   className="text-foreground hover:text-foreground"
                 >
-                  Back to Customize
+                  Back to customize
                 </Button>
                 <Button
                   className="bg-accent text-accent-foreground hover:bg-accent/90 px-8"
                 >
                   <Send className="w-4 h-4 mr-2" />
-                  Send Onboarding Packet
+                  Send onboarding packet
                 </Button>
               </div>
             </div>
@@ -1066,7 +1066,7 @@ export function Stage03Onboarding() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80" onClick={() => setShowUploadModal(false)}>
           <GlassCard className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <GlassCardHeader
-              title={`Upload ${uploadingDocType === "insurance" ? "Insurance Certificate" : "Document"}`}
+              title={`Upload ${uploadingDocType === "insurance" ? "insurance certificate" : "document"}`}
               description="Upload the required document for this partner."
             />
             <div className="mt-4">

@@ -675,7 +675,7 @@ export function EmailImportPanel({ active, onDone, onImported }: EmailImportPane
                 Scan Outlook
               </Button>
               <Button onClick={runScanAll} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-                Scan All
+                Scan all
               </Button>
             </div>
           )}

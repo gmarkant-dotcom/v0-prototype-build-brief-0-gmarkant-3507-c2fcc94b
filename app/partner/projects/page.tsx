@@ -232,7 +232,7 @@ function StatusTab({ project }: { project: PartnerProject }) {
 
       {/* Update form */}
       <div className="space-y-4">
-        <h3 className="font-display font-bold text-base text-vendor-foreground">Submit Status Update</h3>
+        <h3 className="font-display font-bold text-base text-vendor-foreground">Submit status update</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Workflow Status</label>
@@ -272,7 +272,7 @@ function StatusTab({ project }: { project: PartnerProject }) {
 
       {/* History */}
       <div className="space-y-3">
-        <h3 className="font-display font-bold text-base text-vendor-foreground">Update History</h3>
+        <h3 className="font-display font-bold text-base text-vendor-foreground">Update history</h3>
         {histLoading ? (
           <div className="flex items-center gap-2 text-vendor-muted py-4"><Loader2 className="w-4 h-4 animate-spin" /><span className="font-mono text-sm">Loading…</span></div>
         ) : history.length === 0 ? (
@@ -423,7 +423,7 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1 border-vendor-border" onClick={()=>setRequestForm(false)}>Cancel</Button>
               <Button className="flex-1 bg-vendor-foreground text-white" onClick={handleRequestSubmit} disabled={reqSaving}>
-                {reqSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Submit Request
+                {reqSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Submit request
               </Button>
             </div>
           </div>
@@ -432,7 +432,7 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
 
       {/* Milestones */}
       <section className="space-y-3">
-        <h3 className="font-display font-bold text-base text-vendor-foreground">Payment Schedule</h3>
+        <h3 className="font-display font-bold text-base text-vendor-foreground">Payment schedule</h3>
         {milestones.length === 0 ? (
           <p className="text-sm text-vendor-muted">No payment milestones scheduled yet.</p>
         ) : (

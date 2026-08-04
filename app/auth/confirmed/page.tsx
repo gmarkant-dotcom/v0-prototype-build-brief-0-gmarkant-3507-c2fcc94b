@@ -43,7 +43,7 @@ function ConfirmedContent() {
 
           <Button asChild className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-mono">
             <Link href="/auth/login">
-              Log In to Continue
+              Log in to continue
               <ArrowRight className="w-4 h-4 ml-2" />
             </Link>
           </Button>

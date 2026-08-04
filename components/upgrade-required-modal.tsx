@@ -88,14 +88,14 @@ export function UpgradeRequiredModal({ isOpen, onClose, featureName }: UpgradeRe
               onClick={onClose}
               className="flex-1 border-border/50 text-foreground hover:text-foreground"
             >
-              Maybe Later
+              Maybe later
             </Button>
             <Button
               asChild
               className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
             >
               <Link href="/pricing">
-                View Pricing
+                View pricing
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>

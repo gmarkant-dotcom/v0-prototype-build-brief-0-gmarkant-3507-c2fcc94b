@@ -191,7 +191,7 @@ export default function FAQPage() {
           <LigamentLogo size="md" variant="primary" />
         </Link>
         <Link href="/" className="text-sm text-white/80 hover:text-white transition-colors">
-          Back to Home
+          Back to home
         </Link>
       </header>
 

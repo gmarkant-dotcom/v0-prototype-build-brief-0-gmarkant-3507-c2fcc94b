@@ -37,13 +37,13 @@ export default function DemoAccessDeniedPage() {
             <Button asChild className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-mono">
               <a href="mailto:greg@withligament.com?subject=Demo Access Request">
                 <Mail className="w-4 h-4 mr-2" />
-                Request Demo Access
+                Request demo access
               </a>
             </Button>
             
             <Button asChild variant="outline" className="w-full border-border/50 text-foreground hover:text-foreground">
               <Link href="https://withligament.com">
-                Go to Production Site
+                Go to production site
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>

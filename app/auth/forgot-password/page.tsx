@@ -85,7 +85,7 @@ export default function ForgotPasswordPage() {
                 <Link href="/auth/login">
                   <Button className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-mono">
                     <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Sign In
+                    Back to sign in
                   </Button>
                 </Link>
               </div>
@@ -143,7 +143,7 @@ export default function ForgotPasswordPage() {
                   className="inline-flex items-center text-sm text-foreground/90 hover:text-accent transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Sign In
+                  Back to sign in
                 </Link>
               </div>
             </>
@@ -153,7 +153,7 @@ export default function ForgotPasswordPage() {
         {/* Footer links */}
         <div className="mt-6 text-center space-y-3">
           <Link href="/" className="text-sm text-foreground/90 hover:text-foreground">
-            Back to Home
+            Back to home
           </Link>
           <div className="flex items-center justify-center gap-3">
             <Link

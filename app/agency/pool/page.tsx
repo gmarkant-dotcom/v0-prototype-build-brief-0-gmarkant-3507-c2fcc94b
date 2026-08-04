@@ -1255,7 +1255,7 @@ function PartnerPoolPageInner() {
               className="border-border text-foreground hover:bg-white/5 flex items-center gap-2"
             >
               <Upload className="w-4 h-4" />
-              Import Partners
+              Import partners
             </Button>
             <Button
               onClick={() => {
@@ -1266,7 +1266,7 @@ function PartnerPoolPageInner() {
               className="border-border text-foreground hover:bg-white/5 flex items-center gap-2"
             >
               <Compass className="w-4 h-4" />
-              Discover New Partners
+              Discover new partners
             </Button>
             <Button
               onClick={() => {
@@ -1277,14 +1277,14 @@ function PartnerPoolPageInner() {
               className="border-accent text-accent hover:bg-accent/10 flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Add Partner
+              Add partner
             </Button>
             <Button
               onClick={() => setShowInviteModal(true)}
               className="bg-accent text-accent-foreground hover:bg-accent/90 flex items-center gap-2"
             >
               <UserPlus className="w-4 h-4" />
-              Invite Partner
+              Invite partner
             </Button>
           </div>
         </div>
@@ -1484,7 +1484,7 @@ function PartnerPoolPageInner() {
               all three columns for search. */}
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="font-display font-bold text-sm text-foreground">Active Partners</h2>
+              <h2 className="font-display font-bold text-sm text-foreground">Active partners</h2>
               <span className="font-mono text-[10px] text-foreground-muted">{filteredNetworkRows.length}</span>
             </div>
             <p className="text-xs text-foreground-muted mb-4">
@@ -2268,7 +2268,7 @@ function PartnerPoolPageInner() {
                     <UserPlus className="w-5 h-5 text-accent" />
                   </div>
                   <div>
-                    <h2 className="font-display font-bold text-xl text-foreground">Invite Partner</h2>
+                    <h2 className="font-display font-bold text-xl text-foreground">Invite partner</h2>
                     <p className="font-mono text-xs text-foreground-muted">Send an invitation to join your network</p>
                   </div>
                 </div>
@@ -2421,7 +2421,7 @@ function PartnerPoolPageInner() {
           className="w-full sm:max-w-[480px] overflow-y-auto"
         >
           <SheetHeader>
-            <SheetTitle>Discover New Partners</SheetTitle>
+            <SheetTitle>Discover new partners</SheetTitle>
           </SheetHeader>
           <div className="px-4 pb-4">
             {marketplaceOpened && <MarketplaceContent compact excludePartnerIds={activePartnerIds} />}

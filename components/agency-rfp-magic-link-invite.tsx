@@ -131,7 +131,7 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
     <GlassCard>
       <GlassCardHeader
         label="Guest Invitation"
-        title="Invite by Email"
+        title="Invite by email"
         description="Send a no-signup invitation link so a vendor can submit a bid directly, without creating a Ligament account."
       />
       <div className="grid sm:grid-cols-2 gap-3">

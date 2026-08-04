@@ -196,7 +196,7 @@ export default function AgencyUserProfilePage() {
         </div>
 
         <div className="bg-white/5 border border-border/40 rounded-xl p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-foreground">Account Information</h2>
+          <h2 className="font-display font-bold text-lg text-foreground">Account information</h2>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Full Name</label>
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-white/5 border-border text-foreground" />
@@ -241,7 +241,7 @@ export default function AgencyUserProfilePage() {
         </div>
 
         <div className="bg-white/5 border border-border/40 rounded-xl p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-foreground">Password & Security</h2>
+          <h2 className="font-display font-bold text-lg text-foreground">Password & security</h2>
           <div>
             <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Current Password</label>
             <Input
@@ -283,7 +283,7 @@ export default function AgencyUserProfilePage() {
         </div>
 
         <div className="bg-white/5 border border-border/40 rounded-xl p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-foreground">Notification Preferences</h2>
+          <h2 className="font-display font-bold text-lg text-foreground">Notification preferences</h2>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-foreground">Email me when a new bid is received</span>
@@ -326,10 +326,10 @@ export default function AgencyUserProfilePage() {
         </div>
 
         <div className="bg-white/5 border border-red-300/30 rounded-xl p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-foreground">Danger Zone</h2>
+          <h2 className="font-display font-bold text-lg text-foreground">Danger zone</h2>
           <p className="text-sm text-foreground-muted">Account deletion is handled manually by support for security purposes.</p>
           <Button disabled variant="destructive-outline" title="Contact support to delete your account">
-            Delete Account
+            Delete account
           </Button>
         </div>
 

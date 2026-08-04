@@ -356,7 +356,7 @@ export default function PartnerLegalPage() {
     } catch (error) {
       console.error("COI auto-save error:", error)
       setUploadError(
-        "Your file uploaded, but saving it to your profile failed. Click Save Business Criteria below to finish."
+        "Your file uploaded, but saving it to your profile failed. Click Save business criteria below to finish."
       )
     } finally {
       setUploadingDocId(null)
@@ -451,7 +451,7 @@ export default function PartnerLegalPage() {
                 <span className="text-yellow-600 text-xl">!</span>
               </div>
               <div>
-                <h3 className="font-display font-bold text-lg text-yellow-800">Complete Your Legal Setup</h3>
+                <h3 className="font-display font-bold text-lg text-yellow-800">Complete your legal setup</h3>
                 <p className="text-sm text-yellow-700 mt-1">
                   You have {totalCount - completedCount} document{totalCount - completedCount > 1 ? 's' : ''} remaining. 
                   Complete all requirements to be eligible for all RFP opportunities.
@@ -463,7 +463,7 @@ export default function PartnerLegalPage() {
         
         {/* Entity Information */}
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Entity Information</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Entity information</h2>
           
           <div className="grid grid-cols-2 gap-6">
             <div>
@@ -536,7 +536,7 @@ export default function PartnerLegalPage() {
               className="bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
             >
               {savingEntityInfo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              Save Entity Info
+              Save entity info
             </Button>
           </div>
           {entityInfoMsg ? <p className="text-xs text-vendor-muted-strong mt-3">{entityInfoMsg}</p> : null}
@@ -544,7 +544,7 @@ export default function PartnerLegalPage() {
         
         {/* Required Documents */}
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Required Documents</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Required documents</h2>
           
           <div className="space-y-4">
             {documents.map((doc) => (
@@ -643,7 +643,7 @@ export default function PartnerLegalPage() {
         <div className="space-y-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-display font-bold text-xl text-vendor-foreground">Business Criteria</h2>
+              <h2 className="font-display font-bold text-xl text-vendor-foreground">Business criteria</h2>
               <p className="text-sm text-vendor-muted-strong mt-1">
                 Diversity designations, company facts, and insurance coverage used for procurement requirements.
               </p>
@@ -657,14 +657,14 @@ export default function PartnerLegalPage() {
               )}
             >
               {savingBusinessCriteria ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              {savingBusinessCriteria ? "Saving..." : savedBusinessCriteria ? "Saved" : "Save Business Criteria"}
+              {savingBusinessCriteria ? "Saving..." : savedBusinessCriteria ? "Saved" : "Save business criteria"}
             </Button>
           </div>
           {businessCriteriaMsg ? <p className="text-xs text-vendor-muted-strong">{businessCriteriaMsg}</p> : null}
 
           {/* Business Designations & Company Facts */}
           <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
-          <h3 className="font-display font-bold text-lg text-vendor-foreground mb-2">Business Designations & Company Facts</h3>
+          <h3 className="font-display font-bold text-lg text-vendor-foreground mb-2">Business designations & company facts</h3>
           <p className="text-sm text-vendor-muted-strong mb-6">
             Diversity and ownership designations, plus company facts agencies use for procurement requirements.
           </p>
@@ -784,7 +784,7 @@ export default function PartnerLegalPage() {
 
           {/* Insurance Requirements */}
           <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
-          <h3 className="font-display font-bold text-lg text-vendor-foreground mb-1">Insurance Requirements</h3>
+          <h3 className="font-display font-bold text-lg text-vendor-foreground mb-1">Insurance requirements</h3>
           <p className="text-sm text-vendor-muted-strong mb-4">
             Confirm the insurance coverages your company carries, with limits, for project eligibility.
           </p>

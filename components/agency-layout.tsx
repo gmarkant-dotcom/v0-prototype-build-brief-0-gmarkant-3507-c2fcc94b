@@ -386,7 +386,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                   className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-accent text-accent-foreground font-mono text-sm font-medium hover:bg-accent/90 transition-colors"
                 >
                   <Plus className="w-4 h-4" />
-                  New Project
+                  New project
                 </button>
               }
             />

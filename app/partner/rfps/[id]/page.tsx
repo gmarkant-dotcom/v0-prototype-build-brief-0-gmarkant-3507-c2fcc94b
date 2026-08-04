@@ -401,7 +401,7 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
       )}
       {hasRequiredCriteria && (
         <div>
-          <h4 className="font-display font-bold text-vendor-foreground mb-2">Business Criteria Required</h4>
+          <h4 className="font-display font-bold text-vendor-foreground mb-2">Business criteria required</h4>
           {requiredDesignationKeys.length > 0 && (
             <ul className="list-disc list-inside space-y-1">
               {requiredDesignationKeys.map((key) => (
@@ -1258,7 +1258,7 @@ export default function PartnerRfpDetailPage() {
 
               {existing?.agency_feedback && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                  <h3 className="font-display font-bold text-vendor-foreground">Feedback from Agency</h3>
+                  <h3 className="font-display font-bold text-vendor-foreground">Feedback from agency</h3>
                   <p className="text-sm text-vendor-foreground whitespace-pre-wrap mt-2">{existing.agency_feedback}</p>
                   {feedbackUpdatedAt && <p className="font-mono text-[10px] text-vendor-muted mt-2">Updated {feedbackUpdatedAt}</p>}
                 </div>
@@ -1276,7 +1276,7 @@ export default function PartnerRfpDetailPage() {
                       <Button className="bg-cyan-600 hover:bg-cyan-600/90 text-white" asChild>
                         <a href={normalizeMeetingUrlForHref(inbox.agency_meeting_url)} target="_blank" rel="noopener noreferrer">
                           <CalendarDays className="w-4 h-4 mr-2" />
-                          Schedule Meeting
+                          Schedule meeting
                         </a>
                       </Button>
                     </div>
@@ -1300,7 +1300,7 @@ export default function PartnerRfpDetailPage() {
                   className="w-full flex items-center justify-between text-vendor-foreground"
                   onClick={() => setHistoryOpen((prev) => !prev)}
                 >
-                  <h3 className="font-display font-bold text-lg text-vendor-foreground">Submission History</h3>
+                  <h3 className="font-display font-bold text-lg text-vendor-foreground">Submission history</h3>
                   <span className="text-sm text-vendor-muted-strong">{historyOpen ? "Hide" : "Show"}</span>
                 </button>
                 {historyOpen && (
@@ -1587,7 +1587,7 @@ export default function PartnerRfpDetailPage() {
 
             {hasRequiredCriteriaForBid && (
               <div className="rounded-xl border border-vendor-border bg-vendor-background/70 p-4">
-                <h3 className="font-display font-bold text-sm text-vendor-foreground mb-1">Business Criteria</h3>
+                <h3 className="font-display font-bold text-sm text-vendor-foreground mb-1">Business criteria</h3>
                 <p className="text-xs text-vendor-muted-strong mb-3">
                   This RFP requires confirmation of the following. Confirm what applies to your company.
                 </p>

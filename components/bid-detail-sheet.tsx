@@ -374,7 +374,7 @@ function BidDetailSheetInner({
                         onClick={() => patchResponse({ status: "submitted" })}
                         disabled={busy}
                       >
-                        Undo Decline
+                        Undo decline
                       </Button>
                     )}
                     {isAwarded && projectId && (

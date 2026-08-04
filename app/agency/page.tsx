@@ -1296,7 +1296,7 @@ function AgencyRFPContent() {
               className="gap-2"
             >
               {isDuplicatingProject ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-              Duplicate This Project
+              Duplicate this project
             </Button>
           </div>
         )}
@@ -1518,7 +1518,7 @@ function AgencyRFPContent() {
                           setBriefSourceText(pastedContent)
                         }}
                       >
-                        Use Pasted Content
+                        Use pasted content
                       </Button>
                     </div>
                   )}
@@ -1753,7 +1753,7 @@ function AgencyRFPContent() {
                 onClick={handleSkipOutputTemplate}
                 className="border-border text-foreground-muted hover:bg-white/5"
               >
-                Skip - Use Client Brief As-Is
+                Skip - use client brief as-is
               </Button>
             </div>
 
@@ -1815,7 +1815,7 @@ function AgencyRFPContent() {
                 className="border-accent/40 text-accent hover:bg-accent/10 flex items-center gap-2"
               >
                 <Zap className="w-4 h-4" />
-                Send as Lightning RFP Magic Link
+                Send as Lightning RFP magic link
               </Button>
             </div>
           </div>
@@ -1856,7 +1856,7 @@ function AgencyRFPContent() {
               
               <div className="space-y-6">
                 <div>
-                  <h3 className="font-display font-bold text-sm text-foreground mb-2">Project Overview</h3>
+                  <h3 className="font-display font-bold text-sm text-foreground mb-2">Project overview</h3>
                   <p className="text-sm text-foreground-muted leading-relaxed">{masterRfp.overview}</p>
                 </div>
                 
@@ -1894,7 +1894,7 @@ function AgencyRFPContent() {
 
             <GlassCard>
               <div className="mb-6">
-                <h2 className="font-display font-bold text-xl text-foreground">Business Criteria</h2>
+                <h2 className="font-display font-bold text-xl text-foreground">Business criteria</h2>
                 <p className="text-sm text-foreground-muted mt-1">
                   Require any diversity designation or insurance coverage from bidders. Left unchecked, a
                   requirement is optional.
@@ -1986,7 +1986,7 @@ function AgencyRFPContent() {
             <GlassCard>
               <GlassCardHeader
                 label="Step 3"
-                title="Allocate Scope"
+                title="Allocate scope"
                 description="For each deliverable, decide whether your team handles it internally or if you need an external partner."
               />
               
@@ -2129,7 +2129,7 @@ function AgencyRFPContent() {
               <GlassCard>
                 <GlassCardHeader
                   label="Your Team"
-                  title="Handled Internally"
+                  title="Handled internally"
                   description={`${internalItems.length} deliverables your agency will own`}
                 />
                 <div className="space-y-2 mt-4">
@@ -2174,7 +2174,7 @@ function AgencyRFPContent() {
             <GlassCard>
               <GlassCardHeader
                 label="Optional"
-                title="Additional Context for AI"
+                title="Additional context for AI"
                 description="Provide any extra information the AI should consider when generating partner-specific RFPs."
               />
               <Textarea
@@ -2208,7 +2208,7 @@ function AgencyRFPContent() {
             <GlassCard>
               <GlassCardHeader
                 label="Step 5"
-                title="Select Recipients"
+                title="Select recipients"
                 description="Confirmed partners from your account load automatically below. For each outsourced deliverable, pick recipients or invite a new contact by email."
               />
             </GlassCard>
@@ -2511,7 +2511,7 @@ function AgencyRFPContent() {
             <GlassCard>
               <GlassCardHeader
                 label="Step 6"
-                title="Ready to Broadcast"
+                title="Ready to broadcast"
                 description="Review your RFP distribution and send to selected partners."
               />
               
@@ -2707,7 +2707,7 @@ function AgencyRFPContent() {
             </div>
             <div className="flex justify-center gap-3">
               <Button variant="outline" onClick={resetFlow} className="border-border text-foreground hover:bg-white/5">
-                Create Another RFP
+                Create another RFP
               </Button>
               <Button className="bg-accent text-accent-foreground hover:bg-accent/90" asChild>
                 <a href="/agency/bids">View Bid Management</a>

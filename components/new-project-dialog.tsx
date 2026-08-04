@@ -127,7 +127,7 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-[600px] bg-background border-border">
         <DialogHeader>
-          <DialogTitle className="font-display font-black text-2xl text-foreground">Create New Project</DialogTitle>
+          <DialogTitle className="font-display font-black text-2xl text-foreground">Create new project</DialogTitle>
           <DialogDescription className="text-foreground-muted">
             Set up a new master project to begin the vendor orchestration workflow.
           </DialogDescription>

@@ -652,7 +652,7 @@ export default function AgencyNetworkPage() {
               <div className="w-16 h-16 rounded-full bg-vendor-foreground/10 flex items-center justify-center mx-auto mb-4">
                 <Building2 className="w-8 h-8 text-vendor-foreground" />
               </div>
-              <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No Agency Partnerships Yet</h3>
+              <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No agency partnerships yet</h3>
               <p className="text-vendor-muted max-w-md mx-auto">
                 {searchQuery
                   ? "No agencies match your search."
@@ -731,7 +731,7 @@ export default function AgencyNetworkPage() {
               <div className="w-16 h-16 rounded-full bg-vendor-foreground/10 flex items-center justify-center mx-auto mb-4">
                 <Mail className="w-8 h-8 text-vendor-foreground" />
               </div>
-              <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No Invitations Yet</h3>
+              <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No invitations yet</h3>
               <p className="text-vendor-muted max-w-md mx-auto">
                 {searchQuery
                   ? "No invitations match your search."
@@ -920,7 +920,7 @@ export default function AgencyNetworkPage() {
                 <div className="w-16 h-16 rounded-full bg-vendor-foreground/10 flex items-center justify-center mx-auto mb-4">
                   <Building2 className="w-8 h-8 text-vendor-foreground" />
                 </div>
-                <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No Agencies Found</h3>
+                <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No agencies found</h3>
                 <p className="text-vendor-muted max-w-md mx-auto">
                   {searchQuery
                     ? "No agencies match your search. Try different keywords."

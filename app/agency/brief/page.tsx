@@ -667,7 +667,7 @@ function BriefInterpretationContent() {
                         setBriefUploaded(true)
                       }}
                     >
-                      Use Pasted Content
+                      Use pasted content
                     </Button>
                   </div>
                 )}

@@ -193,7 +193,7 @@ export default function PartnerUserProfilePage() {
         </div>
 
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground">Account Information</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Account information</h2>
           <div>
             <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Full Name</label>
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-vendor-surface border-vendor-border text-vendor-foreground" />
@@ -234,7 +234,7 @@ export default function PartnerUserProfilePage() {
         </div>
 
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground">Password & Security</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Password & security</h2>
           <div>
             <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Current Password</label>
             <Input
@@ -272,7 +272,7 @@ export default function PartnerUserProfilePage() {
         </div>
 
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground">Notification Preferences</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Notification preferences</h2>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-vendor-foreground">Email me when a new bid is received</span>
@@ -315,10 +315,10 @@ export default function PartnerUserProfilePage() {
         </div>
 
         <div className="bg-vendor-surface rounded-xl border border-red-200 p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground">Danger Zone</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Danger zone</h2>
           <p className="text-sm text-vendor-muted-strong">Account deletion is handled manually by support for security purposes.</p>
           <Button disabled variant="destructive-outline" title="Contact support to delete your account">
-            Delete Account
+            Delete account
           </Button>
         </div>
 

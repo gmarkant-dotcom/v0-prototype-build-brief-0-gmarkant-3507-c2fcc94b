@@ -45,7 +45,7 @@ export function PartnerImportSheet({
         className="w-full sm:max-w-[520px] flex flex-col"
       >
         <SheetHeader>
-          <SheetTitle>Import Partners</SheetTitle>
+          <SheetTitle>Import partners</SheetTitle>
         </SheetHeader>
         <Tabs value={tab} onValueChange={(v) => setTab(v as ImportTab)} className="flex flex-col flex-1 min-h-0">
           <div className="px-4">

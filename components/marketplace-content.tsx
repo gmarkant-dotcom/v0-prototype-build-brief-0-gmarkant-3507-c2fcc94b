@@ -318,7 +318,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
       {invitePartnerId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setInvitePartnerId(null)}>
           <GlassCard className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="font-display font-bold text-xl text-foreground">Invite Partner to Pool</div>
+            <div className="font-display font-bold text-xl text-foreground">Invite partner to Pool</div>
             <p className="font-mono text-xs text-foreground-muted mt-1">
               {invitePartner?.company_name || invitePartner?.full_name || "Partner Agency"}
             </p>
@@ -375,13 +375,13 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
 
             <div className="flex flex-wrap gap-3 text-sm">
               {selectedPartner.company_website && (
-                <a href={selectedPartner.company_website.startsWith("http") ? selectedPartner.company_website : "https://" + selectedPartner.company_website} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Company Website</a>
+                <a href={selectedPartner.company_website.startsWith("http") ? selectedPartner.company_website : "https://" + selectedPartner.company_website} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">Company website</a>
               )}
               {selectedPartner.company_linkedin_url && (
-                <a href={selectedPartner.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">LinkedIn Profile</a>
+                <a href={selectedPartner.company_linkedin_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">LinkedIn profile</a>
               )}
               {selectedPartner.reel_url && (
-                <a href={selectedPartner.reel_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">View Reel</a>
+                <a href={selectedPartner.reel_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">View reel</a>
               )}
             </div>
 

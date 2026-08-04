@@ -403,7 +403,7 @@ export default function AgencyProfileSettingsPage() {
               />
               <Button variant="outline" className="border-border text-foreground" onClick={() => fileRef.current?.click()}>
                 {uploadingLogo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Camera className="w-4 h-4 mr-2" />}
-                Upload Logo
+                Upload logo
               </Button>
             </div>
           </div>

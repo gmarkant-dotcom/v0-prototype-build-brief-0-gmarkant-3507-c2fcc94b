@@ -228,7 +228,7 @@ export function ScoringSettingsSheet({ open, onOpenChange }: { open: boolean; on
         className="w-full sm:max-w-md bg-card border-border text-foreground flex flex-col p-0 gap-0"
       >
         <SheetHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
-          <SheetTitle className="font-display text-foreground">Scoring Settings</SheetTitle>
+          <SheetTitle className="font-display text-foreground">Scoring settings</SheetTitle>
           <SheetDescription className="text-foreground-muted">
             Manage the criteria used to score bids. Scoring is always optional.
           </SheetDescription>
