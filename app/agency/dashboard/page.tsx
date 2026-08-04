@@ -26,6 +26,7 @@ import {
   ChevronDown,
   UserPlus,
   FolderOpen,
+  Check,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -54,6 +55,13 @@ type AttentionRfpRow = {
 type AttentionDeliveryRow = { projectId: string; projectName: string; count: number; href: string }
 type AttentionAlertRow = { projectId: string; projectName: string; count: number; href: string }
 
+type ChecklistData = {
+  importPartners: boolean
+  firstProject: boolean
+  broadcastRfp: boolean
+  reviewBid: boolean
+}
+
 type DashboardData = {
   attention: {
     bidsAwaitingReview: AttentionBidsRow[]
@@ -62,6 +70,7 @@ type DashboardData = {
     alerts: AttentionAlertRow[]
     isBrandNew: boolean
   }
+  checklist: ChecklistData
   funnel: {
     activePartners: number
     openRfps: number
@@ -220,33 +229,13 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
             className={cn("w-3.5 h-3.5 text-foreground-muted transition-transform", collapsed && "-rotate-90")}
           />
           <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
-            Needs your attention{!data.isBrandNew ? ` (${rows.length})` : ""}
+            Needs your attention ({rows.length})
           </h2>
         </button>
       </div>
       {!collapsed && (
         <div className="glass rounded-xl divide-y divide-border/50 overflow-hidden">
-          {data.isBrandNew ? (
-            <>
-              <NewProjectDialog
-                trigger={
-                  <button
-                    type="button"
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
-                  >
-                    <Plus className="w-4 h-4 text-accent shrink-0" />
-                    <span className="flex-1 text-sm text-foreground">Create your first project</span>
-                    <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
-                  </button>
-                }
-              />
-              <Link href="/agency/pool" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
-                <UserPlus className="w-4 h-4 text-accent shrink-0" />
-                <span className="flex-1 text-sm text-foreground">Invite partners to your pool</span>
-                <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
-              </Link>
-            </>
-          ) : rows.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="px-4 py-3 text-sm text-foreground-muted">You're all caught up.</div>
           ) : (
             <>
@@ -282,6 +271,135 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
               )}
             </>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Getting started checklist ─────────────────────────────────────────────────
+
+type ChecklistStep = {
+  key: keyof ChecklistData
+  done: boolean
+  title: string
+  description: string
+  icon: typeof Users
+  href?: string
+  isNewProject?: boolean
+}
+
+function GettingStartedChecklist({ checklist }: { checklist: ChecklistData }) {
+  const { collapsed, toggle } = useSectionCollapse("agency", "getting-started")
+
+  const steps: ChecklistStep[] = [
+    {
+      key: "importPartners",
+      done: checklist.importPartners,
+      title: "Import your partners",
+      description: "Bring in vendors from your email or a spreadsheet to build your pool.",
+      icon: UserPlus,
+      href: "/agency/pool?import=email",
+    },
+    {
+      key: "firstProject",
+      done: checklist.firstProject,
+      title: "Create your first project",
+      description: "Set up a project to organize briefs, RFPs, and awarded work.",
+      icon: FolderOpen,
+      isNewProject: true,
+    },
+    {
+      key: "broadcastRfp",
+      done: checklist.broadcastRfp,
+      title: "Broadcast an RFP",
+      description: "Send a scoped RFP to your pool or any vendor by magic link.",
+      icon: Send,
+      href: "/agency",
+    },
+    {
+      key: "reviewBid",
+      done: checklist.reviewBid,
+      title: "Review your first bid",
+      description: "Compare and score bids as they come in.",
+      icon: Gavel,
+      href: "/agency/bids",
+    },
+  ]
+
+  const completedCount = steps.filter((s) => s.done).length
+  // Completion is the only way this card fully leaves - collapsing is the escape valve,
+  // there is no dismiss action.
+  if (completedCount === steps.length) return null
+
+  const renderRow = (step: ChecklistStep) => {
+    const Icon = step.icon
+    return (
+      <>
+        <div
+          className={cn(
+            "w-6 h-6 rounded-full border flex items-center justify-center shrink-0",
+            step.done ? "bg-accent/15 border-accent/40 text-accent" : "border-border text-foreground-muted"
+          )}
+        >
+          {step.done ? <Check className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className={cn("text-sm", step.done ? "text-foreground-muted" : "text-foreground")}>{step.title}</div>
+          {!step.done && <div className="text-xs text-foreground-muted mt-0.5">{step.description}</div>}
+        </div>
+        {!step.done && <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />}
+      </>
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <button type="button" onClick={toggle} className="flex items-center gap-1.5 group">
+          <ChevronDown
+            className={cn("w-3.5 h-3.5 text-foreground-muted transition-transform", collapsed && "-rotate-90")}
+          />
+          <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
+            Getting started ({completedCount} of {steps.length})
+          </h2>
+        </button>
+      </div>
+      {!collapsed && (
+        <div className="glass rounded-xl divide-y divide-border/50 overflow-hidden">
+          {steps.map((step) => {
+            if (step.done) {
+              return (
+                <div key={step.key} className="flex items-center gap-3 px-4 py-3 opacity-70">
+                  {renderRow(step)}
+                </div>
+              )
+            }
+            if (step.isNewProject) {
+              return (
+                <NewProjectDialog
+                  key={step.key}
+                  trigger={
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
+                    >
+                      {renderRow(step)}
+                    </button>
+                  }
+                />
+              )
+            }
+            return (
+              <Link
+                key={step.key}
+                href={step.href!}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+              >
+                {renderRow(step)}
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>
@@ -509,6 +627,15 @@ function buildDemoDashboardData(): DashboardData {
   const nowIso = new Date().toISOString()
   return {
     attention: { bidsAwaitingReview: [], rfpsClosingSoon: [], pendingDeliveryEvaluations: [], alerts: [], isBrandNew: false },
+    // Derived from the same demo fixtures as the funnel metrics below, not hardcoded true -
+    // if a future demo fixture ever drops to zero partners/RFPs/bids, this checklist card
+    // should genuinely reappear rather than silently claiming a step is done.
+    checklist: {
+      importPartners: demoMasterProjects.some((p) => p.partnerCount > 0),
+      firstProject: demoMasterProjects.length > 0,
+      broadcastRfp: demoMasterProjects.some((p) => p.activeRfps > 0),
+      reviewBid: demoMasterProjects.some((p) => p.pendingBids > 0),
+    },
     funnel: {
       activePartners: demoMasterProjects.reduce((sum, p) => sum + p.partnerCount, 0),
       openRfps: demoMasterProjects.reduce((sum, p) => sum + p.activeRfps, 0),
@@ -615,6 +742,7 @@ function DashboardContent() {
         if (!dashboardData) return <DashboardSkeleton />
         return (
           <div className="space-y-8">
+            <GettingStartedChecklist checklist={dashboardData.checklist} />
             <AttentionQueue data={dashboardData.attention} />
 
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_14rem] gap-3 items-start">

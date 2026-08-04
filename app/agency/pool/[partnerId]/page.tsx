@@ -39,6 +39,7 @@ import {
   INSURANCE_LABELS,
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
+import { HelpTerm } from "@/components/help-term"
 
 const PAYMENT_TERM_LABELS: Record<string, string> = {
   net_15: "Net 15",
@@ -393,7 +394,7 @@ export default function AgencyPartnerProfilePage() {
                   )}
                 >
                   <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
-                  {ndaOk ? "NDA signed" : "NDA pending"}
+                  <HelpTerm term="nda" theme="dark">{ndaOk ? "NDA signed" : "NDA pending"}</HelpTerm>
                 </span>
                 <span
                   className={cn(
@@ -402,7 +403,7 @@ export default function AgencyPartnerProfilePage() {
                   )}
                 >
                   <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
-                  {msaOk ? "MSA signed" : "MSA pending"}
+                  <HelpTerm term="msa" theme="dark">{msaOk ? "MSA signed" : "MSA pending"}</HelpTerm>
                 </span>
                 {vouchCount >= 3 && (
                   <span className="flex items-center gap-0.5 font-mono text-[10px] px-2 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
@@ -514,7 +515,9 @@ export default function AgencyPartnerProfilePage() {
                   const designation = businessCriteria.designations[key]
                   return (
                     <li key={key}>
-                      <div className="text-foreground font-medium">{DESIGNATION_LABELS[key]}</div>
+                      <HelpTerm term={key} theme="dark" className="block text-foreground font-medium">
+                        {DESIGNATION_LABELS[key]}
+                      </HelpTerm>
                       {(designation.certifying_body || designation.certification_number) && (
                         <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
                           {[designation.certifying_body, designation.certification_number].filter(Boolean).join(" · ")}
@@ -540,13 +543,17 @@ export default function AgencyPartnerProfilePage() {
                   const coverage = businessCriteria.insurance[key]
                   return (
                     <li key={key} className="flex items-center justify-between gap-3">
-                      <span className="text-foreground font-medium">{INSURANCE_LABELS[key]}</span>
+                      <HelpTerm term={key} theme="dark" className="text-foreground font-medium">
+                        {INSURANCE_LABELS[key]}
+                      </HelpTerm>
                       <span className="font-mono text-[10px] text-foreground-muted">{coverage.limit || "No limit on file"}</span>
                     </li>
                   )
                 })}
                 <li className="flex items-center justify-between gap-3 pt-2 border-t border-border">
-                  <span className="text-foreground font-medium">Certificate of Insurance</span>
+                  <HelpTerm term="coi" theme="dark" className="text-foreground font-medium">
+                    Certificate of Insurance
+                  </HelpTerm>
                   <span
                     className={cn(
                       "font-mono text-[10px] px-2 py-0.5 rounded-full",

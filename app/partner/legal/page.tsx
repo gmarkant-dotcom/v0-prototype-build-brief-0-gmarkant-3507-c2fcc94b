@@ -22,6 +22,15 @@ import {
   emptyBusinessCriteriaHolds,
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
+import { HelpTerm } from "@/components/help-term"
+import type { GlossaryKey } from "@/lib/glossary"
+
+/** Only nda/msa/coi have glossary entries - W-9 and EIN are tax forms, not glossary terms. */
+const DOCUMENT_GLOSSARY_KEYS: Record<string, GlossaryKey> = {
+  nda: "nda",
+  msa: "msa",
+  coi: "coi",
+}
 
 type Document = {
   id: string
@@ -559,7 +568,17 @@ export default function PartnerLegalPage() {
                       {doc.status === "complete" ? "✓" : doc.status === "pending" ? "…" : "○"}
                     </div>
                     <div>
-                      <div className="font-display font-bold text-sm text-[#0C3535]">{doc.name}</div>
+                      {DOCUMENT_GLOSSARY_KEYS[doc.id] ? (
+                        <HelpTerm
+                          term={DOCUMENT_GLOSSARY_KEYS[doc.id]}
+                          theme="light"
+                          className="font-display font-bold text-sm text-[#0C3535]"
+                        >
+                          {doc.name}
+                        </HelpTerm>
+                      ) : (
+                        <div className="font-display font-bold text-sm text-[#0C3535]">{doc.name}</div>
+                      )}
                       <div className="text-xs text-gray-600 mt-0.5">{doc.description}</div>
                       {doc.uploadedDate && (
                         <div className="font-mono text-[10px] text-gray-500 mt-2">
@@ -661,7 +680,9 @@ export default function PartnerLegalPage() {
                       onCheckedChange={(checked) => updateDesignation(key, { holds: checked === true })}
                       className="mt-0.5 border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
                     />
-                    <div className="font-display font-bold text-sm text-[#0C3535]">{DESIGNATION_LABELS[key]}</div>
+                    <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-[#0C3535]">
+                      {DESIGNATION_LABELS[key]}
+                    </HelpTerm>
                   </label>
                   {designation.holds && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-7">
@@ -782,9 +803,9 @@ export default function PartnerLegalPage() {
                       onCheckedChange={(checked) => updateInsurance(key, { has_coverage: checked === true })}
                       className="border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
                     />
-                    <div className="font-display font-bold text-sm text-[#0C3535] truncate">
+                    <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-[#0C3535] truncate">
                       {INSURANCE_LABELS[key]}
-                    </div>
+                    </HelpTerm>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     <Input
@@ -820,7 +841,9 @@ export default function PartnerLegalPage() {
                 onCheckedChange={(checked) => updateCoiOnFile(checked === true)}
                 className="border-gray-400 data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600"
               />
-              <span className="text-sm text-gray-700">Certificate of Insurance (COI) on file</span>
+              <span className="text-sm text-gray-700">
+                <HelpTerm term="coi" theme="light">Certificate of Insurance (COI)</HelpTerm> on file
+              </span>
             </label>
             <p className="text-xs text-gray-500 mt-2 pl-7">
               A Certificate of Insurance is the standard proof-of-coverage document issued by your insurance broker.

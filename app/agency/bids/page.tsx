@@ -24,6 +24,7 @@ import {
   termsSummaryLine,
 } from "@/lib/bid-shared"
 import { compositeScoreColorClass } from "@/lib/bid-scoring"
+import { HelpTerm } from "@/components/help-term"
 import { AiMarkdown } from "@/components/ai-markdown"
 import {
   Search, Filter, ChevronDown, ChevronRight,
@@ -192,17 +193,18 @@ function BidCard({
             {badge.label}
           </span>
           {row.composite_score != null && (
-            <span
+            <HelpTerm
+              term="composite_score"
+              theme="dark"
               className={cn(
                 "flex items-center justify-center w-6 h-6 rounded-full border font-mono text-[9px] font-bold shrink-0",
                 compositeScoreColorClass(row.composite_score).bg,
                 compositeScoreColorClass(row.composite_score).text,
                 compositeScoreColorClass(row.composite_score).border
               )}
-              title="Composite evaluation score"
             >
               {Math.round(row.composite_score)}
-            </span>
+            </HelpTerm>
           )}
           {!row.partner_id && row.response_exists && (
             <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider shrink-0">

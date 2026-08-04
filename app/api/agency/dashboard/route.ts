@@ -73,7 +73,7 @@ export async function GET() {
     const { user, supabase } = auth
     const agencyId = user.id
 
-    const [projectsRes, partnershipsRes, inboxRes, responsesRes, deliveryReviewsRes] = await Promise.all([
+    const [projectsRes, partnershipsRes, inboxRes, responsesRes, deliveryReviewsRes, magicTokenExistsRes] = await Promise.all([
       supabase
         .from("projects")
         .select("id, name, client_name, status, budget_range, created_at")
@@ -93,6 +93,11 @@ export async function GET() {
         .from("delivery_reviews")
         .select("id, project_id, partnership_id, assignment_id, status, updated_at")
         .eq("agency_id", agencyId),
+      // Existence-only check for the Getting Started checklist's "Broadcast an RFP" step -
+      // the only one of the four checks not already covered by a table this route fetches
+      // anyway (partner_rfp_inbox is, but a magic-link RFP with no portal recipient never
+      // creates an inbox row, so that alone would under-count).
+      supabase.from("rfp_magic_tokens").select("id").eq("agency_id", agencyId).limit(1),
     ])
 
     for (const [label, res] of [
@@ -101,6 +106,7 @@ export async function GET() {
       ["partner_rfp_inbox", inboxRes],
       ["partner_rfp_responses", responsesRes],
       ["delivery_reviews", deliveryReviewsRes],
+      ["rfp_magic_tokens", magicTokenExistsRes],
     ] as const) {
       if (res.error) {
         console.error("[api] failure", { route, method: "GET", table: label, message: res.error.message })
@@ -113,6 +119,7 @@ export async function GET() {
     const inboxRows = inboxRes.data || []
     const responses = responsesRes.data || []
     const deliveryReviews = deliveryReviewsRes.data || []
+    const hasMagicTokens = (magicTokenExistsRes.data || []).length > 0
     const projectIds = projects.map((p) => p.id as string)
 
     const [assignmentsRes, statusUpdatesRes, onboardingRes] = await Promise.all([
@@ -329,6 +336,20 @@ export async function GET() {
 
     const isBrandNew = projects.length === 0 && partnerships.length === 0
 
+    // ── Getting Started checklist - four real state checks, no separate "onboarding
+    // progress" table. Discovered partners count for step 1 (any status, not just active -
+    // a ghost row from a spreadsheet import still means the step is done). Step 3 checks
+    // both RFP delivery mechanisms since a magic-link-only broadcast never touches
+    // partner_rfp_inbox. Step 4 covers both delivery mechanisms too - partner_rfp_responses
+    // carries agency_id directly regardless of whether the bid came through the portal or
+    // a guest link.
+    const checklist = {
+      importPartners: partnerships.length > 0,
+      firstProject: projects.length > 0,
+      broadcastRfp: inboxRows.length > 0 || hasMagicTokens,
+      reviewBid: responses.length > 0,
+    }
+
     // ── Activity feed - union of timestamped events from existing tables, no events
     // table involved. Newest first, capped at RECENT_ACTIVITY_LIMIT.
     const activity: ActivityItem[] = []
@@ -440,6 +461,7 @@ export async function GET() {
         alerts,
         isBrandNew,
       },
+      checklist,
       funnel: {
         activePartners,
         openRfps,

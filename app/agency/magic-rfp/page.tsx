@@ -37,6 +37,7 @@ import {
   type InsuranceRequirement,
   normalizeBusinessCriteriaRequired,
 } from "@/lib/business-criteria"
+import { HelpTerm } from "@/components/help-term"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -863,9 +864,9 @@ function MagicRfpContent() {
                               checked={businessCriteriaRequired.designations[key] === true}
                               onCheckedChange={(checked) => updateRequiredDesignation(key, checked === true)}
                             />
-                            <span className="font-display font-bold text-sm text-foreground">
+                            <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground">
                               {DESIGNATION_LABELS[key]}
-                            </span>
+                            </HelpTerm>
                           </label>
                         ))}
                       </div>
@@ -885,9 +886,9 @@ function MagicRfpContent() {
                                     updateRequiredInsurance(key, { required: checked === true })
                                   }
                                 />
-                                <span className="font-display font-bold text-sm text-foreground truncate">
+                                <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground truncate">
                                   {INSURANCE_LABELS[key]}
-                                </span>
+                                </HelpTerm>
                               </label>
                               <Input
                                 value={requirement?.minimum || ""}
@@ -906,7 +907,7 @@ function MagicRfpContent() {
                           onCheckedChange={(checked) => updateRequiredCoi(checked === true)}
                         />
                         <span className="text-sm text-foreground">
-                          Require a Certificate of Insurance (COI) on file
+                          Require a <HelpTerm term="coi" theme="dark">Certificate of Insurance (COI)</HelpTerm> on file
                         </span>
                       </label>
 

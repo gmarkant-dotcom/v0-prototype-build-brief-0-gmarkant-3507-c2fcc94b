@@ -29,6 +29,8 @@ import {
   TERM_STATE_BADGE_CLASS,
   type TermState,
 } from "@/lib/terms-disclosure"
+import { HelpTerm } from "@/components/help-term"
+import type { GlossaryKey } from "@/lib/glossary"
 import { AiMarkdown } from "@/components/ai-markdown"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { BidEvaluationTab, type BidEvaluationTabHandle } from "@/components/bid-evaluation-tab"
@@ -496,9 +498,10 @@ function BidDetailSheetInner({
                                   ? `$${d.kill_fee.amount.toLocaleString("en-US")} flat`
                                   : null
                                 : null
-                        const termRows: { label: string; value: string | null; state: TermState | null; note: string }[] = [
+                        const termRows: { label: string; glossaryKey: GlossaryKey; value: string | null; state: TermState | null; note: string }[] = [
                           {
                             label: "Payment",
+                            glossaryKey: "net_days",
                             value:
                               d.payment.net_days != null
                                 ? `Net ${d.payment.net_days}${d.payment.deposit_pct != null ? `, ${d.payment.deposit_pct}% deposit` : ""}`
@@ -508,18 +511,23 @@ function BidDetailSheetInner({
                           },
                           {
                             label: "Kill fee",
+                            glossaryKey: "kill_fee",
                             value: killFeeValue,
                             state: d.kill_fee.fee_type !== "none" ? d.kill_fee.state : null,
                             note: d.kill_fee.note,
                           },
                           {
                             label: "IP rights",
+                            // Points at the specific disclosed stance (not a generic "IP
+                            // rights" concept) so the cue explains what this bid actually says.
+                            glossaryKey: d.ip_rights.stance || "work_for_hire",
                             value: d.ip_rights.stance ? IP_RIGHTS_LABELS[d.ip_rights.stance] : null,
                             state: d.ip_rights.state,
                             note: d.ip_rights.note,
                           },
                           {
                             label: "Rate validity",
+                            glossaryKey: "rate_validity",
                             value: d.rate_validity.days != null ? `${d.rate_validity.days} days` : null,
                             state: d.rate_validity.state,
                             note: d.rate_validity.note,
@@ -531,7 +539,10 @@ function BidDetailSheetInner({
                           <div key={t.label} className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <span className="text-sm text-foreground">
-                                {t.label}: {t.value}
+                                <HelpTerm term={t.glossaryKey} theme="dark">
+                                  {t.label}
+                                </HelpTerm>
+                                : {t.value}
                               </span>
                               {t.note && <p className="text-xs text-foreground-muted mt-0.5">{t.note}</p>}
                             </div>

@@ -45,6 +45,7 @@ import {
   type TermsDisclosureValidationError,
 } from "@/lib/terms-disclosure"
 import { TermsDisclosureSection } from "@/components/terms-disclosure-section"
+import { HelpTerm } from "@/components/help-term"
 
 const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "MXN", "BRL", "AED", "SGD"]
 
@@ -769,9 +770,9 @@ export default function GuestRfpRespondPage() {
                                   onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
                                   className="mt-0.5 w-4 h-4 rounded border-foreground-muted"
                                 />
-                                <span className="font-display font-bold text-sm text-foreground">
+                                <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground">
                                   {DESIGNATION_LABELS[key]}
-                                </span>
+                                </HelpTerm>
                               </label>
                               {designation.holds && (
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pl-7">
@@ -843,7 +844,7 @@ export default function GuestRfpRespondPage() {
                                   className="w-4 h-4 rounded border-foreground-muted"
                                 />
                                 <span className="font-display font-bold text-sm text-foreground truncate">
-                                  {INSURANCE_LABELS[key]}
+                                  <HelpTerm term={key} theme="dark">{INSURANCE_LABELS[key]}</HelpTerm>
                                   {minimum ? ` (min. ${minimum})` : ""}
                                 </span>
                               </label>
@@ -870,7 +871,7 @@ export default function GuestRfpRespondPage() {
                           className="w-4 h-4 rounded border-foreground-muted"
                         />
                         <span className="text-sm text-foreground-muted">
-                          Certificate of Insurance (COI) on file
+                          <HelpTerm term="coi" theme="dark">Certificate of Insurance (COI)</HelpTerm> on file
                         </span>
                       </label>
                     )}

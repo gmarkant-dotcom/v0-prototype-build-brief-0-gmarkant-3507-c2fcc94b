@@ -6,6 +6,7 @@ import { DeliveryReviewSheet } from "@/components/delivery-review-sheet"
 import { AiMarkdown } from "@/components/ai-markdown"
 import { compositeScoreColorClass } from "@/lib/bid-scoring"
 import { cn } from "@/lib/utils"
+import { HelpTerm } from "@/components/help-term"
 import { Loader2, TrendingUp, TrendingDown, Sparkles } from "lucide-react"
 
 type ReviewSummary = {
@@ -39,7 +40,7 @@ type PerformanceData = {
   reliability_summary_generated_at: string | null
 }
 
-function StatTile({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "positive" | "negative" | "neutral" }) {
+function StatTile({ label, value, tone = "neutral" }: { label: React.ReactNode; value: string; tone?: "positive" | "negative" | "neutral" }) {
   return (
     <div className="rounded-lg border border-border/40 bg-white/5 p-3">
       <div className="font-mono text-[9px] uppercase tracking-wider text-foreground-muted mb-1">{label}</div>
@@ -162,7 +163,7 @@ export function VendorPerformanceHistory({
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <StatTile label="Projects Reviewed" value={String(stats.total_projects_reviewed)} />
           <StatTile
-            label="Avg Delivery Score"
+            label={<HelpTerm term="delivery_performance" theme="dark">Avg Delivery Score</HelpTerm>}
             value={stats.avg_delivery_score != null ? `${Math.round(stats.avg_delivery_score)}/100` : "—"}
           />
           <StatTile

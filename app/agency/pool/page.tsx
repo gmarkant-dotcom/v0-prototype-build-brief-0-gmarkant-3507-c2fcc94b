@@ -30,6 +30,7 @@ import {
   emptyBusinessCriteriaHolds,
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
+import { HelpTerm } from "@/components/help-term"
 
 // Partnership type (Tier 1 - business relationship). Covers all three pool states: an
 // Active Partner (partnerId set), an Invited contact (partnerId null, invitationSentAt
@@ -1414,35 +1415,43 @@ function PartnerPoolPageInner() {
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
             <span className="font-mono text-[10px] text-foreground-muted mr-2">Designations:</span>
             {DESIGNATION_KEYS.map((key) => (
-              <button
-                key={key}
-                onClick={() => toggleDesignationFilter(key)}
-                className={cn(
-                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
-                  selectedDesignationFilters.includes(key)
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-border text-foreground/90 hover:border-white/30"
-                )}
-              >
-                {DESIGNATION_LABELS[key]}
-              </button>
+              <div key={key} className="inline-flex items-center gap-1">
+                <button
+                  onClick={() => toggleDesignationFilter(key)}
+                  className={cn(
+                    "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                    selectedDesignationFilters.includes(key)
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-foreground/90 hover:border-white/30"
+                  )}
+                >
+                  {DESIGNATION_LABELS[key]}
+                </button>
+                <HelpTerm term={key} theme="dark" className="text-[11px] text-foreground-muted/60">
+                  ?
+                </HelpTerm>
+              </div>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
             <span className="font-mono text-[10px] text-foreground-muted mr-2">Insurance:</span>
             {INSURANCE_KEYS.map((key) => (
-              <button
-                key={key}
-                onClick={() => toggleInsuranceFilter(key)}
-                className={cn(
-                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
-                  selectedInsuranceFilters.includes(key)
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-border text-foreground/90 hover:border-white/30"
-                )}
-              >
-                {INSURANCE_LABELS[key]}
-              </button>
+              <div key={key} className="inline-flex items-center gap-1">
+                <button
+                  onClick={() => toggleInsuranceFilter(key)}
+                  className={cn(
+                    "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                    selectedInsuranceFilters.includes(key)
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-foreground/90 hover:border-white/30"
+                  )}
+                >
+                  {INSURANCE_LABELS[key]}
+                </button>
+                <HelpTerm term={key} theme="dark" className="text-[11px] text-foreground-muted/60">
+                  ?
+                </HelpTerm>
+              </div>
             ))}
           </div>
         </GlassCard>

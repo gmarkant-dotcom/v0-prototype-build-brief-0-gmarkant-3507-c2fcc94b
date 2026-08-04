@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
+import { HelpTerm } from "@/components/help-term"
 import {
   type TermsDisclosure,
   type TermState,
@@ -104,18 +105,23 @@ function StateControl({
   hasError: boolean
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {TERM_STATES.map((s) => (
-        <button
-          key={s}
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(s)}
-          className={pillClass(theme, value === s, hasError && value == null)}
-        >
-          {TERM_STATE_LABELS[s]}
-        </button>
-      ))}
+    <div className="space-y-1">
+      <HelpTerm term="term_flexibility" theme={theme} className={cn(labelClass(theme), "normal-case tracking-normal")}>
+        Flexibility
+      </HelpTerm>
+      <div className="flex flex-wrap gap-2">
+        {TERM_STATES.map((s) => (
+          <button
+            key={s}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(s)}
+            className={pillClass(theme, value === s, hasError && value == null)}
+          >
+            {TERM_STATE_LABELS[s]}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -282,7 +288,13 @@ export function TermsDisclosureSection({
             {paymentErrors[0] && <span className={errorTextClass(theme)}>{paymentErrors[0]}</span>}
           </div>
           <div>
-            <div className={cn(labelClass(theme), "mb-1 normal-case tracking-normal")}>Net days</div>
+            <HelpTerm
+              term="net_days"
+              theme={theme}
+              className={cn(labelClass(theme), "block mb-1 normal-case tracking-normal")}
+            >
+              Net days
+            </HelpTerm>
             <DaysPicker
               theme={theme}
               options={NET_DAYS_OPTIONS}
@@ -293,7 +305,13 @@ export function TermsDisclosureSection({
             />
           </div>
           <div>
-            <div className={cn(labelClass(theme), "mb-1 normal-case tracking-normal")}>Deposit required (%)</div>
+            <HelpTerm
+              term="deposit_required"
+              theme={theme}
+              className={cn(labelClass(theme), "block mb-1 normal-case tracking-normal")}
+            >
+              Deposit required (%)
+            </HelpTerm>
             <input
               type="number"
               min={0}
@@ -329,7 +347,9 @@ export function TermsDisclosureSection({
         {/* Kill / cancellation fee */}
         <div className={rowWrapperClass(theme)}>
           <div className="flex items-center justify-between">
-            <span className={labelClass(theme)}>Kill / cancellation fee</span>
+            <HelpTerm term="kill_fee" theme={theme} className={cn(labelClass(theme), "block")}>
+              Kill / cancellation fee
+            </HelpTerm>
             {killFeeErrors[0] && <span className={errorTextClass(theme)}>{killFeeErrors[0]}</span>}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -389,17 +409,28 @@ export function TermsDisclosureSection({
             <span className={labelClass(theme)}>IP / usage rights</span>
             {ipRightsErrors[0] && <span className={errorTextClass(theme)}>{ipRightsErrors[0]}</span>}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {IP_RIGHTS_STANCES.map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={disabled}
-                onClick={() => onChange({ ...value, ip_rights: { ...value.ip_rights, stance: s } })}
-                className={pillClass(theme, value.ip_rights.stance === s, ipRightsErrors.length > 0 && !value.ip_rights.stance)}
-              >
-                {IP_RIGHTS_LABELS[s as IpRightsStance]}
-              </button>
+              <div key={s} className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onChange({ ...value, ip_rights: { ...value.ip_rights, stance: s } })}
+                  className={pillClass(theme, value.ip_rights.stance === s, ipRightsErrors.length > 0 && !value.ip_rights.stance)}
+                >
+                  {IP_RIGHTS_LABELS[s as IpRightsStance]}
+                </button>
+                {/* Adjacent, not nested: a HelpTerm trigger can't live inside this button
+                    without invalid nested-interactive markup, and it must not toggle the
+                    stance when opened. */}
+                <HelpTerm
+                  term={s}
+                  theme={theme}
+                  className={theme === "light" ? "text-[11px] text-gray-400" : "text-[11px] text-foreground-muted/60"}
+                >
+                  ?
+                </HelpTerm>
+              </div>
             ))}
           </div>
           <StateControl
@@ -420,7 +451,9 @@ export function TermsDisclosureSection({
         {/* Rate validity */}
         <div className={rowWrapperClass(theme)}>
           <div className="flex items-center justify-between">
-            <span className={labelClass(theme)}>Rate validity</span>
+            <HelpTerm term="rate_validity" theme={theme} className={cn(labelClass(theme), "block")}>
+              Rate validity
+            </HelpTerm>
             {rateValidityErrors[0] && <span className={errorTextClass(theme)}>{rateValidityErrors[0]}</span>}
           </div>
           <div className={cn(labelClass(theme), "normal-case tracking-normal")}>How long this bid&apos;s pricing holds</div>

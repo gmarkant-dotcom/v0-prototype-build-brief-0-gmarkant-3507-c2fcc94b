@@ -20,6 +20,7 @@ import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
 import { createClient } from "@/lib/supabase/client"
 import { useSectionCollapse, useCappedList } from "@/lib/dashboard-section-state"
 import { DashboardShowMoreToggle } from "@/components/dashboard-show-more"
+import { HelpTerm } from "@/components/help-term"
 import {
   AlertTriangle,
   Clock,
@@ -680,7 +681,9 @@ export default function PartnerDashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Award className="w-5 h-5 text-[#0C3535]" />
-              <h2 className="font-display font-bold text-lg text-[#0C3535]">Your Performance</h2>
+              <HelpTerm term="delivery_performance" theme="light" className="font-display font-bold text-lg text-[#0C3535]">
+                Your Performance
+              </HelpTerm>
             </div>
             {!isDemo && (funnel?.agencyRelationships ?? 0) > 0 && (
               <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">

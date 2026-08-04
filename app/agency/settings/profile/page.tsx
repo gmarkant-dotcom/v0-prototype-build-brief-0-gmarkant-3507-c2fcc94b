@@ -19,6 +19,7 @@ import {
   emptyBusinessCriteriaHolds,
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
+import { HelpTerm } from "@/components/help-term"
 
 const disciplines = [
   "Video Production",
@@ -639,7 +640,9 @@ export default function AgencyProfileSettingsPage() {
                         onCheckedChange={(checked) => updateDesignation(key, { holds: checked === true })}
                         className="mt-0.5"
                       />
-                      <div className="font-display font-bold text-sm text-foreground">{DESIGNATION_LABELS[key]}</div>
+                      <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground">
+                        {DESIGNATION_LABELS[key]}
+                      </HelpTerm>
                     </label>
                     {designation.holds && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-7">

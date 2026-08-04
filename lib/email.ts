@@ -136,6 +136,20 @@ export function siteBaseUrl(): string {
 
 type EmailPayload = { subject: string; html: string; text: string }
 
+/**
+ * Resolves a greeting name from a free-text vendor_name field. Vendor name is typed by the
+ * agency at invite time (not the vendor), so it can hold anything - a stray number, an
+ * abbreviation, an empty string. Only greet by name when the value actually contains a
+ * letter; otherwise fall back to "there" rather than greet "Hi 65,". Never derives a name
+ * from the email address - an absent/invalid name always falls back to "there", not a
+ * guess based on the local part of the vendor's email.
+ */
+function resolveGreetingName(rawName: string | null | undefined): string {
+  const trimmed = (rawName || "").trim()
+  if (!trimmed || !/[a-zA-Z]/.test(trimmed)) return "there"
+  return trimmed
+}
+
 export function buildVendorInvitationEmail(opts: {
   agencyName: string
   vendorName?: string
@@ -143,7 +157,7 @@ export function buildVendorInvitationEmail(opts: {
   scopeSummary: string
   token: string
 }): EmailPayload {
-  const recipientName = (opts.vendorName || "").trim() || "there"
+  const recipientName = resolveGreetingName(opts.vendorName)
   const subject = `${opts.agencyName} invited you to bid on ${opts.projectName}`
   const ctaUrl = `https://withligament.com/rfp/respond/${opts.token}`
   const ctaText = "View Brief & Submit Bid"
@@ -163,7 +177,7 @@ export function buildVendorConfirmationEmail(opts: {
   budgetSummary: string
   timelineSummary: string
 }): EmailPayload {
-  const recipientName = (opts.vendorName || "").trim() || "there"
+  const recipientName = resolveGreetingName(opts.vendorName)
   const subject = `Your bid has been submitted — ${opts.projectName}`
   const submittedDisplay = formatDateTime(opts.submittedAt)
   const body = `We've received your bid for ${opts.projectName}, submitted ${submittedDisplay}.\n\nBudget: ${opts.budgetSummary}\nTimeline: ${opts.timelineSummary}\n\nThe agency will review your bid and be in touch.`

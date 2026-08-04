@@ -47,6 +47,7 @@ import {
   type TermsDisclosureValidationError,
 } from "@/lib/terms-disclosure"
 import { TermsDisclosureSection } from "@/components/terms-disclosure-section"
+import { HelpTerm } from "@/components/help-term"
 import {
   Loader2,
   FileText,
@@ -1608,9 +1609,9 @@ export default function PartnerRfpDetailPage() {
                               onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
                               className="mt-0.5 w-4 h-4 rounded border-gray-400"
                             />
-                            <span className="font-display font-bold text-sm text-[#0C3535]">
+                            <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-[#0C3535]">
                               {DESIGNATION_LABELS[key]}
-                            </span>
+                            </HelpTerm>
                           </label>
                           {designation.holds && (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pl-7">
@@ -1678,7 +1679,7 @@ export default function PartnerRfpDetailPage() {
                               className="w-4 h-4 rounded border-gray-400"
                             />
                             <span className="font-display font-bold text-sm text-[#0C3535] truncate">
-                              {INSURANCE_LABELS[key]}
+                              <HelpTerm term={key} theme="light">{INSURANCE_LABELS[key]}</HelpTerm>
                               {minimum ? ` (min. ${minimum})` : ""}
                             </span>
                           </label>
@@ -1704,7 +1705,9 @@ export default function PartnerRfpDetailPage() {
                       onChange={(e) => updateBusinessCriteriaCoi(e.target.checked)}
                       className="w-4 h-4 rounded border-gray-400"
                     />
-                    <span className="text-sm text-gray-700">Certificate of Insurance (COI) on file</span>
+                    <span className="text-sm text-gray-700">
+                      <HelpTerm term="coi" theme="light">Certificate of Insurance (COI)</HelpTerm> on file
+                    </span>
                   </label>
                 )}
               </div>

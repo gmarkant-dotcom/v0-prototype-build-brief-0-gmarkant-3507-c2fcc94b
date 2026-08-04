@@ -34,6 +34,7 @@ import {
   type InsuranceRequirement,
   normalizeBusinessCriteriaRequired,
 } from "@/lib/business-criteria"
+import { HelpTerm } from "@/components/help-term"
 
 // Types
 type UploadMethod = "file" | "google" | "paste" | null
@@ -1910,7 +1911,9 @@ function AgencyRFPContent() {
                       checked={masterRfp.business_criteria_required.designations[key] === true}
                       onCheckedChange={(checked) => updateRequiredDesignation(key, checked === true)}
                     />
-                    <span className="font-display font-bold text-sm text-foreground">{DESIGNATION_LABELS[key]}</span>
+                    <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground">
+                      {DESIGNATION_LABELS[key]}
+                    </HelpTerm>
                   </label>
                 ))}
               </div>
@@ -1928,9 +1931,9 @@ function AgencyRFPContent() {
                           checked={requirement?.required === true}
                           onCheckedChange={(checked) => updateRequiredInsurance(key, { required: checked === true })}
                         />
-                        <span className="font-display font-bold text-sm text-foreground truncate">
+                        <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground truncate">
                           {INSURANCE_LABELS[key]}
-                        </span>
+                        </HelpTerm>
                       </label>
                       <Input
                         value={requirement?.minimum || ""}
@@ -1948,7 +1951,9 @@ function AgencyRFPContent() {
                   checked={masterRfp.business_criteria_required.insurance.coi_on_file === true}
                   onCheckedChange={(checked) => updateRequiredCoi(checked === true)}
                 />
-                <span className="text-sm text-foreground">Require a Certificate of Insurance (COI) on file</span>
+                <span className="text-sm text-foreground">
+                  Require a <HelpTerm term="coi" theme="dark">Certificate of Insurance (COI)</HelpTerm> on file
+                </span>
               </label>
 
               <div>
@@ -2586,7 +2591,9 @@ function AgencyRFPContent() {
                     }}
                     className="border-border"
                   />
-                  <span className="font-mono text-xs text-foreground">NDA Signature Required</span>
+                  <HelpTerm term="nda" theme="dark" className="font-mono text-xs text-foreground">
+                    NDA Signature Required
+                  </HelpTerm>
                 </label>
                 {ndaSignatureRequired && (
                   <div className="space-y-2">

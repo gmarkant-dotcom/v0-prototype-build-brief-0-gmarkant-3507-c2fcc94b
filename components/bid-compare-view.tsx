@@ -19,6 +19,7 @@ import {
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
 import { cn } from "@/lib/utils"
+import { HelpTerm } from "@/components/help-term"
 import { AiMarkdown } from "@/components/ai-markdown"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
@@ -377,7 +378,9 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
             </TableHeader>
             <TableBody>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Score</TableCell>
+                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">
+                  <HelpTerm term="composite_score" theme="dark">Score</HelpTerm>
+                </TableCell>
                 {rows.map((row) => (
                   <TableCell key={row.id}>
                     {row.composite_score != null ? (

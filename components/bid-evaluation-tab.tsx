@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { HelpTerm } from "@/components/help-term"
 import { Sparkles, Loader2, CheckCircle, Settings, History } from "lucide-react"
 
 const STATUS_HELPER_TEXT: Record<Evaluation["status"], string> = {
@@ -460,7 +461,9 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
               </div>
             )}
             <div>
-              <div className="font-mono text-[10px] uppercase text-foreground-muted">Composite Score</div>
+              <HelpTerm term="composite_score" theme="dark" className="font-mono text-[10px] uppercase text-foreground-muted">
+                Composite Score
+              </HelpTerm>
               <div className="text-xs text-foreground-muted">0-100 scale</div>
             </div>
           </div>
