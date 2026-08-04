@@ -19,6 +19,7 @@ const publicPaths = [
   '/pricing',
   '/contact',
   '/rfp',
+  '/faq',
 ]
 
 function isPublicPath(pathname: string): boolean {

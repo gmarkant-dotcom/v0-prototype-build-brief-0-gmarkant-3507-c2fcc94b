@@ -6,7 +6,7 @@ import { LigamentLogo } from "@/components/ligament-logo"
 import { ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-type Tab = "general" | "lead" | "partner"
+type Tab = "general" | "lead" | "partner" | "terms"
 
 type FAQ = { q: string; a: string }
 
@@ -44,7 +44,7 @@ const leadFAQs: FAQ[] = [
   },
   {
     q: "Can I import my vendor contacts from email?",
-    a: "Yes. Connect Gmail and Ligament scans subject lines and message previews (never full email content) to identify likely vendor contacts, scoring each one by signals like attachments and message frequency. Review the results and choose which contacts to add to your pool. Outlook import is coming soon.",
+    a: "Yes, two ways. Connect Gmail or Outlook and Ligament scans subject lines and message previews (never full email content) to identify likely vendor contacts, scoring each one by signals like attachments and message frequency. Review the results and choose which contacts to add to your pool. You can also skip email entirely and upload a spreadsheet (CSV or Excel) of contacts instead.",
   },
   {
     q: "How does RFP Broadcast work?",
@@ -123,6 +123,29 @@ const partnerFAQs: FAQ[] = [
   },
 ]
 
+const termsFAQs: FAQ[] = [
+  {
+    q: "What is terms disclosure?",
+    a: "Both sides state their standard business terms (payment schedule and net days, kill fee, IP ownership, and rate validity) up front as part of the RFP and bid exchange. Surprises surface before an award decision, not during contract review.",
+  },
+  {
+    q: "Who sees my terms?",
+    a: "Disclosure is bilateral and scoped to the exchange. Partners see an agency's terms on the RFPs they receive; agencies see a partner's terms alongside their bid. Terms are not published anywhere publicly.",
+  },
+  {
+    q: "What do Firm, Flexible, and Negotiable mean?",
+    a: "Each term carries a stance. Firm means this is how we work; Flexible means we can adapt within reason; Negotiable means we expect to discuss it. Stances help both sides see where alignment is easy and where a conversation is needed.",
+  },
+  {
+    q: "Do invited vendors without a Ligament account see terms?",
+    a: "Yes. Vendors responding through a Magic Link get the same disclosure step in their bid form, no account required.",
+  },
+  {
+    q: "Is a terms disclosure a contract?",
+    a: "No. Disclosure informs the decision; your contracts still govern the engagement. Ligament surfaces alignment early so contracting goes faster.",
+  },
+]
+
 function FAQItem({ item }: { item: FAQ }) {
   const [open, setOpen] = useState(false)
   return (
@@ -151,12 +174,14 @@ export default function FAQPage() {
     { key: "general", label: "General" },
     { key: "lead", label: "For Lead Agency Users" },
     { key: "partner", label: "For Partner Agency Users" },
+    { key: "terms", label: "Terms & Disclosure" },
   ]
 
   const faqs: Record<Tab, FAQ[]> = {
     general: generalFAQs,
     lead: leadFAQs,
     partner: partnerFAQs,
+    terms: termsFAQs,
   }
 
   return (
