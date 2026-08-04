@@ -1,5 +1,6 @@
 import { isVercelBlobStorageUrl, parseGuestUploadBlobPathFromUrl } from "@/lib/vercel-blob-url"
 import { formatBudgetForDisplay } from "@/lib/rfp-response-fields"
+import { withTermsDisclosureDefaults, formatTermsDisclosureSummary } from "@/lib/terms-disclosure"
 
 // ── Types shared across the bids pipeline, the deep-dive sheet, and compare mode ──
 
@@ -26,6 +27,7 @@ export type BidRow = {
   proposal_text?: string
   timeline_proposal?: string
   payment_terms?: PaymentTerms
+  terms_disclosure?: unknown
   attachments?: BidAttachment[] | null
   business_criteria_responses?: unknown
   business_criteria_required?: unknown
@@ -49,6 +51,30 @@ export type BidRow = {
   composite_score?: number | null
   evaluation_status?: string | null
   ranked_recommendation?: string | null
+}
+
+// ── Terms disclosure display ────────────────────────────────────────────────
+
+/** Legacy payment_terms predates structured terms_disclosure and has no flexibility state -
+ *  shown only as a fallback for bids submitted before this feature existed. */
+function legacyPaymentTermsSummary(pt: PaymentTerms): string | null {
+  if (!pt) return null
+  const parts: string[] = []
+  if (pt.deposit_required_pct != null) parts.push(`${pt.deposit_required_pct}% deposit`)
+  if (pt.payment_schedule_preference) parts.push(pt.payment_schedule_preference)
+  return parts.length > 0 ? parts.join(" · ") : null
+}
+
+/** Compact one-line terms summary for bid cards (list, compare view). Prefers the
+ *  structured disclosure; falls back to the legacy payment_terms shape for bids that
+ *  predate this feature; null means genuinely nothing disclosed - callers render
+ *  "No terms disclosed" rather than leaving blank space or inventing a value. */
+export function termsSummaryLine(row: Pick<BidRow, "terms_disclosure" | "payment_terms">): string | null {
+  if (row.terms_disclosure) {
+    const summary = formatTermsDisclosureSummary(withTermsDisclosureDefaults(row.terms_disclosure))
+    if (summary) return summary
+  }
+  return legacyPaymentTermsSummary(row.payment_terms ?? null)
 }
 
 // ── Status config ─────────────────────────────────────────────────────────────

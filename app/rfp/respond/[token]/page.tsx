@@ -35,9 +35,18 @@ import {
   normalizeBusinessCriteriaRequired,
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
+import {
+  emptyTermsDisclosure,
+  withTermsDisclosureDefaults,
+  validateTermsDisclosure,
+  mergeLegacyPaymentTermsIntoDisclosure,
+  formatTermsDisclosureSummary,
+  type TermsDisclosure,
+  type TermsDisclosureValidationError,
+} from "@/lib/terms-disclosure"
+import { TermsDisclosureSection } from "@/components/terms-disclosure-section"
 
 const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "MXN", "BRL", "AED", "SGD"]
-const SCHEDULE_OPTIONS = ["Milestone-based", "Net 30", "Net 60", "Net 90", "Upon completion"]
 
 type TokenRow = {
   token: string
@@ -46,6 +55,7 @@ type TokenRow = {
   status: string
   submitted_at: string | null
   created_at: string
+  require_terms_disclosure?: boolean
 }
 
 type ProjectData = {
@@ -72,6 +82,7 @@ type SubmittedResponse = {
   budget_proposal: string
   timeline_proposal: string
   payment_terms: PaymentTerms
+  terms_disclosure?: unknown
   attachments: { type: string; label: string; url: string }[] | null
   business_criteria_responses?: unknown
   status: string
@@ -194,9 +205,8 @@ export default function GuestRfpRespondPage() {
   const [budgetAmount, setBudgetAmount] = useState("")
   const [budgetCurrency, setBudgetCurrency] = useState("USD")
   const [timelineText, setTimelineText] = useState("")
-  const [depositPct, setDepositPct] = useState("")
-  const [schedulePreference, setSchedulePreference] = useState(SCHEDULE_OPTIONS[0])
-  const [paymentNotes, setPaymentNotes] = useState("")
+  const [termsDisclosure, setTermsDisclosure] = useState<TermsDisclosure>(emptyTermsDisclosure())
+  const [termsErrors, setTermsErrors] = useState<TermsDisclosureValidationError[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [businessCriteriaResponses, setBusinessCriteriaResponses] = useState<BusinessCriteriaHolds>(
     withBusinessCriteriaDefaults(null)
@@ -281,9 +291,8 @@ export default function GuestRfpRespondPage() {
     setBudgetAmount("")
     setBudgetCurrency("USD")
     setTimelineText("")
-    setDepositPct("")
-    setSchedulePreference(SCHEDULE_OPTIONS[0])
-    setPaymentNotes("")
+    setTermsDisclosure(emptyTermsDisclosure())
+    setTermsErrors([])
     setAttachments([])
     setBusinessCriteriaResponses(withBusinessCriteriaDefaults(null))
   }
@@ -296,11 +305,12 @@ export default function GuestRfpRespondPage() {
     setBudgetAmount(parsedBudget.amount)
     setBudgetCurrency(CURRENCY_OPTIONS.includes(parsedBudget.currency) ? parsedBudget.currency : "USD")
     setTimelineText(response.timeline_proposal || "")
-    setDepositPct(
-      response.payment_terms?.deposit_required_pct != null ? String(response.payment_terms.deposit_required_pct) : ""
+    setTermsDisclosure(
+      response.terms_disclosure
+        ? withTermsDisclosureDefaults(response.terms_disclosure)
+        : mergeLegacyPaymentTermsIntoDisclosure(emptyTermsDisclosure(), response.payment_terms)
     )
-    setSchedulePreference(response.payment_terms?.payment_schedule_preference || SCHEDULE_OPTIONS[0])
-    setPaymentNotes(response.payment_terms?.additional_notes || "")
+    setTermsErrors([])
     setAttachments(
       (response.attachments || []).map((a) => ({
         type: a.type === "link" ? "link" : "file",
@@ -342,6 +352,16 @@ export default function GuestRfpRespondPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setSubmitError(null)
+    // Guest submissions are always final (no draft concept here), so this always enforces
+    // the RFP's requirement when set.
+    const termsRequired = payload?.token.require_terms_disclosure === true
+    const termsValidation = validateTermsDisclosure(termsDisclosure, termsRequired)
+    if (!termsValidation.ok) {
+      setTermsErrors(termsValidation.errors)
+      setSubmitError("Please complete the required term disclosures before submitting.")
+      return
+    }
+    setTermsErrors([])
     setSubmitting(true)
     const wasEditing = isEditingBid
     try {
@@ -353,12 +373,7 @@ export default function GuestRfpRespondPage() {
           proposal_text: proposalText,
           budget_proposal: { amount: Number(budgetAmount), currency: budgetCurrency },
           timeline_proposal: timelineText,
-          payment_terms: {
-            deposit_pct: depositPct ? Number(depositPct) : null,
-            schedule_preference: schedulePreference,
-            currency: budgetCurrency,
-            notes: paymentNotes,
-          },
+          terms_disclosure: termsValidation.value,
           attachments: attachments.map((a) => ({ type: a.type, label: a.label, url: a.url })),
           business_criteria_responses: businessCriteriaResponses,
           ...(wasEditing ? { is_edit: true } : {}),
@@ -525,6 +540,11 @@ export default function GuestRfpRespondPage() {
                 )}
                 <div className="font-display font-bold text-foreground">{agencyDisplayName(agency)}</div>
               </div>
+              {tokenRow.require_terms_disclosure && (
+                <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 text-sm text-foreground">
+                  This agency requires basic term disclosures with your bid.
+                </div>
+              )}
               <div>
                 <div className="font-display font-bold text-xl text-foreground">{project.name}</div>
                 {project.client_name && <div className="text-sm text-foreground-muted">{project.client_name}</div>}
@@ -620,6 +640,11 @@ export default function GuestRfpRespondPage() {
           <TabsContent value="my-bid">
             {showForm ? (
               <form onSubmit={handleSubmit} className="rounded-2xl border border-border/30 bg-white/5 p-6 space-y-5">
+                {tokenRow.require_terms_disclosure && (
+                  <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 text-sm text-foreground">
+                    This agency requires basic term disclosures with your bid.
+                  </div>
+                )}
                 {isEditingBid && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-accent/5 border border-accent/20">
                     <span className="font-mono text-[10px] text-accent uppercase tracking-wider">Editing your bid</span>
@@ -693,53 +718,14 @@ export default function GuestRfpRespondPage() {
                   />
                 </div>
 
-                <div className="p-4 rounded-lg border border-border/40 bg-white/5 space-y-4">
-                  <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Payment Terms</div>
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
-                        Deposit %
-                      </label>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={depositPct}
-                        onChange={(e) => setDepositPct(e.target.value)}
-                        placeholder="25"
-                        className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                      />
-                    </div>
-                    <div>
-                      <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
-                        Schedule Preference
-                      </label>
-                      <Select value={schedulePreference} onValueChange={setSchedulePreference}>
-                        <SelectTrigger className="bg-white/5 border-border text-foreground">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {SCHEDULE_OPTIONS.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
-                      Notes
-                    </label>
-                    <Textarea
-                      rows={2}
-                      value={paymentNotes}
-                      onChange={(e) => setPaymentNotes(e.target.value)}
-                      className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                    />
-                  </div>
-                </div>
+                <TermsDisclosureSection
+                  value={termsDisclosure}
+                  onChange={setTermsDisclosure}
+                  required={tokenRow.require_terms_disclosure === true}
+                  theme="dark"
+                  errors={termsErrors}
+                  disabled={submitting}
+                />
 
                 {hasRequiredCriteriaForBid && (
                   <div className="p-4 rounded-lg border border-border/40 bg-white/5 space-y-4">
@@ -1037,19 +1023,44 @@ export default function GuestRfpRespondPage() {
                       <div className="text-sm text-foreground">{formatTimelineForDisplay(response.timeline_proposal)}</div>
                     </div>
                   </div>
-                  {response.payment_terms && (
+                  {response.terms_disclosure ? (
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Payment Terms</div>
-                      <div className="text-sm text-foreground space-y-1">
-                        {response.payment_terms.deposit_required_pct != null && (
-                          <p>Deposit: {response.payment_terms.deposit_required_pct}%</p>
-                        )}
-                        {response.payment_terms.payment_schedule_preference && (
-                          <p>Schedule: {response.payment_terms.payment_schedule_preference}</p>
-                        )}
-                        {response.payment_terms.additional_notes && <p>Notes: {response.payment_terms.additional_notes}</p>}
-                      </div>
+                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Terms</div>
+                      {(() => {
+                        const d = withTermsDisclosureDefaults(response.terms_disclosure)
+                        const notes = [
+                          d.payment.note && `Payment: ${d.payment.note}`,
+                          d.kill_fee.note && `Kill fee: ${d.kill_fee.note}`,
+                          d.ip_rights.note && `IP rights: ${d.ip_rights.note}`,
+                          d.rate_validity.note && `Rate validity: ${d.rate_validity.note}`,
+                        ].filter(Boolean) as string[]
+                        return (
+                          <div className="text-sm text-foreground space-y-1">
+                            <p>{formatTermsDisclosureSummary(d)}</p>
+                            {notes.map((n, i) => (
+                              <p key={i} className="text-xs text-foreground-muted">
+                                {n}
+                              </p>
+                            ))}
+                          </div>
+                        )
+                      })()}
                     </div>
+                  ) : (
+                    response.payment_terms && (
+                      <div>
+                        <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Payment Terms</div>
+                        <div className="text-sm text-foreground space-y-1">
+                          {response.payment_terms.deposit_required_pct != null && (
+                            <p>Deposit: {response.payment_terms.deposit_required_pct}%</p>
+                          )}
+                          {response.payment_terms.payment_schedule_preference && (
+                            <p>Schedule: {response.payment_terms.payment_schedule_preference}</p>
+                          )}
+                          {response.payment_terms.additional_notes && <p>Notes: {response.payment_terms.additional_notes}</p>}
+                        </div>
+                      </div>
+                    )
                   )}
                   {response.attachments && response.attachments.length > 0 && (
                     <div>

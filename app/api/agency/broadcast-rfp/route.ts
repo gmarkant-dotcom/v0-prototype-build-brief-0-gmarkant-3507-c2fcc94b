@@ -88,6 +88,7 @@ export async function POST(request: NextRequest) {
       typeof body.projectId === "string" && body.projectId.length > 0 ? body.projectId : null
     const masterRfp = body.masterRfp
     const ndaRequired = body.ndaRequired === true
+    const requireTermsDisclosure = body.requireTermsDisclosure !== false
     const ndaLink =
       typeof body.ndaLink === "string" && body.ndaLink.trim().length > 0
         ? body.ndaLink.trim()
@@ -201,6 +202,7 @@ export async function POST(request: NextRequest) {
           master_rfp_json: { ...(masterRfp as Record<string, unknown>), nda_link: ndaLink || null },
           agency_company_name: agencyDisplay,
           nda_gate_enforced: false,
+          require_terms_disclosure: requireTermsDisclosure,
           status: "new",
         }
         rows.push(row)
@@ -319,6 +321,7 @@ export async function POST(request: NextRequest) {
           claimed_at: claimedAt,
           nda_gate_enforced: ndaGateEnforced,
           nda_confirmed_at: ndaAlreadySigned ? new Date().toISOString() : null,
+          require_terms_disclosure: requireTermsDisclosure,
           status: "new",
         })
 

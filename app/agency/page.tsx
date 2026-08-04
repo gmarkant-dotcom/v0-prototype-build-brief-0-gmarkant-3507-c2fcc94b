@@ -443,6 +443,7 @@ function AgencyRFPContent() {
   const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
   const [defaultNdaUrl, setDefaultNdaUrl] = useState("")
   const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
+  const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
   const [agencyId, setAgencyId] = useState<string | null>(null)
   const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterial[]>([])
 
@@ -1024,6 +1025,7 @@ function AgencyRFPContent() {
             masterRfp: { ...masterRfp, referenceMaterials },
             ndaRequired: ndaSignatureRequired,
             ndaLink: ndaSignatureRequired ? ndaSigningLink.trim() : "",
+            requireTermsDisclosure,
             response_deadline: responseDeadline,
             newRecipientsByScope: normalizedNewRecipientsByScope,
             items,
@@ -1049,6 +1051,7 @@ function AgencyRFPContent() {
                 scope_item_name: recipient.scopeItem.name,
                 scope_item_description: recipient.scopeItem.description,
                 reference_materials: referenceMaterials,
+                require_terms_disclosure: requireTermsDisclosure,
               }),
             })
           } catch (magicLinkErr) {
@@ -1072,6 +1075,7 @@ function AgencyRFPContent() {
     setCurrentStep(1)
     setBroadcastComplete(false)
     setBroadcastError(null)
+    setRequireTermsDisclosure(true)
     setRfpTemplateMode("upload")
     setAiTemplateError(null)
     setAiTemplateGenerated(false)
@@ -2553,6 +2557,20 @@ function AgencyRFPContent() {
                 />
                 <p className="font-mono text-[10px] text-foreground-muted">
                   Optional. If set, partners will see “Respond by” in their inbox and RFP detail view.
+                </p>
+              </div>
+
+              <div className="mt-6 p-4 rounded-lg border border-border bg-white/5 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    checked={requireTermsDisclosure}
+                    onCheckedChange={(v) => setRequireTermsDisclosure(v === true)}
+                    className="border-border"
+                  />
+                  <span className="font-mono text-xs text-foreground">Require term disclosures with bids</span>
+                </label>
+                <p className="font-mono text-[10px] text-foreground-muted">
+                  Vendors state payment, cancellation, IP, and rate-validity terms up front.
                 </p>
               </div>
 

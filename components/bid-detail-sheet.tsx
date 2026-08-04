@@ -22,6 +22,13 @@ import {
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
 import { meetsInsuranceMinimum } from "@/lib/insurance-limit-parser"
+import {
+  withTermsDisclosureDefaults,
+  IP_RIGHTS_LABELS,
+  TERM_STATE_LABELS,
+  TERM_STATE_BADGE_CLASS,
+  type TermState,
+} from "@/lib/terms-disclosure"
 import { AiMarkdown } from "@/components/ai-markdown"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { BidEvaluationTab, type BidEvaluationTabHandle } from "@/components/bid-evaluation-tab"
@@ -471,9 +478,78 @@ function BidDetailSheetInner({
                     )}
                   </div>
                 )}
-                {row.payment_terms && (
-                  <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Payment Terms</div>
+                <div>
+                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Terms</div>
+                  {row.terms_disclosure ? (
+                    <div className="space-y-2.5">
+                      {(() => {
+                        const d = withTermsDisclosureDefaults(row.terms_disclosure)
+                        const killFeeValue =
+                          d.kill_fee.fee_type === "none"
+                            ? "None"
+                            : d.kill_fee.fee_type === "percent"
+                              ? d.kill_fee.amount != null
+                                ? `${d.kill_fee.amount}% of fee`
+                                : null
+                              : d.kill_fee.fee_type === "flat"
+                                ? d.kill_fee.amount != null
+                                  ? `$${d.kill_fee.amount.toLocaleString("en-US")} flat`
+                                  : null
+                                : null
+                        const termRows: { label: string; value: string | null; state: TermState | null; note: string }[] = [
+                          {
+                            label: "Payment",
+                            value:
+                              d.payment.net_days != null
+                                ? `Net ${d.payment.net_days}${d.payment.deposit_pct != null ? `, ${d.payment.deposit_pct}% deposit` : ""}`
+                                : null,
+                            state: d.payment.state,
+                            note: d.payment.note,
+                          },
+                          {
+                            label: "Kill fee",
+                            value: killFeeValue,
+                            state: d.kill_fee.fee_type !== "none" ? d.kill_fee.state : null,
+                            note: d.kill_fee.note,
+                          },
+                          {
+                            label: "IP rights",
+                            value: d.ip_rights.stance ? IP_RIGHTS_LABELS[d.ip_rights.stance] : null,
+                            state: d.ip_rights.state,
+                            note: d.ip_rights.note,
+                          },
+                          {
+                            label: "Rate validity",
+                            value: d.rate_validity.days != null ? `${d.rate_validity.days} days` : null,
+                            state: d.rate_validity.state,
+                            note: d.rate_validity.note,
+                          },
+                        ]
+                        const disclosed = termRows.filter((t) => t.value != null)
+                        if (disclosed.length === 0) return <p className="text-sm text-foreground-muted">No terms disclosed</p>
+                        return disclosed.map((t) => (
+                          <div key={t.label} className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="text-sm text-foreground">
+                                {t.label}: {t.value}
+                              </span>
+                              {t.note && <p className="text-xs text-foreground-muted mt-0.5">{t.note}</p>}
+                            </div>
+                            {t.state && (
+                              <span
+                                className={cn(
+                                  "font-mono text-[10px] px-1.5 py-0.5 rounded border shrink-0",
+                                  TERM_STATE_BADGE_CLASS[t.state]
+                                )}
+                              >
+                                {TERM_STATE_LABELS[t.state]}
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  ) : row.payment_terms ? (
                     <div className="text-sm text-foreground space-y-1">
                       {row.payment_terms.deposit_required_pct != null && (
                         <p>Deposit: {row.payment_terms.deposit_required_pct}%</p>
@@ -483,8 +559,10 @@ function BidDetailSheetInner({
                       )}
                       {row.payment_terms.additional_notes && <p>Notes: {row.payment_terms.additional_notes}</p>}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-sm text-foreground-muted">No terms disclosed</p>
+                  )}
+                </div>
                 {row.attachments && row.attachments.length > 0 && (
                   <div>
                     <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>

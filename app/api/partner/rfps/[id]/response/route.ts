@@ -5,6 +5,7 @@ import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-resp
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { withBusinessCriteriaDefaults } from "@/lib/business-criteria"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
+import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureDefaults } from "@/lib/terms-disclosure"
 
 export const dynamic = "force-dynamic"
 
@@ -12,7 +13,7 @@ type Body = {
   proposal_text?: string
   budget_proposal?: string
   timeline_proposal?: string
-  payment_terms?: unknown
+  terms_disclosure?: unknown
   attachments?: unknown
   business_criteria_responses?: unknown
   status?: "draft" | "submitted"
@@ -32,44 +33,6 @@ export type SavedAttachment = {
   type: string
   label: string
   url: string
-}
-
-type PaymentTermsPayload = {
-  deposit_required_pct: number | null
-  payment_schedule_preference: string | null
-  preferred_currency: string | null
-  additional_notes: string | null
-}
-
-function normalizePaymentTerms(raw: unknown): PaymentTermsPayload {
-  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {}
-  const parsedDeposit =
-    source.deposit_required_pct === null || source.deposit_required_pct === undefined
-      ? null
-      : Number(source.deposit_required_pct)
-  const deposit_required_pct =
-    parsedDeposit != null &&
-    Number.isFinite(parsedDeposit) &&
-    parsedDeposit >= 0 &&
-    parsedDeposit <= 100
-      ? parsedDeposit
-      : null
-
-  const payment_schedule_preference = String(source.payment_schedule_preference ?? "")
-    .trim()
-    .slice(0, 80) || null
-  const preferred_currency = String(source.preferred_currency ?? "")
-    .trim()
-    .toUpperCase()
-    .slice(0, 16) || null
-  const additional_notes = String(source.additional_notes ?? "").trim() || null
-
-  return {
-    deposit_required_pct,
-    payment_schedule_preference,
-    preferred_currency,
-    additional_notes,
-  }
 }
 
 function normalizeAttachments(raw: unknown): SavedAttachment[] {
@@ -136,7 +99,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: inbox, error: inboxErr } = await supabase
       .from("partner_rfp_inbox")
-      .select("id, agency_id, partner_id, recipient_email, nda_gate_enforced, nda_confirmed_at")
+      .select("id, agency_id, partner_id, recipient_email, nda_gate_enforced, nda_confirmed_at, require_terms_disclosure")
       .eq("id", inboxId)
       .maybeSingle()
 
@@ -167,7 +130,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const proposal_text = (body.proposal_text ?? "").toString()
     const budget_proposal = (body.budget_proposal ?? "").toString()
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
-    const payment_terms = normalizePaymentTerms(body.payment_terms)
     const attachments = normalizeAttachments(body.attachments)
     const business_criteria_responses = withBusinessCriteriaDefaults(body.business_criteria_responses)
     const changeNotes = (body.change_notes ?? "").toString().trim()
@@ -199,6 +161,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
+    // Trust boundary: the client only blocks submission client-side, so re-validate here
+    // regardless of what the form sent. Drafts never block on terms completeness, matching
+    // the proposal/budget/timeline checks above.
+    const termsRequired = status === "submitted" && inbox.require_terms_disclosure === true
+    const termsValidation = validateTermsDisclosure(body.terms_disclosure, termsRequired)
+    if (!termsValidation.ok) {
+      console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 400, message: "Invalid terms disclosure", errors: termsValidation.errors })
+      return NextResponse.json({ error: "Please complete the required term disclosures", detail: termsValidation.errors }, { status: 400 })
+    }
+    const parsedTermsDisclosure = withTermsDisclosureDefaults(body.terms_disclosure)
+    const terms_disclosure =
+      status === "submitted"
+        ? termsValidation.value
+        : isTermsDisclosureStarted(parsedTermsDisclosure)
+          ? parsedTermsDisclosure
+          : null
+
     const partner_display_name =
       profile.company_name?.trim() ||
       profile.full_name?.trim() ||
@@ -209,7 +188,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       proposal_text,
       budget_proposal,
       timeline_proposal,
-      payment_terms,
+      terms_disclosure,
       attachments,
       business_criteria_responses,
       partner_display_name,

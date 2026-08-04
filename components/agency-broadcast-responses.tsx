@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Loader2, ChevronDown, ChevronRight, Download, ExternalLink, CheckCircle, Star, CalendarDays } from "lucide-react"
+import { termsSummaryLine, type PaymentTerms } from "@/lib/bid-shared"
 
 function externalLinkLabel(url: string): string {
   try {
@@ -131,6 +132,8 @@ type AgencyResponseRow = {
   proposal_text: string
   budget_proposal: string
   timeline_proposal: string
+  payment_terms?: PaymentTerms
+  terms_disclosure?: unknown
   attachments: AttachmentItem[] | null
   status: string
   created_at: string
@@ -172,6 +175,12 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
             "We’d approach this as a modular production with a dedicated showrunner and a nimble B-cam unit for creator days…",
           budget_proposal: "$92,000 – $105,000",
           timeline_proposal: "10 weeks from kickoff to delivery of first wave",
+          terms_disclosure: {
+            payment: { net_days: 30, deposit_pct: 50, state: "firm", note: "50% due at kickoff, balance on delivery." },
+            kill_fee: { fee_type: "percent", amount: 25, state: "negotiable", note: "" },
+            ip_rights: { stance: "work_for_hire", state: "firm", note: "" },
+            rate_validity: { days: 60, state: "flexible", note: "" },
+          },
           attachments: [
             { type: "work_example", label: "Work Example", url: "https://demo.withligament.com/sample-assets/work-example" },
             { type: "proposal", label: "Proposal", url: "https://demo.withligament.com/sample-assets/proposal-deck" },
@@ -181,6 +190,51 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
           updated_at: new Date().toISOString(),
           inbox: {
             id: "demo-inbox",
+            scope_item_name: "Video production",
+            created_at: new Date().toISOString(),
+            status: "bid_submitted",
+          },
+        },
+        {
+          id: "demo-r2",
+          inbox_item_id: "demo-inbox-2",
+          partner_display_name: "Northline Creative Collective",
+          proposal_text:
+            "Small senior team, direct access to the director throughout. We can start within a week of award.",
+          budget_proposal: "$78,500",
+          timeline_proposal: "6 weeks from kickoff to final delivery",
+          terms_disclosure: {
+            payment: { net_days: 15, deposit_pct: 25, state: "negotiable", note: "Open to milestone billing instead." },
+            kill_fee: { fee_type: "flat", amount: 5000, state: "firm", note: "" },
+            ip_rights: { stance: "licensed_usage", state: "negotiable", note: "Usage term scoped to 2 years by default." },
+            rate_validity: { days: 30, state: "firm", note: "" },
+          },
+          attachments: [
+            { type: "capabilities_overview", label: "Capabilities Overview", url: "https://demo.withligament.com/sample-assets/capabilities" },
+          ],
+          status: "submitted",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          inbox: {
+            id: "demo-inbox-2",
+            scope_item_name: "Video production",
+            created_at: new Date().toISOString(),
+            status: "bid_submitted",
+          },
+        },
+        {
+          id: "demo-r3",
+          inbox_item_id: "demo-inbox-3",
+          partner_display_name: "Harbor & Vine Studio",
+          proposal_text: "Full-service bid covering pre-production through delivery, with in-house VFX.",
+          budget_proposal: "$110,000",
+          timeline_proposal: "12 weeks from kickoff to final delivery",
+          attachments: null,
+          status: "submitted",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          inbox: {
+            id: "demo-inbox-3",
             scope_item_name: "Video production",
             created_at: new Date().toISOString(),
             status: "bid_submitted",
@@ -393,6 +447,14 @@ export function AgencyBroadcastResponsesPanel({ projectId }: { projectId?: strin
                       Response deadline {responseDeadline}
                     </div>
                   )}
+                  {(() => {
+                    const summary = termsSummaryLine(r)
+                    return (
+                      <div className="font-mono text-[10px] text-foreground-muted truncate">
+                        {summary || "No terms disclosed"}
+                      </div>
+                    )
+                  })()}
                 </div>
                 <span
                   className={cn(

@@ -38,6 +38,16 @@ import {
   isTimelineValidForSubmit,
 } from "@/lib/rfp-response-fields"
 import {
+  emptyTermsDisclosure,
+  withTermsDisclosureDefaults,
+  validateTermsDisclosure,
+  mergeLegacyPaymentTermsIntoDisclosure,
+  isTermsDisclosureStarted,
+  type TermsDisclosure,
+  type TermsDisclosureValidationError,
+} from "@/lib/terms-disclosure"
+import { TermsDisclosureSection } from "@/components/terms-disclosure-section"
+import {
   Loader2,
   FileText,
   Building2,
@@ -66,14 +76,6 @@ const btnOutlineLight =
 const btnPrimaryDark =
   "!bg-[#0C3535] !text-white hover:!bg-[#0C3535]/90 font-display font-bold border-transparent"
 
-const PAYMENT_SCHEDULE_OPTIONS = [
-  "Milestone-based",
-  "Net 30",
-  "Net 60",
-  "Net 90",
-  "Upon completion",
-] as const
-
 type InboxRow = {
   id: string
   agency_id: string
@@ -94,6 +96,7 @@ type InboxRow = {
   nda_gate_enforced?: boolean
   nda_confirmed_at?: string | null
   client_name?: string | null
+  require_terms_disclosure?: boolean
 }
 
 type AttachmentTag =
@@ -206,6 +209,7 @@ type ResponseRow = {
   budget_proposal: string
   timeline_proposal: string
   payment_terms?: Record<string, unknown> | null
+  terms_disclosure?: unknown
   attachments: SavedAttachment[] | null
   business_criteria_responses?: unknown
   status: string
@@ -478,12 +482,12 @@ export default function PartnerRfpDetailPage() {
   const [timelineDuration, setTimelineDuration] = useState("")
   const [timelineUnit, setTimelineUnit] = useState<"Days" | "Weeks" | "Months">("Weeks")
   const [timelineLegacyHint, setTimelineLegacyHint] = useState<string | null>(null)
-  const [paymentTermsDepositRequired, setPaymentTermsDepositRequired] = useState("")
-  const [paymentTermsSchedulePreference, setPaymentTermsSchedulePreference] = useState<string>(
-    PAYMENT_SCHEDULE_OPTIONS[0]
-  )
-  const [paymentTermsPreferredCurrency, setPaymentTermsPreferredCurrency] = useState("USD")
-  const [paymentTermsAdditionalNotes, setPaymentTermsAdditionalNotes] = useState("")
+  const [termsDisclosure, setTermsDisclosure] = useState<TermsDisclosure>(emptyTermsDisclosure())
+  const [termsErrors, setTermsErrors] = useState<TermsDisclosureValidationError[]>([])
+  const [saveTermsAsDefault, setSaveTermsAsDefault] = useState(true)
+  const [defaultTermsFromProfile, setDefaultTermsFromProfile] = useState<TermsDisclosure | null>(null)
+  const [defaultTermsLoaded, setDefaultTermsLoaded] = useState(false)
+  const [termsHydrated, setTermsHydrated] = useState(false)
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([])
   const [businessCriteriaResponses, setBusinessCriteriaResponses] = useState<BusinessCriteriaHolds>(
     withBusinessCriteriaDefaults(null)
@@ -547,6 +551,7 @@ export default function PartnerRfpDetailPage() {
     ;(async () => {
       setLoading(true)
       setError(null)
+      setTermsHydrated(false)
       try {
         const res = await fetch(`/api/partner/rfps/${id}`, { cache: "no-store", credentials: "same-origin" })
         const data = await res.json().catch(() => ({}))
@@ -593,11 +598,6 @@ export default function PartnerRfpDetailPage() {
             setTimelineDuration(tp.duration)
             setTimelineUnit(tp.unit)
             setTimelineLegacyHint(tp.legacyHint)
-            const pt = parsePaymentTerms(r.payment_terms)
-            setPaymentTermsDepositRequired(pt.deposit_required_pct)
-            setPaymentTermsSchedulePreference(pt.payment_schedule_preference || PAYMENT_SCHEDULE_OPTIONS[0])
-            setPaymentTermsPreferredCurrency(pt.preferred_currency || "USD")
-            setPaymentTermsAdditionalNotes(pt.additional_notes)
             const att = Array.isArray(r.attachments) ? r.attachments : []
             setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
             setBusinessCriteriaResponses(withBusinessCriteriaDefaults(r.business_criteria_responses))
@@ -611,10 +611,6 @@ export default function PartnerRfpDetailPage() {
             setTimelineDuration("")
             setTimelineUnit("Weeks")
             setTimelineLegacyHint(null)
-            setPaymentTermsDepositRequired("")
-            setPaymentTermsSchedulePreference(PAYMENT_SCHEDULE_OPTIONS[0])
-            setPaymentTermsPreferredCurrency("USD")
-            setPaymentTermsAdditionalNotes("")
             setDraftAttachments([])
             setBusinessCriteriaResponses(withBusinessCriteriaDefaults(null))
             setVersions([])
@@ -634,6 +630,70 @@ export default function PartnerRfpDetailPage() {
       cancelled = true
     }
   }, [id, isDemoDetail])
+
+  /** Signed-in partner's saved default terms ("handle compliance once") - fetched once per
+   *  mount, independent of which RFP is open, via the browser client per this repo's
+   *  preferred data-fetching pattern. */
+  useEffect(() => {
+    if (isDemoDetail) {
+      setDefaultTermsLoaded(true)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) return
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("default_terms")
+          .eq("id", user.id)
+          .maybeSingle()
+        if (!cancelled && profile?.default_terms) {
+          setDefaultTermsFromProfile(withTermsDisclosureDefaults(profile.default_terms))
+        }
+      } catch (e) {
+        console.error("[partner/rfps] default_terms fetch failed", { message: e instanceof Error ? e.message : String(e) })
+      } finally {
+        if (!cancelled) setDefaultTermsLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDemoDetail])
+
+  /** Prefills the terms disclosure form once both this RFP's existing bid (if any) and the
+   *  partner's saved defaults have loaded. Existing bid data wins; otherwise falls back to
+   *  saved defaults, with a legacy payment_terms.deposit_required_pct merged in so editing a
+   *  pre-feature bid doesn't ask the vendor to retype data they already gave. Runs once per
+   *  RFP (termsHydrated resets on id change above) so it never clobbers in-progress edits. */
+  useEffect(() => {
+    if (loading || termsHydrated) return
+    if (isDemoDetail) {
+      setTermsHydrated(true)
+      return
+    }
+    if (!defaultTermsLoaded) return
+    if (existing?.terms_disclosure) {
+      setTermsDisclosure(withTermsDisclosureDefaults(existing.terms_disclosure))
+      setSaveTermsAsDefault(!defaultTermsFromProfile)
+    } else {
+      const legacyDepositRaw = existing ? parsePaymentTerms(existing.payment_terms).deposit_required_pct : ""
+      const legacyDeposit = legacyDepositRaw.trim() !== "" ? Number(legacyDepositRaw) : null
+      const base = defaultTermsFromProfile || emptyTermsDisclosure()
+      setTermsDisclosure(
+        Number.isFinite(legacyDeposit)
+          ? mergeLegacyPaymentTermsIntoDisclosure(base, { deposit_required_pct: legacyDeposit })
+          : base
+      )
+      setSaveTermsAsDefault(!defaultTermsFromProfile)
+    }
+    setTermsHydrated(true)
+  }, [loading, isDemoDetail, existing, defaultTermsFromProfile, defaultTermsLoaded, termsHydrated])
 
   /** No separate awarded-state Submission History branch — it lives under Status & Feedback. Open that tab for terminal outcomes so history is visible (default tab is My Bid). */
   useEffect(() => {
@@ -738,6 +798,24 @@ export default function PartnerRfpDetailPage() {
       }
     }
 
+    const termsRequired = inbox?.require_terms_disclosure === true
+    // Drafts never block on terms completeness (matches proposal/budget/timeline above,
+    // which are also submitted-only checks) - only final submission enforces the
+    // requirement, and only when this RFP actually requires disclosure.
+    const termsValidation = validateTermsDisclosure(termsDisclosure, status === "submitted" && termsRequired)
+    if (status === "submitted" && !termsValidation.ok) {
+      setTermsErrors(termsValidation.errors)
+      setSubmitError("Please complete the required term disclosures before submitting.")
+      return
+    }
+    setTermsErrors([])
+    const terms_disclosure =
+      status === "submitted"
+        ? (termsValidation as { ok: true; value: TermsDisclosure | null }).value
+        : isTermsDisclosureStarted(termsDisclosure)
+          ? termsDisclosure
+          : null
+
     setSavingKind(status)
     try {
       const attachments = draftsToPayload(draftAttachments)
@@ -745,13 +823,7 @@ export default function PartnerRfpDetailPage() {
         proposal_text: proposalText,
         budget_proposal,
         timeline_proposal,
-        payment_terms: {
-          deposit_required_pct:
-            paymentTermsDepositRequired.trim() === "" ? null : Number(paymentTermsDepositRequired),
-          payment_schedule_preference: paymentTermsSchedulePreference || null,
-          preferred_currency: paymentTermsPreferredCurrency.trim().toUpperCase() || "USD",
-          additional_notes: paymentTermsAdditionalNotes.trim() || null,
-        },
+        terms_disclosure,
         attachments,
         business_criteria_responses: businessCriteriaResponses,
         status,
@@ -793,11 +865,7 @@ export default function PartnerRfpDetailPage() {
         setTimelineDuration(tp.duration)
         setTimelineUnit(tp.unit)
         setTimelineLegacyHint(tp.legacyHint)
-        const pt = parsePaymentTerms(row.payment_terms)
-        setPaymentTermsDepositRequired(pt.deposit_required_pct)
-        setPaymentTermsSchedulePreference(pt.payment_schedule_preference || PAYMENT_SCHEDULE_OPTIONS[0])
-        setPaymentTermsPreferredCurrency(pt.preferred_currency || "USD")
-        setPaymentTermsAdditionalNotes(pt.additional_notes)
+        if (row.terms_disclosure) setTermsDisclosure(withTermsDisclosureDefaults(row.terms_disclosure))
         const att = Array.isArray(row.attachments) ? row.attachments : []
         setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
       }
@@ -809,6 +877,27 @@ export default function PartnerRfpDetailPage() {
           ["under_review", "shortlisted", "meeting_requested"].includes(preSubmitStatus)
         )
         setBidSubmittedModalOpen(true)
+        if (saveTermsAsDefault && terms_disclosure) {
+          try {
+            const supabase = createClient()
+            const {
+              data: { user },
+            } = await supabase.auth.getUser()
+            if (user) {
+              const { error: defaultTermsErr } = await supabase
+                .from("profiles")
+                .update({ default_terms: terms_disclosure })
+                .eq("id", user.id)
+              if (defaultTermsErr) {
+                console.error("[partner/rfps] save default_terms failed", { message: defaultTermsErr.message })
+              } else {
+                setDefaultTermsFromProfile(withTermsDisclosureDefaults(terms_disclosure))
+              }
+            }
+          } catch (e) {
+            console.error("[partner/rfps] save default_terms failed", { message: e instanceof Error ? e.message : String(e) })
+          }
+        }
       } else {
         setSuccessMsg("Draft saved. You can return anytime to finish and submit.")
       }
@@ -1366,6 +1455,12 @@ export default function PartnerRfpDetailPage() {
               Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, shortlisted, or meeting requested.
           </p>
 
+          {inbox.require_terms_disclosure && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
+              This agency requires basic term disclosures with your bid.
+            </div>
+          )}
+
           {successMsg && (
             <div
               role="status"
@@ -1477,69 +1572,17 @@ export default function PartnerRfpDetailPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
-              <h3 className="font-display font-bold text-sm text-[#0C3535] mb-3">Payment Terms</h3>
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                    Deposit Required (%)
-                  </label>
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    max={100}
-                    step="any"
-                    value={paymentTermsDepositRequired}
-                    onChange={(e) => setPaymentTermsDepositRequired(e.target.value)}
-                    placeholder="0-100"
-                    className={inputClass}
-                    disabled={!canEdit}
-                  />
-                </div>
-                <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                    Payment Schedule Preference
-                  </label>
-                  <select
-                    value={paymentTermsSchedulePreference}
-                    onChange={(e) => setPaymentTermsSchedulePreference(e.target.value)}
-                    disabled={!canEdit}
-                    className={cn(inputClass, "h-10 rounded-md text-sm w-full")}
-                  >
-                    {PAYMENT_SCHEDULE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                    Preferred Currency
-                  </label>
-                  <Input
-                    value={paymentTermsPreferredCurrency}
-                    onChange={(e) => setPaymentTermsPreferredCurrency(e.target.value.toUpperCase())}
-                    placeholder="USD"
-                    className={inputClass}
-                    disabled={!canEdit}
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
-                    Additional Payment Notes
-                  </label>
-                  <Textarea
-                    value={paymentTermsAdditionalNotes}
-                    onChange={(e) => setPaymentTermsAdditionalNotes(e.target.value)}
-                    placeholder="Optional notes about deposit timing, invoicing cadence, terms, or constraints."
-                    className={cn(fieldClass, "min-h-[90px]")}
-                    disabled={!canEdit}
-                  />
-                </div>
-              </div>
-            </div>
+            <TermsDisclosureSection
+              value={termsDisclosure}
+              onChange={setTermsDisclosure}
+              required={inbox.require_terms_disclosure === true}
+              theme="light"
+              errors={termsErrors}
+              disabled={!canEdit}
+              showSaveDefaultOption
+              saveAsDefault={saveTermsAsDefault}
+              onSaveAsDefaultChange={setSaveTermsAsDefault}
+            />
 
             {hasRequiredCriteriaForBid && (
               <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">

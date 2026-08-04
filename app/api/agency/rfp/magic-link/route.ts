@@ -101,6 +101,10 @@ export async function POST(request: NextRequest) {
       : []
     const outputTemplateConfig = normalizeOutputTemplateConfig(body.output_template_config)
     const businessCriteriaRequired = normalizeBusinessCriteriaRequired(body.business_criteria_required)
+    // Only set on an explicit value (initial send). Resends omit this field so the upsert's
+    // ON CONFLICT DO UPDATE leaves the originally-set requirement untouched.
+    const hasRequireTermsDisclosure = typeof body.require_terms_disclosure === "boolean"
+    const requireTermsDisclosure = body.require_terms_disclosure === true
 
     if (!vendorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vendorEmail)) {
       return NextResponse.json({ error: "A valid vendor email is required" }, { status: 400 })
@@ -151,6 +155,7 @@ export async function POST(request: NextRequest) {
           status: "pending",
           submitted_at: null,
           response_id: null,
+          ...(hasRequireTermsDisclosure ? { require_terms_disclosure: requireTermsDisclosure } : {}),
         },
         { onConflict: "agency_id,project_id,vendor_email" }
       )

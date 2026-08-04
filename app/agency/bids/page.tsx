@@ -21,6 +21,7 @@ import {
   buildRankedBlocks,
   sortRankedGroup,
   requestRanking,
+  termsSummaryLine,
 } from "@/lib/bid-shared"
 import { compositeScoreColorClass } from "@/lib/bid-scoring"
 import { AiMarkdown } from "@/components/ai-markdown"
@@ -245,6 +246,11 @@ function BidCard({
         {submittedAt && (
           <div className="font-mono text-[10px] text-foreground-muted/70 mt-1">
             Submitted {submittedAt}
+          </div>
+        )}
+        {row.response_exists && (
+          <div className="font-mono text-[10px] text-foreground-muted/70 mt-1">
+            {termsSummaryLine(row) || "No terms disclosed"}
           </div>
         )}
         {row.response_exists && (

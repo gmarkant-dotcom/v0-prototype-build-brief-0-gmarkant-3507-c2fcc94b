@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { formatDateTime, cn } from "@/lib/utils"
 import { Loader2, Send } from "lucide-react"
 
@@ -26,6 +27,7 @@ function statusPill(status: string) {
 export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
   const [email, setEmail] = useState("")
   const [name, setName] = useState("")
+  const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
   const [checking, setChecking] = useState(false)
   const [checkResult, setCheckResult] = useState<{ is_existing_partner: boolean; has_pending_invite: boolean } | null>(
     null
@@ -90,6 +92,7 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
           vendor_email: email.trim(),
           vendor_name: name.trim() || undefined,
           project_id: projectId,
+          require_terms_disclosure: requireTermsDisclosure,
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -159,6 +162,17 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
           className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
         />
       </div>
+      <label className="mt-3 flex items-center gap-2 cursor-pointer">
+        <Checkbox
+          checked={requireTermsDisclosure}
+          onCheckedChange={(v) => setRequireTermsDisclosure(v === true)}
+          className="border-border"
+        />
+        <span className="font-mono text-xs text-foreground">Require term disclosures with bids</span>
+      </label>
+      <p className="font-mono text-[10px] text-foreground-muted mt-1">
+        Vendors state payment, cancellation, IP, and rate-validity terms up front.
+      </p>
       <div className="mt-3 flex items-center gap-3 flex-wrap">
         <Button
           type="button"

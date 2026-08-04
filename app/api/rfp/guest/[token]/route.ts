@@ -10,6 +10,7 @@ import {
 import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults } from "@/lib/business-criteria"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
+import { validateTermsDisclosure } from "@/lib/terms-disclosure"
 
 export const dynamic = "force-dynamic"
 
@@ -147,28 +148,6 @@ function getServiceSupabase() {
   }
   // Service role required throughout: guests have no authenticated session for RLS.
   return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
-}
-
-type PaymentTermsInput = {
-  deposit_pct?: unknown
-  schedule_preference?: unknown
-  currency?: unknown
-  notes?: unknown
-}
-
-function normalizeGuestPaymentTerms(raw: unknown) {
-  const source = raw && typeof raw === "object" ? (raw as PaymentTermsInput) : {}
-  const parsedDeposit =
-    source.deposit_pct === null || source.deposit_pct === undefined ? null : Number(source.deposit_pct)
-  const deposit_required_pct =
-    parsedDeposit != null && Number.isFinite(parsedDeposit) && parsedDeposit >= 0 && parsedDeposit <= 100
-      ? parsedDeposit
-      : null
-  const payment_schedule_preference =
-    String(source.schedule_preference ?? "").trim().slice(0, 80) || null
-  const preferred_currency = String(source.currency ?? "").trim().toUpperCase().slice(0, 16) || null
-  const additional_notes = String(source.notes ?? "").trim() || null
-  return { deposit_required_pct, payment_schedule_preference, preferred_currency, additional_notes }
 }
 
 function labelFromUrl(url: string): string {
@@ -353,7 +332,7 @@ type PostBody = {
   proposal_text?: string
   budget_proposal?: { amount?: unknown; currency?: unknown }
   timeline_proposal?: string
-  payment_terms?: PaymentTermsInput
+  terms_disclosure?: unknown
   attachments?: unknown
   business_criteria_responses?: unknown
   is_edit?: boolean
@@ -411,6 +390,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Timeline is required" }, { status: 400 })
     }
 
+    // Trust boundary: the guest form only blocks submission client-side, so re-validate
+    // here regardless of what was sent. Guest submissions are always final (no draft
+    // concept for this flow), so this always enforces the RFP's requirement.
+    const termsValidation = validateTermsDisclosure(body.terms_disclosure, tokenRow.require_terms_disclosure === true)
+    if (!termsValidation.ok) {
+      return NextResponse.json(
+        { error: "Please complete the required term disclosures", detail: termsValidation.errors },
+        { status: 400 }
+      )
+    }
+    const terms_disclosure = termsValidation.value
+
     const vendorEmail = (tokenRow.vendor_email || "").trim().toLowerCase()
     const { data: matchedProfile, error: matchedProfileErr } = await supabase
       .from("profiles")
@@ -422,7 +413,6 @@ export async function POST(req: Request) {
     }
     const is_existing_partner = Boolean(matchedProfile?.id)
 
-    const payment_terms = normalizeGuestPaymentTerms(body.payment_terms)
     const attachments = normalizeGuestAttachments(body.attachments)
     const business_criteria_responses = withBusinessCriteriaDefaults(body.business_criteria_responses)
     const budget_proposal = serializeBudget(amount, currency)
@@ -442,7 +432,7 @@ export async function POST(req: Request) {
           proposal_text,
           budget_proposal,
           timeline_proposal,
-          payment_terms,
+          terms_disclosure,
           attachments,
           business_criteria_responses,
           status: "submitted",
@@ -486,7 +476,7 @@ export async function POST(req: Request) {
         proposal_text,
         budget_proposal,
         timeline_proposal,
-        payment_terms,
+        terms_disclosure,
         attachments,
         business_criteria_responses,
         partner_display_name,

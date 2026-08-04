@@ -7,6 +7,7 @@ import {
   bestBudgetDisplay,
   bestBudgetAmount,
   requestRanking,
+  termsSummaryLine,
 } from "@/lib/bid-shared"
 import { compositeScoreColorClass } from "@/lib/bid-scoring"
 import { formatTimelineForDisplay } from "@/lib/rfp-response-fields"
@@ -422,15 +423,21 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 ))}
               </TableRow>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Payment Terms</TableCell>
-                {rows.map((row) => (
-                  <TableCell key={row.id} className="text-foreground whitespace-normal text-xs">
-                    {row.payment_terms?.payment_schedule_preference ||
-                      (row.payment_terms?.deposit_required_pct != null
-                        ? `${row.payment_terms.deposit_required_pct}% deposit`
-                        : "Not specified")}
-                  </TableCell>
-                ))}
+                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Terms</TableCell>
+                {rows.map((row) => {
+                  const summary = termsSummaryLine(row)
+                  return (
+                    <TableCell key={row.id} className="text-xs">
+                      {summary ? (
+                        <span className="text-foreground line-clamp-2" title={summary}>
+                          {summary}
+                        </span>
+                      ) : (
+                        <span className="text-foreground-muted">No terms disclosed</span>
+                      )}
+                    </TableCell>
+                  )
+                })}
               </TableRow>
               <TableRow className="border-border/30">
                 <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Business Criteria</TableCell>
