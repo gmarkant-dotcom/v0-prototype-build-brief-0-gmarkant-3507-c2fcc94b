@@ -14,8 +14,6 @@ const publicPaths = [
   '/legal',
   '/terms',
   '/privacy',
-  '/password',
-  '/api/password',
   '/api/partner/rfps/claim',
   '/api/partner/partnerships/claim',
   '/pricing',

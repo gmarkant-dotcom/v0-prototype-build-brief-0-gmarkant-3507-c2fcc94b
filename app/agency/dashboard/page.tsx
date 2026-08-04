@@ -115,9 +115,9 @@ function formatUsdWhole(amount: number): string {
   }
 }
 
-function formatDeadlineRelative(iso: string): string {
+function formatDeadlineRelative(iso: string): string | null {
   const t = new Date(iso).getTime()
-  if (!Number.isFinite(t)) return "soon"
+  if (!Number.isFinite(t)) return null
   const days = Math.ceil((t - Date.now()) / (24 * 60 * 60 * 1000))
   if (days <= 0) return "today"
   if (days === 1) return "in 1 day"
@@ -187,11 +187,12 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
   }
   for (const r of data.rfpsClosingSoon) {
     const daysLeft = Math.ceil((new Date(r.deadline).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+    const relativeDeadline = formatDeadlineRelative(r.deadline)
     rows.push({
       key: `rfp:${r.projectId}:${r.scopeItemName}`,
       icon: Send,
       text: `RFP for ${r.scopeItemName} on ${r.projectName} - ${r.pending} of ${r.invited} partner${r.invited === 1 ? "" : "s"} ${r.pending === 1 ? "hasn't" : "haven't"} responded`,
-      timeframe: `closes ${formatDeadlineRelative(r.deadline)}`,
+      timeframe: relativeDeadline ? `closes ${relativeDeadline}` : undefined,
       href: r.href,
       urgent: Number.isFinite(daysLeft) && daysLeft <= URGENT_DAYS_THRESHOLD,
     })

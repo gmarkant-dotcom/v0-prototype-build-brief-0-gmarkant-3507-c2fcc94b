@@ -138,7 +138,7 @@ export default function PartnerMarketplacePage() {
 
   return (
     <PartnerLayout>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
         <div>
           <h1 className="font-display font-bold text-3xl text-[#0C3535]">Marketplace</h1>
           <p className="text-gray-600 mt-1">Browse discoverable lead agencies and request connections.</p>

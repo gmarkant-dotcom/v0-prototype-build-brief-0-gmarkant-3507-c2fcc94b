@@ -17,6 +17,7 @@ import { usePaidUser } from "@/contexts/paid-user-context"
 import { createClient } from "@/lib/supabase/client"
 import { Star, Shield, Building2, User, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass, Upload } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { MarketplaceContent } from "@/components/marketplace-content"
 import { PartnerImportSheet } from "@/components/partner-import-sheet"
 import {
@@ -335,6 +336,7 @@ function PartnerPoolPageInner() {
   const [resendingEmail, setResendingEmail] = useState<string | null>(null)
   const [resendMsg, setResendMsg] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [partnershipToRemove, setPartnershipToRemove] = useState<Partnership | null>(null)
 
   // Invitation state
   const [invitations, setInvitations] = useState<PartnerInvitation[]>([])
@@ -1841,15 +1843,10 @@ function PartnerPoolPageInner() {
                         </Button>
                         <Button
                           type="button"
-                          variant="outline"
+                          variant="destructive-outline"
                           size="sm"
                           disabled={removingId === row.id}
-                          onClick={() => {
-                            if (window.confirm(`Remove ${row.partnerEmail} from your pool?`)) {
-                              handleRemovePartnership(row)
-                            }
-                          }}
-                          className="border-border text-foreground-muted hover:bg-white/5"
+                          onClick={() => setPartnershipToRemove(row)}
                         >
                           {removingId === row.id ? "Removing..." : "Remove"}
                         </Button>
@@ -2178,12 +2175,11 @@ function PartnerPoolPageInner() {
               {/* Action Buttons */}
               <div className="flex items-center justify-between pt-4 mt-4 border-t border-border">
                 <Button
-                  variant="outline"
+                  variant="destructive-outline"
                   onClick={() => {
                     setPartnerToDelete(selectedPartner)
                     setShowDeleteConfirm(true)
                   }}
-                  className="border-red-500/30 text-red-400 hover:bg-red-500/10"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Remove from Pool
@@ -2199,46 +2195,69 @@ function PartnerPoolPageInner() {
           </div>
         )}
         
-        {/* Delete Confirmation Modal */}
-        {showDeleteConfirm && partnerToDelete && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowDeleteConfirm(false)}>
-            <GlassCard className="w-full max-w-md" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
-                  <Trash2 className="w-5 h-5 text-red-400" />
-                </div>
-                <div>
-                  <h2 className="font-display font-bold text-xl text-foreground">Remove Partner</h2>
-                  <p className="font-mono text-xs text-foreground-muted">This action cannot be undone</p>
-                </div>
-              </div>
-              
-              <p className="text-foreground-secondary mb-6">
-                Are you sure you want to remove <span className="font-semibold text-foreground">{partnerToDelete.name}</span> from your partner pool? They will no longer have access to your projects.
-              </p>
-              
-              <div className="flex items-center justify-end gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowDeleteConfirm(false)
-                    setPartnerToDelete(null)
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleDeletePartner}
-                  disabled={isDeleting}
-                  className="bg-red-500 text-white hover:bg-red-600"
-                >
-                  {isDeleting ? 'Removing...' : 'Remove Partner'}
-                </Button>
-              </div>
-            </GlassCard>
-          </div>
-        )}
-        
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={showDeleteConfirm && !!partnerToDelete} onOpenChange={(open) => {
+          if (!open) {
+            setShowDeleteConfirm(false)
+            setPartnerToDelete(null)
+          }
+        }}>
+          <DialogContent className="bg-card border-border text-foreground">
+            <DialogHeader>
+              <DialogTitle className="font-display">Remove partner?</DialogTitle>
+              <DialogDescription className="text-foreground-muted">
+                Are you sure you want to remove <span className="font-semibold text-foreground">{partnerToDelete?.name}</span> from your partner pool? They will no longer have access to your projects. This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  setPartnerToDelete(null)
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeletePartner}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Removing...' : 'Remove partner'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Remove from pool confirmation (inline row action) */}
+        <Dialog open={!!partnershipToRemove} onOpenChange={(open) => {
+          if (!open) setPartnershipToRemove(null)
+        }}>
+          <DialogContent className="bg-card border-border text-foreground">
+            <DialogHeader>
+              <DialogTitle className="font-display">Remove from pool?</DialogTitle>
+              <DialogDescription className="text-foreground-muted">
+                Remove <span className="font-semibold text-foreground">{partnershipToRemove?.partnerEmail}</span> from your pool? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setPartnershipToRemove(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (partnershipToRemove) handleRemovePartnership(partnershipToRemove)
+                  setPartnershipToRemove(null)
+                }}
+              >
+                Remove
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Invite Partner Modal */}
         {showInviteModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowInviteModal(false)}>

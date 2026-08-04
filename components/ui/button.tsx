@@ -11,8 +11,12 @@ const buttonVariants = cva(
       variant: {
         /** Primary surface is lime (#C8F53C); use token foreground for contrast (not inherited body text). */
         default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        /** Solid mode: dialog confirms only - the moment of consequence. */
         destructive:
           'bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20',
+        /** Outline mode: inline/row-level destructive actions. Never solid outside a confirm dialog. */
+        'destructive-outline':
+          'border border-destructive/40 bg-transparent text-destructive hover:bg-destructive/10 focus-visible:ring-destructive/20',
         /** App shell is always dark; do not use light-mode gray-900 (invisible without `.dark` on html). */
         outline:
           'border border-border bg-transparent text-foreground shadow-xs hover:bg-white/10 hover:text-foreground',

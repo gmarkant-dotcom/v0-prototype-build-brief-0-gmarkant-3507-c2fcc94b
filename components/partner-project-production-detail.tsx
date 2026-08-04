@@ -190,13 +190,12 @@ export function PartnerProjectProductionDetail({
                   <li key={d.id} className="flex items-center gap-2 text-sm">
                     <FolderOpen className="w-4 h-4 text-[#0C3535]" />
                     <span>
-                      Packet sent{" "}
                       {d.deployed_at
-                        ? new Date(d.deployed_at).toLocaleString(undefined, {
+                        ? `Packet sent ${new Date(d.deployed_at).toLocaleString(undefined, {
                             dateStyle: "medium",
                             timeStyle: "short",
-                          })
-                        : "recently"}
+                          })}`
+                        : "Packet sent (date not recorded)"}
                     </span>
                   </li>
                 ))}

@@ -317,7 +317,7 @@ export default function PartnerUserProfilePage() {
         <div className="bg-white rounded-xl border border-red-200 p-6 space-y-4">
           <h2 className="font-display font-bold text-lg text-[#0C3535]">Danger Zone</h2>
           <p className="text-sm text-gray-600">Account deletion is handled manually by support for security purposes.</p>
-          <Button disabled variant="outline" title="Contact support to delete your account">
+          <Button disabled variant="destructive-outline" title="Contact support to delete your account">
             Delete Account
           </Button>
         </div>

@@ -663,8 +663,8 @@ export default function AgencyPartnerProfilePage() {
         {/* Agency notes */}
         <GlassCard className="p-6 md:p-8 border-amber-500/20">
           <h2 className="font-display font-bold text-lg text-foreground mb-1">Agency notes</h2>
-          <p className="font-mono text-[10px] text-amber-400/90 uppercase tracking-wider mb-6">
-            Private to your agency — not visible to the partner
+          <p className="text-xs text-foreground-muted mb-6">
+            Private to your agency - not visible to the partner
           </p>
 
           <div className="space-y-5">
@@ -765,11 +765,8 @@ export default function AgencyPartnerProfilePage() {
                 <Label className="font-mono text-[10px] text-foreground-muted uppercase">Blacklist</Label>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={notesState.blacklisted ? "destructive-outline" : "outline"}
                   size="sm"
-                  className={cn(
-                    notesState.blacklisted && "border-red-500/50 bg-red-500/10 text-red-300"
-                  )}
                   onClick={() => {
                     if (notesState.blacklisted) {
                       setNotesState((s) => ({ ...s, blacklisted: false }))
@@ -810,7 +807,7 @@ export default function AgencyPartnerProfilePage() {
                 Cancel
               </Button>
               <Button
-                className="bg-red-600 text-white hover:bg-red-700"
+                variant="destructive"
                 onClick={() => {
                   setNotesState((s) => ({ ...s, blacklisted: true }))
                   setBlacklistDialogOpen(false)
