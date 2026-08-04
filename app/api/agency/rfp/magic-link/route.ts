@@ -134,7 +134,37 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
     const is_existing_partner = Boolean(matchedProfile?.id)
 
-    const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "")
+    // Look up any existing row for this (agency, project, vendor) triple before deciding
+    // whether to mint a new token or reuse the live one. A repeat send - an explicit resend,
+    // or a different invite surface targeting the same recipient - must never orphan a link
+    // already sitting in the vendor's inbox. Non-transactional by design: a double-click race
+    // minting two tokens is an acceptable, rare cost at this scale, not worth locking for.
+    const { data: existingToken, error: existingErr } = await service
+      .from("rfp_magic_tokens")
+      .select("token, expires_at, response_id")
+      .eq("agency_id", auth.userId)
+      .eq("project_id", projectId)
+      .eq("vendor_email", vendorEmail)
+      .maybeSingle()
+    if (existingErr) {
+      console.error("[api] failure", { route, method: "POST", code: 500, message: existingErr.message })
+      return NextResponse.json({ error: "Failed to check for an existing invitation" }, { status: 500 })
+    }
+
+    const existingIsExpired =
+      !!existingToken && new Date(existingToken.expires_at as string).getTime() <= Date.now()
+    // A submitted bid's linkage must survive any resend, including a resend that mints a
+    // fresh token because the old one had genuinely expired - the vendor's response stays
+    // reachable at the new link either way. Only a token that was never submitted resets to
+    // a clean "pending" slate on a fresh mint.
+    const wasSubmitted = Boolean(existingToken?.response_id)
+
+    const token =
+      existingToken && !existingIsExpired
+        ? (existingToken.token as string)
+        : crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "")
+    // Always refreshed: a resend is a renewed invitation, whether the token itself is new or
+    // reused - resending is exactly how an agency extends a vendor's window to respond.
     const expires_at = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
 
     const { data: tokenRow, error: upsertErr } = await service
@@ -152,9 +182,10 @@ export async function POST(request: NextRequest) {
           business_criteria_required: businessCriteriaRequired,
           token,
           expires_at,
-          status: "pending",
-          submitted_at: null,
-          response_id: null,
+          // Never reset status/submitted_at/response_id for a row that already has a
+          // submitted bid - a resend (or a second invite surface hitting the same recipient)
+          // must not sever a live submission from its token.
+          ...(wasSubmitted ? {} : { status: "pending", submitted_at: null, response_id: null }),
           ...(hasRequireTermsDisclosure ? { require_terms_disclosure: requireTermsDisclosure } : {}),
         },
         { onConflict: "agency_id,project_id,vendor_email" }
@@ -255,22 +286,27 @@ export async function GET(request: NextRequest) {
     const projectId = (url.searchParams.get("project_id") || "").trim()
 
     if (checkEmail) {
-      const [{ data: matchedProfile }, { data: pendingInvite }] = await Promise.all([
+      const [{ data: matchedProfile }, { data: existingInvite }] = await Promise.all([
         service.from("profiles").select("id").ilike("email", checkEmail).maybeSingle(),
         projectId
           ? service
               .from("rfp_magic_tokens")
-              .select("id")
+              .select("id, expires_at")
               .eq("agency_id", auth.userId)
               .eq("project_id", projectId)
               .eq("vendor_email", checkEmail)
-              .eq("status", "pending")
               .maybeSingle()
           : Promise.resolve({ data: null }),
       ])
+      const existingInviteExpired =
+        !!existingInvite && new Date(existingInvite.expires_at as string).getTime() <= Date.now()
       return NextResponse.json({
         is_existing_partner: Boolean(matchedProfile?.id),
-        has_pending_invite: Boolean(pendingInvite?.id),
+        // has_pending_invite means "an unexpired invite already exists" - sending now will
+        // reuse its token (see POST) rather than mint a new one. has_expired_invite means the
+        // opposite: sending now mints a fresh token because the old one has lapsed.
+        has_pending_invite: Boolean(existingInvite?.id) && !existingInviteExpired,
+        has_expired_invite: Boolean(existingInvite?.id) && existingInviteExpired,
       })
     }
 

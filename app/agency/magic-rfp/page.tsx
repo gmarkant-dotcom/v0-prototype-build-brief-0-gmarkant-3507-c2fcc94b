@@ -56,7 +56,7 @@ const EMPTY_BRIEF: BriefData = {
   timeline: "",
 }
 
-type CheckResult = { is_existing_partner: boolean } | null
+type CheckResult = { is_existing_partner: boolean; has_pending_invite: boolean; has_expired_invite: boolean } | null
 
 type RecipientRow = {
   id: string
@@ -113,6 +113,9 @@ function MagicRfpContent() {
   const [businessCriteriaRequired, setBusinessCriteriaRequired] = useState<BusinessCriteriaRequired>(
     normalizeBusinessCriteriaRequired(null)
   )
+
+  // Step 1: Require term disclosures with bids (wizard-level, applies to every recipient)
+  const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
 
   const updateRequiredDesignation = (key: DesignationKey, required: boolean) => {
     setBusinessCriteriaRequired((prev) => {
@@ -462,7 +465,17 @@ function MagicRfpContent() {
         setRecipients((prev) =>
           prev.map((r) =>
             r.id === id
-              ? { ...r, checking: false, checkResult: res.ok ? { is_existing_partner: Boolean(data.is_existing_partner) } : null }
+              ? {
+                  ...r,
+                  checking: false,
+                  checkResult: res.ok
+                    ? {
+                        is_existing_partner: Boolean(data.is_existing_partner),
+                        has_pending_invite: Boolean(data.has_pending_invite),
+                        has_expired_invite: Boolean(data.has_expired_invite),
+                      }
+                    : null,
+                }
               : r
           )
         )
@@ -499,6 +512,7 @@ function MagicRfpContent() {
             scope_item_description: brief.scopeDescription,
             reference_materials: referenceMaterials,
             business_criteria_required: businessCriteriaRequired,
+            require_terms_disclosure: requireTermsDisclosure,
             output_template_config: {
               mode: templateMode,
               templateStyle,
@@ -911,6 +925,20 @@ function MagicRfpContent() {
                   )}
                 </div>
 
+                <div className="p-4 rounded-lg border border-border bg-white/5 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={requireTermsDisclosure}
+                      onCheckedChange={(v) => setRequireTermsDisclosure(v === true)}
+                      className="border-border"
+                    />
+                    <span className="font-mono text-xs text-foreground">Require term disclosures with bids</span>
+                  </label>
+                  <p className="font-mono text-[10px] text-foreground-muted">
+                    Vendors state payment, cancellation, IP, and rate-validity terms up front.
+                  </p>
+                </div>
+
                 <ReferenceMaterialsInput
                   projectId={selectedProject?.id ?? null}
                   agencyId={agencyId ?? ""}
@@ -956,6 +984,14 @@ function MagicRfpContent() {
                         <p className="font-mono text-[10px] mt-1.5">
                           {r.checking ? (
                             <span className="text-foreground-muted">Checking…</span>
+                          ) : r.checkResult?.has_pending_invite ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
+                              Active invitation exists - resend refreshes its expiry
+                            </span>
+                          ) : r.checkResult?.has_expired_invite ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-white/10 text-foreground-muted">
+                              Previous link expired - a new one will be sent
+                            </span>
                           ) : r.checkResult?.is_existing_partner ? (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-300">
                               In your partner pool

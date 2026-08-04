@@ -411,11 +411,26 @@ export default function GuestRfpRespondPage() {
     )
   }
 
-  if (loadError || !payload) {
+  if (loadError === "not_found") {
     return (
       <CenteredCard>
         <h1 className="font-display font-black text-2xl text-foreground mb-3">Invitation not found</h1>
-        <p className="text-foreground-muted text-sm">This link may be incorrect or no longer active.</p>
+        <p className="text-foreground-muted text-sm">
+          This link is no longer valid. Check your inbox for a newer invitation email from the agency, or contact
+          them for a fresh link.
+        </p>
+      </CenteredCard>
+    )
+  }
+
+  if (loadError || !payload) {
+    return (
+      <CenteredCard>
+        <h1 className="font-display font-black text-2xl text-foreground mb-3">Something went wrong</h1>
+        <p className="text-foreground-muted text-sm">
+          We could not load this invitation. Try refreshing the page, or contact the agency if the problem
+          continues.
+        </p>
       </CenteredCard>
     )
   }

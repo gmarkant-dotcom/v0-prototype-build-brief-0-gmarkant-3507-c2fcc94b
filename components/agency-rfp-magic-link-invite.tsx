@@ -29,9 +29,9 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
   const [name, setName] = useState("")
   const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
   const [checking, setChecking] = useState(false)
-  const [checkResult, setCheckResult] = useState<{ is_existing_partner: boolean; has_pending_invite: boolean } | null>(
-    null
-  )
+  const [checkResult, setCheckResult] = useState<
+    { is_existing_partner: boolean; has_pending_invite: boolean; has_expired_invite: boolean } | null
+  >(null)
   const [sending, setSending] = useState(false)
   const [sendMessage, setSendMessage] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -147,11 +147,13 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
             <p className="font-mono text-[10px] text-foreground-muted mt-1.5">
               {checking
                 ? "Checking…"
-                : checkResult?.is_existing_partner
-                  ? "Already in your partner pool"
-                  : checkResult?.has_pending_invite
-                    ? "Pending invitation already sent to this email"
-                    : "New vendor — will receive a guest invitation"}
+                : checkResult?.has_pending_invite
+                  ? "An active invitation already exists - resending delivers the same link with a refreshed expiry."
+                  : checkResult?.has_expired_invite
+                    ? "The previous link expired - a new one will be sent."
+                    : checkResult?.is_existing_partner
+                      ? "Already in your partner pool"
+                      : "New vendor - will receive a guest invitation"}
             </p>
           )}
         </div>
