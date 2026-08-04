@@ -94,7 +94,9 @@ type DashboardData = {
 
 const STAGE_STYLES: Record<string, { color: string; bg: string }> = {
   active_engagements: { color: "text-emerald-300", bg: "bg-emerald-500/15 border-emerald-500/35" },
-  bid_management: { color: "text-violet-300", bg: "bg-violet-500/15 border-violet-500/35" },
+  // Indigo: distinct from every other hue already in this map (emerald/sky/slate) and from
+  // the reserved semantics (success/warning/destructive, role-identity purple, meeting-cyan).
+  bid_management: { color: "text-indigo-300", bg: "bg-indigo-500/15 border-indigo-500/35" },
   rfp_broadcast: { color: "text-sky-300", bg: "bg-sky-500/15 border-sky-500/35" },
   setup: { color: "text-slate-300", bg: "bg-slate-500/15 border-slate-500/35" },
 }

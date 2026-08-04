@@ -72,7 +72,7 @@ const STATUS_BADGE: Record<string, { bg: string; border: string; text: string; l
   new:               { bg: "bg-gray-100",        border: "border-gray-200",        text: "text-gray-500",   label: "New" },
   submitted:         { bg: "bg-sky-50",           border: "border-sky-200",         text: "text-sky-700",    label: "Submitted" },
   under_review:      { bg: "bg-amber-50",         border: "border-amber-200",       text: "text-amber-700",  label: "Changes Requested" },
-  shortlisted:       { bg: "bg-violet-50",        border: "border-violet-200",      text: "text-violet-700", label: "Shortlisted" },
+  shortlisted:       { bg: "bg-blue-50",          border: "border-blue-200",        text: "text-blue-700",   label: "Shortlisted" },
   meeting_requested: { bg: "bg-cyan-50",          border: "border-cyan-200",        text: "text-cyan-700",   label: "Meeting Requested" },
   awarded:           { bg: "bg-emerald-50",       border: "border-emerald-200",     text: "text-emerald-700",label: "Awarded" },
   declined:          { bg: "bg-red-50",           border: "border-red-200",         text: "text-red-700",    label: "Declined" },

@@ -324,11 +324,10 @@ function BidDetailSheetInner({
                       size="sm"
                       variant={row.status === "shortlisted" ? "default" : "outline"}
                       className={cn(
-                        row.status === "shortlisted"
-                          ? shortlistHover
+                        row.status === "shortlisted" &&
+                          (shortlistHover
                             ? "bg-red-600 hover:bg-red-600/90 text-white"
-                            : "bg-purple-600 hover:bg-purple-600/90 text-white"
-                          : "border-purple-400/40 bg-purple-900/30 text-purple-100 hover:bg-purple-900/45"
+                            : "bg-blue-600 hover:bg-blue-600/90 text-white")
                       )}
                       onMouseEnter={() => row.status === "shortlisted" && setShortlistHover(true)}
                       onMouseLeave={() => row.status === "shortlisted" && setShortlistHover(false)}

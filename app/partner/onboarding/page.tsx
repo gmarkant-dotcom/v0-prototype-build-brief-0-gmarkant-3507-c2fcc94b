@@ -864,8 +864,8 @@ export default function PartnerOnboardingPage() {
                                         onClick={() => handleDocumentAction(doc.id, doc.action)}
                                         disabled={uploadingDocId === doc.id}
                                         className={cn(
-                                          doc.action === "sign" 
-                                            ? "bg-purple-600 hover:bg-purple-700 text-white"
+                                          doc.action === "sign"
+                                            ? "bg-accent text-accent-foreground hover:bg-accent/90"
                                             : doc.action === "upload"
                                             ? "bg-blue-600 hover:bg-blue-700 text-white"
                                             : "bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
@@ -926,8 +926,8 @@ export default function PartnerOnboardingPage() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-lg bg-purple-100 flex items-center justify-center">
-                <Signature className="w-6 h-6 text-purple-600" />
+              <div className="w-12 h-12 rounded-lg bg-[#0C3535]/10 flex items-center justify-center">
+                <Signature className="w-6 h-6 text-[#0C3535]" />
               </div>
               <div>
                 <h3 className="font-display font-bold text-xl text-[#0C3535]">Sign Document</h3>
@@ -960,7 +960,7 @@ export default function PartnerOnboardingPage() {
               </Button>
               <Button
                 onClick={handleSign}
-                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
               >
                 <Signature className="w-4 h-4 mr-2" />
                 Sign Document

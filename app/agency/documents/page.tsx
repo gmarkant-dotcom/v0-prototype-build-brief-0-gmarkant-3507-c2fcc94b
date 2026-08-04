@@ -280,7 +280,7 @@ export default function DocumentsPage() {
             <div className="font-mono text-[10px] text-foreground-muted uppercase">Total Documents</div>
           </GlassCard>
           <GlassCard className="p-4 text-center">
-            <div className="font-display font-bold text-3xl text-purple-400">{masterBriefs.length}</div>
+            <div className="font-display font-bold text-3xl text-foreground">{masterBriefs.length}</div>
             <div className="font-mono text-[10px] text-foreground-muted uppercase">Master Briefs</div>
           </GlassCard>
           <GlassCard className="p-4 text-center">
@@ -346,27 +346,27 @@ export default function DocumentsPage() {
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
               <h3 className="font-display font-bold text-lg text-foreground">Master Briefs</h3>
-              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 uppercase">Internal Only</span>
+              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full border border-border text-foreground-muted uppercase">Internal Only</span>
             </div>
             <p className="font-mono text-xs text-foreground-muted mb-4">
               Complete client briefs with all confidential details. For lead agency reference only - do not share externally.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredDocs.filter(d => d.type === "master_brief").map((doc) => (
-                <GlassCard key={doc.id} className="group border-purple-500/20">
+                <GlassCard key={doc.id} className="group">
                   <div className="flex items-start gap-3 mb-3">
                     <div className={cn(
-                      "w-12 h-12 rounded-lg flex items-center justify-center shrink-0 bg-purple-500/20"
+                      "w-12 h-12 rounded-lg flex items-center justify-center shrink-0 bg-white/10"
                     )}>
-                      <span className="font-mono text-xs font-bold text-purple-400">
+                      <span className="font-mono text-xs font-bold text-foreground-muted">
                         {formatIcons[doc.format]}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-display font-bold text-sm text-foreground truncate group-hover:text-purple-400 transition-colors">
+                      <div className="font-display font-bold text-sm text-foreground truncate group-hover:text-accent transition-colors">
                         {doc.name}
                       </div>
-                      <div className="font-mono text-[10px] text-purple-400 mt-0.5">
+                      <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
                         {typeLabels[doc.type]}
                       </div>
                     </div>
@@ -386,7 +386,7 @@ export default function DocumentsPage() {
                     <Button variant="outline" size="sm" className="flex-1 text-xs border-border text-foreground hover:bg-white/5">
                       Preview
                     </Button>
-                    <Button size="sm" className="flex-1 text-xs bg-purple-600 text-white hover:bg-purple-700">
+                    <Button size="sm" className="flex-1 text-xs bg-accent text-accent-foreground hover:bg-accent/90">
                       Create Partner Brief
                     </Button>
                   </div>

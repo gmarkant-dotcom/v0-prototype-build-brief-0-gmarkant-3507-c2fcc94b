@@ -552,7 +552,7 @@ export function Stage03Onboarding() {
                         {/* Category badge */}
                         <span className={cn(
                           "shrink-0 font-mono text-[10px] px-2 py-1 rounded-full capitalize border",
-                          doc.category === "legal" && "bg-purple-900/30 text-purple-100 border-purple-400/40",
+                          doc.category === "legal" && "bg-slate-800/50 text-slate-200 border-slate-400/40",
                           doc.category === "brand" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
                           doc.category === "process" && "bg-cyan-900/30 text-cyan-100 border-cyan-400/40",
                           doc.category === "scheduling" && "bg-green-900/30 text-green-100 border-green-400/40"
@@ -706,7 +706,7 @@ export function Stage03Onboarding() {
                                 </div>
                                 <span className={cn(
                                   "font-mono text-[10px] px-2 py-0.5 rounded capitalize",
-                                  doc.category === "legal" && "bg-purple-900/30 text-purple-100",
+                                  doc.category === "legal" && "bg-slate-800/50 text-slate-200",
                                   doc.category === "brand" && "bg-blue-900/30 text-blue-100",
                                   doc.category === "process" && "bg-cyan-900/30 text-cyan-100",
                                   doc.category === "scheduling" && "bg-green-900/30 text-green-100"

@@ -339,9 +339,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                           variant="outline"
                           className={cn(
                             "h-6 px-2 text-[10px]",
-                            row.status === "shortlisted"
-                              ? "bg-purple-600 hover:bg-purple-600/90 text-white border-purple-400/40"
-                              : "border-purple-400/40 bg-purple-900/30 text-purple-100 hover:bg-purple-900/45"
+                            row.status === "shortlisted" && "bg-blue-600 hover:bg-blue-600/90 text-white border-blue-400/40"
                           )}
                           disabled={busyId === row.id || row.status === "awarded"}
                           onClick={() =>

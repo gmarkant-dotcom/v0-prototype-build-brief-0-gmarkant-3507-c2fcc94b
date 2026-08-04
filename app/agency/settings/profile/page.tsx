@@ -545,7 +545,7 @@ export default function AgencyProfileSettingsPage() {
                   key={cap}
                   type="button"
                   onClick={() => removeCustomCapability(cap)}
-                  className="px-3 py-1.5 rounded-full text-xs border bg-purple-600 text-white border-purple-600"
+                  className="px-3 py-1.5 rounded-full text-xs border bg-accent text-accent-foreground border-accent"
                 >
                   ✓ {cap} ×
                 </button>
