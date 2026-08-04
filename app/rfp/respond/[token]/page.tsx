@@ -165,7 +165,7 @@ function CenteredCard({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background flex items-center justify-center relative overflow-hidden px-4">
       <HolographicBlobs />
       <div className="w-full max-w-md relative z-10">
-        <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-2xl p-8 text-center">
+        <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-lg p-8 text-center">
           {children}
         </div>
         <div className="mt-6 flex items-center justify-center gap-3">
@@ -470,7 +470,7 @@ export default function GuestRfpRespondPage() {
             account-status confirmation is seen immediately regardless of which tab a guest
             lands on (including a fresh page load of an already-submitted link). */}
         {hasSubmittedBid ? (
-          <div className="rounded-2xl border border-teal-400/30 bg-teal-400/[0.06] p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-lg border border-teal-400/30 bg-teal-400/[0.06] p-4 flex flex-wrap items-center justify-between gap-3">
             {isExistingPartner ? (
               <>
                 <p className="text-sm text-foreground/90 leading-relaxed max-w-md">
@@ -499,7 +499,7 @@ export default function GuestRfpRespondPage() {
             )}
           </div>
         ) : (
-          <div className="rounded-2xl border border-teal-400/30 bg-teal-400/[0.06] p-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-lg border border-teal-400/30 bg-teal-400/[0.06] p-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-foreground/90 leading-relaxed max-w-md">
               You&apos;re viewing as a guest. Create a profile to track all your bids and get discovered by agencies.
             </p>
@@ -539,7 +539,7 @@ export default function GuestRfpRespondPage() {
 
           {/* TAB 1: RFP Details */}
           <TabsContent value="rfp-details">
-            <div className="rounded-2xl border border-border/30 bg-white/5 p-6 space-y-4">
+            <div className="rounded-lg border border-border/30 bg-white/5 p-6 space-y-4">
               <div className="flex items-center gap-3">
                 {agency.company_logo_url && !agencyLogoLoadError ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -655,7 +655,7 @@ export default function GuestRfpRespondPage() {
           {/* TAB 2: My Bid */}
           <TabsContent value="my-bid">
             {showForm ? (
-              <form onSubmit={handleSubmit} className="rounded-2xl border border-border/30 bg-white/5 p-6 space-y-5">
+              <form onSubmit={handleSubmit} className="rounded-lg border border-border/30 bg-white/5 p-6 space-y-5">
                 {tokenRow.require_terms_disclosure && (
                   <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 text-sm text-foreground">
                     This agency requires basic term disclosures with your bid.
@@ -993,7 +993,7 @@ export default function GuestRfpRespondPage() {
               </form>
             ) : (
               response && (
-                <div className="rounded-2xl border border-border/30 bg-white/5 p-6 space-y-4">
+                <div className="rounded-lg border border-border/30 bg-white/5 p-6 space-y-4">
                   {(formatSubmittedAt(response.submitted_at) || formatSubmittedAt(tokenRow.submitted_at)) && (
                     <div className="flex items-center justify-between">
                       <div className="font-mono text-[10px] uppercase text-accent tracking-wider">
@@ -1122,7 +1122,7 @@ export default function GuestRfpRespondPage() {
           {/* TAB 3: Status & Feedback */}
           <TabsContent value="status">
             <div className="space-y-4">
-              <div className="rounded-2xl border border-border/30 bg-white/5 p-6 text-center">
+              <div className="rounded-lg border border-border/30 bg-white/5 p-6 text-center">
                 <div className="font-mono text-[10px] uppercase text-foreground-muted mb-3">Current Status</div>
                 <span
                   className={cn(
@@ -1135,7 +1135,7 @@ export default function GuestRfpRespondPage() {
               </div>
 
               {response?.agency_feedback && (
-                <div className="rounded-2xl border border-amber-400/30 bg-amber-400/[0.05] p-5">
+                <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.05] p-5">
                   <div className="font-mono text-[10px] uppercase text-amber-300 tracking-wider mb-2">
                     Agency Feedback
                   </div>
@@ -1145,7 +1145,7 @@ export default function GuestRfpRespondPage() {
                 </div>
               )}
 
-              <div className="rounded-2xl border border-border/30 bg-white/5 p-5">
+              <div className="rounded-lg border border-border/30 bg-white/5 p-5">
                 <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider mb-3">Timeline</div>
                 <ul className="space-y-3">
                   {activityTimeline.map((entry, i) => (
@@ -1161,7 +1161,7 @@ export default function GuestRfpRespondPage() {
               </div>
 
               {!hasSubmittedBid && (
-                <div className="rounded-2xl border border-border/30 bg-white/5 p-6 text-center space-y-3">
+                <div className="rounded-lg border border-border/30 bg-white/5 p-6 text-center space-y-3">
                   <p className="text-sm text-foreground-muted">You haven&apos;t submitted a bid yet.</p>
                   <Button
                     type="button"

@@ -32,7 +32,7 @@ export function AgencySubscriptionGate({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#081F1F] flex flex-col items-center justify-center p-8">
-      <div className="max-w-lg w-full rounded-2xl border border-white/10 bg-[#0C3535]/80 p-10 text-center">
+      <div className="max-w-lg w-full rounded-lg border border-white/10 bg-[#0C3535]/80 p-10 text-center">
         <Link href="/" className="inline-block mb-8">
           <LigamentLogo size="md" variant="primary" />
         </Link>

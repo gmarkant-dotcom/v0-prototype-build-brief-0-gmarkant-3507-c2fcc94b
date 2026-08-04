@@ -18,7 +18,7 @@ export default function SignUpSuccessPage() {
         </div>
 
         {/* Success Card */}
-        <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-2xl p-8">
+        <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-lg p-8">
           <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mx-auto mb-6">
             <Mail className="w-8 h-8 text-accent" />
           </div>

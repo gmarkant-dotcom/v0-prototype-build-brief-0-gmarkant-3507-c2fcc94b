@@ -82,7 +82,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div 
-        className="w-full max-w-md bg-background/95 backdrop-blur-xl border border-border/30 rounded-2xl p-6"
+        className="w-full max-w-md bg-background/95 backdrop-blur-xl border border-border/30 rounded-xl p-6"
         onClick={e => e.stopPropagation()}
       >
         {success ? (

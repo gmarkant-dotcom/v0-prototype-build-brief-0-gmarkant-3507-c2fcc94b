@@ -3,7 +3,7 @@ import Link from "next/link"
 export default function TermsPage() {
   return (
     <main className="min-h-screen px-6 py-10 sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-4xl rounded-2xl border border-border bg-card/70 p-6 sm:p-8 lg:p-10">
+      <div className="mx-auto max-w-4xl rounded-lg border border-border bg-card/70 p-6 sm:p-8 lg:p-10">
         <div className="mb-8 border-b border-border pb-6">
           <Link href="/" className="font-mono text-xs text-accent hover:underline">
             ← Back to Home

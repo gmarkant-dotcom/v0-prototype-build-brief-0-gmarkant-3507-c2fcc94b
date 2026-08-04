@@ -20,7 +20,7 @@ export default function DemoAccessDeniedPage() {
         </div>
 
         {/* Access Denied Card */}
-        <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-2xl p-8 text-center">
+        <div className="bg-white/5 backdrop-blur-xl border border-border/30 rounded-lg p-8 text-center">
           <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
             <Lock className="w-8 h-8 text-amber-400" />
           </div>

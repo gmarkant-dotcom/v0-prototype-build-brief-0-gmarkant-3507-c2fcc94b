@@ -23,7 +23,7 @@ function ConfirmedContent() {
         </div>
 
         {/* Success Card */}
-        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+        <div className="bg-card border border-border rounded-lg p-8 text-center">
           {/* Success Icon */}
           <div className="w-16 h-16 rounded-full bg-[#C8F53C]/10 flex items-center justify-center mx-auto mb-6">
             <CheckCircle className="w-8 h-8 text-[#C8F53C]" />

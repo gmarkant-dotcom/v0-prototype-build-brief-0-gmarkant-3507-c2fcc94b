@@ -229,7 +229,7 @@ export default function PricingPage() {
         </div>
 
         {/* Partner free callout */}
-        <div className="max-w-3xl mx-auto mb-10 rounded-2xl border border-[#C8F53C]/40 bg-[#C8F53C]/10 px-6 py-5 text-center">
+        <div className="max-w-3xl mx-auto mb-10 rounded-lg border border-[#C8F53C]/40 bg-[#C8F53C]/10 px-6 py-5 text-center">
           <p className="font-display font-bold text-lg text-white">Partner agencies always access Ligament for free.</p>
           <p className="text-white/75 text-sm mt-1">No fees, no limits, no catch.</p>
         </div>
@@ -275,7 +275,7 @@ export default function PricingPage() {
               <div
                 key={tier.id}
                 className={cn(
-                  "relative rounded-2xl border p-6 flex flex-col",
+                  "relative rounded-lg border p-6 flex flex-col",
                   tier.popular ? "border-[#C8F53C] bg-[#0C3535] md:-translate-y-2 shadow-2xl shadow-black/20" : "border-white/20 bg-white/5"
                 )}
               >

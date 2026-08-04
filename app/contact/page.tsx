@@ -66,7 +66,7 @@ function ContactFormContent() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-xl bg-card border border-border rounded-2xl p-8">
+      <div className="w-full max-w-xl bg-card border border-border rounded-lg p-8">
         <h1 className="font-display font-black text-3xl text-foreground mb-2">Talk to the Ligament Team</h1>
         <p className="text-foreground-muted mb-6">
           Tell us about your team and what plan you are considering. We will follow up with next steps.
@@ -223,7 +223,7 @@ function ContactFormContent() {
 function ContactFallback() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-xl bg-card border border-border rounded-2xl p-8 text-foreground-muted">Loading contact form...</div>
+      <div className="w-full max-w-xl bg-card border border-border rounded-lg p-8 text-foreground-muted">Loading contact form...</div>
     </div>
   )
 }
