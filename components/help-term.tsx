@@ -51,10 +51,15 @@ export function HelpTerm({ term, children, theme = "dark", className, stopPropag
       ? "underline decoration-dotted decoration-gray-400 underline-offset-4 hover:decoration-gray-600 focus-visible:ring-[#0C3535]/40"
       : "underline decoration-dotted decoration-foreground-muted/50 underline-offset-4 hover:decoration-foreground-muted focus-visible:ring-accent/40"
 
+  // Opaque, theme-appropriate elevated surface - same structure both themes (width,
+  // radius, border, padding, shadow), only the color tokens differ. Dark uses bg-popover
+  // (the --popover token, 95% opaque) explicitly rather than inheriting PopoverContent's
+  // own default, so this stays correct even if that default ever changes. bg-card was the
+  // bug: --card is only 7% opaque, effectively see-through.
   const contentClass =
     theme === "light"
       ? "z-[60] w-72 rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
-      : "z-[60] w-72 rounded-lg border border-border bg-card p-3 shadow-lg"
+      : "z-[60] w-72 rounded-lg border border-border bg-popover p-3 shadow-lg"
 
   const titleClass = theme === "light" ? "font-display font-bold text-sm text-[#0C3535] mb-1" : "font-display font-bold text-sm text-foreground mb-1"
   const bodyClass = theme === "light" ? "text-xs text-gray-600 leading-relaxed" : "text-xs text-foreground-muted leading-relaxed"
