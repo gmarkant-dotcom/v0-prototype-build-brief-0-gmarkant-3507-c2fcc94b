@@ -134,19 +134,19 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <span className="font-display font-bold text-vendor-foreground truncate">{row.scope_item_name}</span>
           <span className={cn(
-            "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+            "font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
             b.bg, b.border, b.text
           )}>
             {b.label}
           </span>
           {blocked && (
-            <span className="flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-700 shrink-0">
+            <span className="flex items-center gap-1 font-mono text-2xs px-2 py-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-700 shrink-0">
               <AlertTriangle className="w-2.5 h-2.5" />
               NDA required
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 font-mono text-[10px] text-vendor-muted flex-wrap">
+        <div className="flex items-center gap-2 font-mono text-2xs text-vendor-muted flex-wrap">
           {showAgency && row.agency_company_name && (
             <span className="flex items-center gap-1">
               <Building2 className="w-3 h-3" />
@@ -189,14 +189,14 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
       <div className="flex items-center gap-2 flex-wrap mb-1">
         <span className="font-display font-bold text-vendor-foreground truncate">{bid.scope_item_name || "Scope"}</span>
         <span className={cn(
-          "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+          "font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
           b.bg, b.border, b.text
         )}>
           {b.label}
         </span>
         {showOutcome && (
           <span className={cn(
-            "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+            "font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
             !isTerminal
               ? "bg-gray-100 border-vendor-border text-vendor-muted"
               : bid.status === "awarded"
@@ -207,7 +207,7 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 font-mono text-[10px] text-vendor-muted flex-wrap">
+      <div className="flex items-center gap-2 font-mono text-2xs text-vendor-muted flex-wrap">
         <span className="flex items-center gap-1">
           <Building2 className="w-3 h-3" />
           {agencyName}
@@ -310,7 +310,7 @@ function GroupSection({
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-display font-bold text-xl text-vendor-foreground">{label}</div>
-          <div className="font-mono text-[11px] text-vendor-muted mt-0.5">
+          <div className="font-mono text-2xs text-vendor-muted mt-0.5">
             {rows.length} RFP{rows.length !== 1 ? "s" : ""}
             {(counts["awarded"] ?? 0) > 0 && (
               <span className="ml-2 text-success">· {counts["awarded"]} awarded</span>
@@ -334,7 +334,7 @@ function GroupSection({
                   type="button"
                   onClick={() => setActiveStatus(key)}
                   className={cn(
-                    "shrink-0 px-2.5 py-1 rounded-lg font-mono text-[10px] transition-colors whitespace-nowrap",
+                    "shrink-0 px-2.5 py-1 rounded-lg font-mono text-2xs transition-colors whitespace-nowrap",
                     activeStatus === key
                       ? "bg-vendor-foreground text-white"
                       : "bg-gray-100 text-vendor-muted hover:bg-gray-200"
@@ -393,7 +393,7 @@ function FlatStatusView({ allRows }: { allRows: PartnerInboxRow[] }) {
               type="button"
               onClick={() => setActiveStatus(key)}
               className={cn(
-                "shrink-0 px-2.5 py-1 rounded-lg font-mono text-[10px] transition-colors whitespace-nowrap",
+                "shrink-0 px-2.5 py-1 rounded-lg font-mono text-2xs transition-colors whitespace-nowrap",
                 activeStatus === key
                   ? "bg-vendor-foreground text-white"
                   : "bg-gray-100 text-vendor-muted hover:bg-gray-200"
@@ -524,7 +524,7 @@ function PartnerRFPsContent() {
               type="button"
               onClick={() => setActiveTab(t.key)}
               className={cn(
-                "px-4 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                "px-4 py-2 font-mono text-2xs uppercase tracking-wider transition-colors",
                 activeTab === t.key
                   ? "bg-vendor-foreground text-white"
                   : "bg-vendor-surface text-vendor-muted hover:bg-vendor-background"
@@ -555,7 +555,7 @@ function PartnerRFPsContent() {
                 />
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="font-mono text-[10px] text-vendor-muted/70 uppercase tracking-wider">Group by</span>
+                <span className="font-mono text-2xs text-vendor-muted/70 uppercase tracking-wider">Group by</span>
                 <div className="flex rounded-lg overflow-hidden border border-vendor-border">
                   {(["agency", "client", "status"] as GroupBy[]).map(g => (
                     <button
@@ -563,7 +563,7 @@ function PartnerRFPsContent() {
                       type="button"
                       onClick={() => setGroupBy(g)}
                       className={cn(
-                        "px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                        "px-3 py-1.5 font-mono text-2xs uppercase tracking-wider transition-colors",
                         groupBy === g
                           ? "bg-vendor-foreground text-white"
                           : "bg-vendor-surface text-vendor-muted hover:bg-vendor-background"

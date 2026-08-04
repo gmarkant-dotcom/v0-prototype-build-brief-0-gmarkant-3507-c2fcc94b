@@ -47,7 +47,7 @@ export function AiMarkdown({ content, className }: { content: string; className?
           ),
           thead: ({ children }) => <thead className="bg-white/5 border-b border-border/40">{children}</thead>,
           th: ({ children }) => (
-            <th className="text-left font-mono text-[10px] uppercase tracking-wider text-foreground-muted px-3 py-2">
+            <th className="text-left font-mono text-2xs uppercase tracking-wider text-foreground-muted px-3 py-2">
               {children}
             </th>
           ),

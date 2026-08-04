@@ -361,7 +361,7 @@ export function SpreadsheetImportPanel({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="font-mono text-[10px] text-foreground-muted truncate">
+                <div className="font-mono text-2xs text-foreground-muted truncate">
                   {parsed.rows
                     .slice(0, 3)
                     .map((row) => row[i] || "-")
@@ -398,7 +398,7 @@ export function SpreadsheetImportPanel({
           <div className="flex-1 overflow-y-auto px-4 space-y-4">
             {newItems.length > 0 && (
               <div className="space-y-2">
-                <p className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">New</p>
+                <p className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">New</p>
                 {newItems.map((it) => (
                   <PoolReviewRow
                     key={it.row.key}
@@ -419,7 +419,7 @@ export function SpreadsheetImportPanel({
             )}
             {existingItems.length > 0 && (
               <div className="space-y-2">
-                <p className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">
+                <p className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
                   Already in your pool
                 </p>
                 {existingItems.map((it) => (
@@ -438,7 +438,7 @@ export function SpreadsheetImportPanel({
             )}
             {invalidItems.length > 0 && (
               <div className="space-y-2">
-                <p className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Invalid</p>
+                <p className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Invalid</p>
                 {invalidItems.map((it) => (
                   <PoolReviewRow
                     key={it.row.key}

@@ -300,12 +300,12 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
       {/* At a Glance - existing data only, no AI, renders instantly */}
       <div className="rounded-xl border border-border/40 bg-white/[0.02] overflow-hidden">
         <div className="px-5 pt-5 pb-1 flex items-center justify-between gap-3 flex-wrap">
-          <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider">At a Glance</div>
+          <div className="font-mono text-2xs uppercase text-foreground-muted tracking-wider">At a Glance</div>
           {rows.filter((r) => r.composite_score == null).length >= 2 && (
             <Button
               size="sm"
               variant="outline"
-              className="h-7 text-[10px] border-accent/40 bg-accent/10 text-accent hover:bg-accent/20"
+              className="h-7 text-2xs border-accent/40 bg-accent/10 text-accent hover:bg-accent/20"
               onClick={() => {
                 const unscored = rows.filter((r) => r.composite_score == null)
                 setEvaluateQueue(unscored)
@@ -328,7 +328,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                       <div className="flex items-center gap-1.5">
                         <Button
                           size="sm"
-                          className="h-6 px-2 text-[10px] bg-success hover:bg-success/90 text-accent-foreground"
+                          className="h-6 px-2 text-2xs bg-success hover:bg-success/90 text-accent-foreground"
                           disabled={busyId === row.id || row.status === "awarded" || (!row.partner_id && row.response_exists)}
                           onClick={() => setAwardTarget(row)}
                         >
@@ -338,7 +338,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                           size="sm"
                           variant="outline"
                           className={cn(
-                            "h-6 px-2 text-[10px]",
+                            "h-6 px-2 text-2xs",
                             row.status === "shortlisted" && "bg-blue-600 hover:bg-blue-600/90 text-white border-blue-400/40"
                           )}
                           disabled={busyId === row.id || row.status === "awarded"}
@@ -351,7 +351,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-6 px-2 text-[10px] border-red-400/40 bg-red-900/30 text-red-100 hover:bg-red-900/45"
+                          className="h-6 px-2 text-2xs border-red-400/40 bg-red-900/30 text-red-100 hover:bg-red-900/45"
                           disabled={busyId === row.id || row.status === "awarded" || row.status === "declined"}
                           onClick={() => void patchRow(row, { status: "declined" })}
                         >
@@ -360,7 +360,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-6 px-2 text-[10px] border-border text-foreground hover:bg-white/5"
+                          className="h-6 px-2 text-2xs border-border text-foreground hover:bg-white/5"
                           onClick={() => {
                             setEvaluateQueue([row])
                             setEvaluateIndex(0)
@@ -376,7 +376,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
             </TableHeader>
             <TableBody>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">
+                <TableCell className="text-foreground-muted font-mono text-2xs uppercase">
                   <HelpTerm term="composite_score" theme="dark">Score</HelpTerm>
                 </TableCell>
                 {rows.map((row) => (
@@ -399,7 +399,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 ))}
               </TableRow>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Budget</TableCell>
+                <TableCell className="text-foreground-muted font-mono text-2xs uppercase">Budget</TableCell>
                 {rows.map((row) => {
                   const amount = bestBudgetAmount(row)
                   const pct = maxBudget > 0 && amount != null ? Math.max(4, Math.round((amount / maxBudget) * 100)) : 0
@@ -416,7 +416,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 })}
               </TableRow>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Timeline</TableCell>
+                <TableCell className="text-foreground-muted font-mono text-2xs uppercase">Timeline</TableCell>
                 {rows.map((row) => (
                   <TableCell key={row.id} className="text-foreground whitespace-normal">
                     {row.timeline_proposal ? formatTimelineForDisplay(row.timeline_proposal) : "Not provided"}
@@ -424,7 +424,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 ))}
               </TableRow>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Terms</TableCell>
+                <TableCell className="text-foreground-muted font-mono text-2xs uppercase">Terms</TableCell>
                 {rows.map((row) => {
                   const summary = termsSummaryLine(row)
                   return (
@@ -441,7 +441,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 })}
               </TableRow>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Business Criteria</TableCell>
+                <TableCell className="text-foreground-muted font-mono text-2xs uppercase">Business Criteria</TableCell>
                 {rows.map((row) => {
                   const { required, missing } = businessCriteriaCounts(row)
                   return (
@@ -458,13 +458,13 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 })}
               </TableRow>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase">Attachments</TableCell>
+                <TableCell className="text-foreground-muted font-mono text-2xs uppercase">Attachments</TableCell>
                 {rows.map((row) => (
                   <TableCell key={row.id} className="text-foreground">{row.attachments?.length || 0}</TableCell>
                 ))}
               </TableRow>
               <TableRow className="border-border/30">
-                <TableCell className="text-foreground-muted font-mono text-[10px] uppercase align-top">AI Summary</TableCell>
+                <TableCell className="text-foreground-muted font-mono text-2xs uppercase align-top">AI Summary</TableCell>
                 {rows.map((row) => (
                   <TableCell key={row.id} className="whitespace-normal text-xs text-foreground/80 align-top">
                     {generatingSummaryIds.has(row.id) ? (
@@ -486,7 +486,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
       {/* Detailed Comparison - AI-powered */}
       <div className="rounded-xl border border-border/40 bg-white/[0.02] overflow-hidden">
         <div className="px-5 pt-5 pb-1">
-          <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider">Detailed Comparison</div>
+          <div className="font-mono text-2xs uppercase text-foreground-muted tracking-wider">Detailed Comparison</div>
         </div>
         <div className="p-5 pt-3 space-y-4">
           {checkingDecompositions ? (
@@ -559,7 +559,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
               )}
 
               <div className="rounded-lg border border-border/40 bg-white/5 p-4 space-y-2">
-                <div className="font-mono text-[10px] uppercase text-foreground-muted flex items-center gap-1.5">
+                <div className="font-mono text-2xs uppercase text-foreground-muted flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3 text-accent" /> AI Analysis
                 </div>
                 {comparing ? (
@@ -570,7 +570,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                     <Skeleton className="h-3 w-2/3 bg-white/10" />
                   </div>
                 ) : comparisonError ? (
-                  <div className="flex items-center gap-2 font-mono text-[10px] text-red-300">
+                  <div className="flex items-center gap-2 font-mono text-2xs text-red-300">
                     <span>{comparisonError}</span>
                     <button type="button" onClick={() => void runComparison(true)} className="underline hover:text-red-200">
                       Retry
@@ -582,7 +582,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                     <button
                       type="button"
                       onClick={() => void runComparison(true)}
-                      className="font-mono text-[10px] text-accent hover:underline"
+                      className="font-mono text-2xs text-accent hover:underline"
                     >
                       Regenerate Comparison
                     </button>
@@ -598,7 +598,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
 
       {allScored && (
         <div className="rounded-lg border border-accent/30 bg-accent/5 p-4">
-          <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
+          <div className="font-mono text-2xs uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-accent" /> Ranking Recommendation
           </div>
           {rankingGenerating ? (
@@ -608,7 +608,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
               <Skeleton className="h-3 w-2/3 bg-white/10" />
             </div>
           ) : rankingError ? (
-            <div className="flex items-center gap-2 font-mono text-[10px] text-red-300">
+            <div className="flex items-center gap-2 font-mono text-2xs text-red-300">
               <span>{rankingError}</span>
               <button type="button" onClick={() => void runRanking(true)} className="underline hover:text-red-200">
                 Retry
@@ -620,7 +620,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
               <button
                 type="button"
                 onClick={() => void runRanking(true)}
-                className="mt-1.5 font-mono text-[10px] text-accent hover:underline"
+                className="mt-1.5 font-mono text-2xs text-accent hover:underline"
               >
                 Regenerate Rankings
               </button>

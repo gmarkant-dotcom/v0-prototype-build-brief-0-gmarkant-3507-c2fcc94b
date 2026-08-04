@@ -154,7 +154,7 @@ function LoginContent() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                 Email Address
               </label>
               <Input
@@ -169,12 +169,12 @@ function LoginContent() {
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
+                <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">
                   Password
                 </label>
                 <Link 
                   href="/auth/forgot-password" 
-                  className="font-mono text-[10px] text-accent hover:text-accent/80 transition-colors"
+                  className="font-mono text-2xs text-accent hover:text-accent/80 transition-colors"
                 >
                   Forgot password?
                 </Link>
@@ -232,14 +232,14 @@ function LoginContent() {
           <div className="flex items-center justify-center gap-3">
             <Link
               href="/terms"
-              className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+              className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
             >
               Terms of Service
             </Link>
             <span className="text-foreground-muted/30">|</span>
             <Link
               href="/privacy"
-              className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+              className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
             >
               Privacy Policy
             </Link>

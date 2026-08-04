@@ -24,7 +24,7 @@ export function EngagementContext({ agency, project, budget, className }: Engage
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-6">
           <div>
-            <div className="font-mono text-[9px] text-foreground-muted tracking-wider uppercase mb-1">
+            <div className="font-mono text-2xs text-foreground-muted tracking-wider uppercase mb-1">
               Agency
             </div>
             <div className="font-display font-bold text-lg text-foreground">
@@ -33,7 +33,7 @@ export function EngagementContext({ agency, project, budget, className }: Engage
           </div>
           <div className="w-px h-8 bg-border" />
           <div>
-            <div className="font-mono text-[9px] text-foreground-muted tracking-wider uppercase mb-1">
+            <div className="font-mono text-2xs text-foreground-muted tracking-wider uppercase mb-1">
               Project
             </div>
             <div className="font-sans text-sm text-foreground-secondary">
@@ -42,7 +42,7 @@ export function EngagementContext({ agency, project, budget, className }: Engage
           </div>
         </div>
         <div className="text-right">
-          <div className="font-mono text-[9px] text-foreground-muted tracking-wider uppercase mb-1">
+          <div className="font-mono text-2xs text-foreground-muted tracking-wider uppercase mb-1">
             Client Budget
           </div>
           <div className="font-mono text-lg text-accent font-medium">

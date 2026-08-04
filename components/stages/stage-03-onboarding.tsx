@@ -354,7 +354,7 @@ export function Stage03Onboarding() {
           >
             {partner.name}
             <span className={cn(
-              "ml-2 px-1.5 py-0.5 rounded text-[9px] uppercase border",
+              "ml-2 px-1.5 py-0.5 rounded text-2xs uppercase border",
               partner.onboardingStatus === "complete" && "bg-success/30 text-success border-success/40",
               partner.onboardingStatus === "in_progress" && "bg-yellow-900/30 text-yellow-100 border-yellow-400/40",
               partner.onboardingStatus === "documents_sent" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
@@ -384,7 +384,7 @@ export function Stage03Onboarding() {
                   )}
                 >
                   <span className={cn(
-                    "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
+                    "w-5 h-5 rounded-full flex items-center justify-center text-2xs font-bold",
                     currentStep === step.id ? "bg-accent text-accent-foreground" :
                     index < currentStepIndex ? "bg-success text-accent-foreground" :
                     "bg-white/10"
@@ -455,18 +455,18 @@ export function Stage03Onboarding() {
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-medium text-foreground">{doc.name}</span>
                             {doc.version && (
-                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-foreground-muted">
+                              <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-white/10 text-foreground-muted">
                                 {doc.version}
                               </span>
                             )}
                             {doc.required && (
-                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-100 border border-red-400/40">
+                              <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-red-900/30 text-red-100 border border-red-400/40">
                                 Required
                               </span>
                             )}
                           </div>
                           <p className="text-sm text-foreground-muted mb-2">{doc.description}</p>
-                          <div className="font-mono text-[10px] text-foreground-muted">
+                          <div className="font-mono text-2xs text-foreground-muted">
                             Last updated: {doc.lastUpdated}
                           </div>
                         </div>
@@ -474,17 +474,17 @@ export function Stage03Onboarding() {
                         {/* Partner status badge */}
                         <div className="shrink-0">
                           {partnerStatus === "signed" && (
-                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-success/30 text-success border border-success/40">
+                            <span className="flex items-center gap-1 font-mono text-2xs px-2 py-1 rounded-full bg-success/30 text-success border border-success/40">
                               <CheckCircle className="w-3 h-3" /> Already Signed
                             </span>
                           )}
                           {partnerStatus === "outdated" && (
-                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-yellow-900/30 text-yellow-100 border border-yellow-400/40">
+                            <span className="flex items-center gap-1 font-mono text-2xs px-2 py-1 rounded-full bg-yellow-900/30 text-yellow-100 border border-yellow-400/40">
                               <AlertCircle className="w-3 h-3" /> Outdated Version
                             </span>
                           )}
                           {partnerStatus === "not_signed" && (
-                            <span className="flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded-full bg-white/10 text-foreground-muted border border-border">
+                            <span className="flex items-center gap-1 font-mono text-2xs px-2 py-1 rounded-full bg-white/10 text-foreground-muted border border-border">
                               <Clock className="w-3 h-3" /> Not Signed
                             </span>
                           )}
@@ -533,25 +533,25 @@ export function Stage03Onboarding() {
                             <IconComponent className="w-4 h-4 text-foreground-muted" />
                             <span className="font-medium text-foreground">{doc.name}</span>
                             {doc.version && (
-                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-foreground-muted">
+                              <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-white/10 text-foreground-muted">
                                 {doc.version}
                               </span>
                             )}
                             {doc.required && (
-                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-100 border border-red-400/40">
+                              <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-red-900/30 text-red-100 border border-red-400/40">
                                 Required
                               </span>
                             )}
                           </div>
                           <p className="text-sm text-foreground-muted mb-2">{doc.description}</p>
-                          <div className="font-mono text-[10px] text-foreground-muted">
+                          <div className="font-mono text-2xs text-foreground-muted">
                             Last updated: {doc.lastUpdated}
                           </div>
                         </div>
                         
                         {/* Category badge */}
                         <span className={cn(
-                          "shrink-0 font-mono text-[10px] px-2 py-1 rounded-full capitalize border",
+                          "shrink-0 font-mono text-2xs px-2 py-1 rounded-full capitalize border",
                           doc.category === "legal" && "bg-slate-800/50 text-slate-200 border-slate-400/40",
                           doc.category === "brand" && "bg-blue-900/30 text-blue-100 border-blue-400/40",
                           doc.category === "process" && "bg-cyan-900/30 text-cyan-100 border-cyan-400/40",
@@ -626,7 +626,7 @@ export function Stage03Onboarding() {
                               <CheckCircle className="w-4 h-4 text-success" />
                               <span className="text-sm text-foreground">{doc.name}</span>
                             </div>
-                            <span className="font-mono text-[10px] text-success">{signedDate}</span>
+                            <span className="font-mono text-2xs text-success">{signedDate}</span>
                           </div>
                         )
                       })}
@@ -663,7 +663,7 @@ export function Stage03Onboarding() {
                     <div className="space-y-2">
                       {documentsOutdated.length > 0 && (
                         <>
-                          <div className="font-mono text-[10px] text-yellow-400 uppercase tracking-wider mb-2">
+                          <div className="font-mono text-2xs text-yellow-400 uppercase tracking-wider mb-2">
                             Outdated Versions (Re-signature Required)
                           </div>
                           {documentsOutdated.map(docId => {
@@ -680,7 +680,7 @@ export function Stage03Onboarding() {
                                   <AlertCircle className="w-4 h-4 text-yellow-400" />
                                   <span className="text-sm text-foreground">{doc.name}</span>
                                 </div>
-                                <span className="font-mono text-[10px] text-yellow-400">
+                                <span className="font-mono text-2xs text-yellow-400">
                                   {oldVersion} → {doc.version}
                                 </span>
                               </div>
@@ -691,7 +691,7 @@ export function Stage03Onboarding() {
                       
                       {documentsToSend.filter(d => !documentsOutdated.includes(d)).length > 0 && (
                         <>
-                          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2 mt-4">
+                          <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2 mt-4">
                             New Documents
                           </div>
                           {documentsToSend.filter(d => !documentsOutdated.includes(d)).map(docId => {
@@ -705,7 +705,7 @@ export function Stage03Onboarding() {
                                   <span className="text-sm text-foreground">{doc.name}</span>
                                 </div>
                                 <span className={cn(
-                                  "font-mono text-[10px] px-2 py-0.5 rounded capitalize",
+                                  "font-mono text-2xs px-2 py-0.5 rounded capitalize",
                                   doc.category === "legal" && "bg-slate-800/50 text-slate-200",
                                   doc.category === "brand" && "bg-blue-900/30 text-blue-100",
                                   doc.category === "process" && "bg-cyan-900/30 text-cyan-100",
@@ -748,7 +748,7 @@ export function Stage03Onboarding() {
                     {currentPartner.ndaSigned ? (
                       <>
                         <div className="text-sm text-success">Signed</div>
-                        <div className="font-mono text-[10px] text-foreground-muted">
+                        <div className="font-mono text-2xs text-foreground-muted">
                           {currentPartner.ndaSignedDate} ({currentPartner.ndaVersion})
                         </div>
                       </>
@@ -768,7 +768,7 @@ export function Stage03Onboarding() {
                     {currentPartner.msaApproved ? (
                       <>
                         <div className="text-sm text-success">Approved</div>
-                        <div className="font-mono text-[10px] text-foreground-muted">
+                        <div className="font-mono text-2xs text-foreground-muted">
                           {currentPartner.msaApprovedDate} ({currentPartner.msaVersion})
                         </div>
                       </>
@@ -802,7 +802,7 @@ export function Stage03Onboarding() {
                     {currentPartner.insuranceUploaded ? (
                       <>
                         <div className="text-sm text-success">On file</div>
-                        <div className="font-mono text-[10px] text-foreground-muted">
+                        <div className="font-mono text-2xs text-foreground-muted">
                           Expires {currentPartner.insuranceExpiry}
                         </div>
                       </>
@@ -868,7 +868,7 @@ export function Stage03Onboarding() {
                   
                   <div className="space-y-4">
                     <div>
-                      <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                      <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                         Calendly / Scheduling Link
                       </label>
                       <div className="flex gap-2">
@@ -888,7 +888,7 @@ export function Stage03Onboarding() {
                     </div>
                     
                     <div className="p-4 bg-white/5 rounded-lg border border-border">
-                      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                      <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                         Preview
                       </div>
                       <p className="text-sm text-foreground-secondary">
@@ -982,23 +982,23 @@ export function Stage03Onboarding() {
                   <div className="grid grid-cols-3 gap-4">
                     <div className="p-4 rounded-lg bg-white/5 border border-border text-center">
                       <div className="font-display font-bold text-2xl text-accent">{documentsToSend.length}</div>
-                      <div className="font-mono text-[10px] text-foreground-muted uppercase">Documents</div>
+                      <div className="font-mono text-2xs text-foreground-muted uppercase">Documents</div>
                     </div>
                     <div className="p-4 rounded-lg bg-white/5 border border-border text-center">
                       <div className="font-display font-bold text-2xl text-success">{documentsAlreadySigned.length}</div>
-                      <div className="font-mono text-[10px] text-foreground-muted uppercase">Skipped</div>
+                      <div className="font-mono text-2xs text-foreground-muted uppercase">Skipped</div>
                     </div>
                     <div className="p-4 rounded-lg bg-white/5 border border-border text-center">
                       <div className="font-display font-bold text-2xl text-foreground">
                         {documentsToSend.filter(d => masterDocuments.find(m => m.id === d)?.required).length}
                       </div>
-                      <div className="font-mono text-[10px] text-foreground-muted uppercase">Required</div>
+                      <div className="font-mono text-2xs text-foreground-muted uppercase">Required</div>
                     </div>
                   </div>
                   
                   {/* Document List */}
                   <div>
-                    <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-3">
+                    <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-3">
                       Documents Being Sent
                     </div>
                     <div className="space-y-2">
@@ -1012,12 +1012,12 @@ export function Stage03Onboarding() {
                               <FileText className="w-4 h-4 text-accent" />
                               <span className="text-sm text-foreground">{doc.name}</span>
                               {doc.required && (
-                                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-100">
+                                <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-red-900/30 text-red-100">
                                   Required
                                 </span>
                               )}
                             </div>
-                            <span className="font-mono text-[10px] text-foreground-muted capitalize">
+                            <span className="font-mono text-2xs text-foreground-muted capitalize">
                               {doc.type} / {doc.category}
                             </span>
                           </div>
@@ -1029,7 +1029,7 @@ export function Stage03Onboarding() {
                   {/* Message Preview */}
                   {customMessage && (
                     <div>
-                      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-3">
+                      <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-3">
                         Personal Message
                       </div>
                       <div className="p-4 rounded-lg bg-white/5 border border-border">

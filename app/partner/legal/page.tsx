@@ -426,7 +426,7 @@ export default function PartnerLegalPage() {
           </div>
           <div className="flex items-start gap-4">
             <div className="text-right">
-              <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider">Compliance</div>
+              <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider">Compliance</div>
               <div className={cn(
                 "font-display font-bold text-3xl",
                 completionPercentage === 100 ? "text-success" : "text-yellow-600"
@@ -467,7 +467,7 @@ export default function PartnerLegalPage() {
           
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Legal Entity Name
               </label>
               <Input
@@ -478,7 +478,7 @@ export default function PartnerLegalPage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Entity Type
               </label>
               <select
@@ -495,7 +495,7 @@ export default function PartnerLegalPage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 EIN
               </label>
               <Input
@@ -507,7 +507,7 @@ export default function PartnerLegalPage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 State of Incorporation
               </label>
               <Input
@@ -518,7 +518,7 @@ export default function PartnerLegalPage() {
             </div>
             
             <div className="col-span-2">
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Business Address
               </label>
               <Input
@@ -581,7 +581,7 @@ export default function PartnerLegalPage() {
                       )}
                       <div className="text-xs text-vendor-muted-strong mt-0.5">{doc.description}</div>
                       {doc.uploadedDate && (
-                        <div className="font-mono text-[10px] text-vendor-muted mt-2">
+                        <div className="font-mono text-2xs text-vendor-muted mt-2">
                           Uploaded: {doc.uploadedDate}
                           {doc.expirationDate && ` • Expires: ${doc.expirationDate}`}
                         </div>
@@ -687,7 +687,7 @@ export default function PartnerLegalPage() {
                   {designation.holds && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-7">
                       <div>
-                        <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                        <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                           Certifying Body
                         </label>
                         <Input
@@ -699,7 +699,7 @@ export default function PartnerLegalPage() {
                         />
                       </div>
                       <div>
-                        <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                        <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                           Certification Number
                         </label>
                         <Input
@@ -733,7 +733,7 @@ export default function PartnerLegalPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Years in Business
               </label>
               <Input
@@ -747,7 +747,7 @@ export default function PartnerLegalPage() {
               />
             </div>
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Union Signatory
               </label>
               <Input
@@ -758,7 +758,7 @@ export default function PartnerLegalPage() {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Sustainability Approach
               </label>
               <Textarea
@@ -769,7 +769,7 @@ export default function PartnerLegalPage() {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Workforce Diversity Summary
               </label>
               <Textarea
@@ -822,7 +822,7 @@ export default function PartnerLegalPage() {
                     />
                     <span
                       className={cn(
-                        "font-mono text-[10px] px-2 py-0.5 rounded-full",
+                        "font-mono text-2xs px-2 py-0.5 rounded-full",
                         coverage.has_coverage ? "bg-success/15 text-success" : "bg-gray-100 text-vendor-muted-strong"
                       )}
                     >

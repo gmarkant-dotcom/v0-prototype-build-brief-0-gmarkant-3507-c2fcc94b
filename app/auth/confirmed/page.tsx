@@ -59,14 +59,14 @@ function ConfirmedContent() {
         <div className="mt-3 flex items-center justify-center gap-3">
           <Link
             href="/terms"
-            className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+            className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
           >
             Terms of Service
           </Link>
           <span className="text-foreground-muted/30">|</span>
           <Link
             href="/privacy"
-            className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+            className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
           >
             Privacy Policy
           </Link>

@@ -1326,7 +1326,7 @@ function AgencyRFPContent() {
                 )}
               >
                 <span className={cn(
-                  "w-5 h-5 rounded-full flex items-center justify-center text-[10px]",
+                  "w-5 h-5 rounded-full flex items-center justify-center text-2xs",
                   currentStep === step.number ? "bg-accent-foreground/20" : "bg-current/20"
                 )}>
                   {step.number < currentStep ? <Check className="w-3 h-3" /> : step.number}
@@ -1391,16 +1391,16 @@ function AgencyRFPContent() {
                 </div>
                 {briefSource === "step00" && selectedInterpretation?.brief_summary && (
                   <div className="mt-4 p-3 rounded-lg bg-accent/5 border border-accent/20">
-                    <div className="font-mono text-[10px] text-accent uppercase tracking-wider mb-1">Auto-populated from Step 00</div>
+                    <div className="font-mono text-2xs text-accent uppercase tracking-wider mb-1">Auto-populated from Step 00</div>
                     <p className="text-sm text-foreground-muted">{selectedInterpretation.brief_summary}</p>
                     <div className="flex gap-4 mt-2">
                       {selectedInterpretation.budget_result?.total_low != null && (
-                        <span className="font-mono text-[10px] text-foreground-muted">
+                        <span className="font-mono text-2xs text-foreground-muted">
                           Budget: ${selectedInterpretation.budget_result.total_low.toLocaleString()} - ${(selectedInterpretation.budget_result.total_high ?? 0).toLocaleString()}
                         </span>
                       )}
                       {selectedInterpretation.timeline_result?.total_weeks_min != null && (
-                        <span className="font-mono text-[10px] text-foreground-muted">
+                        <span className="font-mono text-2xs text-foreground-muted">
                           Timeline: {selectedInterpretation.timeline_result.total_weeks_min}-{selectedInterpretation.timeline_result.total_weeks_max} weeks
                         </span>
                       )}
@@ -1459,13 +1459,13 @@ function AgencyRFPContent() {
                       <div className="font-display font-bold text-foreground mb-1">
                         Drop your file here
                       </div>
-                      <div className="font-mono text-[10px] text-foreground-muted">PDF, Word, PowerPoint, or text - click to browse (max 50MB)</div>
+                      <div className="font-mono text-2xs text-foreground-muted">PDF, Word, PowerPoint, or text - click to browse (max 50MB)</div>
                     </label>
                   )}
                   
                   {uploadMethod === "google" && (
                     <div className="space-y-3">
-                      <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                      <label className="font-mono text-2xs text-foreground-muted uppercase block">
                         Google Docs or Slides URL
                       </label>
                       <Input
@@ -1498,7 +1498,7 @@ function AgencyRFPContent() {
                   
                   {uploadMethod === "paste" && (
                     <div className="space-y-3">
-                      <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                      <label className="font-mono text-2xs text-foreground-muted uppercase block">
                         Paste Brief Content
                       </label>
                       <Textarea
@@ -1548,13 +1548,13 @@ function AgencyRFPContent() {
                     </div>
                     <div>
                       <div className="font-display font-bold text-sm text-foreground">{briefFileName}</div>
-                      <div className="font-mono text-[10px] text-success">
+                      <div className="font-mono text-2xs text-success">
                         {isExtractingBrief
                           ? "Extracting text from document…"
                           : "Ready for AI - text extracted from your file"}
                       </div>
                       {!isExtractingBrief && briefSourceText.trim() && (
-                        <div className="font-mono text-[10px] text-foreground-muted mt-1">
+                        <div className="font-mono text-2xs text-foreground-muted mt-1">
                           {briefSourceText.length.toLocaleString()} characters from the file will be sent (before any pasted add-on)
                         </div>
                       )}
@@ -1579,7 +1579,7 @@ function AgencyRFPContent() {
               )}
 
               <div className="mt-6 space-y-2">
-                <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                <label className="font-mono text-2xs text-foreground-muted uppercase block">
                   Optional: Additional brief details
                 </label>
                 <Textarea
@@ -1589,7 +1589,7 @@ function AgencyRFPContent() {
                   className="min-h-[120px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 />
                 {briefAugmentText.trim() && (
-                  <p className="font-mono text-[10px] text-foreground-muted">
+                  <p className="font-mono text-2xs text-foreground-muted">
                     +{briefAugmentText.trim().length.toLocaleString()} characters appended when generating
                   </p>
                 )}
@@ -1613,7 +1613,7 @@ function AgencyRFPContent() {
 
               <div className="grid grid-cols-2 gap-6 mt-4">
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                     RFP output template
                   </label>
                   <RfpOutputTemplate
@@ -1650,7 +1650,7 @@ function AgencyRFPContent() {
                 </div>
 
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                     SOW Template
                   </label>
                   <div className="space-y-2">
@@ -1668,7 +1668,7 @@ function AgencyRFPContent() {
                         <FileText className="w-5 h-5 text-blue-400" />
                         <div className="flex-1">
                           <div className="font-display font-bold text-sm text-foreground">{template.name}</div>
-                          <div className="font-mono text-[10px] text-foreground-muted">From Documents Library</div>
+                          <div className="font-mono text-2xs text-foreground-muted">From Documents Library</div>
                         </div>
                         {selectedSowTemplate === template.id && <Check className="w-4 h-4 text-accent" />}
                       </button>
@@ -1689,7 +1689,7 @@ function AgencyRFPContent() {
                         <FileText className="w-5 h-5 text-success" />
                         <div className="flex-1">
                           <div className="font-display font-bold text-sm text-foreground">{uploadedSowTemplate.name}</div>
-                          <div className="font-mono text-[10px] text-foreground-muted">Uploaded Template</div>
+                          <div className="font-mono text-2xs text-foreground-muted">Uploaded Template</div>
                         </div>
                         {selectedSowTemplate === 'uploaded' && <Check className="w-4 h-4 text-accent" />}
                       </button>
@@ -1759,7 +1759,7 @@ function AgencyRFPContent() {
 
             {/* Generate Button */}
             <div className="flex flex-col items-end gap-2">
-              <p className="font-mono text-[10px] text-foreground-muted text-right max-w-md">
+              <p className="font-mono text-2xs text-foreground-muted text-right max-w-md">
                 {templateSourceText.trim()
                   ? "Using your uploaded output template to structure the Master RFP."
                   : "Upload an RFP output template in Step 1b for best results, or continue with a default structure."}{" "}
@@ -1792,7 +1792,7 @@ function AgencyRFPContent() {
                 )}
               </Button>
               {isGenerating && (
-                <p className="font-mono text-[10px] text-foreground-muted text-right max-w-md">
+                <p className="font-mono text-2xs text-foreground-muted text-right max-w-md">
                   {MASTER_BRIEF_LOADING_MESSAGES[masterBriefLoadingMessageIndex]}
                 </p>
               )}
@@ -1827,7 +1827,7 @@ function AgencyRFPContent() {
             <GlassCard>
               <div className="flex items-start justify-between mb-6">
                 <div>
-                  <span className="font-mono text-[10px] text-accent uppercase flex items-center gap-1 mb-2">
+                  <span className="font-mono text-2xs text-accent uppercase flex items-center gap-1 mb-2">
                     <span className="ai-badge">✦</span> AI Generated Master RFP
                   </span>
                   <h2 className="font-display font-bold text-2xl text-foreground">{masterRfp.projectName}</h2>
@@ -1845,11 +1845,11 @@ function AgencyRFPContent() {
               
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="p-3 rounded-lg bg-accent/10 border border-accent/20">
-                  <div className="font-mono text-[10px] text-foreground-muted uppercase mb-1">Total Budget</div>
+                  <div className="font-mono text-2xs text-foreground-muted uppercase mb-1">Total Budget</div>
                   <div className="font-display font-bold text-xl text-accent">{masterRfp.totalBudget}</div>
                 </div>
                 <div className="p-3 rounded-lg bg-white/5 border border-border">
-                  <div className="font-mono text-[10px] text-foreground-muted uppercase mb-1">Timeline</div>
+                  <div className="font-mono text-2xs text-foreground-muted uppercase mb-1">Timeline</div>
                   <div className="font-display font-bold text-xl text-foreground">{masterRfp.timeline}</div>
                 </div>
               </div>
@@ -1880,10 +1880,10 @@ function AgencyRFPContent() {
                     {scopeItems.map((item) => (
                       <div key={item.id} className="p-3 rounded-lg bg-white/5 border border-border">
                         <div className="font-display font-bold text-sm text-foreground mb-1">{item.name}</div>
-                        <div className="font-mono text-[10px] text-foreground-muted line-clamp-2 mb-2">{item.description}</div>
+                        <div className="font-mono text-2xs text-foreground-muted line-clamp-2 mb-2">{item.description}</div>
                         <div className="flex gap-3">
-                          <span className="font-mono text-[10px] text-accent">{item.estimatedBudget}</span>
-                          <span className="font-mono text-[10px] text-foreground-muted">{item.timeline}</span>
+                          <span className="font-mono text-2xs text-accent">{item.estimatedBudget}</span>
+                          <span className="font-mono text-2xs text-foreground-muted">{item.timeline}</span>
                         </div>
                       </div>
                     ))}
@@ -1957,7 +1957,7 @@ function AgencyRFPContent() {
               </label>
 
               <div>
-                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
                   Additional Notes
                 </label>
                 <Textarea
@@ -2007,7 +2007,7 @@ function AgencyRFPContent() {
                           <h4 className="font-display font-bold text-foreground">{item.name}</h4>
                           {item.allocation && (
                             <span className={cn(
-                              "font-mono text-[9px] px-2 py-0.5 rounded uppercase",
+                              "font-mono text-2xs px-2 py-0.5 rounded uppercase",
                               item.allocation === "internal" && "bg-blue-500/30 text-blue-300",
                               item.allocation === "outsource" && "bg-accent/30 text-accent"
                             )}>
@@ -2017,8 +2017,8 @@ function AgencyRFPContent() {
                         </div>
                         <p className="text-sm text-foreground-muted mb-2">{item.description}</p>
                         <div className="flex gap-3">
-                          <span className="font-mono text-[10px] text-accent">{item.estimatedBudget}</span>
-                          <span className="font-mono text-[10px] text-foreground-muted">{item.timeline}</span>
+                          <span className="font-mono text-2xs text-accent">{item.estimatedBudget}</span>
+                          <span className="font-mono text-2xs text-foreground-muted">{item.timeline}</span>
                         </div>
                       </div>
                       
@@ -2136,7 +2136,7 @@ function AgencyRFPContent() {
                   {internalItems.map((item) => (
                     <div key={item.id} className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                       <div className="font-display font-bold text-sm text-foreground">{item.name}</div>
-                      <div className="font-mono text-[10px] text-accent mt-1">{item.estimatedBudget}</div>
+                      <div className="font-mono text-2xs text-accent mt-1">{item.estimatedBudget}</div>
                     </div>
                   ))}
                   {internalItems.length === 0 && (
@@ -2158,7 +2158,7 @@ function AgencyRFPContent() {
                   {outsourcedItems.map((item) => (
                     <div key={item.id} className="p-3 rounded-lg bg-accent/10 border border-accent/20">
                       <div className="font-display font-bold text-sm text-foreground">{item.name}</div>
-                      <div className="font-mono text-[10px] text-accent mt-1">{item.estimatedBudget}</div>
+                      <div className="font-mono text-2xs text-accent mt-1">{item.estimatedBudget}</div>
                     </div>
                   ))}
                   {outsourcedItems.length === 0 && (
@@ -2218,13 +2218,13 @@ function AgencyRFPContent() {
               <GlassCard>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-px flex-1 bg-border" />
-                  <span className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">From Step 00 Shortlist</span>
+                  <span className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">From Step 00 Shortlist</span>
                   <div className="h-px flex-1 bg-border" />
                 </div>
                 <p className="text-xs text-foreground-muted mb-3">Directors and production companies recommended for this brief. Use as a reference when inviting new contacts below.</p>
                 <div className="flex flex-wrap gap-2">
                   {selectedInterpretation.directors_result.recommendations.map((rec, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 font-mono text-[10px] px-2.5 py-1 rounded-full border border-border bg-white/5 text-foreground-muted whitespace-nowrap">
+                    <span key={i} className="inline-flex items-center gap-1 font-mono text-2xs px-2.5 py-1 rounded-full border border-border bg-white/5 text-foreground-muted whitespace-nowrap">
                       <span className="text-foreground font-medium">{rec.name}</span>
                       <span className="text-foreground-muted/60">/</span>
                       <span>{rec.company}</span>
@@ -2241,12 +2241,12 @@ function AgencyRFPContent() {
                     <div className="font-display font-bold text-lg text-foreground">{item.name}</div>
                     <div className="font-mono text-xs text-foreground-muted mt-1">{item.description}</div>
                     <div className="flex gap-3 mt-2">
-                      <span className="font-mono text-[10px] text-accent">{item.estimatedBudget}</span>
-                      <span className="font-mono text-[10px] text-foreground-muted">{item.timeline}</span>
+                      <span className="font-mono text-2xs text-accent">{item.estimatedBudget}</span>
+                      <span className="font-mono text-2xs text-foreground-muted">{item.timeline}</span>
                     </div>
                   </div>
                   <span className={cn(
-                    "font-mono text-[10px] px-3 py-1 rounded-full",
+                    "font-mono text-2xs px-3 py-1 rounded-full",
                     getRecipientCount(item.id) > 0 ? "bg-accent/10 text-accent" : "bg-white/5 text-foreground-muted"
                   )}>
                     {getRecipientCount(item.id)} recipient{getRecipientCount(item.id) !== 1 ? 's' : ''}
@@ -2263,11 +2263,11 @@ function AgencyRFPContent() {
                         <div key={partnerId} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/20">
                           <span className="font-mono text-xs text-foreground">{partner.name}</span>
                           {partner.ndaSigned ? (
-                            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success flex items-center gap-1">
+                            <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success flex items-center gap-1">
                               <Shield className="w-2.5 h-2.5" /> NDA Signed {partner.ndaSignedDate ? `(${partner.ndaSignedDate})` : ""}
                             </span>
                           ) : (
-                            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Pending</span>
+                            <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Pending</span>
                           )}
                           <button 
                             onClick={() => togglePartner(item.id, partnerId)}
@@ -2283,14 +2283,14 @@ function AgencyRFPContent() {
                         <span className="font-mono text-xs text-foreground">
                           {recipient.name ? `${recipient.name} · ${recipient.email}` : recipient.email}
                         </span>
-                        <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-100">New</span>
+                        <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-100">New</span>
                         {recipient.sendAsMagicLink && (
-                          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-accent/15 text-accent flex items-center gap-0.5">
+                          <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-accent/15 text-accent flex items-center gap-0.5">
                             <Zap className="w-2.5 h-2.5" /> Magic Link
                           </span>
                         )}
                         {ndaSignatureRequired && recipient.requireNda && (
-                          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Required</span>
+                          <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Required</span>
                         )}
                         <button 
                           onClick={() => removeNewRecipient(item.id, index)}
@@ -2306,7 +2306,7 @@ function AgencyRFPContent() {
                 <div className="grid grid-cols-2 gap-4">
                   {/* Existing Partners */}
                   <div>
-                    <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                    <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                       From Your Partner Pool
                     </label>
                     {!isDemo && poolPartnersLoading && (
@@ -2325,10 +2325,10 @@ function AgencyRFPContent() {
                     )}
                     {!isDemo && pendingPartnerInvites.length > 0 && (
                       <div className="mb-3 p-2 rounded-md border border-border/60 bg-white/[0.02]">
-                        <div className="font-mono text-[9px] text-foreground-muted uppercase mb-1">Pending invitations</div>
+                        <div className="font-mono text-2xs text-foreground-muted uppercase mb-1">Pending invitations</div>
                         <ul className="space-y-1">
                           {pendingPartnerInvites.map((inv) => (
-                            <li key={inv.id} className="font-mono text-[10px] text-foreground-muted">
+                            <li key={inv.id} className="font-mono text-2xs text-foreground-muted">
                               {inv.email} <span className="text-foreground-muted/60">(awaiting acceptance)</span>
                             </li>
                           ))}
@@ -2355,25 +2355,25 @@ function AgencyRFPContent() {
                                   <span className="font-display font-bold text-sm text-foreground truncate">{partner.name}</span>
                                   {partner.bookmarked && <span className="text-yellow-400 text-xs">★</span>}
                                 </div>
-                                <div className="font-mono text-[10px] text-foreground-muted">{partner.discipline}</div>
+                                <div className="font-mono text-2xs text-foreground-muted">{partner.discipline}</div>
                                 {partner.pastProjects && partner.pastProjects.length > 0 && (
-                                  <div className="font-mono text-[9px] text-foreground-muted/60 mt-1 truncate">
+                                  <div className="font-mono text-2xs text-foreground-muted/60 mt-1 truncate">
                                     Past: {partner.pastProjects.join(", ")}
                                   </div>
                                 )}
                               </div>
                               <div className="flex flex-col items-end gap-1 shrink-0">
                                 {partner.ndaSigned ? (
-                                  <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success">
+                                  <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success">
                                     NDA Signed {partner.ndaSignedDate ? partner.ndaSignedDate : "✓"}
                                   </span>
                                 ) : (
-                                  <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Pending</span>
+                                  <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-warning/20 text-warning">NDA Pending</span>
                                 )}
                                 {partner.msaApproved ? (
-                                  <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-success/20 text-success">MSA ✓</span>
+                                  <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success">MSA ✓</span>
                                 ) : (
-                                  <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-foreground-muted/20 text-foreground-muted">No MSA</span>
+                                  <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-foreground-muted/20 text-foreground-muted">No MSA</span>
                                 )}
                               </div>
                             </div>
@@ -2385,7 +2385,7 @@ function AgencyRFPContent() {
                   
                   {/* New Contact */}
                   <div>
-                    <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                    <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                       Invite New Partner
                     </label>
                     <div className="space-y-3 p-4 rounded-lg bg-white/5 border border-border">
@@ -2439,12 +2439,12 @@ function AgencyRFPContent() {
                             }
                             className="rounded border-border"
                           />
-                          <span className="font-mono text-[10px] text-foreground-muted">
+                          <span className="font-mono text-2xs text-foreground-muted">
                             Require NDA signature before viewing RFP
                           </span>
                         </label>
                       ) : (
-                        <p className="font-mono text-[10px] text-foreground-muted">
+                        <p className="font-mono text-2xs text-foreground-muted">
                           NDA requirement is off for this broadcast.
                         </p>
                       )}
@@ -2465,7 +2465,7 @@ function AgencyRFPContent() {
                           }
                           className="rounded border-border"
                         />
-                        <span className="font-mono text-[10px] text-foreground-muted flex items-center gap-1">
+                        <span className="font-mono text-2xs text-foreground-muted flex items-center gap-1">
                           <Zap className="w-3 h-3 text-accent" />
                           Send as Magic Link
                         </span>
@@ -2479,10 +2479,10 @@ function AgencyRFPContent() {
                         <Plus className="w-4 h-4 mr-1" /> Add New Contact
                       </Button>
                       {recipientAddErrors[item.id] && (
-                        <p className="font-mono text-[10px] text-red-300">{recipientAddErrors[item.id]}</p>
+                        <p className="font-mono text-2xs text-red-300">{recipientAddErrors[item.id]}</p>
                       )}
                       {recipientAddSuccess[item.id] && !recipientAddErrors[item.id] && (
-                        <p className="font-mono text-[10px] text-success">{recipientAddSuccess[item.id]}</p>
+                        <p className="font-mono text-2xs text-success">{recipientAddSuccess[item.id]}</p>
                       )}
                     </div>
                   </div>
@@ -2521,9 +2521,9 @@ function AgencyRFPContent() {
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <div className="font-display font-bold text-foreground">{item.name}</div>
-                        <div className="font-mono text-[10px] text-accent mt-1">{item.estimatedBudget}</div>
+                        <div className="font-mono text-2xs text-accent mt-1">{item.estimatedBudget}</div>
                       </div>
-                      <span className="font-mono text-[10px] text-foreground-muted">
+                      <span className="font-mono text-2xs text-foreground-muted">
                         {getRecipientCount(item.id)} recipient{getRecipientCount(item.id) !== 1 ? 's' : ''}
                       </span>
                     </div>
@@ -2551,7 +2551,7 @@ function AgencyRFPContent() {
               </div>
 
               <div className="mt-6 p-4 rounded-lg border border-border bg-white/5 space-y-2">
-                <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                <label className="font-mono text-2xs text-foreground-muted uppercase block">
                   Response Deadline
                 </label>
                 <Input
@@ -2560,7 +2560,7 @@ function AgencyRFPContent() {
                   onChange={(e) => setResponseDeadlineDate(e.target.value)}
                   className="bg-white/5 border-border text-foreground"
                 />
-                <p className="font-mono text-[10px] text-foreground-muted">
+                <p className="font-mono text-2xs text-foreground-muted">
                   Optional. If set, partners will see “Respond by” in their inbox and RFP detail view.
                 </p>
               </div>
@@ -2574,7 +2574,7 @@ function AgencyRFPContent() {
                   />
                   <span className="font-mono text-xs text-foreground">Require term disclosures with bids</span>
                 </label>
-                <p className="font-mono text-[10px] text-foreground-muted">
+                <p className="font-mono text-2xs text-foreground-muted">
                   Vendors state payment, cancellation, IP, and rate-validity terms up front.
                 </p>
               </div>
@@ -2597,7 +2597,7 @@ function AgencyRFPContent() {
                 </label>
                 {ndaSignatureRequired && (
                   <div className="space-y-2">
-                    <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                    <label className="font-mono text-2xs text-foreground-muted uppercase block">
                       NDA signing link
                     </label>
                     <Input
@@ -2606,7 +2606,7 @@ function AgencyRFPContent() {
                       placeholder="https://www.docusign.com/"
                       className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                     />
-                    <p className="font-mono text-[10px] text-foreground-muted">
+                    <p className="font-mono text-2xs text-foreground-muted">
                       Recipients without confirmed NDA will get this link in their broadcast email.
                     </p>
                   </div>
@@ -2617,25 +2617,25 @@ function AgencyRFPContent() {
               <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-border">
                 <div className="text-center">
                   <div className="font-display font-bold text-2xl text-foreground">{outsourcedItems.length}</div>
-                  <div className="font-mono text-[10px] text-foreground-muted">RFPs</div>
+                  <div className="font-mono text-2xs text-foreground-muted">RFPs</div>
                 </div>
                 <div className="text-center">
                   <div className="font-display font-bold text-2xl text-accent">
                     {Object.values(selectedPartners).flat().length + Object.values(newRecipients).flat().length}
                   </div>
-                  <div className="font-mono text-[10px] text-foreground-muted">Total Recipients</div>
+                  <div className="font-mono text-2xs text-foreground-muted">Total Recipients</div>
                 </div>
                 <div className="text-center">
                   <div className="font-display font-bold text-2xl text-blue-400">
                     {Object.values(newRecipients).flat().length}
                   </div>
-                  <div className="font-mono text-[10px] text-foreground-muted">New Contacts</div>
+                  <div className="font-mono text-2xs text-foreground-muted">New Contacts</div>
                 </div>
                 <div className="text-center">
                   <div className="font-display font-bold text-2xl text-warning">
                     {ndaSignatureRequired ? getTotalNewWithNda() + getTotalExistingWithoutNda() : 0}
                   </div>
-                  <div className="font-mono text-[10px] text-foreground-muted">NDAs Required</div>
+                  <div className="font-mono text-2xs text-foreground-muted">NDAs Required</div>
                 </div>
               </div>
             </GlassCard>
@@ -2700,7 +2700,7 @@ function AgencyRFPContent() {
             </p>
             <div className="flex flex-wrap justify-center gap-2 mb-8">
               {outsourcedItems.map(item => (
-                <span key={item.id} className="font-mono text-[11px] px-3 py-1 rounded-full bg-accent/20 text-accent">
+                <span key={item.id} className="font-mono text-2xs px-3 py-1 rounded-full bg-accent/20 text-accent">
                   {item.name}
                 </span>
               ))}

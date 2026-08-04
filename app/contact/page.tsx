@@ -96,7 +96,7 @@ function ContactFormContent() {
           ) : (
             <form onSubmit={onSubmit} className="space-y-4">
               <div>
-                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Full name</label>
+                <label className="font-mono text-2xs uppercase tracking-wide text-foreground-muted block mb-2">Full name</label>
                 <Input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -105,7 +105,7 @@ function ContactFormContent() {
                 />
               </div>
               <div>
-                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Work email</label>
+                <label className="font-mono text-2xs uppercase tracking-wide text-foreground-muted block mb-2">Work email</label>
                 <Input
                   type="email"
                   value={workEmail}
@@ -115,7 +115,7 @@ function ContactFormContent() {
                 />
               </div>
               <div>
-                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Company name</label>
+                <label className="font-mono text-2xs uppercase tracking-wide text-foreground-muted block mb-2">Company name</label>
                 <Input
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
@@ -125,7 +125,7 @@ function ContactFormContent() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Company size</label>
+                  <label className="font-mono text-2xs uppercase tracking-wide text-foreground-muted block mb-2">Company size</label>
                   <select
                     value={companySize}
                     onChange={(e) => setCompanySize(e.target.value)}
@@ -140,7 +140,7 @@ function ContactFormContent() {
                   </select>
                 </div>
                 <div>
-                  <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">Role</label>
+                  <label className="font-mono text-2xs uppercase tracking-wide text-foreground-muted block mb-2">Role</label>
                   <select
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
@@ -157,7 +157,7 @@ function ContactFormContent() {
                 </div>
               </div>
               <div>
-                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">
+                <label className="font-mono text-2xs uppercase tracking-wide text-foreground-muted block mb-2">
                   Which plan are you interested in?
                 </label>
                 <select
@@ -172,7 +172,7 @@ function ContactFormContent() {
                 </select>
               </div>
               <div>
-                <label className="font-mono text-[10px] uppercase tracking-wide text-foreground-muted block mb-2">
+                <label className="font-mono text-2xs uppercase tracking-wide text-foreground-muted block mb-2">
                   Message / anything else you&apos;d like to share
                 </label>
                 <Textarea
@@ -203,14 +203,14 @@ function ContactFormContent() {
         <div className="mt-6 flex items-center justify-center gap-3">
           <Link
             href="/terms"
-            className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+            className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
           >
             Terms of Service
           </Link>
           <span className="text-foreground-muted/30">|</span>
           <Link
             href="/privacy"
-            className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+            className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
           >
             Privacy Policy
           </Link>

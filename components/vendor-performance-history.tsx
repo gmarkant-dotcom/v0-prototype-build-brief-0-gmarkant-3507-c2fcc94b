@@ -43,7 +43,7 @@ type PerformanceData = {
 function StatTile({ label, value, tone = "neutral" }: { label: React.ReactNode; value: string; tone?: "positive" | "negative" | "neutral" }) {
   return (
     <div className="rounded-lg border border-border/40 bg-white/5 p-3">
-      <div className="font-mono text-[9px] uppercase tracking-wider text-foreground-muted mb-1">{label}</div>
+      <div className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-1">{label}</div>
       <div
         className={cn(
           "font-display font-bold text-base",
@@ -144,14 +144,14 @@ export function VendorPerformanceHistory({
         {reliability_summary && (
           <div className="rounded-lg border border-border/40 bg-white/5 p-4">
             <div className="flex items-center justify-between gap-3 mb-1">
-              <div className="font-mono text-[10px] uppercase text-foreground-muted flex items-center gap-1.5">
+              <div className="font-mono text-2xs uppercase text-foreground-muted flex items-center gap-1.5">
                 <Sparkles className="w-3 h-3 text-accent" /> AI Reliability Summary
               </div>
               <button
                 type="button"
                 onClick={() => void load(true)}
                 disabled={regenerating}
-                className="font-mono text-[10px] text-accent hover:underline disabled:opacity-50"
+                className="font-mono text-2xs text-accent hover:underline disabled:opacity-50"
               >
                 {regenerating ? "Regenerating…" : "Regenerate"}
               </button>
@@ -187,11 +187,11 @@ export function VendorPerformanceHistory({
             <div key={r.id} className="rounded-lg border border-border/40 bg-white/5 p-4 space-y-2">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <span className="font-display font-bold text-sm text-foreground">{r.project_name}</span>
-                <button type="button" onClick={() => setReviewSheetRow(r)} className="font-mono text-[10px] text-accent hover:underline">
+                <button type="button" onClick={() => setReviewSheetRow(r)} className="font-mono text-2xs text-accent hover:underline">
                   View Full Review
                 </button>
               </div>
-              <div className="flex items-center gap-2 flex-wrap font-mono text-[10px]">
+              <div className="flex items-center gap-2 flex-wrap font-mono text-2xs">
                 {r.composite_score != null && (
                   <span
                     className={cn(

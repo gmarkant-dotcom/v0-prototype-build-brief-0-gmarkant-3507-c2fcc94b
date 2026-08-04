@@ -55,7 +55,7 @@ export function UpgradeRequiredModal({ isOpen, onClose, featureName }: UpgradeRe
           </p>
 
           <div className="bg-white/5 border border-border/30 rounded-lg p-4 mb-6 text-left">
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-3">
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-3">
               What you get with Pro
             </div>
             <ul className="space-y-2 text-sm text-foreground-secondary">

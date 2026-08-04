@@ -134,8 +134,8 @@ export function HelpTerm({ term, children, theme = "dark", className, stopPropag
     theme === "light" ? "text-xs text-gray-500 leading-relaxed mt-2" : "text-xs text-foreground-muted/80 leading-relaxed mt-2"
   const legalClass =
     theme === "light"
-      ? "text-[10px] text-gray-400 mt-2 pt-2 border-t border-gray-200"
-      : "text-[10px] text-foreground-muted/60 mt-2 pt-2 border-t border-border"
+      ? "text-2xs text-gray-400 mt-2 pt-2 border-t border-gray-200"
+      : "text-2xs text-foreground-muted/60 mt-2 pt-2 border-t border-border"
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

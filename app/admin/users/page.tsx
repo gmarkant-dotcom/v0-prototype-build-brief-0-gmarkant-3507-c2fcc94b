@@ -260,12 +260,12 @@ export default function AdminUsersPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10">
-                <th className="text-left px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">User</th>
-                <th className="text-left px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Role</th>
-                <th className="text-left px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Joined</th>
-                <th className="text-center px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Paid Status</th>
-                <th className="text-center px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Demo Access</th>
-                <th className="text-center px-4 py-3 font-mono text-[10px] text-white/50 uppercase tracking-wider">Agency Access</th>
+                <th className="text-left px-4 py-3 font-mono text-2xs text-white/50 uppercase tracking-wider">User</th>
+                <th className="text-left px-4 py-3 font-mono text-2xs text-white/50 uppercase tracking-wider">Role</th>
+                <th className="text-left px-4 py-3 font-mono text-2xs text-white/50 uppercase tracking-wider">Joined</th>
+                <th className="text-center px-4 py-3 font-mono text-2xs text-white/50 uppercase tracking-wider">Paid Status</th>
+                <th className="text-center px-4 py-3 font-mono text-2xs text-white/50 uppercase tracking-wider">Demo Access</th>
+                <th className="text-center px-4 py-3 font-mono text-2xs text-white/50 uppercase tracking-wider">Agency Access</th>
               </tr>
             </thead>
             <tbody>

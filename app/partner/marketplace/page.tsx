@@ -241,7 +241,7 @@ export default function PartnerMarketplacePage() {
                       {selectedAgency.company_name || selectedAgency.full_name || "Agency"}
                     </h2>
                     {(selectedAgency.vouch_count ?? 0) >= 3 && (
-                      <span className="flex items-center gap-0.5 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                      <span className="flex items-center gap-0.5 font-mono text-2xs px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
                         <Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" />
                         Triple-Vouched
                       </span>
@@ -296,7 +296,7 @@ export default function PartnerMarketplacePage() {
                 if (!Array.isArray(caps) || caps.length === 0) return null
                 return (
                   <div>
-                    <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Capabilities</div>
+                    <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Capabilities</div>
                     <div className="flex flex-wrap gap-1">
                       {(caps as string[]).map((cap: string, i: number) => (
                         <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-vendor-foreground text-xs">{cap}</span>
@@ -307,7 +307,7 @@ export default function PartnerMarketplacePage() {
               })()}
 
               <div className="rounded-lg border border-vendor-border p-4">
-                <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Contact</div>
+                <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Contact</div>
                 <div className="text-sm text-vendor-foreground font-medium">{selectedAgency.full_name || selectedAgency.company_name || "Not provided"}</div>
                 {selectedAgency.email ? (
                   <div className="text-sm text-vendor-muted-strong mt-1">{selectedAgency.email}</div>

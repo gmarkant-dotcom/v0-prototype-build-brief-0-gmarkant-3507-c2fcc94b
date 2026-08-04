@@ -83,7 +83,7 @@ function libraryUrl(row: LibraryRow): string {
 
 function msaStatusBadge(status: string) {
   const s = status.toLowerCase()
-  const base = "font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border"
+  const base = "font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border"
   if (s === "signed") return cn(base, "border-success/50 bg-success/15 text-success")
   if (s === "sent") return cn(base, "border-amber-500/50 bg-amber-500/15 text-amber-200")
   if (s === "expired") return cn(base, "border-red-500/50 bg-red-500/15 text-red-200")
@@ -599,7 +599,7 @@ export function Stage03OnboardingWorkflow() {
                       />
                       <div>
                         <div className="font-display font-semibold text-foreground">{d.label}</div>
-                        <div className="font-mono text-[10px] text-foreground-muted uppercase">{d.kind}</div>
+                        <div className="font-mono text-2xs text-foreground-muted uppercase">{d.kind}</div>
                         {!u && <div className="text-xs text-amber-400 mt-1">No file or URL on record</div>}
                       </div>
                     </label>
@@ -636,7 +636,7 @@ export function Stage03OnboardingWorkflow() {
                       />
                       <div>
                         <div className="font-display font-semibold text-foreground">{d.label}</div>
-                        <div className="font-mono text-[10px] text-foreground-muted">{d.kind}</div>
+                        <div className="font-mono text-2xs text-foreground-muted">{d.kind}</div>
                       </div>
                     </label>
                   )
@@ -855,7 +855,7 @@ export function Stage03OnboardingWorkflow() {
                       (selectedPartnerRow.partner?.email || "").trim() ||
                       "Partner"}
                   </div>
-                  <div className="font-mono text-[10px] text-foreground-muted mt-1">Partnership</div>
+                  <div className="font-mono text-2xs text-foreground-muted mt-1">Partnership</div>
                 </div>
                 <span className={msaStatusBadge(selectedPartnerAgreement?.status || "pending")}>
                   {selectedPartnerAgreement?.status || "pending"}
@@ -878,7 +878,7 @@ export function Stage03OnboardingWorkflow() {
               ) : (
                 <>
                   <div className="space-y-2">
-                    <label className="font-mono text-[9px] uppercase text-foreground-muted">Document URL</label>
+                    <label className="font-mono text-2xs uppercase text-foreground-muted">Document URL</label>
                     <div className="flex gap-2">
                       <input
                         className="flex-1 rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
@@ -910,7 +910,7 @@ export function Stage03OnboardingWorkflow() {
                   </div>
 
                   {selectedPartnerAgreement.signed_at ? (
-                    <p className="font-mono text-[10px] text-foreground-muted">
+                    <p className="font-mono text-2xs text-foreground-muted">
                       Signed {new Date(selectedPartnerAgreement.signed_at).toLocaleDateString()}
                     </p>
                   ) : null}

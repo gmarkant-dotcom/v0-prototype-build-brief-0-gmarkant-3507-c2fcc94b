@@ -227,7 +227,7 @@ function StatusTab({ project }: { project: PartnerProject }) {
 
   return (
     <div className="p-6 space-y-6">
-      <p className="font-mono text-[10px] text-vendor-muted italic">
+      <p className="font-mono text-2xs text-vendor-muted italic">
         Your updates are visible to the lead agency and reflected in their dashboard.
       </p>
 
@@ -236,14 +236,14 @@ function StatusTab({ project }: { project: PartnerProject }) {
         <h3 className="font-display font-bold text-base text-vendor-foreground">Submit status update</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Workflow Status</label>
+            <label className="font-mono text-2xs uppercase tracking-wider text-vendor-muted">Workflow Status</label>
             <select value={workflowStatus} onChange={e => setWorkflowStatus(e.target.value)}
               className="w-full h-9 px-3 rounded-lg border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground">
               {WORKFLOW_STATUSES.map(s => <option key={s} value={s}>{WORKFLOW_LABEL[s]}</option>)}
             </select>
           </div>
           <div className="space-y-1">
-            <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Budget Status</label>
+            <label className="font-mono text-2xs uppercase tracking-wider text-vendor-muted">Budget Status</label>
             <select value={budgetStatus} onChange={e => setBudgetStatus(e.target.value)}
               className="w-full h-9 px-3 rounded-lg border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground">
               {BUDGET_STATUSES.map(s => <option key={s} value={s}>{BUDGET_LABEL[s]}</option>)}
@@ -252,14 +252,14 @@ function StatusTab({ project }: { project: PartnerProject }) {
         </div>
         <div className="space-y-1">
           <div className="flex justify-between">
-            <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Completion</label>
+            <label className="font-mono text-2xs uppercase tracking-wider text-vendor-muted">Completion</label>
             <span className="font-mono text-xs text-vendor-foreground">{completionPct}%</span>
           </div>
           <input type="range" min={0} max={100} value={completionPct} onChange={e => setCompletionPct(Number(e.target.value))}
             className="w-full accent-vendor-foreground" />
         </div>
         <div className="space-y-1">
-          <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Notes</label>
+          <label className="font-mono text-2xs uppercase tracking-wider text-vendor-muted">Notes</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
             placeholder="Progress update, blockers, next steps…"
             className="w-full rounded-lg border border-vendor-border bg-vendor-surface px-3 py-2 text-sm text-vendor-foreground placeholder:text-vendor-muted/70 resize-none" />
@@ -285,13 +285,13 @@ function StatusTab({ project }: { project: PartnerProject }) {
               return (
                 <div key={u.id} className="rounded-lg border border-vendor-border bg-vendor-background p-3 space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {b && <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider", b.bg, b.text, b.border)}>{WORKFLOW_LABEL[u.status]||u.status}</span>}
-                    <span className="font-mono text-[9px] text-vendor-muted">{BUDGET_LABEL[u.budget_status]||u.budget_status}</span>
-                    <span className="font-mono text-[9px] text-vendor-muted">{u.completion_pct}% complete</span>
-                    {u.is_resolved && <span className="flex items-center gap-1 font-mono text-[9px] text-success"><CheckCircle className="w-2.5 h-2.5" />Resolved</span>}
+                    {b && <span className={cn("font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider", b.bg, b.text, b.border)}>{WORKFLOW_LABEL[u.status]||u.status}</span>}
+                    <span className="font-mono text-2xs text-vendor-muted">{BUDGET_LABEL[u.budget_status]||u.budget_status}</span>
+                    <span className="font-mono text-2xs text-vendor-muted">{u.completion_pct}% complete</span>
+                    {u.is_resolved && <span className="flex items-center gap-1 font-mono text-2xs text-success"><CheckCircle className="w-2.5 h-2.5" />Resolved</span>}
                   </div>
                   {u.notes && <p className="text-xs text-vendor-foreground">{u.notes}</p>}
-                  <p className="font-mono text-[10px] text-vendor-muted/70">{fmtDate(u.created_at)}</p>
+                  <p className="font-mono text-2xs text-vendor-muted/70">{fmtDate(u.created_at)}</p>
                 </div>
               )
             })}
@@ -391,23 +391,23 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
         <div className="flex items-center justify-between">
           <h3 className="font-display font-bold text-base text-vendor-foreground">Agreed Terms &amp; Rate</h3>
           {!requestForm && !pendingRequest && (
-            <button type="button" onClick={() => setRequestForm(true)} className="font-mono text-[10px] text-vendor-foreground underline hover:no-underline">
+            <button type="button" onClick={() => setRequestForm(true)} className="font-mono text-2xs text-vendor-foreground underline hover:no-underline">
               Request update
             </button>
           )}
         </div>
         {rateInfo ? (
           <div className="rounded-lg border border-vendor-border bg-vendor-background p-4 grid grid-cols-2 gap-3 text-sm">
-            {rateInfo.hourly_rate && <div><span className="font-mono text-[10px] text-vendor-muted block">Hourly Rate</span><span className="text-vendor-foreground">{rateInfo.hourly_rate}</span></div>}
-            {rateInfo.project_minimum && <div><span className="font-mono text-[10px] text-vendor-muted block">Project Minimum</span><span className="text-vendor-foreground">{rateInfo.project_minimum}</span></div>}
-            <div><span className="font-mono text-[10px] text-vendor-muted block">Payment Terms</span><span className="text-vendor-foreground">{termsLabel[rateInfo.payment_terms]||rateInfo.payment_terms}{rateInfo.payment_terms==="custom"&&rateInfo.payment_terms_custom&&`: ${rateInfo.payment_terms_custom}`}</span></div>
-            {rateInfo.notes && <div className="col-span-2"><span className="font-mono text-[10px] text-vendor-muted block">Notes</span><span className="text-vendor-foreground">{rateInfo.notes}</span></div>}
+            {rateInfo.hourly_rate && <div><span className="font-mono text-2xs text-vendor-muted block">Hourly Rate</span><span className="text-vendor-foreground">{rateInfo.hourly_rate}</span></div>}
+            {rateInfo.project_minimum && <div><span className="font-mono text-2xs text-vendor-muted block">Project Minimum</span><span className="text-vendor-foreground">{rateInfo.project_minimum}</span></div>}
+            <div><span className="font-mono text-2xs text-vendor-muted block">Payment Terms</span><span className="text-vendor-foreground">{termsLabel[rateInfo.payment_terms]||rateInfo.payment_terms}{rateInfo.payment_terms==="custom"&&rateInfo.payment_terms_custom&&`: ${rateInfo.payment_terms_custom}`}</span></div>
+            {rateInfo.notes && <div className="col-span-2"><span className="font-mono text-2xs text-vendor-muted block">Notes</span><span className="text-vendor-foreground">{rateInfo.notes}</span></div>}
           </div>
         ) : <p className="text-sm text-vendor-muted">No rate info on file yet. <a href="/partner/settings/user" className="text-vendor-foreground underline">Add via Payment Setup</a>.</p>}
 
         {pendingRequest && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-            <p className="font-mono text-[10px] text-amber-700 uppercase tracking-wider mb-1">Pending update request</p>
+            <p className="font-mono text-2xs text-amber-700 uppercase tracking-wider mb-1">Pending update request</p>
             {pendingRequest.proposed_rate && <p className="text-sm text-amber-900">Rate: {pendingRequest.proposed_rate}</p>}
             {pendingRequest.proposed_terms && <p className="text-sm text-amber-900">Terms: {pendingRequest.proposed_terms}</p>}
             {pendingRequest.notes && <p className="text-sm text-amber-700 italic">{pendingRequest.notes}</p>}
@@ -416,7 +416,7 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
 
         {requestForm && (
           <div className="rounded-lg border border-vendor-border p-4 space-y-3 bg-vendor-surface">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Propose updated rate/terms</p>
+            <p className="font-mono text-2xs uppercase tracking-wider text-vendor-muted">Propose updated rate/terms</p>
             <Input placeholder="Proposed rate (e.g. $150/hr)" value={reqRate} onChange={e=>setReqRate(e.target.value)} className="bg-vendor-surface border-vendor-border text-vendor-foreground" />
             <Input placeholder="Proposed payment terms (e.g. Net 30)" value={reqTerms} onChange={e=>setReqTerms(e.target.value)} className="bg-vendor-surface border-vendor-border text-vendor-foreground" />
             <textarea placeholder="Reason / notes" value={reqNotes} onChange={e=>setReqNotes(e.target.value)} rows={2}
@@ -446,15 +446,15 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="font-display font-bold text-sm text-vendor-foreground">{m.title}</div>
-                      <div className="flex items-center gap-2 mt-0.5 font-mono text-[10px] text-vendor-muted flex-wrap">
+                      <div className="flex items-center gap-2 mt-0.5 font-mono text-2xs text-vendor-muted flex-wrap">
                         <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />{m.currency} {m.amount.toLocaleString("en-US")}</span>
                         <span className={cn("flex items-center gap-1", overdue && "text-destructive")}><Clock className="w-3 h-3" />Due {fmtDate(m.due_date)}</span>
-                        <span className={cn("px-1.5 py-0.5 rounded font-mono text-[9px] uppercase", isPaid ? "bg-success/15 text-success" : overdue ? "bg-destructive/15 text-destructive" : "bg-gray-100 text-vendor-muted-strong")}>
+                        <span className={cn("px-1.5 py-0.5 rounded font-mono text-2xs uppercase", isPaid ? "bg-success/15 text-success" : overdue ? "bg-destructive/15 text-destructive" : "bg-gray-100 text-vendor-muted-strong")}>
                           {overdue ? "Overdue" : MILESTONE_LABEL[m.status]||m.status}
                         </span>
                       </div>
                       {m.notes && <p className="text-xs text-vendor-muted mt-1 italic">{m.notes}</p>}
-                      {m.paid_at && <p className="font-mono text-[10px] text-success">Received {fmtDate(m.paid_at)}</p>}
+                      {m.paid_at && <p className="font-mono text-2xs text-success">Received {fmtDate(m.paid_at)}</p>}
                     </div>
                     {!isPaid && m.status === "payment_sent" && (
                       <Button size="sm" variant="outline"
@@ -495,7 +495,7 @@ function SlideOverPanel({ project, onClose }: { project: PartnerProject; onClose
           <div>
             <h2 className="font-display font-bold text-xl text-vendor-foreground">{project.agency_name}</h2>
             <p className="text-sm text-vendor-muted-strong mt-0.5">{project.scope_item_name || project.project_name}</p>
-            {project.client_name && <p className="font-mono text-[10px] text-vendor-muted/70 mt-0.5">Client: {project.client_name}</p>}
+            {project.client_name && <p className="font-mono text-2xs text-vendor-muted/70 mt-0.5">Client: {project.client_name}</p>}
           </div>
           <button type="button" onClick={onClose} className="text-vendor-muted/70 hover:text-vendor-foreground mt-1"><X className="w-5 h-5" /></button>
         </div>
@@ -504,7 +504,7 @@ function SlideOverPanel({ project, onClose }: { project: PartnerProject; onClose
         <div className="flex border-b border-vendor-border shrink-0">
           {tabs.map(t => (
             <button key={t.key} type="button" onClick={() => setTab(t.key)}
-              className={cn("px-5 py-3 font-mono text-[11px] uppercase tracking-wider transition-colors border-b-2 -mb-px",
+              className={cn("px-5 py-3 font-mono text-2xs uppercase tracking-wider transition-colors border-b-2 -mb-px",
                 tab===t.key ? "border-vendor-foreground text-vendor-foreground" : "border-transparent text-vendor-muted hover:text-vendor-foreground")}>
               {t.label}
             </button>
@@ -534,13 +534,13 @@ function ProjectCard({ project, onClick }: { project: PartnerProject; onClick: (
         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
           <span className="font-display font-bold text-base text-vendor-foreground truncate">{project.scope_item_name || project.project_name}</span>
           {project.status && (
-            <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+            <span className={cn("font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
               project.status==="active" ? "bg-success/15 text-success border-success/30" : "bg-gray-100 text-vendor-muted-strong border-vendor-border")}>
               {project.status.replace(/_/g," ")}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 font-mono text-[10px] text-vendor-muted flex-wrap">
+        <div className="flex items-center gap-3 font-mono text-2xs text-vendor-muted flex-wrap">
           {project.scope_item_name && project.project_name !== project.scope_item_name && <span>{project.project_name}</span>}
           {dateRange !== "-" && <span>{dateRange}</span>}
           {budget > 0 && <span className="text-vendor-foreground">{formatBudgetK(budget)}</span>}
@@ -569,7 +569,7 @@ function GroupSection({ label, projects, defaultOpen, onProjectClick }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-display font-bold text-xl text-vendor-foreground">{label}</div>
-          <div className="flex items-center gap-3 mt-0.5 font-mono text-[11px] text-vendor-muted">
+          <div className="flex items-center gap-3 mt-0.5 font-mono text-2xs text-vendor-muted">
             <span>{projects.length} engagement{projects.length!==1?"s":""}</span>
             {totalBudget>0 && <span>{formatBudgetK(totalBudget)} total</span>}
           </div>
@@ -601,7 +601,7 @@ function PerformanceScoresSection({ reviews, projectNameById }: {
           <Award className="w-5 h-5 text-vendor-foreground" />
           Performance Scores
         </h2>
-        <p className="font-mono text-[10px] text-vendor-muted mt-0.5">
+        <p className="font-mono text-2xs text-vendor-muted mt-0.5">
           Delivery reviews completed by your lead agencies. Read-only.
         </p>
       </div>
@@ -627,17 +627,17 @@ function PerformanceScoresSection({ reviews, projectNameById }: {
                   </span>
                 )}
                 {onTime && (
-                  <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider", onTime.className)}>
+                  <span className={cn("font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider", onTime.className)}>
                     {onTime.label}
                   </span>
                 )}
                 {onBudget && (
-                  <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider", onBudget.className)}>
+                  <span className={cn("font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider", onBudget.className)}>
                     {onBudget.label}
                   </span>
                 )}
                 {review.overall_satisfaction != null && (
-                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-vendor-border bg-vendor-background text-vendor-muted-strong uppercase tracking-wider">
+                  <span className="font-mono text-2xs px-2 py-0.5 rounded-full border border-vendor-border bg-vendor-background text-vendor-muted-strong uppercase tracking-wider">
                     Satisfaction {review.overall_satisfaction}/10
                   </span>
                 )}
@@ -747,11 +747,11 @@ export default function PartnerProjectsPage() {
               className="pl-10 bg-vendor-surface border-vendor-border text-vendor-foreground placeholder:text-vendor-muted/70" />
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="font-mono text-[10px] text-vendor-muted/70 uppercase tracking-wider">Group by</span>
+            <span className="font-mono text-2xs text-vendor-muted/70 uppercase tracking-wider">Group by</span>
             <div className="flex rounded-lg overflow-hidden border border-vendor-border">
               {(["agency","client"] as GroupBy[]).map(g => (
                 <button key={g} type="button" onClick={() => setGroupBy(g)}
-                  className={cn("px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                  className={cn("px-3 py-1.5 font-mono text-2xs uppercase tracking-wider transition-colors",
                     groupBy===g ? "bg-vendor-foreground text-white" : "bg-vendor-surface text-vendor-muted hover:bg-vendor-background")}>
                   {g==="agency" ? "Agency" : "Client"}
                 </button>

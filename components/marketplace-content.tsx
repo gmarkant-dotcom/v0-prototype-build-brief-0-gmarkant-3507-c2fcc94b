@@ -249,7 +249,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                       {partner.company_name || partner.full_name || "Partner Agency"}
                     </div>
                     {(partner.vouch_count ?? 0) >= 3 && (
-                      <span className="flex items-center gap-0.5 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                      <span className="flex items-center gap-0.5 font-mono text-2xs px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
                         <Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" />
                       </span>
                     )}
@@ -356,7 +356,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                   <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-display font-bold text-xl text-foreground">{selectedPartner.company_name || selectedPartner.full_name || "Partner"}</h2>
                   {(selectedPartner.vouch_count ?? 0) >= 3 && (
-                    <span className="flex items-center gap-0.5 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                    <span className="flex items-center gap-0.5 font-mono text-2xs px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
                       <Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" />
                       Triple-Vouched
                     </span>
@@ -387,7 +387,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
 
             {Array.isArray(selectedPartner.capabilities) && (selectedPartner.capabilities as string[]).length > 0 && (
               <div>
-                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">Capabilities</div>
+                <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">Capabilities</div>
                 <div className="flex flex-wrap gap-1">
                   {(selectedPartner.capabilities as string[]).map((cap: string, i: number) => (
                     <span key={i} className="px-2 py-0.5 rounded-full bg-white/10 text-foreground-muted text-xs">{cap}</span>
@@ -398,7 +398,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
 
             {selectedPartnerDesignations.length > 0 && (
               <div>
-                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                   Business Designations
                 </div>
                 <ul className="space-y-2 text-sm">
@@ -408,12 +408,12 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                       <li key={key}>
                         <div className="text-foreground font-medium">{DESIGNATION_LABELS[key]}</div>
                         {(designation.certifying_body || designation.certification_number) && (
-                          <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                          <div className="font-mono text-2xs text-foreground-muted mt-0.5">
                             {[designation.certifying_body, designation.certification_number].filter(Boolean).join(" · ")}
                           </div>
                         )}
                         {designation.self_certified && (
-                          <div className="font-mono text-[10px] text-foreground-muted mt-0.5">Self-certified</div>
+                          <div className="font-mono text-2xs text-foreground-muted mt-0.5">Self-certified</div>
                         )}
                       </li>
                     )
@@ -424,7 +424,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
 
             {selectedPartnerHasInsurance && (
               <div>
-                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                   Insurance Coverage
                 </div>
                 <ul className="space-y-2 text-sm">
@@ -433,7 +433,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                     return (
                       <li key={key} className="flex items-center justify-between gap-3">
                         <span className="text-foreground font-medium">{INSURANCE_LABELS[key]}</span>
-                        <span className="font-mono text-[10px] text-foreground-muted">
+                        <span className="font-mono text-2xs text-foreground-muted">
                           {coverage.limit || "No limit on file"}
                         </span>
                       </li>
@@ -443,7 +443,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                     <span className="text-foreground font-medium">Certificate of Insurance</span>
                     <span
                       className={cn(
-                        "font-mono text-[10px] px-2 py-0.5 rounded-full",
+                        "font-mono text-2xs px-2 py-0.5 rounded-full",
                         selectedPartnerCriteria?.insurance.coi_on_file
                           ? "bg-success/15 text-success"
                           : "bg-white/10 text-foreground-muted"
@@ -458,31 +458,31 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
 
             {selectedPartnerHasFacts && selectedPartnerFacts && (
               <div>
-                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                   Company Facts
                 </div>
                 <dl className="space-y-2 text-sm">
                   {selectedPartnerFacts.years_in_business != null && (
                     <div>
-                      <dt className="font-mono text-[10px] text-foreground-muted uppercase">Years in Business</dt>
+                      <dt className="font-mono text-2xs text-foreground-muted uppercase">Years in Business</dt>
                       <dd className="text-foreground">{selectedPartnerFacts.years_in_business}</dd>
                     </div>
                   )}
                   {selectedPartnerFacts.union_signatory.trim() && (
                     <div>
-                      <dt className="font-mono text-[10px] text-foreground-muted uppercase">Union Signatory</dt>
+                      <dt className="font-mono text-2xs text-foreground-muted uppercase">Union Signatory</dt>
                       <dd className="text-foreground">{selectedPartnerFacts.union_signatory}</dd>
                     </div>
                   )}
                   {selectedPartnerFacts.sustainability_approach.trim() && (
                     <div>
-                      <dt className="font-mono text-[10px] text-foreground-muted uppercase">Sustainability Approach</dt>
+                      <dt className="font-mono text-2xs text-foreground-muted uppercase">Sustainability Approach</dt>
                       <dd className="text-foreground whitespace-pre-wrap">{selectedPartnerFacts.sustainability_approach}</dd>
                     </div>
                   )}
                   {selectedPartnerFacts.workforce_diversity_summary.trim() && (
                     <div>
-                      <dt className="font-mono text-[10px] text-foreground-muted uppercase">Workforce Diversity Summary</dt>
+                      <dt className="font-mono text-2xs text-foreground-muted uppercase">Workforce Diversity Summary</dt>
                       <dd className="text-foreground whitespace-pre-wrap">{selectedPartnerFacts.workforce_diversity_summary}</dd>
                     </div>
                   )}
@@ -491,7 +491,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
             )}
 
             <div className="rounded-lg border border-border p-4">
-              <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">Contact</div>
+              <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">Contact</div>
               <div className="text-sm text-foreground font-medium">{selectedPartner.full_name || selectedPartner.company_name || "Not provided"}</div>
                   {selectedPartner.email ? (
                     <div className="text-sm text-foreground-muted mt-1">{selectedPartner.email}</div>

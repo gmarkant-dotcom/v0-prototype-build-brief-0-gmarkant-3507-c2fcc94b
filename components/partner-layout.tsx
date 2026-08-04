@@ -174,7 +174,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               {isDemo && (
                 <Link 
                   href="/agency" 
-                  className="font-mono text-[10px] text-white/85 hover:text-[#C8F53C] transition-colors"
+                  className="font-mono text-2xs text-white/85 hover:text-[#C8F53C] transition-colors"
                 >
                   Switch to Lead Agency View →
                 </Link>
@@ -186,7 +186,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                 >
                   <div className="text-right hidden sm:block">
                     <div className="font-display font-bold text-sm">{userName}</div>
-                    <div className="font-mono text-[10px] text-[#C8F53C]">Partner Account</div>
+                    <div className="font-mono text-2xs text-[#C8F53C]">Partner Account</div>
                   </div>
                   <div className="w-9 h-9 rounded-full bg-[#C8F53C]/20 flex items-center justify-center">
                     {avatarUrl && !avatarLoadError ? (
@@ -270,14 +270,14 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-2 rounded-lg font-mono text-[11px] whitespace-nowrap shrink-0 transition-colors",
+                    "flex items-center gap-1.5 px-2.5 py-2 rounded-lg font-mono text-2xs whitespace-nowrap shrink-0 transition-colors",
                     isActive
                       ? "bg-white/10 text-[#C8F53C]"
                       : "text-white/90 hover:text-white hover:bg-white/5"
                   )}
                 >
                   {item.number ? (
-                    <span className={cn("font-mono text-[11px] font-medium", isActive ? "text-[#C8F53C]" : "text-white/60")}>
+                    <span className={cn("font-mono text-2xs font-medium", isActive ? "text-[#C8F53C]" : "text-white/60")}>
                       {item.number}
                     </span>
                   ) : (
@@ -303,20 +303,20 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
       {/* Legal Footer */}
       <footer className="bg-vendor-surface border-t border-vendor-border py-6">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="font-mono text-[10px] text-vendor-muted/70">
+          <div className="font-mono text-2xs text-vendor-muted/70">
             &copy; {new Date().getFullYear()} LIGAMENT. All rights reserved.
           </div>
           <div className="flex items-center gap-4">
             <Link 
               href="/terms" 
-              className="font-mono text-[10px] text-vendor-muted hover:text-vendor-foreground transition-colors"
+              className="font-mono text-2xs text-vendor-muted hover:text-vendor-foreground transition-colors"
             >
               Terms of Service
             </Link>
             <span className="text-vendor-muted/50">|</span>
             <Link 
               href="/privacy" 
-              className="font-mono text-[10px] text-vendor-muted hover:text-vendor-foreground transition-colors"
+              className="font-mono text-2xs text-vendor-muted hover:text-vendor-foreground transition-colors"
             >
               Privacy Policy
             </Link>

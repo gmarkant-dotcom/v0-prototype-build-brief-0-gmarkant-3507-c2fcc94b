@@ -231,7 +231,7 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
           <ChevronDown
             className={cn("w-3.5 h-3.5 text-foreground-muted transition-transform", collapsed && "-rotate-90")}
           />
-          <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
+          <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
             Needs your attention ({rows.length})
           </h2>
         </button>
@@ -253,7 +253,7 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
                     <Icon className="w-4 h-4 text-amber-400 shrink-0" />
                     <span className="flex-1 text-sm text-foreground min-w-0 truncate">{row.text}</span>
                     {row.timeframe && (
-                      <span className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted shrink-0">
+                      <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted shrink-0">
                         {row.timeframe}
                       </span>
                     )}
@@ -363,7 +363,7 @@ function GettingStartedChecklist({ checklist }: { checklist: ChecklistData }) {
           <ChevronDown
             className={cn("w-3.5 h-3.5 text-foreground-muted transition-transform", collapsed && "-rotate-90")}
           />
-          <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
+          <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
             Getting started ({completedCount} of {steps.length})
           </h2>
         </button>
@@ -433,7 +433,7 @@ function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
                 <Icon className="w-4 h-4 text-accent" />
               </div>
               <div className="font-display font-bold text-2xl text-foreground">{stat.value}</div>
-              <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">{stat.label}</div>
+              <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">{stat.label}</div>
             </Link>
           )
         })}
@@ -466,7 +466,7 @@ function UsageCard() {
   return (
     <Link href="/agency/usage" className="glass rounded-xl p-4 flex flex-col justify-between hover:bg-white/10 transition-colors">
       <div className="flex items-center justify-between mb-3">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">
+        <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
           {isLoading || !usage ? "Plan" : `${usage.tier.charAt(0).toUpperCase()}${usage.tier.slice(1)} plan`}
         </span>
         <ChevronRight className="w-3.5 h-3.5 text-foreground-muted" />
@@ -478,7 +478,7 @@ function UsageCard() {
       ) : (
         <div className="space-y-3">
           <div>
-            <div className="flex items-center justify-between text-[11px] mb-1">
+            <div className="flex items-center justify-between text-2xs mb-1">
               <span className="text-foreground-muted">AI analyses</span>
               <span className="text-foreground-muted">
                 {usage.analyses.count} / {usage.analyses.limit ?? "∞"}
@@ -490,7 +490,7 @@ function UsageCard() {
             />
           </div>
           <div>
-            <div className="flex items-center justify-between text-[11px] mb-1">
+            <div className="flex items-center justify-between text-2xs mb-1">
               <span className="text-foreground-muted">Projects</span>
               <span className="text-foreground-muted">
                 {usage.projects.count} / {usage.projects.limit ?? "∞"}
@@ -520,7 +520,7 @@ function ActivityFeed({ items }: { items: DashboardData["activity"] }) {
           <ChevronDown
             className={cn("w-3.5 h-3.5 text-foreground-muted transition-transform", collapsed && "-rotate-90")}
           />
-          <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
+          <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
             Recent activity ({items.length})
           </h2>
         </button>
@@ -534,7 +534,7 @@ function ActivityFeed({ items }: { items: DashboardData["activity"] }) {
               {visible.map((item) => (
                 <Link key={item.id} href={item.href} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors">
                   <span className="flex-1 text-sm text-foreground min-w-0 truncate">{item.text}</span>
-                  <span className="font-mono text-[10px] text-foreground-muted shrink-0">{formatRelativeTime(item.timestamp)}</span>
+                  <span className="font-mono text-2xs text-foreground-muted shrink-0">{formatRelativeTime(item.timestamp)}</span>
                 </Link>
               ))}
               {hasMore && (
@@ -565,7 +565,7 @@ function RecentProjectsList({ projects }: { projects: DashboardData["projects"] 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <h2 className="font-mono text-[11px] uppercase tracking-wider text-foreground-muted">Recent projects</h2>
+        <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Recent projects</h2>
         {projects.length > RECENT_PROJECTS_PREVIEW_COUNT && (
           <button
             type="button"
@@ -596,7 +596,7 @@ function RecentProjectsList({ projects }: { projects: DashboardData["projects"] 
                     <span className="text-sm font-medium text-foreground truncate">{p.name}</span>
                     <span
                       className={cn(
-                        "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+                        "font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
                         stageStyle.bg,
                         stageStyle.color
                       )}
@@ -609,7 +609,7 @@ function RecentProjectsList({ projects }: { projects: DashboardData["projects"] 
                 {p.committedSpend > 0 && (
                   <span className="font-mono text-xs text-foreground-muted shrink-0">{formatUsdWhole(p.committedSpend)}</span>
                 )}
-                <span className="font-mono text-[10px] text-foreground-muted shrink-0 w-16 text-right">
+                <span className="font-mono text-2xs text-foreground-muted shrink-0 w-16 text-right">
                   {formatRelativeTime(p.lastActivityAt)}
                 </span>
                 <ChevronRight className="w-4 h-4 text-foreground-muted shrink-0" />
@@ -729,7 +729,7 @@ function DashboardContent() {
           >
             <Search className="w-4 h-4 shrink-0" />
             <span className="text-sm flex-1 text-left">Search projects...</span>
-            <kbd className="hidden sm:inline font-mono text-[10px] px-1.5 py-0.5 rounded border border-border/70 text-foreground-muted/70">
+            <kbd className="hidden sm:inline font-mono text-2xs px-1.5 py-0.5 rounded border border-border/70 text-foreground-muted/70">
               ⌘K
             </kbd>
           </button>

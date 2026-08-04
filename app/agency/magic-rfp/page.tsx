@@ -669,7 +669,7 @@ function MagicRfpContent() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                     Project name
                   </label>
                   <Input
@@ -680,7 +680,7 @@ function MagicRfpContent() {
                   />
                 </div>
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                     Client name
                   </label>
                   <Input
@@ -691,11 +691,11 @@ function MagicRfpContent() {
                   />
                 </div>
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                     Scope description
                   </label>
                   {briefImportedMessage && (
-                    <p className="font-mono text-[10px] text-teal-300 mb-2">
+                    <p className="font-mono text-2xs text-teal-300 mb-2">
                       Brief imported - review and edit below
                     </p>
                   )}
@@ -712,7 +712,7 @@ function MagicRfpContent() {
                 </div>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                    <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                       Budget range
                     </label>
                     <Input
@@ -723,7 +723,7 @@ function MagicRfpContent() {
                     />
                   </div>
                   <div>
-                    <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                    <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                       Timeline <span className="text-foreground-muted/60 normal-case">(optional)</span>
                     </label>
                     <Input
@@ -743,7 +743,7 @@ function MagicRfpContent() {
                   >
                     <div>
                       <div className="font-display font-bold text-sm text-foreground">Advanced Options</div>
-                      <p className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                      <p className="font-mono text-2xs text-foreground-muted mt-0.5">
                         Structure your brief and format the output vendors receive.
                       </p>
                     </div>
@@ -758,7 +758,7 @@ function MagicRfpContent() {
                       {/* Subsection 1: Client Brief */}
                       <div>
                         <div className="font-display font-bold text-sm text-foreground">Client Brief</div>
-                        <p className="font-mono text-[10px] text-foreground-muted mt-0.5 mb-3">
+                        <p className="font-mono text-2xs text-foreground-muted mt-0.5 mb-3">
                           Help structure your brief
                         </p>
 
@@ -805,7 +805,7 @@ function MagicRfpContent() {
                       {/* Subsection 2: Output Template */}
                       <div>
                         <div className="font-display font-bold text-sm text-foreground">Output Template</div>
-                        <p className="font-mono text-[10px] text-foreground-muted mt-0.5 mb-3">
+                        <p className="font-mono text-2xs text-foreground-muted mt-0.5 mb-3">
                           Format the RFP vendors receive
                         </p>
                         <RfpOutputTemplate
@@ -842,7 +842,7 @@ function MagicRfpContent() {
                   >
                     <div>
                       <div className="font-display font-bold text-sm text-foreground">Additional business criteria</div>
-                      <p className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                      <p className="font-mono text-2xs text-foreground-muted mt-0.5">
                         Require diversity designations or insurance coverage from this vendor.
                       </p>
                     </div>
@@ -912,7 +912,7 @@ function MagicRfpContent() {
                       </label>
 
                       <div>
-                        <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                        <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
                           Additional Notes
                         </label>
                         <Textarea
@@ -935,7 +935,7 @@ function MagicRfpContent() {
                     />
                     <span className="font-mono text-xs text-foreground">Require term disclosures with bids</span>
                   </label>
-                  <p className="font-mono text-[10px] text-foreground-muted">
+                  <p className="font-mono text-2xs text-foreground-muted">
                     Vendors state payment, cancellation, IP, and rate-validity terms up front.
                   </p>
                 </div>
@@ -982,7 +982,7 @@ function MagicRfpContent() {
                         className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                       />
                       {(r.checking || r.checkResult) && (
-                        <p className="font-mono text-[10px] mt-1.5">
+                        <p className="font-mono text-2xs mt-1.5">
                           {r.checking ? (
                             <span className="text-foreground-muted">Checking…</span>
                           ) : r.checkResult?.has_pending_invite ? (
@@ -1098,7 +1098,7 @@ function MagicRfpContent() {
                       <div className="font-display font-bold text-sm text-foreground truncate">
                         {r.name ? `${r.name} · ${r.email}` : r.email}
                       </div>
-                      <div className={cn("font-mono text-[10px]", r.success ? "text-teal-300" : "text-red-400")}>
+                      <div className={cn("font-mono text-2xs", r.success ? "text-teal-300" : "text-red-400")}>
                         {r.success ? "Invitation sent - expires in 72 hours" : r.error || "Failed to send invitation"}
                       </div>
                     </div>

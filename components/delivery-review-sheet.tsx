@@ -75,7 +75,7 @@ function PillGroup<T extends string>({
           type="button"
           onClick={() => onChange(o.v)}
           className={cn(
-            "px-3 py-1.5 rounded-lg font-mono text-[10px] uppercase tracking-wider border transition-colors",
+            "px-3 py-1.5 rounded-lg font-mono text-2xs uppercase tracking-wider border transition-colors",
             value === o.v
               ? "bg-accent text-accent-foreground border-accent"
               : "bg-white/5 text-foreground-muted border-border hover:bg-white/10"
@@ -278,7 +278,7 @@ export function DeliveryReviewSheet({
               <h3 className="font-display font-bold text-sm text-foreground">Delivery Summary</h3>
 
               <div className="space-y-2">
-                <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">On time</label>
+                <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">On time</label>
                 <PillGroup value={onTime} options={ON_TIME_OPTIONS} onChange={setOnTime} />
                 <Textarea
                   value={onTimeNotes}
@@ -289,7 +289,7 @@ export function DeliveryReviewSheet({
               </div>
 
               <div className="space-y-2">
-                <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">On budget</label>
+                <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">On budget</label>
                 <PillGroup value={onBudget} options={ON_BUDGET_OPTIONS} onChange={setOnBudget} />
                 {(onBudget === "over" || onBudget === "under") && (
                   <Input
@@ -308,7 +308,7 @@ export function DeliveryReviewSheet({
               </div>
 
               <div className="space-y-2">
-                <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">
+                <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
                   Would work with again
                 </label>
                 <PillGroup value={workAgain} options={WORK_AGAIN_OPTIONS} onChange={setWorkAgain} />
@@ -316,7 +316,7 @@ export function DeliveryReviewSheet({
 
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">
+                  <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
                     Overall satisfaction
                   </label>
                   <span className="font-mono text-xs text-foreground">{satisfaction}/10</span>
@@ -332,7 +332,7 @@ export function DeliveryReviewSheet({
               </div>
 
               <div className="space-y-2">
-                <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">
+                <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
                   Client feedback
                 </label>
                 <Textarea
@@ -405,12 +405,12 @@ export function DeliveryReviewSheet({
                     {Math.round(liveComposite)}
                   </div>
                 ) : (
-                  <div className="w-14 h-14 rounded-full border-2 border-border flex items-center justify-center font-mono text-[10px] text-foreground-muted">
+                  <div className="w-14 h-14 rounded-full border-2 border-border flex items-center justify-center font-mono text-2xs text-foreground-muted">
                     --
                   </div>
                 )}
                 <div>
-                  <div className="font-mono text-[10px] uppercase text-foreground-muted">Composite Score</div>
+                  <div className="font-mono text-2xs uppercase text-foreground-muted">Composite Score</div>
                   <div className="text-xs text-foreground-muted">0-100 scale</div>
                 </div>
               </div>
@@ -427,16 +427,16 @@ export function DeliveryReviewSheet({
                         <table className="w-full text-sm border-collapse">
                           <thead className="bg-white/5 border-b border-border/40">
                             <tr>
-                              <th className="text-left font-mono text-[10px] uppercase tracking-wider text-foreground-muted px-3 py-2">
+                              <th className="text-left font-mono text-2xs uppercase tracking-wider text-foreground-muted px-3 py-2">
                                 Criterion
                               </th>
-                              <th className="text-left font-mono text-[10px] uppercase tracking-wider text-foreground-muted px-3 py-2">
+                              <th className="text-left font-mono text-2xs uppercase tracking-wider text-foreground-muted px-3 py-2">
                                 Bid Score
                               </th>
-                              <th className="text-left font-mono text-[10px] uppercase tracking-wider text-foreground-muted px-3 py-2">
+                              <th className="text-left font-mono text-2xs uppercase tracking-wider text-foreground-muted px-3 py-2">
                                 Delivery Score
                               </th>
-                              <th className="text-left font-mono text-[10px] uppercase tracking-wider text-foreground-muted px-3 py-2">
+                              <th className="text-left font-mono text-2xs uppercase tracking-wider text-foreground-muted px-3 py-2">
                                 Delta
                               </th>
                             </tr>

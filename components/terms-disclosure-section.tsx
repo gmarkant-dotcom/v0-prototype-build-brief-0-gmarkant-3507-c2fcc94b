@@ -77,8 +77,8 @@ function inputClass(theme: Theme, hasError: boolean) {
 
 function labelClass(theme: Theme) {
   return theme === "light"
-    ? "font-mono text-[10px] text-gray-500 uppercase tracking-wider"
-    : "font-mono text-[10px] text-foreground-muted uppercase tracking-wider"
+    ? "font-mono text-2xs text-gray-500 uppercase tracking-wider"
+    : "font-mono text-2xs text-foreground-muted uppercase tracking-wider"
 }
 
 function rowWrapperClass(theme: Theme) {
@@ -88,7 +88,7 @@ function rowWrapperClass(theme: Theme) {
 }
 
 function errorTextClass(theme: Theme) {
-  return theme === "light" ? "text-[11px] text-red-700" : "text-[11px] text-red-300"
+  return theme === "light" ? "text-2xs text-red-700" : "text-2xs text-red-300"
 }
 
 function StateControl({
@@ -268,7 +268,7 @@ export function TermsDisclosureSection({
             type="button"
             onClick={() => setExpanded(false)}
             disabled={disabled}
-            className={cn("font-mono text-[10px]", theme === "light" ? "text-gray-500 hover:text-gray-700" : "text-foreground-muted hover:text-foreground")}
+            className={cn("font-mono text-2xs", theme === "light" ? "text-gray-500 hover:text-gray-700" : "text-foreground-muted hover:text-foreground")}
           >
             Collapse
           </button>
@@ -426,7 +426,7 @@ export function TermsDisclosureSection({
                 <HelpTerm
                   term={s}
                   theme={theme}
-                  className={theme === "light" ? "text-[11px] text-gray-400" : "text-[11px] text-foreground-muted/60"}
+                  className={theme === "light" ? "text-2xs text-gray-400" : "text-2xs text-foreground-muted/60"}
                 >
                   ?
                 </HelpTerm>

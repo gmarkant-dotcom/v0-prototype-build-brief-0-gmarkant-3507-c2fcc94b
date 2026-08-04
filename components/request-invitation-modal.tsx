@@ -129,7 +129,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                   Lead Agency Name
                 </label>
                 <Input
@@ -142,7 +142,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                   Agency Contact Email
                 </label>
                 <Input
@@ -156,7 +156,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                   Message (Optional)
                 </label>
                 <Textarea

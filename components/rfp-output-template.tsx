@@ -169,7 +169,7 @@ export function RfpOutputTemplate({
                 <FileText className="w-5 h-5 text-blue-400" />
                 <div className="flex-1">
                   <div className="font-display font-bold text-sm text-foreground">{template.name}</div>
-                  <div className="font-mono text-[10px] text-foreground-muted">From Documents Library</div>
+                  <div className="font-mono text-2xs text-foreground-muted">From Documents Library</div>
                 </div>
                 {selectedLibraryTemplateId === template.id && <Check className="w-4 h-4 text-accent" />}
               </button>
@@ -181,7 +181,7 @@ export function RfpOutputTemplate({
                   <FileText className="w-5 h-5 text-success" />
                   <div className="flex-1 min-w-0">
                     <div className="font-display font-bold text-sm text-foreground truncate">{uploadedTemplate.name}</div>
-                    <div className="font-mono text-[10px] text-foreground-muted">
+                    <div className="font-mono text-2xs text-foreground-muted">
                       {generatedTemplateText
                         ? `Format loaded - ${generatedTemplateText.length.toLocaleString()} characters`
                         : "No readable format text"}
@@ -238,7 +238,7 @@ export function RfpOutputTemplate({
         ) : (
           <div className="space-y-4">
             <div className="space-y-2">
-              <span className="font-mono text-[10px] text-foreground-muted uppercase block">Template style</span>
+              <span className="font-mono text-2xs text-foreground-muted uppercase block">Template style</span>
               <div className="flex flex-wrap gap-2">
                 {TEMPLATE_STYLE_OPTIONS.map((opt) => (
                   <button
@@ -246,7 +246,7 @@ export function RfpOutputTemplate({
                     type="button"
                     onClick={() => onTemplateStyleChange(opt.id)}
                     className={cn(
-                      "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
+                      "font-mono text-2xs px-2.5 py-1.5 rounded-lg border transition-colors",
                       templateStyle === opt.id
                         ? "border-accent bg-accent/10 text-foreground"
                         : "border-border text-foreground-muted hover:border-white/30"
@@ -259,12 +259,12 @@ export function RfpOutputTemplate({
             </div>
 
             <div className="space-y-2">
-              <span className="font-mono text-[10px] text-foreground-muted uppercase block">Sensitivity (optional)</span>
+              <span className="font-mono text-2xs text-foreground-muted uppercase block">Sensitivity (optional)</span>
               <div className="space-y-2">
                 {sensitivityRows.map((row) => (
                   <label
                     key={row.key}
-                    className="flex items-start gap-2 cursor-pointer font-mono text-[11px] text-foreground/90 leading-snug"
+                    className="flex items-start gap-2 cursor-pointer font-mono text-2xs text-foreground/90 leading-snug"
                   >
                     <Checkbox
                       checked={sensitivity[row.key]}
@@ -278,13 +278,13 @@ export function RfpOutputTemplate({
             </div>
 
             <div className="space-y-2">
-              <span className="font-mono text-[10px] text-foreground-muted uppercase block">Output format</span>
+              <span className="font-mono text-2xs text-foreground-muted uppercase block">Output format</span>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => onOutputFormatChange("section")}
                   className={cn(
-                    "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
+                    "font-mono text-2xs px-2.5 py-1.5 rounded-lg border transition-colors",
                     outputFormat === "section"
                       ? "border-accent bg-accent/10 text-foreground"
                       : "border-border text-foreground-muted hover:border-white/30"
@@ -296,7 +296,7 @@ export function RfpOutputTemplate({
                   type="button"
                   onClick={() => onOutputFormatChange("modular")}
                   className={cn(
-                    "font-mono text-[11px] px-2.5 py-1.5 rounded-lg border transition-colors",
+                    "font-mono text-2xs px-2.5 py-1.5 rounded-lg border transition-colors",
                     outputFormat === "modular"
                       ? "border-accent bg-accent/10 text-foreground"
                       : "border-border text-foreground-muted hover:border-white/30"
@@ -328,7 +328,7 @@ export function RfpOutputTemplate({
             {isGenerating && showSlowMessage && (
               <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2 flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 text-accent animate-spin shrink-0" />
-                <p className="font-mono text-[10px] text-foreground-muted">
+                <p className="font-mono text-2xs text-foreground-muted">
                   Still generating - this may take a moment…
                 </p>
               </div>
@@ -346,7 +346,7 @@ export function RfpOutputTemplate({
                 )}
               >
                 {isTemplateReady && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
-                <p className="font-mono text-[10px] text-foreground-muted">
+                <p className="font-mono text-2xs text-foreground-muted">
                   {isTemplateReady
                     ? `Template ready - ${generatedTemplateText.length.toLocaleString()} characters loaded`
                     : `AI format loading - ${generatedTemplateText.length.toLocaleString()} characters so far`}

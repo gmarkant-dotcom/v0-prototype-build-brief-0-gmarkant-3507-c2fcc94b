@@ -366,7 +366,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           <Link href="/">
             <LigamentLogo size="md" variant="primary" />
           </Link>
-          <div className="mt-2 font-mono text-[10px] text-accent bg-accent/10 px-2 py-1 rounded inline-block">
+          <div className="mt-2 font-mono text-2xs text-accent bg-accent/10 px-2 py-1 rounded inline-block">
             Lead Agency
           </div>
           <RoleToggle />
@@ -394,7 +394,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
 
           {/* Overview Section */}
           <div className="mb-4">
-            <div className="font-mono text-[10px] text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
+            <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
               Overview
             </div>
             <div className="space-y-1">
@@ -437,7 +437,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           
           {/* Project Selector — hidden; inline selector used on broadcast page */}
           <div className="mb-4 px-3 hidden">
-            <div className="font-mono text-[10px] text-foreground-muted/60 uppercase tracking-wider mb-2">
+            <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider mb-2">
               Current Project View
             </div>
             <div className="relative">
@@ -460,7 +460,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                       <div className="font-display font-bold text-sm text-foreground truncate">
                         {formatProjectName(selectedProject)}
                       </div>
-                      <div className="font-mono text-[10px] text-foreground-muted truncate">
+                      <div className="font-mono text-2xs text-foreground-muted truncate">
                         {selectedProject.client}
                       </div>
                     </>
@@ -506,7 +506,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                           <div className="font-display font-bold text-sm text-foreground truncate">
                             {formatProjectName(project)}
                           </div>
-                          <div className="font-mono text-[10px] text-foreground-muted truncate">
+                          <div className="font-mono text-2xs text-foreground-muted truncate">
                             {project.client}
                           </div>
                         </div>
@@ -519,7 +519,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                   {onHoldProjects.length > 0 && (
                     <>
                       <div className="px-4 py-1.5 bg-white/5 border-t border-border/50">
-                        <span className="font-mono text-[9px] text-foreground-muted uppercase tracking-wider">On Hold</span>
+                        <span className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">On Hold</span>
                       </div>
                       {onHoldProjects.map((project) => (
                         <button
@@ -535,7 +535,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                             <div className="font-display font-bold text-sm text-foreground truncate">
                               {formatProjectName(project)}
                             </div>
-                            <div className="font-mono text-[10px] text-foreground-muted truncate">
+                            <div className="font-mono text-2xs text-foreground-muted truncate">
                               {project.client}
                             </div>
                           </div>
@@ -553,7 +553,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             {/* Warning if on workflow page without project selected */}
             {isWorkflowPage && !isLoadingProjects && !selectedProject && uniqueProjects.length === 0 && (
               <div className="mt-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
-                <p className="font-mono text-[10px] text-yellow-400">
+                <p className="font-mono text-2xs text-yellow-400">
                   Select a project to view workflow details
                 </p>
               </div>
@@ -563,7 +563,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           {/* Workflow and Resources Sections */}
           {navSections.filter(s => s.label !== "Overview").map((section) => (
             <div key={section.label} className="mb-6">
-              <div className="font-mono text-[10px] text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
+              <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
                 {section.label}
               </div>
               <div className="space-y-1">
@@ -651,7 +651,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <div className="font-display font-bold text-sm text-foreground truncate">{userName}</div>
-                <div className="font-mono text-[10px] text-foreground-muted">Lead Agency Account</div>
+                <div className="font-mono text-2xs text-foreground-muted">Lead Agency Account</div>
               </div>
               <ChevronDown className={cn(
                 "w-4 h-4 text-foreground-muted transition-transform",
@@ -701,7 +701,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           </div>
           {isDemo && (
             <div className="flex items-center justify-between mt-3">
-              <Link href="/partner" className="font-mono text-[10px] text-foreground-muted hover:text-accent transition-colors">
+              <Link href="/partner" className="font-mono text-2xs text-foreground-muted hover:text-accent transition-colors">
                 Switch to Partner View →
               </Link>
             </div>
@@ -711,14 +711,14 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           <div className="mt-4 pt-3 border-t border-border/30 flex items-center justify-center gap-3">
             <Link 
               href="/terms" 
-              className="font-mono text-[9px] text-foreground-muted/60 hover:text-foreground-muted transition-colors"
+              className="font-mono text-2xs text-foreground-muted/60 hover:text-foreground-muted transition-colors"
             >
               Terms
             </Link>
             <span className="text-foreground-muted/30">|</span>
             <Link 
               href="/privacy" 
-              className="font-mono text-[9px] text-foreground-muted/60 hover:text-foreground-muted transition-colors"
+              className="font-mono text-2xs text-foreground-muted/60 hover:text-foreground-muted transition-colors"
             >
               Privacy
             </Link>

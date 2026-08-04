@@ -195,11 +195,11 @@ export default function PartnerUserProfilePage() {
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-4">
           <h2 className="font-display font-bold text-lg text-vendor-foreground">Account information</h2>
           <div>
-            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Full Name</label>
+            <label className="font-mono text-2xs uppercase text-vendor-muted block mb-2">Full Name</label>
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-vendor-surface border-vendor-border text-vendor-foreground" />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Display Name</label>
+            <label className="font-mono text-2xs uppercase text-vendor-muted block mb-2">Display Name</label>
             <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
@@ -207,12 +207,12 @@ export default function PartnerUserProfilePage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Email</label>
+            <label className="font-mono text-2xs uppercase text-vendor-muted block mb-2">Email</label>
             <Input value={email} readOnly className="bg-gray-100 border-vendor-border text-vendor-foreground" />
             <p className="mt-1 text-xs text-vendor-muted-strong">Read-only, email changes are managed through account auth.</p>
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Personal LinkedIn URL <span className="text-vendor-muted/70">(optional)</span></label>
+            <label className="font-mono text-2xs uppercase text-vendor-muted block mb-2">Personal LinkedIn URL <span className="text-vendor-muted/70">(optional)</span></label>
             <Input
               type="url"
               value={personalLinkedin}
@@ -236,7 +236,7 @@ export default function PartnerUserProfilePage() {
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-4">
           <h2 className="font-display font-bold text-lg text-vendor-foreground">Password & security</h2>
           <div>
-            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Current Password</label>
+            <label className="font-mono text-2xs uppercase text-vendor-muted block mb-2">Current Password</label>
             <Input
               type="password"
               value={currentPassword}
@@ -245,7 +245,7 @@ export default function PartnerUserProfilePage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">New Password</label>
+            <label className="font-mono text-2xs uppercase text-vendor-muted block mb-2">New Password</label>
             <Input
               type="password"
               value={newPassword}
@@ -255,7 +255,7 @@ export default function PartnerUserProfilePage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Confirm New Password</label>
+            <label className="font-mono text-2xs uppercase text-vendor-muted block mb-2">Confirm New Password</label>
             <Input
               type="password"
               value={confirmPassword}

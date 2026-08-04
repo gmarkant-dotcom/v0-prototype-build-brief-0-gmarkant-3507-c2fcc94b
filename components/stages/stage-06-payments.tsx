@@ -160,12 +160,12 @@ export function Stage06Payments() {
             <div className="p-4 rounded-lg bg-success/10 border border-success/30">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-success" />
-                <span className="font-mono text-[10px] text-success uppercase tracking-wider">Client Received</span>
+                <span className="font-mono text-2xs text-success uppercase tracking-wider">Client Received</span>
               </div>
               <div className="font-display font-bold text-2xl text-success">
                 ${totalClientReceived.toLocaleString()}
               </div>
-              <div className="font-mono text-[10px] text-foreground-muted mt-1">
+              <div className="font-mono text-2xs text-foreground-muted mt-1">
                 ${totalClientPending.toLocaleString()} pending
               </div>
             </div>
@@ -173,12 +173,12 @@ export function Stage06Payments() {
             <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingDown className="w-4 h-4 text-red-400" />
-                <span className="font-mono text-[10px] text-red-400 uppercase tracking-wider">Paid to Partners</span>
+                <span className="font-mono text-2xs text-red-400 uppercase tracking-wider">Paid to Partners</span>
               </div>
               <div className="font-display font-bold text-2xl text-red-400">
                 ${totalPaid.toLocaleString()}
               </div>
-              <div className="font-mono text-[10px] text-foreground-muted mt-1">
+              <div className="font-mono text-2xs text-foreground-muted mt-1">
                 ${(totalPending + totalUpcoming).toLocaleString()} remaining
               </div>
             </div>
@@ -186,12 +186,12 @@ export function Stage06Payments() {
             <div className="p-4 rounded-lg bg-accent/10 border border-accent/30">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="w-4 h-4 text-accent" />
-                <span className="font-mono text-[10px] text-accent uppercase tracking-wider">Current Position</span>
+                <span className="font-mono text-2xs text-accent uppercase tracking-wider">Current Position</span>
               </div>
               <div className="font-display font-bold text-2xl text-accent">
                 ${currentCashPosition.toLocaleString()}
               </div>
-              <div className="font-mono text-[10px] text-foreground-muted mt-1">
+              <div className="font-mono text-2xs text-foreground-muted mt-1">
                 Projected margin: ${projectedMargin.toLocaleString()} ({Math.round(projectedMargin / 250000 * 100)}%)
               </div>
             </div>
@@ -202,15 +202,15 @@ export function Stage06Payments() {
             <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-success" />
-                <span className="font-mono text-[10px] text-foreground-muted">Client Payments In</span>
+                <span className="font-mono text-2xs text-foreground-muted">Client Payments In</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-400" />
-                <span className="font-mono text-[10px] text-foreground-muted">Partner Payments Out</span>
+                <span className="font-mono text-2xs text-foreground-muted">Partner Payments Out</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-accent" />
-                <span className="font-mono text-[10px] text-foreground-muted">Net Cashflow</span>
+                <span className="font-mono text-2xs text-foreground-muted">Net Cashflow</span>
               </div>
             </div>
             
@@ -218,9 +218,9 @@ export function Stage06Payments() {
             <div className="relative h-64 border-l border-b border-border/50 ml-12">
               {/* Y-axis labels */}
               <div className="absolute -left-12 top-0 bottom-0 flex flex-col justify-between text-right pr-2">
-                <span className="font-mono text-[10px] text-foreground-muted">${(maxValue / 1000).toFixed(0)}K</span>
-                <span className="font-mono text-[10px] text-foreground-muted">${(maxValue / 2000).toFixed(0)}K</span>
-                <span className="font-mono text-[10px] text-foreground-muted">$0</span>
+                <span className="font-mono text-2xs text-foreground-muted">${(maxValue / 1000).toFixed(0)}K</span>
+                <span className="font-mono text-2xs text-foreground-muted">${(maxValue / 2000).toFixed(0)}K</span>
+                <span className="font-mono text-2xs text-foreground-muted">$0</span>
               </div>
               
               {/* Grid lines */}
@@ -250,13 +250,13 @@ export function Stage06Payments() {
                     </div>
                     {/* Net indicator */}
                     <div className={cn(
-                      "font-mono text-[9px] px-1.5 py-0.5 rounded",
+                      "font-mono text-2xs px-1.5 py-0.5 rounded",
                       data.net >= 0 ? "bg-accent/20 text-accent" : "bg-red-500/20 text-red-400"
                     )}>
                       {data.net >= 0 ? "+" : ""}{(data.net / 1000).toFixed(0)}K
                     </div>
                     {/* Month label */}
-                    <span className="font-mono text-[10px] text-foreground-muted">{data.month}</span>
+                    <span className="font-mono text-2xs text-foreground-muted">{data.month}</span>
                   </div>
                 ))}
               </div>
@@ -304,7 +304,7 @@ export function Stage06Payments() {
               <div className="font-display font-bold text-2xl text-success mb-1">
                 ${totalPaid.toLocaleString()}
               </div>
-              <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
+              <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">
                 Paid to Partners
               </div>
             </GlassCard>
@@ -312,7 +312,7 @@ export function Stage06Payments() {
               <div className="font-display font-bold text-2xl text-yellow-400 mb-1">
                 ${totalPending.toLocaleString()}
               </div>
-              <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
+              <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">
                 Pending
               </div>
             </GlassCard>
@@ -320,7 +320,7 @@ export function Stage06Payments() {
               <div className="font-display font-bold text-2xl text-foreground/85 mb-1">
                 ${totalUpcoming.toLocaleString()}
               </div>
-              <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
+              <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">
                 Upcoming
               </div>
             </GlassCard>
@@ -328,7 +328,7 @@ export function Stage06Payments() {
               <div className="font-display font-bold text-2xl text-accent mb-1">
                 $185,000
               </div>
-              <div className="font-mono text-[10px] text-accent uppercase tracking-wider">
+              <div className="font-mono text-2xs text-accent uppercase tracking-wider">
                 Total Contracted
               </div>
             </GlassCard>
@@ -348,7 +348,7 @@ export function Stage06Payments() {
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm text-foreground">{payment.milestone}</span>
                       <span className={cn(
-                        "font-mono text-[9px] px-2 py-0.5 rounded-full border capitalize",
+                        "font-mono text-2xs px-2 py-0.5 rounded-full border capitalize",
                         getStatusStyle(payment.status)
                       )}>
                         {payment.status}
@@ -358,7 +358,7 @@ export function Stage06Payments() {
                       <span className="font-mono text-lg text-success">
                         ${payment.amount.toLocaleString()}
                       </span>
-                      <span className="font-mono text-[10px] text-foreground-muted">
+                      <span className="font-mono text-2xs text-foreground-muted">
                         {payment.status === "received" ? `Received ${payment.receivedDate}` : `Due ${payment.dueDate}`}
                       </span>
                     </div>
@@ -393,12 +393,12 @@ export function Stage06Payments() {
                       <div className="font-display font-bold text-sm text-foreground">
                         {contract.vendor}
                       </div>
-                      <div className="font-mono text-[10px] text-foreground-muted">
+                      <div className="font-mono text-2xs text-foreground-muted">
                         {contract.type}
                       </div>
                     </div>
                     <span className={cn(
-                      "font-mono text-[9px] px-2 py-0.5 rounded-full border capitalize",
+                      "font-mono text-2xs px-2 py-0.5 rounded-full border capitalize",
                       getStatusStyle(contract.status)
                     )}>
                       {contract.status}
@@ -409,7 +409,7 @@ export function Stage06Payments() {
                       ${contract.amount.toLocaleString()}
                     </span>
                     {contract.signedDate && (
-                      <span className="font-mono text-[10px] text-foreground-muted">
+                      <span className="font-mono text-2xs text-foreground-muted">
                         {contract.signedDate}
                       </span>
                     )}
@@ -435,7 +435,7 @@ export function Stage06Payments() {
             
             <div className="space-y-4">
               <div className="p-4 rounded-lg bg-success/10 border border-success/30">
-                <div className="font-mono text-[10px] text-success uppercase tracking-wider mb-1">
+                <div className="font-mono text-2xs text-success uppercase tracking-wider mb-1">
                   Client Contract Value
                 </div>
                 <div className="font-display font-bold text-2xl text-success">
@@ -444,7 +444,7 @@ export function Stage06Payments() {
               </div>
               
               <div className="p-4 rounded-lg bg-white/5 border border-border">
-                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-1">
+                <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-1">
                   Total Partner Contracts
                 </div>
                 <div className="font-display font-bold text-2xl text-foreground">
@@ -453,7 +453,7 @@ export function Stage06Payments() {
               </div>
               
               <div className="p-4 rounded-lg bg-accent/10 border border-accent/30">
-                <div className="font-mono text-[10px] text-accent uppercase tracking-wider mb-1">
+                <div className="font-mono text-2xs text-accent uppercase tracking-wider mb-1">
                   Gross Margin
                 </div>
                 <div className="font-display font-bold text-2xl text-accent">
@@ -475,22 +475,22 @@ export function Stage06Payments() {
           <table className="w-full min-w-[500px]">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left font-mono text-[10px] text-foreground-muted uppercase tracking-wider py-2 px-2">
+                <th className="text-left font-mono text-2xs text-foreground-muted uppercase tracking-wider py-2 px-2">
                   Partner
                 </th>
-                <th className="text-left font-mono text-[10px] text-foreground-muted uppercase tracking-wider py-2 px-2">
+                <th className="text-left font-mono text-2xs text-foreground-muted uppercase tracking-wider py-2 px-2">
                   Milestone
                 </th>
-                <th className="text-right font-mono text-[10px] text-foreground-muted uppercase tracking-wider py-2 px-2">
+                <th className="text-right font-mono text-2xs text-foreground-muted uppercase tracking-wider py-2 px-2">
                   Amount
                 </th>
-                <th className="text-left font-mono text-[10px] text-foreground-muted uppercase tracking-wider py-2 px-2">
+                <th className="text-left font-mono text-2xs text-foreground-muted uppercase tracking-wider py-2 px-2">
                   Due
                 </th>
-                <th className="text-center font-mono text-[10px] text-foreground-muted uppercase tracking-wider py-2 px-2">
+                <th className="text-center font-mono text-2xs text-foreground-muted uppercase tracking-wider py-2 px-2">
                   Status
                 </th>
-                <th className="text-center font-mono text-[10px] text-foreground-muted uppercase tracking-wider py-2 px-2">
+                <th className="text-center font-mono text-2xs text-foreground-muted uppercase tracking-wider py-2 px-2">
                   Action
                 </th>
               </tr>
@@ -516,7 +516,7 @@ export function Stage06Payments() {
                   </td>
                   <td className="text-center py-3 px-2">
                     <span className={cn(
-                      "font-mono text-[9px] px-2 py-0.5 rounded-full border capitalize",
+                      "font-mono text-2xs px-2 py-0.5 rounded-full border capitalize",
                       getStatusStyle(payment.status)
                     )}>
                       {payment.status}
@@ -524,7 +524,7 @@ export function Stage06Payments() {
                   </td>
                   <td className="text-center py-3 px-2">
                     {payment.status === "pending" && (
-                      <Button size="sm" className="font-mono text-[10px] h-6 px-2 bg-accent hover:bg-accent/90 text-accent-foreground">
+                      <Button size="sm" className="font-mono text-2xs h-6 px-2 bg-accent hover:bg-accent/90 text-accent-foreground">
                         Pay now
                       </Button>
                     )}

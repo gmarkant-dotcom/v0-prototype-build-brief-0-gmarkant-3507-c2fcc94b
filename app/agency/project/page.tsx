@@ -190,7 +190,7 @@ function SummaryBar({ partners, project, loading }: {
             {s.icon}
           </div>
           <div className={cn("font-display font-bold text-base tabular-nums", s.highlight ? "text-amber-200" : "text-foreground")}>{s.value}</div>
-          <span className="font-mono text-[9px] uppercase tracking-wider text-foreground-muted whitespace-nowrap mt-1 block">{s.label}</span>
+          <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted whitespace-nowrap mt-1 block">{s.label}</span>
         </div>
       ))}
     </div>
@@ -247,11 +247,11 @@ function OverrideForm({ row, projectId, onSaved }: {
         <div className="border-t border-border/30 p-4 space-y-4">
           <p className="text-xs text-foreground-muted">Overrides are recorded as agency-set updates.</p>
           <div className="space-y-2">
-            <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Status</label>
+            <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Status</label>
             <div className="flex flex-wrap gap-2">
               {statuses.map(s => (
                 <button key={s} type="button" onClick={() => setStatus(s)}
-                  className={cn("px-2.5 py-1.5 rounded-lg font-mono text-[10px] uppercase tracking-wider border transition-colors",
+                  className={cn("px-2.5 py-1.5 rounded-lg font-mono text-2xs uppercase tracking-wider border transition-colors",
                     status === s ? "bg-accent text-accent-foreground border-accent" : "bg-white/5 text-foreground-muted border-border hover:bg-white/10")}>
                   {STATUS_LABEL[s] || s}
                 </button>
@@ -260,7 +260,7 @@ function OverrideForm({ row, projectId, onSaved }: {
           </div>
           <div className="space-y-2">
             <div className="flex justify-between">
-              <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Completion</label>
+              <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Completion</label>
               <span className="font-mono text-xs text-foreground">{pct}%</span>
             </div>
             <input type="range" min={0} max={100} value={pct} onChange={e => setPct(Number(e.target.value))} className="w-full accent-accent" />
@@ -323,7 +323,7 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
         <div className="flex border-b border-border shrink-0">
           {tabs.map(t => (
             <button key={t.key} type="button" onClick={() => setTab(t.key)}
-              className={cn("px-5 py-3 font-mono text-[11px] uppercase tracking-wider transition-colors border-b-2 -mb-px",
+              className={cn("px-5 py-3 font-mono text-2xs uppercase tracking-wider transition-colors border-b-2 -mb-px",
                 tab === t.key ? "border-accent text-accent" : "border-transparent text-foreground-muted hover:text-foreground")}>
               {t.label}
             </button>
@@ -337,18 +337,18 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
                             {/* Scope Overview */}
               {currentProject && (
                 <div className="space-y-2">
-                  <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Scope Overview</label>
+                  <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Scope Overview</label>
                   <div className="rounded-lg border border-border/40 bg-white/5 p-3">
                     {row.scopeItemName && (
-                      <p className="font-mono text-[10px] text-foreground-muted mb-2">{row.scopeItemName}</p>
+                      <p className="font-mono text-2xs text-foreground-muted mb-2">{row.scopeItemName}</p>
                     )}
                     <div className="grid grid-cols-3 gap-2 text-center">
                       <div>
-                        <div className="font-mono text-[9px] text-foreground-muted uppercase mb-1">Completion</div>
+                        <div className="font-mono text-2xs text-foreground-muted uppercase mb-1">Completion</div>
                         <div className="font-display font-bold text-base text-foreground">{row.completion_pct}%</div>
                       </div>
                       <div>
-                        <div className="font-mono text-[9px] text-foreground-muted uppercase mb-1">Awarded</div>
+                        <div className="font-mono text-2xs text-foreground-muted uppercase mb-1">Awarded</div>
                         <div className="font-display font-bold text-base text-accent">
                           {(() => {
                             const amt = parseBudgetAmount(row.budgetProposal)
@@ -358,7 +358,7 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
                         </div>
                       </div>
                       <div>
-                        <div className="font-mono text-[9px] text-foreground-muted uppercase mb-1">Timeframe</div>
+                        <div className="font-mono text-2xs text-foreground-muted uppercase mb-1">Timeframe</div>
                         <div className="font-display font-bold text-base text-foreground">
                           {(() => {
                             const s = currentProject.startDate
@@ -380,17 +380,17 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
               {/* Current status */}
               <div className="space-y-3">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className={cn("font-mono text-[10px] px-2.5 py-1 rounded-full border uppercase tracking-wider", badge.bg, badge.text, badge.border)}>
+                  <span className={cn("font-mono text-2xs px-2.5 py-1 rounded-full border uppercase tracking-wider", badge.bg, badge.text, badge.border)}>
                     {STATUS_LABEL[sk] || sk}
                   </span>
                   {agencySet && (
-                    <span className="flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded-full border border-sky-500/40 bg-sky-500/15 text-sky-300">
+                    <span className="flex items-center gap-1 font-mono text-2xs px-2 py-0.5 rounded-full border border-sky-500/40 bg-sky-500/15 text-sky-300">
                       <Shield className="w-2.5 h-2.5" />Agency set
                     </span>
                   )}
                 </div>
                 <div>
-                  <div className="flex justify-between text-[10px] font-mono text-foreground-muted mb-1">
+                  <div className="flex justify-between text-2xs font-mono text-foreground-muted mb-1">
                     <span>Completion</span><span>{row.completion_pct}%</span>
                   </div>
                   <div className="h-2 bg-white/10 rounded-full overflow-hidden">
@@ -398,7 +398,7 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
                       style={{ width: `${row.completion_pct}%` }} />
                   </div>
                 </div>
-                <p className="font-mono text-[10px] text-foreground-muted/70 italic">
+                <p className="font-mono text-2xs text-foreground-muted/70 italic">
                   Status data comes from partner-submitted updates via their portal.
                 </p>
               </div>
@@ -406,18 +406,18 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
               {/* Latest partner note */}
               {row.latest_partner_update && !agencySet && row.latest_partner_update.notes && (
                 <div className="space-y-1">
-                  <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">Latest partner note</label>
+                  <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Latest partner note</label>
                   <p className="text-sm text-foreground leading-relaxed italic">
                     &ldquo;{row.latest_partner_update.notes}&rdquo;
                   </p>
-                  <p className="font-mono text-[10px] text-foreground-muted">{fmtTime(row.latest_partner_update.created_at)}</p>
+                  <p className="font-mono text-2xs text-foreground-muted">{fmtTime(row.latest_partner_update.created_at)}</p>
                 </div>
               )}
 
               {/* Unresolved alerts */}
               {row.alert_summaries.length > 0 && (
                 <div className="space-y-2">
-                  <label className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">
+                  <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
                     Unresolved Alerts ({row.alert_summaries.length})
                   </label>
                   {row.alert_summaries.map(a => (
@@ -425,13 +425,13 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                          <span className={cn("font-mono text-[9px] px-1.5 py-0.5 rounded-full border uppercase", STATUS_BADGE[a.status]?.bg, STATUS_BADGE[a.status]?.text, STATUS_BADGE[a.status]?.border)}>
+                          <span className={cn("font-mono text-2xs px-1.5 py-0.5 rounded-full border uppercase", STATUS_BADGE[a.status]?.bg, STATUS_BADGE[a.status]?.text, STATUS_BADGE[a.status]?.border)}>
                             {STATUS_LABEL[a.status] || a.status}
                           </span>
-                          <span className="font-mono text-[9px] text-foreground-muted">{fmtTime(a.created_at)}</span>
+                          <span className="font-mono text-2xs text-foreground-muted">{fmtTime(a.created_at)}</span>
                         </div>
                         <Button size="sm" variant="outline"
-                          className="h-6 px-2 text-[10px] border-amber-500/40 text-amber-200 hover:bg-amber-500/10 shrink-0"
+                          className="h-6 px-2 text-2xs border-amber-500/40 text-amber-200 hover:bg-amber-500/10 shrink-0"
                           disabled={resolving === a.id}
                           onClick={() => onResolve(a.id)}>
                           {resolving === a.id ? <Loader2 className="w-2.5 h-2.5 animate-spin mr-1" /> : null}
@@ -484,20 +484,20 @@ function EngagementRow({ row, onClick, review, onReview }: {
           <div className="flex items-center gap-2 flex-wrap mb-1.5">
             <span className="font-display font-bold text-sm text-foreground truncate">{name}</span>
             {row.scopeItemName && (
-              <span className="font-mono text-[9px] text-foreground-muted px-1.5 py-0.5 rounded bg-white/5 border border-border/40 shrink-0">
+              <span className="font-mono text-2xs text-foreground-muted px-1.5 py-0.5 rounded bg-white/5 border border-border/40 shrink-0">
                 {row.scopeItemName}
               </span>
             )}
-            <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0", badge.bg, badge.text, badge.border)}>
+            <span className={cn("font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0", badge.bg, badge.text, badge.border)}>
               {badgeLabel}
             </span>
             {agencySet && (
-              <span className="flex items-center gap-1 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-sky-500/40 bg-sky-500/15 text-sky-300 shrink-0">
+              <span className="flex items-center gap-1 font-mono text-2xs px-1.5 py-0.5 rounded-full border border-sky-500/40 bg-sky-500/15 text-sky-300 shrink-0">
                 <Shield className="w-2.5 h-2.5" />Agency
               </span>
             )}
             {row.alert_count > 0 && (
-              <span className="flex items-center gap-1 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 text-amber-200 shrink-0">
+              <span className="flex items-center gap-1 font-mono text-2xs px-1.5 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 text-amber-200 shrink-0">
                 <AlertTriangle className="w-2.5 h-2.5" />{row.alert_count}
               </span>
             )}
@@ -509,9 +509,9 @@ function EngagementRow({ row, onClick, review, onReview }: {
                 <div className={cn("h-full rounded-full", sk === "complete" ? "bg-cyan-400/80" : "bg-accent/80")}
                   style={{ width: `${row.completion_pct}%` }} />
               </div>
-              <span className="font-mono text-[10px] text-foreground-muted shrink-0">{row.completion_pct}%</span>
+              <span className="font-mono text-2xs text-foreground-muted shrink-0">{row.completion_pct}%</span>
             </div>
-            <div className="flex items-center gap-3 font-mono text-[10px] text-foreground-muted shrink-0">
+            <div className="flex items-center gap-3 font-mono text-2xs text-foreground-muted shrink-0">
               {budgetAmt != null && <span className="text-accent">{formatMoney(budgetAmt, budgetCur)}</span>}
               {lastTs && <span>{fmtTime(lastTs)}</span>}
             </div>
@@ -522,7 +522,7 @@ function EngagementRow({ row, onClick, review, onReview }: {
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onReview() }}
-        className="shrink-0 flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-accent/30 text-accent hover:bg-accent/10 transition-colors"
+        className="shrink-0 flex items-center gap-1.5 font-mono text-2xs uppercase tracking-wider px-2.5 py-1.5 rounded-lg border border-accent/30 text-accent hover:bg-accent/10 transition-colors"
       >
         <ClipboardList className="w-3 h-3" />
         {review ? (review.status === "complete" ? "View Review" : "Edit Review") : "Write Review"}
@@ -562,7 +562,7 @@ function GroupSection({ label, rows, defaultOpen, onRowClick, reviewsByPartnersh
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-display font-bold text-xl text-foreground">{label}</div>
-          <div className="flex items-center gap-3 mt-0.5 font-mono text-[11px] text-foreground-muted">
+          <div className="flex items-center gap-3 mt-0.5 font-mono text-2xs text-foreground-muted">
             <span>{rows.length} engagement{rows.length !== 1 ? "s" : ""}</span>
             {totalAlerts > 0 && (
               <span className="flex items-center gap-1 text-amber-400">
@@ -581,7 +581,7 @@ function GroupSection({ label, rows, defaultOpen, onRowClick, reviewsByPartnersh
               const count = key === "all" ? rows.length : (counts[key] ?? 0)
               return (
                 <button key={key} type="button" onClick={() => setActiveStatus(key)}
-                  className={cn("shrink-0 px-2.5 py-1 rounded-lg font-mono text-[10px] transition-colors whitespace-nowrap",
+                  className={cn("shrink-0 px-2.5 py-1 rounded-lg font-mono text-2xs transition-colors whitespace-nowrap",
                     activeStatus === key ? "bg-accent text-accent-foreground" : "bg-white/5 text-foreground-muted hover:bg-white/10")}>
                   {tl} ({count})
                 </button>
@@ -737,11 +737,11 @@ function ActiveEngagementsContent() {
                 className="pl-9 h-9 bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 text-sm" />
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Group by</span>
+              <span className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">Group by</span>
               <div className="flex rounded-lg overflow-hidden border border-border">
                 {(["client", "partner"] as GroupBy[]).map(g => (
                   <button key={g} type="button" onClick={() => setGroupBy(g)}
-                    className={cn("px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                    className={cn("px-3 py-1.5 font-mono text-2xs uppercase tracking-wider transition-colors",
                       groupBy === g ? "bg-accent text-accent-foreground" : "bg-white/5 text-foreground-muted hover:bg-white/10")}>
                     {g === "client" ? "Client" : "Partner Agency"}
                   </button>

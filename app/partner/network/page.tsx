@@ -203,17 +203,17 @@ function getStatusBadge(status: string, surface: "dark" | "light") {
   switch (status) {
     case "pending":
       return surface === "dark" ? (
-        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40">
+        <span className="font-mono text-2xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-200 ring-1 ring-amber-400/40">
           Pending Your Response
         </span>
       ) : (
-        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+        <span className="font-mono text-2xs px-2 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
           Pending Your Response
         </span>
       )
     case "active":
       return surface === "dark" ? (
-        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-success/25 text-success ring-1 ring-success/50">
+        <span className="font-mono text-2xs px-2 py-1 rounded-full bg-success/25 text-success ring-1 ring-success/50">
           Active Partnership
         </span>
       ) : (
@@ -223,21 +223,21 @@ function getStatusBadge(status: string, surface: "dark" | "light") {
       )
     case "suspended":
       return surface === "dark" ? (
-        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-orange-500/20 text-orange-100 ring-1 ring-orange-400/40">
+        <span className="font-mono text-2xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-100 ring-1 ring-orange-400/40">
           Suspended
         </span>
       ) : (
-        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-orange-100 text-orange-900 border border-orange-300">
+        <span className="font-mono text-2xs px-2 py-1 rounded-full bg-orange-100 text-orange-900 border border-orange-300">
           Suspended
         </span>
       )
     case "terminated":
       return surface === "dark" ? (
-        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-red-500/20 text-red-100 ring-1 ring-red-400/40">
+        <span className="font-mono text-2xs px-2 py-1 rounded-full bg-red-500/20 text-red-100 ring-1 ring-red-400/40">
           Terminated
         </span>
       ) : (
-        <span className="font-mono text-[10px] px-2 py-1 rounded-full bg-red-100 text-red-900 border border-red-300">
+        <span className="font-mono text-2xs px-2 py-1 rounded-full bg-red-100 text-red-900 border border-red-300">
           Terminated
         </span>
       )
@@ -631,7 +631,7 @@ export default function AgencyNetworkPage() {
           <TabButton active={activeTab === "invitations"} onClick={() => setActiveTab("invitations")}>
             Invitations
             {pendingPartnerships.length > 0 && (
-              <span className="font-mono text-[10px] min-w-[18px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-center">
+              <span className="font-mono text-2xs min-w-[18px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-center">
                 {pendingPartnerships.length}
               </span>
             )}
@@ -830,7 +830,7 @@ export default function AgencyNetworkPage() {
                 type="button"
                 onClick={() => setViewMode("all")}
                 className={cn(
-                  "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+                  "font-mono text-2xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
                   viewMode === "all" ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground" : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
                 )}
               >
@@ -841,7 +841,7 @@ export default function AgencyNetworkPage() {
                 type="button"
                 onClick={() => setViewMode("network")}
                 className={cn(
-                  "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+                  "font-mono text-2xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
                   viewMode === "network" ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground" : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
                 )}
               >
@@ -853,14 +853,14 @@ export default function AgencyNetworkPage() {
             {/* Filters */}
             <div className="bg-vendor-surface rounded-xl border border-vendor-border p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-[10px] text-vendor-muted mr-2">Discipline:</span>
+                <span className="font-mono text-2xs text-vendor-muted mr-2">Discipline:</span>
                 {dynamicDisciplineFilters.map((discipline) => (
                   <button
                     key={discipline}
                     type="button"
                     onClick={() => setSelectedDiscipline(discipline)}
                     className={cn(
-                      "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                      "font-mono text-2xs px-2 py-1 rounded border transition-colors",
                       selectedDiscipline === discipline
                         ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground"
                         : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
@@ -872,14 +872,14 @@ export default function AgencyNetworkPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-vendor-border">
-                <span className="font-mono text-[10px] text-vendor-muted mr-2">Designations:</span>
+                <span className="font-mono text-2xs text-vendor-muted mr-2">Designations:</span>
                 {DESIGNATION_KEYS.map((key) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => toggleDesignationFilter(key)}
                     className={cn(
-                      "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                      "font-mono text-2xs px-2 py-1 rounded border transition-colors",
                       selectedDesignationFilters.includes(key)
                         ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground"
                         : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
@@ -891,14 +891,14 @@ export default function AgencyNetworkPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-vendor-border">
-                <span className="font-mono text-[10px] text-vendor-muted mr-2">Insurance:</span>
+                <span className="font-mono text-2xs text-vendor-muted mr-2">Insurance:</span>
                 {INSURANCE_KEYS.map((key) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => toggleInsuranceFilter(key)}
                     className={cn(
-                      "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                      "font-mono text-2xs px-2 py-1 rounded border transition-colors",
                       selectedInsuranceFilters.includes(key)
                         ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground"
                         : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
@@ -948,7 +948,7 @@ export default function AgencyNetworkPage() {
                             <span className="flex items-center gap-2 flex-wrap">
                               {agency.company_name || agency.full_name || agency.email || "Agency"}
                               {(agency.vouch_count ?? 0) >= 3 && (
-                                <span className="flex items-center gap-0.5 font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                                <span className="flex items-center gap-0.5 font-mono text-2xs px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
                                   <Zap className="w-2.5 h-2.5" />
                                   <Zap className="w-2.5 h-2.5" />
                                   <Zap className="w-2.5 h-2.5" />
@@ -1083,7 +1083,7 @@ export default function AgencyNetworkPage() {
 
               <div className="space-y-4">
                 <div>
-                  <label className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider block mb-2">Message (Optional)</label>
+                  <label className="font-mono text-2xs text-vendor-muted uppercase tracking-wider block mb-2">Message (Optional)</label>
                   <Textarea
                     value={requestMessage}
                     onChange={(e) => setRequestMessage(e.target.value)}
@@ -1176,7 +1176,7 @@ export default function AgencyNetworkPage() {
                   if (caps.length === 0) return null
                   return (
                     <div>
-                      <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Capabilities</div>
+                      <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Capabilities</div>
                       <div className="flex flex-wrap gap-1">
                         {caps.map((cap, i) => (
                           <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-vendor-foreground text-xs">
@@ -1190,7 +1190,7 @@ export default function AgencyNetworkPage() {
 
                 {agencyProfileProjects.length > 0 && !isLoadingAgencyProfile && (
                   <div>
-                    <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Shared Projects</div>
+                    <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Shared Projects</div>
                     <div className="space-y-2">
                       {agencyProfileProjects.map((p) => (
                         <div key={p.id} className="rounded-lg border border-vendor-border p-3 text-sm">
@@ -1203,7 +1203,7 @@ export default function AgencyNetworkPage() {
                 )}
 
                 <div className="rounded-lg border border-vendor-border p-4">
-                  <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Contact</div>
+                  <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Contact</div>
                   <div className="text-sm text-vendor-foreground font-medium">
                     {selectedAgency.full_name || selectedAgency.company_name || "Not provided"}
                   </div>

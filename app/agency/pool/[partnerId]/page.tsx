@@ -383,13 +383,13 @@ export default function AgencyPartnerProfilePage() {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="font-display font-black text-3xl text-foreground tracking-tight">{headerTitle}</h1>
                 {p.agency_type?.trim() && (
-                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full border border-border bg-white/5 text-foreground-muted uppercase tracking-wider">
+                  <span className="font-mono text-2xs px-2 py-0.5 rounded-full border border-border bg-white/5 text-foreground-muted uppercase tracking-wider">
                     {p.agency_type}
                   </span>
                 )}
                 <span
                   className={cn(
-                    "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider",
+                    "font-mono text-2xs px-2 py-0.5 rounded-full uppercase tracking-wider",
                     ndaOk ? "bg-success/15 text-success border border-success/30" : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
                   )}
                 >
@@ -398,7 +398,7 @@ export default function AgencyPartnerProfilePage() {
                 </span>
                 <span
                   className={cn(
-                    "font-mono text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider",
+                    "font-mono text-2xs px-2 py-0.5 rounded-full uppercase tracking-wider",
                     msaOk ? "bg-sky-500/15 text-sky-400 border border-sky-500/30" : "bg-white/10 text-foreground-muted border border-border"
                   )}
                 >
@@ -406,7 +406,7 @@ export default function AgencyPartnerProfilePage() {
                   <HelpTerm term="msa" theme="dark">{msaOk ? "MSA signed" : "MSA pending"}</HelpTerm>
                 </span>
                 {vouchCount >= 3 && (
-                  <span className="flex items-center gap-0.5 font-mono text-[10px] px-2 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
+                  <span className="flex items-center gap-0.5 font-mono text-2xs px-2 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
                     <Zap className="w-3 h-3" /><Zap className="w-3 h-3" /><Zap className="w-3 h-3" />
                     Triple-Vouched
                   </span>
@@ -419,7 +419,7 @@ export default function AgencyPartnerProfilePage() {
                   onClick={handleVouchToggle}
                   disabled={vouchSaving || vouchLoading}
                   className={cn(
-                    "inline-flex items-center gap-1.5 font-mono text-[10px] px-3 py-1.5 rounded-lg border transition-colors",
+                    "inline-flex items-center gap-1.5 font-mono text-2xs px-3 py-1.5 rounded-lg border transition-colors",
                     hasVouched
                       ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/40 hover:bg-yellow-500/25"
                       : "bg-white/5 text-foreground-muted border-border hover:bg-white/10 hover:text-foreground"
@@ -429,7 +429,7 @@ export default function AgencyPartnerProfilePage() {
                   {vouchSaving ? "Saving…" : hasVouched ? "Vouching ✓" : "I'll vouch for them"}
                 </button>
                 {!vouchLoading && (
-                  <span className="font-mono text-[10px] text-foreground-muted">
+                  <span className="font-mono text-2xs text-foreground-muted">
                     Vouched by {vouchCount} {vouchCount === 1 ? "agency" : "agencies"}
                   </span>
                 )}
@@ -477,7 +477,7 @@ export default function AgencyPartnerProfilePage() {
         {/* Three columns */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <GlassCard className="p-6">
-            <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+            <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-4">
               Capabilities & Bio
             </h2>
             <p className="text-sm text-foreground whitespace-pre-wrap mb-4">
@@ -494,20 +494,20 @@ export default function AgencyPartnerProfilePage() {
                 p.tags.map((t) => (
                   <span
                     key={t}
-                    className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-white/5 text-foreground-muted border border-border"
+                    className="font-mono text-2xs px-2 py-0.5 rounded-full bg-white/5 text-foreground-muted border border-border"
                   >
                     {t}
                   </span>
                 ))
               ) : (
-                <span className="font-mono text-[10px] text-foreground-muted">No tags on file</span>
+                <span className="font-mono text-2xs text-foreground-muted">No tags on file</span>
               )}
             </div>
           </GlassCard>
 
           {hasDesignations && (
             <GlassCard className="p-6">
-              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+              <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-4">
                 Business Designations
               </h2>
               <ul className="space-y-3 text-sm">
@@ -519,12 +519,12 @@ export default function AgencyPartnerProfilePage() {
                         {DESIGNATION_LABELS[key]}
                       </HelpTerm>
                       {(designation.certifying_body || designation.certification_number) && (
-                        <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                        <div className="font-mono text-2xs text-foreground-muted mt-0.5">
                           {[designation.certifying_body, designation.certification_number].filter(Boolean).join(" · ")}
                         </div>
                       )}
                       {designation.self_certified && (
-                        <div className="font-mono text-[10px] text-foreground-muted mt-0.5">Self-certified</div>
+                        <div className="font-mono text-2xs text-foreground-muted mt-0.5">Self-certified</div>
                       )}
                     </li>
                   )
@@ -535,7 +535,7 @@ export default function AgencyPartnerProfilePage() {
 
           {hasInsurance && (
             <GlassCard className="p-6">
-              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+              <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-4">
                 Insurance Coverage
               </h2>
               <ul className="space-y-3 text-sm">
@@ -546,7 +546,7 @@ export default function AgencyPartnerProfilePage() {
                       <HelpTerm term={key} theme="dark" className="text-foreground font-medium">
                         {INSURANCE_LABELS[key]}
                       </HelpTerm>
-                      <span className="font-mono text-[10px] text-foreground-muted">{coverage.limit || "No limit on file"}</span>
+                      <span className="font-mono text-2xs text-foreground-muted">{coverage.limit || "No limit on file"}</span>
                     </li>
                   )
                 })}
@@ -556,7 +556,7 @@ export default function AgencyPartnerProfilePage() {
                   </HelpTerm>
                   <span
                     className={cn(
-                      "font-mono text-[10px] px-2 py-0.5 rounded-full",
+                      "font-mono text-2xs px-2 py-0.5 rounded-full",
                       businessCriteria.insurance.coi_on_file
                         ? "bg-success/15 text-success"
                         : "bg-white/10 text-foreground-muted"
@@ -571,31 +571,31 @@ export default function AgencyPartnerProfilePage() {
 
           {hasCompanyFacts && (
             <GlassCard className="p-6">
-              <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+              <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-4">
                 Company Facts
               </h2>
               <dl className="space-y-3 text-sm">
                 {companyFacts.years_in_business != null && (
                   <div>
-                    <dt className="font-mono text-[10px] text-foreground-muted uppercase">Years in Business</dt>
+                    <dt className="font-mono text-2xs text-foreground-muted uppercase">Years in Business</dt>
                     <dd className="text-foreground">{companyFacts.years_in_business}</dd>
                   </div>
                 )}
                 {companyFacts.union_signatory.trim() && (
                   <div>
-                    <dt className="font-mono text-[10px] text-foreground-muted uppercase">Union Signatory</dt>
+                    <dt className="font-mono text-2xs text-foreground-muted uppercase">Union Signatory</dt>
                     <dd className="text-foreground">{companyFacts.union_signatory}</dd>
                   </div>
                 )}
                 {companyFacts.sustainability_approach.trim() && (
                   <div>
-                    <dt className="font-mono text-[10px] text-foreground-muted uppercase">Sustainability Approach</dt>
+                    <dt className="font-mono text-2xs text-foreground-muted uppercase">Sustainability Approach</dt>
                     <dd className="text-foreground whitespace-pre-wrap">{companyFacts.sustainability_approach}</dd>
                   </div>
                 )}
                 {companyFacts.workforce_diversity_summary.trim() && (
                   <div>
-                    <dt className="font-mono text-[10px] text-foreground-muted uppercase">Workforce Diversity Summary</dt>
+                    <dt className="font-mono text-2xs text-foreground-muted uppercase">Workforce Diversity Summary</dt>
                     <dd className="text-foreground whitespace-pre-wrap">{companyFacts.workforce_diversity_summary}</dd>
                   </div>
                 )}
@@ -604,31 +604,31 @@ export default function AgencyPartnerProfilePage() {
           )}
 
           <GlassCard className="p-6">
-            <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+            <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-4">
               Rate information
             </h2>
             <dl className="space-y-3 text-sm">
               <div>
-                <dt className="font-mono text-[10px] text-foreground-muted uppercase">Hourly rate</dt>
+                <dt className="font-mono text-2xs text-foreground-muted uppercase">Hourly rate</dt>
                 <dd className="text-foreground">{ri.hourly_rate?.trim() || "-"}</dd>
               </div>
               <div>
-                <dt className="font-mono text-[10px] text-foreground-muted uppercase">Project minimum</dt>
+                <dt className="font-mono text-2xs text-foreground-muted uppercase">Project minimum</dt>
                 <dd className="text-foreground">{ri.project_minimum?.trim() || "-"}</dd>
               </div>
               <div>
-                <dt className="font-mono text-[10px] text-foreground-muted uppercase">Payment terms</dt>
+                <dt className="font-mono text-2xs text-foreground-muted uppercase">Payment terms</dt>
                 <dd className="text-foreground">{paymentTermsLabel(ri)}</dd>
               </div>
               <div>
-                <dt className="font-mono text-[10px] text-foreground-muted uppercase">Notes</dt>
+                <dt className="font-mono text-2xs text-foreground-muted uppercase">Notes</dt>
                 <dd className="text-foreground whitespace-pre-wrap">{ri.notes?.trim() || "-"}</dd>
               </div>
             </dl>
           </GlassCard>
 
           <GlassCard className="p-6 lg:col-span-1">
-            <h2 className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted mb-4">
+            <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-4">
               Engagement history
             </h2>
             {profile.engagement_history.length === 0 ? (
@@ -646,7 +646,7 @@ export default function AgencyPartnerProfilePage() {
                       <span className="font-mono text-xs text-accent">
                         {formatMoney(row.awarded_amount, row.currency)}
                       </span>
-                      <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success capitalize">
+                      <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-success/15 text-success capitalize">
                         {row.status}
                       </span>
                     </div>
@@ -669,7 +669,7 @@ export default function AgencyPartnerProfilePage() {
 
           <div className="space-y-5">
             <div>
-              <Label className="font-mono text-[10px] text-foreground-muted uppercase">Notes</Label>
+              <Label className="font-mono text-2xs text-foreground-muted uppercase">Notes</Label>
               <Textarea
                 value={notesState.notes ?? ""}
                 onChange={(e) => setNotesState((s) => ({ ...s, notes: e.target.value }))}
@@ -679,13 +679,13 @@ export default function AgencyPartnerProfilePage() {
               />
               {Array.isArray(notesState.notes_log) && notesState.notes_log.length > 0 && (
                 <div className="mt-3 space-y-2">
-                  <div className="font-mono text-[9px] text-foreground-muted uppercase tracking-wider">
+                  <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">
                     Notes history ({notesState.notes_log.length})
                   </div>
                   <div className="max-h-[200px] overflow-y-auto space-y-2 pr-1">
                     {[...notesState.notes_log].reverse().map((entry, idx) => (
                       <div key={idx} className="rounded-lg border border-border/50 bg-white/5 p-3">
-                        <div className="font-mono text-[9px] text-foreground-muted mb-1">
+                        <div className="font-mono text-2xs text-foreground-muted mb-1">
                           {new Date(entry.timestamp).toLocaleString("en-US", {
                             month: "short",
                             day: "numeric",
@@ -703,7 +703,7 @@ export default function AgencyPartnerProfilePage() {
             </div>
 
             <div>
-              <Label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+              <Label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                 Overall rating
               </Label>
               <div className="flex gap-1">
@@ -734,7 +734,7 @@ export default function AgencyPartnerProfilePage() {
             </div>
 
             <div>
-              <Label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+              <Label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                 Would work with again
               </Label>
               <div className="flex gap-2">
@@ -762,7 +762,7 @@ export default function AgencyPartnerProfilePage() {
 
             <div className="flex items-center justify-between gap-4 pt-2 border-t border-border">
               <div className="flex items-center gap-3">
-                <Label className="font-mono text-[10px] text-foreground-muted uppercase">Blacklist</Label>
+                <Label className="font-mono text-2xs text-foreground-muted uppercase">Blacklist</Label>
                 <Button
                   type="button"
                   variant={notesState.blacklisted ? "destructive-outline" : "outline"}

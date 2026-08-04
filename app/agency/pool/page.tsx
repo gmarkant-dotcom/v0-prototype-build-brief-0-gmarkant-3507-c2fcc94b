@@ -1296,7 +1296,7 @@ function PartnerPoolPageInner() {
               <Users className="w-4 h-4 text-accent" />
             </div>
             <div className="font-display font-bold text-2xl text-foreground">{activePartnersStat}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">
               Active partners
             </div>
           </GlassCard>
@@ -1305,7 +1305,7 @@ function PartnerPoolPageInner() {
               <Briefcase className="w-4 h-4 text-accent" />
             </div>
             <div className="font-display font-bold text-2xl text-foreground">{partnersWithActiveEngagementsStat}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">
               Partners with active engagements
             </div>
           </GlassCard>
@@ -1314,7 +1314,7 @@ function PartnerPoolPageInner() {
               <Ban className="w-4 h-4 text-red-400" />
             </div>
             <div className="font-display font-bold text-2xl text-red-400">{blacklistedPartnersStat}</div>
-            <div className="font-mono text-[10px] text-red-400 uppercase tracking-wider mt-1">Blacklisted</div>
+            <div className="font-mono text-2xs text-red-400 uppercase tracking-wider mt-1">Blacklisted</div>
           </GlassCard>
         </div>
 
@@ -1331,14 +1331,14 @@ function PartnerPoolPageInner() {
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] text-foreground-muted">Type:</span>
+              <span className="font-mono text-2xs text-foreground-muted">Type:</span>
               <div className="flex gap-1">
                 {types.map((type) => (
                   <button
                     key={type}
                     onClick={() => setSelectedType(type)}
                     className={cn(
-                      "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors",
+                      "font-mono text-2xs px-3 py-1.5 rounded-full border transition-colors",
                       selectedType === type
                         ? "border-accent bg-accent/10 text-accent"
                         : "border-border text-foreground/90 hover:border-white/30"
@@ -1353,7 +1353,7 @@ function PartnerPoolPageInner() {
             <button
               onClick={() => setShowBookmarkedOnly(!showBookmarkedOnly)}
               className={cn(
-                "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
+                "font-mono text-2xs px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
                 showBookmarkedOnly
                   ? "border-accent bg-accent/10 text-accent"
                   : "border-border text-foreground/90 hover:border-white/30"
@@ -1365,13 +1365,13 @@ function PartnerPoolPageInner() {
 
           {/* Status Filter */}
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
-            <span className="font-mono text-[10px] text-foreground-muted mr-2">Status:</span>
+            <span className="font-mono text-2xs text-foreground-muted mr-2">Status:</span>
             {statusFilters.map((filter) => (
               <button
                 key={filter}
                 onClick={() => setSelectedStatus(filter)}
                 className={cn(
-                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors flex items-center gap-1",
+                  "font-mono text-2xs px-2 py-1 rounded border transition-colors flex items-center gap-1",
                   selectedStatus === filter
                     ? filter === "Blacklisted" ? "border-red-500 bg-red-500/10 text-red-400" : "border-accent bg-accent/10 text-accent"
                     : "border-border text-foreground/90 hover:border-white/30"
@@ -1385,13 +1385,13 @@ function PartnerPoolPageInner() {
 
           {/* Legal Status Filter */}
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
-            <span className="font-mono text-[10px] text-foreground-muted mr-2">Legal Status:</span>
+            <span className="font-mono text-2xs text-foreground-muted mr-2">Legal Status:</span>
             {legalFilters.map((filter) => (
               <button
                 key={filter}
                 onClick={() => setSelectedLegal(filter)}
                 className={cn(
-                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors flex items-center gap-1",
+                  "font-mono text-2xs px-2 py-1 rounded border transition-colors flex items-center gap-1",
                   selectedLegal === filter
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-border text-foreground/90 hover:border-white/30"
@@ -1405,13 +1405,13 @@ function PartnerPoolPageInner() {
 
           {/* Discipline Filter */}
           <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-border">
-            <span className="font-mono text-[10px] text-foreground-muted mr-2">Discipline:</span>
+            <span className="font-mono text-2xs text-foreground-muted mr-2">Discipline:</span>
             {dynamicDisciplineFilters.map((discipline) => (
               <button
                 key={discipline}
                 onClick={() => setSelectedDiscipline(discipline)}
                 className={cn(
-                  "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                  "font-mono text-2xs px-2 py-1 rounded border transition-colors",
                   selectedDiscipline === discipline
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-border text-foreground/90 hover:border-white/30"
@@ -1424,13 +1424,13 @@ function PartnerPoolPageInner() {
 
           {/* Business Criteria Filter */}
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
-            <span className="font-mono text-[10px] text-foreground-muted mr-2">Designations:</span>
+            <span className="font-mono text-2xs text-foreground-muted mr-2">Designations:</span>
             {DESIGNATION_KEYS.map((key) => (
               <div key={key} className="inline-flex items-center gap-1">
                 <button
                   onClick={() => toggleDesignationFilter(key)}
                   className={cn(
-                    "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                    "font-mono text-2xs px-2 py-1 rounded border transition-colors",
                     selectedDesignationFilters.includes(key)
                       ? "border-accent bg-accent/10 text-accent"
                       : "border-border text-foreground/90 hover:border-white/30"
@@ -1438,20 +1438,20 @@ function PartnerPoolPageInner() {
                 >
                   {DESIGNATION_LABELS[key]}
                 </button>
-                <HelpTerm term={key} theme="dark" className="text-[11px] text-foreground-muted/60">
+                <HelpTerm term={key} theme="dark" className="text-2xs text-foreground-muted/60">
                   ?
                 </HelpTerm>
               </div>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
-            <span className="font-mono text-[10px] text-foreground-muted mr-2">Insurance:</span>
+            <span className="font-mono text-2xs text-foreground-muted mr-2">Insurance:</span>
             {INSURANCE_KEYS.map((key) => (
               <div key={key} className="inline-flex items-center gap-1">
                 <button
                   onClick={() => toggleInsuranceFilter(key)}
                   className={cn(
-                    "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
+                    "font-mono text-2xs px-2 py-1 rounded border transition-colors",
                     selectedInsuranceFilters.includes(key)
                       ? "border-accent bg-accent/10 text-accent"
                       : "border-border text-foreground/90 hover:border-white/30"
@@ -1459,7 +1459,7 @@ function PartnerPoolPageInner() {
                 >
                   {INSURANCE_LABELS[key]}
                 </button>
-                <HelpTerm term={key} theme="dark" className="text-[11px] text-foreground-muted/60">
+                <HelpTerm term={key} theme="dark" className="text-2xs text-foreground-muted/60">
                   ?
                 </HelpTerm>
               </div>
@@ -1468,7 +1468,7 @@ function PartnerPoolPageInner() {
         </GlassCard>
 
         {(allNetworkRows.length > 0 || partners.length > 0) && (
-          <p className="font-mono text-[11px] text-foreground-muted mb-6">
+          <p className="font-mono text-2xs text-foreground-muted mb-6">
             Showing {totalFilteredMatches} result{totalFilteredMatches !== 1 ? "s" : ""}
             {allNetworkRows.length > 0 && (
               <span>
@@ -1494,7 +1494,7 @@ function PartnerPoolPageInner() {
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-display font-bold text-sm text-foreground">Active partners</h2>
-              <span className="font-mono text-[10px] text-foreground-muted">{filteredNetworkRows.length}</span>
+              <span className="font-mono text-2xs text-foreground-muted">{filteredNetworkRows.length}</span>
             </div>
             <p className="text-xs text-foreground-muted mb-4">
               Partners you can send RFPs to and collaborate with directly.
@@ -1550,9 +1550,9 @@ function PartnerPoolPageInner() {
                           </div>
                           <div className="min-w-0">
                             <div className="font-medium text-foreground truncate">{title}</div>
-                            <div className="font-mono text-[10px] text-foreground-muted">{subLine}</div>
+                            <div className="font-mono text-2xs text-foreground-muted">{subLine}</div>
                             {partner && (
-                              <div className="font-mono text-[10px] mt-1 text-foreground-muted">
+                              <div className="font-mono text-2xs mt-1 text-foreground-muted">
                                 {partner.ndaSigned ? (
                                   <span className="text-success">NDA on file</span>
                                 ) : (
@@ -1565,7 +1565,7 @@ function PartnerPoolPageInner() {
                         <div className="flex items-center gap-2 shrink-0">
                           <span
                             className={cn(
-                              "font-mono text-[10px] px-2 py-1 rounded-full",
+                              "font-mono text-2xs px-2 py-1 rounded-full",
                               bl
                                 ? "bg-red-500/10 text-red-400"
                                 : pending
@@ -1645,8 +1645,8 @@ function PartnerPoolPageInner() {
                         </div>
                         <div className="min-w-0">
                           <div className="font-medium text-foreground truncate">{title}</div>
-                          <div className="font-mono text-[10px] text-foreground-muted">{subLine}</div>
-                          <div className="font-mono text-[10px] mt-1">
+                          <div className="font-mono text-2xs text-foreground-muted">{subLine}</div>
+                          <div className="font-mono text-2xs mt-1">
                             {p.ndaConfirmedAt ? (
                               <span className="text-success">
                                 NDA signed{" "}
@@ -1671,7 +1671,7 @@ function PartnerPoolPageInner() {
                         {p.partnerId && !bl && (
                           <Link
                             href={`/agency/pool/${encodeURIComponent(p.partnerId)}`}
-                            className="inline-flex items-center gap-1 font-mono text-[10px] text-accent hover:underline px-2 py-1 rounded-md border border-accent/30 hover:bg-accent/10"
+                            className="inline-flex items-center gap-1 font-mono text-2xs text-accent hover:underline px-2 py-1 rounded-md border border-accent/30 hover:bg-accent/10"
                           >
                             View profile
                             <ChevronRight className="w-3 h-3" />
@@ -1701,7 +1701,7 @@ function PartnerPoolPageInner() {
                         )}
                         <span
                           className={cn(
-                            "font-mono text-[10px] px-2 py-1 rounded-full",
+                            "font-mono text-2xs px-2 py-1 rounded-full",
                             bl
                               ? "bg-red-500/10 text-red-400"
                               : pending
@@ -1727,7 +1727,7 @@ function PartnerPoolPageInner() {
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-display font-bold text-sm text-foreground">Invited</h2>
-                <span className="font-mono text-[10px] text-foreground-muted">{filteredInvitedRows.length}</span>
+                <span className="font-mono text-2xs text-foreground-muted">{filteredInvitedRows.length}</span>
               </div>
               <p className="text-xs text-foreground-muted mb-4">
                 Contacts who have been sent an invitation to join your partner network.
@@ -1746,12 +1746,12 @@ function PartnerPoolPageInner() {
                           <span className="font-display font-bold text-sm text-foreground truncate">
                             {row.vendorName || row.partnerEmail}
                           </span>
-                          <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300">
+                          <span className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300">
                             Invited
                           </span>
                           {row.poolStatus === "domain_match_flagged" && (
                             <span
-                              className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300"
+                              className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300"
                               title={
                                 row.domainMatchProfile
                                   ? `Shares an email domain with an existing profile: ${
@@ -1765,14 +1765,14 @@ function PartnerPoolPageInner() {
                           )}
                           {row.poolStatus === "already_on_ligament" && (
                             <span
-                              className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-sky-400/40 bg-sky-400/10 text-sky-300"
+                              className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-sky-400/40 bg-sky-400/10 text-sky-300"
                               title="This contact's email already matches a Ligament account."
                             >
                               Already on Ligament
                             </span>
                           )}
                         </div>
-                        <div className="font-mono text-[10px] text-foreground-muted mt-1 truncate">
+                        <div className="font-mono text-2xs text-foreground-muted mt-1 truncate">
                           {row.partnerEmail}
                           {row.invitationSentAt && <span> · Invited {formatDateTime(row.invitationSentAt)}</span>}
                         </div>
@@ -1797,7 +1797,7 @@ function PartnerPoolPageInner() {
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="font-display font-bold text-sm text-foreground">Discovered</h2>
-                <span className="font-mono text-[10px] text-foreground-muted">{filteredDiscoveredRows.length}</span>
+                <span className="font-mono text-2xs text-foreground-muted">{filteredDiscoveredRows.length}</span>
               </div>
               <p className="text-xs text-foreground-muted mb-4">
                 Contacts added to your pool who have not been invited to join your network yet.
@@ -1816,12 +1816,12 @@ function PartnerPoolPageInner() {
                           <span className="font-display font-bold text-sm text-foreground truncate">
                             {row.companyName || row.contactName || row.vendorName || row.partnerEmail}
                           </span>
-                          <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-foreground-muted">
+                          <span className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-foreground-muted">
                             Not Yet Invited
                           </span>
                           {row.poolStatus === "domain_match_flagged" && (
                             <span
-                              className="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300"
+                              className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300"
                               title={
                                 row.domainMatchProfile
                                   ? `Shares an email domain with an existing profile: ${
@@ -1834,7 +1834,7 @@ function PartnerPoolPageInner() {
                             </span>
                           )}
                         </div>
-                        <div className="font-mono text-[10px] text-foreground-muted mt-1 truncate">
+                        <div className="font-mono text-2xs text-foreground-muted mt-1 truncate">
                           {row.companyName && row.contactName ? `${row.contactName} · ` : ""}
                           {row.partnerEmail}
                           <span> · Added {formatDateTime(row.partnershipCreatedAt)}</span>
@@ -1892,7 +1892,7 @@ function PartnerPoolPageInner() {
               {partner.status === "blacklisted" && (
                 <div className="absolute top-0 left-0 right-0 bg-red-500/20 border-b border-red-500/30 px-4 py-1.5 flex items-center gap-2">
                   <Ban className="w-3 h-3 text-red-400" />
-                  <span className="font-mono text-[10px] text-red-400 uppercase">Blacklisted</span>
+                  <span className="font-mono text-2xs text-red-400 uppercase">Blacklisted</span>
                 </div>
               )}
 
@@ -1940,7 +1940,7 @@ function PartnerPoolPageInner() {
                 </div>
                 <div className="min-w-0">
                   <div className="font-display font-bold text-foreground truncate">{partner.name}</div>
-                  <div className={cn("font-mono text-[10px]", partner.status === "blacklisted" ? "text-red-400" : "text-accent")}>{partner.discipline}</div>
+                  <div className={cn("font-mono text-2xs", partner.status === "blacklisted" ? "text-red-400" : "text-accent")}>{partner.discipline}</div>
                 </div>
               </div>
 
@@ -1948,16 +1948,16 @@ function PartnerPoolPageInner() {
               <div className="space-y-1.5 mb-3">
                 <div className="flex items-center gap-2 text-foreground-muted">
                   <MapPin className="w-3 h-3" />
-                  <span className="font-mono text-[10px]">{partner.location}</span>
+                  <span className="font-mono text-2xs">{partner.location}</span>
                 </div>
                 <div className="flex items-center gap-2 text-foreground-muted">
                   <Briefcase className="w-3 h-3" />
-                  <span className="font-mono text-[10px]">{partner.rate} rate</span>
+                  <span className="font-mono text-2xs">{partner.rate} rate</span>
                 </div>
                 {partner.rating && (
                   <div className="flex items-center gap-2 text-foreground-muted">
                     <Star className="w-3 h-3 fill-accent text-accent" />
-                    <span className="font-mono text-[10px]">{partner.rating} rating</span>
+                    <span className="font-mono text-2xs">{partner.rating} rating</span>
                   </div>
                 )}
               </div>
@@ -1965,12 +1965,12 @@ function PartnerPoolPageInner() {
               {/* Tags */}
               <div className="flex flex-wrap gap-1 mb-3">
                 {partner.tags.slice(0, 3).map((tag) => (
-                  <span key={tag} className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-white/5 text-foreground-muted">
+                  <span key={tag} className="font-mono text-2xs px-2 py-0.5 rounded-full bg-white/5 text-foreground-muted">
                     {tag}
                   </span>
                 ))}
                 {partner.tags.length > 3 && (
-                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-white/5 text-foreground-muted">
+                  <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-white/5 text-foreground-muted">
                     +{partner.tags.length - 3}
                   </span>
                 )}
@@ -1979,14 +1979,14 @@ function PartnerPoolPageInner() {
               {/* Legal Status */}
               <div className="flex gap-2 pt-3 border-t border-border">
                 <div className={cn(
-                  "flex items-center gap-1 font-mono text-[9px] px-2 py-1 rounded",
+                  "flex items-center gap-1 font-mono text-2xs px-2 py-1 rounded",
                   partner.ndaSigned ? "bg-success/10 text-success" : "bg-white/5 text-foreground-muted"
                 )}>
                   <Shield className="w-3 h-3" />
                   NDA
                 </div>
                 <div className={cn(
-                  "flex items-center gap-1 font-mono text-[9px] px-2 py-1 rounded",
+                  "flex items-center gap-1 font-mono text-2xs px-2 py-1 rounded",
                   partner.msaApproved ? "bg-success/10 text-success" : "bg-white/5 text-foreground-muted"
                 )}>
                   <Shield className="w-3 h-3" />
@@ -2059,7 +2059,7 @@ function PartnerPoolPageInner() {
                     </div>
                     <div>
                       <div className="font-medium text-foreground">{request.partnerCompany || request.partnerName || request.partnerEmail}</div>
-                      <div className="font-mono text-[10px] text-foreground-muted">
+                      <div className="font-mono text-2xs text-foreground-muted">
                         {request.requestMessage ? `"${request.requestMessage.slice(0, 50)}${request.requestMessage.length > 50 ? '...' : ''}"` : 'No message provided'}
                       </div>
                     </div>
@@ -2141,14 +2141,14 @@ function PartnerPoolPageInner() {
 
               {/* Experience */}
               <div className="mb-6">
-                <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Experience</h3>
+                <h3 className="font-mono text-2xs uppercase text-foreground-muted mb-2">Experience</h3>
                 <p className="text-foreground">{selectedPartner.experience}</p>
               </div>
 
               {/* Credentials */}
               {selectedPartner.credentials.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Credentials</h3>
+                  <h3 className="font-mono text-2xs uppercase text-foreground-muted mb-2">Credentials</h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedPartner.credentials.map((cred) => (
                       <span key={cred} className="font-mono text-xs px-3 py-1 rounded-full bg-accent/10 text-accent flex items-center gap-1">
@@ -2163,7 +2163,7 @@ function PartnerPoolPageInner() {
               {/* Past Projects */}
               {selectedPartner.pastProjects.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Past Projects</h3>
+                  <h3 className="font-mono text-2xs uppercase text-foreground-muted mb-2">Past Projects</h3>
                   <div className="space-y-2">
                     {selectedPartner.pastProjects.map((project, i) => (
                       <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-white/5">
@@ -2288,7 +2288,7 @@ function PartnerPoolPageInner() {
               
               <div className="space-y-4">
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider block mb-2">
                     Partner Email *
                   </label>
                   <Input
@@ -2301,7 +2301,7 @@ function PartnerPoolPageInner() {
                 </div>
                 
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider block mb-2">
                     Invitation Message (Optional)
                   </label>
                   <Textarea
@@ -2509,12 +2509,12 @@ function AddEditPartnerModal({
 
         <div className="space-y-6">
           <div>
-            <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3 flex items-center gap-2">
+            <h3 className="font-mono text-2xs uppercase text-foreground-muted mb-3 flex items-center gap-2">
               <User className="w-3 h-3" /> Basic Information
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
+                <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider block mb-2">
                   Company Name
                 </label>
                 <Input
@@ -2525,7 +2525,7 @@ function AddEditPartnerModal({
                 />
               </div>
               <div className="col-span-2">
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
+                <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider block mb-2">
                   Contact Name
                 </label>
                 <Input
@@ -2539,12 +2539,12 @@ function AddEditPartnerModal({
           </div>
 
           <div>
-            <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3 flex items-center gap-2">
+            <h3 className="font-mono text-2xs uppercase text-foreground-muted mb-3 flex items-center gap-2">
               <Mail className="w-3 h-3" /> Contact Information
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
+                <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider block mb-2">
                   Email *
                 </label>
                 <Input
@@ -2556,7 +2556,7 @@ function AddEditPartnerModal({
                 />
               </div>
               <div>
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
+                <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider block mb-2">
                   Phone
                 </label>
                 <Input
@@ -2567,7 +2567,7 @@ function AddEditPartnerModal({
                 />
               </div>
               <div>
-                <label className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider block mb-2">
+                <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider block mb-2">
                   Website
                 </label>
                 <Input
@@ -2581,7 +2581,7 @@ function AddEditPartnerModal({
           </div>
 
           <div>
-            <h3 className="font-mono text-[10px] uppercase text-foreground-muted mb-3">Notes</h3>
+            <h3 className="font-mono text-2xs uppercase text-foreground-muted mb-3">Notes</h3>
             <Textarea
               value={formData.notes}
               onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}

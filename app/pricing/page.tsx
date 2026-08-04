@@ -280,7 +280,7 @@ export default function PricingPage() {
                 )}
               >
                 {tier.popular && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-wider px-3 py-1 rounded-full bg-[#C8F53C] text-[#0C3535] font-bold whitespace-nowrap">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 font-mono text-2xs uppercase tracking-wider px-3 py-1 rounded-full bg-[#C8F53C] text-[#0C3535] font-bold whitespace-nowrap">
                     Most Popular
                   </span>
                 )}
@@ -292,7 +292,7 @@ export default function PricingPage() {
                   <span className="font-display font-black text-4xl">{amount}</span>
                   {period && <span className="text-white/50 text-sm">{period}</span>}
                   {showSavings && (
-                    <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#C8F53C]/15 text-[#C8F53C] border border-[#C8F53C]/40">
+                    <span className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#C8F53C]/15 text-[#C8F53C] border border-[#C8F53C]/40">
                       Save ${tier.annualSavings}/yr
                     </span>
                   )}
@@ -357,10 +357,10 @@ export default function PricingPage() {
             <table className="w-full text-sm border-collapse min-w-[640px]">
               <thead>
                 <tr className="border-b border-white/15 bg-white/5">
-                  <th className="text-left font-mono text-[10px] uppercase tracking-wider text-white/60 px-4 py-3">Feature</th>
-                  <th className="text-center font-mono text-[10px] uppercase tracking-wider text-white/60 px-4 py-3">Starter</th>
-                  <th className="text-center font-mono text-[10px] uppercase tracking-wider text-white/60 px-4 py-3">Professional</th>
-                  <th className="text-center font-mono text-[10px] uppercase tracking-wider text-white/60 px-4 py-3">Enterprise</th>
+                  <th className="text-left font-mono text-2xs uppercase tracking-wider text-white/60 px-4 py-3">Feature</th>
+                  <th className="text-center font-mono text-2xs uppercase tracking-wider text-white/60 px-4 py-3">Starter</th>
+                  <th className="text-center font-mono text-2xs uppercase tracking-wider text-white/60 px-4 py-3">Professional</th>
+                  <th className="text-center font-mono text-2xs uppercase tracking-wider text-white/60 px-4 py-3">Enterprise</th>
                 </tr>
               </thead>
               <tbody>
@@ -417,7 +417,7 @@ export default function PricingPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div className="rounded-xl border border-white/15 bg-white/5 p-5">
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-[#C8F53C] mb-2">Year 1</p>
+                  <p className="font-mono text-2xs uppercase tracking-wider text-[#C8F53C] mb-2">Year 1</p>
                   <p className="font-display font-black text-2xl text-white mb-2">5 hrs/month recovered</p>
                   <p className="text-[#C8F53C] font-semibold text-sm mb-3">
                     $3,720 in annual labor value recovered
@@ -429,7 +429,7 @@ export default function PricingPage() {
                 </div>
 
                 <div className="rounded-xl border border-white/15 bg-white/5 p-5">
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-[#C8F53C] mb-2">Year 5</p>
+                  <p className="font-mono text-2xs uppercase tracking-wider text-[#C8F53C] mb-2">Year 5</p>
                   <p className="font-display font-black text-2xl text-white mb-2">12 to 15 hrs/month recovered</p>
                   <p className="text-[#C8F53C] font-semibold text-sm mb-3">
                     $8,928 to $11,160 in annual labor value recovered
@@ -476,11 +476,11 @@ export default function PricingPage() {
 
       <footer className="border-t border-white/10 py-6">
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-center gap-3">
-          <Link href="/terms" className="font-mono text-[10px] text-white/50 hover:text-white transition-colors">
+          <Link href="/terms" className="font-mono text-2xs text-white/50 hover:text-white transition-colors">
             Terms
           </Link>
           <span className="text-white/25">|</span>
-          <Link href="/privacy" className="font-mono text-[10px] text-white/50 hover:text-white transition-colors">
+          <Link href="/privacy" className="font-mono text-2xs text-white/50 hover:text-white transition-colors">
             Privacy
           </Link>
         </div>

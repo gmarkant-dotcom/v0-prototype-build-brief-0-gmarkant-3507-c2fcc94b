@@ -300,7 +300,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
         <button
           type="button"
           onClick={() => setScoringSettingsOpen(true)}
-          className="flex items-center gap-1.5 font-mono text-[10px] text-foreground-muted hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 font-mono text-2xs text-foreground-muted hover:text-foreground transition-colors"
         >
           <Settings className="w-3.5 h-3.5" /> Scoring Settings
         </button>
@@ -308,7 +308,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
 
       {trackRecord && (
         <div className="rounded-lg border border-accent/30 bg-accent/5 p-4 space-y-1.5">
-          <div className="font-mono text-[10px] uppercase text-foreground-muted flex items-center gap-1.5">
+          <div className="font-mono text-2xs uppercase text-foreground-muted flex items-center gap-1.5">
             <History className="w-3 h-3 text-accent" /> Vendor Track Record
           </div>
           <p className="text-sm text-foreground/90 leading-relaxed">
@@ -319,7 +319,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
               ` Bids typically score ${Math.abs(trackRecord.avg_bid_to_delivery_delta)} points ${trackRecord.avg_bid_to_delivery_delta >= 0 ? "below" : "above"} actual delivery.`}
           </p>
           {partnerId && (
-            <Link href={`/agency/pool/${partnerId}`} className="font-mono text-[10px] text-accent hover:underline">
+            <Link href={`/agency/pool/${partnerId}`} className="font-mono text-2xs text-accent hover:underline">
               View full performance history
             </Link>
           )}
@@ -339,7 +339,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-display font-bold text-sm text-foreground">{c.name}</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[10px] text-foreground-muted">weight</span>
+                  <span className="font-mono text-2xs text-foreground-muted">weight</span>
                   <Input
                     type="number"
                     min={MIN_WEIGHT}
@@ -353,7 +353,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
                     <button
                       type="button"
                       onClick={() => updateWeight(c.id, String(c.default_weight))}
-                      className="font-mono text-[9px] text-foreground-muted hover:text-accent underline transition-colors"
+                      className="font-mono text-2xs text-foreground-muted hover:text-accent underline transition-colors"
                     >
                       Reset to default
                     </button>
@@ -370,7 +370,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
                   !hasHuman && existing?.ai_score != null ? "border-accent/40 bg-accent/5" : "border-border/30"
                 )}
               >
-                <div className="font-mono text-[9px] uppercase text-foreground-muted mb-1.5 flex items-center justify-between">
+                <div className="font-mono text-2xs uppercase text-foreground-muted mb-1.5 flex items-center justify-between">
                   <span>AI Score</span>
                   {!hasHuman && existing?.ai_score != null && (
                     <span className="text-accent">Active</span>
@@ -404,7 +404,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
               </div>
 
               <div className={cn("rounded-md border p-3", hasHuman ? "border-accent/40 bg-accent/5" : "border-border/30")}>
-                <div className="font-mono text-[9px] uppercase text-foreground-muted mb-1.5 flex items-center justify-between">
+                <div className="font-mono text-2xs uppercase text-foreground-muted mb-1.5 flex items-center justify-between">
                   <span>Your Score</span>
                   {hasHuman && <span className="text-accent">Active</span>}
                 </div>
@@ -456,12 +456,12 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
                 {Math.round(liveComposite)}
               </div>
             ) : (
-              <div className="w-14 h-14 rounded-full border-2 border-border flex items-center justify-center font-mono text-[10px] text-foreground-muted">
+              <div className="w-14 h-14 rounded-full border-2 border-border flex items-center justify-center font-mono text-2xs text-foreground-muted">
                 --
               </div>
             )}
             <div>
-              <HelpTerm term="composite_score" theme="dark" className="font-mono text-[10px] uppercase text-foreground-muted">
+              <HelpTerm term="composite_score" theme="dark" className="font-mono text-2xs uppercase text-foreground-muted">
                 Composite Score
               </HelpTerm>
               <div className="text-xs text-foreground-muted">0-100 scale</div>
@@ -479,13 +479,13 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
                 <SelectItem value="complete">Complete</SelectItem>
               </SelectContent>
             </Select>
-            <p className="mt-1 text-[10px] text-foreground-muted max-w-[150px]">{STATUS_HELPER_TEXT[status]}</p>
+            <p className="mt-1 text-2xs text-foreground-muted max-w-[150px]">{STATUS_HELPER_TEXT[status]}</p>
           </div>
         </div>
 
         {evaluation.ai_recommendation && evaluation.status === "complete" && (
           <div className="rounded-md border border-border/40 bg-white/5 p-3">
-            <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
+            <div className="font-mono text-2xs uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
               <Sparkles className="w-3 h-3 text-accent" /> AI Recommendation
             </div>
             <AiMarkdown content={evaluation.ai_recommendation} />
@@ -507,7 +507,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
               type="button"
               onClick={() => void generateAiScores()}
               disabled={generating}
-              className="font-mono text-[10px] text-accent hover:underline"
+              className="font-mono text-2xs text-accent hover:underline"
             >
               {generating ? "Regenerating..." : "Regenerate AI Scores"}
             </button>

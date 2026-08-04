@@ -810,11 +810,11 @@ export default function PartnerProfilePage() {
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Account Email</label>
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Account Email</label>
               <Input value={accountEmail} readOnly className="border-vendor-border bg-gray-100 text-vendor-foreground" />
             </div>
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Account Full Name</label>
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Account Full Name</label>
               <Input value={accountFullName} readOnly className="border-vendor-border bg-gray-100 text-vendor-foreground" />
             </div>
           </div>
@@ -872,7 +872,7 @@ export default function PartnerProfilePage() {
 
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Company Name
               </label>
               <Input
@@ -883,7 +883,7 @@ export default function PartnerProfilePage() {
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Company Website
               </label>
               <Input
@@ -895,7 +895,7 @@ export default function PartnerProfilePage() {
               />
             </div>
             <div>
-              <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Company LinkedIn URL</label>
+              <label className="font-mono text-2xs uppercase text-vendor-muted block mb-2">Company LinkedIn URL</label>
               <Input
                 type="url"
                 value={formData.companyLinkedin ?? ""}
@@ -906,7 +906,7 @@ export default function PartnerProfilePage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Company Type
               </label>
               <select
@@ -922,7 +922,7 @@ export default function PartnerProfilePage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Primary Discipline
               </label>
               {showCustomDiscipline ? (
@@ -982,7 +982,7 @@ export default function PartnerProfilePage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Location
               </label>
               <input
@@ -997,7 +997,7 @@ export default function PartnerProfilePage() {
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                   Team Size
                 </label>
                 <select
@@ -1013,7 +1013,7 @@ export default function PartnerProfilePage() {
                 </select>
               </div>
               <div>
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                   Year Founded
                 </label>
                 <Input
@@ -1025,7 +1025,7 @@ export default function PartnerProfilePage() {
             </div>
             
             <div className="col-span-2">
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Company Bio
               </label>
               <Textarea
@@ -1066,7 +1066,7 @@ export default function PartnerProfilePage() {
           ) : (
             <div className="space-y-6">
               <div>
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                   Partnership
                 </label>
                 <select
@@ -1086,7 +1086,7 @@ export default function PartnerProfilePage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                   Bio
                 </label>
                 <Textarea
@@ -1099,7 +1099,7 @@ export default function PartnerProfilePage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Reel URL
                   </label>
                   <Input
@@ -1111,7 +1111,7 @@ export default function PartnerProfilePage() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Capabilities Tags
                   </label>
                   <Input
@@ -1127,7 +1127,7 @@ export default function PartnerProfilePage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                   Credentials Notes
                 </label>
                 <Textarea
@@ -1144,7 +1144,7 @@ export default function PartnerProfilePage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                       Deposit Percent
                     </label>
                     <Input
@@ -1155,7 +1155,7 @@ export default function PartnerProfilePage() {
                     />
                   </div>
                   <div>
-                    <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                       Net Days
                     </label>
                     <Input
@@ -1166,7 +1166,7 @@ export default function PartnerProfilePage() {
                     />
                   </div>
                   <div>
-                    <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                       Schedule Preference
                     </label>
                     <Input
@@ -1177,7 +1177,7 @@ export default function PartnerProfilePage() {
                     />
                   </div>
                   <div>
-                    <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                       Notes
                     </label>
                     <Input
@@ -1230,7 +1230,7 @@ export default function PartnerProfilePage() {
           
           {/* Add Custom Capability */}
           <div className="pt-4 border-t border-vendor-border">
-            <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+            <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
               Add Custom Capability
             </label>
             <div className="flex gap-2">
@@ -1284,7 +1284,7 @@ export default function PartnerProfilePage() {
               <h3 className="font-display font-bold text-sm text-vendor-foreground mb-4">Add new project</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Project Title
                   </label>
                   <Input
@@ -1295,7 +1295,7 @@ export default function PartnerProfilePage() {
                   />
                 </div>
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Client
                   </label>
                   <Input
@@ -1306,7 +1306,7 @@ export default function PartnerProfilePage() {
                   />
                 </div>
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Year
                   </label>
                   <Input
@@ -1317,7 +1317,7 @@ export default function PartnerProfilePage() {
                   />
                 </div>
                 <div className="md:col-span-3">
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Relevant Context
                   </label>
                   <Textarea
@@ -1389,7 +1389,7 @@ export default function PartnerProfilePage() {
                   ) : (
                     <div>
                       <div className="font-display font-bold text-sm text-vendor-foreground">{cred.title}</div>
-                      <div className="font-mono text-[10px] text-vendor-muted">
+                      <div className="font-mono text-2xs text-vendor-muted">
                         {cred.client} • {cred.year}
                       </div>
                       {cred.relevant_context?.trim() ? (
@@ -1427,7 +1427,7 @@ export default function PartnerProfilePage() {
 
           <div className="space-y-6">
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Primary Reel URL or Upload
               </label>
               <div className="flex gap-2">
@@ -1473,7 +1473,7 @@ export default function PartnerProfilePage() {
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Capabilities Overview
               </label>
               <p className="text-sm text-vendor-muted-strong mb-2">
@@ -1519,7 +1519,7 @@ export default function PartnerProfilePage() {
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                 Additional Work Examples
               </label>
               <div className="space-y-3">

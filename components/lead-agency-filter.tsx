@@ -1,7 +1,7 @@
 "use client"
 
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
-import { Building2, ChevronDown, Check, X } from "lucide-react"
+import { Building2, ChevronDown, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useRef, useEffect } from "react"
 
@@ -120,46 +120,6 @@ export function LeadAgencyFilter({ className }: { className?: string }) {
             </button>
           ))}
         </div>
-      )}
-    </div>
-  )
-}
-
-// Compact version for use in headers
-export function LeadAgencyFilterCompact({ className }: { className?: string }) {
-  const { confirmedAgencies, selectedAgencyId, setSelectedAgencyId, isLoading } = useLeadAgencyFilter()
-
-  if (isLoading || confirmedAgencies.length === 0) {
-    return null
-  }
-
-  const selectedAgency = selectedAgencyId 
-    ? confirmedAgencies.find(a => a.agencyId === selectedAgencyId)
-    : null
-
-  return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <span className="text-xs text-vendor-foreground/70 uppercase tracking-wider font-medium">Filter:</span>
-      <select
-        value={selectedAgencyId || ""}
-        onChange={(e) => setSelectedAgencyId(e.target.value || null)}
-        className="bg-vendor-foreground/10 border border-vendor-foreground/30 rounded px-2 py-1 text-sm text-vendor-foreground min-w-[150px]"
-      >
-        <option value="">All Lead Agencies</option>
-        {confirmedAgencies.map((agency) => (
-          <option key={agency.agencyId} value={agency.agencyId}>
-            {agency.agencyName}
-          </option>
-        ))}
-      </select>
-      {selectedAgencyId && (
-        <button
-          onClick={() => setSelectedAgencyId(null)}
-          className="p-1 hover:bg-gray-100 rounded transition-colors text-vendor-foreground"
-          title="Clear filter"
-        >
-          <X className="w-3 h-3" />
-        </button>
       )}
     </div>
   )

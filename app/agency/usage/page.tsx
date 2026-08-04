@@ -52,13 +52,13 @@ function MetricBar({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-foreground-muted">{label}</span>
+        <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">{label}</span>
         <span className={cn("font-mono text-xs", severityTextClass(severity))}>
           {limit == null ? "Unlimited" : `${current} of ${limit} used`}
         </span>
       </div>
       {limit != null && <Progress value={percentage} className={cn("h-2", indicatorClass(severity))} />}
-      {resetDate && <p className="text-[11px] text-foreground-muted">Resets {formatDateTime(resetDate)}</p>}
+      {resetDate && <p className="text-2xs text-foreground-muted">Resets {formatDateTime(resetDate)}</p>}
     </div>
   )
 }

@@ -313,7 +313,7 @@ export default function HomePage() {
                   <div className="relative z-10 w-14 h-14 rounded-full border-2 border-accent bg-background flex items-center justify-center mb-4">
                     <span className="font-mono text-sm font-bold text-foreground">{stage.number}</span>
                     {stage.ai && (
-                      <span className="ai-badge absolute -top-2 -right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-[10px] font-bold">
+                      <span className="ai-badge absolute -top-2 -right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-2xs font-bold">
                         ✦
                       </span>
                     )}
@@ -336,7 +336,7 @@ export default function HomePage() {
                   <div className="relative z-10 w-14 h-14 rounded-full border-2 border-accent bg-background flex items-center justify-center shrink-0">
                     <span className="font-mono text-sm font-bold text-foreground">{stage.number}</span>
                     {stage.ai && (
-                      <span className="ai-badge absolute -top-2 -right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-[10px] font-bold">
+                      <span className="ai-badge absolute -top-2 -right-2 w-6 h-6 rounded-full bg-accent flex items-center justify-center text-accent-foreground text-2xs font-bold">
                         ✦
                       </span>
                     )}
@@ -395,7 +395,7 @@ export default function HomePage() {
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-12">
               <div>
-                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-4">
+                <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-4">
                   Lead Agencies
                 </div>
                 <div className="space-y-2">
@@ -415,7 +415,7 @@ export default function HomePage() {
               </div>
 
               <div>
-                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-4">
+                <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-4">
                   Partner Agencies
                 </div>
                 <div className="space-y-2">
@@ -435,7 +435,7 @@ export default function HomePage() {
               </div>
 
               <div>
-                <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-4">
+                <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-4">
                   Contact
                 </div>
                 <div className="space-y-2">
@@ -449,20 +449,20 @@ export default function HomePage() {
 
           <div className="mt-12 pt-8 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
-              <div className="font-mono text-[10px] text-foreground-muted/50">
+              <div className="font-mono text-2xs text-foreground-muted/50">
                 LIGAMENT is a product of Liveligood, Inc.
               </div>
               <div className="flex items-center gap-3">
-                <Link href="/terms" className="font-mono text-[10px] text-foreground-muted hover:text-foreground transition-colors">
+                <Link href="/terms" className="font-mono text-2xs text-foreground-muted hover:text-foreground transition-colors">
                   Terms
                 </Link>
                 <span className="text-foreground-muted/30">|</span>
-                <Link href="/privacy" className="font-mono text-[10px] text-foreground-muted hover:text-foreground transition-colors">
+                <Link href="/privacy" className="font-mono text-2xs text-foreground-muted hover:text-foreground transition-colors">
                   Privacy
                 </Link>
               </div>
             </div>
-            <div className="font-mono text-[10px] text-foreground-muted border border-white/20 rounded-full px-3 py-1">
+            <div className="font-mono text-2xs text-foreground-muted border border-white/20 rounded-full px-3 py-1">
               Q2 · 2026
             </div>
           </div>

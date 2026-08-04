@@ -100,7 +100,7 @@ function BidSummaryStrip({
 
   if (error) {
     return (
-      <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-red-300">
+      <div className="mt-2 flex items-center gap-2 font-mono text-2xs text-red-300">
         <span>{error}</span>
         <button type="button" onClick={(e) => { e.stopPropagation(); onGenerate() }} className="underline hover:text-red-200">
           Retry
@@ -124,7 +124,7 @@ function BidSummaryStrip({
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onGenerate() }}
-        className="shrink-0 font-mono text-[10px] text-accent hover:underline whitespace-nowrap"
+        className="shrink-0 font-mono text-2xs text-accent hover:underline whitespace-nowrap"
       >
         Generate
       </button>
@@ -181,13 +181,13 @@ function BidCard({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
           {rank != null && (
-            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-accent/40 bg-accent/10 text-accent shrink-0">
+            <span className="font-mono text-2xs font-bold px-1.5 py-0.5 rounded-full border border-accent/40 bg-accent/10 text-accent shrink-0">
               #{rank}
             </span>
           )}
           <span className="font-display font-bold text-foreground truncate">{scope}</span>
           <span className={cn(
-            "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+            "font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
             badge.bg, badge.text
           )}>
             {badge.label}
@@ -197,7 +197,7 @@ function BidCard({
               term="composite_score"
               theme="dark"
               className={cn(
-                "flex items-center justify-center w-6 h-6 rounded-full border font-mono text-[9px] font-bold shrink-0",
+                "flex items-center justify-center w-6 h-6 rounded-full border font-mono text-2xs font-bold shrink-0",
                 compositeScoreColorClass(row.composite_score).bg,
                 compositeScoreColorClass(row.composite_score).text,
                 compositeScoreColorClass(row.composite_score).border
@@ -207,12 +207,12 @@ function BidCard({
             </HelpTerm>
           )}
           {!row.partner_id && row.response_exists && (
-            <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider shrink-0">
+            <span className="font-mono text-2xs px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider shrink-0">
               Guest Submission
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 font-mono text-[10px] text-foreground-muted flex-wrap">
+        <div className="flex items-center gap-2 font-mono text-2xs text-foreground-muted flex-wrap">
           {groupBy === "client" && (
             <span className="flex items-center gap-1">
               <Users className="w-3 h-3" />
@@ -246,12 +246,12 @@ function BidCard({
           )}
         </div>
         {submittedAt && (
-          <div className="font-mono text-[10px] text-foreground-muted/70 mt-1">
+          <div className="font-mono text-2xs text-foreground-muted/70 mt-1">
             Submitted {submittedAt}
           </div>
         )}
         {row.response_exists && (
-          <div className="font-mono text-[10px] text-foreground-muted/70 mt-1">
+          <div className="font-mono text-2xs text-foreground-muted/70 mt-1">
             {termsSummaryLine(row) || "No terms disclosed"}
           </div>
         )}
@@ -269,7 +269,7 @@ function BidCard({
           <Link
             href={`/agency/project?projectId=${encodeURIComponent(row.inbox.project_id)}&responseId=${encodeURIComponent(row.id)}`}
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 font-mono text-[10px] text-success border border-success/30 hover:bg-success/10 rounded-md px-2 py-1 transition-colors"
+            className="flex items-center gap-1 font-mono text-2xs text-success border border-success/30 hover:bg-success/10 rounded-md px-2 py-1 transition-colors"
           >
             Review Delivery
           </Link>
@@ -277,7 +277,7 @@ function BidCard({
         <button
           type="button"
           onClick={() => onView(row)}
-          className="flex items-center gap-1 font-mono text-[10px] text-accent border border-accent/30 hover:bg-accent/10 rounded-md px-2 py-1 transition-colors"
+          className="flex items-center gap-1 font-mono text-2xs text-accent border border-accent/30 hover:bg-accent/10 rounded-md px-2 py-1 transition-colors"
         >
           View <ChevronRight className="w-3 h-3" />
         </button>
@@ -351,9 +351,9 @@ function RankedGroup({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 px-1">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-accent">Ranked</span>
+        <span className="font-mono text-2xs uppercase tracking-wider text-accent">Ranked</span>
         <span className="text-foreground-muted/40">·</span>
-        <span className="font-mono text-[10px] text-foreground-muted">
+        <span className="font-mono text-2xs text-foreground-muted">
           {ranked.filter((r) => r.rank != null).length} scored
         </span>
       </div>
@@ -373,14 +373,14 @@ function RankedGroup({
         </div>
       ) : narrative ? (
         <div className="rounded-lg border border-accent/30 bg-accent/5 p-3">
-          <div className="font-mono text-[9px] uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
+          <div className="font-mono text-2xs uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
             <Sparkles className="w-3 h-3 text-accent" /> Ranking Recommendation
           </div>
           <AiMarkdown content={narrative} />
           <button
             type="button"
             onClick={() => void generate(true)}
-            className="mt-1.5 font-mono text-[10px] text-accent hover:underline"
+            className="mt-1.5 font-mono text-2xs text-accent hover:underline"
           >
             Regenerate Rankings
           </button>
@@ -447,7 +447,7 @@ function GroupSection({
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-display font-bold text-xl text-foreground">{label}</div>
-          <div className="font-mono text-[11px] text-foreground-muted mt-0.5">
+          <div className="font-mono text-2xs text-foreground-muted mt-0.5">
             {rows.length} RFP{rows.length !== 1 ? "s" : ""}
             {counts["awarded"] > 0 && (
               <span className="ml-2 text-success">· {counts["awarded"]} awarded</span>
@@ -471,7 +471,7 @@ function GroupSection({
                   type="button"
                   onClick={() => setActiveStatus(key)}
                   className={cn(
-                    "shrink-0 px-2.5 py-1 rounded-lg font-mono text-[10px] transition-colors whitespace-nowrap",
+                    "shrink-0 px-2.5 py-1 rounded-lg font-mono text-2xs transition-colors whitespace-nowrap",
                     activeStatus === key
                       ? "bg-accent text-accent-foreground"
                       : "bg-white/5 text-foreground-muted hover:bg-white/10"
@@ -646,7 +646,7 @@ export default function AgencyBidsPage() {
             />
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">Group by</span>
+            <span className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">Group by</span>
             <div className="flex rounded-lg overflow-hidden border border-border">
               {(["client", "partner"] as GroupBy[]).map(g => (
                 <button
@@ -654,7 +654,7 @@ export default function AgencyBidsPage() {
                   type="button"
                   onClick={() => setGroupBy(g)}
                   className={cn(
-                    "px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                    "px-3 py-1.5 font-mono text-2xs uppercase tracking-wider transition-colors",
                     groupBy === g
                       ? "bg-accent text-accent-foreground"
                       : "bg-white/5 text-foreground-muted hover:bg-white/10"
@@ -720,7 +720,7 @@ export default function AgencyBidsPage() {
               Compare {selectedRows.length} Bids
             </Button>
           ) : (
-            <span className="font-mono text-[10px] text-amber-300 flex items-center gap-1.5">
+            <span className="font-mono text-2xs text-amber-300 flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5" />
               Select bids from the same RFP to compare
             </span>

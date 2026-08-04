@@ -75,7 +75,7 @@ function deriveBriefTitle(filename: string | null, text: string): string {
 function JustificationBlock({ label, text }: { label: string; text: string }) {
   return (
     <div className="border-l-2 border-accent/40 pl-3 mt-4">
-      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-1">{label}</div>
+      <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-1">{label}</div>
       <p className="text-xs text-foreground-muted leading-relaxed">{text}</p>
     </div>
   )
@@ -96,7 +96,7 @@ function TimelineCard({ data }: { data: unknown }) {
       <div className="space-y-2">
         {d.phases.map((phase, i) => (
           <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-white/5 border border-border">
-            <div className="font-mono text-[10px] text-accent mt-0.5 whitespace-nowrap">
+            <div className="font-mono text-2xs text-accent mt-0.5 whitespace-nowrap">
               {phase.weeks_min}{phase.weeks_min !== phase.weeks_max ? `-${phase.weeks_max}` : ""} wks
             </div>
             <div>
@@ -127,9 +127,9 @@ function BudgetCard({ data }: { data: unknown }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border">
-            <th className="text-left pb-2 font-mono text-[10px] text-foreground-muted uppercase">Line Item</th>
-            <th className="text-right pb-2 font-mono text-[10px] text-foreground-muted uppercase">Low</th>
-            <th className="text-right pb-2 font-mono text-[10px] text-foreground-muted uppercase">High</th>
+            <th className="text-left pb-2 font-mono text-2xs text-foreground-muted uppercase">Line Item</th>
+            <th className="text-right pb-2 font-mono text-2xs text-foreground-muted uppercase">Low</th>
+            <th className="text-right pb-2 font-mono text-2xs text-foreground-muted uppercase">High</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -139,7 +139,7 @@ function BudgetCard({ data }: { data: unknown }) {
             return (
               <tr key={i}>
                 <td className={cn("py-2 pr-4", isAssumed ? "text-foreground-muted italic" : "text-foreground")}>
-                  {isAssumed && <span className="font-mono text-[9px] text-foreground-muted mr-1.5">assumed</span>}
+                  {isAssumed && <span className="font-mono text-2xs text-foreground-muted mr-1.5">assumed</span>}
                   {label}
                 </td>
                 <td className="py-2 text-right text-foreground-muted font-mono text-xs">{fmt(item.low)}</td>
@@ -163,10 +163,10 @@ function CampaignsCard({ data }: { data: unknown }) {
       {d.campaigns.map((c, i) => (
         <div key={i} className="p-3 rounded-lg bg-white/5 border border-border">
           <div className="font-display font-bold text-sm text-foreground">{c.title}</div>
-          <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+          <div className="font-mono text-2xs text-foreground-muted mt-0.5">
             {c.brand} &middot; {c.year} &middot; Dir. {c.director}
           </div>
-          <div className="font-mono text-[10px] text-foreground-muted">{c.production_company}</div>
+          <div className="font-mono text-2xs text-foreground-muted">{c.production_company}</div>
           <p className="text-xs text-foreground-muted mt-2 leading-relaxed border-l-2 border-accent/30 pl-2">{c.relevance}</p>
         </div>
       ))}
@@ -183,7 +183,7 @@ function DirectorsCard({ data }: { data: unknown }) {
       {d.recommendations.map((r, i) => (
         <div key={i} className="p-3 rounded-lg bg-white/5 border border-border">
           <div className="font-display font-bold text-sm text-foreground">{r.name}</div>
-          <div className="font-mono text-[10px] text-foreground-muted">{r.company}</div>
+          <div className="font-mono text-2xs text-foreground-muted">{r.company}</div>
           <p className="text-xs text-foreground-muted mt-1.5">{r.known_for}</p>
           <p className="text-xs text-foreground-muted mt-1 italic">{r.notable_credits}</p>
           <p className="text-xs text-foreground-muted mt-2 leading-relaxed border-l-2 border-accent/30 pl-2">{r.fit_reason}</p>
@@ -605,7 +605,7 @@ function BriefInterpretationContent() {
                         <Upload className="w-8 h-8 text-accent" />
                       </div>
                       <div className="font-display font-bold text-foreground mb-1">Drop your file here</div>
-                      <div className="font-mono text-[10px] text-foreground-muted">PDF, Word, PowerPoint, or text - click to browse (max 50MB)</div>
+                      <div className="font-mono text-2xs text-foreground-muted">PDF, Word, PowerPoint, or text - click to browse (max 50MB)</div>
                     </label>
                     {briefUploadError && (
                       <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
@@ -617,7 +617,7 @@ function BriefInterpretationContent() {
 
                 {uploadMethod === "google" && (
                   <div className="space-y-3">
-                    <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                    <label className="font-mono text-2xs text-foreground-muted uppercase block">
                       Google Docs or Slides URL
                     </label>
                     <Input
@@ -649,7 +649,7 @@ function BriefInterpretationContent() {
 
                 {uploadMethod === "paste" && (
                   <div className="space-y-3">
-                    <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+                    <label className="font-mono text-2xs text-foreground-muted uppercase block">
                       Paste Brief Content
                     </label>
                     <Textarea
@@ -698,11 +698,11 @@ function BriefInterpretationContent() {
                   </div>
                   <div>
                     <div className="font-display font-bold text-sm text-foreground">{briefFileName}</div>
-                    <div className="font-mono text-[10px] text-success">
+                    <div className="font-mono text-2xs text-success">
                       {isExtractingBrief ? "Extracting text from document..." : "Ready for AI - text extracted"}
                     </div>
                     {!isExtractingBrief && briefSourceText.trim() && (
-                      <div className="font-mono text-[10px] text-foreground-muted mt-1">
+                      <div className="font-mono text-2xs text-foreground-muted mt-1">
                         {briefSourceText.length.toLocaleString()} characters extracted
                       </div>
                     )}
@@ -721,7 +721,7 @@ function BriefInterpretationContent() {
 
             {/* Optional additional details - matches Step 1a */}
             <div className="mt-6 space-y-2">
-              <label className="font-mono text-[10px] text-foreground-muted uppercase block">
+              <label className="font-mono text-2xs text-foreground-muted uppercase block">
                 Optional: Additional brief details
               </label>
               <Textarea
@@ -731,7 +731,7 @@ function BriefInterpretationContent() {
                 className="min-h-[120px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
               />
               {briefAugmentText.trim() && (
-                <p className="font-mono text-[10px] text-foreground-muted">
+                <p className="font-mono text-2xs text-foreground-muted">
                   +{briefAugmentText.trim().length.toLocaleString()} characters appended when analyzing
                 </p>
               )}

@@ -36,7 +36,7 @@ export function AgencySubscriptionGate({ children }: { children: ReactNode }) {
         <Link href="/" className="inline-block mb-8">
           <LigamentLogo size="md" variant="primary" />
         </Link>
-        <p className="font-mono text-[10px] uppercase tracking-wider text-[#C8F53C]/80 mb-2">
+        <p className="font-mono text-2xs uppercase tracking-wider text-[#C8F53C]/80 mb-2">
           Access restricted
         </p>
         <h1 className="font-display font-black text-2xl text-white mb-3">

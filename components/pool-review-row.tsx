@@ -47,7 +47,7 @@ export function ReviewBadge({ tone, children }: { tone?: "neutral" | "accent" | 
   return (
     <span
       className={cn(
-        "font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border",
+        "font-mono text-2xs uppercase tracking-wider px-1.5 py-0.5 rounded-full border",
         tone === "accent" && "border-accent/40 bg-accent/10 text-accent",
         tone === "warning" && "border-yellow-500/30 bg-yellow-500/15 text-yellow-400",
         (!tone || tone === "neutral") && "border-border text-foreground-muted"

@@ -144,7 +144,7 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
             className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
           />
           {(checking || checkResult) && (
-            <p className="font-mono text-[10px] text-foreground-muted mt-1.5">
+            <p className="font-mono text-2xs text-foreground-muted mt-1.5">
               {checking
                 ? "Checking…"
                 : checkResult?.has_pending_invite
@@ -172,7 +172,7 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
         />
         <span className="font-mono text-xs text-foreground">Require term disclosures with bids</span>
       </label>
-      <p className="font-mono text-[10px] text-foreground-muted mt-1">
+      <p className="font-mono text-2xs text-foreground-muted mt-1">
         Vendors state payment, cancellation, IP, and rate-validity terms up front.
       </p>
       <div className="mt-3 flex items-center gap-3 flex-wrap">
@@ -197,7 +197,7 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
       </div>
 
       <div className="mt-6 pt-6 border-t border-border/30">
-        <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider mb-3">
+        <div className="font-mono text-2xs uppercase text-foreground-muted tracking-wider mb-3">
           Pending Invitations
         </div>
         {invitesLoading ? (
@@ -219,19 +219,19 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
                         {row.vendor_name || row.vendor_email}
                       </span>
                       {row.is_existing_partner && (
-                        <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-accent/15 text-accent">
+                        <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-accent/15 text-accent">
                           In partner pool
                         </span>
                       )}
                     </div>
                     {row.vendor_name && (
-                      <div className="font-mono text-[10px] text-foreground-muted truncate">{row.vendor_email}</div>
+                      <div className="font-mono text-2xs text-foreground-muted truncate">{row.vendor_email}</div>
                     )}
-                    <div className="font-mono text-[10px] text-foreground-muted">
+                    <div className="font-mono text-2xs text-foreground-muted">
                       Sent {formatDateTime(row.created_at)} · Expires {formatDateTime(row.expires_at)}
                     </div>
                   </div>
-                  <span className={cn("font-mono text-[10px] px-2 py-0.5 rounded-full uppercase shrink-0", pill.className)}>
+                  <span className={cn("font-mono text-2xs px-2 py-0.5 rounded-full uppercase shrink-0", pill.className)}>
                     {pill.label}
                   </span>
                   {row.status === "pending" && (
@@ -249,7 +249,7 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
                   {row.status === "submitted" && (
                     <a
                       href="/agency/bids"
-                      className="font-mono text-[10px] text-accent border border-accent/30 hover:bg-accent/10 rounded-md px-2 py-1 transition-colors shrink-0"
+                      className="font-mono text-2xs text-accent border border-accent/30 hover:bg-accent/10 rounded-md px-2 py-1 transition-colors shrink-0"
                     >
                       View Bid
                     </a>

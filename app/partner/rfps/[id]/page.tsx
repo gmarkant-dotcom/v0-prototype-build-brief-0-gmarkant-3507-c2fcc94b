@@ -363,7 +363,7 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
             <div className="flex gap-2 items-start">
               <DollarSign className="w-4 h-4 text-vendor-muted/70 mt-0.5 shrink-0" />
               <div>
-                <div className="font-mono text-[10px] uppercase text-vendor-muted">Program budget (master)</div>
+                <div className="font-mono text-2xs uppercase text-vendor-muted">Program budget (master)</div>
                 <div>{totalBudget}</div>
               </div>
             </div>
@@ -372,7 +372,7 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
             <div className="flex gap-2 items-start">
               <Calendar className="w-4 h-4 text-vendor-muted/70 mt-0.5 shrink-0" />
               <div>
-                <div className="font-mono text-[10px] uppercase text-vendor-muted">Timeline (master)</div>
+                <div className="font-mono text-2xs uppercase text-vendor-muted">Timeline (master)</div>
                 <div>{timeline}</div>
               </div>
             </div>
@@ -389,7 +389,7 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
                 <li key={i} className="border border-vendor-border/50 rounded-lg p-3 bg-vendor-background/80">
                   <div className="font-medium text-vendor-foreground">{s.name || `Item ${i + 1}`}</div>
                   {s.description && <p className="text-vendor-muted-strong mt-1">{s.description}</p>}
-                  <div className="font-mono text-[10px] text-vendor-muted mt-2 flex flex-wrap gap-3">
+                  <div className="font-mono text-2xs text-vendor-muted mt-2 flex flex-wrap gap-3">
                     {s.estimatedBudget && <span>Budget: {s.estimatedBudget}</span>}
                     {s.timeline && <span>Timeline: {s.timeline}</span>}
                   </div>
@@ -1112,7 +1112,7 @@ export default function PartnerRfpDetailPage() {
         <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
-              <p className="font-mono text-[10px] uppercase text-vendor-muted mb-1">Scoped RFP</p>
+              <p className="font-mono text-2xs uppercase text-vendor-muted mb-1">Scoped RFP</p>
               <h1 className="font-display font-bold text-2xl text-vendor-foreground">{inbox.scope_item_name}</h1>
               <p className="text-sm text-vendor-muted-strong mt-2 flex flex-wrap items-center gap-3">
                 <span className="inline-flex items-center gap-1">
@@ -1131,7 +1131,7 @@ export default function PartnerRfpDetailPage() {
             </div>
             <span
               className={cn(
-                "font-mono text-[10px] px-2 py-1 rounded-full uppercase inline-flex items-center gap-1",
+                "font-mono text-2xs px-2 py-1 rounded-full uppercase inline-flex items-center gap-1",
                 getBidStatusColor(currentStatus)
               )}
             >
@@ -1158,13 +1158,13 @@ export default function PartnerRfpDetailPage() {
             <div className="grid sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-vendor-border/50">
               {inbox.estimated_budget && (
                 <div>
-                  <div className="font-mono text-[10px] uppercase text-vendor-muted">Estimated budget (scope line)</div>
+                  <div className="font-mono text-2xs uppercase text-vendor-muted">Estimated budget (scope line)</div>
                   <div className="text-vendor-foreground font-medium">{inbox.estimated_budget}</div>
                 </div>
               )}
               {inbox.timeline && (
                 <div>
-                  <div className="font-mono text-[10px] uppercase text-vendor-muted">Timeline (scope line)</div>
+                  <div className="font-mono text-2xs uppercase text-vendor-muted">Timeline (scope line)</div>
                   <div className="text-vendor-foreground font-medium">{inbox.timeline}</div>
                 </div>
               )}
@@ -1229,7 +1229,7 @@ export default function PartnerRfpDetailPage() {
           {activeTab === "status" ? (
             <>
               <div className="bg-vendor-surface rounded-xl border border-vendor-border p-5">
-                <div className="font-mono text-[10px] uppercase text-vendor-muted mb-2">Current status</div>
+                <div className="font-mono text-2xs uppercase text-vendor-muted mb-2">Current status</div>
                 <span
                   className={cn(
                     "font-mono text-xs px-3 py-1 rounded-full uppercase inline-flex items-center gap-1",
@@ -1243,13 +1243,13 @@ export default function PartnerRfpDetailPage() {
 
               {activityTimeline.length > 0 && (
                 <div className="bg-vendor-surface rounded-xl border border-vendor-border p-5">
-                  <div className="font-mono text-[10px] uppercase text-vendor-muted mb-3">Activity</div>
+                  <div className="font-mono text-2xs uppercase text-vendor-muted mb-3">Activity</div>
                   <ul className="space-y-2">
                     {activityTimeline.map((entry, i) => (
                       <li key={i} className="flex items-center gap-2 text-sm text-vendor-foreground">
                         <span className="w-1.5 h-1.5 rounded-full bg-vendor-foreground/60 shrink-0" />
                         <span className="font-medium">{entry.label}</span>
-                        <span className="font-mono text-[10px] text-vendor-muted">{formatSubmittedAt(entry.iso)}</span>
+                        <span className="font-mono text-2xs text-vendor-muted">{formatSubmittedAt(entry.iso)}</span>
                       </li>
                     ))}
                   </ul>
@@ -1260,7 +1260,7 @@ export default function PartnerRfpDetailPage() {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
                   <h3 className="font-display font-bold text-vendor-foreground">Feedback from agency</h3>
                   <p className="text-sm text-vendor-foreground whitespace-pre-wrap mt-2">{existing.agency_feedback}</p>
-                  {feedbackUpdatedAt && <p className="font-mono text-[10px] text-vendor-muted mt-2">Updated {feedbackUpdatedAt}</p>}
+                  {feedbackUpdatedAt && <p className="font-mono text-2xs text-vendor-muted mt-2">Updated {feedbackUpdatedAt}</p>}
                 </div>
               )}
               {currentStatus === "under_review" && (
@@ -1321,13 +1321,13 @@ export default function PartnerRfpDetailPage() {
                               <div className="font-display font-bold text-vendor-foreground text-base">
                                 V{v.version_number} {isOriginal ? "- Original" : ""}
                               </div>
-                              <div className="font-mono text-[10px] text-vendor-muted">
+                              <div className="font-mono text-2xs text-vendor-muted">
                                 {new Date(v.submitted_at).toLocaleString()}
                               </div>
                             </div>
                             <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                               <div>
-                                <div className="font-mono text-[10px] uppercase text-vendor-muted">Budget</div>
+                                <div className="font-mono text-2xs uppercase text-vendor-muted">Budget</div>
                                 <div className="text-vendor-foreground">
                                   {budgetObj?.amount != null && budgetObj?.currency
                                     ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
@@ -1335,7 +1335,7 @@ export default function PartnerRfpDetailPage() {
                                 </div>
                               </div>
                               <div>
-                                <div className="font-mono text-[10px] uppercase text-vendor-muted">Timeline</div>
+                                <div className="font-mono text-2xs uppercase text-vendor-muted">Timeline</div>
                                 <div className="text-vendor-foreground">
                                   {timelineObj?.duration != null && timelineObj?.unit
                                     ? `${timelineObj.duration} ${timelineObj.unit}`
@@ -1345,9 +1345,9 @@ export default function PartnerRfpDetailPage() {
                             </div>
                             <p className="text-sm text-vendor-foreground mt-3 whitespace-pre-wrap">{preview || "-"}</p>
                             <div className="mt-3">
-                              <div className="font-mono text-[10px] uppercase text-vendor-muted mb-2">Attachments</div>
+                              <div className="font-mono text-2xs uppercase text-vendor-muted mb-2">Attachments</div>
                               {versionAttachments.length === 0 ? (
-                                <p className="text-sm text-vendor-muted font-mono text-[10px]">No attachments</p>
+                                <p className="text-sm text-vendor-muted font-mono text-2xs">No attachments</p>
                               ) : (
                                 <ul className="space-y-2">
                                   {versionAttachments.map((att, i) => {
@@ -1363,7 +1363,7 @@ export default function PartnerRfpDetailPage() {
                                         key={`${att.url}-${i}`}
                                         className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm border border-vendor-border rounded-lg p-3 bg-vendor-surface"
                                       >
-                                        <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-gray-100 text-vendor-muted-strong shrink-0">
+                                        <span className="font-mono text-2xs px-2 py-0.5 rounded bg-gray-100 text-vendor-muted-strong shrink-0">
                                           {att.label}
                                         </span>
                                         <span className="text-vendor-foreground min-w-0 flex-1 truncate" title={displayName}>
@@ -1392,7 +1392,7 @@ export default function PartnerRfpDetailPage() {
                             </div>
                             {v.change_notes && (
                               <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2">
-                                <div className="font-mono text-[10px] uppercase text-amber-800">Change notes</div>
+                                <div className="font-mono text-2xs uppercase text-amber-800">Change notes</div>
                                 <p className="text-sm text-amber-900 whitespace-pre-wrap">{v.change_notes}</p>
                               </div>
                             )}
@@ -1419,7 +1419,7 @@ export default function PartnerRfpDetailPage() {
               <div className="flex items-center justify-between gap-3 mb-3">
                 <h3 className="font-display font-bold text-sm text-vendor-foreground">Response intent</h3>
                 {partnerIntent && (
-                  <span className="font-mono text-[10px] text-vendor-muted uppercase tracking-wide">
+                  <span className="font-mono text-2xs text-vendor-muted uppercase tracking-wide">
                     {partnerIntentLabel(partnerIntent as PartnerIntent)}
                   </span>
                 )}
@@ -1478,7 +1478,7 @@ export default function PartnerRfpDetailPage() {
           {canEdit ? (
           <div className="space-y-5">
             <div>
-              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Proposal *</label>
+              <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Proposal *</label>
               <Textarea
                 value={proposalText}
                 onChange={(e) => setProposalText(e.target.value)}
@@ -1489,7 +1489,7 @@ export default function PartnerRfpDetailPage() {
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Budget proposal *</label>
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Budget proposal *</label>
                 <div className="flex flex-wrap gap-2 items-center">
                   <CurrencyInput
                     value={budgetAmount}
@@ -1533,7 +1533,7 @@ export default function PartnerRfpDetailPage() {
                 )}
               </div>
               <div>
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Timeline proposal *</label>
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Timeline proposal *</label>
                 <div className="flex flex-wrap gap-2 items-center">
                   <Input
                     type="number"
@@ -1743,7 +1743,7 @@ export default function PartnerRfpDetailPage() {
                   <div key={d.id} className="rounded-lg border border-vendor-border bg-vendor-surface p-4 space-y-3">
                     <div className="flex flex-wrap gap-3 items-start justify-between">
                       <div className="flex flex-wrap gap-2 items-center flex-1 min-w-[200px]">
-                        <label className="font-mono text-[10px] text-vendor-muted uppercase shrink-0">Label</label>
+                        <label className="font-mono text-2xs text-vendor-muted uppercase shrink-0">Label</label>
                         <select
                           value={d.tag}
                           onChange={(e) =>
@@ -1821,7 +1821,7 @@ export default function PartnerRfpDetailPage() {
 
                     {d.source === "url" && (
                       <div>
-                        <label className="block font-mono text-[10px] text-vendor-muted uppercase mb-1">URL</label>
+                        <label className="block font-mono text-2xs text-vendor-muted uppercase mb-1">URL</label>
                         <Input
                           value={d.urlInput}
                           onChange={(e) => updateDraft(d.id, { urlInput: e.target.value, storedUrl: null })}
@@ -1880,7 +1880,7 @@ export default function PartnerRfpDetailPage() {
                     )}
 
                     {d.storedUrl && d.source === "url" && !isLikelyPrivateBlobUrl(d.storedUrl) && (
-                      <p className="font-mono text-[10px] text-vendor-muted-strong">
+                      <p className="font-mono text-2xs text-vendor-muted-strong">
                         Saved link:{" "}
                         <a href={d.storedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 break-all">
                           {d.storedUrl}
@@ -1914,12 +1914,12 @@ export default function PartnerRfpDetailPage() {
               return (
                 <div className="rounded-lg border border-vendor-border bg-vendor-background p-4 space-y-3">
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-vendor-muted">Proposal</div>
+                    <div className="font-mono text-2xs uppercase text-vendor-muted">Proposal</div>
                     <p className="text-sm text-vendor-foreground whitespace-pre-wrap mt-1">{proposalText || "-"}</p>
                   </div>
                   <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-vendor-muted">Budget</div>
+                      <div className="font-mono text-2xs uppercase text-vendor-muted">Budget</div>
                       <div className="text-vendor-foreground">
                         {budgetObj?.amount != null && budgetObj?.currency
                           ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
@@ -1927,7 +1927,7 @@ export default function PartnerRfpDetailPage() {
                       </div>
                     </div>
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-vendor-muted">Timeline</div>
+                      <div className="font-mono text-2xs uppercase text-vendor-muted">Timeline</div>
                       <div className="text-vendor-foreground">
                         {timelineObj?.duration != null && timelineObj?.unit
                           ? `${timelineObj.duration} ${timelineObj.unit}`
@@ -1945,7 +1945,7 @@ export default function PartnerRfpDetailPage() {
             <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-vendor-border">
               {canEdit && (
                 <div className="w-full">
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Change notes (optional)
                   </label>
                   <Textarea

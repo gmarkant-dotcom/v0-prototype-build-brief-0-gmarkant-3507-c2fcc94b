@@ -34,7 +34,7 @@ export function GlassCardHeader({ label, title, description, badge, className }:
   return (
     <div className={cn("mb-4", className)}>
       {label && (
-        <div className="font-mono text-[10px] text-accent tracking-wider uppercase mb-2">
+        <div className="font-mono text-2xs text-accent tracking-wider uppercase mb-2">
           {label}
         </div>
       )}
@@ -43,7 +43,7 @@ export function GlassCardHeader({ label, title, description, badge, className }:
           {title}
         </h3>
         {badge && (
-          <span className="font-mono text-[10px] text-foreground-muted bg-white/10 px-2 py-0.5 rounded-full shrink-0">
+          <span className="font-mono text-2xs text-foreground-muted bg-white/10 px-2 py-0.5 rounded-full shrink-0">
             {badge}
           </span>
         )}

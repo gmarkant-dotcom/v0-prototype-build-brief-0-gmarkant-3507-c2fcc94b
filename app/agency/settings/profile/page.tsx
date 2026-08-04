@@ -367,11 +367,11 @@ export default function AgencyProfileSettingsPage() {
         <div className="bg-white/5 border border-border/40 rounded-xl p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Account Full Name</label>
+              <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Account Full Name</label>
               <Input value={form.full_name} readOnly className="bg-white/10 border-border/50 text-foreground/60 cursor-not-allowed" />
             </div>
             <div>
-              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Account Email</label>
+              <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Account Email</label>
               <Input value={form.email} readOnly className="bg-white/10 border-border/50 text-foreground/60 cursor-not-allowed" />
             </div>
           </div>
@@ -411,7 +411,7 @@ export default function AgencyProfileSettingsPage() {
 
         <div className="bg-white/5 border border-border/40 rounded-xl p-6 space-y-5">
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company Name</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Company Name</label>
             <Input
               value={form.company_name}
               onChange={(e) => setForm((p) => ({ ...p, company_name: e.target.value }))}
@@ -419,7 +419,7 @@ export default function AgencyProfileSettingsPage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company Website</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Company Website</label>
             <Input
               type="text"
               value={form.company_website}
@@ -429,7 +429,7 @@ export default function AgencyProfileSettingsPage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company LinkedIn URL</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Company LinkedIn URL</label>
             <Input
               type="url"
               value={form.company_linkedin_url}
@@ -439,7 +439,7 @@ export default function AgencyProfileSettingsPage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Default NDA URL</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Default NDA URL</label>
             <Input
               type="url"
               value={form.default_nda_url}
@@ -452,7 +452,7 @@ export default function AgencyProfileSettingsPage() {
             </p>
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Agency Type / Specialization</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Agency Type / Specialization</label>
             <Input
               value={form.agency_type}
               onChange={(e) => setForm((p) => ({ ...p, agency_type: e.target.value }))}
@@ -461,7 +461,7 @@ export default function AgencyProfileSettingsPage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Primary Discipline</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Primary Discipline</label>
             {showCustomDiscipline ? (
               <div className="flex gap-2">
                 <Input
@@ -515,7 +515,7 @@ export default function AgencyProfileSettingsPage() {
             )}
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Company Description / Bio</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Company Description / Bio</label>
             <Textarea
               value={form.bio}
               onChange={(e) => setForm((p) => ({ ...p, bio: e.target.value }))}
@@ -523,7 +523,7 @@ export default function AgencyProfileSettingsPage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Capabilities</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Capabilities</label>
             <div className="flex flex-wrap gap-2">
               {capabilities.map((cap) => (
                 <button
@@ -565,7 +565,7 @@ export default function AgencyProfileSettingsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Location</label>
+              <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Location</label>
               <input
                 ref={locationInputRef}
                 defaultValue={form.location || ""}
@@ -577,7 +577,7 @@ export default function AgencyProfileSettingsPage() {
             </div>
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
               Preferred payment terms
             </label>
             <p className="text-xs text-foreground-muted mb-2">
@@ -603,7 +603,7 @@ export default function AgencyProfileSettingsPage() {
             ) : null}
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Scheduling Link</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Scheduling Link</label>
             <Input
               value={form.meeting_url}
               onChange={(e) => setForm((p) => ({ ...p, meeting_url: e.target.value }))}
@@ -624,7 +624,7 @@ export default function AgencyProfileSettingsPage() {
             <Switch checked={form.is_discoverable} onCheckedChange={toggleDiscoverable} />
           </label>
           <div className="pt-2 border-t border-border/40">
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-1">Business Profile</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-1">Business Profile</label>
             <p className="text-xs text-foreground-muted mb-4">
               Diversity and ownership designations, plus company facts used for procurement requirements.
             </p>
@@ -647,7 +647,7 @@ export default function AgencyProfileSettingsPage() {
                     {designation.holds && (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-7">
                         <div>
-                          <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                          <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
                             Certifying Body
                           </label>
                           <Input
@@ -659,7 +659,7 @@ export default function AgencyProfileSettingsPage() {
                           />
                         </div>
                         <div>
-                          <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                          <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
                             Certification Number
                           </label>
                           <Input
@@ -694,7 +694,7 @@ export default function AgencyProfileSettingsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
                   Years in Business
                 </label>
                 <Input
@@ -708,7 +708,7 @@ export default function AgencyProfileSettingsPage() {
                 />
               </div>
               <div>
-                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
                   Union Signatory
                 </label>
                 <Input
@@ -719,7 +719,7 @@ export default function AgencyProfileSettingsPage() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
                   Sustainability Approach
                 </label>
                 <Textarea
@@ -730,7 +730,7 @@ export default function AgencyProfileSettingsPage() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">
+                <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
                   Workforce Diversity Summary
                 </label>
                 <Textarea

@@ -244,7 +244,7 @@ export function ScoringSettingsSheet({ open, onOpenChange }: { open: boolean; on
               )}
 
               <div className="space-y-2">
-                <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider">Criteria</div>
+                <div className="font-mono text-2xs uppercase text-foreground-muted tracking-wider">Criteria</div>
                 {criteria.map((c) =>
                   editingId === c.id ? (
                     <CriterionForm
@@ -271,11 +271,11 @@ export function ScoringSettingsSheet({ open, onOpenChange }: { open: boolean; on
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-display font-bold text-sm text-foreground">{c.name}</span>
                           {c.category && (
-                            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-border text-foreground-muted uppercase">
+                            <span className="font-mono text-2xs px-1.5 py-0.5 rounded-full border border-border text-foreground-muted uppercase">
                               {c.category}
                             </span>
                           )}
-                          <span className="font-mono text-[10px] text-foreground-muted">weight {c.default_weight}</span>
+                          <span className="font-mono text-2xs text-foreground-muted">weight {c.default_weight}</span>
                         </div>
                         {c.description && (
                           <p className="text-xs text-foreground-muted mt-1 leading-relaxed">{c.description}</p>
@@ -311,7 +311,7 @@ export function ScoringSettingsSheet({ open, onOpenChange }: { open: boolean; on
                   <button
                     type="button"
                     onClick={() => setAddingCriterion(true)}
-                    className="flex items-center gap-1.5 font-mono text-[10px] text-accent hover:underline"
+                    className="flex items-center gap-1.5 font-mono text-2xs text-accent hover:underline"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add Criterion
                   </button>
@@ -319,20 +319,20 @@ export function ScoringSettingsSheet({ open, onOpenChange }: { open: boolean; on
               </div>
 
               <div className="space-y-2">
-                <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider">Templates</div>
+                <div className="font-mono text-2xs uppercase text-foreground-muted tracking-wider">Templates</div>
                 {templates.map((t) => (
                   <div key={t.id} className="flex items-start gap-3 p-3 rounded-lg border border-border/40 bg-white/5">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-display font-bold text-sm text-foreground">{t.name}</span>
                         {t.is_default && (
-                          <span className="font-mono text-[9px] px-1.5 py-0.5 rounded-full border border-accent/40 bg-accent/10 text-accent uppercase">
+                          <span className="font-mono text-2xs px-1.5 py-0.5 rounded-full border border-accent/40 bg-accent/10 text-accent uppercase">
                             Default
                           </span>
                         )}
                       </div>
                       {t.description && <p className="text-xs text-foreground-muted mt-1">{t.description}</p>}
-                      <p className="font-mono text-[10px] text-foreground-muted/70 mt-1">
+                      <p className="font-mono text-2xs text-foreground-muted/70 mt-1">
                         {t.criteria_weights.length} criteri{t.criteria_weights.length === 1 ? "on" : "a"}
                       </p>
                     </div>
@@ -341,7 +341,7 @@ export function ScoringSettingsSheet({ open, onOpenChange }: { open: boolean; on
                         type="button"
                         onClick={() => void setDefaultTemplate(t)}
                         disabled={savingId === t.id}
-                        className="shrink-0 flex items-center gap-1 font-mono text-[10px] text-foreground-muted hover:text-accent transition-colors"
+                        className="shrink-0 flex items-center gap-1 font-mono text-2xs text-foreground-muted hover:text-accent transition-colors"
                       >
                         <Star className="w-3.5 h-3.5" /> Set Default
                       </button>
@@ -390,7 +390,7 @@ export function ScoringSettingsSheet({ open, onOpenChange }: { open: boolean; on
                   <button
                     type="button"
                     onClick={() => setAddingTemplate(true)}
-                    className="flex items-center gap-1.5 font-mono text-[10px] text-accent hover:underline"
+                    className="flex items-center gap-1.5 font-mono text-2xs text-accent hover:underline"
                   >
                     <Plus className="w-3.5 h-3.5" /> New Template
                   </button>

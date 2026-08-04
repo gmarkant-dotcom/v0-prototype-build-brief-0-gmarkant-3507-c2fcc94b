@@ -587,7 +587,7 @@ function PartnerPaymentsPageLegacy() {
 
         {/* Top: Lead agency dropdown */}
         <div className="space-y-3">
-          <p className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider">Lead agency</p>
+          <p className="font-mono text-2xs text-vendor-muted uppercase tracking-wider">Lead agency</p>
           {loadingShell ? (
             <div className="h-9 w-48 max-w-full bg-gray-100 rounded-lg animate-pulse" />
           ) : partnershipsError ? (
@@ -668,7 +668,7 @@ function PartnerPaymentsPageLegacy() {
           ) : (
             <>
               <div className="space-y-2 max-w-md">
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider">
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider">
                   Client / Project
                 </label>
                 <select
@@ -728,7 +728,7 @@ function PartnerPaymentsPageLegacy() {
                                 scope.scope_item_name?.trim() || (scope.response_id ? "Scope" : "Project")
                               return (
                                 <div key={scopeKey} className="space-y-2">
-                                  <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider">
+                                  <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider">
                                     {scopeLabel}
                                   </div>
                                   {ms.length === 0 ? (
@@ -738,16 +738,16 @@ function PartnerPaymentsPageLegacy() {
                                       <table className="w-full text-sm">
                                         <thead>
                                           <tr className="border-b border-vendor-border">
-                                            <th className="text-left font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-2 pr-2">
+                                            <th className="text-left font-mono text-2xs text-vendor-muted uppercase tracking-wider py-2 pr-2">
                                               Title
                                             </th>
-                                            <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-2">
+                                            <th className="text-right font-mono text-2xs text-vendor-muted uppercase tracking-wider py-2">
                                               Amount
                                             </th>
-                                            <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-2">
+                                            <th className="text-right font-mono text-2xs text-vendor-muted uppercase tracking-wider py-2">
                                               Due date
                                             </th>
-                                            <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-2">
+                                            <th className="text-right font-mono text-2xs text-vendor-muted uppercase tracking-wider py-2">
                                               Status
                                             </th>
                                           </tr>
@@ -767,7 +767,7 @@ function PartnerPaymentsPageLegacy() {
                                               <td className="py-2 text-right">
                                                 <span
                                                   className={cn(
-                                                    "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize inline-block",
+                                                    "font-mono text-2xs px-2 py-0.5 rounded-full capitalize inline-block",
                                                     statusBadgeClass(m.status, overdue)
                                                   )}
                                                 >
@@ -815,7 +815,7 @@ function PartnerPaymentsPageLegacy() {
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Hourly rate
                   </label>
                   <div className="relative">
@@ -831,7 +831,7 @@ function PartnerPaymentsPageLegacy() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Project minimum
                   </label>
                   <div className="relative">
@@ -846,7 +846,7 @@ function PartnerPaymentsPageLegacy() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Preferred payment terms
                   </label>
                   <select
@@ -864,7 +864,7 @@ function PartnerPaymentsPageLegacy() {
 
               {rateInfo.payment_terms === "custom" ? (
                 <div>
-                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">
                     Custom terms
                   </label>
                   <Input
@@ -877,7 +877,7 @@ function PartnerPaymentsPageLegacy() {
               ) : null}
 
               <div>
-                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Notes</label>
+                <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Notes</label>
                 <Textarea
                   value={rateInfo.notes}
                   onChange={(e) => setRateInfo((prev) => ({ ...prev, notes: e.target.value }))}

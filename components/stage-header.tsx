@@ -24,7 +24,7 @@ export function StageHeader({
           {stageNumber} / {totalStages}
         </span>
         {aiPowered && (
-          <span className="font-mono text-[10px] text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/30 flex items-center gap-1">
+          <span className="font-mono text-2xs text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/30 flex items-center gap-1">
             <span className="ai-badge">✦</span> AI-powered
           </span>
         )}

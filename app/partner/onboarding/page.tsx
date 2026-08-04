@@ -507,7 +507,7 @@ export default function PartnerOnboardingPage() {
                         ) : null}
                         <div
                           className={cn(
-                            "font-mono text-[10px] mt-2",
+                            "font-mono text-2xs mt-2",
                             isSel ? "text-white/70" : "text-vendor-muted"
                           )}
                         >
@@ -515,7 +515,7 @@ export default function PartnerOnboardingPage() {
                         </div>
                         <div
                           className={cn(
-                            "font-mono text-[10px] mt-2 px-2 py-0.5 rounded-full inline-block",
+                            "font-mono text-2xs mt-2 px-2 py-0.5 rounded-full inline-block",
                             p.status === "reviewed"
                               ? isSel
                                 ? "bg-white/20"
@@ -582,7 +582,7 @@ export default function PartnerOnboardingPage() {
                           >
                             <div>
                               <div className="font-medium text-vendor-foreground">{doc.label}</div>
-                              <div className="font-mono text-[10px] text-vendor-muted uppercase">{doc.document_role}</div>
+                              <div className="font-mono text-2xs text-vendor-muted uppercase">{doc.document_role}</div>
                             </div>
                             <Button variant="outline" size="sm" className="border-vendor-border" asChild>
                               <a href={href} {...(isProxy ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
@@ -669,7 +669,7 @@ export default function PartnerOnboardingPage() {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className={cn(
-                        "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize",
+                        "font-mono text-2xs px-2 py-0.5 rounded-full capitalize",
                         selectedPacket?.id === packet.id
                           ? "bg-white/20 text-white"
                           : packet.status === "complete" 
@@ -679,7 +679,7 @@ export default function PartnerOnboardingPage() {
                         {packet.status.replace("_", " ")}
                       </span>
                       <span className={cn(
-                        "font-mono text-[10px]",
+                        "font-mono text-2xs",
                         selectedPacket?.id === packet.id ? "text-white/60" : "text-vendor-muted"
                       )}>
                         {packetCompleted}/{packetTotal} complete
@@ -692,7 +692,7 @@ export default function PartnerOnboardingPage() {
                       {packet.projectName}
                     </h3>
                     <div className={cn(
-                      "font-mono text-[10px] mt-1",
+                      "font-mono text-2xs mt-1",
                       selectedPacket?.id === packet.id ? "text-white/60" : "text-vendor-muted"
                     )}>
                       from {packet.agencyName} • {packet.sentAt}
@@ -736,7 +736,7 @@ export default function PartnerOnboardingPage() {
                   
                   {/* Message from Agency */}
                   <div className="bg-vendor-foreground/5 rounded-lg p-4 mb-4">
-                    <div className="font-mono text-[10px] text-vendor-foreground/60 uppercase tracking-wider mb-2">
+                    <div className="font-mono text-2xs text-vendor-foreground/60 uppercase tracking-wider mb-2">
                       Message from {selectedPacket.agencyName}
                     </div>
                     <p className="text-sm text-vendor-foreground italic">&quot;{selectedPacket.message}&quot;</p>
@@ -770,7 +770,7 @@ export default function PartnerOnboardingPage() {
                         <h3 className="font-display font-bold text-lg text-vendor-foreground capitalize">
                           {type} Documents
                         </h3>
-                        <span className="font-mono text-[10px] text-vendor-muted ml-auto">
+                        <span className="font-mono text-2xs text-vendor-muted ml-auto">
                           {typeDocs.filter(d => d.status !== "pending").length}/{typeDocs.length} complete
                         </span>
                       </div>
@@ -805,14 +805,14 @@ export default function PartnerOnboardingPage() {
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="font-display font-bold text-vendor-foreground">{doc.name}</span>
                                     {doc.required && (
-                                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-600">Required</span>
+                                      <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-red-100 text-red-600">Required</span>
                                     )}
                                   </div>
                                   <p className="text-sm text-vendor-muted-strong mb-2">{doc.description}</p>
                                   
                                   <div className="flex items-center gap-3">
                                     <span className={cn(
-                                      "font-mono text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1",
+                                      "font-mono text-2xs px-2 py-0.5 rounded-full border flex items-center gap-1",
                                       getStatusColor(doc.status)
                                     )}>
                                       {doc.status === "signed" || doc.status === "uploaded" || doc.status === "acknowledged" || doc.status === "viewed" ? (
@@ -824,13 +824,13 @@ export default function PartnerOnboardingPage() {
                                     </span>
                                     
                                     {(doc.signedAt || doc.viewedAt) && (
-                                      <span className="font-mono text-[10px] text-vendor-muted/70">
+                                      <span className="font-mono text-2xs text-vendor-muted/70">
                                         {doc.signedAt || doc.viewedAt}
                                       </span>
                                     )}
                                     
                                     {doc.status === "pending" && doc.dueDate && (
-                                      <span className="font-mono text-[10px] text-yellow-600 flex items-center gap-1">
+                                      <span className="font-mono text-2xs text-yellow-600 flex items-center gap-1">
                                         <AlertCircle className="w-3 h-3" />
                                         Due {doc.dueDate}
                                       </span>
@@ -945,7 +945,7 @@ export default function PartnerOnboardingPage() {
               <div className="font-display text-2xl text-vendor-muted/50 italic">
                 Your organization
               </div>
-              <div className="font-mono text-[10px] text-vendor-muted/70 mt-2">
+              <div className="font-mono text-2xs text-vendor-muted/70 mt-2">
                 Digital Signature
               </div>
             </div>

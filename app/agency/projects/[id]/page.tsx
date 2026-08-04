@@ -206,7 +206,7 @@ function ProjectDetailContent() {
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, status: s }))}
                 className={cn(
-                  "px-3 py-1.5 rounded-lg font-mono text-[10px] uppercase tracking-wider transition-colors",
+                  "px-3 py-1.5 rounded-lg font-mono text-2xs uppercase tracking-wider transition-colors",
                   form.status === s
                     ? "bg-accent text-accent-foreground"
                     : "bg-white/5 text-foreground border border-border/40 hover:bg-white/10"

@@ -192,14 +192,14 @@ function ResetPasswordContent() {
           <div className="mt-6 flex items-center justify-center gap-3">
             <Link
               href="/terms"
-              className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+              className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
             >
               Terms of Service
             </Link>
             <span className="text-foreground-muted/30">|</span>
             <Link
               href="/privacy"
-              className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+              className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
             >
               Privacy Policy
             </Link>
@@ -255,7 +255,7 @@ function ResetPasswordContent() {
 
               <form onSubmit={handleResetPassword} className="space-y-4">
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     New Password
                   </label>
                   <div className="relative">
@@ -279,7 +279,7 @@ function ResetPasswordContent() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Confirm Password
                   </label>
                   <div className="relative">
@@ -332,14 +332,14 @@ function ResetPasswordContent() {
           <div className="flex items-center justify-center gap-3">
             <Link
               href="/terms"
-              className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+              className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
             >
               Terms of Service
             </Link>
             <span className="text-foreground-muted/30">|</span>
             <Link
               href="/privacy"
-              className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+              className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
             >
               Privacy Policy
             </Link>

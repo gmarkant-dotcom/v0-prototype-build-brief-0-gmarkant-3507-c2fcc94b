@@ -129,7 +129,7 @@ export function ReferenceMaterialsInput({ projectId, agencyId, onChange }: Refer
     <div className="rounded-lg border border-border/40 bg-white/5 p-4 space-y-4">
       <div>
         <div className="font-display font-bold text-sm text-foreground">Reference Materials</div>
-        <p className="font-mono text-[10px] text-foreground-muted mt-0.5">
+        <p className="font-mono text-2xs text-foreground-muted mt-0.5">
           Add files or links to share context with vendors.
         </p>
       </div>
@@ -192,7 +192,7 @@ export function ReferenceMaterialsInput({ projectId, agencyId, onChange }: Refer
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-display font-bold text-sm text-foreground truncate">{item.label}</div>
-                  <div className="font-mono text-[10px] text-foreground-muted truncate">
+                  <div className="font-mono text-2xs text-foreground-muted truncate">
                     {item.uploading ? "Uploading…" : item.url}
                   </div>
                 </div>

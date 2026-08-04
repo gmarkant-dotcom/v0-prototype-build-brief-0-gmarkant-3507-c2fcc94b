@@ -69,7 +69,12 @@
   --font-sans: var(--font-inter), 'Inter', system-ui, sans-serif;
   --font-mono: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace;
   --font-display: var(--font-barlow-condensed), 'Barlow Condensed', sans-serif;
-  
+
+  /* Micro type step (ruled): 10px is the most-used size in the product (mono eyebrow/
+     metadata size) - blessed as a named token rather than left as an arbitrary text-[10px]. */
+  --text-2xs: 10px;
+  --text-2xs--line-height: 14px;
+
   --color-background: var(--background);
   --color-background-deep: var(--background-deep);
   --color-surface: var(--surface);

@@ -228,7 +228,7 @@ export function FileUpload({
             </div>
             <div className="font-display font-bold text-foreground mb-1">{label}</div>
             <div className="font-mono text-xs text-foreground-muted mb-2">{description}</div>
-            <div className="font-mono text-[10px] text-foreground-muted">
+            <div className="font-mono text-2xs text-foreground-muted">
               Max {effectiveMaxSizeMB}MB
             </div>
           </>

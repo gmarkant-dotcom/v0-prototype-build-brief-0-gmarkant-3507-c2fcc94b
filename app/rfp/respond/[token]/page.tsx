@@ -171,14 +171,14 @@ function CenteredCard({ children }: { children: React.ReactNode }) {
         <div className="mt-6 flex items-center justify-center gap-3">
           <Link
             href="/terms"
-            className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+            className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
           >
             Terms of Service
           </Link>
           <span className="text-foreground-muted/30">|</span>
           <Link
             href="/privacy"
-            className="text-[11px] text-foreground/80 hover:text-foreground transition-colors"
+            className="text-2xs text-foreground/80 hover:text-foreground transition-colors"
           >
             Privacy Policy
           </Link>
@@ -461,7 +461,7 @@ export default function GuestRfpRespondPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
           <div className="font-display font-black text-2xl tracking-tight text-foreground">LIGAMENT</div>
-          <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">
+          <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">
             Powered by Ligament
           </div>
         </div>
@@ -568,13 +568,13 @@ export default function GuestRfpRespondPage() {
               <div className="grid sm:grid-cols-2 gap-3 text-sm">
                 {project.budget_range && (
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted">Budget</div>
+                    <div className="font-mono text-2xs uppercase text-foreground-muted">Budget</div>
                     <div className="text-foreground">{project.budget_range}</div>
                   </div>
                 )}
                 {dateRange && (
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted">Timeline</div>
+                    <div className="font-mono text-2xs uppercase text-foreground-muted">Timeline</div>
                     <div className="text-foreground">{dateRange}</div>
                   </div>
                 )}
@@ -584,7 +584,7 @@ export default function GuestRfpRespondPage() {
               )}
               {referenceMaterials.length > 0 && (
                 <div className="pt-3 border-t border-border/30 space-y-2">
-                  <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider">
+                  <div className="font-mono text-2xs uppercase text-foreground-muted tracking-wider">
                     Reference Materials
                   </div>
                   {referenceMaterials.map((material, i) => (
@@ -663,18 +663,18 @@ export default function GuestRfpRespondPage() {
                 )}
                 {isEditingBid && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-accent/5 border border-accent/20">
-                    <span className="font-mono text-[10px] text-accent uppercase tracking-wider">Editing your bid</span>
+                    <span className="font-mono text-2xs text-accent uppercase tracking-wider">Editing your bid</span>
                     <button
                       type="button"
                       onClick={cancelEditingBid}
-                      className="font-mono text-[10px] text-foreground-muted hover:text-foreground"
+                      className="font-mono text-2xs text-foreground-muted hover:text-foreground"
                     >
                       Cancel
                     </button>
                   </div>
                 )}
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Proposal
                   </label>
                   <Textarea
@@ -689,7 +689,7 @@ export default function GuestRfpRespondPage() {
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                       Budget Amount
                     </label>
                     <Input
@@ -703,7 +703,7 @@ export default function GuestRfpRespondPage() {
                     />
                   </div>
                   <div>
-                    <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                       Currency
                     </label>
                     <Select value={budgetCurrency} onValueChange={setBudgetCurrency}>
@@ -722,7 +722,7 @@ export default function GuestRfpRespondPage() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Timeline
                   </label>
                   <Input
@@ -746,7 +746,7 @@ export default function GuestRfpRespondPage() {
                 {hasRequiredCriteriaForBid && (
                   <div className="p-4 rounded-lg border border-border/40 bg-white/5 space-y-4">
                     <div>
-                      <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider">
+                      <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">
                         Business Criteria
                       </div>
                       <p className="text-xs text-foreground-muted mt-1">
@@ -879,7 +879,7 @@ export default function GuestRfpRespondPage() {
                 )}
 
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Attachments
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2">
@@ -996,13 +996,13 @@ export default function GuestRfpRespondPage() {
                 <div className="rounded-lg border border-border/30 bg-white/5 p-6 space-y-4">
                   {(formatSubmittedAt(response.submitted_at) || formatSubmittedAt(tokenRow.submitted_at)) && (
                     <div className="flex items-center justify-between">
-                      <div className="font-mono text-[10px] uppercase text-accent tracking-wider">
+                      <div className="font-mono text-2xs uppercase text-accent tracking-wider">
                         Submitted {formatSubmittedAt(response.submitted_at) || formatSubmittedAt(tokenRow.submitted_at)}
                       </div>
                     </div>
                   )}
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
+                    <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Proposal</div>
                     <p
                       className={cn(
                         "text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed",
@@ -1015,7 +1015,7 @@ export default function GuestRfpRespondPage() {
                       <button
                         type="button"
                         onClick={() => setProposalExpanded((v) => !v)}
-                        className="mt-1 inline-flex items-center gap-1 font-mono text-[10px] text-accent hover:underline"
+                        className="mt-1 inline-flex items-center gap-1 font-mono text-2xs text-accent hover:underline"
                       >
                         {proposalExpanded ? (
                           <>
@@ -1031,17 +1031,17 @@ export default function GuestRfpRespondPage() {
                   </div>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Budget</div>
+                      <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Budget</div>
                       <div className="text-sm text-foreground">{formatBudgetForDisplay(response.budget_proposal)}</div>
                     </div>
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Timeline</div>
+                      <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Timeline</div>
                       <div className="text-sm text-foreground">{formatTimelineForDisplay(response.timeline_proposal)}</div>
                     </div>
                   </div>
                   {response.terms_disclosure ? (
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Terms</div>
+                      <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Terms</div>
                       {(() => {
                         const d = withTermsDisclosureDefaults(response.terms_disclosure)
                         const notes = [
@@ -1065,7 +1065,7 @@ export default function GuestRfpRespondPage() {
                   ) : (
                     response.payment_terms && (
                       <div>
-                        <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Payment Terms</div>
+                        <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Payment Terms</div>
                         <div className="text-sm text-foreground space-y-1">
                           {response.payment_terms.deposit_required_pct != null && (
                             <p>Deposit: {response.payment_terms.deposit_required_pct}%</p>
@@ -1080,7 +1080,7 @@ export default function GuestRfpRespondPage() {
                   )}
                   {response.attachments && response.attachments.length > 0 && (
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
+                      <div className="font-mono text-2xs uppercase text-foreground-muted mb-2">Attachments</div>
                       <ul className="space-y-1.5">
                         {response.attachments.map((a, i) => (
                           <li key={`${a.url}-${i}`}>
@@ -1123,7 +1123,7 @@ export default function GuestRfpRespondPage() {
           <TabsContent value="status">
             <div className="space-y-4">
               <div className="rounded-lg border border-border/30 bg-white/5 p-6 text-center">
-                <div className="font-mono text-[10px] uppercase text-foreground-muted mb-3">Current Status</div>
+                <div className="font-mono text-2xs uppercase text-foreground-muted mb-3">Current Status</div>
                 <span
                   className={cn(
                     "inline-flex items-center px-4 py-1.5 rounded-full font-display font-bold text-sm",
@@ -1136,7 +1136,7 @@ export default function GuestRfpRespondPage() {
 
               {response?.agency_feedback && (
                 <div className="rounded-lg border border-amber-400/30 bg-amber-400/[0.05] p-5">
-                  <div className="font-mono text-[10px] uppercase text-amber-300 tracking-wider mb-2">
+                  <div className="font-mono text-2xs uppercase text-amber-300 tracking-wider mb-2">
                     Agency Feedback
                   </div>
                   <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
@@ -1146,13 +1146,13 @@ export default function GuestRfpRespondPage() {
               )}
 
               <div className="rounded-lg border border-border/30 bg-white/5 p-5">
-                <div className="font-mono text-[10px] uppercase text-foreground-muted tracking-wider mb-3">Timeline</div>
+                <div className="font-mono text-2xs uppercase text-foreground-muted tracking-wider mb-3">Timeline</div>
                 <ul className="space-y-3">
                   {activityTimeline.map((entry, i) => (
                     <li key={i} className="flex items-center gap-3">
                       <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
                       <span className="text-sm text-foreground">{entry.label}</span>
-                      <span className="font-mono text-[10px] text-foreground-muted ml-auto">
+                      <span className="font-mono text-2xs text-foreground-muted ml-auto">
                         {formatSubmittedAt(entry.iso)}
                       </span>
                     </li>
@@ -1179,14 +1179,14 @@ export default function GuestRfpRespondPage() {
         <div className="mt-6 flex items-center justify-center gap-3">
           <Link
             href="/terms"
-            className="text-[11px] text-foreground-muted hover:text-foreground transition-colors"
+            className="text-2xs text-foreground-muted hover:text-foreground transition-colors"
           >
             Terms of Service
           </Link>
           <span className="text-foreground-muted/30">|</span>
           <Link
             href="/privacy"
-            className="text-[11px] text-foreground-muted hover:text-foreground transition-colors"
+            className="text-2xs text-foreground-muted hover:text-foreground transition-colors"
           >
             Privacy Policy
           </Link>

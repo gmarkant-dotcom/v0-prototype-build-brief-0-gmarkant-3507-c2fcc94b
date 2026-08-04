@@ -73,7 +73,7 @@ export function RoleToggle() {
         onClick={handleSwitch}
         disabled={switching}
         className={cn(
-          "w-full flex items-center gap-2 px-3 py-2 rounded-lg border font-mono text-[11px] transition-all",
+          "w-full flex items-center gap-2 px-3 py-2 rounded-lg border font-mono text-2xs transition-all",
           activeRole === "agency"
             ? "border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20"
             : "border-accent/30 bg-accent/10 text-accent hover:bg-accent/20"
@@ -89,7 +89,7 @@ export function RoleToggle() {
 
       {upgradeRequired && (
         <div className="mt-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
-          <p className="font-mono text-[10px] text-amber-200 leading-relaxed">
+          <p className="font-mono text-2xs text-amber-200 leading-relaxed">
             Lead Agency access requires an active subscription. Contact us at{" "}
             <a href="mailto:hello@withligament.com" className="underline">
               hello@withligament.com

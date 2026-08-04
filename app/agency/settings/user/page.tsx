@@ -198,11 +198,11 @@ export default function AgencyUserProfilePage() {
         <div className="bg-white/5 border border-border/40 rounded-xl p-6 space-y-4">
           <h2 className="font-display font-bold text-lg text-foreground">Account information</h2>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Full Name</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Full Name</label>
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-white/5 border-border text-foreground" />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Display Name</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Display Name</label>
             <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
@@ -210,12 +210,12 @@ export default function AgencyUserProfilePage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Email</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Email</label>
             <Input value={email} readOnly className="bg-white/10 border-border/50 text-foreground/60 cursor-not-allowed" />
             <p className="mt-1 text-xs text-foreground-muted">Read-only, email changes are managed through account auth.</p>
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Personal LinkedIn URL <span className="text-foreground-muted">(optional)</span></label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Personal LinkedIn URL <span className="text-foreground-muted">(optional)</span></label>
             <Input
               type="url"
               value={personalLinkedin}
@@ -243,7 +243,7 @@ export default function AgencyUserProfilePage() {
         <div className="bg-white/5 border border-border/40 rounded-xl p-6 space-y-4">
           <h2 className="font-display font-bold text-lg text-foreground">Password & security</h2>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Current Password</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Current Password</label>
             <Input
               type="password"
               value={currentPassword}
@@ -252,7 +252,7 @@ export default function AgencyUserProfilePage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">New Password</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">New Password</label>
             <Input
               type="password"
               value={newPassword}
@@ -262,7 +262,7 @@ export default function AgencyUserProfilePage() {
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-foreground-muted block mb-2">Confirm New Password</label>
+            <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Confirm New Password</label>
             <Input
               type="password"
               value={confirmPassword}

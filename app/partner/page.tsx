@@ -524,7 +524,7 @@ export default function PartnerDashboardPage() {
                           <div className="font-display font-bold text-sm text-vendor-foreground truncate">
                             Overdue payment - {item.title}
                           </div>
-                          <div className="font-mono text-[10px] text-destructive mt-1">
+                          <div className="font-mono text-2xs text-destructive mt-1">
                             {formatUsdWhole(item.amount)} - {item.project_name}
                           </div>
                         </div>
@@ -546,7 +546,7 @@ export default function PartnerDashboardPage() {
                         <div className="font-display font-bold text-sm text-vendor-foreground truncate">
                           Onboarding step pending - {item.projectName}
                         </div>
-                        <div className="font-mono text-[10px] text-vendor-muted mt-1">{item.agencyName}</div>
+                        <div className="font-mono text-2xs text-vendor-muted mt-1">{item.agencyName}</div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-vendor-muted/70 shrink-0" />
                     </Link>
@@ -565,13 +565,13 @@ export default function PartnerDashboardPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-display font-bold text-sm text-vendor-foreground truncate">{item.scopeItemName}</span>
                         {item.ndaPending && (
-                          <span className="flex items-center gap-1 font-mono text-[9px] px-2 py-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-700 shrink-0">
+                          <span className="flex items-center gap-1 font-mono text-2xs px-2 py-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-700 shrink-0">
                             <AlertTriangle className="w-2.5 h-2.5" />
                             NDA required
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 font-mono text-[10px] text-vendor-muted mt-1 flex-wrap">
+                      <div className="flex items-center gap-2 font-mono text-2xs text-vendor-muted mt-1 flex-wrap">
                         <span className="flex items-center gap-1">
                           <Building2 className="w-3 h-3" />
                           {item.agencyName}
@@ -638,21 +638,21 @@ export default function PartnerDashboardPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Link href="/partner/rfps" className="bg-vendor-surface rounded-xl border border-vendor-border p-5 text-center hover:border-vendor-foreground/30 transition-colors">
               <div className="font-display font-bold text-3xl text-vendor-foreground">{funnel?.openRfps ?? 0}</div>
-              <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mt-1">Open RFPs</div>
+              <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mt-1">Open RFPs</div>
             </Link>
             <Link href="/partner/rfps" className="bg-vendor-surface rounded-xl border border-vendor-border p-5 text-center hover:border-vendor-foreground/30 transition-colors">
               <div className="font-display font-bold text-3xl text-vendor-foreground">{funnel?.bidsSubmitted ?? 0}</div>
-              <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mt-1">Bids Submitted</div>
+              <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mt-1">Bids Submitted</div>
               {bidsBreakdownParts.length > 0 && (
-                <div className="text-[10px] text-vendor-muted/70 mt-1 truncate">{bidsBreakdownParts.join(" · ")}</div>
+                <div className="text-2xs text-vendor-muted/70 mt-1 truncate">{bidsBreakdownParts.join(" · ")}</div>
               )}
             </Link>
             <Link href="/partner/rfps" className="bg-vendor-surface rounded-xl border border-vendor-border p-5 text-center hover:border-vendor-foreground/30 transition-colors">
               <div className="font-display font-bold text-3xl text-vendor-foreground">
                 {funnel?.winRate.rate != null ? `${Math.round(funnel.winRate.rate * 100)}%` : "-"}
               </div>
-              <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mt-1">Win Rate</div>
-              <div className="text-[10px] text-vendor-muted/70 mt-1">
+              <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mt-1">Win Rate</div>
+              <div className="text-2xs text-vendor-muted/70 mt-1">
                 {funnel && funnel.winRate.awarded + funnel.winRate.declined > 0
                   ? `${funnel.winRate.awarded} of ${funnel.winRate.awarded + funnel.winRate.declined} awarded`
                   : "No decided bids yet"}
@@ -662,7 +662,7 @@ export default function PartnerDashboardPage() {
               <div className="font-display font-bold text-3xl text-vendor-foreground">
                 {activeProjectsLoading ? "-" : fetchedActiveProjects.length}
               </div>
-              <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mt-1">Active Engagements</div>
+              <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mt-1">Active Engagements</div>
             </Link>
           </div>
         )}
@@ -680,13 +680,13 @@ export default function PartnerDashboardPage() {
             <Link
               href="/partner/payments"
               className={cn(
-                "font-mono text-[10px] uppercase tracking-wider mt-1 hover:underline block",
+                "font-mono text-2xs uppercase tracking-wider mt-1 hover:underline block",
                 hasNoPayments ? "text-vendor-muted/70" : "text-success"
               )}
             >
               Paid to Date
             </Link>
-            {hasNoPayments && <div className="text-[10px] text-vendor-muted/70 mt-0.5">No payments yet</div>}
+            {hasNoPayments && <div className="text-2xs text-vendor-muted/70 mt-0.5">No payments yet</div>}
           </div>
           <div
             className={cn(
@@ -700,13 +700,13 @@ export default function PartnerDashboardPage() {
             <Link
               href="/partner/payments"
               className={cn(
-                "font-mono text-[10px] uppercase tracking-wider mt-1 hover:underline block",
+                "font-mono text-2xs uppercase tracking-wider mt-1 hover:underline block",
                 hasNoPayments ? "text-vendor-muted/70" : "text-yellow-600"
               )}
             >
               Pending
             </Link>
-            {hasNoPayments && <div className="text-[10px] text-vendor-muted/70 mt-0.5">No payments yet</div>}
+            {hasNoPayments && <div className="text-2xs text-vendor-muted/70 mt-0.5">No payments yet</div>}
           </div>
         </div>
 
@@ -720,12 +720,12 @@ export default function PartnerDashboardPage() {
               </HelpTerm>
             </div>
             {!isDemo && (funnel?.agencyRelationships ?? 0) > 0 && (
-              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-vendor-muted-strong">
+              <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-gray-100 text-vendor-muted-strong">
                 {funnel?.agencyRelationships} agency relationship{funnel?.agencyRelationships === 1 ? "" : "s"}
               </span>
             )}
             {isDemo && (
-              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-vendor-muted-strong">
+              <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-gray-100 text-vendor-muted-strong">
                 {demoFunnelMetrics.agencyRelationships} agency relationships
               </span>
             )}
@@ -780,11 +780,11 @@ export default function PartnerDashboardPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-vendor-border">
-                    <th className="text-left font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-3">Project</th>
-                    <th className="text-left font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-3">Milestone</th>
-                    <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-3">Amount</th>
-                    <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-3">Due Date</th>
-                    <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-3">Status</th>
+                    <th className="text-left font-mono text-2xs text-vendor-muted uppercase tracking-wider py-3">Project</th>
+                    <th className="text-left font-mono text-2xs text-vendor-muted uppercase tracking-wider py-3">Milestone</th>
+                    <th className="text-right font-mono text-2xs text-vendor-muted uppercase tracking-wider py-3">Amount</th>
+                    <th className="text-right font-mono text-2xs text-vendor-muted uppercase tracking-wider py-3">Due Date</th>
+                    <th className="text-right font-mono text-2xs text-vendor-muted uppercase tracking-wider py-3">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -798,7 +798,7 @@ export default function PartnerDashboardPage() {
                       <td className={cn("py-4 text-right font-mono text-xs", overdue ? "text-destructive" : "text-vendor-muted")}>{formatDueDate(payment.due_date)}</td>
                       <td className="py-4 text-right">
                         <span className={cn(
-                          "font-mono text-[10px] px-2 py-0.5 rounded-full capitalize",
+                          "font-mono text-2xs px-2 py-0.5 rounded-full capitalize",
                           overdue ? "bg-destructive/15 text-destructive" : "bg-yellow-100 text-yellow-700"
                         )}>
                           {overdue ? "Overdue" : payment.status}
@@ -822,11 +822,11 @@ export default function PartnerDashboardPage() {
                 <h2 className="font-display font-bold text-lg text-vendor-foreground">Lead agency connections</h2>
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-success/15 text-success">
+                <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-success/15 text-success">
                   {connections.filter((c) => c.status === "confirmed").length} Confirmed
                 </span>
                 {connections.filter((c) => c.status === "pending").length > 0 && (
-                  <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600">
+                  <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-600">
                     {connections.filter((c) => c.status === "pending").length} Pending
                   </span>
                 )}
@@ -886,10 +886,10 @@ export default function PartnerDashboardPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h4 className="font-display font-bold text-sm text-vendor-foreground truncate">{connection.agencyName}</h4>
-                        <p className="font-mono text-[10px] text-vendor-muted mt-0.5">{connection.agencyLocation}</p>
+                        <p className="font-mono text-2xs text-vendor-muted mt-0.5">{connection.agencyLocation}</p>
                         <div className="flex items-center gap-1.5 mt-2">
                           {statusConfig.icon}
-                          <span className={cn("font-mono text-[10px] px-1.5 py-0.5 rounded", statusConfig.labelBg)}>
+                          <span className={cn("font-mono text-2xs px-1.5 py-0.5 rounded", statusConfig.labelBg)}>
                             {statusConfig.label}
                           </span>
                         </div>
@@ -915,7 +915,7 @@ export default function PartnerDashboardPage() {
 
                     {connection.status === "confirmed" && (
                       <div className="mt-3 pt-3 border-t border-success/50">
-                        <p className="font-mono text-[10px] text-success">
+                        <p className="font-mono text-2xs text-success">
                           Connected since{" "}
                           {connection.confirmedAt
                             ? new Date(connection.confirmedAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })
@@ -951,7 +951,7 @@ export default function PartnerDashboardPage() {
                   className="block p-4 rounded-lg border border-vendor-border hover:border-vendor-foreground/30 transition-colors"
                 >
                   <h4 className="font-display font-bold text-sm text-vendor-foreground">{project.name}</h4>
-                  <div className="font-mono text-[10px] text-vendor-muted mt-0.5">
+                  <div className="font-mono text-2xs text-vendor-muted mt-0.5">
                     {project.client} · {project.agencyName}
                   </div>
                 </Link>
@@ -989,7 +989,7 @@ export default function PartnerDashboardPage() {
                   className="flex items-center justify-between gap-3 py-2 border-b border-vendor-border/50 last:border-0 hover:bg-vendor-background/60 -mx-2 px-2 rounded"
                 >
                   <span className="text-sm text-vendor-foreground min-w-0 truncate">{item.text}</span>
-                  <span className="font-mono text-[10px] text-vendor-muted/70 shrink-0">{formatRelativeTime(item.timestamp)}</span>
+                  <span className="font-mono text-2xs text-vendor-muted/70 shrink-0">{formatRelativeTime(item.timestamp)}</span>
                 </Link>
               ))}
               {activityHasMore && (

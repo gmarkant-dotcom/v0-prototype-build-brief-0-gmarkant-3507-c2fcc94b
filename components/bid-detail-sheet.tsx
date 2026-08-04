@@ -268,14 +268,14 @@ function BidDetailSheetInner({
               {scope}
               <span
                 className={cn(
-                  "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider",
+                  "font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider",
                   badge.bg, badge.text
                 )}
               >
                 {badge.label}
               </span>
               {isGuest && (
-                <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider">
+                <span className="font-mono text-2xs px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider">
                   Guest Submission
                 </span>
               )}
@@ -431,7 +431,7 @@ function BidDetailSheetInner({
 
               <TabsContent value="analysis" className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
                 <div>
-                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
+                  <div className="font-mono text-2xs uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
                     <Sparkles className="w-3 h-3 text-accent" /> AI Analysis
                   </div>
                   {analysisGenerating ? (
@@ -442,7 +442,7 @@ function BidDetailSheetInner({
                       <Skeleton className="h-3 w-2/3 bg-white/10" />
                     </div>
                   ) : analysisError ? (
-                    <div className="flex items-center gap-2 font-mono text-[10px] text-red-300">
+                    <div className="flex items-center gap-2 font-mono text-2xs text-red-300">
                       <span>{analysisError}</span>
                       <button type="button" onClick={() => void generateAnalysis(true)} className="underline hover:text-red-200">
                         Retry
@@ -457,7 +457,7 @@ function BidDetailSheetInner({
 
                 {row.proposal_text && (
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Proposal</div>
+                    <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Proposal</div>
                     <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
                       {row.proposal_text}
                     </p>
@@ -467,20 +467,20 @@ function BidDetailSheetInner({
                   <div className="grid sm:grid-cols-2 gap-4">
                     {budget && (
                       <div>
-                        <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Budget</div>
+                        <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Budget</div>
                         <div className="text-sm text-foreground">{budget}</div>
                       </div>
                     )}
                     {timeline && (
                       <div>
-                        <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Timeline</div>
+                        <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Timeline</div>
                         <div className="text-sm text-foreground">{timeline}</div>
                       </div>
                     )}
                   </div>
                 )}
                 <div>
-                  <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Terms</div>
+                  <div className="font-mono text-2xs uppercase text-foreground-muted mb-2">Terms</div>
                   {row.terms_disclosure ? (
                     <div className="space-y-2.5">
                       {(() => {
@@ -548,7 +548,7 @@ function BidDetailSheetInner({
                             {t.state && (
                               <span
                                 className={cn(
-                                  "font-mono text-[10px] px-1.5 py-0.5 rounded border shrink-0",
+                                  "font-mono text-2xs px-1.5 py-0.5 rounded border shrink-0",
                                   TERM_STATE_BADGE_CLASS[t.state]
                                 )}
                               >
@@ -575,7 +575,7 @@ function BidDetailSheetInner({
                 </div>
                 {row.attachments && row.attachments.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Attachments</div>
+                    <div className="font-mono text-2xs uppercase text-foreground-muted mb-2">Attachments</div>
                     <ul className="space-y-1.5">
                       {row.attachments.map((a, i) => (
                         <li key={`${a.url}-${i}`}>
@@ -600,10 +600,10 @@ function BidDetailSheetInner({
                 )}
                 {activityTimeline.length > 0 && (
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1">Activity</div>
+                    <div className="font-mono text-2xs uppercase text-foreground-muted mb-1">Activity</div>
                     <ul className="space-y-1">
                       {activityTimeline.map((entry, i) => (
-                        <li key={i} className="font-mono text-[10px] text-foreground-muted flex items-center gap-2">
+                        <li key={i} className="font-mono text-2xs text-foreground-muted flex items-center gap-2">
                           <span className="w-1 h-1 rounded-full bg-foreground-muted/60 shrink-0" />
                           {entry.label} {formatSubmittedAt(entry.iso)}
                         </li>
@@ -614,7 +614,7 @@ function BidDetailSheetInner({
 
                 {showBusinessCriteriaSection && (
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-foreground-muted mb-2">Business Criteria</div>
+                    <div className="font-mono text-2xs uppercase text-foreground-muted mb-2">Business Criteria</div>
                     <div className="space-y-2">
                       {designationKeysToShow.map((key) => {
                         const designation = businessCriteriaResponses.designations[key]
@@ -625,30 +625,30 @@ function BidDetailSheetInner({
                             <div className="min-w-0">
                               <div className="text-foreground">{DESIGNATION_LABELS[key]}</div>
                               {designation.holds && (designation.certifying_body || designation.certification_number) && (
-                                <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                                <div className="font-mono text-2xs text-foreground-muted mt-0.5">
                                   {[designation.certifying_body, designation.certification_number]
                                     .filter(Boolean)
                                     .join(" · ")}
                                 </div>
                               )}
                               {designation.holds && designation.self_certified && (
-                                <div className="font-mono text-[10px] text-foreground-muted mt-0.5">Self-certified</div>
+                                <div className="font-mono text-2xs text-foreground-muted mt-0.5">Self-certified</div>
                               )}
                             </div>
                             {isRequired ? (
                               isMissing ? (
                                 <span className="inline-flex items-center gap-1 text-amber-300 shrink-0">
                                   <AlertTriangle className="w-3.5 h-3.5" />
-                                  <span className="font-mono text-[9px] uppercase">Missing</span>
+                                  <span className="font-mono text-2xs uppercase">Missing</span>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-success shrink-0">
                                   <CheckCircle className="w-3.5 h-3.5" />
-                                  <span className="font-mono text-[9px] uppercase">Met</span>
+                                  <span className="font-mono text-2xs uppercase">Met</span>
                                 </span>
                               )
                             ) : (
-                              <span className="font-mono text-[9px] uppercase text-foreground-muted shrink-0">
+                              <span className="font-mono text-2xs uppercase text-foreground-muted shrink-0">
                                 Confirmed
                               </span>
                             )}
@@ -670,12 +670,12 @@ function BidDetailSheetInner({
                                 {minimum ? ` (min. ${minimum})` : ""}
                               </div>
                               {coverage.has_coverage && coverage.limit && (
-                                <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                                <div className="font-mono text-2xs text-foreground-muted mt-0.5">
                                   Limit: {coverage.limit}
                                 </div>
                               )}
                               {limitVerdict === "unknown" && (
-                                <div className="font-mono text-[9px] text-foreground-muted/70 mt-0.5 italic">
+                                <div className="font-mono text-2xs text-foreground-muted/70 mt-0.5 italic">
                                   Limit not auto-verified
                                 </div>
                               )}
@@ -684,16 +684,16 @@ function BidDetailSheetInner({
                               isMissing || limitVerdict === "not_met" ? (
                                 <span className="inline-flex items-center gap-1 text-amber-300 shrink-0">
                                   <AlertTriangle className="w-3.5 h-3.5" />
-                                  <span className="font-mono text-[9px] uppercase">Missing</span>
+                                  <span className="font-mono text-2xs uppercase">Missing</span>
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-success shrink-0">
                                   <CheckCircle className="w-3.5 h-3.5" />
-                                  <span className="font-mono text-[9px] uppercase">Met</span>
+                                  <span className="font-mono text-2xs uppercase">Met</span>
                                 </span>
                               )
                             ) : (
-                              <span className="font-mono text-[9px] uppercase text-foreground-muted shrink-0">
+                              <span className="font-mono text-2xs uppercase text-foreground-muted shrink-0">
                                 Confirmed
                               </span>
                             )}
@@ -707,16 +707,16 @@ function BidDetailSheetInner({
                             businessCriteriaGap.missingCoi ? (
                               <span className="inline-flex items-center gap-1 text-amber-300 shrink-0">
                                 <AlertTriangle className="w-3.5 h-3.5" />
-                                <span className="font-mono text-[9px] uppercase">Missing</span>
+                                <span className="font-mono text-2xs uppercase">Missing</span>
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 text-success shrink-0">
                                 <CheckCircle className="w-3.5 h-3.5" />
-                                <span className="font-mono text-[9px] uppercase">Met</span>
+                                <span className="font-mono text-2xs uppercase">Met</span>
                               </span>
                             )
                           ) : (
-                            <span className="font-mono text-[9px] uppercase text-foreground-muted shrink-0">
+                            <span className="font-mono text-2xs uppercase text-foreground-muted shrink-0">
                               Confirmed
                             </span>
                           )}
@@ -728,7 +728,7 @@ function BidDetailSheetInner({
 
                 {canMutate && (
                   <div>
-                    <label className="block font-mono text-[10px] uppercase text-foreground-muted mb-1">
+                    <label className="block font-mono text-2xs uppercase text-foreground-muted mb-1">
                       Agency Feedback
                     </label>
                     <Textarea
@@ -780,7 +780,7 @@ function BidDetailSheetInner({
                     <Skeleton className="h-8 w-full bg-white/10" />
                   </div>
                 ) : decomposeError ? (
-                  <div className="flex items-center gap-2 font-mono text-[10px] text-red-300">
+                  <div className="flex items-center gap-2 font-mono text-2xs text-red-300">
                     <span>{decomposeError}</span>
                     <button type="button" onClick={() => void loadDecomposition(true)} className="underline hover:text-red-200">
                       Retry
@@ -820,7 +820,7 @@ function BidDetailSheetInner({
 
                     {decomposition.narrative_summary && (
                       <div className="rounded-lg border border-border/40 bg-white/5 p-4">
-                        <div className="font-mono text-[10px] uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
+                        <div className="font-mono text-2xs uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
                           <Sparkles className="w-3 h-3 text-accent" /> Cost Structure Notes
                         </div>
                         <AiMarkdown content={decomposition.narrative_summary} />
@@ -830,7 +830,7 @@ function BidDetailSheetInner({
                     <button
                       type="button"
                       onClick={() => void loadDecomposition(true)}
-                      className="font-mono text-[10px] text-accent hover:underline"
+                      className="font-mono text-2xs text-accent hover:underline"
                     >
                       Regenerate
                     </button>

@@ -52,7 +52,7 @@ function ProjectSwitcherDropdown({ projects, selectedProject }: { projects: Mast
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="font-mono text-[10px] text-accent hover:text-accent/80 transition-colors flex items-center gap-1"
+        className="font-mono text-2xs text-accent hover:text-accent/80 transition-colors flex items-center gap-1"
       >
         Switch Project <ChevronDown className={cn("w-3 h-3 transition-transform", open && "rotate-180")} />
       </button>
@@ -85,7 +85,7 @@ function ProjectSwitcherDropdown({ projects, selectedProject }: { projects: Mast
                     <div className="font-display font-bold text-sm text-foreground truncate">
                       {formatProjectLabel(project, duplicateNameCounts)}
                     </div>
-                    <div className="font-mono text-[10px] text-foreground-muted truncate">{project.client}</div>
+                    <div className="font-mono text-2xs text-foreground-muted truncate">{project.client}</div>
                   </div>
                   {selectedProject.id === project.id && <Check className="w-4 h-4 text-accent shrink-0" />}
                 </button>
@@ -94,7 +94,7 @@ function ProjectSwitcherDropdown({ projects, selectedProject }: { projects: Mast
             {onHoldProjects.length > 0 && (
               <>
                 <div className="px-3 py-1.5 bg-white/5 border-t border-border/50">
-                  <span className="font-mono text-[9px] text-foreground-muted uppercase tracking-wider">On Hold</span>
+                  <span className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">On Hold</span>
                 </div>
                 <div className="p-1.5">
                   {onHoldProjects.map((project) => (
@@ -115,7 +115,7 @@ function ProjectSwitcherDropdown({ projects, selectedProject }: { projects: Mast
                         <div className="font-display font-bold text-sm text-foreground truncate">
                           {formatProjectLabel(project, duplicateNameCounts)}
                         </div>
-                        <div className="font-mono text-[10px] text-foreground-muted truncate">{project.client}</div>
+                        <div className="font-mono text-2xs text-foreground-muted truncate">{project.client}</div>
                       </div>
                       {selectedProject.id === project.id && <Check className="w-4 h-4 text-accent shrink-0" />}
                     </button>
@@ -151,7 +151,7 @@ export function SelectedProjectHeader({ className, dropdown }: SelectedProjectHe
             </p>
             <Link 
               href="/agency/dashboard"
-              className="inline-flex items-center gap-1 font-mono text-[10px] text-yellow-400 hover:text-yellow-300 transition-colors"
+              className="inline-flex items-center gap-1 font-mono text-2xs text-yellow-400 hover:text-yellow-300 transition-colors"
             >
               Go to Dashboard <ChevronRight className="w-3 h-3" />
             </Link>
@@ -175,7 +175,7 @@ export function SelectedProjectHeader({ className, dropdown }: SelectedProjectHe
               selectedProject.status === "onboarding" ? "bg-yellow-400" :
               selectedProject.status === "on_hold" ? "bg-gray-400" : "bg-blue-400"
             )} />
-            <span className="font-mono text-[10px] text-foreground-muted uppercase">
+            <span className="font-mono text-2xs text-foreground-muted uppercase">
               {selectedProject.status.replace("_", " ")}
             </span>
           </div>
@@ -191,7 +191,7 @@ export function SelectedProjectHeader({ className, dropdown }: SelectedProjectHe
         ) : (
           <Link
             href="/agency/dashboard"
-            className="font-mono text-[10px] text-accent hover:text-accent/80 transition-colors flex items-center gap-1 shrink-0"
+            className="font-mono text-2xs text-accent hover:text-accent/80 transition-colors flex items-center gap-1 shrink-0"
           >
             Switch Project <ChevronRight className="w-3 h-3" />
           </Link>

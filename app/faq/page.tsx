@@ -249,11 +249,11 @@ export default function FAQPage() {
 
       <footer className="border-t border-white/10 py-6">
         <div className="max-w-3xl mx-auto px-6 flex items-center justify-center gap-3">
-          <Link href="/terms" className="font-mono text-[10px] text-white/50 hover:text-white transition-colors">
+          <Link href="/terms" className="font-mono text-2xs text-white/50 hover:text-white transition-colors">
             Terms
           </Link>
           <span className="text-white/25">|</span>
-          <Link href="/privacy" className="font-mono text-[10px] text-white/50 hover:text-white transition-colors">
+          <Link href="/privacy" className="font-mono text-2xs text-white/50 hover:text-white transition-colors">
             Privacy
           </Link>
         </div>

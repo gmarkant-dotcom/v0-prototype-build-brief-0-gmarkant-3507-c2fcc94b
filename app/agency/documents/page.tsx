@@ -281,35 +281,35 @@ export default function DocumentsPage() {
               <FileText className="w-4 h-4 text-accent" />
             </div>
             <div className="font-display font-bold text-2xl text-foreground">{allDocuments.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Total documents</div>
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">Total documents</div>
           </GlassCard>
           <GlassCard className="p-4">
             <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
               <FileLock2 className="w-4 h-4 text-accent" />
             </div>
             <div className="font-display font-bold text-2xl text-foreground">{masterBriefs.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Master briefs</div>
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">Master briefs</div>
           </GlassCard>
           <GlassCard className="p-4">
             <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
               <Send className="w-4 h-4 text-accent" />
             </div>
             <div className="font-display font-bold text-2xl text-accent">{partnerBriefs.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Partner briefs</div>
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">Partner briefs</div>
           </GlassCard>
           <GlassCard className="p-4">
             <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center mb-3">
               <ClipboardCheck className="w-4 h-4 text-warning" />
             </div>
             <div className="font-display font-bold text-2xl text-warning">{requirements.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Requirements</div>
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">Requirements</div>
           </GlassCard>
           <GlassCard className="p-4">
             <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center mb-3">
               <Copy className="w-4 h-4 text-accent" />
             </div>
             <div className="font-display font-bold text-2xl text-foreground">{templates.length}</div>
-            <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mt-1">Templates</div>
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">Templates</div>
           </GlassCard>
         </div>
         
@@ -362,7 +362,7 @@ export default function DocumentsPage() {
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
               <h3 className="font-display font-bold text-lg text-foreground">Master briefs</h3>
-              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full border border-border text-foreground-muted uppercase">Internal Only</span>
+              <span className="font-mono text-2xs px-2 py-0.5 rounded-full border border-border text-foreground-muted uppercase">Internal Only</span>
             </div>
             <p className="font-mono text-xs text-foreground-muted mb-4">
               Complete client briefs with all confidential details. For lead agency reference only - do not share externally.
@@ -382,20 +382,20 @@ export default function DocumentsPage() {
                       <div className="font-display font-bold text-sm text-foreground truncate group-hover:text-accent transition-colors">
                         {doc.name}
                       </div>
-                      <div className="font-mono text-[10px] text-foreground-muted mt-0.5">
+                      <div className="font-mono text-2xs text-foreground-muted mt-0.5">
                         {typeLabels[doc.type]}
                       </div>
                     </div>
                   </div>
                   
                   {doc.description && (
-                    <p className="font-mono text-[10px] text-foreground-muted mb-3 line-clamp-2">{doc.description}</p>
+                    <p className="font-mono text-2xs text-foreground-muted mb-3 line-clamp-2">{doc.description}</p>
                   )}
                   
                   <div className="flex items-center gap-3 text-foreground-muted mb-4">
-                    <span className="font-mono text-[10px]">{doc.size}</span>
-                    <span className="font-mono text-[10px]">Updated {doc.uploadedAt}</span>
-                    {doc.project && <span className="font-mono text-[10px] text-accent">{doc.project}</span>}
+                    <span className="font-mono text-2xs">{doc.size}</span>
+                    <span className="font-mono text-2xs">Updated {doc.uploadedAt}</span>
+                    {doc.project && <span className="font-mono text-2xs text-accent">{doc.project}</span>}
                   </div>
                   
                   <div className="flex gap-2 pt-3 border-t border-border">
@@ -417,7 +417,7 @@ export default function DocumentsPage() {
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
               <h3 className="font-display font-bold text-lg text-foreground">Partner briefs</h3>
-              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-accent/20 text-accent uppercase">Shareable</span>
+              <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-accent/20 text-accent uppercase">Shareable</span>
             </div>
             <p className="font-mono text-xs text-foreground-muted mb-4">
               Clean, external-facing briefs for sharing with potential partners. Confidential details redacted.
@@ -437,20 +437,20 @@ export default function DocumentsPage() {
                       <div className="font-display font-bold text-sm text-foreground truncate group-hover:text-accent transition-colors">
                         {doc.name}
                       </div>
-                      <div className="font-mono text-[10px] text-accent mt-0.5">
+                      <div className="font-mono text-2xs text-accent mt-0.5">
                         {typeLabels[doc.type]}
                       </div>
                     </div>
                   </div>
                   
                   {doc.description && (
-                    <p className="font-mono text-[10px] text-foreground-muted mb-3 line-clamp-2">{doc.description}</p>
+                    <p className="font-mono text-2xs text-foreground-muted mb-3 line-clamp-2">{doc.description}</p>
                   )}
                   
                   <div className="flex items-center gap-3 text-foreground-muted mb-4">
-                    <span className="font-mono text-[10px]">{doc.size}</span>
-                    <span className="font-mono text-[10px]">Updated {doc.uploadedAt}</span>
-                    {doc.project && <span className="font-mono text-[10px] text-accent">{doc.project}</span>}
+                    <span className="font-mono text-2xs">{doc.size}</span>
+                    <span className="font-mono text-2xs">Updated {doc.uploadedAt}</span>
+                    {doc.project && <span className="font-mono text-2xs text-accent">{doc.project}</span>}
                   </div>
                   
                   <div className="flex gap-2 pt-3 border-t border-border">
@@ -472,7 +472,7 @@ export default function DocumentsPage() {
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
               <h3 className="font-display font-bold text-lg text-foreground">Master requirements</h3>
-              <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-warning/20 text-warning uppercase">Mandatory</span>
+              <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-warning/20 text-warning uppercase">Mandatory</span>
             </div>
             <p className="font-mono text-xs text-foreground-muted mb-4">
               Critical ways of working and compliance requirements that all partners must follow.
@@ -489,11 +489,11 @@ export default function DocumentsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="font-display font-bold text-foreground">{doc.name}</div>
                     {doc.description && (
-                      <div className="font-mono text-[10px] text-foreground-muted mt-0.5">{doc.description}</div>
+                      <div className="font-mono text-2xs text-foreground-muted mt-0.5">{doc.description}</div>
                     )}
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="font-mono text-[10px] text-foreground-muted">{doc.size}</span>
-                      <span className="font-mono text-[10px] text-foreground-muted">{doc.uploadedAt}</span>
+                      <span className="font-mono text-2xs text-foreground-muted">{doc.size}</span>
+                      <span className="font-mono text-2xs text-foreground-muted">{doc.uploadedAt}</span>
                     </div>
                   </div>
                   
@@ -543,15 +543,15 @@ export default function DocumentsPage() {
                       <div className="font-display font-bold text-sm text-foreground truncate group-hover:text-accent transition-colors">
                         {doc.name}
                       </div>
-                      <div className="font-mono text-[10px] text-accent mt-0.5">
+                      <div className="font-mono text-2xs text-accent mt-0.5">
                         {typeLabels[doc.type]}
                       </div>
                     </div>
                   </div>
                   
                   <div className="flex items-center gap-3 text-foreground-muted">
-                    <span className="font-mono text-[10px]">{doc.size}</span>
-                    <span className="font-mono text-[10px]">Updated {doc.uploadedAt}</span>
+                    <span className="font-mono text-2xs">{doc.size}</span>
+                    <span className="font-mono text-2xs">Updated {doc.uploadedAt}</span>
                   </div>
                   
                   <div className="flex gap-2 mt-4 pt-4 border-t border-border">
@@ -577,7 +577,7 @@ export default function DocumentsPage() {
                   <span className="text-2xl text-accent">+</span>
                 </div>
                 <div className="font-display font-bold text-sm text-foreground">Add Template</div>
-                <div className="font-mono text-[10px] text-foreground-muted mt-1">RFP, SOW, NDA, or MSA</div>
+                <div className="font-mono text-2xs text-foreground-muted mt-1">RFP, SOW, NDA, or MSA</div>
               </GlassCard>
             </div>
           </div>
@@ -612,10 +612,10 @@ export default function DocumentsPage() {
                     <div className="font-display font-bold text-foreground truncate">{doc.name}</div>
                     <div className="flex items-center gap-3 mt-1">
                       {doc.project && (
-                        <span className="font-mono text-[10px] text-accent">{doc.project}</span>
+                        <span className="font-mono text-2xs text-accent">{doc.project}</span>
                       )}
-                      <span className="font-mono text-[10px] text-foreground-muted">{doc.size}</span>
-                      <span className="font-mono text-[10px] text-foreground-muted">{doc.uploadedAt}</span>
+                      <span className="font-mono text-2xs text-foreground-muted">{doc.size}</span>
+                      <span className="font-mono text-2xs text-foreground-muted">{doc.uploadedAt}</span>
                     </div>
                   </div>
                   
@@ -639,23 +639,23 @@ export default function DocumentsPage() {
                 <div className="grid grid-cols-5 gap-3 mt-4">
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-red-400 font-mono text-xs mb-1">PDF</span>
-                    <span className="text-[10px] text-foreground-muted">upload</span>
+                    <span className="text-2xs text-foreground-muted">upload</span>
                   </Button>
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-blue-400 font-mono text-xs mb-1">DOCX</span>
-                    <span className="text-[10px] text-foreground-muted">upload</span>
+                    <span className="text-2xs text-foreground-muted">upload</span>
                   </Button>
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-orange-400 font-mono text-xs mb-1">PPTX</span>
-                    <span className="text-[10px] text-foreground-muted">upload</span>
+                    <span className="text-2xs text-foreground-muted">upload</span>
                   </Button>
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-green-400 font-mono text-xs mb-1">Google</span>
-                    <span className="text-[10px] text-foreground-muted">paste link</span>
+                    <span className="text-2xs text-foreground-muted">paste link</span>
                   </Button>
                   <Button variant="outline" className="flex-col h-auto py-4 border-border text-foreground hover:bg-white/5 hover:border-accent/50">
                     <span className="text-accent font-mono text-xs mb-1">Text</span>
-                    <span className="text-[10px] text-foreground-muted">copy/paste</span>
+                    <span className="text-2xs text-foreground-muted">copy/paste</span>
                   </Button>
                 </div>
               </GlassCard>
@@ -674,7 +674,7 @@ export default function DocumentsPage() {
               
               <div className="space-y-4 mt-4">
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                     Document Type
                   </label>
                   <div className="grid grid-cols-3 gap-2">
@@ -683,7 +683,7 @@ export default function DocumentsPage() {
                         key={type}
                         onClick={() => setUploadType(type)}
                         className={cn(
-                          "font-mono text-[10px] px-3 py-2 rounded-lg border transition-colors",
+                          "font-mono text-2xs px-3 py-2 rounded-lg border transition-colors",
                           uploadType === type
                             ? "border-accent bg-accent/10 text-accent"
                             : "border-border text-foreground/90 hover:border-white/30"
@@ -704,10 +704,10 @@ export default function DocumentsPage() {
                   description="PDF, DOCX, PPTX up to 50MB"
                 />
                 
-                <div className="text-center font-mono text-[10px] text-foreground-muted">or</div>
+                <div className="text-center font-mono text-2xs text-foreground-muted">or</div>
                 
                 <div>
-                  <label className="font-mono text-[10px] text-foreground-muted uppercase block mb-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase block mb-2">
                     Google Docs/Slides Link
                   </label>
                   <div className="flex gap-2">

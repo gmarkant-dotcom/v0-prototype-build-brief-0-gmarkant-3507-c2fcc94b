@@ -275,7 +275,7 @@ function SignUpContent() {
               <div className="text-center mb-8">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <span className={cn(
-                    "font-mono text-[10px] px-2 py-0.5 rounded-full border capitalize",
+                    "font-mono text-2xs px-2 py-0.5 rounded-full border capitalize",
                     role === "agency" 
                       ? "bg-accent/10 text-accent border-accent/30" 
                       : "bg-purple-500/10 text-purple-400 border-purple-500/30"
@@ -303,7 +303,7 @@ function SignUpContent() {
               )}
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Full Name
                   </label>
                   <Input
@@ -317,7 +317,7 @@ function SignUpContent() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Company Name
                   </label>
                   <Input
@@ -330,7 +330,7 @@ function SignUpContent() {
                   />
                 </div>
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Company LinkedIn URL
                   </label>
                   <Input
@@ -344,7 +344,7 @@ function SignUpContent() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Email Address
                   </label>
                   <Input
@@ -359,7 +359,7 @@ function SignUpContent() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Password
                   </label>
                   <div className="relative">
@@ -382,7 +382,7 @@ function SignUpContent() {
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Confirm Password
                   </label>
                   <Input
@@ -398,7 +398,7 @@ function SignUpContent() {
                 {/* Legal Agreements */}
                 <div className="space-y-3 pt-2">
                   <div className="p-4 bg-white/5 rounded-lg border border-border/30">
-                    <div className="font-mono text-[10px] text-foreground-muted uppercase tracking-wider mb-3">
+                    <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-3">
                       {role === "agency" ? "Lead Agency Agreement" : "Partner Agreement"}
                     </div>
                     
@@ -465,7 +465,7 @@ function SignUpContent() {
                     </div>
                   </div>
 
-                  <p className="text-[11px] text-foreground-muted text-center leading-relaxed">
+                  <p className="text-2xs text-foreground-muted text-center leading-relaxed">
                     By creating an account, you acknowledge that you are authorized to accept these terms 
                     on behalf of your organization.
                   </p>

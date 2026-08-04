@@ -350,15 +350,15 @@ function PartnerActiveEngagementInner() {
               <h2 className="font-display font-bold text-lg text-vendor-foreground mb-4">Lead agency contact</h2>
               <dl className="space-y-2 text-sm">
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-vendor-muted">Company</dt>
+                  <dt className="font-mono text-2xs uppercase text-vendor-muted">Company</dt>
                   <dd className="text-vendor-foreground">{pageData.leadAgency?.companyName || "-"}</dd>
                 </div>
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-vendor-muted">Contact name</dt>
+                  <dt className="font-mono text-2xs uppercase text-vendor-muted">Contact name</dt>
                   <dd className="text-vendor-foreground">{pageData.leadAgency?.fullName || "-"}</dd>
                 </div>
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-vendor-muted">Email</dt>
+                  <dt className="font-mono text-2xs uppercase text-vendor-muted">Email</dt>
                   <dd>
                     {pageData.leadAgency?.email ? (
                       <a
@@ -373,7 +373,7 @@ function PartnerActiveEngagementInner() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-vendor-muted">Schedule Meeting</dt>
+                  <dt className="font-mono text-2xs uppercase text-vendor-muted">Schedule Meeting</dt>
                   <dd>
                     {kickoffFromFirst?.kickoffUrl ? (
                       <a
@@ -418,11 +418,11 @@ function PartnerActiveEngagementInner() {
                           </h3>
                           <div className="mt-2 grid sm:grid-cols-2 gap-3 text-sm">
                             <div>
-                              <div className="font-mono text-[10px] uppercase text-vendor-muted">Proposed budget</div>
+                              <div className="font-mono text-2xs uppercase text-vendor-muted">Proposed budget</div>
                               <div className="text-vendor-foreground">{formatEngagementBudget(eng.budgetProposal)}</div>
                             </div>
                             <div>
-                              <div className="font-mono text-[10px] uppercase text-vendor-muted">Proposed timeline</div>
+                              <div className="font-mono text-2xs uppercase text-vendor-muted">Proposed timeline</div>
                               <div className="text-vendor-foreground">{formatEngagementTimeline(eng.timelineProposal)}</div>
                             </div>
                           </div>
@@ -441,7 +441,7 @@ function PartnerActiveEngagementInner() {
                     <CollapsibleContent>
                       <div className="p-5 space-y-6 border-t border-vendor-border/50">
                         <div>
-                          <h4 className="font-mono text-[10px] uppercase text-vendor-muted mb-2">Proposal</h4>
+                          <h4 className="font-mono text-2xs uppercase text-vendor-muted mb-2">Proposal</h4>
                           <p className="text-sm text-vendor-foreground whitespace-pre-wrap leading-relaxed">
                             {(eng.proposalText || "").trim() || "-"}
                           </p>
@@ -489,7 +489,7 @@ function PartnerActiveEngagementInner() {
                           ) : ui.latest ? (
                             <div className="space-y-3 mb-6 pb-6 border-b border-vendor-border">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-mono text-[10px] uppercase text-vendor-muted">Latest update</span>
+                                <span className="font-mono text-2xs uppercase text-vendor-muted">Latest update</span>
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-vendor-foreground/10 text-vendor-foreground font-medium">
                                   {workflowStatusLabel(ui.latest.status)}
                                 </span>
@@ -512,7 +512,7 @@ function PartnerActiveEngagementInner() {
                               {ui.latest.notes && (
                                 <p className="text-sm text-vendor-foreground whitespace-pre-wrap">{ui.latest.notes}</p>
                               )}
-                              <p className="font-mono text-[10px] text-vendor-muted/70">
+                              <p className="font-mono text-2xs text-vendor-muted/70">
                                 {new Date(ui.latest.created_at).toLocaleString()}
                               </p>
                             </div>
@@ -580,9 +580,9 @@ function PartnerActiveEngagementInner() {
                                               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
                                                 {budgetStatusLabel(u.budget_status)}
                                               </span>
-                                              <span className="font-mono text-[10px] text-vendor-muted-strong">{u.completion_pct}%</span>
+                                              <span className="font-mono text-2xs text-vendor-muted-strong">{u.completion_pct}%</span>
                                             </div>
-                                            <div className="font-mono text-[10px] text-vendor-muted">
+                                            <div className="font-mono text-2xs text-vendor-muted">
                                               {new Date(u.created_at).toLocaleString()}
                                             </div>
                                             {!cardOpen && (
@@ -608,7 +608,7 @@ function PartnerActiveEngagementInner() {
                                               </div>
                                             </div>
                                             <div>
-                                              <div className="font-mono text-[10px] uppercase text-vendor-muted mb-1">Notes</div>
+                                              <div className="font-mono text-2xs uppercase text-vendor-muted mb-1">Notes</div>
                                               <p className="text-sm text-vendor-foreground whitespace-pre-wrap">
                                                 {(u.notes || "").trim() || "-"}
                                               </p>
@@ -725,7 +725,7 @@ function PartnerActiveEngagementInner() {
                           >
                             <div className="grid sm:grid-cols-2 gap-4">
                               <div>
-                                <Label className="font-mono text-[10px] text-vendor-muted uppercase">Workflow status</Label>
+                                <Label className="font-mono text-2xs text-vendor-muted uppercase">Workflow status</Label>
                                 <select
                                   value={ui.formStatus}
                                   onChange={(e) =>
@@ -747,7 +747,7 @@ function PartnerActiveEngagementInner() {
                                 </select>
                               </div>
                               <div>
-                                <Label className="font-mono text-[10px] text-vendor-muted uppercase">Budget status</Label>
+                                <Label className="font-mono text-2xs text-vendor-muted uppercase">Budget status</Label>
                                 <select
                                   value={ui.formBudget}
                                   onChange={(e) =>
@@ -770,7 +770,7 @@ function PartnerActiveEngagementInner() {
                               </div>
                             </div>
                             <div>
-                              <Label className="font-mono text-[10px] text-vendor-muted uppercase">
+                              <Label className="font-mono text-2xs text-vendor-muted uppercase">
                                 Completion ({ui.formPct}%)
                               </Label>
                               <Slider
@@ -791,7 +791,7 @@ function PartnerActiveEngagementInner() {
                               />
                             </div>
                             <div>
-                              <Label className="font-mono text-[10px] text-vendor-muted uppercase">Notes</Label>
+                              <Label className="font-mono text-2xs text-vendor-muted uppercase">Notes</Label>
                               <Textarea
                                 value={ui.formNotes}
                                 onChange={(e) =>
@@ -832,7 +832,7 @@ function PartnerActiveEngagementInner() {
             </div>
 
             {isDemo && (
-              <p className="font-mono text-[10px] text-vendor-muted">
+              <p className="font-mono text-2xs text-vendor-muted">
                 Demo preview for {agencyName}. Production data loads from your awarded assignments.
               </p>
             )}

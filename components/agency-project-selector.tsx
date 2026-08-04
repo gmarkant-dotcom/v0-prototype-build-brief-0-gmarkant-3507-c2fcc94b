@@ -32,7 +32,7 @@ export function InlineProjectSelector({ selectedProject, projects, isLoadingProj
 
   return (
     <div className="relative mb-6">
-      <div className="font-mono text-[10px] text-foreground-muted/60 uppercase tracking-wider mb-1.5">{label}</div>
+      <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider mb-1.5">{label}</div>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -46,7 +46,7 @@ export function InlineProjectSelector({ selectedProject, projects, isLoadingProj
           {selectedProject ? (
             <>
               <div className="font-display font-bold text-sm text-foreground truncate">{selectedProject.name}</div>
-              <div className="font-mono text-[10px] text-foreground-muted">{selectedProject.client}</div>
+              <div className="font-mono text-2xs text-foreground-muted">{selectedProject.client}</div>
             </>
           ) : (
             <div className="text-sm text-foreground-muted">Select a project…</div>
@@ -66,7 +66,7 @@ export function InlineProjectSelector({ selectedProject, projects, isLoadingProj
               <div className={cn("w-2 h-2 rounded-full shrink-0", project.status === "active" ? "bg-success" : project.status === "on_hold" ? "bg-gray-400" : "bg-yellow-400")} />
               <div className="flex-1 min-w-0">
                 <div className="font-display font-bold text-sm text-foreground truncate">{project.name}</div>
-                <div className="font-mono text-[10px] text-foreground-muted">{project.client}</div>
+                <div className="font-mono text-2xs text-foreground-muted">{project.client}</div>
               </div>
               {selectedProject?.id === project.id && <span className="text-accent text-xs">✓</span>}
             </button>
