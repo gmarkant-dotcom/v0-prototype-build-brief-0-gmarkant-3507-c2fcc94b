@@ -18,32 +18,87 @@ interface HelpTermProps {
   stopPropagation?: boolean
 }
 
+const OPEN_DELAY_MS = 100
 const CLOSE_DELAY_MS = 150
 
 /**
  * Inline help cue for a glossary term: a dotted-underline trigger that opens a small popover
- * on hover (desktop), tap (mobile - Radix's own click-toggle handles this), or keyboard
- * focus. Esc and outside-click dismiss via Popover's built-in DismissableLayer - no extra
- * wiring needed for those. Renders through PopoverContent's portal, so it is never clipped
- * inside a Sheet/Dialog, and sits above their z-50 overlay/content via an explicit z-[60].
+ * on hover (desktop, with hover-intent timing - see below), tap (mobile - Radix's own
+ * click-toggle handles this, untouched by the hover logic), or keyboard focus (immediate,
+ * no delay). Esc and outside-click dismiss via Popover's built-in DismissableLayer - no
+ * extra wiring needed for those. Renders through PopoverContent's portal, so it is never
+ * clipped inside a Sheet/Dialog, and sits above their z-50 overlay/content via an explicit
+ * z-[60].
+ *
+ * Hover-intent: kept Radix Popover (not HoverCard) and manage open/close timing manually.
+ * HoverCard bakes in openDelay/closeDelay but is hover/focus-only by design - it has no tap
+ * support, so switching would mean re-deriving the touch path from scratch. Popover's
+ * Trigger already click-toggles correctly for tap; layering hover-intent on top of that is
+ * the smaller, safer change.
+ *
+ * The open and close timers are shared across the trigger AND the content (both wire the
+ * same two handlers below), so entering either one cancels a pending close and entering
+ * either cancels a pending open. This is what fixes the flicker: when collision avoidance
+ * places the content overlapping or flush against the trigger, the browser can fire
+ * trigger-mouseleave/content-mouseenter (or vice versa) in the same tick with no real gap -
+ * a shared "pointer is over trigger or content" model absorbs that instead of racing a
+ * single open/close boolean toggle.
  */
 export function HelpTerm({ term, children, theme = "dark", className, stopPropagation = true }: HelpTermProps) {
   const entry = GLOSSARY[term]
   const [open, setOpen] = useState(false)
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const descriptionId = useId()
 
   if (!entry) return <>{children}</>
 
-  const cancelClose = () => {
+  const clearTimers = () => {
+    if (openTimer.current) {
+      clearTimeout(openTimer.current)
+      openTimer.current = null
+    }
     if (closeTimer.current) {
       clearTimeout(closeTimer.current)
       closeTimer.current = null
     }
   }
-  const scheduleClose = () => {
-    cancelClose()
-    closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY_MS)
+
+  // Pointer entered the trigger or the content: cancel any pending close (this is the
+  // flicker fix - re-entering either element mid-close-countdown keeps it open), and if
+  // not already open or opening, start the short open-intent delay so a passing graze
+  // across the underline doesn't pop a definition nobody asked for.
+  const handlePointerEnter = () => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+    if (open || openTimer.current) return
+    openTimer.current = setTimeout(() => {
+      openTimer.current = null
+      setOpen(true)
+    }, OPEN_DELAY_MS)
+  }
+
+  // Pointer left the trigger or the content: cancel a not-yet-fired open (a quick graze
+  // shouldn't open at all), then schedule a close. If the pointer is actually moving to the
+  // other half (trigger <-> content) it re-enters within the delay and cancels this.
+  const handlePointerLeave = () => {
+    if (openTimer.current) {
+      clearTimeout(openTimer.current)
+      openTimer.current = null
+    }
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null
+      setOpen(false)
+    }, CLOSE_DELAY_MS)
+  }
+
+  // Keyboard focus opens immediately - no open-intent delay. That delay exists purely to
+  // filter accidental mouse grazes; a Tab landing on the trigger is always deliberate.
+  const handleFocus = () => {
+    clearTimers()
+    setOpen(true)
   }
 
   const triggerClass =
@@ -77,16 +132,10 @@ export function HelpTerm({ term, children, theme = "dark", className, stopPropag
           type="button"
           className={cn("inline cursor-help rounded-sm outline-none focus-visible:ring-1", triggerClass, className)}
           aria-describedby={descriptionId}
-          onMouseEnter={() => {
-            cancelClose()
-            setOpen(true)
-          }}
-          onMouseLeave={scheduleClose}
-          onFocus={() => {
-            cancelClose()
-            setOpen(true)
-          }}
-          onBlur={scheduleClose}
+          onMouseEnter={handlePointerEnter}
+          onMouseLeave={handlePointerLeave}
+          onFocus={handleFocus}
+          onBlur={handlePointerLeave}
           onClick={
             stopPropagation
               ? (e) => {
@@ -101,8 +150,15 @@ export function HelpTerm({ term, children, theme = "dark", className, stopPropag
       <PopoverContent
         id={descriptionId}
         role="tooltip"
-        onMouseEnter={cancelClose}
-        onMouseLeave={scheduleClose}
+        onMouseEnter={handlePointerEnter}
+        onMouseLeave={handlePointerLeave}
+        // Wider gap and edge padding than the primitive's default (sideOffset 4) - less
+        // overlap with the trigger means less surface for the occlusion-driven flicker to
+        // occur on in the first place, independent of the hover-intent timing above. Radix
+        // still auto-flips side (bottom <-> top) on its own when space runs out.
+        sideOffset={10}
+        collisionPadding={8}
+        avoidCollisions
         className={contentClass}
       >
         <div className={titleClass}>{entry.term}</div>
