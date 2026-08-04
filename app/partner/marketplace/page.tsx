@@ -140,26 +140,26 @@ export default function PartnerMarketplacePage() {
     <PartnerLayout>
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Marketplace</h1>
-          <p className="text-gray-600 mt-1">Browse discoverable lead agencies and request connections.</p>
+          <h1 className="font-display font-bold text-3xl text-vendor-foreground">Marketplace</h1>
+          <p className="text-vendor-muted-strong mt-1">Browse discoverable lead agencies and request connections.</p>
         </div>
 
         <div className="relative max-w-md">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-vendor-muted/70 absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search agencies..."
-            className="pl-10 bg-white border-gray-200 text-gray-900"
+            className="pl-10 bg-vendor-surface border-vendor-border text-vendor-foreground"
           />
         </div>
 
         {loading ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-500">Loading marketplace...</div>
+          <div className="bg-vendor-surface rounded-xl border border-vendor-border p-8 text-center text-vendor-muted">Loading marketplace...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-            <div className="font-display font-bold text-lg text-gray-900">No discoverable agencies right now</div>
-            <p className="text-sm text-gray-500 mt-2">
+          <div className="bg-vendor-surface rounded-xl border border-vendor-border p-10 text-center">
+            <div className="font-display font-bold text-lg text-vendor-foreground">No discoverable agencies right now</div>
+            <p className="text-sm text-vendor-muted mt-2">
               Agencies can opt in to Marketplace visibility from their account settings.
             </p>
           </div>
@@ -168,25 +168,25 @@ export default function PartnerMarketplacePage() {
             {filtered.map((agency) => {
               const status = requestStatus(agency.id)
               return (
-                <div key={agency.id} className="bg-white rounded-xl border border-gray-200 p-6">
+                <div key={agency.id} className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
                   <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-[#0C3535]/10 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-lg bg-vendor-foreground/10 flex items-center justify-center">
                       {agency.company_logo_url ? (
                         <img src={agency.company_logo_url} alt={agency.company_name || "Agency"} className="w-full h-full object-cover rounded-xl" />
                       ) : (
-                        <Building2 className="w-6 h-6 text-[#0C3535]" />
+                        <Building2 className="w-6 h-6 text-vendor-foreground" />
                       )}
                     </div>
                     <div className="flex-1">
-                      <h2 className="font-display font-bold text-lg text-gray-900">
+                      <h2 className="font-display font-bold text-lg text-vendor-foreground">
                         {agency.company_name || agency.full_name || "Lead Agency"}
                       </h2>
                       {agency.agency_type && (
-                        <p className="font-mono text-xs text-gray-600 mt-1">{agency.agency_type}</p>
+                        <p className="font-mono text-xs text-vendor-muted-strong mt-1">{agency.agency_type}</p>
                       )}
-                      {agency.location && <p className="font-mono text-xs text-gray-500 mt-1">{agency.location}</p>}
-                      <p className="font-mono text-xs text-gray-500 mt-1">{agency.website || "-"}</p>
-                      <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+                      {agency.location && <p className="font-mono text-xs text-vendor-muted mt-1">{agency.location}</p>}
+                      <p className="font-mono text-xs text-vendor-muted mt-1">{agency.website || "-"}</p>
+                      <p className="text-sm text-vendor-muted-strong mt-2 line-clamp-2">
                         {agency.bio || "Discoverable lead agency on Ligament Marketplace."}
                       </p>
                       <div className="mt-4 flex items-center gap-2 flex-wrap">
@@ -195,7 +195,7 @@ export default function PartnerMarketplacePage() {
                           variant="outline"
                           size="sm"
                           onClick={() => setSelectedAgency(agency)}
-                          className="border-gray-200 text-gray-700 hover:bg-gray-50 text-xs"
+                          className="border-vendor-border text-vendor-foreground hover:bg-vendor-background text-xs"
                         >
                           View Profile
                         </Button>
@@ -206,7 +206,7 @@ export default function PartnerMarketplacePage() {
                         ) : (
                           <Button
                             onClick={() => requestConnection(agency.id)}
-                            className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                            className="bg-vendor-foreground hover:bg-vendor-foreground/90 text-white"
                             disabled={submittingId === agency.id}
                           >
                             <Send className="w-4 h-4 mr-2" />
@@ -225,19 +225,19 @@ export default function PartnerMarketplacePage() {
       {/* Agency Profile Modal */}
       {selectedAgency && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSelectedAgency(null)}>
-          <div className="w-full max-w-2xl bg-white rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-2xl bg-vendor-surface rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center overflow-hidden shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-vendor-foreground/10 flex items-center justify-center overflow-hidden shrink-0">
                   {selectedAgency.company_logo_url ? (
                     <img src={selectedAgency.company_logo_url} alt={selectedAgency.company_name || "Agency"} className="w-full h-full object-cover" />
                   ) : (
-                    <Building2 className="w-5 h-5 text-[#0C3535]" />
+                    <Building2 className="w-5 h-5 text-vendor-foreground" />
                   )}
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="font-display font-bold text-xl text-gray-900">
+                    <h2 className="font-display font-bold text-xl text-vendor-foreground">
                       {selectedAgency.company_name || selectedAgency.full_name || "Agency"}
                     </h2>
                     {(selectedAgency.vouch_count ?? 0) >= 3 && (
@@ -248,21 +248,21 @@ export default function PartnerMarketplacePage() {
                     )}
                   </div>
                   {selectedAgency.agency_type && (
-                    <p className="font-mono text-xs text-gray-500 mt-0.5">{selectedAgency.agency_type}</p>
+                    <p className="font-mono text-xs text-vendor-muted mt-0.5">{selectedAgency.agency_type}</p>
                   )}
                   {selectedAgency.location && (
-                    <p className="font-mono text-xs text-gray-500">{selectedAgency.location}</p>
+                    <p className="font-mono text-xs text-vendor-muted">{selectedAgency.location}</p>
                   )}
                 </div>
               </div>
-              <button onClick={() => setSelectedAgency(null)} className="text-gray-700 hover:text-gray-900 shrink-0">
+              <button onClick={() => setSelectedAgency(null)} className="text-vendor-foreground hover:text-vendor-foreground shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-4">
               {selectedAgency.bio && (
-                <p className="text-sm text-gray-700">{selectedAgency.bio}</p>
+                <p className="text-sm text-vendor-foreground">{selectedAgency.bio}</p>
               )}
 
               {(selectedAgency.website || selectedAgency.company_website || selectedAgency.company_linkedin_url || selectedAgency.reel_url) && (
@@ -296,21 +296,21 @@ export default function PartnerMarketplacePage() {
                 if (!Array.isArray(caps) || caps.length === 0) return null
                 return (
                   <div>
-                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Capabilities</div>
+                    <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Capabilities</div>
                     <div className="flex flex-wrap gap-1">
                       {(caps as string[]).map((cap: string, i: number) => (
-                        <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">{cap}</span>
+                        <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-vendor-foreground text-xs">{cap}</span>
                       ))}
                     </div>
                   </div>
                 )
               })()}
 
-              <div className="rounded-lg border border-gray-200 p-4">
-                <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Contact</div>
-                <div className="text-sm text-gray-900 font-medium">{selectedAgency.full_name || selectedAgency.company_name || "Not provided"}</div>
+              <div className="rounded-lg border border-vendor-border p-4">
+                <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Contact</div>
+                <div className="text-sm text-vendor-foreground font-medium">{selectedAgency.full_name || selectedAgency.company_name || "Not provided"}</div>
                 {selectedAgency.email ? (
-                  <div className="text-sm text-gray-600 mt-1">{selectedAgency.email}</div>
+                  <div className="text-sm text-vendor-muted-strong mt-1">{selectedAgency.email}</div>
                 ) : (
                   <button
                     onClick={() => {

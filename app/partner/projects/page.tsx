@@ -226,45 +226,45 @@ function StatusTab({ project }: { project: PartnerProject }) {
 
   return (
     <div className="p-6 space-y-6">
-      <p className="font-mono text-[10px] text-gray-500 italic">
+      <p className="font-mono text-[10px] text-vendor-muted italic">
         Your updates are visible to the lead agency and reflected in their dashboard.
       </p>
 
       {/* Update form */}
       <div className="space-y-4">
-        <h3 className="font-display font-bold text-base text-[#0C3535]">Submit Status Update</h3>
+        <h3 className="font-display font-bold text-base text-vendor-foreground">Submit Status Update</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="font-mono text-[10px] uppercase tracking-wider text-gray-500">Workflow Status</label>
+            <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Workflow Status</label>
             <select value={workflowStatus} onChange={e => setWorkflowStatus(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900">
+              className="w-full h-9 px-3 rounded-lg border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground">
               {WORKFLOW_STATUSES.map(s => <option key={s} value={s}>{WORKFLOW_LABEL[s]}</option>)}
             </select>
           </div>
           <div className="space-y-1">
-            <label className="font-mono text-[10px] uppercase tracking-wider text-gray-500">Budget Status</label>
+            <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Budget Status</label>
             <select value={budgetStatus} onChange={e => setBudgetStatus(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg border border-gray-200 bg-white text-sm text-gray-900">
+              className="w-full h-9 px-3 rounded-lg border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground">
               {BUDGET_STATUSES.map(s => <option key={s} value={s}>{BUDGET_LABEL[s]}</option>)}
             </select>
           </div>
         </div>
         <div className="space-y-1">
           <div className="flex justify-between">
-            <label className="font-mono text-[10px] uppercase tracking-wider text-gray-500">Completion</label>
-            <span className="font-mono text-xs text-[#0C3535]">{completionPct}%</span>
+            <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Completion</label>
+            <span className="font-mono text-xs text-vendor-foreground">{completionPct}%</span>
           </div>
           <input type="range" min={0} max={100} value={completionPct} onChange={e => setCompletionPct(Number(e.target.value))}
-            className="w-full accent-[#0C3535]" />
+            className="w-full accent-vendor-foreground" />
         </div>
         <div className="space-y-1">
-          <label className="font-mono text-[10px] uppercase tracking-wider text-gray-500">Notes</label>
+          <label className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Notes</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
             placeholder="Progress update, blockers, next steps…"
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 resize-none" />
+            className="w-full rounded-lg border border-vendor-border bg-vendor-surface px-3 py-2 text-sm text-vendor-foreground placeholder:text-vendor-muted/70 resize-none" />
         </div>
         {submitMsg && <p className={cn("text-sm", submitMsg.includes("success") ? "text-success" : "text-red-600")}>{submitMsg}</p>}
-        <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
+        <Button onClick={handleSubmit} disabled={submitting} className="w-full bg-vendor-foreground hover:bg-vendor-foreground/90 text-white">
           {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
           {submitting ? "Submitting…" : "Submit Status Update"}
         </Button>
@@ -272,25 +272,25 @@ function StatusTab({ project }: { project: PartnerProject }) {
 
       {/* History */}
       <div className="space-y-3">
-        <h3 className="font-display font-bold text-base text-[#0C3535]">Update History</h3>
+        <h3 className="font-display font-bold text-base text-vendor-foreground">Update History</h3>
         {histLoading ? (
-          <div className="flex items-center gap-2 text-gray-500 py-4"><Loader2 className="w-4 h-4 animate-spin" /><span className="font-mono text-sm">Loading…</span></div>
+          <div className="flex items-center gap-2 text-vendor-muted py-4"><Loader2 className="w-4 h-4 animate-spin" /><span className="font-mono text-sm">Loading…</span></div>
         ) : history.length === 0 ? (
-          <p className="text-sm text-gray-500">No updates submitted yet.</p>
+          <p className="text-sm text-vendor-muted">No updates submitted yet.</p>
         ) : (
           <div className="space-y-2">
             {history.map(u => {
               const b = STATUS_BADGE[u.status]
               return (
-                <div key={u.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-1.5">
+                <div key={u.id} className="rounded-lg border border-vendor-border bg-vendor-background p-3 space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     {b && <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider", b.bg, b.text, b.border)}>{WORKFLOW_LABEL[u.status]||u.status}</span>}
-                    <span className="font-mono text-[9px] text-gray-500">{BUDGET_LABEL[u.budget_status]||u.budget_status}</span>
-                    <span className="font-mono text-[9px] text-gray-500">{u.completion_pct}% complete</span>
+                    <span className="font-mono text-[9px] text-vendor-muted">{BUDGET_LABEL[u.budget_status]||u.budget_status}</span>
+                    <span className="font-mono text-[9px] text-vendor-muted">{u.completion_pct}% complete</span>
                     {u.is_resolved && <span className="flex items-center gap-1 font-mono text-[9px] text-success"><CheckCircle className="w-2.5 h-2.5" />Resolved</span>}
                   </div>
-                  {u.notes && <p className="text-xs text-gray-700">{u.notes}</p>}
-                  <p className="font-mono text-[10px] text-gray-400">{fmtDate(u.created_at)}</p>
+                  {u.notes && <p className="text-xs text-vendor-foreground">{u.notes}</p>}
+                  <p className="font-mono text-[10px] text-vendor-muted/70">{fmtDate(u.created_at)}</p>
                 </div>
               )
             })}
@@ -379,7 +379,7 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
     finally { setConfirmingMilestone(null) }
   }, [])
 
-  if (loading) return <div className="flex items-center gap-2 text-gray-500 p-6"><Loader2 className="w-5 h-5 animate-spin" /><span className="font-mono text-sm">Loading…</span></div>
+  if (loading) return <div className="flex items-center gap-2 text-vendor-muted p-6"><Loader2 className="w-5 h-5 animate-spin" /><span className="font-mono text-sm">Loading…</span></div>
 
   const termsLabel: Record<string,string> = { net_15:"Net 15", net_30:"Net 30", net_45:"Net 45", net_60:"Net 60", custom:"Custom" }
 
@@ -388,21 +388,21 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
       {/* Rate & Terms */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-display font-bold text-base text-[#0C3535]">Agreed Terms &amp; Rate</h3>
+          <h3 className="font-display font-bold text-base text-vendor-foreground">Agreed Terms &amp; Rate</h3>
           {!requestForm && !pendingRequest && (
-            <button type="button" onClick={() => setRequestForm(true)} className="font-mono text-[10px] text-[#0C3535] underline hover:no-underline">
+            <button type="button" onClick={() => setRequestForm(true)} className="font-mono text-[10px] text-vendor-foreground underline hover:no-underline">
               Request update
             </button>
           )}
         </div>
         {rateInfo ? (
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 grid grid-cols-2 gap-3 text-sm">
-            {rateInfo.hourly_rate && <div><span className="font-mono text-[10px] text-gray-500 block">Hourly Rate</span><span className="text-gray-900">{rateInfo.hourly_rate}</span></div>}
-            {rateInfo.project_minimum && <div><span className="font-mono text-[10px] text-gray-500 block">Project Minimum</span><span className="text-gray-900">{rateInfo.project_minimum}</span></div>}
-            <div><span className="font-mono text-[10px] text-gray-500 block">Payment Terms</span><span className="text-gray-900">{termsLabel[rateInfo.payment_terms]||rateInfo.payment_terms}{rateInfo.payment_terms==="custom"&&rateInfo.payment_terms_custom&&`: ${rateInfo.payment_terms_custom}`}</span></div>
-            {rateInfo.notes && <div className="col-span-2"><span className="font-mono text-[10px] text-gray-500 block">Notes</span><span className="text-gray-700">{rateInfo.notes}</span></div>}
+          <div className="rounded-lg border border-vendor-border bg-vendor-background p-4 grid grid-cols-2 gap-3 text-sm">
+            {rateInfo.hourly_rate && <div><span className="font-mono text-[10px] text-vendor-muted block">Hourly Rate</span><span className="text-vendor-foreground">{rateInfo.hourly_rate}</span></div>}
+            {rateInfo.project_minimum && <div><span className="font-mono text-[10px] text-vendor-muted block">Project Minimum</span><span className="text-vendor-foreground">{rateInfo.project_minimum}</span></div>}
+            <div><span className="font-mono text-[10px] text-vendor-muted block">Payment Terms</span><span className="text-vendor-foreground">{termsLabel[rateInfo.payment_terms]||rateInfo.payment_terms}{rateInfo.payment_terms==="custom"&&rateInfo.payment_terms_custom&&`: ${rateInfo.payment_terms_custom}`}</span></div>
+            {rateInfo.notes && <div className="col-span-2"><span className="font-mono text-[10px] text-vendor-muted block">Notes</span><span className="text-vendor-foreground">{rateInfo.notes}</span></div>}
           </div>
-        ) : <p className="text-sm text-gray-500">No rate info on file yet. <a href="/partner/settings/user" className="text-[#0C3535] underline">Add via Payment Setup</a>.</p>}
+        ) : <p className="text-sm text-vendor-muted">No rate info on file yet. <a href="/partner/settings/user" className="text-vendor-foreground underline">Add via Payment Setup</a>.</p>}
 
         {pendingRequest && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
@@ -414,15 +414,15 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
         )}
 
         {requestForm && (
-          <div className="rounded-lg border border-gray-200 p-4 space-y-3 bg-white">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-gray-500">Propose updated rate/terms</p>
-            <Input placeholder="Proposed rate (e.g. $150/hr)" value={reqRate} onChange={e=>setReqRate(e.target.value)} className="bg-white border-gray-200 text-gray-900" />
-            <Input placeholder="Proposed payment terms (e.g. Net 30)" value={reqTerms} onChange={e=>setReqTerms(e.target.value)} className="bg-white border-gray-200 text-gray-900" />
+          <div className="rounded-lg border border-vendor-border p-4 space-y-3 bg-vendor-surface">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-vendor-muted">Propose updated rate/terms</p>
+            <Input placeholder="Proposed rate (e.g. $150/hr)" value={reqRate} onChange={e=>setReqRate(e.target.value)} className="bg-vendor-surface border-vendor-border text-vendor-foreground" />
+            <Input placeholder="Proposed payment terms (e.g. Net 30)" value={reqTerms} onChange={e=>setReqTerms(e.target.value)} className="bg-vendor-surface border-vendor-border text-vendor-foreground" />
             <textarea placeholder="Reason / notes" value={reqNotes} onChange={e=>setReqNotes(e.target.value)} rows={2}
-              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 resize-none" />
+              className="w-full rounded-lg border border-vendor-border bg-vendor-surface px-3 py-2 text-sm text-vendor-foreground placeholder:text-vendor-muted/70 resize-none" />
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1 border-gray-200" onClick={()=>setRequestForm(false)}>Cancel</Button>
-              <Button className="flex-1 bg-[#0C3535] text-white" onClick={handleRequestSubmit} disabled={reqSaving}>
+              <Button variant="outline" className="flex-1 border-vendor-border" onClick={()=>setRequestForm(false)}>Cancel</Button>
+              <Button className="flex-1 bg-vendor-foreground text-white" onClick={handleRequestSubmit} disabled={reqSaving}>
                 {reqSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}Submit Request
               </Button>
             </div>
@@ -432,26 +432,26 @@ function CashFlowTab({ project }: { project: PartnerProject }) {
 
       {/* Milestones */}
       <section className="space-y-3">
-        <h3 className="font-display font-bold text-base text-[#0C3535]">Payment Schedule</h3>
+        <h3 className="font-display font-bold text-base text-vendor-foreground">Payment Schedule</h3>
         {milestones.length === 0 ? (
-          <p className="text-sm text-gray-500">No payment milestones scheduled yet.</p>
+          <p className="text-sm text-vendor-muted">No payment milestones scheduled yet.</p>
         ) : (
           <div className="space-y-2">
             {milestones.map(m => {
               const isPaid = m.status === "payment_received"
               return (
-                <div key={m.id} className={cn("rounded-lg border p-3 space-y-1.5", isPaid ? "border-success/30 bg-success/15" : "border-gray-200 bg-white")}>
+                <div key={m.id} className={cn("rounded-lg border p-3 space-y-1.5", isPaid ? "border-success/30 bg-success/15" : "border-vendor-border bg-vendor-surface")}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="font-display font-bold text-sm text-[#0C3535]">{m.title}</div>
-                      <div className="flex items-center gap-2 mt-0.5 font-mono text-[10px] text-gray-500 flex-wrap">
+                      <div className="font-display font-bold text-sm text-vendor-foreground">{m.title}</div>
+                      <div className="flex items-center gap-2 mt-0.5 font-mono text-[10px] text-vendor-muted flex-wrap">
                         <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />{m.currency} {m.amount.toLocaleString("en-US")}</span>
                         <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Due {fmtDate(m.due_date)}</span>
-                        <span className={cn("px-1.5 py-0.5 rounded font-mono text-[9px] uppercase", isPaid ? "bg-success/15 text-success" : "bg-gray-100 text-gray-600")}>
+                        <span className={cn("px-1.5 py-0.5 rounded font-mono text-[9px] uppercase", isPaid ? "bg-success/15 text-success" : "bg-gray-100 text-vendor-muted-strong")}>
                           {MILESTONE_LABEL[m.status]||m.status}
                         </span>
                       </div>
-                      {m.notes && <p className="text-xs text-gray-500 mt-1 italic">{m.notes}</p>}
+                      {m.notes && <p className="text-xs text-vendor-muted mt-1 italic">{m.notes}</p>}
                       {m.paid_at && <p className="font-mono text-[10px] text-success">Received {fmtDate(m.paid_at)}</p>}
                     </div>
                     {!isPaid && m.status === "payment_sent" && (
@@ -487,23 +487,23 @@ function SlideOverPanel({ project, onClose }: { project: PartnerProject; onClose
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full md:w-1/2 max-w-2xl h-full bg-white flex flex-col shadow-2xl">
+      <div className="relative w-full md:w-1/2 max-w-2xl h-full bg-vendor-surface flex flex-col shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-gray-200 shrink-0">
+        <div className="flex items-start justify-between p-6 border-b border-vendor-border shrink-0">
           <div>
-            <h2 className="font-display font-bold text-xl text-[#0C3535]">{project.agency_name}</h2>
-            <p className="text-sm text-gray-600 mt-0.5">{project.scope_item_name || project.project_name}</p>
-            {project.client_name && <p className="font-mono text-[10px] text-gray-400 mt-0.5">Client: {project.client_name}</p>}
+            <h2 className="font-display font-bold text-xl text-vendor-foreground">{project.agency_name}</h2>
+            <p className="text-sm text-vendor-muted-strong mt-0.5">{project.scope_item_name || project.project_name}</p>
+            {project.client_name && <p className="font-mono text-[10px] text-vendor-muted/70 mt-0.5">Client: {project.client_name}</p>}
           </div>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 mt-1"><X className="w-5 h-5" /></button>
+          <button type="button" onClick={onClose} className="text-vendor-muted/70 hover:text-vendor-foreground mt-1"><X className="w-5 h-5" /></button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 shrink-0">
+        <div className="flex border-b border-vendor-border shrink-0">
           {tabs.map(t => (
             <button key={t.key} type="button" onClick={() => setTab(t.key)}
               className={cn("px-5 py-3 font-mono text-[11px] uppercase tracking-wider transition-colors border-b-2 -mb-px",
-                tab===t.key ? "border-[#0C3535] text-[#0C3535]" : "border-transparent text-gray-500 hover:text-gray-700")}>
+                tab===t.key ? "border-vendor-foreground text-vendor-foreground" : "border-transparent text-vendor-muted hover:text-vendor-foreground")}>
               {t.label}
             </button>
           ))}
@@ -527,25 +527,25 @@ function ProjectCard({ project, onClick }: { project: PartnerProject; onClick: (
 
   return (
     <button type="button" onClick={onClick}
-      className="w-full text-left flex items-center gap-4 p-5 rounded-xl border border-gray-200 bg-white hover:border-[#0C3535]/40 hover:shadow-sm transition-all group">
+      className="w-full text-left flex items-center gap-4 p-5 rounded-xl border border-vendor-border bg-vendor-surface hover:border-vendor-foreground/40 hover:shadow-sm transition-all group">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-          <span className="font-display font-bold text-base text-[#0C3535] truncate">{project.scope_item_name || project.project_name}</span>
+          <span className="font-display font-bold text-base text-vendor-foreground truncate">{project.scope_item_name || project.project_name}</span>
           {project.status && (
             <span className={cn("font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
-              project.status==="active" ? "bg-success/15 text-success border-success/30" : "bg-gray-100 text-gray-600 border-gray-200")}>
+              project.status==="active" ? "bg-success/15 text-success border-success/30" : "bg-gray-100 text-vendor-muted-strong border-vendor-border")}>
               {project.status.replace(/_/g," ")}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 font-mono text-[10px] text-gray-500 flex-wrap">
+        <div className="flex items-center gap-3 font-mono text-[10px] text-vendor-muted flex-wrap">
           {project.scope_item_name && project.project_name !== project.scope_item_name && <span>{project.project_name}</span>}
           {dateRange !== "-" && <span>{dateRange}</span>}
-          {budget > 0 && <span className="text-[#0C3535]">{formatBudgetK(budget)}</span>}
+          {budget > 0 && <span className="text-vendor-foreground">{formatBudgetK(budget)}</span>}
           {project.client_name && <span>Client: {project.client_name}</span>}
         </div>
       </div>
-      <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-[#0C3535] transition-colors shrink-0" />
+      <ChevronRight className="w-5 h-5 text-vendor-muted/70 group-hover:text-vendor-foreground transition-colors shrink-0" />
     </button>
   )
 }
@@ -559,23 +559,23 @@ function GroupSection({ label, projects, defaultOpen, onProjectClick }: {
   const totalBudget = projects.reduce((s, p) => s + parseBudgetNumber(p.budget_proposal), 0)
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden">
+    <div className="rounded-xl border border-vendor-border bg-vendor-background/50 overflow-hidden">
       <button type="button" onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-4 p-5 hover:bg-gray-100/60 transition-colors text-left">
-        <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center shrink-0">
-          <Building2 className="w-5 h-5 text-[#0C3535]" />
+        <div className="w-10 h-10 rounded-lg bg-vendor-foreground/10 flex items-center justify-center shrink-0">
+          <Building2 className="w-5 h-5 text-vendor-foreground" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-display font-bold text-xl text-[#0C3535]">{label}</div>
-          <div className="flex items-center gap-3 mt-0.5 font-mono text-[11px] text-gray-500">
+          <div className="font-display font-bold text-xl text-vendor-foreground">{label}</div>
+          <div className="flex items-center gap-3 mt-0.5 font-mono text-[11px] text-vendor-muted">
             <span>{projects.length} engagement{projects.length!==1?"s":""}</span>
             {totalBudget>0 && <span>{formatBudgetK(totalBudget)} total</span>}
           </div>
         </div>
-        <ChevronDown className={cn("w-5 h-5 text-gray-400 shrink-0 transition-transform", open && "rotate-180")} />
+        <ChevronDown className={cn("w-5 h-5 text-vendor-muted/70 shrink-0 transition-transform", open && "rotate-180")} />
       </button>
       {open && (
-        <div className="border-t border-gray-200 p-4 space-y-2 bg-white">
+        <div className="border-t border-vendor-border p-4 space-y-2 bg-vendor-surface">
           {projects.map(p => (
             <ProjectCard key={`${p.project_id}-${p.response_id??p.assignment_id}`} project={p} onClick={() => onProjectClick(p)} />
           ))}
@@ -593,13 +593,13 @@ function PerformanceScoresSection({ reviews, projectNameById }: {
   if (!reviews?.length) return null
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+    <div className="bg-vendor-surface rounded-xl border border-vendor-border p-5 space-y-4">
       <div>
-        <h2 className="font-display font-bold text-lg text-[#0C3535] flex items-center gap-2">
-          <Award className="w-5 h-5 text-[#0C3535]" />
+        <h2 className="font-display font-bold text-lg text-vendor-foreground flex items-center gap-2">
+          <Award className="w-5 h-5 text-vendor-foreground" />
           Performance Scores
         </h2>
-        <p className="font-mono text-[10px] text-gray-500 mt-0.5">
+        <p className="font-mono text-[10px] text-vendor-muted mt-0.5">
           Delivery reviews completed by your lead agencies. Read-only.
         </p>
       </div>
@@ -611,9 +611,9 @@ function PerformanceScoresSection({ reviews, projectNameById }: {
           const onBudget = review.on_budget ? ON_BUDGET_BADGE[review.on_budget] : null
           const scoreColor = review.composite_score != null ? compositeScoreColorClass(review.composite_score) : null
           return (
-            <div key={review.id ?? i} className="flex items-center gap-4 p-3 rounded-lg border border-gray-200 flex-wrap">
+            <div key={review.id ?? i} className="flex items-center gap-4 p-3 rounded-lg border border-vendor-border flex-wrap">
               <div className="flex-1 min-w-0">
-                <div className="font-display font-bold text-sm text-[#0C3535] truncate">{projectName}</div>
+                <div className="font-display font-bold text-sm text-vendor-foreground truncate">{projectName}</div>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {review.composite_score != null && scoreColor && (
@@ -635,7 +635,7 @@ function PerformanceScoresSection({ reviews, projectNameById }: {
                   </span>
                 )}
                 {review.overall_satisfaction != null && (
-                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600 uppercase tracking-wider">
+                  <span className="font-mono text-[9px] px-2 py-0.5 rounded-full border border-vendor-border bg-vendor-background text-vendor-muted-strong uppercase tracking-wider">
                     Satisfaction {review.overall_satisfaction}/10
                   </span>
                 )}
@@ -732,25 +732,25 @@ export default function PartnerProjectsPage() {
     <PartnerLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Delivery & Projects</h1>
-          <p className="text-gray-600 mt-1">Your active project engagements and delivery performance</p>
+          <h1 className="font-display font-bold text-3xl text-vendor-foreground">Delivery & Projects</h1>
+          <p className="text-vendor-muted-strong mt-1">Your active project engagements and delivery performance</p>
         </div>
 
         <PerformanceScoresSection reviews={deliveryReviews} projectNameById={projectNameById} />
 
         <div className="flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 min-w-[220px] max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vendor-muted/70" />
             <Input placeholder="Search projects, agencies, or clients..." value={search} onChange={e => setSearch(e.target.value)}
-              className="pl-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400" />
+              className="pl-10 bg-vendor-surface border-vendor-border text-vendor-foreground placeholder:text-vendor-muted/70" />
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Group by</span>
-            <div className="flex rounded-lg overflow-hidden border border-gray-200">
+            <span className="font-mono text-[10px] text-vendor-muted/70 uppercase tracking-wider">Group by</span>
+            <div className="flex rounded-lg overflow-hidden border border-vendor-border">
               {(["agency","client"] as GroupBy[]).map(g => (
                 <button key={g} type="button" onClick={() => setGroupBy(g)}
                   className={cn("px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                    groupBy===g ? "bg-[#0C3535] text-white" : "bg-white text-gray-500 hover:bg-gray-50")}>
+                    groupBy===g ? "bg-vendor-foreground text-white" : "bg-vendor-surface text-vendor-muted hover:bg-vendor-background")}>
                   {g==="agency" ? "Agency" : "Client"}
                 </button>
               ))}
@@ -758,12 +758,12 @@ export default function PartnerProjectsPage() {
           </div>
         </div>
 
-        {isLoading && <div className="flex items-center gap-2 text-gray-500 py-8"><Loader2 className="w-5 h-5 animate-spin" /><span className="font-mono text-sm">Loading projects…</span></div>}
+        {isLoading && <div className="flex items-center gap-2 text-vendor-muted py-8"><Loader2 className="w-5 h-5 animate-spin" /><span className="font-mono text-sm">Loading projects…</span></div>}
         {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Failed to load projects. Please refresh.</div>}
         {!isLoading && !error && groups.length===0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <div className="font-display font-bold text-xl text-[#0C3535] mb-2">{search ? "No results" : "No active projects"}</div>
-            <p className="text-gray-600">{search ? "Try adjusting your search." : "You don't have any project assignments yet."}</p>
+          <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+            <div className="font-display font-bold text-xl text-vendor-foreground mb-2">{search ? "No results" : "No active projects"}</div>
+            <p className="text-vendor-muted-strong">{search ? "Try adjusting your search." : "You don't have any project assignments yet."}</p>
           </div>
         )}
         {!isLoading && groups.length>0 && (

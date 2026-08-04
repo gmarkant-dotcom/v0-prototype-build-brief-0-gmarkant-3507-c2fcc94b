@@ -159,8 +159,8 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                               <span>{item.title}</span>
                             </Link>
                           </TooltipTrigger>
-                          <TooltipContent side="bottom" showArrow={false} className="w-64 p-3 bg-white border border-gray-200 shadow-xl">
-                            <p className="text-xs text-gray-600">{item.tooltip}</p>
+                          <TooltipContent side="bottom" showArrow={false} className="w-64 p-3 bg-vendor-surface border border-vendor-border shadow-xl">
+                            <p className="text-xs text-vendor-muted-strong">{item.tooltip}</p>
                           </TooltipContent>
                         </Tooltip>
                       )
@@ -208,41 +208,41 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                 </button>
                 
                 {userMenuOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-lg shadow-xl overflow-hidden z-50">
+                  <div className="absolute top-full right-0 mt-2 w-56 bg-vendor-surface rounded-lg shadow-xl overflow-hidden z-50">
                     <button
                       onClick={() => navigateFromMenu("/partner/settings/user")}
-                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-vendor-background transition-colors text-vendor-foreground"
                     >
-                      <Settings className="w-4 h-4 text-gray-500" />
+                      <Settings className="w-4 h-4 text-vendor-muted" />
                       <span className="text-sm">User Profile</span>
                     </button>
                     <button
                       onClick={() => navigateFromMenu("/partner/profile")}
-                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-vendor-background transition-colors text-vendor-foreground"
                     >
-                      <User className="w-4 h-4 text-gray-500" />
+                      <User className="w-4 h-4 text-vendor-muted" />
                       <span className="text-sm">Company Profile & Capabilities</span>
                     </button>
                     <button
                       onClick={() => navigateFromMenu("/partner/marketplace")}
-                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-vendor-background transition-colors text-vendor-foreground"
                     >
-                      <Globe className="w-4 h-4 text-gray-500" />
+                      <Globe className="w-4 h-4 text-vendor-muted" />
                       <span className="text-sm">Marketplace</span>
                     </button>
-                    <div className="border-t border-gray-200">
+                    <div className="border-t border-vendor-border">
                       <button
                         onClick={() => navigateFromMenu("/pricing")}
-                        className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-gray-700"
+                        className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-vendor-background transition-colors text-vendor-foreground"
                       >
-                        <ArrowUpRight className="w-4 h-4 mt-0.5 text-gray-500" />
+                        <ArrowUpRight className="w-4 h-4 mt-0.5 text-vendor-muted" />
                         <span className="text-sm">
                           <span className="block">Become a Lead Agency</span>
-                          <span className="block text-xs text-gray-500">Unlock full platform access.</span>
+                          <span className="block text-xs text-vendor-muted">Unlock full platform access.</span>
                         </span>
                       </button>
                     </div>
-                    <div className="border-t border-gray-200">
+                    <div className="border-t border-vendor-border">
                       <button
                         onClick={handleSignOut}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-50 transition-colors text-red-600"
@@ -301,22 +301,22 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
       </main>
 
       {/* Legal Footer */}
-      <footer className="bg-white border-t border-gray-200 py-6">
+      <footer className="bg-vendor-surface border-t border-vendor-border py-6">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="font-mono text-[10px] text-gray-400">
+          <div className="font-mono text-[10px] text-vendor-muted/70">
             &copy; {new Date().getFullYear()} LIGAMENT. All rights reserved.
           </div>
           <div className="flex items-center gap-4">
             <Link 
               href="/terms" 
-              className="font-mono text-[10px] text-gray-500 hover:text-[#0C3535] transition-colors"
+              className="font-mono text-[10px] text-vendor-muted hover:text-vendor-foreground transition-colors"
             >
               Terms of Service
             </Link>
-            <span className="text-gray-300">|</span>
+            <span className="text-vendor-muted/50">|</span>
             <Link 
               href="/privacy" 
-              className="font-mono text-[10px] text-gray-500 hover:text-[#0C3535] transition-colors"
+              className="font-mono text-[10px] text-vendor-muted hover:text-vendor-foreground transition-colors"
             >
               Privacy Policy
             </Link>

@@ -219,7 +219,7 @@ function statusBadgeClass(status: string) {
   const s = status.toLowerCase()
   if (s === "paid") return "bg-success/15 text-success"
   if (s === "invoiced") return "bg-amber-100 text-amber-800"
-  return "bg-gray-100 text-gray-600"
+  return "bg-gray-100 text-vendor-muted-strong"
 }
 
 function agencyLabel(p: PartnershipApiRow) {
@@ -578,21 +578,21 @@ function PartnerPaymentsPageLegacy() {
     <PartnerLayout>
       <div className="max-w-4xl mx-auto space-y-8">
         <div>
-          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Payment Setup</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="font-display font-bold text-3xl text-vendor-foreground">Payment Setup</h1>
+          <p className="text-vendor-muted-strong mt-1">
             View payment schedules from your lead agencies and save rate details for each relationship.
           </p>
         </div>
 
         {/* Top: Lead agency dropdown */}
         <div className="space-y-3">
-          <p className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Lead agency</p>
+          <p className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider">Lead agency</p>
           {loadingShell ? (
             <div className="h-9 w-48 max-w-full bg-gray-100 rounded-lg animate-pulse" />
           ) : partnershipsError ? (
             <div className="text-sm text-red-600">{partnershipsError}</div>
           ) : activePartnerships.length === 0 ? (
-            <div className="text-sm text-gray-600 rounded-xl border border-gray-200 bg-white px-4 py-3">
+            <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-3">
               No active partnerships yet. Accept an invitation to see payment schedules and rate fields here.
             </div>
           ) : (
@@ -603,8 +603,8 @@ function PartnerPaymentsPageLegacy() {
                 className={cn(
                   "flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors min-w-[200px] w-full max-w-sm",
                   selectedPartnershipRow
-                    ? "bg-[#0C3535] border-[#0C3535] text-white"
-                    : "bg-[#0C3535]/10 border-[#0C3535]/30 text-[#0C3535] hover:bg-[#0C3535]/20"
+                    ? "bg-vendor-foreground border-vendor-foreground text-white"
+                    : "bg-vendor-foreground/10 border-vendor-foreground/30 text-vendor-foreground hover:bg-vendor-foreground/20"
                 )}
               >
                 <Building2 className="w-4 h-4 flex-shrink-0" />
@@ -617,7 +617,7 @@ function PartnerPaymentsPageLegacy() {
               </button>
 
               {agencyDropdownOpen && (
-                <div className="absolute top-full left-0 mt-1 w-full min-w-[250px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
+                <div className="absolute top-full left-0 mt-1 w-full min-w-[250px] bg-vendor-surface border border-vendor-border rounded-lg shadow-xl z-50 overflow-hidden">
                   {activePartnerships.map((p) => {
                     const label = agencyLabel(p)
                     const isSelected = p.id === selectedId
@@ -631,17 +631,17 @@ function PartnerPaymentsPageLegacy() {
                         }}
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors",
-                          isSelected ? "bg-[#0C3535]/10 text-[#0C3535]" : "hover:bg-gray-50 text-gray-700"
+                          isSelected ? "bg-vendor-foreground/10 text-vendor-foreground" : "hover:bg-vendor-background text-vendor-foreground"
                         )}
                       >
-                        <div className="w-8 h-8 rounded-full bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0">
-                          <span className="text-xs font-bold text-[#0C3535]">{agencyInitials(label)}</span>
+                        <div className="w-8 h-8 rounded-full bg-vendor-foreground/10 flex items-center justify-center flex-shrink-0">
+                          <span className="text-xs font-bold text-vendor-foreground">{agencyInitials(label)}</span>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">{label}</div>
-                          <div className="text-xs text-gray-500 truncate">Payment schedule and rate card</div>
+                          <div className="text-xs text-vendor-muted truncate">Payment schedule and rate card</div>
                         </div>
-                        {isSelected ? <Check className="w-4 h-4 text-[#0C3535] flex-shrink-0" /> : null}
+                        {isSelected ? <Check className="w-4 h-4 text-vendor-foreground flex-shrink-0" /> : null}
                       </button>
                     )
                   })}
@@ -655,25 +655,25 @@ function PartnerPaymentsPageLegacy() {
 
         {/* Middle: Active engagements — grouped by project */}
         <div className="space-y-4">
-          <h2 className="font-display font-bold text-lg text-[#0C3535]">Active engagements</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Active engagements</h2>
           {!selectedId ? (
-            <p className="text-sm text-gray-500">Select a lead agency to see awarded engagements.</p>
+            <p className="text-sm text-vendor-muted">Select a lead agency to see awarded engagements.</p>
           ) : loadingShell ? (
             <div className="h-24 bg-gray-100 rounded-xl animate-pulse" />
           ) : engagementsForAgency.length === 0 ? (
-            <div className="text-sm text-gray-600 rounded-xl border border-gray-200 bg-white px-4 py-4">
+            <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-4">
               No awarded engagements with this agency yet.
             </div>
           ) : (
             <>
               <div className="space-y-2 max-w-md">
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider">
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider">
                   Client / Project
                 </label>
                 <select
                   value={selectedProjectFilter}
                   onChange={(e) => setSelectedProjectFilter(e.target.value)}
-                  className="w-full h-10 px-3 rounded-lg border border-[#0C3535]/30 bg-white text-sm text-[#0C3535]"
+                  className="w-full h-10 px-3 rounded-lg border border-vendor-foreground/30 bg-vendor-surface text-sm text-vendor-foreground"
                 >
                   <option value="">All projects</option>
                   {projectFilterOptions.map((opt) => (
@@ -686,7 +686,7 @@ function PartnerPaymentsPageLegacy() {
 
               <div className="space-y-2">
                 {visibleProjects.length === 0 ? (
-                  <div className="text-sm text-gray-600 rounded-xl border border-gray-200 bg-white px-4 py-4">
+                  <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-4">
                     No projects match this filter.
                   </div>
                 ) : (
@@ -700,26 +700,26 @@ function PartnerPaymentsPageLegacy() {
                           if (open) setOpenProjectId(group.project_id)
                           else if (openProjectId === group.project_id) setOpenProjectId(null)
                         }}
-                        className="rounded-xl border border-gray-200 bg-white overflow-hidden"
+                        className="rounded-xl border border-vendor-border bg-vendor-surface overflow-hidden"
                       >
-                        <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50/80 transition-colors">
+                        <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-vendor-background/80 transition-colors">
                           <ChevronDown
                             className={cn(
-                              "w-4 h-4 text-gray-500 shrink-0 transition-transform",
+                              "w-4 h-4 text-vendor-muted shrink-0 transition-transform",
                               isOpen && "rotate-180"
                             )}
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="font-display font-bold text-sm text-[#0C3535] truncate">
+                            <div className="font-display font-bold text-sm text-vendor-foreground truncate">
                               {group.project_name}
                             </div>
-                            <div className="text-xs text-gray-500 truncate">
+                            <div className="text-xs text-vendor-muted truncate">
                               {group.client_name || "Client TBD"}
                             </div>
                           </div>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                          <div className="border-t border-gray-100 px-4 pb-4 pt-3 space-y-6">
+                          <div className="border-t border-vendor-border/50 px-4 pb-4 pt-3 space-y-6">
                             {group.scopes.map((scope) => {
                               const ms = milestonesForEngagement(allMilestones, scope)
                               const scopeKey = `${scope.response_id ?? "no-resp"}:${scope.assignment_id}:${scope.scope_item_name ?? ""}`
@@ -727,38 +727,38 @@ function PartnerPaymentsPageLegacy() {
                                 scope.scope_item_name?.trim() || (scope.response_id ? "Scope" : "Project")
                               return (
                                 <div key={scopeKey} className="space-y-2">
-                                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">
+                                  <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider">
                                     {scopeLabel}
                                   </div>
                                   {ms.length === 0 ? (
-                                    <p className="text-sm text-gray-600 pl-0">No payment schedule set up yet.</p>
+                                    <p className="text-sm text-vendor-muted-strong pl-0">No payment schedule set up yet.</p>
                                   ) : (
                                     <div className="overflow-x-auto">
                                       <table className="w-full text-sm">
                                         <thead>
-                                          <tr className="border-b border-gray-200">
-                                            <th className="text-left font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2 pr-2">
+                                          <tr className="border-b border-vendor-border">
+                                            <th className="text-left font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-2 pr-2">
                                               Title
                                             </th>
-                                            <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                            <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-2">
                                               Amount
                                             </th>
-                                            <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                            <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-2">
                                               Due date
                                             </th>
-                                            <th className="text-right font-mono text-[10px] text-gray-500 uppercase tracking-wider py-2">
+                                            <th className="text-right font-mono text-[10px] text-vendor-muted uppercase tracking-wider py-2">
                                               Status
                                             </th>
                                           </tr>
                                         </thead>
                                         <tbody>
                                           {ms.map((m) => (
-                                            <tr key={m.id} className="border-b border-gray-100">
-                                              <td className="py-2 pr-2 text-gray-900 font-medium">{m.title}</td>
-                                              <td className="py-2 text-right font-mono text-[#0C3535]">
+                                            <tr key={m.id} className="border-b border-vendor-border/50">
+                                              <td className="py-2 pr-2 text-vendor-foreground font-medium">{m.title}</td>
+                                              <td className="py-2 text-right font-mono text-vendor-foreground">
                                                 {formatMoney(m.amount, m.currency)}
                                               </td>
-                                              <td className="py-2 text-right font-mono text-xs text-gray-500">
+                                              <td className="py-2 text-right font-mono text-xs text-vendor-muted">
                                                 {formatDueDate(m.due_date)}
                                               </td>
                                               <td className="py-2 text-right">
@@ -792,63 +792,63 @@ function PartnerPaymentsPageLegacy() {
         </div>
 
         {/* Bottom: Rate information */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535]">Rate information</h2>
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-6">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Rate information</h2>
           {!selectedId ? (
-            <p className="text-sm text-gray-500">Select a lead agency to view and edit rates for that relationship.</p>
+            <p className="text-sm text-vendor-muted">Select a lead agency to view and edit rates for that relationship.</p>
           ) : loadingRate ? (
-            <div className="text-sm text-gray-500">Loading…</div>
+            <div className="text-sm text-vendor-muted">Loading…</div>
           ) : rateError ? (
             <div className="text-sm text-red-600">{rateError}</div>
           ) : (
             <>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-vendor-muted-strong">
                 Rates below are stored for{" "}
-                <span className="font-medium text-[#0C3535]">
+                <span className="font-medium text-vendor-foreground">
                   {selectedPartnershipRow ? agencyLabel(selectedPartnershipRow) : "this agency"}
                 </span>{" "}
                 only.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Hourly rate
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-vendor-muted/70">$</span>
                     <Input
                       value={rateInfo.hourly_rate}
                       onChange={(e) => setRateInfo((prev) => ({ ...prev, hourly_rate: e.target.value }))}
-                      className="border-gray-200 pl-7 text-gray-900 placeholder:text-gray-500"
+                      className="border-vendor-border pl-7 text-vendor-foreground placeholder:text-vendor-muted"
                       placeholder="e.g. 250"
                     />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">For reference with this agency</p>
+                  <p className="text-xs text-vendor-muted/70 mt-1">For reference with this agency</p>
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Project minimum
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-vendor-muted/70">$</span>
                     <Input
                       value={rateInfo.project_minimum}
                       onChange={(e) => setRateInfo((prev) => ({ ...prev, project_minimum: e.target.value }))}
-                      className="border-gray-200 pl-7 text-gray-900 placeholder:text-gray-500"
+                      className="border-vendor-border pl-7 text-vendor-foreground placeholder:text-vendor-muted"
                       placeholder="e.g. 5000"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Preferred payment terms
                   </label>
                   <select
                     value={rateInfo.payment_terms}
                     onChange={(e) => setRateInfo((prev) => ({ ...prev, payment_terms: e.target.value }))}
-                    className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                    className="w-full h-10 px-3 rounded-md border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground"
                   >
                     <option value="net_15">Net 15</option>
                     <option value="net_30">Net 30</option>
@@ -860,24 +860,24 @@ function PartnerPaymentsPageLegacy() {
 
               {rateInfo.payment_terms === "custom" ? (
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Custom terms
                   </label>
                   <Input
                     value={rateInfo.payment_terms_custom}
                     onChange={(e) => setRateInfo((prev) => ({ ...prev, payment_terms_custom: e.target.value }))}
-                    className="border-gray-200 text-gray-900"
+                    className="border-vendor-border text-vendor-foreground"
                     placeholder="Describe your terms"
                   />
                 </div>
               ) : null}
 
               <div>
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Notes</label>
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Notes</label>
                 <Textarea
                   value={rateInfo.notes}
                   onChange={(e) => setRateInfo((prev) => ({ ...prev, notes: e.target.value }))}
-                  className="border-gray-200 text-gray-900 min-h-[100px]"
+                  className="border-vendor-border text-vendor-foreground min-h-[100px]"
                   placeholder="Optional context for your rates or billing preferences"
                 />
               </div>
@@ -891,7 +891,7 @@ function PartnerPaymentsPageLegacy() {
               <div className="flex justify-end">
                 <Button
                   type="button"
-                  className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                  className="bg-vendor-foreground hover:bg-vendor-foreground/90 text-white"
                   disabled={savingRate}
                   onClick={() => void saveRateInfo()}
                 >
@@ -902,9 +902,9 @@ function PartnerPaymentsPageLegacy() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-dashed border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Banking details</h2>
-          <p className="text-sm text-gray-600">
+        <div className="bg-vendor-surface rounded-xl border border-dashed border-vendor-border p-6">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-2">Banking details</h2>
+          <p className="text-sm text-vendor-muted-strong">
             Banking details are managed securely via your payment provider. We do not collect account or routing numbers
             on this page.
           </p>

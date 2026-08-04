@@ -283,7 +283,7 @@ export default function PartnerOnboardingPage() {
       case "acknowledged": return "bg-success/15 text-success border-success/30"
       case "viewed": return "bg-blue-100 text-blue-700 border-blue-200"
       case "pending": return "bg-yellow-100 text-yellow-700 border-yellow-200"
-      default: return "bg-gray-100 text-gray-600 border-gray-200"
+      default: return "bg-gray-100 text-vendor-muted-strong border-vendor-border"
     }
   }
   
@@ -439,8 +439,8 @@ export default function PartnerOnboardingPage() {
       <div className="space-y-6">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="font-display font-bold text-3xl text-[#0C3535]">Onboarding</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="font-display font-bold text-3xl text-vendor-foreground">Onboarding</h1>
+            <p className="text-vendor-muted-strong mt-1">
               Review and complete onboarding documents for your active projects.
             </p>
           </div>
@@ -450,7 +450,7 @@ export default function PartnerOnboardingPage() {
         {!isDemo && (
           <>
             {apiLoading && (
-              <div className="flex items-center gap-2 text-gray-600 text-sm">
+              <div className="flex items-center gap-2 text-vendor-muted-strong text-sm">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Loading packages…
               </div>
@@ -459,10 +459,10 @@ export default function PartnerOnboardingPage() {
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">{apiError}</div>
             )}
             {!apiLoading && apiPackages.length === 0 && !apiError && (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <div className="font-display font-bold text-xl text-[#0C3535] mb-2">No onboarding packages</div>
-                <p className="text-gray-600">
+              <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+                <FileText className="w-12 h-12 mx-auto mb-4 text-vendor-muted/50" />
+                <div className="font-display font-bold text-xl text-vendor-foreground mb-2">No onboarding packages</div>
+                <p className="text-vendor-muted-strong">
                   When your lead agency sends onboarding documents, they will appear here.
                 </p>
               </div>
@@ -483,24 +483,24 @@ export default function PartnerOnboardingPage() {
                         className={cn(
                           "w-full text-left p-4 rounded-xl border transition-colors",
                           isSel
-                            ? "bg-[#0C3535] text-white border-[#0C3535]"
-                            : "bg-white border-gray-200 hover:border-[#0C3535]/30"
+                            ? "bg-vendor-foreground text-white border-vendor-foreground"
+                            : "bg-vendor-surface border-vendor-border hover:border-vendor-foreground/30"
                         )}
                       >
-                        <div className={cn("font-display font-bold", isSel ? "text-white" : "text-[#0C3535]")}>
+                        <div className={cn("font-display font-bold", isSel ? "text-white" : "text-vendor-foreground")}>
                           {agencyName}
                         </div>
                         <div
                           className={cn(
                             "text-sm font-medium mt-1.5",
-                            isSel ? "text-white/90" : "text-gray-800"
+                            isSel ? "text-white/90" : "text-vendor-foreground"
                           )}
                         >
                           {projectName}
                         </div>
                         {clientName ? (
                           <div
-                            className={cn("text-xs mt-0.5", isSel ? "text-white/65" : "text-gray-500")}
+                            className={cn("text-xs mt-0.5", isSel ? "text-white/65" : "text-vendor-muted")}
                           >
                             {clientName}
                           </div>
@@ -508,7 +508,7 @@ export default function PartnerOnboardingPage() {
                         <div
                           className={cn(
                             "font-mono text-[10px] mt-2",
-                            isSel ? "text-white/70" : "text-gray-500"
+                            isSel ? "text-white/70" : "text-vendor-muted"
                           )}
                         >
                           {new Date(p.created_at).toLocaleDateString()}
@@ -532,26 +532,26 @@ export default function PartnerOnboardingPage() {
                   })}
                 </div>
                 <div className="lg:col-span-2 space-y-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h2 className="font-display font-bold text-2xl text-[#0C3535]">
+                  <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+                    <h2 className="font-display font-bold text-2xl text-vendor-foreground">
                       {apiProjectName(selectedApi.project)}
                     </h2>
                     {selectedApiClientName ? (
-                      <p className="text-xs text-gray-500 mt-1">{selectedApiClientName}</p>
+                      <p className="text-xs text-vendor-muted mt-1">{selectedApiClientName}</p>
                     ) : null}
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="text-sm text-vendor-muted-strong mt-1">
                       From{" "}
                       {selectedApi.agency?.company_name || selectedApi.agency?.full_name || "your lead agency"}
                     </p>
                     {selectedApi.custom_message && (
-                      <div className="mt-4 rounded-lg bg-[#0C3535]/5 p-4 text-sm text-[#0C3535] whitespace-pre-wrap">
+                      <div className="mt-4 rounded-lg bg-vendor-foreground/5 p-4 text-sm text-vendor-foreground whitespace-pre-wrap">
                         {selectedApi.custom_message}
                       </div>
                     )}
-                    <div className="mt-6 border-t border-gray-100 pt-6">
-                      <h3 className="font-display font-bold text-lg text-[#0C3535] mb-3">Schedule Meeting</h3>
+                    <div className="mt-6 border-t border-vendor-border/50 pt-6">
+                      <h3 className="font-display font-bold text-lg text-vendor-foreground mb-3">Schedule Meeting</h3>
                       {selectedApi.kickoff_type === "calendly" && selectedApi.kickoff_url && (
-                        <Button className="bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90 font-display font-bold" asChild>
+                        <Button className="bg-[#C8F53C] text-vendor-foreground hover:bg-[#C8F53C]/90 font-display font-bold" asChild>
                           <a href={normalizeMeetingUrlForHref(selectedApi.kickoff_url)} target="_blank" rel="noopener noreferrer">
                             <Calendar className="w-4 h-4 mr-2" />
                             Schedule Meeting
@@ -559,18 +559,18 @@ export default function PartnerOnboardingPage() {
                         </Button>
                       )}
                       {selectedApi.kickoff_type === "availability" && selectedApi.kickoff_availability && (
-                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800 whitespace-pre-wrap">
+                        <div className="rounded-lg border border-vendor-border bg-vendor-background p-4 text-sm text-vendor-foreground whitespace-pre-wrap">
                           {selectedApi.kickoff_availability}
                         </div>
                       )}
                       {selectedApi.kickoff_type === "none" && (
-                        <p className="text-sm text-gray-500">No kickoff details included.</p>
+                        <p className="text-sm text-vendor-muted">No kickoff details included.</p>
                       )}
                     </div>
                   </div>
 
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h3 className="font-display font-bold text-lg text-[#0C3535] mb-4">Documents</h3>
+                  <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+                    <h3 className="font-display font-bold text-lg text-vendor-foreground mb-4">Documents</h3>
                     <ul className="space-y-3">
                       {selectedApi.documents.map((doc) => {
                         const href = openDocHref(doc)
@@ -578,13 +578,13 @@ export default function PartnerOnboardingPage() {
                         return (
                           <li
                             key={doc.id}
-                            className="flex flex-wrap items-center justify-between gap-3 border border-gray-100 rounded-lg p-3"
+                            className="flex flex-wrap items-center justify-between gap-3 border border-vendor-border/50 rounded-lg p-3"
                           >
                             <div>
-                              <div className="font-medium text-[#0C3535]">{doc.label}</div>
-                              <div className="font-mono text-[10px] text-gray-500 uppercase">{doc.document_role}</div>
+                              <div className="font-medium text-vendor-foreground">{doc.label}</div>
+                              <div className="font-mono text-[10px] text-vendor-muted uppercase">{doc.document_role}</div>
                             </div>
-                            <Button variant="outline" size="sm" className="border-gray-300" asChild>
+                            <Button variant="outline" size="sm" className="border-vendor-border" asChild>
                               <a href={href} {...(isProxy ? {} : { target: "_blank", rel: "noopener noreferrer" })}>
                                 <ExternalLink className="w-4 h-4 mr-1" />
                                 Open
@@ -599,7 +599,7 @@ export default function PartnerOnboardingPage() {
                   {selectedApi.status !== "reviewed" ? (
                     <Button
                       type="button"
-                      className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                      className="bg-vendor-foreground hover:bg-vendor-foreground/90 text-white"
                       disabled={markingReviewed}
                       onClick={() => void markReviewed()}
                     >
@@ -632,12 +632,12 @@ export default function PartnerOnboardingPage() {
         
         {isDemo ? (
           packets.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <div className="font-display font-bold text-xl text-[#0C3535] mb-2">
+          <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+            <FileText className="w-12 h-12 mx-auto mb-4 text-vendor-muted/50" />
+            <div className="font-display font-bold text-xl text-vendor-foreground mb-2">
               No Onboarding Packets
             </div>
-            <p className="text-gray-600">
+            <p className="text-vendor-muted-strong">
               You don&apos;t have any pending onboarding documents. When you&apos;re awarded a project, onboarding materials will appear here.
             </p>
           </div>
@@ -663,8 +663,8 @@ export default function PartnerOnboardingPage() {
                     className={cn(
                       "w-full text-left p-4 rounded-xl border transition-colors",
                       selectedPacket?.id === packet.id
-                        ? "bg-[#0C3535] text-white border-[#0C3535]"
-                        : "bg-white border-gray-200 hover:border-[#0C3535]/30"
+                        ? "bg-vendor-foreground text-white border-vendor-foreground"
+                        : "bg-vendor-surface border-vendor-border hover:border-vendor-foreground/30"
                     )}
                   >
                     <div className="flex items-center justify-between mb-2">
@@ -680,20 +680,20 @@ export default function PartnerOnboardingPage() {
                       </span>
                       <span className={cn(
                         "font-mono text-[10px]",
-                        selectedPacket?.id === packet.id ? "text-white/60" : "text-gray-500"
+                        selectedPacket?.id === packet.id ? "text-white/60" : "text-vendor-muted"
                       )}>
                         {packetCompleted}/{packetTotal} complete
                       </span>
                     </div>
                     <h3 className={cn(
                       "font-display font-bold",
-                      selectedPacket?.id === packet.id ? "text-white" : "text-[#0C3535]"
+                      selectedPacket?.id === packet.id ? "text-white" : "text-vendor-foreground"
                     )}>
                       {packet.projectName}
                     </h3>
                     <div className={cn(
                       "font-mono text-[10px] mt-1",
-                      selectedPacket?.id === packet.id ? "text-white/60" : "text-gray-500"
+                      selectedPacket?.id === packet.id ? "text-white/60" : "text-vendor-muted"
                     )}>
                       from {packet.agencyName} • {packet.sentAt}
                     </div>
@@ -706,19 +706,19 @@ export default function PartnerOnboardingPage() {
             {selectedPacket && (
               <div className="lg:col-span-2 space-y-6">
                 {/* Header Card */}
-                <div className="bg-white rounded-xl border border-gray-200 p-6">
+                <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h2 className="font-display font-bold text-2xl text-[#0C3535]">
+                      <h2 className="font-display font-bold text-2xl text-vendor-foreground">
                         {selectedPacket.projectName}
                       </h2>
-                      <div className="font-mono text-xs text-gray-500 mt-1">
+                      <div className="font-mono text-xs text-vendor-muted mt-1">
                         Onboarding packet from {selectedPacket.agencyName}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-mono text-xs text-gray-500 mb-1">Progress</div>
-                      <div className="font-display font-bold text-lg text-[#0C3535]">
+                      <div className="font-mono text-xs text-vendor-muted mb-1">Progress</div>
+                      <div className="font-display font-bold text-lg text-vendor-foreground">
                         {requiredCompletedCount}/{requiredCount} Required
                       </div>
                     </div>
@@ -726,25 +726,25 @@ export default function PartnerOnboardingPage() {
                   
                   {/* Progress Bar */}
                   <div className="mb-4">
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-2 bg-vendor-track rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-[#0C3535] rounded-full transition-all"
+                        className="h-full bg-vendor-foreground rounded-full transition-all"
                         style={{ width: `${(completedCount / selectedPacket.documents.length) * 100}%` }}
                       />
                     </div>
                   </div>
                   
                   {/* Message from Agency */}
-                  <div className="bg-[#0C3535]/5 rounded-lg p-4 mb-4">
-                    <div className="font-mono text-[10px] text-[#0C3535]/60 uppercase tracking-wider mb-2">
+                  <div className="bg-vendor-foreground/5 rounded-lg p-4 mb-4">
+                    <div className="font-mono text-[10px] text-vendor-foreground/60 uppercase tracking-wider mb-2">
                       Message from {selectedPacket.agencyName}
                     </div>
-                    <p className="text-sm text-[#0C3535] italic">&quot;{selectedPacket.message}&quot;</p>
+                    <p className="text-sm text-vendor-foreground italic">&quot;{selectedPacket.message}&quot;</p>
                   </div>
                   
                   {/* Schedule Kickoff */}
                   <Button
-                    className="w-full bg-[#C8F53C] text-[#0C3535] hover:bg-[#C8F53C]/90 font-display font-bold"
+                    className="w-full bg-[#C8F53C] text-vendor-foreground hover:bg-[#C8F53C]/90 font-display font-bold"
                     asChild
                   >
                     <a href={normalizeMeetingUrlForHref(selectedPacket.kickoffScheduleLink)} target="_blank" rel="noopener noreferrer">
@@ -760,17 +760,17 @@ export default function PartnerOnboardingPage() {
                   if (typeDocs.length === 0) return null
                   
                   return (
-                    <div key={type} className="bg-white rounded-xl border border-gray-200 p-6">
+                    <div key={type} className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
                       <div className="flex items-center gap-2 mb-4">
                         {type === "agency" ? (
                           <Shield className="w-5 h-5 text-purple-500" />
                         ) : (
-                          <Palette className="w-5 h-5 text-[#0C3535]" />
+                          <Palette className="w-5 h-5 text-vendor-foreground" />
                         )}
-                        <h3 className="font-display font-bold text-lg text-[#0C3535] capitalize">
+                        <h3 className="font-display font-bold text-lg text-vendor-foreground capitalize">
                           {type} Documents
                         </h3>
-                        <span className="font-mono text-[10px] text-gray-500 ml-auto">
+                        <span className="font-mono text-[10px] text-vendor-muted ml-auto">
                           {typeDocs.filter(d => d.status !== "pending").length}/{typeDocs.length} complete
                         </span>
                       </div>
@@ -786,29 +786,29 @@ export default function PartnerOnboardingPage() {
                                 doc.status === "pending" && doc.required
                                   ? "bg-yellow-50 border-yellow-200"
                                   : doc.status === "pending"
-                                  ? "bg-gray-50 border-gray-200"
+                                  ? "bg-vendor-background border-vendor-border"
                                   : "bg-success/15 border-success/30"
                               )}
                             >
                               <div className="flex items-start gap-4">
                                 <div className={cn(
                                   "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                                  type === "agency" ? "bg-purple-100" : "bg-[#0C3535]/10"
+                                  type === "agency" ? "bg-purple-100" : "bg-vendor-foreground/10"
                                 )}>
                                   <Icon className={cn(
                                     "w-5 h-5",
-                                    type === "agency" ? "text-purple-600" : "text-[#0C3535]"
+                                    type === "agency" ? "text-purple-600" : "text-vendor-foreground"
                                   )} />
                                 </div>
                                 
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
-                                    <span className="font-display font-bold text-[#0C3535]">{doc.name}</span>
+                                    <span className="font-display font-bold text-vendor-foreground">{doc.name}</span>
                                     {doc.required && (
                                       <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-600">Required</span>
                                     )}
                                   </div>
-                                  <p className="text-sm text-gray-600 mb-2">{doc.description}</p>
+                                  <p className="text-sm text-vendor-muted-strong mb-2">{doc.description}</p>
                                   
                                   <div className="flex items-center gap-3">
                                     <span className={cn(
@@ -824,7 +824,7 @@ export default function PartnerOnboardingPage() {
                                     </span>
                                     
                                     {(doc.signedAt || doc.viewedAt) && (
-                                      <span className="font-mono text-[10px] text-gray-400">
+                                      <span className="font-mono text-[10px] text-vendor-muted/70">
                                         {doc.signedAt || doc.viewedAt}
                                       </span>
                                     )}
@@ -842,7 +842,7 @@ export default function PartnerOnboardingPage() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="border-gray-300 text-gray-600 hover:bg-gray-50"
+                                    className="border-vendor-border text-vendor-muted-strong hover:bg-vendor-background"
                                   >
                                     <Download className="w-4 h-4 mr-1" />
                                     Download
@@ -868,7 +868,7 @@ export default function PartnerOnboardingPage() {
                                             ? "bg-accent text-accent-foreground hover:bg-accent/90"
                                             : doc.action === "upload"
                                             ? "bg-blue-600 hover:bg-blue-700 text-white"
-                                            : "bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                                            : "bg-vendor-foreground hover:bg-vendor-foreground/90 text-white"
                                         )}
                                       >
                                         {uploadingDocId === doc.id ? (
@@ -898,14 +898,14 @@ export default function PartnerOnboardingPage() {
                 {requiredCompletedCount === requiredCount && (
                   <div className="bg-success/15 rounded-xl border border-success/30 p-6 text-center">
                     <CheckCircle className="w-12 h-12 mx-auto mb-3 text-success" />
-                    <div className="font-display font-bold text-xl text-[#0C3535] mb-2">
+                    <div className="font-display font-bold text-xl text-vendor-foreground mb-2">
                       Onboarding Complete!
                     </div>
-                    <p className="text-sm text-gray-600 mb-4">
+                    <p className="text-sm text-vendor-muted-strong mb-4">
                       You&apos;ve completed all required onboarding documents. Don&apos;t forget to schedule your kickoff call.
                     </p>
                     <Button
-                      className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                      className="bg-vendor-foreground hover:bg-vendor-foreground/90 text-white"
                       asChild
                     >
                       <a href="/partner/projects">
@@ -924,28 +924,28 @@ export default function PartnerOnboardingPage() {
       {/* Sign Modal (demo only) */}
       {isDemo && showSignModal && signingDoc && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6">
+          <div className="bg-vendor-surface rounded-xl max-w-lg w-full p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-lg bg-[#0C3535]/10 flex items-center justify-center">
-                <Signature className="w-6 h-6 text-[#0C3535]" />
+              <div className="w-12 h-12 rounded-lg bg-vendor-foreground/10 flex items-center justify-center">
+                <Signature className="w-6 h-6 text-vendor-foreground" />
               </div>
               <div>
-                <h3 className="font-display font-bold text-xl text-[#0C3535]">Sign Document</h3>
-                <p className="text-sm text-gray-500">{signingDoc.name}</p>
+                <h3 className="font-display font-bold text-xl text-vendor-foreground">Sign Document</h3>
+                <p className="text-sm text-vendor-muted">{signingDoc.name}</p>
               </div>
             </div>
             
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <p className="text-sm text-gray-600">
+            <div className="bg-vendor-background rounded-lg p-4 mb-6">
+              <p className="text-sm text-vendor-muted-strong">
                 By signing below, you agree to the terms outlined in this document. Your digital signature is legally binding.
               </p>
             </div>
             
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 mb-6 text-center">
-              <div className="font-display text-2xl text-gray-300 italic">
+            <div className="border-2 border-dashed border-vendor-border rounded-lg p-8 mb-6 text-center">
+              <div className="font-display text-2xl text-vendor-muted/50 italic">
                 Your organization
               </div>
-              <div className="font-mono text-[10px] text-gray-400 mt-2">
+              <div className="font-mono text-[10px] text-vendor-muted/70 mt-2">
                 Digital Signature
               </div>
             </div>
@@ -954,7 +954,7 @@ export default function PartnerOnboardingPage() {
               <Button
                 variant="outline"
                 onClick={() => { setShowSignModal(false); setSigningDoc(null); }}
-                className="flex-1 border-gray-300"
+                className="flex-1 border-vendor-border"
               >
                 Cancel
               </Button>

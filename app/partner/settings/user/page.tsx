@@ -179,7 +179,7 @@ export default function PartnerUserProfilePage() {
   if (loading) {
     return (
       <PartnerLayout>
-        <div className="max-w-3xl mx-auto p-8 text-gray-600">Loading user profile...</div>
+        <div className="max-w-3xl mx-auto p-8 text-vendor-muted-strong">Loading user profile...</div>
       </PartnerLayout>
     )
   }
@@ -188,41 +188,41 @@ export default function PartnerUserProfilePage() {
     <PartnerLayout>
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
-          <h1 className="font-display font-bold text-3xl text-[#0C3535]">User Profile</h1>
-          <p className="text-gray-600 mt-1">Manage your personal account information.</p>
+          <h1 className="font-display font-bold text-3xl text-vendor-foreground">User Profile</h1>
+          <p className="text-vendor-muted-strong mt-1">Manage your personal account information.</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-[#0C3535]">Account Information</h2>
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-4">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Account Information</h2>
           <div>
-            <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Full Name</label>
-            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-white border-gray-200 text-gray-900" />
+            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Full Name</label>
+            <Input value={fullName} onChange={(e) => setFullName(e.target.value)} className="bg-vendor-surface border-vendor-border text-vendor-foreground" />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Display Name</label>
+            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Display Name</label>
             <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="bg-white border-gray-200 text-gray-900"
+              className="bg-vendor-surface border-vendor-border text-vendor-foreground"
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Email</label>
-            <Input value={email} readOnly className="bg-gray-100 border-gray-200 text-gray-700" />
-            <p className="mt-1 text-xs text-gray-600">Read-only, email changes are managed through account auth.</p>
+            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Email</label>
+            <Input value={email} readOnly className="bg-gray-100 border-vendor-border text-vendor-foreground" />
+            <p className="mt-1 text-xs text-vendor-muted-strong">Read-only, email changes are managed through account auth.</p>
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Personal LinkedIn URL <span className="text-gray-400">(optional)</span></label>
+            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Personal LinkedIn URL <span className="text-vendor-muted/70">(optional)</span></label>
             <Input
               type="url"
               value={personalLinkedin}
               onChange={(e) => setPersonalLinkedin(e.target.value)}
               placeholder="https://linkedin.com/in/your-name"
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+              className="bg-vendor-surface border-vendor-border text-vendor-foreground placeholder:text-vendor-muted/70"
             />
           </div>
           <div className="flex flex-col items-end">
-            <Button onClick={saveProfileSettings} disabled={saving || !hasSettingsChanges} className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
+            <Button onClick={saveProfileSettings} disabled={saving || !hasSettingsChanges} className="bg-vendor-foreground hover:bg-vendor-foreground/90 text-white">
               {saving ? "Saving..." : "Save Changes"}
             </Button>
             {saveSuccess && (
@@ -233,56 +233,56 @@ export default function PartnerUserProfilePage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-[#0C3535]">Password & Security</h2>
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-4">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Password & Security</h2>
           <div>
-            <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Current Password</label>
+            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Current Password</label>
             <Input
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-vendor-surface border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">New Password</label>
+            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">New Password</label>
             <Input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               placeholder="Minimum 8 characters"
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-vendor-surface border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
             />
           </div>
           <div>
-            <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Confirm New Password</label>
+            <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Confirm New Password</label>
             <Input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Re-enter new password"
-              className="bg-white border-gray-200 text-gray-900 placeholder:text-gray-500"
+              className="bg-vendor-surface border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
             />
           </div>
           <div className="flex justify-end">
-            <Button onClick={savePassword} disabled={passwordSaving} className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
+            <Button onClick={savePassword} disabled={passwordSaving} className="bg-vendor-foreground hover:bg-vendor-foreground/90 text-white">
               {passwordSaving ? "Updating..." : "Update Password"}
             </Button>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-[#0C3535]">Notification Preferences</h2>
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6 space-y-4">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Notification Preferences</h2>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700">Email me when a new bid is received</span>
+              <span className="text-sm text-vendor-foreground">Email me when a new bid is received</span>
               <Switch
                 checked={notificationPrefs.newBidReceived}
                 onCheckedChange={(checked) => setNotificationPrefs((prev) => ({ ...prev, newBidReceived: checked }))}
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700">Email me when a partner invitation is accepted</span>
+              <span className="text-sm text-vendor-foreground">Email me when a partner invitation is accepted</span>
               <Switch
                 checked={notificationPrefs.partnerInvitationAccepted}
                 onCheckedChange={(checked) =>
@@ -291,14 +291,14 @@ export default function PartnerUserProfilePage() {
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700">Email me on project updates</span>
+              <span className="text-sm text-vendor-foreground">Email me on project updates</span>
               <Switch
                 checked={notificationPrefs.projectUpdate}
                 onCheckedChange={(checked) => setNotificationPrefs((prev) => ({ ...prev, projectUpdate: checked }))}
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-700">Email me platform announcements</span>
+              <span className="text-sm text-vendor-foreground">Email me platform announcements</span>
               <Switch
                 checked={notificationPrefs.platformAnnouncements}
                 onCheckedChange={(checked) =>
@@ -308,15 +308,15 @@ export default function PartnerUserProfilePage() {
             </div>
           </div>
           <div className="flex justify-end">
-            <Button onClick={saveAccountInformation} disabled={saving} className="bg-[#0C3535] hover:bg-[#0C3535]/90 text-white">
+            <Button onClick={saveAccountInformation} disabled={saving} className="bg-vendor-foreground hover:bg-vendor-foreground/90 text-white">
               {saving ? "Saving..." : "Save Preferences"}
             </Button>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-red-200 p-6 space-y-4">
-          <h2 className="font-display font-bold text-lg text-[#0C3535]">Danger Zone</h2>
-          <p className="text-sm text-gray-600">Account deletion is handled manually by support for security purposes.</p>
+        <div className="bg-vendor-surface rounded-xl border border-red-200 p-6 space-y-4">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Danger Zone</h2>
+          <p className="text-sm text-vendor-muted-strong">Account deletion is handled manually by support for security purposes.</p>
           <Button disabled variant="destructive-outline" title="Contact support to delete your account">
             Delete Account
           </Button>

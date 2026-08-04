@@ -744,7 +744,7 @@ export default function PartnerProfilePage() {
   if (loading) {
     return (
       <PartnerChrome>
-        <div className="max-w-4xl mx-auto p-8 text-gray-600">Loading profile...</div>
+        <div className="max-w-4xl mx-auto p-8 text-vendor-muted-strong">Loading profile...</div>
       </PartnerChrome>
     )
   }
@@ -759,8 +759,8 @@ export default function PartnerProfilePage() {
         )}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="font-display font-bold text-3xl text-[#0C3535]">Profile & Capabilities</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="font-display font-bold text-3xl text-vendor-foreground">Profile & Capabilities</h1>
+            <p className="text-vendor-muted-strong mt-1">
               Tell agencies about your company, expertise, and past work.
             </p>
           </div>
@@ -772,7 +772,7 @@ export default function PartnerProfilePage() {
               "transition-all min-w-[140px] rounded-md px-4 py-2 text-sm font-medium disabled:opacity-60",
               saved
                 ? "bg-success hover:bg-success text-accent-foreground"
-                : "bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                : "bg-vendor-foreground hover:bg-vendor-foreground/90 text-white"
             )}
           >
             {saving ? "Saving..." : saved ? "Saved Successfully" : "Save Changes"}
@@ -781,9 +781,9 @@ export default function PartnerProfilePage() {
 
         {/* Vouch status — count only, never reveals who vouched (by design) */}
         {!vouchLoading && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
+          <div className="bg-vendor-surface rounded-xl border border-vendor-border p-5 flex items-center gap-4">
             <div className="flex-1">
-              <div className="font-display font-bold text-base text-[#0C3535] flex items-center gap-2 flex-wrap">
+              <div className="font-display font-bold text-base text-vendor-foreground flex items-center gap-2 flex-wrap">
                 {vouchCount >= 3 ? (
                   <>
                     <span className="flex items-center gap-0.5">
@@ -797,7 +797,7 @@ export default function PartnerProfilePage() {
                   "Community Vouching"
                 )}
               </div>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-vendor-muted mt-1">
                 {vouchCount >= 3
                   ? `${vouchCount} lead agencies have vouched for your work.`
                   : vouchCount === 0
@@ -807,41 +807,41 @@ export default function PartnerProfilePage() {
             </div>
           </div>
         )}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Account Email</label>
-              <Input value={accountEmail} readOnly className="border-gray-200 bg-gray-100 text-gray-700" />
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Account Email</label>
+              <Input value={accountEmail} readOnly className="border-vendor-border bg-gray-100 text-vendor-foreground" />
             </div>
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Account Full Name</label>
-              <Input value={accountFullName} readOnly className="border-gray-200 bg-gray-100 text-gray-700" />
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Account Full Name</label>
+              <Input value={accountFullName} readOnly className="border-vendor-border bg-gray-100 text-vendor-foreground" />
             </div>
           </div>
           <label className="flex items-start justify-between gap-4 cursor-pointer">
             <div>
-              <div className="font-display font-bold text-lg text-[#0C3535]">
+              <div className="font-display font-bold text-lg text-vendor-foreground">
                 Allow agencies to discover me on the Marketplace
               </div>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-vendor-muted-strong mt-1">
                 When enabled, your agency profile can appear in Marketplace discovery for lead agencies.
               </p>
-              {discoverabilityMsg && <p className="text-xs text-gray-500 mt-2">{discoverabilityMsg}</p>}
+              {discoverabilityMsg && <p className="text-xs text-vendor-muted mt-2">{discoverabilityMsg}</p>}
             </div>
             <Switch checked={discoverable} onCheckedChange={toggleDiscoverability} disabled={discoverabilitySaving} />
           </label>
         </div>
         
         {/* Basic Info */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Company Profile & Basic Information</h2>
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Company Profile & Basic Information</h2>
 
           <div className="flex items-center gap-5 mb-6">
             <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center flex-shrink-0">
               {companyLogoUrl ? (
                 <img src={companyLogoUrl} alt="Company logo" className="w-full h-full object-cover" />
               ) : (
-                <span className="font-display font-bold text-xl text-[#0C3535]">
+                <span className="font-display font-bold text-xl text-vendor-foreground">
                   {(formData.companyName || "P").split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
                 </span>
               )}
@@ -860,30 +860,30 @@ export default function PartnerProfilePage() {
               <Button
                 type="button"
                 variant="outline"
-                className="border-gray-300 text-gray-900 hover:bg-[#0C3535]/5 w-fit"
+                className="border-vendor-border text-vendor-foreground hover:bg-vendor-foreground/5 w-fit"
                 onClick={() => fileRef.current?.click()}
               >
                 {uploadingLogo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Camera className="w-4 h-4 mr-2" />}
                 Upload Logo
               </Button>
-              <p className="text-xs text-gray-500">PNG, JPG, or WebP. Shown in your sidebar and on your public profile.</p>
+              <p className="text-xs text-vendor-muted">PNG, JPG, or WebP. Shown in your sidebar and on your public profile.</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Company Name
               </label>
               <Input
                 value={formData.companyName}
                 onChange={(e) => setFormData(prev => ({ ...prev, companyName: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
               />
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Company Website
               </label>
               <Input
@@ -891,28 +891,28 @@ export default function PartnerProfilePage() {
                 value={formData.companyWebsite}
                 onChange={(e) => setFormData(prev => ({ ...prev, companyWebsite: e.target.value }))}
                 placeholder="https://youragency.com"
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
               />
             </div>
             <div>
-              <label className="font-mono text-[10px] uppercase text-gray-500 block mb-2">Company LinkedIn URL</label>
+              <label className="font-mono text-[10px] uppercase text-vendor-muted block mb-2">Company LinkedIn URL</label>
               <Input
                 type="url"
                 value={formData.companyLinkedin ?? ""}
                 onChange={(e) => setFormData((p) => ({ ...p, companyLinkedin: e.target.value }))}
                 placeholder="https://linkedin.com/company/your-company"
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
               />
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Company Type
               </label>
               <select
                 value={formData.type}
                 onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                className="w-full h-10 px-3 rounded-md border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground"
               >
                 <option value="production">Production Company</option>
                 <option value="agency">Agency</option>
@@ -922,7 +922,7 @@ export default function PartnerProfilePage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Primary Discipline
               </label>
               {showCustomDiscipline ? (
@@ -931,7 +931,7 @@ export default function PartnerProfilePage() {
                     value={customDisciplineInput}
                     onChange={(e) => setCustomDisciplineInput(e.target.value)}
                     placeholder="Enter custom discipline"
-                    className="border-gray-200 flex-1 text-gray-900 placeholder:text-gray-500"
+                    className="border-vendor-border flex-1 text-vendor-foreground placeholder:text-vendor-muted"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
@@ -944,7 +944,7 @@ export default function PartnerProfilePage() {
                     type="button"
                     size="sm"
                     onClick={addCustomDiscipline}
-                    className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+                    className="bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
                   >
                     Add
                   </Button>
@@ -956,7 +956,7 @@ export default function PartnerProfilePage() {
                       setShowCustomDiscipline(false)
                       setCustomDisciplineInput("")
                     }}
-                    className="border-gray-300 text-gray-900 hover:bg-gray-50"
+                    className="border-vendor-border text-vendor-foreground hover:bg-vendor-background"
                   >
                     Cancel
                   </Button>
@@ -971,7 +971,7 @@ export default function PartnerProfilePage() {
                       setFormData(prev => ({ ...prev, primaryDiscipline: e.target.value }))
                     }
                   }}
-                  className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                  className="w-full h-10 px-3 rounded-md border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground"
                 >
                   {allDisciplines.map(d => (
                     <option key={d} value={d}>{d}</option>
@@ -982,7 +982,7 @@ export default function PartnerProfilePage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Location
               </label>
               <input
@@ -991,19 +991,19 @@ export default function PartnerProfilePage() {
                 onChange={(e) => setFormData((p) => ({ ...p, location: e.target.value }))}
                 placeholder="Start typing a city..."
                 autoComplete="off"
-                className="flex h-10 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex h-10 w-full rounded-md border border-vendor-border bg-vendor-surface px-3 py-2 text-sm text-vendor-foreground placeholder:text-vendor-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                   Team Size
                 </label>
                 <select
                   value={formData.teamSize}
                   onChange={(e) => setFormData(prev => ({ ...prev, teamSize: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                className="w-full h-10 px-3 rounded-md border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground"
                 >
                   <option value="1">Solo</option>
                   <option value="2-4">2-4</option>
@@ -1013,36 +1013,36 @@ export default function PartnerProfilePage() {
                 </select>
               </div>
               <div>
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                   Year Founded
                 </label>
                 <Input
                   value={formData.yearFounded}
                   onChange={(e) => setFormData(prev => ({ ...prev, yearFounded: e.target.value }))}
-                  className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                 />
               </div>
             </div>
             
             <div className="col-span-2">
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Company Bio
               </label>
               <Textarea
                 value={formData.bio}
                 onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-                className="min-h-[120px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="min-h-[120px] border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                 placeholder="Describe your company, expertise, and what makes you unique..."
               />
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
-              <h2 className="font-display font-bold text-lg text-[#0C3535]">Partnership Context</h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <h2 className="font-display font-bold text-lg text-vendor-foreground">Partnership Context</h2>
+              <p className="text-sm text-vendor-muted-strong mt-1">
                 Tailor your profile details for each active lead agency partnership.
               </p>
             </div>
@@ -1051,7 +1051,7 @@ export default function PartnerProfilePage() {
               onClick={handleSavePartnershipContext}
               disabled={!selectedPartnershipId || contextSaving}
               className={cn(
-                "min-w-[120px] bg-[#0C3535] text-white hover:bg-[#0C3535]/90",
+                "min-w-[120px] bg-vendor-foreground text-white hover:bg-vendor-foreground/90",
                 contextSaved && "bg-success hover:bg-success text-accent-foreground"
               )}
             >
@@ -1060,13 +1060,13 @@ export default function PartnerProfilePage() {
           </div>
 
           {activePartnershipOptions.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+            <div className="rounded-lg border border-dashed border-vendor-border p-4 text-sm text-vendor-muted">
               No active partner partnerships found.
             </div>
           ) : (
             <div className="space-y-6">
               <div>
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                   Partnership
                 </label>
                 <select
@@ -1075,7 +1075,7 @@ export default function PartnerProfilePage() {
                     setContextSaved(false)
                     setSelectedPartnershipId(e.target.value)
                   }}
-                  className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                  className="w-full h-10 px-3 rounded-md border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground"
                 >
                   {activePartnershipOptions.map((option) => (
                     <option key={option.partnership_id} value={option.partnership_id}>
@@ -1086,105 +1086,105 @@ export default function PartnerProfilePage() {
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                   Bio
                 </label>
                 <Textarea
                   value={selectedPartnershipContext.bio}
                   onChange={(e) => updateSelectedPartnershipContext({ bio: e.target.value })}
-                  className="min-h-[120px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  className="min-h-[120px] border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                   placeholder="Describe how you'd like to present yourself for this specific partnership."
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Reel URL
                   </label>
                   <Input
                     value={selectedPartnershipContext.reel_url}
                     onChange={(e) => updateSelectedPartnershipContext({ reel_url: e.target.value })}
                     placeholder="https://vimeo.com/partnership-specific-reel"
-                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Capabilities Tags
                   </label>
                   <Input
                     value={selectedPartnershipContext.capabilities_tags_input}
                     onChange={(e) => updateSelectedPartnershipContext({ capabilities_tags_input: e.target.value })}
                     placeholder="Production, Motion Design, Creator Content"
-                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                   />
-                  <p className="text-xs mt-2 text-gray-500">
+                  <p className="text-xs mt-2 text-vendor-muted">
                     Enter comma-separated tags.
                   </p>
                 </div>
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                   Credentials Notes
                 </label>
                 <Textarea
                   value={selectedPartnershipContext.credentials_notes}
                   onChange={(e) => updateSelectedPartnershipContext({ credentials_notes: e.target.value })}
-                  className="min-h-[100px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                  className="min-h-[100px] border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                   placeholder="Plain-text credentials notes for this partnership."
                 />
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <h3 className="font-display font-bold text-base text-[#0C3535]">Payment Terms</h3>
+                  <h3 className="font-display font-bold text-base text-vendor-foreground">Payment Terms</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                       Deposit Percent
                     </label>
                     <Input
                       type="number"
                       value={selectedPartnershipContext.deposit_percent}
                       onChange={(e) => updateSelectedPartnershipContext({ deposit_percent: e.target.value })}
-                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                      className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                     />
                   </div>
                   <div>
-                    <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                       Net Days
                     </label>
                     <Input
                       type="number"
                       value={selectedPartnershipContext.net_days}
                       onChange={(e) => updateSelectedPartnershipContext({ net_days: e.target.value })}
-                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                      className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                     />
                   </div>
                   <div>
-                    <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                       Schedule Preference
                     </label>
                     <Input
                       value={selectedPartnershipContext.schedule_preference}
                       onChange={(e) => updateSelectedPartnershipContext({ schedule_preference: e.target.value })}
                       placeholder="Milestone-based, Net 30, etc."
-                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                      className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                     />
                   </div>
                   <div>
-                    <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                    <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                       Notes
                     </label>
                     <Input
                       value={selectedPartnershipContext.payment_notes}
                       onChange={(e) => updateSelectedPartnershipContext({ payment_notes: e.target.value })}
                       placeholder="Additional payment notes"
-                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                      className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                     />
                   </div>
                 </div>
@@ -1194,9 +1194,9 @@ export default function PartnerProfilePage() {
         </div>
         
         {/* Capabilities */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Capabilities</h2>
-          <p className="text-sm text-gray-600 mb-6">
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-2">Capabilities</h2>
+          <p className="text-sm text-vendor-muted-strong mb-6">
             Select all the capabilities that apply to your work. This helps agencies find you for relevant projects.
           </p>
           
@@ -1208,8 +1208,8 @@ export default function PartnerProfilePage() {
                 className={cn(
                   "px-4 py-2 rounded-full font-mono text-xs transition-all border",
                   formData.selectedCapabilities.includes(cap)
-                    ? "bg-[#0C3535] text-white border-[#0C3535]"
-                    : "bg-white text-gray-900 border-gray-200 hover:border-[#0C3535]/30"
+                    ? "bg-vendor-foreground text-white border-vendor-foreground"
+                    : "bg-vendor-surface text-vendor-foreground border-vendor-border hover:border-vendor-foreground/30"
                 )}
               >
                 {formData.selectedCapabilities.includes(cap) && "✓ "}
@@ -1221,7 +1221,7 @@ export default function PartnerProfilePage() {
               <button
                 key={cap}
                 onClick={() => removeCustomCapability(cap)}
-                className="px-4 py-2 rounded-full font-mono text-xs transition-all border bg-[#0C3535]/80 text-white border-[#0C3535] hover:bg-[#0C3535]"
+                className="px-4 py-2 rounded-full font-mono text-xs transition-all border bg-vendor-foreground/80 text-white border-vendor-foreground hover:bg-vendor-foreground"
               >
                 ✓ {cap} ×
               </button>
@@ -1229,8 +1229,8 @@ export default function PartnerProfilePage() {
           </div>
           
           {/* Add Custom Capability */}
-          <div className="pt-4 border-t border-gray-200">
-            <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+          <div className="pt-4 border-t border-vendor-border">
+            <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
               Add Custom Capability
             </label>
             <div className="flex gap-2">
@@ -1238,7 +1238,7 @@ export default function PartnerProfilePage() {
                 value={customCapability}
                 onChange={(e) => setCustomCapability(e.target.value)}
                 placeholder="e.g., Aerial Cinematography, VR/360 Video..."
-                className="flex-1 border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="flex-1 border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
@@ -1250,29 +1250,29 @@ export default function PartnerProfilePage() {
                 type="button"
                 onClick={addCustomCapability}
                 variant="outline"
-                className="border-[#0C3535] text-gray-900 hover:bg-[#0C3535]/5"
+                className="border-vendor-foreground text-vendor-foreground hover:bg-vendor-foreground/5"
               >
                 + Add
               </Button>
             </div>
-            <p className="text-xs mt-2 text-gray-500">
+            <p className="text-xs mt-2 text-vendor-muted">
               Custom capabilities are highlighted. Click to remove.
             </p>
           </div>
         </div>
         
         {/* Credentials / Portfolio */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="font-display font-bold text-lg text-[#0C3535]">Credentials & Portfolio</h2>
-              <p className="text-sm text-gray-600">
+              <h2 className="font-display font-bold text-lg text-vendor-foreground">Credentials & Portfolio</h2>
+              <p className="text-sm text-vendor-muted-strong">
                 Showcase your best work to potential agency partners.
               </p>
             </div>
             <Button
               variant="outline" 
-              className="border-gray-300 text-gray-900 hover:bg-[#0C3535]/5"
+              className="border-vendor-border text-vendor-foreground hover:bg-vendor-foreground/5"
               onClick={() => setShowAddProject(true)}
             >
               + Add Project
@@ -1280,65 +1280,65 @@ export default function PartnerProfilePage() {
           </div>
           
           {showAddProject && (
-            <div className="mb-6 p-4 rounded-lg border border-[#0C3535]/20 bg-[#0C3535]/5">
-              <h3 className="font-display font-bold text-sm text-[#0C3535] mb-4">Add New Project</h3>
+            <div className="mb-6 p-4 rounded-lg border border-vendor-foreground/20 bg-vendor-foreground/5">
+              <h3 className="font-display font-bold text-sm text-vendor-foreground mb-4">Add New Project</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Project Title
                   </label>
                   <Input
                     value={newProject.title}
                     onChange={(e) => setNewProject(prev => ({ ...prev, title: e.target.value }))}
                     placeholder="Project name"
-                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                   />
                 </div>
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Client
                   </label>
                   <Input
                     value={newProject.client}
                     onChange={(e) => setNewProject(prev => ({ ...prev, client: e.target.value }))}
                     placeholder="Client name"
-                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                   />
                 </div>
                 <div>
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Year
                   </label>
                   <Input
                     value={newProject.year}
                     onChange={(e) => setNewProject(prev => ({ ...prev, year: e.target.value }))}
                     placeholder="2024"
-                    className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                   />
                 </div>
                 <div className="md:col-span-3">
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Relevant Context
                   </label>
                   <Textarea
                     value={newProject.relevant_context}
                     onChange={(e) => setNewProject(prev => ({ ...prev, relevant_context: e.target.value }))}
                     placeholder="Share context about objectives, your contribution, outcomes, and why this work is relevant."
-                    className="min-h-[90px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                    className="min-h-[90px] border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                   />
                 </div>
               </div>
               <div className="flex gap-2">
                 <Button
                   onClick={addProject}
-                  className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+                  className="bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
                 >
                   Add Project
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowAddProject(false)}
-                  className="border-gray-300 text-gray-900 hover:bg-gray-50"
+                  className="border-vendor-border text-vendor-foreground hover:bg-vendor-background"
                 >
                   Cancel
                 </Button>
@@ -1348,14 +1348,14 @@ export default function PartnerProfilePage() {
           
           <div className="space-y-3">
             {credentials.length === 0 ? (
-              <div className="p-4 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500">
+              <div className="p-4 rounded-lg border border-dashed border-vendor-border text-sm text-vendor-muted">
                 No credentials added yet.
               </div>
             ) : (
               credentials.map((cred) => (
                 <div
                   key={cred.id}
-                  className="p-4 rounded-lg border border-gray-200 bg-gray-50 space-y-3"
+                  className="p-4 rounded-lg border border-vendor-border bg-vendor-background space-y-3"
                 >
                   {editingCredentialId === cred.id ? (
                     <div className="space-y-3">
@@ -1364,36 +1364,36 @@ export default function PartnerProfilePage() {
                           value={cred.title}
                           onChange={(e) => updateCredential(cred.id, { title: e.target.value })}
                           placeholder="Project title"
-                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                          className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                         />
                         <Input
                           value={cred.client}
                           onChange={(e) => updateCredential(cred.id, { client: e.target.value })}
                           placeholder="Client"
-                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                          className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                         />
                         <Input
                           value={cred.year}
                           onChange={(e) => updateCredential(cred.id, { year: e.target.value })}
                           placeholder="Year"
-                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                          className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                         />
                       </div>
                       <Textarea
                         value={cred.relevant_context}
                         onChange={(e) => updateCredential(cred.id, { relevant_context: e.target.value })}
                         placeholder="Relevant context for this project."
-                        className="min-h-[90px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                        className="min-h-[90px] border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                       />
                     </div>
                   ) : (
                     <div>
-                      <div className="font-display font-bold text-sm text-[#0C3535]">{cred.title}</div>
-                      <div className="font-mono text-[10px] text-gray-500">
+                      <div className="font-display font-bold text-sm text-vendor-foreground">{cred.title}</div>
+                      <div className="font-mono text-[10px] text-vendor-muted">
                         {cred.client} • {cred.year}
                       </div>
                       {cred.relevant_context?.trim() ? (
-                        <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{cred.relevant_context}</p>
+                        <p className="text-sm text-vendor-foreground mt-2 whitespace-pre-wrap">{cred.relevant_context}</p>
                       ) : null}
                     </div>
                   )}
@@ -1401,7 +1401,7 @@ export default function PartnerProfilePage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                    className="text-gray-900 hover:text-gray-900 hover:bg-[#0C3535]/10"
+                    className="text-vendor-foreground hover:text-vendor-foreground hover:bg-vendor-foreground/10"
                       onClick={() => setEditingCredentialId((prev) => (prev === cred.id ? null : cred.id))}
                     >
                       {editingCredentialId === cred.id ? "Done" : "Edit"}
@@ -1422,12 +1422,12 @@ export default function PartnerProfilePage() {
         </div>
 
         {/* Reel / Work Examples */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Reel & Work Examples</h2>
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Reel & Work Examples</h2>
 
           <div className="space-y-6">
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Primary Reel URL or Upload
               </label>
               <div className="flex gap-2">
@@ -1436,7 +1436,7 @@ export default function PartnerProfilePage() {
                   value={reelUrl}
                   onChange={(e) => setReelUrl(e.target.value)}
                   placeholder="https://vimeo.com/your-reel"
-                  className="border-gray-200 flex-1 text-gray-900 placeholder:text-gray-500"
+                  className="border-vendor-border flex-1 text-vendor-foreground placeholder:text-vendor-muted"
                 />
                 <div className="relative">
                   <input
@@ -1454,7 +1454,7 @@ export default function PartnerProfilePage() {
                     variant="outline"
                     onClick={() => reelInputRef.current?.click()}
                     disabled={isUploadingReel}
-                    className="border-gray-300 text-gray-900 hover:bg-gray-50"
+                    className="border-vendor-border text-vendor-foreground hover:bg-vendor-background"
                   >
                     {isUploadingReel ? (
                       <>
@@ -1473,10 +1473,10 @@ export default function PartnerProfilePage() {
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Capabilities Overview
               </label>
-              <p className="text-sm text-gray-600 mb-2">
+              <p className="text-sm text-vendor-muted-strong mb-2">
                 Upload a PDF or document that summarizes your capabilities.
               </p>
               <div className="flex gap-2">
@@ -1484,7 +1484,7 @@ export default function PartnerProfilePage() {
                   value={capabilitiesOverviewUrl}
                   onChange={(e) => setCapabilitiesOverviewUrl(e.target.value)}
                   placeholder="Capabilities overview file URL"
-                  className="border-gray-200 flex-1 text-gray-900 placeholder:text-gray-500"
+                  className="border-vendor-border flex-1 text-vendor-foreground placeholder:text-vendor-muted"
                 />
                 <input
                   type="file"
@@ -1501,7 +1501,7 @@ export default function PartnerProfilePage() {
                   variant="outline"
                   onClick={() => capabilitiesInputRef.current?.click()}
                   disabled={isUploadingCapabilitiesOverview}
-                  className="border-gray-300 text-gray-900 hover:bg-gray-50"
+                  className="border-vendor-border text-vendor-foreground hover:bg-vendor-background"
                 >
                   {isUploadingCapabilitiesOverview ? (
                     <>
@@ -1519,39 +1519,39 @@ export default function PartnerProfilePage() {
             </div>
 
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Additional Work Examples
               </label>
               <div className="space-y-3">
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-gray-300 text-gray-900 hover:bg-[#0C3535]/5"
+                  className="border-vendor-border text-vendor-foreground hover:bg-vendor-foreground/5"
                   onClick={() => setShowAddWorkExample(true)}
                 >
                   + Add Work Example
                 </Button>
 
                 {showAddWorkExample ? (
-                  <div className="rounded-lg border border-[#0C3535]/20 bg-[#0C3535]/5 p-4 space-y-3">
+                  <div className="rounded-lg border border-vendor-foreground/20 bg-vendor-foreground/5 p-4 space-y-3">
                     <Input
                       value={newWorkExample.title}
                       onChange={(e) => setNewWorkExample((prev) => ({ ...prev, title: e.target.value }))}
                       placeholder="Work example title"
-                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                      className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                     />
                     <Input
                       value={newWorkExample.url}
                       onChange={(e) => setNewWorkExample((prev) => ({ ...prev, url: e.target.value }))}
                       placeholder="https://example.com/work-item"
-                      className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                      className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                     />
                     <div className="flex gap-2">
                       <Input
                         value={newWorkExample.file_url}
                         onChange={(e) => setNewWorkExample((prev) => ({ ...prev, file_url: e.target.value }))}
                         placeholder="Uploaded file URL (optional)"
-                        className="border-gray-200 text-gray-900 placeholder:text-gray-500 flex-1"
+                        className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted flex-1"
                       />
                       <input
                         type="file"
@@ -1568,7 +1568,7 @@ export default function PartnerProfilePage() {
                         variant="outline"
                         onClick={() => newWorkExampleInputRef.current?.click()}
                         disabled={uploadingWorkExampleId === "__new__"}
-                        className="border-gray-300 text-gray-900 hover:bg-gray-50"
+                        className="border-vendor-border text-vendor-foreground hover:bg-vendor-background"
                       >
                         {uploadingWorkExampleId === "__new__" ? (
                           <>
@@ -1587,14 +1587,14 @@ export default function PartnerProfilePage() {
                       <Button
                         type="button"
                         onClick={addWorkExample}
-                        className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+                        className="bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
                       >
                         Add Work Example
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        className="border-gray-300 text-gray-900 hover:bg-gray-50"
+                        className="border-vendor-border text-vendor-foreground hover:bg-vendor-background"
                         onClick={() => setShowAddWorkExample(false)}
                       >
                         Cancel
@@ -1604,12 +1604,12 @@ export default function PartnerProfilePage() {
                 ) : null}
 
                 {workExamples.length === 0 ? (
-                  <div className="p-4 rounded-lg border border-dashed border-gray-300 text-sm text-gray-500">
+                  <div className="p-4 rounded-lg border border-dashed border-vendor-border text-sm text-vendor-muted">
                     No work examples added yet.
                   </div>
                 ) : (
                   workExamples.map((example) => (
-                    <div key={example.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                    <div key={example.id} className="rounded-lg border border-vendor-border bg-vendor-background p-4 space-y-3">
                       <Input
                         value={example.title}
                         onChange={(e) =>
@@ -1618,7 +1618,7 @@ export default function PartnerProfilePage() {
                           )
                         }
                         placeholder="Title"
-                        className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                        className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                       />
                       <Input
                         value={example.url}
@@ -1628,7 +1628,7 @@ export default function PartnerProfilePage() {
                           )
                         }
                         placeholder="URL"
-                        className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                        className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                       />
                       <div className="flex gap-2">
                         <Input
@@ -1639,7 +1639,7 @@ export default function PartnerProfilePage() {
                             )
                           }
                           placeholder="Uploaded file URL (optional)"
-                          className="border-gray-200 text-gray-900 placeholder:text-gray-500 flex-1"
+                          className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted flex-1"
                         />
                         <input
                           id={`work-example-file-${example.id}`}
@@ -1654,7 +1654,7 @@ export default function PartnerProfilePage() {
                         <Button
                           type="button"
                           variant="outline"
-                          className="border-gray-300 text-gray-900 hover:bg-gray-50"
+                          className="border-vendor-border text-vendor-foreground hover:bg-vendor-background"
                           disabled={uploadingWorkExampleId === example.id}
                           onClick={() =>
                             (document.getElementById(`work-example-file-${example.id}`) as HTMLInputElement | null)?.click()
@@ -1690,7 +1690,7 @@ export default function PartnerProfilePage() {
             </div>
           </div>
         </div>
-        {message && <p className="text-sm text-gray-600">{message}</p>}
+        {message && <p className="text-sm text-vendor-muted-strong">{message}</p>}
       </div>
     </PartnerChrome>
   )

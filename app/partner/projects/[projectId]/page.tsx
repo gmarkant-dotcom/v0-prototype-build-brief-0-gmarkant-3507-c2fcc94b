@@ -23,9 +23,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils"
 
 const btnOutlineLight =
-  "border-gray-300 !bg-white text-[#0C3535] shadow-sm hover:!bg-gray-50 hover:text-[#0C3535]"
-const btnPrimaryDark = "bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
-const fieldClass = "border-gray-200 bg-white text-gray-900"
+  "border-vendor-border !bg-vendor-surface text-vendor-foreground shadow-sm hover:!bg-vendor-background hover:text-vendor-foreground"
+const btnPrimaryDark = "bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
+const fieldClass = "border-vendor-border bg-vendor-surface text-vendor-foreground"
 
 type EngagementItem = {
   assignmentId: string
@@ -308,20 +308,20 @@ function PartnerActiveEngagementInner() {
           <div>
             <Link
               href="/partner/projects"
-              className="font-mono text-xs text-[#0C3535]/70 hover:underline mb-2 inline-block"
+              className="font-mono text-xs text-vendor-foreground/70 hover:underline mb-2 inline-block"
             >
               ← All projects
             </Link>
-            <h1 className="font-display font-bold text-3xl text-[#0C3535]">Active engagements</h1>
+            <h1 className="font-display font-bold text-3xl text-vendor-foreground">Active engagements</h1>
             {pageData?.found && pageData.project && (
-              <p className="text-lg text-gray-700 mt-2 font-display font-semibold">{pageData.project.title}</p>
+              <p className="text-lg text-vendor-foreground mt-2 font-display font-semibold">{pageData.project.title}</p>
             )}
           </div>
           <LeadAgencyFilter />
         </div>
 
         {loading && (
-          <div className="flex items-center gap-2 text-gray-500 py-12">
+          <div className="flex items-center gap-2 text-vendor-muted py-12">
             <Loader2 className="w-5 h-5 animate-spin" />
             Loading…
           </div>
@@ -332,38 +332,38 @@ function PartnerActiveEngagementInner() {
         )}
 
         {!loading && !error && pageData && !pageData.found && (
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center text-gray-700">
+          <div className="rounded-xl border border-vendor-border bg-vendor-background p-8 text-center text-vendor-foreground">
             No active engagement found for this project. You&apos;ll see details here after the lead agency awards your
             bid.
           </div>
         )}
 
         {!loading && !error && pageData?.found && pageData.engagements.length === 0 && (
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center text-gray-700">
+          <div className="rounded-xl border border-vendor-border bg-vendor-background p-8 text-center text-vendor-foreground">
             No awarded scope items were found for this project yet.
           </div>
         )}
 
         {!loading && !error && pageData?.found && pageData.engagements.length > 0 && (
           <div className="space-y-6">
-            <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-              <h2 className="font-display font-bold text-lg text-[#0C3535] mb-4">Lead agency contact</h2>
+            <section className="bg-vendor-surface rounded-xl border border-vendor-border p-6 shadow-sm">
+              <h2 className="font-display font-bold text-lg text-vendor-foreground mb-4">Lead agency contact</h2>
               <dl className="space-y-2 text-sm">
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-gray-500">Company</dt>
-                  <dd className="text-gray-900">{pageData.leadAgency?.companyName || "-"}</dd>
+                  <dt className="font-mono text-[10px] uppercase text-vendor-muted">Company</dt>
+                  <dd className="text-vendor-foreground">{pageData.leadAgency?.companyName || "-"}</dd>
                 </div>
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-gray-500">Contact name</dt>
-                  <dd className="text-gray-900">{pageData.leadAgency?.fullName || "-"}</dd>
+                  <dt className="font-mono text-[10px] uppercase text-vendor-muted">Contact name</dt>
+                  <dd className="text-vendor-foreground">{pageData.leadAgency?.fullName || "-"}</dd>
                 </div>
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-gray-500">Email</dt>
+                  <dt className="font-mono text-[10px] uppercase text-vendor-muted">Email</dt>
                   <dd>
                     {pageData.leadAgency?.email ? (
                       <a
                         href={`mailto:${pageData.leadAgency.email}`}
-                        className="text-[#0C3535] underline font-mono text-xs"
+                        className="text-vendor-foreground underline font-mono text-xs"
                       >
                         {pageData.leadAgency.email}
                       </a>
@@ -373,14 +373,14 @@ function PartnerActiveEngagementInner() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="font-mono text-[10px] uppercase text-gray-500">Schedule Meeting</dt>
+                  <dt className="font-mono text-[10px] uppercase text-vendor-muted">Schedule Meeting</dt>
                   <dd>
                     {kickoffFromFirst?.kickoffUrl ? (
                       <a
                         href={normalizeMeetingUrlForHref(kickoffFromFirst.kickoffUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-[#0C3535] font-medium hover:underline"
+                        className="inline-flex items-center gap-1.5 text-vendor-foreground font-medium hover:underline"
                       >
                         <ExternalLink className="w-4 h-4" />
                         {kickoffFromFirst.kickoffType === "calendly"
@@ -388,7 +388,7 @@ function PartnerActiveEngagementInner() {
                           : "Open scheduling link"}
                       </a>
                     ) : (
-                      <span className="text-gray-500">Not provided yet</span>
+                      <span className="text-vendor-muted">Not provided yet</span>
                     )}
                   </dd>
                 </div>
@@ -396,7 +396,7 @@ function PartnerActiveEngagementInner() {
             </section>
 
             <div className="space-y-4">
-              <h2 className="font-display font-bold text-lg text-[#0C3535]">Awarded scope items</h2>
+              <h2 className="font-display font-bold text-lg text-vendor-foreground">Awarded scope items</h2>
               {pageData.engagements.map((eng) => {
                 const ckey = engagementCardKey(eng)
                 const open = expandedCard[ckey] ?? false
@@ -408,22 +408,22 @@ function PartnerActiveEngagementInner() {
                     key={ckey}
                     open={open}
                     onOpenChange={(v) => setExpandedCard((prev) => ({ ...prev, [ckey]: v }))}
-                    className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+                    className="bg-vendor-surface rounded-xl border border-vendor-border shadow-sm overflow-hidden"
                   >
-                    <div className="p-5 border-b border-gray-100">
+                    <div className="p-5 border-b border-vendor-border/50">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-display font-bold text-base text-[#0C3535]">
+                          <h3 className="font-display font-bold text-base text-vendor-foreground">
                             {eng.scopeItemName?.trim() || "Scope item"}
                           </h3>
                           <div className="mt-2 grid sm:grid-cols-2 gap-3 text-sm">
                             <div>
-                              <div className="font-mono text-[10px] uppercase text-gray-500">Proposed budget</div>
-                              <div className="text-gray-900">{formatEngagementBudget(eng.budgetProposal)}</div>
+                              <div className="font-mono text-[10px] uppercase text-vendor-muted">Proposed budget</div>
+                              <div className="text-vendor-foreground">{formatEngagementBudget(eng.budgetProposal)}</div>
                             </div>
                             <div>
-                              <div className="font-mono text-[10px] uppercase text-gray-500">Proposed timeline</div>
-                              <div className="text-gray-900">{formatEngagementTimeline(eng.timelineProposal)}</div>
+                              <div className="font-mono text-[10px] uppercase text-vendor-muted">Proposed timeline</div>
+                              <div className="text-vendor-foreground">{formatEngagementTimeline(eng.timelineProposal)}</div>
                             </div>
                           </div>
                         </div>
@@ -439,18 +439,18 @@ function PartnerActiveEngagementInner() {
                     </div>
 
                     <CollapsibleContent>
-                      <div className="p-5 space-y-6 border-t border-gray-100">
+                      <div className="p-5 space-y-6 border-t border-vendor-border/50">
                         <div>
-                          <h4 className="font-mono text-[10px] uppercase text-gray-500 mb-2">Proposal</h4>
-                          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
+                          <h4 className="font-mono text-[10px] uppercase text-vendor-muted mb-2">Proposal</h4>
+                          <p className="text-sm text-vendor-foreground whitespace-pre-wrap leading-relaxed">
                             {(eng.proposalText || "").trim() || "-"}
                           </p>
                         </div>
 
                         <div>
-                          <h4 className="font-display font-bold text-sm text-[#0C3535] mb-3">Documents</h4>
+                          <h4 className="font-display font-bold text-sm text-vendor-foreground mb-3">Documents</h4>
                           {(eng.onboardingDocuments || []).length === 0 ? (
-                            <p className="text-sm text-gray-500">No onboarding documents have been shared yet.</p>
+                            <p className="text-sm text-vendor-muted">No onboarding documents have been shared yet.</p>
                           ) : (
                             <ul className="space-y-2">
                               {(eng.onboardingDocuments || []).map((d, i) => (
@@ -472,25 +472,25 @@ function PartnerActiveEngagementInner() {
                           )}
                         </div>
 
-                        <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-5 space-y-4">
-                          <h4 className="font-display font-bold text-lg text-[#0C3535]">Project status</h4>
-                          <p className="text-xs text-gray-500 font-mono">
+                        <div className="rounded-xl border border-vendor-border bg-vendor-background/80 p-5 space-y-4">
+                          <h4 className="font-display font-bold text-lg text-vendor-foreground">Project status</h4>
+                          <p className="text-xs text-vendor-muted font-mono">
                             Updates apply to assignment{" "}
-                            <span className="text-gray-700">{eng.assignmentId.slice(0, 8)}…</span>
+                            <span className="text-vendor-foreground">{eng.assignmentId.slice(0, 8)}…</span>
                             {uniqueAssignmentIds.length > 1 ? (
                               <span> (shared if you have multiple scopes on the same assignment)</span>
                             ) : null}
                           </p>
                           {ui.loading ? (
-                            <div className="flex items-center gap-2 text-gray-500 text-sm py-4">
+                            <div className="flex items-center gap-2 text-vendor-muted text-sm py-4">
                               <Loader2 className="w-4 h-4 animate-spin" />
                               Loading status…
                             </div>
                           ) : ui.latest ? (
-                            <div className="space-y-3 mb-6 pb-6 border-b border-gray-200">
+                            <div className="space-y-3 mb-6 pb-6 border-b border-vendor-border">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-mono text-[10px] uppercase text-gray-500">Latest update</span>
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-[#0C3535]/10 text-[#0C3535] font-medium">
+                                <span className="font-mono text-[10px] uppercase text-vendor-muted">Latest update</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-vendor-foreground/10 text-vendor-foreground font-medium">
                                   {workflowStatusLabel(ui.latest.status)}
                                 </span>
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
@@ -498,32 +498,32 @@ function PartnerActiveEngagementInner() {
                                 </span>
                               </div>
                               <div>
-                                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                <div className="flex justify-between text-xs text-vendor-muted mb-1">
                                   <span>Completion</span>
                                   <span>{ui.latest.completion_pct}%</span>
                                 </div>
-                                <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                                <div className="h-2 rounded-full bg-vendor-track overflow-hidden">
                                   <div
-                                    className="h-full bg-[#0C3535]/80 rounded-full"
+                                    className="h-full bg-vendor-foreground/80 rounded-full"
                                     style={{ width: `${ui.latest.completion_pct}%` }}
                                   />
                                 </div>
                               </div>
                               {ui.latest.notes && (
-                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{ui.latest.notes}</p>
+                                <p className="text-sm text-vendor-foreground whitespace-pre-wrap">{ui.latest.notes}</p>
                               )}
-                              <p className="font-mono text-[10px] text-gray-400">
+                              <p className="font-mono text-[10px] text-vendor-muted/70">
                                 {new Date(ui.latest.created_at).toLocaleString()}
                               </p>
                             </div>
                           ) : (
-                            <p className="text-sm text-gray-500 mb-6">No status updates yet. Submit your first update below.</p>
+                            <p className="text-sm text-vendor-muted mb-6">No status updates yet. Submit your first update below.</p>
                           )}
 
-                          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+                          <div className="bg-vendor-surface rounded-xl border border-vendor-border p-4 mb-6">
                             <button
                               type="button"
-                              className="w-full flex items-center justify-between gap-3 text-left text-gray-900"
+                              className="w-full flex items-center justify-between gap-3 text-left text-vendor-foreground"
                               onClick={() =>
                                 setAssignmentUi((prev) => {
                                   const cur = prev[eng.assignmentId] ?? defaultAssignmentUi()
@@ -534,28 +534,28 @@ function PartnerActiveEngagementInner() {
                                 })
                               }
                             >
-                              <h5 className="font-display font-bold text-base text-[#0C3535]">Update history</h5>
-                              <span className="text-sm text-gray-600 shrink-0">
+                              <h5 className="font-display font-bold text-base text-vendor-foreground">Update history</h5>
+                              <span className="text-sm text-vendor-muted-strong shrink-0">
                                 {ui.historyOpen ? "Hide" : "Show"}
                               </span>
                             </button>
                             {ui.historyOpen && (
                               <div className="mt-4 space-y-3">
                                 {ui.loading ? (
-                                  <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
+                                  <div className="flex items-center gap-2 text-vendor-muted text-sm py-2">
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                     Loading history…
                                   </div>
                                 ) : previousStatusUpdates.length === 0 ? (
-                                  <p className="text-sm text-gray-600">No earlier updates.</p>
+                                  <p className="text-sm text-vendor-muted-strong">No earlier updates.</p>
                                 ) : (
                                   previousStatusUpdates.map((u) => {
                                     const cardOpen = ui.historyCardOpen[u.id] ?? false
                                     return (
-                                      <div key={u.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                                      <div key={u.id} className="rounded-lg border border-vendor-border bg-vendor-background p-4">
                                         <button
                                           type="button"
-                                          className="w-full flex items-start justify-between gap-3 text-left text-gray-900"
+                                          className="w-full flex items-start justify-between gap-3 text-left text-vendor-foreground"
                                           onClick={() =>
                                             setAssignmentUi((prev) => {
                                               const cur = prev[eng.assignmentId] ?? defaultAssignmentUi()
@@ -574,42 +574,42 @@ function PartnerActiveEngagementInner() {
                                         >
                                           <div className="min-w-0 flex-1 space-y-2">
                                             <div className="flex flex-wrap items-center gap-2">
-                                              <span className="text-xs px-2 py-0.5 rounded-full bg-[#0C3535]/10 text-[#0C3535] font-medium">
+                                              <span className="text-xs px-2 py-0.5 rounded-full bg-vendor-foreground/10 text-vendor-foreground font-medium">
                                                 {workflowStatusLabel(u.status)}
                                               </span>
                                               <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
                                                 {budgetStatusLabel(u.budget_status)}
                                               </span>
-                                              <span className="font-mono text-[10px] text-gray-600">{u.completion_pct}%</span>
+                                              <span className="font-mono text-[10px] text-vendor-muted-strong">{u.completion_pct}%</span>
                                             </div>
-                                            <div className="font-mono text-[10px] text-gray-500">
+                                            <div className="font-mono text-[10px] text-vendor-muted">
                                               {new Date(u.created_at).toLocaleString()}
                                             </div>
                                             {!cardOpen && (
-                                              <p className="text-sm text-gray-700 line-clamp-3 whitespace-pre-wrap">
+                                              <p className="text-sm text-vendor-foreground line-clamp-3 whitespace-pre-wrap">
                                                 {(u.notes || "").trim() || "-"}
                                               </p>
                                             )}
                                           </div>
-                                          <span className="text-sm text-gray-600 shrink-0">{cardOpen ? "Hide" : "Show"}</span>
+                                          <span className="text-sm text-vendor-muted-strong shrink-0">{cardOpen ? "Hide" : "Show"}</span>
                                         </button>
                                         {cardOpen && (
-                                          <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
+                                          <div className="mt-3 pt-3 border-t border-vendor-border space-y-3">
                                             <div>
-                                              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                              <div className="flex justify-between text-xs text-vendor-muted mb-1">
                                                 <span>Completion</span>
                                                 <span>{u.completion_pct}%</span>
                                               </div>
-                                              <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                                              <div className="h-2 rounded-full bg-vendor-track overflow-hidden">
                                                 <div
-                                                  className="h-full bg-[#0C3535]/80 rounded-full"
+                                                  className="h-full bg-vendor-foreground/80 rounded-full"
                                                   style={{ width: `${u.completion_pct}%` }}
                                                 />
                                               </div>
                                             </div>
                                             <div>
-                                              <div className="font-mono text-[10px] uppercase text-gray-500 mb-1">Notes</div>
-                                              <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                              <div className="font-mono text-[10px] uppercase text-vendor-muted mb-1">Notes</div>
+                                              <p className="text-sm text-vendor-foreground whitespace-pre-wrap">
                                                 {(u.notes || "").trim() || "-"}
                                               </p>
                                             </div>
@@ -725,7 +725,7 @@ function PartnerActiveEngagementInner() {
                           >
                             <div className="grid sm:grid-cols-2 gap-4">
                               <div>
-                                <Label className="font-mono text-[10px] text-gray-500 uppercase">Workflow status</Label>
+                                <Label className="font-mono text-[10px] text-vendor-muted uppercase">Workflow status</Label>
                                 <select
                                   value={ui.formStatus}
                                   onChange={(e) =>
@@ -737,7 +737,7 @@ function PartnerActiveEngagementInner() {
                                       },
                                     }))
                                   }
-                                  className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+                                  className="mt-1 w-full rounded-md border border-vendor-border bg-vendor-surface px-3 py-2 text-sm text-vendor-foreground"
                                 >
                                   {PARTNER_WORKFLOW_STATUSES.map((s) => (
                                     <option key={s} value={s}>
@@ -747,7 +747,7 @@ function PartnerActiveEngagementInner() {
                                 </select>
                               </div>
                               <div>
-                                <Label className="font-mono text-[10px] text-gray-500 uppercase">Budget status</Label>
+                                <Label className="font-mono text-[10px] text-vendor-muted uppercase">Budget status</Label>
                                 <select
                                   value={ui.formBudget}
                                   onChange={(e) =>
@@ -759,7 +759,7 @@ function PartnerActiveEngagementInner() {
                                       },
                                     }))
                                   }
-                                  className="mt-1 w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900"
+                                  className="mt-1 w-full rounded-md border border-vendor-border bg-vendor-surface px-3 py-2 text-sm text-vendor-foreground"
                                 >
                                   {PARTNER_BUDGET_STATUSES.map((s) => (
                                     <option key={s} value={s}>
@@ -770,7 +770,7 @@ function PartnerActiveEngagementInner() {
                               </div>
                             </div>
                             <div>
-                              <Label className="font-mono text-[10px] text-gray-500 uppercase">
+                              <Label className="font-mono text-[10px] text-vendor-muted uppercase">
                                 Completion ({ui.formPct}%)
                               </Label>
                               <Slider
@@ -791,7 +791,7 @@ function PartnerActiveEngagementInner() {
                               />
                             </div>
                             <div>
-                              <Label className="font-mono text-[10px] text-gray-500 uppercase">Notes</Label>
+                              <Label className="font-mono text-[10px] text-vendor-muted uppercase">Notes</Label>
                               <Textarea
                                 value={ui.formNotes}
                                 onChange={(e) =>
@@ -832,7 +832,7 @@ function PartnerActiveEngagementInner() {
             </div>
 
             {isDemo && (
-              <p className="font-mono text-[10px] text-gray-500">
+              <p className="font-mono text-[10px] text-vendor-muted">
                 Demo preview for {agencyName}. Production data loads from your awarded assignments.
               </p>
             )}
@@ -848,7 +848,7 @@ export default function PartnerProjectActiveEngagementPage() {
     <Suspense
       fallback={
         <PartnerLayout>
-          <div className="p-8 flex items-center gap-2 text-gray-500">
+          <div className="p-8 flex items-center gap-2 text-vendor-muted">
             <Loader2 className="w-5 h-5 animate-spin" />
             Loading…
           </div>

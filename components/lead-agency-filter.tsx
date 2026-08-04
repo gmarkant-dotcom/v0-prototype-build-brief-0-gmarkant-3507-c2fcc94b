@@ -43,8 +43,8 @@ export function LeadAgencyFilter({ className }: { className?: string }) {
         className={cn(
           "flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors min-w-[200px]",
           selectedAgencyId
-            ? "bg-[#0C3535] border-[#0C3535] text-white"
-            : "bg-[#0C3535]/10 border-[#0C3535]/30 text-[#0C3535] hover:bg-[#0C3535]/20"
+            ? "bg-vendor-foreground border-vendor-foreground text-white"
+            : "bg-vendor-foreground/10 border-vendor-foreground/30 text-vendor-foreground hover:bg-vendor-foreground/20"
         )}
       >
         <Building2 className="w-4 h-4 flex-shrink-0" />
@@ -58,7 +58,7 @@ export function LeadAgencyFilter({ className }: { className?: string }) {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-1 w-full min-w-[250px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
+        <div className="absolute top-full left-0 mt-1 w-full min-w-[250px] bg-vendor-surface border border-vendor-border rounded-lg shadow-xl z-50 overflow-hidden">
           {/* All agencies option */}
           <button
             onClick={() => {
@@ -68,21 +68,21 @@ export function LeadAgencyFilter({ className }: { className?: string }) {
             className={cn(
               "w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors",
               !selectedAgencyId
-                ? "bg-[#0C3535]/10 text-[#0C3535]"
-                : "hover:bg-gray-50 text-gray-700"
+                ? "bg-vendor-foreground/10 text-vendor-foreground"
+                : "hover:bg-vendor-background text-vendor-foreground"
             )}
           >
             <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-              <Building2 className="w-4 h-4 text-gray-500" />
+              <Building2 className="w-4 h-4 text-vendor-muted" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium">All Lead Agencies</div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-vendor-muted">
                 View all engagements
               </div>
             </div>
             {!selectedAgencyId && (
-              <Check className="w-4 h-4 text-[#0C3535] flex-shrink-0" />
+              <Check className="w-4 h-4 text-vendor-foreground flex-shrink-0" />
             )}
           </button>
 
@@ -99,23 +99,23 @@ export function LeadAgencyFilter({ className }: { className?: string }) {
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors",
                 selectedAgencyId === agency.agencyId
-                  ? "bg-[#0C3535]/10 text-[#0C3535]"
-                  : "hover:bg-gray-50 text-gray-700"
+                  ? "bg-vendor-foreground/10 text-vendor-foreground"
+                  : "hover:bg-vendor-background text-vendor-foreground"
               )}
             >
-              <div className="w-8 h-8 rounded-full bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold text-[#0C3535]">
+              <div className="w-8 h-8 rounded-full bg-vendor-foreground/10 flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-vendor-foreground">
                   {agency.agencyName.split(' ').map(w => w[0]).join('').slice(0, 2)}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{agency.agencyName}</div>
-                <div className="text-xs text-gray-500 truncate">
+                <div className="text-xs text-vendor-muted truncate">
                   {agency.agencyLocation}
                 </div>
               </div>
               {selectedAgencyId === agency.agencyId && (
-                <Check className="w-4 h-4 text-[#0C3535] flex-shrink-0" />
+                <Check className="w-4 h-4 text-vendor-foreground flex-shrink-0" />
               )}
             </button>
           ))}
@@ -139,11 +139,11 @@ export function LeadAgencyFilterCompact({ className }: { className?: string }) {
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <span className="text-xs text-[#0C3535]/70 uppercase tracking-wider font-medium">Filter:</span>
+      <span className="text-xs text-vendor-foreground/70 uppercase tracking-wider font-medium">Filter:</span>
       <select
         value={selectedAgencyId || ""}
         onChange={(e) => setSelectedAgencyId(e.target.value || null)}
-        className="bg-[#0C3535]/10 border border-[#0C3535]/30 rounded px-2 py-1 text-sm text-[#0C3535] min-w-[150px]"
+        className="bg-vendor-foreground/10 border border-vendor-foreground/30 rounded px-2 py-1 text-sm text-vendor-foreground min-w-[150px]"
       >
         <option value="">All Lead Agencies</option>
         {confirmedAgencies.map((agency) => (

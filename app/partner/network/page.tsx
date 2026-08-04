@@ -253,7 +253,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
       onClick={onClick}
       className={cn(
         "px-4 py-2.5 font-mono text-xs uppercase tracking-wider border-b-2 -mb-px transition-colors flex items-center gap-2",
-        active ? "border-[#0C3535] text-[#0C3535]" : "border-transparent text-gray-500 hover:text-gray-700"
+        active ? "border-vendor-foreground text-vendor-foreground" : "border-transparent text-vendor-muted hover:text-vendor-foreground"
       )}
     >
       {children}
@@ -608,23 +608,23 @@ export default function AgencyNetworkPage() {
     <PartnerLayout>
       <div className="space-y-6">
         <div>
-          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Agency Network</h1>
-          <p className="text-gray-600 mt-1">Your agency partnerships, pending invitations, and agencies to discover</p>
+          <h1 className="font-display font-bold text-3xl text-vendor-foreground">Agency Network</h1>
+          <p className="text-vendor-muted-strong mt-1">Your agency partnerships, pending invitations, and agencies to discover</p>
         </div>
 
         {/* Unified search */}
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vendor-muted/70" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search agencies by name or location..."
-            className="pl-10 bg-white border-gray-200 text-gray-900"
+            className="pl-10 bg-vendor-surface border-vendor-border text-vendor-foreground"
           />
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-gray-200">
+        <div className="flex items-center gap-1 border-b border-vendor-border">
           <TabButton active={activeTab === "my-agencies"} onClick={() => setActiveTab("my-agencies")}>
             My Agencies
           </TabButton>
@@ -645,15 +645,15 @@ export default function AgencyNetworkPage() {
         {activeTab === "my-agencies" &&
           (isLoadingPartnerships ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">Loading agencies...</div>
+              <div className="text-vendor-muted">Loading agencies...</div>
             </div>
           ) : searchedActivePartnerships.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#0C3535]/10 flex items-center justify-center mx-auto mb-4">
-                <Building2 className="w-8 h-8 text-[#0C3535]" />
+            <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+              <div className="w-16 h-16 rounded-full bg-vendor-foreground/10 flex items-center justify-center mx-auto mb-4">
+                <Building2 className="w-8 h-8 text-vendor-foreground" />
               </div>
-              <h3 className="font-display font-bold text-xl text-gray-900 mb-2">No Agency Partnerships Yet</h3>
-              <p className="text-gray-500 max-w-md mx-auto">
+              <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No Agency Partnerships Yet</h3>
+              <p className="text-vendor-muted max-w-md mx-auto">
                 {searchQuery
                   ? "No agencies match your search."
                   : "Active partnerships with lead agencies appear here. Check the Discover tab to find and connect with new agencies."}
@@ -664,7 +664,7 @@ export default function AgencyNetworkPage() {
               {searchedActivePartnerships.map((partnership) => {
                 const caps = extractCapabilityValues(partnership.agency?.capabilities)
                 return (
-                  <div key={partnership.id} className="bg-white border border-gray-200 shadow-sm rounded-xl p-5 flex items-start gap-4">
+                  <div key={partnership.id} className="bg-vendor-surface border border-vendor-border shadow-sm rounded-xl p-5 flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
                       {partnership.agency?.company_logo_url ? (
                         <img
@@ -673,28 +673,28 @@ export default function AgencyNetworkPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <Building2 className="w-6 h-6 text-gray-700" />
+                        <Building2 className="w-6 h-6 text-vendor-foreground" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <h3 className="font-display text-gray-900 text-lg font-bold">
+                        <h3 className="font-display text-vendor-foreground text-lg font-bold">
                           {partnership.agency?.company_name || partnership.agency?.full_name || "Lead Agency"}
                         </h3>
                         {getStatusBadge(partnership.status, "light")}
                       </div>
-                      {partnership.agency?.email && <p className="text-gray-700 text-sm mb-2">{partnership.agency.email}</p>}
+                      {partnership.agency?.email && <p className="text-vendor-foreground text-sm mb-2">{partnership.agency.email}</p>}
                       {caps.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mb-2">
                           {caps.slice(0, 6).map((c) => (
-                            <span key={c} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">
+                            <span key={c} className="px-2 py-0.5 rounded-full bg-gray-100 text-vendor-foreground text-xs">
                               {c}
                             </span>
                           ))}
                         </div>
                       )}
                       {partnership.accepted_at && (
-                        <p className="text-gray-500 text-xs">
+                        <p className="text-vendor-muted text-xs">
                           Partnered since{" "}
                           {new Date(partnership.accepted_at).toLocaleDateString("en-US", {
                             month: "long",
@@ -708,7 +708,7 @@ export default function AgencyNetworkPage() {
                           type="button"
                           onClick={() => openAgencyProfileFromPartnership(partnership)}
                           variant="outline"
-                          className="h-8 px-3 border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10 text-xs"
+                          className="h-8 px-3 border-vendor-foreground text-vendor-foreground hover:bg-vendor-foreground/10 text-xs"
                         >
                           View Profile
                         </Button>
@@ -724,15 +724,15 @@ export default function AgencyNetworkPage() {
         {activeTab === "invitations" &&
           (isLoadingPartnerships ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">Loading invitations...</div>
+              <div className="text-vendor-muted">Loading invitations...</div>
             </div>
           ) : searchedPendingPartnerships.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#0C3535]/10 flex items-center justify-center mx-auto mb-4">
-                <Mail className="w-8 h-8 text-[#0C3535]" />
+            <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+              <div className="w-16 h-16 rounded-full bg-vendor-foreground/10 flex items-center justify-center mx-auto mb-4">
+                <Mail className="w-8 h-8 text-vendor-foreground" />
               </div>
-              <h3 className="font-display font-bold text-xl text-gray-900 mb-2">No Invitations Yet</h3>
-              <p className="text-gray-500 max-w-md mx-auto">
+              <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No Invitations Yet</h3>
+              <p className="text-vendor-muted max-w-md mx-auto">
                 {searchQuery
                   ? "No invitations match your search."
                   : "When lead agencies invite you to join their partner network, those invitations will appear here. Make sure your profile is complete to increase your chances of being discovered."}
@@ -741,7 +741,7 @@ export default function AgencyNetworkPage() {
           ) : (
             <div className="space-y-4">
               {searchedPendingPartnerships.map((partnership) => (
-                <div key={partnership.id} className="rounded-xl p-6 bg-[#0C3535] border border-accent/40">
+                <div key={partnership.id} className="rounded-xl p-6 bg-vendor-foreground border border-accent/40">
                   <div className="flex flex-col gap-4">
                     <div className="flex items-start gap-4">
                       <div className="w-14 h-14 rounded-xl bg-accent/30 flex items-center justify-center flex-shrink-0">
@@ -749,18 +749,18 @@ export default function AgencyNetworkPage() {
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">{getStatusBadge(partnership.status, "dark")}</div>
-                        <h3 className="font-display font-bold text-2xl text-[#FFFFFF]">
+                        <h3 className="font-display font-bold text-2xl text-foreground">
                           {partnership.agency?.company_name || partnership.agency?.full_name || "Unknown Agency"}
                         </h3>
-                        <p className="text-base text-[#E8E8E8] flex items-center gap-2 mt-2">
+                        <p className="text-base text-foreground-secondary flex items-center gap-2 mt-2">
                           <Mail className="w-4 h-4 text-accent" />
                           <span className="font-medium">{partnership.agency?.email || "Email not available"}</span>
                         </p>
                       </div>
                     </div>
 
-                    <div className="bg-[#1A5252] rounded-lg p-4 border border-[#9BB8B8]/30">
-                      <p className="text-[#E8E8E8] text-sm leading-relaxed">
+                    <div className="bg-surface rounded-lg p-4 border border-border">
+                      <p className="text-foreground-secondary text-sm leading-relaxed">
                         <strong className="text-accent">
                           {partnership.agency?.company_name || partnership.agency?.full_name || "This agency"}
                         </strong>{" "}
@@ -770,19 +770,19 @@ export default function AgencyNetworkPage() {
                     </div>
 
                     {partnership.invitation_message && (
-                      <div className="p-4 rounded-lg bg-[#1A5252] border-l-4 border-accent">
+                      <div className="p-4 rounded-lg bg-surface border-l-4 border-accent">
                         <div className="flex items-center gap-2 mb-2">
                           <MessageSquare className="w-4 h-4 text-accent" />
                           <span className="font-mono text-xs text-accent uppercase tracking-wider font-semibold">
                             Personal Message from Agency
                           </span>
                         </div>
-                        <p className="text-[#E8E8E8] text-sm leading-relaxed">{partnership.invitation_message}</p>
+                        <p className="text-foreground-secondary text-sm leading-relaxed">{partnership.invitation_message}</p>
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between pt-4 border-t border-[#9BB8B8]/30">
-                      <div className="flex items-center gap-2 text-[#9BB8B8] text-sm">
+                    <div className="flex items-center justify-between pt-4 border-t border-border">
+                      <div className="flex items-center gap-2 text-foreground-muted text-sm">
                         <Calendar className="w-4 h-4 text-accent" />
                         <span>
                           Received{" "}
@@ -831,7 +831,7 @@ export default function AgencyNetworkPage() {
                 onClick={() => setViewMode("all")}
                 className={cn(
                   "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
-                  viewMode === "all" ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                  viewMode === "all" ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground" : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
                 )}
               >
                 <Globe className="w-3 h-3" />
@@ -842,7 +842,7 @@ export default function AgencyNetworkPage() {
                 onClick={() => setViewMode("network")}
                 className={cn(
                   "font-mono text-[10px] px-3 py-1.5 rounded-full border transition-colors flex items-center gap-1.5",
-                  viewMode === "network" ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]" : "border-gray-200 text-gray-600 hover:border-gray-300"
+                  viewMode === "network" ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground" : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
                 )}
               >
                 <Users className="w-3 h-3" />
@@ -851,9 +851,9 @@ export default function AgencyNetworkPage() {
             </div>
 
             {/* Filters */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="bg-vendor-surface rounded-xl border border-vendor-border p-4">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-[10px] text-gray-500 mr-2">Discipline:</span>
+                <span className="font-mono text-[10px] text-vendor-muted mr-2">Discipline:</span>
                 {dynamicDisciplineFilters.map((discipline) => (
                   <button
                     key={discipline}
@@ -862,8 +862,8 @@ export default function AgencyNetworkPage() {
                     className={cn(
                       "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
                       selectedDiscipline === discipline
-                        ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground"
+                        : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
                     )}
                   >
                     {discipline}
@@ -871,8 +871,8 @@ export default function AgencyNetworkPage() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-gray-200">
-                <span className="font-mono text-[10px] text-gray-500 mr-2">Designations:</span>
+              <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-vendor-border">
+                <span className="font-mono text-[10px] text-vendor-muted mr-2">Designations:</span>
                 {DESIGNATION_KEYS.map((key) => (
                   <button
                     key={key}
@@ -881,8 +881,8 @@ export default function AgencyNetworkPage() {
                     className={cn(
                       "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
                       selectedDesignationFilters.includes(key)
-                        ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground"
+                        : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
                     )}
                   >
                     {DESIGNATION_LABELS[key]}
@@ -890,8 +890,8 @@ export default function AgencyNetworkPage() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-gray-200">
-                <span className="font-mono text-[10px] text-gray-500 mr-2">Insurance:</span>
+              <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-vendor-border">
+                <span className="font-mono text-[10px] text-vendor-muted mr-2">Insurance:</span>
                 {INSURANCE_KEYS.map((key) => (
                   <button
                     key={key}
@@ -900,8 +900,8 @@ export default function AgencyNetworkPage() {
                     className={cn(
                       "font-mono text-[10px] px-2 py-1 rounded border transition-colors",
                       selectedInsuranceFilters.includes(key)
-                        ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground"
+                        : "border-vendor-border text-vendor-muted-strong hover:border-vendor-border"
                     )}
                   >
                     {INSURANCE_LABELS[key]}
@@ -913,15 +913,15 @@ export default function AgencyNetworkPage() {
             {/* Agency Directory */}
             {isLoadingAgencies ? (
               <div className="flex items-center justify-center py-12">
-                <div className="text-gray-500">Loading agencies...</div>
+                <div className="text-vendor-muted">Loading agencies...</div>
               </div>
             ) : filteredAgencies.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <div className="w-16 h-16 rounded-full bg-[#0C3535]/10 flex items-center justify-center mx-auto mb-4">
-                  <Building2 className="w-8 h-8 text-[#0C3535]" />
+              <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-vendor-foreground/10 flex items-center justify-center mx-auto mb-4">
+                  <Building2 className="w-8 h-8 text-vendor-foreground" />
                 </div>
-                <h3 className="font-display font-bold text-xl text-gray-900 mb-2">No Agencies Found</h3>
-                <p className="text-gray-500 max-w-md mx-auto">
+                <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">No Agencies Found</h3>
+                <p className="text-vendor-muted max-w-md mx-auto">
                   {searchQuery
                     ? "No agencies match your search. Try different keywords."
                     : viewMode === "network"
@@ -934,17 +934,17 @@ export default function AgencyNetworkPage() {
                 {filteredAgencies.map((agency) => {
                   const request = getRequestStatus(agency.id)
                   return (
-                    <div key={agency.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div key={agency.id} className="bg-vendor-surface rounded-xl border border-vendor-border p-6 hover:shadow-md transition-shadow">
                       <div className="flex items-start gap-4">
-                        <div className="w-14 h-14 rounded-xl bg-[#0C3535]/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        <div className="w-14 h-14 rounded-xl bg-vendor-foreground/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
                           {agency.company_logo_url ? (
                             <img src={agency.company_logo_url} alt={agency.company_name || "Agency"} className="w-full h-full object-cover rounded-xl" />
                           ) : (
-                            <Building2 className="w-7 h-7 text-[#0C3535]" />
+                            <Building2 className="w-7 h-7 text-vendor-foreground" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-display font-bold text-lg text-gray-900">
+                          <h3 className="font-display font-bold text-lg text-vendor-foreground">
                             <span className="flex items-center gap-2 flex-wrap">
                               {agency.company_name || agency.full_name || agency.email || "Agency"}
                               {(agency.vouch_count ?? 0) >= 3 && (
@@ -957,7 +957,7 @@ export default function AgencyNetworkPage() {
                             </span>
                           </h3>
 
-                          <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-gray-500">
+                          <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-vendor-muted">
                             {agency.agency_type && <span className="flex items-center gap-1">{agency.agency_type}</span>}
                             {agency.location && (
                               <span className="flex items-center gap-1">
@@ -979,7 +979,7 @@ export default function AgencyNetworkPage() {
                             )}
                           </div>
 
-                          {agency.bio && <p className="text-sm text-gray-600 mt-2 line-clamp-2">{agency.bio}</p>}
+                          {agency.bio && <p className="text-sm text-vendor-muted-strong mt-2 line-clamp-2">{agency.bio}</p>}
 
                           <div className="mt-4">
                             {agency.collaborated ? (
@@ -987,7 +987,7 @@ export default function AgencyNetworkPage() {
                                 <button
                                   type="button"
                                   onClick={() => openAgencyProfile(agency)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0C3535]/10 text-[#0C3535] text-xs font-medium hover:bg-[#0C3535]/20"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-vendor-foreground/10 text-vendor-foreground text-xs font-medium hover:bg-vendor-foreground/20"
                                 >
                                   <CheckCircle className="w-3.5 h-3.5" />
                                   Worked Together
@@ -996,7 +996,7 @@ export default function AgencyNetworkPage() {
                                   type="button"
                                   onClick={() => openAgencyProfile(agency)}
                                   variant="outline"
-                                  className="h-8 px-3 border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10 text-xs"
+                                  className="h-8 px-3 border-vendor-foreground text-vendor-foreground hover:bg-vendor-foreground/10 text-xs"
                                 >
                                   View Profile
                                 </Button>
@@ -1011,7 +1011,7 @@ export default function AgencyNetworkPage() {
                                   type="button"
                                   onClick={() => openAgencyProfile(agency)}
                                   variant="outline"
-                                  className="h-8 px-3 border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10 text-xs"
+                                  className="h-8 px-3 border-vendor-foreground text-vendor-foreground hover:bg-vendor-foreground/10 text-xs"
                                 >
                                   View Profile
                                 </Button>
@@ -1031,7 +1031,7 @@ export default function AgencyNetworkPage() {
                                   type="button"
                                   onClick={() => openAgencyProfile(agency)}
                                   variant="outline"
-                                  className="h-8 px-3 border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10 text-xs"
+                                  className="h-8 px-3 border-vendor-foreground text-vendor-foreground hover:bg-vendor-foreground/10 text-xs"
                                 >
                                   View Profile
                                 </Button>
@@ -1041,7 +1041,7 @@ export default function AgencyNetworkPage() {
                                     setShowRequestModal(true)
                                   }}
                                   variant="outline"
-                                  className="border-[#0C3535] text-[#0C3535] hover:bg-[#0C3535]/10"
+                                  className="border-vendor-foreground text-vendor-foreground hover:bg-vendor-foreground/10"
                                 >
                                   <Send className="w-4 h-4 mr-1.5" />
                                   Request Access
@@ -1065,42 +1065,42 @@ export default function AgencyNetworkPage() {
             className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
             onClick={() => setShowRequestModal(false)}
           >
-            <div className="w-full max-w-md bg-white rounded-xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-md bg-vendor-surface rounded-xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center">
-                    <Send className="w-5 h-5 text-[#0C3535]" />
+                  <div className="w-10 h-10 rounded-lg bg-vendor-foreground/10 flex items-center justify-center">
+                    <Send className="w-5 h-5 text-vendor-foreground" />
                   </div>
                   <div>
-                    <h2 className="font-display font-bold text-xl text-gray-900">Request Access</h2>
-                    <p className="font-mono text-xs text-gray-500">{selectedAgency.company_name || selectedAgency.full_name}</p>
+                    <h2 className="font-display font-bold text-xl text-vendor-foreground">Request Access</h2>
+                    <p className="font-mono text-xs text-vendor-muted">{selectedAgency.company_name || selectedAgency.full_name}</p>
                   </div>
                 </div>
-                <button onClick={() => setShowRequestModal(false)} className="text-gray-700 hover:text-gray-900">
+                <button onClick={() => setShowRequestModal(false)} className="text-vendor-foreground hover:text-vendor-foreground">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="font-mono text-[10px] text-gray-500 uppercase tracking-wider block mb-2">Message (Optional)</label>
+                  <label className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider block mb-2">Message (Optional)</label>
                   <Textarea
                     value={requestMessage}
                     onChange={(e) => setRequestMessage(e.target.value)}
                     placeholder="Introduce yourself and explain why you'd like to join their network..."
                     rows={4}
-                    className="bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 resize-none"
+                    className="bg-vendor-background border-vendor-border text-vendor-foreground placeholder:text-vendor-muted/70 resize-none"
                   />
                 </div>
 
                 <div className="flex gap-3 pt-2">
-                  <Button variant="outline" onClick={() => setShowRequestModal(false)} className="flex-1 border-gray-200 text-gray-600 hover:bg-gray-50">
+                  <Button variant="outline" onClick={() => setShowRequestModal(false)} className="flex-1 border-vendor-border text-vendor-muted-strong hover:bg-vendor-background">
                     Cancel
                   </Button>
                   <Button
                     onClick={handleRequestAccess}
                     disabled={requestingAgency === selectedAgency.id}
-                    className="flex-1 bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+                    className="flex-1 bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
                   >
                     {requestingAgency === selectedAgency.id ? "Sending..." : "Send Request"}
                   </Button>
@@ -1116,31 +1116,31 @@ export default function AgencyNetworkPage() {
             className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
             onClick={() => setShowAgencyProfileModal(false)}
           >
-            <div className="w-full max-w-2xl bg-white rounded-xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="w-full max-w-2xl bg-vendor-surface rounded-xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center overflow-hidden">
+                  <div className="w-10 h-10 rounded-lg bg-vendor-foreground/10 flex items-center justify-center overflow-hidden">
                     {selectedAgency.company_logo_url ? (
                       <img src={selectedAgency.company_logo_url} alt={selectedAgency.company_name || "Agency"} className="w-full h-full object-cover" />
                     ) : (
-                      <Building2 className="w-5 h-5 text-[#0C3535]" />
+                      <Building2 className="w-5 h-5 text-vendor-foreground" />
                     )}
                   </div>
                   <div>
-                    <h2 className="font-display font-bold text-xl text-gray-900">
+                    <h2 className="font-display font-bold text-xl text-vendor-foreground">
                       {selectedAgency.company_name || selectedAgency.full_name || selectedAgency.email || "Agency"}
                     </h2>
-                    {selectedAgency.agency_type && <p className="font-mono text-xs text-gray-500 mt-0.5">{selectedAgency.agency_type}</p>}
-                    {selectedAgency.location && <p className="font-mono text-xs text-gray-500">{selectedAgency.location}</p>}
+                    {selectedAgency.agency_type && <p className="font-mono text-xs text-vendor-muted mt-0.5">{selectedAgency.agency_type}</p>}
+                    {selectedAgency.location && <p className="font-mono text-xs text-vendor-muted">{selectedAgency.location}</p>}
                   </div>
                 </div>
-                <button onClick={() => setShowAgencyProfileModal(false)} className="text-gray-700 hover:text-gray-900">
+                <button onClick={() => setShowAgencyProfileModal(false)} className="text-vendor-foreground hover:text-vendor-foreground">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-4">
-                {selectedAgency.bio && <p className="text-sm text-gray-700">{selectedAgency.bio}</p>}
+                {selectedAgency.bio && <p className="text-sm text-vendor-foreground">{selectedAgency.bio}</p>}
 
                 {(selectedAgency.website || selectedAgency.company_website || selectedAgency.company_linkedin_url || selectedAgency.reel_url) && (
                   <div className="flex flex-wrap gap-3 text-sm">
@@ -1176,10 +1176,10 @@ export default function AgencyNetworkPage() {
                   if (caps.length === 0) return null
                   return (
                     <div>
-                      <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Capabilities</div>
+                      <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Capabilities</div>
                       <div className="flex flex-wrap gap-1">
                         {caps.map((cap, i) => (
-                          <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">
+                          <span key={i} className="px-2 py-0.5 rounded-full bg-gray-100 text-vendor-foreground text-xs">
                             {cap}
                           </span>
                         ))}
@@ -1190,25 +1190,25 @@ export default function AgencyNetworkPage() {
 
                 {agencyProfileProjects.length > 0 && !isLoadingAgencyProfile && (
                   <div>
-                    <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Shared Projects</div>
+                    <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Shared Projects</div>
                     <div className="space-y-2">
                       {agencyProfileProjects.map((p) => (
-                        <div key={p.id} className="rounded-lg border border-gray-200 p-3 text-sm">
-                          <div className="text-gray-900 font-medium">{p.title}</div>
-                          <div className="text-gray-500 text-xs mt-0.5">{p.clientName}</div>
+                        <div key={p.id} className="rounded-lg border border-vendor-border p-3 text-sm">
+                          <div className="text-vendor-foreground font-medium">{p.title}</div>
+                          <div className="text-vendor-muted text-xs mt-0.5">{p.clientName}</div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div className="rounded-lg border border-gray-200 p-4">
-                  <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Contact</div>
-                  <div className="text-sm text-gray-900 font-medium">
+                <div className="rounded-lg border border-vendor-border p-4">
+                  <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Contact</div>
+                  <div className="text-sm text-vendor-foreground font-medium">
                     {selectedAgency.full_name || selectedAgency.company_name || "Not provided"}
                   </div>
                   {selectedAgency.email ? (
-                    <div className="text-sm text-gray-600 mt-1">{selectedAgency.email}</div>
+                    <div className="text-sm text-vendor-muted-strong mt-1">{selectedAgency.email}</div>
                   ) : (
                     <button
                       onClick={() => {

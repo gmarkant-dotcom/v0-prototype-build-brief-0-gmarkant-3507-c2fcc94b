@@ -67,15 +67,15 @@ import {
 
 /** Readable text on white cards (defaults are transparent / light in dark theme). */
 const fieldClass =
-  "border-gray-200 bg-white text-gray-900 placeholder:text-gray-400 shadow-sm focus-visible:ring-[#0C3535]/30 focus-visible:border-[#0C3535]"
+  "border-vendor-border bg-vendor-surface text-vendor-foreground placeholder:text-vendor-muted/70 shadow-sm focus-visible:ring-vendor-foreground/30 focus-visible:border-vendor-foreground"
 const textareaClass = cn(fieldClass, "min-h-[140px]")
 const inputClass = fieldClass
 
-/** Shadcn outline uses bg-background (#0C3535); pairing with text-[#0C3535] made label text invisible on partner light pages. */
+/** Shadcn outline uses bg-background (#0C3535); pairing with text-vendor-foreground made label text invisible on partner light pages. */
 const btnOutlineLight =
-  "border-gray-300 !bg-white text-[#0C3535] shadow-sm hover:!bg-gray-50 hover:text-[#0C3535]"
+  "border-vendor-border !bg-vendor-surface text-vendor-foreground shadow-sm hover:!bg-vendor-background hover:text-vendor-foreground"
 const btnPrimaryDark =
-  "!bg-[#0C3535] !text-white hover:!bg-[#0C3535]/90 font-display font-bold border-transparent"
+  "!bg-vendor-foreground !text-white hover:!bg-vendor-foreground/90 font-display font-bold border-transparent"
 
 type InboxRow = {
   id: string
@@ -319,7 +319,7 @@ function isDeadlineWithin48Hours(value?: string | null): boolean {
 
 function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
   if (!json || typeof json !== "object") {
-    return <p className="text-sm text-gray-500">No master RFP content available.</p>
+    return <p className="text-sm text-vendor-muted">No master RFP content available.</p>
   }
   const projectName = typeof json.projectName === "string" ? json.projectName : ""
   const client = typeof json.client === "string" ? json.client : ""
@@ -335,21 +335,21 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
     requiredDesignationKeys.length > 0 || requiredInsuranceKeys.length > 0 || requiredCriteria.insurance.coi_on_file
 
   return (
-    <div className="space-y-6 text-sm text-gray-700">
+    <div className="space-y-6 text-sm text-vendor-foreground">
       <div>
-        <h4 className="font-display font-bold text-[#0C3535] mb-1">Project</h4>
+        <h4 className="font-display font-bold text-vendor-foreground mb-1">Project</h4>
         <p>{projectName || "-"}</p>
-        {client && <p className="text-gray-600 mt-1">Client: {client}</p>}
+        {client && <p className="text-vendor-muted-strong mt-1">Client: {client}</p>}
       </div>
       {overview && (
         <div>
-          <h4 className="font-display font-bold text-[#0C3535] mb-1">Overview</h4>
+          <h4 className="font-display font-bold text-vendor-foreground mb-1">Overview</h4>
           <p className="leading-relaxed whitespace-pre-wrap">{overview}</p>
         </div>
       )}
       {objectives.length > 0 && (
         <div>
-          <h4 className="font-display font-bold text-[#0C3535] mb-2">Objectives</h4>
+          <h4 className="font-display font-bold text-vendor-foreground mb-2">Objectives</h4>
           <ul className="list-disc list-inside space-y-1">
             {objectives.map((o, i) => (
               <li key={i}>{o}</li>
@@ -361,18 +361,18 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
         <div className="grid sm:grid-cols-2 gap-4">
           {totalBudget && (
             <div className="flex gap-2 items-start">
-              <DollarSign className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+              <DollarSign className="w-4 h-4 text-vendor-muted/70 mt-0.5 shrink-0" />
               <div>
-                <div className="font-mono text-[10px] uppercase text-gray-500">Program budget (master)</div>
+                <div className="font-mono text-[10px] uppercase text-vendor-muted">Program budget (master)</div>
                 <div>{totalBudget}</div>
               </div>
             </div>
           )}
           {timeline && (
             <div className="flex gap-2 items-start">
-              <Calendar className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+              <Calendar className="w-4 h-4 text-vendor-muted/70 mt-0.5 shrink-0" />
               <div>
-                <div className="font-mono text-[10px] uppercase text-gray-500">Timeline (master)</div>
+                <div className="font-mono text-[10px] uppercase text-vendor-muted">Timeline (master)</div>
                 <div>{timeline}</div>
               </div>
             </div>
@@ -381,15 +381,15 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
       )}
       {scopeItems.length > 0 && (
         <div>
-          <h4 className="font-display font-bold text-[#0C3535] mb-2">All scope items (master RFP)</h4>
+          <h4 className="font-display font-bold text-vendor-foreground mb-2">All scope items (master RFP)</h4>
           <ul className="space-y-3">
             {scopeItems.map((item: unknown, i: number) => {
               const s = item as { name?: string; description?: string; estimatedBudget?: string; timeline?: string }
               return (
-                <li key={i} className="border border-gray-100 rounded-lg p-3 bg-gray-50/80">
-                  <div className="font-medium text-[#0C3535]">{s.name || `Item ${i + 1}`}</div>
-                  {s.description && <p className="text-gray-600 mt-1">{s.description}</p>}
-                  <div className="font-mono text-[10px] text-gray-500 mt-2 flex flex-wrap gap-3">
+                <li key={i} className="border border-vendor-border/50 rounded-lg p-3 bg-vendor-background/80">
+                  <div className="font-medium text-vendor-foreground">{s.name || `Item ${i + 1}`}</div>
+                  {s.description && <p className="text-vendor-muted-strong mt-1">{s.description}</p>}
+                  <div className="font-mono text-[10px] text-vendor-muted mt-2 flex flex-wrap gap-3">
                     {s.estimatedBudget && <span>Budget: {s.estimatedBudget}</span>}
                     {s.timeline && <span>Timeline: {s.timeline}</span>}
                   </div>
@@ -401,7 +401,7 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
       )}
       {hasRequiredCriteria && (
         <div>
-          <h4 className="font-display font-bold text-[#0C3535] mb-2">Business Criteria Required</h4>
+          <h4 className="font-display font-bold text-vendor-foreground mb-2">Business Criteria Required</h4>
           {requiredDesignationKeys.length > 0 && (
             <ul className="list-disc list-inside space-y-1">
               {requiredDesignationKeys.map((key) => (
@@ -426,7 +426,7 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
             <p className="mt-1">Certificate of Insurance (COI) on file</p>
           )}
           {requiredCriteria.notes.trim() && (
-            <p className="text-gray-600 mt-2 whitespace-pre-wrap">{requiredCriteria.notes}</p>
+            <p className="text-vendor-muted-strong mt-2 whitespace-pre-wrap">{requiredCriteria.notes}</p>
           )}
         </div>
       )}
@@ -954,8 +954,8 @@ export default function PartnerRfpDetailPage() {
     return (
       <PartnerChrome>
         <div className="max-w-4xl mx-auto py-16 flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#0C3535]" />
-          <p className="font-mono text-sm text-gray-600">Loading RFP…</p>
+          <Loader2 className="w-8 h-8 animate-spin text-vendor-foreground" />
+          <p className="font-mono text-sm text-vendor-muted-strong">Loading RFP…</p>
         </div>
       </PartnerChrome>
     )
@@ -965,10 +965,10 @@ export default function PartnerRfpDetailPage() {
     return (
       <PartnerChrome>
         <div className="max-w-4xl mx-auto py-8">
-          <Link href="/partner/rfps" className="font-mono text-xs text-gray-500 hover:text-[#0C3535] mb-6 inline-block">
+          <Link href="/partner/rfps" className="font-mono text-xs text-vendor-muted hover:text-vendor-foreground mb-6 inline-block">
             ← Back to Open RFPs
           </Link>
-          <div className="bg-white rounded-xl border border-red-200 p-8 text-red-800">{error || "Not found"}</div>
+          <div className="bg-vendor-surface rounded-xl border border-red-200 p-8 text-red-800">{error || "Not found"}</div>
         </div>
       </PartnerChrome>
     )
@@ -980,12 +980,12 @@ export default function PartnerRfpDetailPage() {
     return (
       <PartnerChrome>
         <div className="max-w-3xl mx-auto py-8 space-y-5">
-          <Link href="/partner/rfps" className="font-mono text-xs text-gray-500 hover:text-[#0C3535] inline-flex items-center gap-1">
+          <Link href="/partner/rfps" className="font-mono text-xs text-vendor-muted hover:text-vendor-foreground inline-flex items-center gap-1">
             ← Back to Open RFPs
           </Link>
-          <div className="bg-white rounded-xl border border-amber-200 p-6">
-            <h1 className="font-display font-bold text-2xl text-[#0C3535]">This RFP requires a signed NDA</h1>
-            <p className="mt-3 text-sm text-gray-700">
+          <div className="bg-vendor-surface rounded-xl border border-amber-200 p-6">
+            <h1 className="font-display font-bold text-2xl text-vendor-foreground">This RFP requires a signed NDA</h1>
+            <p className="mt-3 text-sm text-vendor-foreground">
               Sign the NDA document and notify {inbox.agency_company_name || "the agency"} when complete. They will confirm and unlock your access.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
@@ -1008,7 +1008,7 @@ export default function PartnerRfpDetailPage() {
                   }
                 }}
                 disabled={ndaNotifyBusy}
-                className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+                className="bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
               >
                 {ndaNotifyBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 I have signed the NDA - notify the agency
@@ -1021,7 +1021,7 @@ export default function PartnerRfpDetailPage() {
                 </Button>
               )}
             </div>
-            {ndaNotifyMessage && <p className="mt-4 text-sm text-gray-700">{ndaNotifyMessage}</p>}
+            {ndaNotifyMessage && <p className="mt-4 text-sm text-vendor-foreground">{ndaNotifyMessage}</p>}
           </div>
         </div>
       </PartnerChrome>
@@ -1105,27 +1105,27 @@ export default function PartnerRfpDetailPage() {
   return (
     <PartnerChrome>
       <div className="max-w-4xl mx-auto space-y-6 pb-16">
-        <Link href="/partner/rfps" className="font-mono text-xs text-gray-500 hover:text-[#0C3535] inline-flex items-center gap-1">
+        <Link href="/partner/rfps" className="font-mono text-xs text-vendor-muted hover:text-vendor-foreground inline-flex items-center gap-1">
           ← Back to Open RFPs
         </Link>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           <div className="flex flex-wrap items-start justify-between gap-4 mb-4">
             <div>
-              <p className="font-mono text-[10px] uppercase text-gray-500 mb-1">Scoped RFP</p>
-              <h1 className="font-display font-bold text-2xl text-[#0C3535]">{inbox.scope_item_name}</h1>
-              <p className="text-sm text-gray-600 mt-2 flex flex-wrap items-center gap-3">
+              <p className="font-mono text-[10px] uppercase text-vendor-muted mb-1">Scoped RFP</p>
+              <h1 className="font-display font-bold text-2xl text-vendor-foreground">{inbox.scope_item_name}</h1>
+              <p className="text-sm text-vendor-muted-strong mt-2 flex flex-wrap items-center gap-3">
                 <span className="inline-flex items-center gap-1">
                   <Building2 className="w-4 h-4" />
                   {inbox.agency_company_name}
                 </span>
                 {inbox.client_name && (
                   <>
-                    <span className="text-gray-400">·</span>
-                    <span className="text-gray-600">Client: {inbox.client_name}</span>
+                    <span className="text-vendor-muted/70">·</span>
+                    <span className="text-vendor-muted-strong">Client: {inbox.client_name}</span>
                   </>
                 )}
-                <span className="text-gray-400">·</span>
+                <span className="text-vendor-muted/70">·</span>
                 <span>Sent {sentAt}</span>
               </p>
             </div>
@@ -1145,33 +1145,33 @@ export default function PartnerRfpDetailPage() {
                 "mb-4 rounded-lg border px-3 py-2 text-sm font-mono inline-flex items-center gap-2",
                 responseDeadlineSoon
                   ? "border-amber-300 bg-amber-50 text-amber-900"
-                  : "border-gray-200 bg-gray-50 text-gray-700"
+                  : "border-vendor-border bg-vendor-background text-vendor-foreground"
               )}
             >
               Respond by {responseDeadlineLabel}
             </div>
           )}
           {inbox.scope_item_description && (
-            <p className="text-sm text-gray-700 leading-relaxed border-t border-gray-100 pt-4">{inbox.scope_item_description}</p>
+            <p className="text-sm text-vendor-foreground leading-relaxed border-t border-vendor-border/50 pt-4">{inbox.scope_item_description}</p>
           )}
           {(inbox.estimated_budget || inbox.timeline) && (
-            <div className="grid sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+            <div className="grid sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-vendor-border/50">
               {inbox.estimated_budget && (
                 <div>
-                  <div className="font-mono text-[10px] uppercase text-gray-500">Estimated budget (scope line)</div>
-                  <div className="text-[#0C3535] font-medium">{inbox.estimated_budget}</div>
+                  <div className="font-mono text-[10px] uppercase text-vendor-muted">Estimated budget (scope line)</div>
+                  <div className="text-vendor-foreground font-medium">{inbox.estimated_budget}</div>
                 </div>
               )}
               {inbox.timeline && (
                 <div>
-                  <div className="font-mono text-[10px] uppercase text-gray-500">Timeline (scope line)</div>
-                  <div className="text-[#0C3535] font-medium">{inbox.timeline}</div>
+                  <div className="font-mono text-[10px] uppercase text-vendor-muted">Timeline (scope line)</div>
+                  <div className="text-vendor-foreground font-medium">{inbox.timeline}</div>
                 </div>
               )}
             </div>
           )}
           <div
-            className="mt-5 pt-4 border-t border-gray-100 -mx-6 px-6 pb-4 border-b border-gray-200"
+            className="mt-5 pt-4 border-t border-vendor-border/50 -mx-6 px-6 pb-4 border-b border-vendor-border"
             role="tablist"
             aria-label="RFP sections"
           >
@@ -1183,10 +1183,10 @@ export default function PartnerRfpDetailPage() {
                 onClick={() => setActiveTab("status")}
                 className={cn(
                   "flex-1 min-w-0 inline-flex items-center justify-center rounded-md py-2.5 px-2 sm:px-3 text-sm font-semibold transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0C3535] focus-visible:ring-offset-2",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vendor-foreground focus-visible:ring-offset-2",
                   activeTab === "status"
-                    ? "bg-[#0C3535] text-white border border-[#0C3535]"
-                    : "bg-white text-[#0C3535] border border-gray-300 hover:bg-gray-100"
+                    ? "bg-vendor-foreground text-white border border-vendor-foreground"
+                    : "bg-vendor-surface text-vendor-foreground border border-vendor-border hover:bg-gray-100"
                 )}
               >
                 Status & Feedback
@@ -1198,10 +1198,10 @@ export default function PartnerRfpDetailPage() {
                 onClick={() => setActiveTab("rfp")}
                 className={cn(
                   "flex-1 min-w-0 inline-flex items-center justify-center rounded-md py-2.5 px-2 sm:px-3 text-sm font-semibold transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0C3535] focus-visible:ring-offset-2",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vendor-foreground focus-visible:ring-offset-2",
                   activeTab === "rfp"
-                    ? "bg-[#0C3535] text-white border border-[#0C3535]"
-                    : "bg-white text-[#0C3535] border border-gray-300 hover:bg-gray-100"
+                    ? "bg-vendor-foreground text-white border border-vendor-foreground"
+                    : "bg-vendor-surface text-vendor-foreground border border-vendor-border hover:bg-gray-100"
                 )}
               >
                 RFP Details
@@ -1213,10 +1213,10 @@ export default function PartnerRfpDetailPage() {
                 onClick={() => setActiveTab("bid")}
                 className={cn(
                   "flex-1 min-w-0 inline-flex items-center justify-center rounded-md py-2.5 px-2 sm:px-3 text-sm font-semibold transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0C3535] focus-visible:ring-offset-2",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vendor-foreground focus-visible:ring-offset-2",
                   activeTab === "bid"
-                    ? "bg-[#0C3535] text-white border border-[#0C3535]"
-                    : "bg-white text-[#0C3535] border border-gray-300 hover:bg-gray-100"
+                    ? "bg-vendor-foreground text-white border border-vendor-foreground"
+                    : "bg-vendor-surface text-vendor-foreground border border-vendor-border hover:bg-gray-100"
                 )}
               >
                 My Bid
@@ -1228,8 +1228,8 @@ export default function PartnerRfpDetailPage() {
         <div className="space-y-6">
           {activeTab === "status" ? (
             <>
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="font-mono text-[10px] uppercase text-gray-500 mb-2">Current status</div>
+              <div className="bg-vendor-surface rounded-xl border border-vendor-border p-5">
+                <div className="font-mono text-[10px] uppercase text-vendor-muted mb-2">Current status</div>
                 <span
                   className={cn(
                     "font-mono text-xs px-3 py-1 rounded-full uppercase inline-flex items-center gap-1",
@@ -1242,14 +1242,14 @@ export default function PartnerRfpDetailPage() {
               </div>
 
               {activityTimeline.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="font-mono text-[10px] uppercase text-gray-500 mb-3">Activity</div>
+                <div className="bg-vendor-surface rounded-xl border border-vendor-border p-5">
+                  <div className="font-mono text-[10px] uppercase text-vendor-muted mb-3">Activity</div>
                   <ul className="space-y-2">
                     {activityTimeline.map((entry, i) => (
-                      <li key={i} className="flex items-center gap-2 text-sm text-gray-700">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#0C3535]/60 shrink-0" />
+                      <li key={i} className="flex items-center gap-2 text-sm text-vendor-foreground">
+                        <span className="w-1.5 h-1.5 rounded-full bg-vendor-foreground/60 shrink-0" />
                         <span className="font-medium">{entry.label}</span>
-                        <span className="font-mono text-[10px] text-gray-500">{formatSubmittedAt(entry.iso)}</span>
+                        <span className="font-mono text-[10px] text-vendor-muted">{formatSubmittedAt(entry.iso)}</span>
                       </li>
                     ))}
                   </ul>
@@ -1258,9 +1258,9 @@ export default function PartnerRfpDetailPage() {
 
               {existing?.agency_feedback && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                  <h3 className="font-display font-bold text-[#0C3535]">Feedback from Agency</h3>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{existing.agency_feedback}</p>
-                  {feedbackUpdatedAt && <p className="font-mono text-[10px] text-gray-500 mt-2">Updated {feedbackUpdatedAt}</p>}
+                  <h3 className="font-display font-bold text-vendor-foreground">Feedback from Agency</h3>
+                  <p className="text-sm text-vendor-foreground whitespace-pre-wrap mt-2">{existing.agency_feedback}</p>
+                  {feedbackUpdatedAt && <p className="font-mono text-[10px] text-vendor-muted mt-2">Updated {feedbackUpdatedAt}</p>}
                 </div>
               )}
               {currentStatus === "under_review" && (
@@ -1291,22 +1291,22 @@ export default function PartnerRfpDetailPage() {
                 </div>
               )}
               {currentStatus === "declined" && (
-                <div className="bg-gray-100 border border-gray-300 rounded-xl p-4 text-gray-800">This bid was declined.</div>
+                <div className="bg-gray-100 border border-vendor-border rounded-xl p-4 text-vendor-foreground">This bid was declined.</div>
               )}
 
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
                 <button
                   type="button"
-                  className="w-full flex items-center justify-between text-[#0C3535]"
+                  className="w-full flex items-center justify-between text-vendor-foreground"
                   onClick={() => setHistoryOpen((prev) => !prev)}
                 >
-                  <h3 className="font-display font-bold text-lg text-[#0C3535]">Submission History</h3>
-                  <span className="text-sm text-gray-600">{historyOpen ? "Hide" : "Show"}</span>
+                  <h3 className="font-display font-bold text-lg text-vendor-foreground">Submission History</h3>
+                  <span className="text-sm text-vendor-muted-strong">{historyOpen ? "Hide" : "Show"}</span>
                 </button>
                 {historyOpen && (
                   <div className="mt-4 space-y-3">
                     {versions.length === 0 ? (
-                      <p className="text-sm text-gray-600">No previous submissions.</p>
+                      <p className="text-sm text-vendor-muted-strong">No previous submissions.</p>
                     ) : (
                       versions.map((v) => {
                         const isOriginal = v.version_number === 1
@@ -1316,38 +1316,38 @@ export default function PartnerRfpDetailPage() {
                         const budgetObj = parseVersionBudgetFields(v.budget_proposal)
                         const timelineObj = parseVersionTimelineFields(v.timeline_proposal)
                         return (
-                          <div key={v.id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                          <div key={v.id} className="rounded-lg border border-vendor-border bg-vendor-background p-4">
                             <div className="flex items-center justify-between gap-3">
-                              <div className="font-display font-bold text-[#0C3535] text-base">
+                              <div className="font-display font-bold text-vendor-foreground text-base">
                                 V{v.version_number} {isOriginal ? "- Original" : ""}
                               </div>
-                              <div className="font-mono text-[10px] text-gray-500">
+                              <div className="font-mono text-[10px] text-vendor-muted">
                                 {new Date(v.submitted_at).toLocaleString()}
                               </div>
                             </div>
                             <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                               <div>
-                                <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
-                                <div className="text-gray-900">
+                                <div className="font-mono text-[10px] uppercase text-vendor-muted">Budget</div>
+                                <div className="text-vendor-foreground">
                                   {budgetObj?.amount != null && budgetObj?.currency
                                     ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
                                     : "-"}
                                 </div>
                               </div>
                               <div>
-                                <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
-                                <div className="text-gray-900">
+                                <div className="font-mono text-[10px] uppercase text-vendor-muted">Timeline</div>
+                                <div className="text-vendor-foreground">
                                   {timelineObj?.duration != null && timelineObj?.unit
                                     ? `${timelineObj.duration} ${timelineObj.unit}`
                                     : "-"}
                                 </div>
                               </div>
                             </div>
-                            <p className="text-sm text-gray-700 mt-3 whitespace-pre-wrap">{preview || "-"}</p>
+                            <p className="text-sm text-vendor-foreground mt-3 whitespace-pre-wrap">{preview || "-"}</p>
                             <div className="mt-3">
-                              <div className="font-mono text-[10px] uppercase text-gray-500 mb-2">Attachments</div>
+                              <div className="font-mono text-[10px] uppercase text-vendor-muted mb-2">Attachments</div>
                               {versionAttachments.length === 0 ? (
-                                <p className="text-sm text-gray-500 font-mono text-[10px]">No attachments</p>
+                                <p className="text-sm text-vendor-muted font-mono text-[10px]">No attachments</p>
                               ) : (
                                 <ul className="space-y-2">
                                   {versionAttachments.map((att, i) => {
@@ -1361,12 +1361,12 @@ export default function PartnerRfpDetailPage() {
                                     return (
                                       <li
                                         key={`${att.url}-${i}`}
-                                        className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm border border-gray-200 rounded-lg p-3 bg-white"
+                                        className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm border border-vendor-border rounded-lg p-3 bg-vendor-surface"
                                       >
-                                        <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 shrink-0">
+                                        <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-gray-100 text-vendor-muted-strong shrink-0">
                                           {att.label}
                                         </span>
-                                        <span className="text-gray-900 min-w-0 flex-1 truncate" title={displayName}>
+                                        <span className="text-vendor-foreground min-w-0 flex-1 truncate" title={displayName}>
                                           {displayName}
                                         </span>
                                         {isBlob && downloadHref ? (
@@ -1405,21 +1405,21 @@ export default function PartnerRfpDetailPage() {
               </div>
             </>
           ) : activeTab === "rfp" ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
               <div className="flex items-center gap-2 mb-4">
-                <FileText className="w-5 h-5 text-[#0C3535]" />
-                <h2 className="font-display font-bold text-lg text-[#0C3535]">Master RFP</h2>
+                <FileText className="w-5 h-5 text-vendor-foreground" />
+                <h2 className="font-display font-bold text-lg text-vendor-foreground">Master RFP</h2>
               </div>
               <MasterRfpSections json={inbox.master_rfp_json} />
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
           {showIntentSection && (
-            <div className="mb-6 rounded-xl border border-gray-200 bg-gray-50/70 p-4">
+            <div className="mb-6 rounded-xl border border-vendor-border bg-vendor-background/70 p-4">
               <div className="flex items-center justify-between gap-3 mb-3">
-                <h3 className="font-display font-bold text-sm text-[#0C3535]">Response intent</h3>
+                <h3 className="font-display font-bold text-sm text-vendor-foreground">Response intent</h3>
                 {partnerIntent && (
-                  <span className="font-mono text-[10px] text-gray-500 uppercase tracking-wide">
+                  <span className="font-mono text-[10px] text-vendor-muted uppercase tracking-wide">
                     {partnerIntentLabel(partnerIntent as PartnerIntent)}
                   </span>
                 )}
@@ -1436,8 +1436,8 @@ export default function PartnerRfpDetailPage() {
                     className={cn(
                       "rounded-md border px-3 py-1.5 text-xs font-mono transition-colors",
                       partnerIntent === option.id
-                        ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535]"
-                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                        ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground"
+                        : "border-vendor-border bg-vendor-surface text-vendor-foreground hover:bg-gray-100"
                     )}
                     onClick={() => void updatePartnerIntent(option.id)}
                     disabled={isSavingIntent}
@@ -1451,8 +1451,8 @@ export default function PartnerRfpDetailPage() {
               )}
             </div>
           )}
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-2">Your bid response</h2>
-          <p className="text-sm text-gray-600 mb-6">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-2">Your bid response</h2>
+          <p className="text-sm text-vendor-muted-strong mb-6">
               Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, shortlisted, or meeting requested.
           </p>
 
@@ -1478,7 +1478,7 @@ export default function PartnerRfpDetailPage() {
           {canEdit ? (
           <div className="space-y-5">
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Proposal *</label>
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Proposal *</label>
               <Textarea
                 value={proposalText}
                 onChange={(e) => setProposalText(e.target.value)}
@@ -1489,7 +1489,7 @@ export default function PartnerRfpDetailPage() {
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Budget proposal *</label>
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Budget proposal *</label>
                 <div className="flex flex-wrap gap-2 items-center">
                   <CurrencyInput
                     value={budgetAmount}
@@ -1533,7 +1533,7 @@ export default function PartnerRfpDetailPage() {
                 )}
               </div>
               <div>
-                <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">Timeline proposal *</label>
+                <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">Timeline proposal *</label>
                 <div className="flex flex-wrap gap-2 items-center">
                   <Input
                     type="number"
@@ -1586,13 +1586,13 @@ export default function PartnerRfpDetailPage() {
             />
 
             {hasRequiredCriteriaForBid && (
-              <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-4">
-                <h3 className="font-display font-bold text-sm text-[#0C3535] mb-1">Business Criteria</h3>
-                <p className="text-xs text-gray-600 mb-3">
+              <div className="rounded-xl border border-vendor-border bg-vendor-background/70 p-4">
+                <h3 className="font-display font-bold text-sm text-vendor-foreground mb-1">Business Criteria</h3>
+                <p className="text-xs text-vendor-muted-strong mb-3">
                   This RFP requires confirmation of the following. Confirm what applies to your company.
                 </p>
                 {requiredCriteria.notes.trim() && (
-                  <p className="text-xs text-gray-600 mb-3 whitespace-pre-wrap">{requiredCriteria.notes}</p>
+                  <p className="text-xs text-vendor-muted-strong mb-3 whitespace-pre-wrap">{requiredCriteria.notes}</p>
                 )}
 
                 {requiredDesignationKeysForBid.length > 0 && (
@@ -1600,16 +1600,16 @@ export default function PartnerRfpDetailPage() {
                     {requiredDesignationKeysForBid.map((key) => {
                       const designation = businessCriteriaResponses.designations[key]
                       return (
-                        <div key={key} className="rounded-lg border border-gray-200 bg-white p-3">
+                        <div key={key} className="rounded-lg border border-vendor-border bg-vendor-surface p-3">
                           <label className="flex items-start gap-3 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={designation.holds}
                               disabled={!canEdit}
                               onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
-                              className="mt-0.5 w-4 h-4 rounded border-gray-400"
+                              className="mt-0.5 w-4 h-4 rounded border-vendor-border"
                             />
-                            <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-[#0C3535]">
+                            <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-vendor-foreground">
                               {DESIGNATION_LABELS[key]}
                             </HelpTerm>
                           </label>
@@ -1648,9 +1648,9 @@ export default function PartnerRfpDetailPage() {
                                         : {}),
                                     })
                                   }
-                                  className="w-4 h-4 rounded border-gray-400"
+                                  className="w-4 h-4 rounded border-vendor-border"
                                 />
-                                <span className="text-sm text-gray-700">Self-certified (no third-party certification)</span>
+                                <span className="text-sm text-vendor-foreground">Self-certified (no third-party certification)</span>
                               </label>
                             </div>
                           )}
@@ -1668,7 +1668,7 @@ export default function PartnerRfpDetailPage() {
                       return (
                         <div
                           key={key}
-                          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-gray-200 bg-white"
+                          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-vendor-border bg-vendor-surface"
                         >
                           <label className="flex items-center gap-3 min-w-0 cursor-pointer">
                             <input
@@ -1676,9 +1676,9 @@ export default function PartnerRfpDetailPage() {
                               checked={coverage.has_coverage}
                               disabled={!canEdit}
                               onChange={(e) => updateBusinessCriteriaInsurance(key, { has_coverage: e.target.checked })}
-                              className="w-4 h-4 rounded border-gray-400"
+                              className="w-4 h-4 rounded border-vendor-border"
                             />
-                            <span className="font-display font-bold text-sm text-[#0C3535] truncate">
+                            <span className="font-display font-bold text-sm text-vendor-foreground truncate">
                               <HelpTerm term={key} theme="light">{INSURANCE_LABELS[key]}</HelpTerm>
                               {minimum ? ` (min. ${minimum})` : ""}
                             </span>
@@ -1703,9 +1703,9 @@ export default function PartnerRfpDetailPage() {
                       checked={businessCriteriaResponses.insurance.coi_on_file}
                       disabled={!canEdit}
                       onChange={(e) => updateBusinessCriteriaCoi(e.target.checked)}
-                      className="w-4 h-4 rounded border-gray-400"
+                      className="w-4 h-4 rounded border-vendor-border"
                     />
-                    <span className="text-sm text-gray-700">
+                    <span className="text-sm text-vendor-foreground">
                       <HelpTerm term="coi" theme="light">Certificate of Insurance (COI)</HelpTerm> on file
                     </span>
                   </label>
@@ -1713,11 +1713,11 @@ export default function PartnerRfpDetailPage() {
               </div>
             )}
 
-            <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/80">
+            <div className="border border-vendor-border rounded-xl p-4 bg-vendor-background/80">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                 <div>
-                  <h3 className="font-display font-bold text-sm text-[#0C3535]">Attachments</h3>
-                  <p className="text-xs text-gray-600 mt-0.5">Up to 6 - link or file (PDF, PPTX, DOCX) per row.</p>
+                  <h3 className="font-display font-bold text-sm text-vendor-foreground">Attachments</h3>
+                  <p className="text-xs text-vendor-muted-strong mt-0.5">Up to 6 - link or file (PDF, PPTX, DOCX) per row.</p>
                 </div>
                 {canEdit && (
                   <Button
@@ -1735,15 +1735,15 @@ export default function PartnerRfpDetailPage() {
               </div>
 
               {draftAttachments.length === 0 && (
-                <p className="text-sm text-gray-500 mb-2">No attachments yet. Add one to include portfolio links or documents.</p>
+                <p className="text-sm text-vendor-muted mb-2">No attachments yet. Add one to include portfolio links or documents.</p>
               )}
 
               <div className="space-y-4">
                 {draftAttachments.map((d) => (
-                  <div key={d.id} className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+                  <div key={d.id} className="rounded-lg border border-vendor-border bg-vendor-surface p-4 space-y-3">
                     <div className="flex flex-wrap gap-3 items-start justify-between">
                       <div className="flex flex-wrap gap-2 items-center flex-1 min-w-[200px]">
-                        <label className="font-mono text-[10px] text-gray-500 uppercase shrink-0">Label</label>
+                        <label className="font-mono text-[10px] text-vendor-muted uppercase shrink-0">Label</label>
                         <select
                           value={d.tag}
                           onChange={(e) =>
@@ -1772,7 +1772,7 @@ export default function PartnerRfpDetailPage() {
                         <button
                           type="button"
                           onClick={() => removeDraft(d.id)}
-                          className="text-gray-500 hover:text-red-600 p-1"
+                          className="text-vendor-muted hover:text-red-600 p-1"
                           aria-label="Remove attachment"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1792,10 +1792,10 @@ export default function PartnerRfpDetailPage() {
                         }}
                         disabled={!canEdit}
                         className={cn(
-                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors bg-white",
+                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors bg-vendor-surface",
                           d.source === "url"
-                            ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535] font-medium"
-                            : "border-gray-300 text-[#0C3535]"
+                            ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground font-medium"
+                            : "border-vendor-border text-vendor-foreground"
                         )}
                       >
                         <LinkIcon className="w-3.5 h-3.5 inline mr-1" />
@@ -1808,10 +1808,10 @@ export default function PartnerRfpDetailPage() {
                         }}
                         disabled={!canEdit}
                         className={cn(
-                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors bg-white",
+                          "font-mono text-xs px-3 py-1.5 rounded-lg border transition-colors bg-vendor-surface",
                           d.source === "file"
-                            ? "border-[#0C3535] bg-[#0C3535]/10 text-[#0C3535] font-medium"
-                            : "border-gray-300 text-[#0C3535]"
+                            ? "border-vendor-foreground bg-vendor-foreground/10 text-vendor-foreground font-medium"
+                            : "border-vendor-border text-vendor-foreground"
                         )}
                       >
                         <Upload className="w-3.5 h-3.5 inline mr-1" />
@@ -1821,7 +1821,7 @@ export default function PartnerRfpDetailPage() {
 
                     {d.source === "url" && (
                       <div>
-                        <label className="block font-mono text-[10px] text-gray-500 uppercase mb-1">URL</label>
+                        <label className="block font-mono text-[10px] text-vendor-muted uppercase mb-1">URL</label>
                         <Input
                           value={d.urlInput}
                           onChange={(e) => updateDraft(d.id, { urlInput: e.target.value, storedUrl: null })}
@@ -1871,8 +1871,8 @@ export default function PartnerRfpDetailPage() {
                           <span className="ml-3 inline-flex items-center gap-2 text-sm text-success">
                             <CheckCircle className="w-4 h-4 shrink-0 text-success" aria-hidden />
                             <span>
-                              <span className="font-medium text-gray-900">{d.fileName || "Uploaded file"}</span>
-                              <span className="text-gray-600 ml-1.5">Uploaded</span>
+                              <span className="font-medium text-vendor-foreground">{d.fileName || "Uploaded file"}</span>
+                              <span className="text-vendor-muted-strong ml-1.5">Uploaded</span>
                             </span>
                           </span>
                         )}
@@ -1880,7 +1880,7 @@ export default function PartnerRfpDetailPage() {
                     )}
 
                     {d.storedUrl && d.source === "url" && !isLikelyPrivateBlobUrl(d.storedUrl) && (
-                      <p className="font-mono text-[10px] text-gray-600">
+                      <p className="font-mono text-[10px] text-vendor-muted-strong">
                         Saved link:{" "}
                         <a href={d.storedUrl} target="_blank" rel="noopener noreferrer" className="text-blue-700 break-all">
                           {d.storedUrl}
@@ -1891,10 +1891,10 @@ export default function PartnerRfpDetailPage() {
                       <div className="flex items-center gap-2 text-sm text-success mt-1">
                         <CheckCircle className="w-4 h-4 shrink-0 text-success" aria-hidden />
                         <span>
-                          <span className="font-medium text-gray-900">
+                          <span className="font-medium text-vendor-foreground">
                             {d.fileName || displayNameFromBlobPath(d.storedUrl)}
                           </span>
-                          <span className="text-gray-600 ml-1.5">Uploaded</span>
+                          <span className="text-vendor-muted-strong ml-1.5">Uploaded</span>
                         </span>
                       </div>
                     )}
@@ -1912,40 +1912,40 @@ export default function PartnerRfpDetailPage() {
                 existing?.timeline_proposal ?? buildTimelineProposalForSave(timelineDuration, timelineUnit, timelineLegacyHint)
               )
               return (
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                <div className="rounded-lg border border-vendor-border bg-vendor-background p-4 space-y-3">
                   <div>
-                    <div className="font-mono text-[10px] uppercase text-gray-500">Proposal</div>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{proposalText || "-"}</p>
+                    <div className="font-mono text-[10px] uppercase text-vendor-muted">Proposal</div>
+                    <p className="text-sm text-vendor-foreground whitespace-pre-wrap mt-1">{proposalText || "-"}</p>
                   </div>
                   <div className="grid sm:grid-cols-2 gap-3 mt-3 text-sm">
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-gray-500">Budget</div>
-                      <div className="text-gray-900">
+                      <div className="font-mono text-[10px] uppercase text-vendor-muted">Budget</div>
+                      <div className="text-vendor-foreground">
                         {budgetObj?.amount != null && budgetObj?.currency
                           ? `${Number(budgetObj.amount).toLocaleString("en-US")} ${budgetObj.currency}`
                           : "-"}
                       </div>
                     </div>
                     <div>
-                      <div className="font-mono text-[10px] uppercase text-gray-500">Timeline</div>
-                      <div className="text-gray-900">
+                      <div className="font-mono text-[10px] uppercase text-vendor-muted">Timeline</div>
+                      <div className="text-vendor-foreground">
                         {timelineObj?.duration != null && timelineObj?.unit
                           ? `${timelineObj.duration} ${timelineObj.unit}`
                           : "-"}
                       </div>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-700">This bid is read-only in its current state.</p>
+                  <p className="text-sm text-vendor-foreground">This bid is read-only in its current state.</p>
                 </div>
               )
             })()
           )}
 
           {canEdit ? (
-            <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+            <div className="flex flex-wrap justify-end gap-3 mt-8 pt-6 border-t border-vendor-border">
               {canEdit && (
                 <div className="w-full">
-                  <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                  <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                     Change notes (optional)
                   </label>
                   <Textarea
@@ -2016,7 +2016,7 @@ export default function PartnerRfpDetailPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="bid-submitted-title"
-            className="w-full max-w-md rounded-xl border-2 border-success/30 bg-white p-6 shadow-xl"
+            className="w-full max-w-md rounded-xl border-2 border-success/30 bg-vendor-surface p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-center mb-4">
@@ -2024,10 +2024,10 @@ export default function PartnerRfpDetailPage() {
                 <CheckCircle className="h-8 w-8 text-success" aria-hidden />
               </div>
             </div>
-            <h2 id="bid-submitted-title" className="font-display text-center text-xl font-bold text-[#0C3535]">
+            <h2 id="bid-submitted-title" className="font-display text-center text-xl font-bold text-vendor-foreground">
               Bid Submitted Successfully
             </h2>
-            <p className="mt-3 text-center text-sm text-gray-800 leading-relaxed">
+            <p className="mt-3 text-center text-sm text-vendor-foreground leading-relaxed">
               {bidSubmittedModalIsRevision ? (
                 "Your updated bid has been submitted."
               ) : (
@@ -2044,7 +2044,7 @@ export default function PartnerRfpDetailPage() {
             ) : null}
             <Button
               type="button"
-              className="mt-6 w-full bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+              className="mt-6 w-full bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
               onClick={() => setBidSubmittedModalOpen(false)}
             >
               Got it

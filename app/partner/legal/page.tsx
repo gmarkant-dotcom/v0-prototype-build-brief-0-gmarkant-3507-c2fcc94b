@@ -419,14 +419,14 @@ export default function PartnerLegalPage() {
       <div className="max-w-4xl mx-auto space-y-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="font-display font-bold text-3xl text-[#0C3535]">Legal & Compliance</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="font-display font-bold text-3xl text-vendor-foreground">Legal & Compliance</h1>
+            <p className="text-vendor-muted-strong mt-1">
               Manage your legal documents, insurance, and compliance requirements.
             </p>
           </div>
           <div className="flex items-start gap-4">
             <div className="text-right">
-              <div className="font-mono text-[10px] text-gray-500 uppercase tracking-wider">Compliance</div>
+              <div className="font-mono text-[10px] text-vendor-muted uppercase tracking-wider">Compliance</div>
               <div className={cn(
                 "font-display font-bold text-3xl",
                 completionPercentage === 100 ? "text-success" : "text-yellow-600"
@@ -462,29 +462,29 @@ export default function PartnerLegalPage() {
         )}
         
         {/* Entity Information */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Entity Information</h2>
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Entity Information</h2>
           
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Legal Entity Name
               </label>
               <Input
                 value={entityInfo.legalName}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, legalName: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
               />
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Entity Type
               </label>
               <select
                 value={entityInfo.entityType}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, entityType: e.target.value }))}
-                className="w-full h-10 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-900"
+                className="w-full h-10 px-3 rounded-md border border-vendor-border bg-vendor-surface text-sm text-vendor-foreground"
               >
                 <option value="llc">LLC</option>
                 <option value="corporation">Corporation (C-Corp)</option>
@@ -495,36 +495,36 @@ export default function PartnerLegalPage() {
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 EIN
               </label>
               <Input
                 value={entityInfo.ein}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, ein: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                 placeholder="XX-XXXXXXX"
               />
             </div>
             
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 State of Incorporation
               </label>
               <Input
                 value={entityInfo.stateOfIncorporation}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, stateOfIncorporation: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
               />
             </div>
             
             <div className="col-span-2">
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Business Address
               </label>
               <Input
                 value={entityInfo.address}
                 onChange={(e) => setEntityInfo(prev => ({ ...prev, address: e.target.value }))}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
               />
             </div>
           </div>
@@ -533,18 +533,18 @@ export default function PartnerLegalPage() {
             <Button
               onClick={saveEntityInfo}
               disabled={savingEntityInfo}
-              className="bg-[#0C3535] text-white hover:bg-[#0C3535]/90"
+              className="bg-vendor-foreground text-white hover:bg-vendor-foreground/90"
             >
               {savingEntityInfo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Save Entity Info
             </Button>
           </div>
-          {entityInfoMsg ? <p className="text-xs text-gray-600 mt-3">{entityInfoMsg}</p> : null}
+          {entityInfoMsg ? <p className="text-xs text-vendor-muted-strong mt-3">{entityInfoMsg}</p> : null}
         </div>
         
         {/* Required Documents */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="font-display font-bold text-lg text-[#0C3535] mb-6">Required Documents</h2>
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-6">Required Documents</h2>
           
           <div className="space-y-4">
             {documents.map((doc) => (
@@ -554,7 +554,7 @@ export default function PartnerLegalPage() {
                   "p-4 rounded-lg border",
                   doc.status === "complete" && "bg-success/15 border-success/30",
                   doc.status === "pending" && "bg-yellow-50 border-yellow-200",
-                  doc.status === "not_started" && "bg-gray-50 border-gray-200"
+                  doc.status === "not_started" && "bg-vendor-background border-vendor-border"
                 )}
               >
                 <div className="flex items-start justify-between">
@@ -563,7 +563,7 @@ export default function PartnerLegalPage() {
                       "w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5",
                       doc.status === "complete" && "bg-success text-accent-foreground",
                       doc.status === "pending" && "bg-yellow-500 text-white",
-                      doc.status === "not_started" && "bg-gray-300 text-gray-600"
+                      doc.status === "not_started" && "bg-gray-300 text-vendor-muted-strong"
                     )}>
                       {doc.status === "complete" ? "✓" : doc.status === "pending" ? "…" : "○"}
                     </div>
@@ -572,16 +572,16 @@ export default function PartnerLegalPage() {
                         <HelpTerm
                           term={DOCUMENT_GLOSSARY_KEYS[doc.id]}
                           theme="light"
-                          className="font-display font-bold text-sm text-[#0C3535]"
+                          className="font-display font-bold text-sm text-vendor-foreground"
                         >
                           {doc.name}
                         </HelpTerm>
                       ) : (
-                        <div className="font-display font-bold text-sm text-[#0C3535]">{doc.name}</div>
+                        <div className="font-display font-bold text-sm text-vendor-foreground">{doc.name}</div>
                       )}
-                      <div className="text-xs text-gray-600 mt-0.5">{doc.description}</div>
+                      <div className="text-xs text-vendor-muted-strong mt-0.5">{doc.description}</div>
                       {doc.uploadedDate && (
-                        <div className="font-mono text-[10px] text-gray-500 mt-2">
+                        <div className="font-mono text-[10px] text-vendor-muted mt-2">
                           Uploaded: {doc.uploadedDate}
                           {doc.expirationDate && ` • Expires: ${doc.expirationDate}`}
                         </div>
@@ -594,10 +594,10 @@ export default function PartnerLegalPage() {
                         {doc.id === "coi" && coiSaved && (
                           <span className="text-xs font-medium text-success">Saved</span>
                         )}
-                        <Button variant="ghost" size="sm" className="text-gray-800 hover:text-[#0C3535]">
+                        <Button variant="ghost" size="sm" className="text-vendor-foreground hover:text-vendor-foreground">
                           View
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-gray-800 hover:text-[#0C3535]">
+                        <Button variant="ghost" size="sm" className="text-vendor-foreground hover:text-vendor-foreground">
                           Replace
                         </Button>
                       </div>
@@ -617,7 +617,7 @@ export default function PartnerLegalPage() {
                           className={cn(
                             doc.status === "pending" 
                               ? "bg-yellow-600 hover:bg-yellow-700" 
-                              : "bg-[#0C3535] hover:bg-[#0C3535]/90",
+                              : "bg-vendor-foreground hover:bg-vendor-foreground/90",
                             "text-white"
                           )}
                         >
@@ -643,8 +643,8 @@ export default function PartnerLegalPage() {
         <div className="space-y-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-display font-bold text-xl text-[#0C3535]">Business Criteria</h2>
-              <p className="text-sm text-gray-600 mt-1">
+              <h2 className="font-display font-bold text-xl text-vendor-foreground">Business Criteria</h2>
+              <p className="text-sm text-vendor-muted-strong mt-1">
                 Diversity designations, company facts, and insurance coverage used for procurement requirements.
               </p>
             </div>
@@ -653,19 +653,19 @@ export default function PartnerLegalPage() {
               disabled={savingBusinessCriteria}
               className={cn(
                 "shrink-0 min-w-[190px]",
-                savedBusinessCriteria ? "bg-success hover:bg-success text-accent-foreground" : "bg-[#0C3535] hover:bg-[#0C3535]/90 text-white"
+                savedBusinessCriteria ? "bg-success hover:bg-success text-accent-foreground" : "bg-vendor-foreground hover:bg-vendor-foreground/90 text-white"
               )}
             >
               {savingBusinessCriteria ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               {savingBusinessCriteria ? "Saving..." : savedBusinessCriteria ? "Saved" : "Save Business Criteria"}
             </Button>
           </div>
-          {businessCriteriaMsg ? <p className="text-xs text-gray-600">{businessCriteriaMsg}</p> : null}
+          {businessCriteriaMsg ? <p className="text-xs text-vendor-muted-strong">{businessCriteriaMsg}</p> : null}
 
           {/* Business Designations & Company Facts */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-display font-bold text-lg text-[#0C3535] mb-2">Business Designations & Company Facts</h3>
-          <p className="text-sm text-gray-600 mb-6">
+          <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+          <h3 className="font-display font-bold text-lg text-vendor-foreground mb-2">Business Designations & Company Facts</h3>
+          <p className="text-sm text-vendor-muted-strong mb-6">
             Diversity and ownership designations, plus company facts agencies use for procurement requirements.
           </p>
 
@@ -673,39 +673,39 @@ export default function PartnerLegalPage() {
             {DESIGNATION_KEYS.map((key) => {
               const designation = businessCriteria.designations[key]
               return (
-                <div key={key} className="rounded-lg border border-gray-200 p-4">
+                <div key={key} className="rounded-lg border border-vendor-border p-4">
                   <label className="flex items-start gap-3 cursor-pointer">
                     <Checkbox
                       checked={designation.holds}
                       onCheckedChange={(checked) => updateDesignation(key, { holds: checked === true })}
-                      className="mt-0.5 border-gray-400 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+                      className="mt-0.5 border-vendor-border data-[state=checked]:bg-accent data-[state=checked]:border-accent"
                     />
-                    <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-[#0C3535]">
+                    <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-vendor-foreground">
                       {DESIGNATION_LABELS[key]}
                     </HelpTerm>
                   </label>
                   {designation.holds && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 pl-7">
                       <div>
-                        <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                        <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                           Certifying Body
                         </label>
                         <Input
                           value={designation.certifying_body || ""}
                           onChange={(e) => updateDesignation(key, { certifying_body: e.target.value || null })}
                           placeholder="e.g. NMSDC, WBENC, NGLCC"
-                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                          className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                           disabled={designation.self_certified}
                         />
                       </div>
                       <div>
-                        <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+                        <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                           Certification Number
                         </label>
                         <Input
                           value={designation.certification_number || ""}
                           onChange={(e) => updateDesignation(key, { certification_number: e.target.value || null })}
-                          className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                          className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                           disabled={designation.self_certified}
                         />
                       </div>
@@ -719,9 +719,9 @@ export default function PartnerLegalPage() {
                                 ...(checked === true ? { certifying_body: null, certification_number: null } : {}),
                               })
                             }
-                            className="border-gray-400 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+                            className="border-vendor-border data-[state=checked]:bg-accent data-[state=checked]:border-accent"
                           />
-                          <span className="text-sm text-gray-700">Self-certified (no third-party certification)</span>
+                          <span className="text-sm text-vendor-foreground">Self-certified (no third-party certification)</span>
                         </label>
                       </div>
                     </div>
@@ -733,7 +733,7 @@ export default function PartnerLegalPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Years in Business
               </label>
               <Input
@@ -743,39 +743,39 @@ export default function PartnerLegalPage() {
                   const raw = e.target.value
                   updateCompanyFacts({ years_in_business: raw === "" ? null : Number(raw) })
                 }}
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
               />
             </div>
             <div>
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Union Signatory
               </label>
               <Input
                 value={businessCriteria.company_facts.union_signatory}
                 onChange={(e) => updateCompanyFacts({ union_signatory: e.target.value })}
                 placeholder="e.g. SAG-AFTRA, IATSE"
-                className="border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Sustainability Approach
               </label>
               <Textarea
                 value={businessCriteria.company_facts.sustainability_approach}
                 onChange={(e) => updateCompanyFacts({ sustainability_approach: e.target.value })}
-                className="min-h-[90px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="min-h-[90px] border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                 placeholder="Describe your sustainability practices."
               />
             </div>
             <div className="md:col-span-2">
-              <label className="block font-mono text-[10px] text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-[10px] text-vendor-muted uppercase tracking-wider mb-2">
                 Workforce Diversity Summary
               </label>
               <Textarea
                 value={businessCriteria.company_facts.workforce_diversity_summary}
                 onChange={(e) => updateCompanyFacts({ workforce_diversity_summary: e.target.value })}
-                className="min-h-[90px] border-gray-200 text-gray-900 placeholder:text-gray-500"
+                className="min-h-[90px] border-vendor-border text-vendor-foreground placeholder:text-vendor-muted"
                 placeholder="Describe your team's diversity."
               />
             </div>
@@ -783,9 +783,9 @@ export default function PartnerLegalPage() {
           </div>
 
           {/* Insurance Requirements */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-display font-bold text-lg text-[#0C3535] mb-1">Insurance Requirements</h3>
-          <p className="text-sm text-gray-600 mb-4">
+          <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+          <h3 className="font-display font-bold text-lg text-vendor-foreground mb-1">Insurance Requirements</h3>
+          <p className="text-sm text-vendor-muted-strong mb-4">
             Confirm the insurance coverages your company carries, with limits, for project eligibility.
           </p>
 
@@ -795,15 +795,15 @@ export default function PartnerLegalPage() {
               return (
                 <div
                   key={key}
-                  className="flex items-center justify-between gap-4 p-3 rounded-lg bg-gray-50 border border-gray-200"
+                  className="flex items-center justify-between gap-4 p-3 rounded-lg bg-vendor-background border border-vendor-border"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <Checkbox
                       checked={coverage.has_coverage}
                       onCheckedChange={(checked) => updateInsurance(key, { has_coverage: checked === true })}
-                      className="border-gray-400 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+                      className="border-vendor-border data-[state=checked]:bg-accent data-[state=checked]:border-accent"
                     />
-                    <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-[#0C3535] truncate">
+                    <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-vendor-foreground truncate">
                       {INSURANCE_LABELS[key]}
                     </HelpTerm>
                   </div>
@@ -818,12 +818,12 @@ export default function PartnerLegalPage() {
                         })
                       }}
                       placeholder="e.g. $1M/$2M"
-                      className="border-gray-200 text-gray-900 placeholder:text-gray-500 w-36"
+                      className="border-vendor-border text-vendor-foreground placeholder:text-vendor-muted w-36"
                     />
                     <span
                       className={cn(
                         "font-mono text-[10px] px-2 py-0.5 rounded-full",
-                        coverage.has_coverage ? "bg-success/15 text-success" : "bg-gray-100 text-gray-600"
+                        coverage.has_coverage ? "bg-success/15 text-success" : "bg-gray-100 text-vendor-muted-strong"
                       )}
                     >
                       {coverage.has_coverage ? "Covered" : "Not Covered"}
@@ -834,18 +834,18 @@ export default function PartnerLegalPage() {
             })}
           </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="mt-4 pt-4 border-t border-vendor-border">
             <label className="flex items-center gap-3 cursor-pointer">
               <Checkbox
                 checked={businessCriteria.insurance.coi_on_file}
                 onCheckedChange={(checked) => updateCoiOnFile(checked === true)}
-                className="border-gray-400 data-[state=checked]:bg-accent data-[state=checked]:border-accent"
+                className="border-vendor-border data-[state=checked]:bg-accent data-[state=checked]:border-accent"
               />
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-vendor-foreground">
                 <HelpTerm term="coi" theme="light">Certificate of Insurance (COI)</HelpTerm> on file
               </span>
             </label>
-            <p className="text-xs text-gray-500 mt-2 pl-7">
+            <p className="text-xs text-vendor-muted mt-2 pl-7">
               A Certificate of Insurance is the standard proof-of-coverage document issued by your insurance broker.
               Checking this confirms you can provide a current COI on request.
             </p>

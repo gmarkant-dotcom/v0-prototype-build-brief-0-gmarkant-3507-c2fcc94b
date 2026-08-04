@@ -69,7 +69,7 @@ type RFPStatusKey = (typeof RFP_STATUSES)[number]["key"]
 type GroupBy = "agency" | "client" | "status"
 
 const STATUS_BADGE: Record<string, { bg: string; border: string; text: string; label: string }> = {
-  new:               { bg: "bg-gray-100",        border: "border-gray-200",        text: "text-gray-500",   label: "New" },
+  new:               { bg: "bg-gray-100",        border: "border-vendor-border",        text: "text-vendor-muted",   label: "New" },
   submitted:         { bg: "bg-sky-50",           border: "border-sky-200",         text: "text-sky-700",    label: "Submitted" },
   under_review:      { bg: "bg-amber-50",         border: "border-amber-200",       text: "text-amber-700",  label: "Changes Requested" },
   shortlisted:       { bg: "bg-blue-50",          border: "border-blue-200",        text: "text-blue-700",   label: "Shortlisted" },
@@ -79,7 +79,7 @@ const STATUS_BADGE: Record<string, { bg: string; border: string; text: string; l
   bid_submitted:     { bg: "bg-sky-50",           border: "border-sky-200",         text: "text-sky-700",    label: "Submitted" },
   feedback_received: { bg: "bg-amber-50",         border: "border-amber-200",       text: "text-amber-700",  label: "Feedback" },
   revision_submitted:{ bg: "bg-sky-50",           border: "border-sky-200",         text: "text-sky-700",    label: "Revised" },
-  viewed:            { bg: "bg-gray-100",         border: "border-gray-200",        text: "text-gray-600",   label: "Viewed" },
+  viewed:            { bg: "bg-gray-100",         border: "border-vendor-border",        text: "text-vendor-muted-strong",   label: "Viewed" },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -128,11 +128,11 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
   return (
     <Link
       href={`/partner/rfps/${row.id}`}
-      className="flex items-start gap-4 p-4 rounded-xl border border-gray-200 bg-white hover:border-[#0C3535]/40 hover:shadow-sm transition-all group"
+      className="flex items-start gap-4 p-4 rounded-xl border border-vendor-border bg-vendor-surface hover:border-vendor-foreground/40 hover:shadow-sm transition-all group"
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          <span className="font-display font-bold text-[#0C3535] truncate">{row.scope_item_name}</span>
+          <span className="font-display font-bold text-vendor-foreground truncate">{row.scope_item_name}</span>
           <span className={cn(
             "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
             b.bg, b.border, b.text
@@ -146,7 +146,7 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 font-mono text-[10px] text-gray-500 flex-wrap">
+        <div className="flex items-center gap-2 font-mono text-[10px] text-vendor-muted flex-wrap">
           {showAgency && row.agency_company_name && (
             <span className="flex items-center gap-1">
               <Building2 className="w-3 h-3" />
@@ -155,13 +155,13 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
           )}
           {formatDate(row.created_at) && (
             <>
-              {showAgency && row.agency_company_name && <span className="text-gray-300">·</span>}
+              {showAgency && row.agency_company_name && <span className="text-vendor-muted/50">·</span>}
               <span>Received {formatDate(row.created_at)}</span>
             </>
           )}
           {deadline && (
             <>
-              <span className="text-gray-300">·</span>
+              <span className="text-vendor-muted/50">·</span>
               <span className={cn("flex items-center gap-1", soon && "text-red-600 font-medium")}>
                 <Clock className="w-3 h-3" />
                 Due {deadline}
@@ -170,7 +170,7 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
           )}
         </div>
       </div>
-      <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#0C3535] transition-colors shrink-0 mt-1" />
+      <ChevronRight className="w-4 h-4 text-vendor-muted/70 group-hover:text-vendor-foreground transition-colors shrink-0 mt-1" />
     </Link>
   )
 }
@@ -187,7 +187,7 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
   const content = (
     <div className="flex-1 min-w-0">
       <div className="flex items-center gap-2 flex-wrap mb-1">
-        <span className="font-display font-bold text-[#0C3535] truncate">{bid.scope_item_name || "Scope"}</span>
+        <span className="font-display font-bold text-vendor-foreground truncate">{bid.scope_item_name || "Scope"}</span>
         <span className={cn(
           "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
           b.bg, b.border, b.text
@@ -198,7 +198,7 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
           <span className={cn(
             "font-mono text-[9px] px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
             !isTerminal
-              ? "bg-gray-100 border-gray-200 text-gray-500"
+              ? "bg-gray-100 border-vendor-border text-vendor-muted"
               : bid.status === "awarded"
                 ? "bg-success/15 border-success/30 text-success"
                 : "bg-red-50 border-red-200 text-red-700"
@@ -207,26 +207,26 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2 font-mono text-[10px] text-gray-500 flex-wrap">
+      <div className="flex items-center gap-2 font-mono text-[10px] text-vendor-muted flex-wrap">
         <span className="flex items-center gap-1">
           <Building2 className="w-3 h-3" />
           {agencyName}
         </span>
         {bid.client_name && (
           <>
-            <span className="text-gray-300">·</span>
+            <span className="text-vendor-muted/50">·</span>
             <span>{bid.client_name}</span>
           </>
         )}
         {budget !== "-" && (
           <>
-            <span className="text-gray-300">·</span>
+            <span className="text-vendor-muted/50">·</span>
             <span>{budget}</span>
           </>
         )}
         {submitted && (
           <>
-            <span className="text-gray-300">·</span>
+            <span className="text-vendor-muted/50">·</span>
             <span>Submitted {submitted}</span>
           </>
         )}
@@ -238,22 +238,22 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
     return (
       <Link
         href={`/partner/rfps/${bid.inbox_item_id}`}
-        className="flex items-start gap-4 p-4 rounded-xl border border-gray-200 bg-white hover:border-[#0C3535]/40 hover:shadow-sm transition-all group"
+        className="flex items-start gap-4 p-4 rounded-xl border border-vendor-border bg-vendor-surface hover:border-vendor-foreground/40 hover:shadow-sm transition-all group"
       >
         {content}
-        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#0C3535] transition-colors shrink-0 mt-1" />
+        <ChevronRight className="w-4 h-4 text-vendor-muted/70 group-hover:text-vendor-foreground transition-colors shrink-0 mt-1" />
       </Link>
     )
   }
-  return <div className="flex items-start gap-4 p-4 rounded-xl border border-gray-200 bg-white">{content}</div>
+  return <div className="flex items-start gap-4 p-4 rounded-xl border border-vendor-border bg-vendor-surface">{content}</div>
 }
 
 function BidsList({ bids, showOutcome, emptyMessage }: { bids: PartnerBidRow[]; showOutcome: boolean; emptyMessage: string }) {
   if (bids.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-        <div className="font-display font-bold text-xl text-[#0C3535] mb-2">No bids yet</div>
-        <p className="text-gray-600">{emptyMessage}</p>
+      <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+        <div className="font-display font-bold text-xl text-vendor-foreground mb-2">No bids yet</div>
+        <p className="text-vendor-muted-strong">{emptyMessage}</p>
       </div>
     )
   }
@@ -296,21 +296,21 @@ function GroupSection({
   )
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50/50 overflow-hidden">
+    <div className="rounded-xl border border-vendor-border bg-vendor-background/50 overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-4 p-5 hover:bg-gray-100/60 transition-colors text-left"
       >
-        <div className="w-10 h-10 rounded-lg bg-[#0C3535]/10 flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-lg bg-vendor-foreground/10 flex items-center justify-center shrink-0">
           {groupBy === "agency"
-            ? <Building2 className="w-5 h-5 text-[#0C3535]" />
-            : <FileText className="w-5 h-5 text-[#0C3535]" />
+            ? <Building2 className="w-5 h-5 text-vendor-foreground" />
+            : <FileText className="w-5 h-5 text-vendor-foreground" />
           }
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-display font-bold text-xl text-[#0C3535]">{label}</div>
-          <div className="font-mono text-[11px] text-gray-500 mt-0.5">
+          <div className="font-display font-bold text-xl text-vendor-foreground">{label}</div>
+          <div className="font-mono text-[11px] text-vendor-muted mt-0.5">
             {rows.length} RFP{rows.length !== 1 ? "s" : ""}
             {(counts["awarded"] ?? 0) > 0 && (
               <span className="ml-2 text-success">· {counts["awarded"]} awarded</span>
@@ -318,12 +318,12 @@ function GroupSection({
           </div>
         </div>
         <div className={cn("transition-transform shrink-0", open && "rotate-180")}>
-          <ChevronDown className="w-5 h-5 text-gray-400" />
+          <ChevronDown className="w-5 h-5 text-vendor-muted/70" />
         </div>
       </button>
 
       {open && (
-        <div className="border-t border-gray-200 bg-white">
+        <div className="border-t border-vendor-border bg-vendor-surface">
           {/* Status tabs */}
           <div className="flex gap-1 flex-wrap px-4 pt-3 pb-2">
             {RFP_STATUSES.map(({ key, label: tabLabel }) => {
@@ -336,8 +336,8 @@ function GroupSection({
                   className={cn(
                     "shrink-0 px-2.5 py-1 rounded-lg font-mono text-[10px] transition-colors whitespace-nowrap",
                     activeStatus === key
-                      ? "bg-[#0C3535] text-white"
-                      : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      ? "bg-vendor-foreground text-white"
+                      : "bg-gray-100 text-vendor-muted hover:bg-gray-200"
                   )}
                 >
                   {tabLabel} ({count})
@@ -348,7 +348,7 @@ function GroupSection({
           {/* RFP list */}
           <div className="px-4 pb-4 space-y-2">
             {filtered.length === 0 ? (
-              <p className="text-sm text-gray-500 py-4 text-center">No RFPs match this filter.</p>
+              <p className="text-sm text-vendor-muted py-4 text-center">No RFPs match this filter.</p>
             ) : (
               filtered.map(row => (
                 <RFPCard key={row.id} row={row} showAgency={groupBy !== "agency"} />
@@ -383,8 +383,8 @@ function FlatStatusView({ allRows }: { allRows: PartnerInboxRow[] }) {
   )
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="flex gap-1 flex-wrap px-4 pt-4 pb-3 border-b border-gray-100">
+    <div className="bg-vendor-surface rounded-xl border border-vendor-border overflow-hidden">
+      <div className="flex gap-1 flex-wrap px-4 pt-4 pb-3 border-b border-vendor-border/50">
         {RFP_STATUSES.map(({ key, label: tabLabel }) => {
           const count = key === "all" ? allRows.length : (counts[key] ?? 0)
           return (
@@ -395,8 +395,8 @@ function FlatStatusView({ allRows }: { allRows: PartnerInboxRow[] }) {
               className={cn(
                 "shrink-0 px-2.5 py-1 rounded-lg font-mono text-[10px] transition-colors whitespace-nowrap",
                 activeStatus === key
-                  ? "bg-[#0C3535] text-white"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  ? "bg-vendor-foreground text-white"
+                  : "bg-gray-100 text-vendor-muted hover:bg-gray-200"
               )}
             >
               {tabLabel} ({count})
@@ -406,7 +406,7 @@ function FlatStatusView({ allRows }: { allRows: PartnerInboxRow[] }) {
       </div>
       <div className="p-4 space-y-2">
         {filtered.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4 text-center">No RFPs match this filter.</p>
+          <p className="text-sm text-vendor-muted py-4 text-center">No RFPs match this filter.</p>
         ) : (
           filtered.map(row => (
             <RFPCard key={row.id} row={row} showAgency={true} />
@@ -499,8 +499,8 @@ function PartnerRFPsContent() {
       <div className="space-y-6">
         {/* Header */}
         <div>
-          <h1 className="font-display font-bold text-3xl text-[#0C3535]">Open RFPs & Bids</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="font-display font-bold text-3xl text-vendor-foreground">Open RFPs & Bids</h1>
+          <p className="text-vendor-muted-strong mt-1">
             {activeTab === "open"
               ? isLoading
                 ? "Loading…"
@@ -513,7 +513,7 @@ function PartnerRFPsContent() {
         </div>
 
         {/* Tabs */}
-        <div className="flex rounded-lg overflow-hidden border border-gray-200 w-fit">
+        <div className="flex rounded-lg overflow-hidden border border-vendor-border w-fit">
           {([
             { key: "open", label: "Open RFPs" },
             { key: "my-bids", label: "My Bids" },
@@ -526,8 +526,8 @@ function PartnerRFPsContent() {
               className={cn(
                 "px-4 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors",
                 activeTab === t.key
-                  ? "bg-[#0C3535] text-white"
-                  : "bg-white text-gray-500 hover:bg-gray-50"
+                  ? "bg-vendor-foreground text-white"
+                  : "bg-vendor-surface text-vendor-muted hover:bg-vendor-background"
               )}
             >
               {t.label}
@@ -546,17 +546,17 @@ function PartnerRFPsContent() {
             {/* Search + group-by */}
             <div className="flex items-center gap-4 flex-wrap">
               <div className="relative flex-1 min-w-[220px] max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vendor-muted/70" />
                 <Input
                   placeholder="Search agency or scope…"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  className="pl-10 bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+                  className="pl-10 bg-vendor-surface border-vendor-border text-vendor-foreground placeholder:text-vendor-muted/70"
                 />
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">Group by</span>
-                <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                <span className="font-mono text-[10px] text-vendor-muted/70 uppercase tracking-wider">Group by</span>
+                <div className="flex rounded-lg overflow-hidden border border-vendor-border">
                   {(["agency", "client", "status"] as GroupBy[]).map(g => (
                     <button
                       key={g}
@@ -565,8 +565,8 @@ function PartnerRFPsContent() {
                       className={cn(
                         "px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
                         groupBy === g
-                          ? "bg-[#0C3535] text-white"
-                          : "bg-white text-gray-500 hover:bg-gray-50"
+                          ? "bg-vendor-foreground text-white"
+                          : "bg-vendor-surface text-vendor-muted hover:bg-vendor-background"
                       )}
                     >
                       {g === "agency" ? "Agency" : g === "client" ? "Client" : "Status"}
@@ -578,8 +578,8 @@ function PartnerRFPsContent() {
 
             {/* Content */}
             {isLoading && (
-              <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
-                <Loader2 className="w-5 h-5 animate-spin text-[#0C3535]" />
+              <div className="flex items-center justify-center py-12 gap-3 text-vendor-muted">
+                <Loader2 className="w-5 h-5 animate-spin text-vendor-foreground" />
                 <span className="font-mono text-sm">Loading RFPs…</span>
               </div>
             )}
@@ -589,11 +589,11 @@ function PartnerRFPsContent() {
               </div>
             )}
             {!isLoading && !error && groups.length === 0 && (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <div className="font-display font-bold text-xl text-[#0C3535] mb-2">
+              <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+                <div className="font-display font-bold text-xl text-vendor-foreground mb-2">
                   {search ? "No results" : "No RFPs yet"}
                 </div>
-                <p className="text-gray-600">
+                <p className="text-vendor-muted-strong">
                   {search ? "Try a different search term." : "When a lead agency broadcasts an RFP to you, it will appear here."}
                 </p>
               </div>
@@ -620,8 +620,8 @@ function PartnerRFPsContent() {
         {activeTab === "my-bids" && (
           <>
             {bidsLoading && (
-              <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
-                <Loader2 className="w-5 h-5 animate-spin text-[#0C3535]" />
+              <div className="flex items-center justify-center py-12 gap-3 text-vendor-muted">
+                <Loader2 className="w-5 h-5 animate-spin text-vendor-foreground" />
                 <span className="font-mono text-sm">Loading bids…</span>
               </div>
             )}
@@ -643,8 +643,8 @@ function PartnerRFPsContent() {
         {activeTab === "history" && (
           <>
             {bidsLoading && (
-              <div className="flex items-center justify-center py-12 gap-3 text-gray-500">
-                <Loader2 className="w-5 h-5 animate-spin text-[#0C3535]" />
+              <div className="flex items-center justify-center py-12 gap-3 text-vendor-muted">
+                <Loader2 className="w-5 h-5 animate-spin text-vendor-foreground" />
                 <span className="font-mono text-sm">Loading bids…</span>
               </div>
             )}

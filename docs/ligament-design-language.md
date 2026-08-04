@@ -52,8 +52,24 @@ Two deliberate worlds, one accent family. All values are the real tokens from ap
 - Lime `#C8F53C` is used for: primary buttons, active nav state, selected chips, positive emphasis. Always via `accent`/`primary` token classes, never as a raw hex literal (46 existing literals are an S3 migration batch).
 
 **Partner portal (light).**
-- Tokens exist and are canonical: `--vendor-background #FAFAFA`, `--vendor-surface #FFFFFF`, `--vendor-foreground #0C3535`, `--vendor-muted #6B7280`, `--vendor-border #E5E7EB`
-- Current reality: the portal hardcodes literals (`#0C3535`, `border-gray-200`, `text-gray-500`, `bg-white`) and the tokens are unconsumed. Ruling: wire the portal to the tokens (large S3 batch, possibly its own session chunk). New partner-portal code uses the tokens from day one.
+- Tokens exist and are canonical: `--vendor-background #FAFAFA`, `--vendor-surface #FFFFFF`, `--vendor-foreground #0C3535`, `--vendor-muted #6B7280`, `--vendor-muted-strong #4B5563` (added S3), `--vendor-border #E5E7EB`, `--vendor-track #F3F4F6` (added S3, the ratified light progress-track value). All seven are exposed as Tailwind utilities (`bg-vendor-surface`, `text-vendor-foreground`, etc. - `@theme inline` mappings added S3, they previously existed only as unconsumed CSS variables).
+- Wired S3 (R1 batch): `app/partner/**` plus the partner-only components `lead-agency-filter.tsx` and the light-content portions of `partner-layout.tsx` (its header/nav chrome stays on dark agency tokens by design - see below). Shared components used by the dark portal or guest surfaces (`help-term.tsx`, `terms-disclosure-section.tsx`, `dashboard-show-more.tsx`) were left out of scope even though their light-theme branches hardcode the same literals - migrating a shared file for one consumer's sake risks the others. Literal-to-token mapping used:
+
+  | Literal | Token |
+  | --- | --- |
+  | `#0C3535` (any property: bg/text/border/fill/ring/accent/...), `text-gray-700`, `text-gray-800`, `text-gray-900` | `--vendor-foreground` |
+  | `text-gray-600` | `--vendor-muted-strong` |
+  | `text-gray-500` | `--vendor-muted` |
+  | `text-gray-400` | `--vendor-muted/70` |
+  | `text-gray-300` | `--vendor-muted/50` |
+  | `bg-white` (opaque only, not `bg-white/NN`) | `--vendor-surface` |
+  | `bg-gray-50` | `--vendor-background` |
+  | `bg-gray-100` on a literal progress track/meter | `--vendor-track` |
+  | `border-gray-200`, `border-gray-300`, `border-gray-400` | `--vendor-border` |
+  | `border-gray-100` | `--vendor-border/50` |
+
+- Not migrated, flagged instead of guessed: `bg-gray-100` used as a neutral status-badge fill, disabled/read-only input fill, avatar/icon-tile placeholder, skeleton shimmer, or hover overlay (~30 sites) - none of the seven vendor tokens is semantically "light neutral fill," and forcing one would misapply the track/meter semantic. Needs its own token (`--vendor-neutral`?) and a follow-up decision. Same for the handful of `bg-gray-200`/`bg-gray-300` non-border uses found alongside them.
+- `partner-layout.tsx`'s `<header>` (nav bar) is deliberately dark, matching the agency portal's chrome, not the vendor tokens - it stays on `bg-[#0C3535]`/`text-white`/`--accent` as before. Its tooltip, account dropdown, and footer are genuine light surfaces and were migrated.
 - Same lime primary for CTAs. The two portals are intentionally different atmospheres for different audiences; the audit checks each portal is internally consistent, not that they match each other.
 
 **Status colors (shared semantics across both portals, via tokens):**
@@ -66,7 +82,7 @@ Two deliberate worlds, one accent family. All values are the real tokens from ap
 | Informational / neutral status | Blue | RFP BROADCAST badge, Awarded chip |
 | Muted / inactive | Gray | NOT YET INVITED, disabled rows |
 
-Ruling on green: `green-*` and `emerald-*` both currently express success. Consolidate to the `--success` token family (S3 mechanical batch). One green, one meaning.
+Ruling on green: `green-*` and `emerald-*` both currently express success. Consolidate to the `--success` token family (done S3). One green, one meaning. Two named exceptions stay their own hue rather than success or neutral: `agency/dashboard.tsx`'s `active_engagements` stage color is teal (an arbitrary stage-map hue, parallel to indigo/sky/slate, not a literal status), and the "scheduling" document-category tag in `stage-03-onboarding.tsx` is teal to match its legal/brand/process siblings' structure. The Google Docs/Slides file-format indicator in `agency/documents.tsx` stays green as Google's own brand color, not a status. `agency/msa/page.tsx` is parked for product review and was left untouched.
 
 **Purple (ruled, amended S3).** Purple/violet has exactly one sanctioned semantic: role/mode identity - the role toggle, sign-up role-selection cards, and role badges (partner = purple, agency = its portal accent/blue). Meeting-request bid intent is cyan in the actual codebase, not purple - recorded as reality rather than migrated, since cyan was already the live, working treatment everywhere the meeting-request action and its intent badge appear.
 
@@ -74,7 +90,7 @@ Everything else currently purple falls back: legal-category tags and "Internal O
 
 **Rules:**
 - A status color always means the same thing. Never use amber decoratively.
-- Progress tracks are neutral (`bg-white/10` dark; `bg-gray-100` light, ratified S2) - never a tint of the fill color. 0% must be visually unmistakable from 100%. (Codified from the bg-primary/20 incident.) The light track is a hand-rolled literal today, pending a `--vendor-track` token as part of the R1 partner-token batch.
+- Progress tracks are neutral (`bg-white/10` dark; `bg-vendor-track` light, ratified S2, wired to a token S3) - never a tint of the fill color. 0% must be visually unmistakable from 100%. (Codified from the bg-primary/20 incident.)
 - Severity thresholds are shared app-wide: green < 80% ≤ amber < 100% ≤ red.
 - Overdue (ruled, amended S3): overdue = unpaid AND due date before today, compared in calendar days with no grace period. A past-due, unpaid milestone switches its Pending label to an OVERDUE badge - destructive red text on low-alpha red background, date rendered red - and the row surfaces in the attention/response queues. Amber means approaching; red means past. Derived only in the shared milestone summarizer (`summarizePartnerMilestones`) so both portals agree automatically - no other function may compute overdue status independently.
 
@@ -229,3 +245,7 @@ Buckets for findings: **mechanical** (batchable Claude Code fixes) / **copy** / 
 17. Destructive convention implemented: `variant="destructive"` (solid) and `variant="destructive-outline"` (outline) in the shared button component, both on the `--destructive` token
 18. Legacy `/settings/*` island, `/vendor`, `/ai-engine`, `/agency/pool/marketplace`, `/partner/discover`, `/password` + `/api/password`, and `components/agency-broadcast-responses.tsx` deleted as zero-reference dead code. `/partner/invitations` kept as a redirect stub to `/partner/network` - it is live-linked from the partnership invite email flow and the auth callback's post-login destination, not a true orphan
 19. Fake `DashboardAlertBanner` deleted along with its usage on `/agency/payments` - fabricated alerts reachable by authed users, violating Honest by construction
+20. Green/emerald consolidated to `--success` app-wide, with two named teal exceptions (agency dashboard stage color, onboarding "scheduling" category tag) and two named exclusions (Google-brand file-format green, the parked `agency/msa` page)
+21. Checked-checkbox styling standardized on `data-[state=checked]:bg-accent data-[state=checked]:border-accent`, matching the convention already used by every other checkbox in the app
+22. Solid button/step-indicator fills on `--success` use `text-accent-foreground` for contrast, not white - `--success` (`#4ADE80`) is too light for white text to read reliably, the same reasoning that already governs text-on-lime
+23. `--vendor-muted-strong` and `--vendor-track` added to the vendor token set; all seven vendor tokens wired into `@theme inline` as real Tailwind utilities; `app/partner/**` plus the partner-only components migrated off hardcoded literals per the mapping table in §4
