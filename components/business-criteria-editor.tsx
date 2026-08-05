@@ -91,7 +91,7 @@ export function BusinessCriteriaEditor({
                 checked={isRequired}
                 onCheckedChange={(checked) => onChangeDesignation(key, checked === true)}
               />
-              <HelpTerm term={key} theme="dark" className="text-sm text-foreground flex-1 min-w-0">
+              <HelpTerm term={key} theme="dark" className="text-sm text-foreground text-left">
                 {DESIGNATION_LABELS[key]}
               </HelpTerm>
               {isRequired && (
@@ -119,7 +119,7 @@ export function BusinessCriteriaEditor({
                   checked={isRequired}
                   onCheckedChange={(checked) => onChangeInsurance(key, { required: checked === true })}
                 />
-                <HelpTerm term={key} theme="dark" className="text-sm text-foreground truncate">
+                <HelpTerm term={key} theme="dark" className="text-sm text-foreground text-left truncate">
                   {INSURANCE_LABELS[key]}
                 </HelpTerm>
               </label>
