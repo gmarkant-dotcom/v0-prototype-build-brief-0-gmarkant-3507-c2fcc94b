@@ -160,14 +160,14 @@ export async function POST(req: Request) {
 
     const partnerCtx = partnerProfile
       ? [
-          `Partner company: ${partnerProfile.company_name || "—"}`,
-          `Partner display name: ${partnerProfile.display_name || partnerProfile.full_name || "—"}`,
-          partnerProfile.bio ? `Partner bio: ${partnerProfile.bio}` : "",
+          `Vendor company: ${partnerProfile.company_name || "—"}`,
+          `Vendor display name: ${partnerProfile.display_name || partnerProfile.full_name || "—"}`,
+          partnerProfile.bio ? `Vendor bio: ${partnerProfile.bio}` : "",
           partnerProfile.website ? `Website: ${partnerProfile.website}` : "",
         ]
           .filter(Boolean)
           .join("\n")
-      : "Partner profile: not available"
+      : "Vendor profile: not available"
 
     const existingBlock =
       (existingMilestones || []).length > 0
@@ -196,13 +196,13 @@ export async function POST(req: Request) {
         ? `The agency pays invoices on Net ${netDays}: for each milestone, first infer the invoice issue date from the project timeline (when that phase is complete, deliverable submitted, or milestone achieved). Set that milestone's due_date to invoice_issue_date + ${netDays} calendar days (output as YYYY-MM-DD).`
         : `The agency uses custom payment terms. Infer invoice issue dates from the timeline; set each milestone due_date to match the custom terms above. If timing is ambiguous, use invoice issue date + 30 calendar days.`
 
-    const prompt = `You are helping a lead agency design a payment milestone schedule for an outsourced scope that was awarded to a partner.
+    const prompt = `You are helping a lead agency design a payment milestone schedule for an outsourced scope that was awarded to a vendor.
 
 ## 1) Invoice schedule structure (creative production practice)
 - Include a substantial **deposit** of roughly **25–50%** of the allocated budget **before work begins**, when budget and timeline reasonably support it.
 - Add a **midpoint** milestone tied to a **key deliverable** (e.g. concept approval, first draft, rough cut, or similar gate).
 - Hold a **final balance** for **delivery / client approval** or final acceptance.
-- If the engagement spans **more than 60 calendar days** from inferred start to end (use inbox timeline, partner timeline proposal, and scope hints), add **monthly progress billing** milestones between deposit and final payment; each must have notes tying it to a project phase.
+- If the engagement spans **more than 60 calendar days** from inferred start to end (use inbox timeline, vendor timeline proposal, and scope hints), add **monthly progress billing** milestones between deposit and final payment; each must have notes tying it to a project phase.
 
 ## 2) Due dates vs agency payment terms
 Agency profile payment terms: ${paymentTermsLine}
@@ -218,13 +218,13 @@ Scope description (if any): ${scopeDesc || "—"}
 Inbox estimated budget hint: ${inboxBudget || "—"}
 Inbox timeline hint: ${inboxTimeline || "—"}
 
-Partner's awarded proposal (text):
+Vendor's awarded proposal (text):
 ${(resp.proposal_text as string) || "—"}
 
-Partner's budget proposal (structured text/JSON as stored):
+Vendor's budget proposal (structured text/JSON as stored):
 ${(resp.budget_proposal as string) || "—"}
 
-Partner's timeline proposal (as stored):
+Vendor's timeline proposal (as stored):
 ${(resp.timeline_proposal as string) || "—"}
 
 ${partnerCtx}

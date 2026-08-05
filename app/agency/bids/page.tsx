@@ -583,8 +583,8 @@ export default function AgencyBidsPage() {
       // from a known partner carries whatever name the agency typed into the invite, which
       // can differ from that partner's other bids and would otherwise split them into a
       // separate group. partner_id is the stable identity; display_name is cosmetic only.
-      const key = groupBy === "client" ? r.client_name!.trim() : r.partner_id || r.partner_display_name || "Unknown Partner"
-      const label = groupBy === "client" ? r.client_name!.trim() : r.partner_display_name || "Unknown Partner"
+      const key = groupBy === "client" ? r.client_name!.trim() : r.partner_id || r.partner_display_name || "Unknown Vendor"
+      const label = groupBy === "client" ? r.client_name!.trim() : r.partner_display_name || "Unknown Vendor"
       const existing = map.get(key)
       if (existing) {
         existing.rows.push(r)
@@ -619,7 +619,7 @@ export default function AgencyBidsPage() {
             <p className="text-foreground-muted mt-1">
               {isLoading
                 ? "Loading…"
-                : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "client" ? "client" : "partner agency"}${totalGroups !== 1 ? "s" : ""}`
+                : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "client" ? "client" : "vendor"}${totalGroups !== 1 ? "s" : ""}`
               }
             </p>
           </div>
@@ -639,7 +639,7 @@ export default function AgencyBidsPage() {
           <div className="relative flex-1 min-w-[240px] max-w-lg">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground-muted" />
             <Input
-              placeholder="Search client, partner agency, or project…"
+              placeholder="Search client, vendor, or project…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-10 bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
@@ -660,7 +660,7 @@ export default function AgencyBidsPage() {
                       : "bg-white/5 text-foreground-muted hover:bg-white/10"
                   )}
                 >
-                  {g === "client" ? "Client" : "Partner Agency"}
+                  {g === "client" ? "Client" : "Vendor"}
                 </button>
               ))}
             </div>

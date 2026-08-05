@@ -657,7 +657,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                 {awardTarget && (
                   <>
                     You&apos;re about to award <span className="font-semibold text-foreground">{awardTarget.partner_display_name}</span>.
-                    This action cannot be undone. The partner will be notified immediately.
+                    This action cannot be undone. The vendor will be notified immediately.
                   </>
                 )}
               </p>

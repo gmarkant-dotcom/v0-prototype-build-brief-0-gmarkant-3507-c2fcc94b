@@ -111,7 +111,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
 
     if (prof.error || !prof.data) {
       console.error("[api/agency/pool/partner] profile load", prof.error)
-      return NextResponse.json({ error: "Partner profile not found" }, { status: 404, headers: noStore })
+      return NextResponse.json({ error: "Vendor profile not found" }, { status: 404, headers: noStore })
     }
 
     const row = prof.data as {

@@ -47,7 +47,7 @@ How movable the stated term is. Firm means take it as stated. Negotiable means t
 
 **Minority Business Enterprise (MBE)**
 A business majority-owned and controlled by members of a recognized minority group, certified by a body such as the NMSDC or a state agency.
-*Why it matters: many clients carry supplier-diversity commitments; certified partners help you meet them and document it.*
+*Why it matters: many clients carry supplier-diversity commitments; certified vendors help you meet them and document it.*
 
 **Women Business Enterprise (WBE)**
 A business majority-owned and controlled by women, certified by a body such as WBENC.
@@ -134,7 +134,7 @@ The weighted overall 0-100 score for a bid, combining your scoring criteria - AI
 *Why it matters: makes bids comparable at a glance, but it's an input to your judgment, not a verdict.*
 
 **Delivery performance / reliability score**
-A partner's track record from completed project reviews: how delivery matched what was bid.
+A vendor's track record from completed project reviews: how delivery matched what was bid.
 *Why it matters: past delivery is the best predictor you have. This is the evidence layer behind awarding with confidence.*
 
 ---

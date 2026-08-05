@@ -31,7 +31,7 @@ export default function TermsPage() {
             <p>
               Ligament is an AI-powered vendor orchestration SaaS platform for independent creative and production
               agencies. Ligament is operated by Liveligood, Inc., an S-Corp organized in New York. The platform helps
-              agencies source partners, manage project workflows, facilitate onboarding and legal coordination, and oversee
+              agencies source vendors, manage project workflows, facilitate onboarding and legal coordination, and oversee
               payment and operational collaboration across vendor relationships.
             </p>
           </section>
@@ -91,7 +91,7 @@ export default function TermsPage() {
             <h2 className="font-display text-xl font-bold text-foreground">8. Confidentiality</h2>
             <p>
               Ligament supports workflows involving confidential information and may facilitate NDA and confidentiality
-              agreements between agency users and partners. Each party remains responsible for complying with its contractual
+              agreements between agency users and vendors. Each party remains responsible for complying with its contractual
               confidentiality obligations. You agree to use reasonable safeguards to protect confidential information accessed
               through the platform.
             </p>

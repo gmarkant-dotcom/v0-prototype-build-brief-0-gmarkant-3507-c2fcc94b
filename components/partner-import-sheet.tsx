@@ -15,7 +15,7 @@ interface PartnerImportSheetProps {
   /** Lowercased email -> display status, for every partnership already in this agency's
    *  pool across all statuses - used by the spreadsheet review step's dedup bucket. */
   existingStatusByEmail: Map<string, string>
-  /** Which tab to open on - agency-layout.tsx's "Import Partners" links carry
+  /** Which tab to open on - agency-layout.tsx's "Import Vendors" links carry
    *  ?import=email, so the sheet opens straight to the email tab from those entry points. */
   initialTab?: ImportTab
 }
@@ -45,7 +45,7 @@ export function PartnerImportSheet({
         className="w-full sm:max-w-[520px] flex flex-col"
       >
         <SheetHeader>
-          <SheetTitle>Import partners</SheetTitle>
+          <SheetTitle>Import vendors</SheetTitle>
         </SheetHeader>
         <Tabs value={tab} onValueChange={(v) => setTab(v as ImportTab)} className="flex flex-col flex-1 min-h-0">
           <div className="px-4">

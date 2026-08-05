@@ -188,7 +188,7 @@ export async function GET() {
           partnership_id: ib?.partnership_id ?? null,
           scope_item_name: (ib?.scope_item_name || "Scope").trim() || "Scope",
           estimated_budget: ib?.estimated_budget ?? null,
-          partner_display_name: (r.partner_display_name as string) || "Partner",
+          partner_display_name: (r.partner_display_name as string) || "Vendor",
           budget_proposal: (r.budget_proposal as string | null) ?? null,
         })
       }
@@ -258,7 +258,7 @@ export async function GET() {
           (profile?.display_name || "").trim() ||
           (profile?.full_name || "").trim() ||
           (profile?.email || "").trim() ||
-          "Partner"
+          "Vendor"
         partnerNameByPartnership.set(String(row.id), label)
       }
     }
@@ -273,7 +273,7 @@ export async function GET() {
       for (const row of responseRows || []) {
         partnerNameByResponse.set(
           String(row.id),
-          ((row.partner_display_name as string | null) || "").trim() || "Partner"
+          ((row.partner_display_name as string | null) || "").trim() || "Vendor"
         )
       }
     }

@@ -106,7 +106,7 @@ function SignUpContent() {
   const inviteBannerText = useMemo(() => {
     if (!hasInviteContext) return ""
     if (hasPartnershipInviteContext) {
-      return "A lead agency has invited you to join their partner network on Ligament."
+      return "A lead agency has invited you to join their vendor network on Ligament."
     }
     if (agencyName && scopeName) {
       return `${agencyName} has invited you to respond to an RFP for ${scopeName} on Ligament.`
@@ -238,7 +238,7 @@ function SignUpContent() {
                         Lead Agency
                       </div>
                       <p className="text-sm text-foreground-muted">
-                        I manage projects and orchestrate external partners to deliver client work.
+                        I manage projects and orchestrate external vendors to deliver client work.
                       </p>
                     </div>
                   </div>
@@ -260,7 +260,7 @@ function SignUpContent() {
                     </div>
                     <div>
                       <div className="font-display font-bold text-foreground mb-1">
-                        Partner / Freelancer
+                        Vendor / Freelancer
                       </div>
                       <p className="text-sm text-foreground-muted">
                         I provide services to agencies and respond to project opportunities.
@@ -280,7 +280,7 @@ function SignUpContent() {
                       ? "bg-accent/10 text-accent border-accent/30" 
                       : "bg-purple-500/10 text-purple-400 border-purple-500/30"
                   )}>
-                    {role}
+                    {role === "agency" ? "Agency" : "Vendor"}
                   </span>
                 </div>
                 <h1 className="font-display font-black text-2xl text-foreground mb-2">
@@ -399,7 +399,7 @@ function SignUpContent() {
                 <div className="space-y-3 pt-2">
                   <div className="p-4 bg-white/5 rounded-lg border border-border/30">
                     <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-3">
-                      {role === "agency" ? "Lead Agency Agreement" : "Partner Agreement"}
+                      {role === "agency" ? "Lead Agency Agreement" : "Vendor Agreement"}
                     </div>
                     
                     <div className="space-y-3">
@@ -421,7 +421,7 @@ function SignUpContent() {
                           </Link>
                           {role === "agency" ? (
                             <span className="text-foreground-muted">
-                              , including my responsibilities as a Lead Agency for managing partner relationships, 
+                              , including my responsibilities as a Lead Agency for managing vendor relationships,
                               payment obligations, and compliance with applicable contractor laws.
                             </span>
                           ) : (
@@ -451,7 +451,7 @@ function SignUpContent() {
                           </Link>
                           {role === "agency" ? (
                             <span className="text-foreground-muted">
-                              , including how my company and partner data will be collected, used, and shared 
+                              , including how my company and vendor data will be collected, used, and shared
                               to facilitate vendor orchestration.
                             </span>
                           ) : (

@@ -14,7 +14,7 @@ export async function GET(_request: NextRequest) {
     const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
     const isPartner = profile?.role === "partner" || profile?.active_role === "partner"
     if (!isPartner) {
-      return NextResponse.json({ error: "Partner only" }, { status: 403 })
+      return NextResponse.json({ error: "Vendor only" }, { status: 403 })
     }
 
     const { data: partnerships } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)

@@ -215,7 +215,7 @@ export async function GET(request: Request) {
       const magicToken = !r.inbox_item_id ? magicTokenByResponseId[r.id as string] ?? null : null
       const pid = inboxRow ? (inboxRow as Record<string,unknown>).partner_id as string | null : null
       const pr = pid ? profileById[pid] : null
-      const displayName = pr?.company_name || pr?.full_name || pr?.email || (r.partner_id ? profileById[r.partner_id as string]?.company_name || profileById[r.partner_id as string]?.full_name || profileById[r.partner_id as string]?.email : null) || 'Partner'
+      const displayName = pr?.company_name || pr?.full_name || pr?.email || (r.partner_id ? profileById[r.partner_id as string]?.company_name || profileById[r.partner_id as string]?.full_name || profileById[r.partner_id as string]?.email : null) || 'Vendor'
       const magicProjectMeta = magicToken?.project_id ? projectMetaById[magicToken.project_id] : null
       // Requirements live on partner_rfp_inbox.master_rfp_json for partner bids, or on
       // rfp_magic_tokens.business_criteria_required for guest bids (no inbox row exists there).
@@ -374,7 +374,7 @@ export async function GET(request: Request) {
         const pid = (i.partner_id as string | null) || null
         const pr = pid ? profileById[pid] : null
         const displayName =
-          pr?.company_name || pr?.full_name || pr?.email || (i.recipient_email as string | null) || "Partner"
+          pr?.company_name || pr?.full_name || pr?.email || (i.recipient_email as string | null) || "Vendor"
         return {
           id: `inbox-${i.id}`,
           response_id: null,
@@ -383,7 +383,7 @@ export async function GET(request: Request) {
           partner_display_name: displayName,
           project_name: (inboxById[i.id as string] as Record<string,unknown>)?.project_name as string | null ?? null,
           client_name: (inboxById[i.id as string] as Record<string,unknown>)?.client_name as string | null ?? null,
-          proposal_text: "Awaiting partner response.",
+          proposal_text: "Awaiting vendor response.",
           budget_proposal: "",
           timeline_proposal: "",
           attachments: [],

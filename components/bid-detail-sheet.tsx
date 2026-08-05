@@ -343,7 +343,7 @@ function BidDetailSheetInner({
                       className="bg-success hover:bg-success/90 text-accent-foreground"
                       onClick={() => setAwardConfirmOpen(true)}
                       disabled={busy || isAwarded || isGuest}
-                      title={isGuest ? "Award isn't available yet for guest submissions, since they aren't linked to a partner account." : undefined}
+                      title={isGuest ? "Award isn't available yet for guest submissions, since they aren't linked to a vendor account." : undefined}
                     >
                       Award
                     </Button>
@@ -417,7 +417,7 @@ function BidDetailSheetInner({
 
           {!row.response_exists ? (
             <div className="p-6">
-              <p className="text-sm text-foreground-muted">Awaiting partner response.</p>
+              <p className="text-sm text-foreground-muted">Awaiting vendor response.</p>
             </div>
           ) : (
             <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 min-h-0 flex flex-col gap-0">
@@ -734,7 +734,7 @@ function BidDetailSheetInner({
                     <Textarea
                       value={feedbackDraft}
                       onChange={(e) => setFeedbackDraft(e.target.value)}
-                      placeholder="Share notes or next steps for the partner..."
+                      placeholder="Share notes or next steps for the vendor..."
                       className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 min-h-[90px]"
                     />
                     <div className="mt-2 flex items-center gap-3">

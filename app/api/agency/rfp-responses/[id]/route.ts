@@ -317,7 +317,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             html: buildBrandedEmailHtml({
               title: "Feedback on your bid",
               recipientName: partnerRecipient,
-              body: `${agencyName} has reviewed your bid for ${scopeName || "this scope"} and left feedback for your consideration.\n\nLog in to your Ligament partner portal to view the feedback and update your submission if needed.`,
+              body: `${agencyName} has reviewed your bid for ${scopeName || "this scope"} and left feedback for your consideration.\n\nLog in to your Ligament vendor portal to view the feedback and update your submission if needed.`,
               ctaText: "View Feedback",
               ctaUrl: `${baseUrl}/partner/rfps/${existing.inbox_item_id}`,
             }),
@@ -482,7 +482,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const rawScopeItemName = inbox?.scope_item_name?.trim?.() || ""
       const projectName = rawProjectName || "Project"
       const scopeItemName = rawScopeItemName || "Scope item"
-      const partnerName = partner?.company_name || partner?.full_name || partner?.email || "Partner"
+      const partnerName = partner?.company_name || partner?.full_name || partner?.email || "Vendor"
       const leadAgencyName = profile.company_name || profile.full_name || "Lead agency"
       const declineSubject = rawScopeItemName
         ? `Update on your bid for ${scopeItemName}`
@@ -490,7 +490,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const baseUrl = siteBaseUrl()
       if (partner?.email) {
         try {
-          let declineBody = `Thank you for submitting your bid. After careful review, ${leadAgencyName} has decided to move forward with another partner for this scope.\n\nWe appreciate your time and the quality of your submission. We hope to work together on a future project.`
+          let declineBody = `Thank you for submitting your bid. After careful review, ${leadAgencyName} has decided to move forward with another vendor for this scope.\n\nWe appreciate your time and the quality of your submission. We hope to work together on a future project.`
           if (declineReason && String(declineReason).trim()) {
             declineBody += `\n\nReason: ${String(declineReason).trim()}`
           }

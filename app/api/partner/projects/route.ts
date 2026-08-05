@@ -33,7 +33,7 @@ export async function GET() {
       .eq("id", user.id)
       .single()
     if (profileErr || (profile?.role !== "partner" && profile?.active_role !== "partner")) {
-      return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
+      return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStoreHeaders })
     }
 
     const { data: userPartnerships, error: pErr } = await supabase

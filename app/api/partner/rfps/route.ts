@@ -37,7 +37,7 @@ export async function GET() {
       console.warn(
         `[partner/rfps] GET: wrong role — userId=${user.id} email=${user.email ?? profile?.email ?? "n/a"} profileRole=${profile?.role ?? "null"}`
       )
-      return NextResponse.json({ error: "Partners only" }, { status: 403, headers: noStoreHeaders })
+      return NextResponse.json({ error: "Vendors only" }, { status: 403, headers: noStoreHeaders })
     }
 
     // RLS applies: partner sees rows where partner_id = auth.uid() OR recipient_email matches profile email

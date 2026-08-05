@@ -54,17 +54,17 @@ const demoDocuments: Document[] = [
   // Partner Brief Templates (for external sharing)
   {
     id: "partner-1",
-    name: "Partner Brief Template - Standard",
+    name: "Vendor Brief Template - Standard",
     type: "partner_brief_template",
     format: "docx",
     uploadedAt: "2024-01-20",
     size: "128 KB",
     isTemplate: true,
-    description: "Clean, external-facing brief template for sharing project requirements with potential partners.",
+    description: "Clean, external-facing brief template for sharing project requirements with potential vendors.",
   },
   {
     id: "partner-2",
-    name: "Partner Brief Template - Production",
+    name: "Vendor Brief Template - Production",
     type: "partner_brief_template",
     format: "docx",
     uploadedAt: "2024-01-20",
@@ -74,14 +74,14 @@ const demoDocuments: Document[] = [
   },
   {
     id: "partner-3",
-    name: "NWSL Creator Content Series - Partner Brief",
+    name: "NWSL Creator Content Series - Vendor Brief",
     type: "partner_brief_template",
     format: "pdf",
     uploadedAt: "2024-01-18",
     size: "1.8 MB",
     project: "NWSL Creator Content Series",
     isTemplate: false,
-    description: "External-ready brief for video production partners. Confidential budget details redacted.",
+    description: "External-ready brief for video production vendors. Confidential budget details redacted.",
   },
   // Master Requirements Document
   {
@@ -92,7 +92,7 @@ const demoDocuments: Document[] = [
     uploadedAt: "2024-02-15",
     size: "892 KB",
     isTemplate: true,
-    description: "Critical ways of working, compliance requirements, and mandatory standards that all partners must follow.",
+    description: "Critical ways of working, compliance requirements, and mandatory standards that all vendors must follow.",
   },
   // Original documents
   {
@@ -156,7 +156,7 @@ const demoDocuments: Document[] = [
 const typeLabels: Record<Document["type"], string> = {
   client_brief: "Client Brief",
   master_brief: "Master Brief (Internal)",
-  partner_brief_template: "Partner Brief",
+  partner_brief_template: "Vendor Brief",
   rfp_template: "RFP Template",
   sow_template: "SOW Template",
   nda_template: "NDA Template",
@@ -186,7 +186,7 @@ export default function DocumentsPage() {
           <StageHeader
             stageNumber="◈"
             title="Master Documents"
-            subtitle="Agency legal documents and key templates power RFPs and partner onboarding."
+            subtitle="Agency legal documents and key templates power RFPs and vendor onboarding."
           />
           <AgencyDocumentLibraryManager />
         </div>
@@ -271,7 +271,7 @@ export default function DocumentsPage() {
         <StageHeader
           stageNumber="◈"
           title="Master Documents"
-          subtitle="Store client briefs, RFP/SOW templates, and legal documents. These will be used when generating RFPs and onboarding partners."
+          subtitle="Store client briefs, RFP/SOW templates, and legal documents. These will be used when generating RFPs and onboarding vendors."
         />
         
         {/* Stats */}
@@ -295,7 +295,7 @@ export default function DocumentsPage() {
               <Send className="w-4 h-4 text-accent" />
             </div>
             <div className="font-display font-bold text-2xl text-accent">{partnerBriefs.length}</div>
-            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">Partner briefs</div>
+            <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">Vendor briefs</div>
           </GlassCard>
           <GlassCard className="p-4">
             <div className="w-8 h-8 rounded-lg bg-warning/10 flex items-center justify-center mb-3">
@@ -319,7 +319,7 @@ export default function DocumentsPage() {
             {[
               { id: "all", label: "All Documents" },
               { id: "master_briefs", label: "Master Briefs" },
-              { id: "partner_briefs", label: "Partner Briefs" },
+              { id: "partner_briefs", label: "Vendor Briefs" },
               { id: "requirements", label: "Requirements" },
               { id: "templates", label: "Templates" },
             ].map((tab) => (
@@ -403,7 +403,7 @@ export default function DocumentsPage() {
                       Preview
                     </Button>
                     <Button size="sm" className="flex-1 text-xs bg-accent text-accent-foreground hover:bg-accent/90">
-                      Create partner brief
+                      Create vendor brief
                     </Button>
                   </div>
                 </GlassCard>
@@ -416,11 +416,11 @@ export default function DocumentsPage() {
         {(activeTab === "all" || activeTab === "partner_briefs") && partnerBriefs.length > 0 && (
           <div className="mb-8">
             <div className="flex items-center gap-3 mb-4">
-              <h3 className="font-display font-bold text-lg text-foreground">Partner briefs</h3>
+              <h3 className="font-display font-bold text-lg text-foreground">Vendor briefs</h3>
               <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-accent/20 text-accent uppercase">Shareable</span>
             </div>
             <p className="font-mono text-xs text-foreground-muted mb-4">
-              Clean, external-facing briefs for sharing with potential partners. Confidential details redacted.
+              Clean, external-facing briefs for sharing with potential vendors. Confidential details redacted.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredDocs.filter(d => d.type === "partner_brief_template").map((doc) => (

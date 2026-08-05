@@ -121,7 +121,7 @@ export async function POST(
       .single()
 
     if (existing) {
-      return NextResponse.json({ error: 'Partner already assigned to this project' }, { status: 400 })
+      return NextResponse.json({ error: 'Vendor already assigned to this project' }, { status: 400 })
     }
 
     const insertPayload: Record<string, unknown> = {
@@ -240,7 +240,7 @@ export async function PATCH(
 
     if (isPartner && assignment.status === 'invited') {
       if (!['accepted', 'declined'].includes(status)) {
-        return NextResponse.json({ error: 'Invalid status for partner' }, { status: 400 })
+        return NextResponse.json({ error: 'Invalid status for vendor' }, { status: 400 })
       }
 
       const { data: updated, error } = await supabase
@@ -261,7 +261,7 @@ export async function PATCH(
         .eq('id', user.id)
         .single()
 
-      const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'Partner'
+      const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'Vendor'
       const projectTitle = assignment.project?.title || 'Project'
 
       await notifyProjectResponse(
@@ -287,12 +287,12 @@ export async function PATCH(
         const responsePlain =
           status === 'accepted'
             ? `${partnerName} has accepted the RFP and confirmed their interest in ${projectTitle}.\n\nYou can now expect a bid submission from them in the platform.`
-            : `${partnerName} has declined the RFP for ${projectTitle}.\n\nYou may want to broadcast this scope to additional partners or reach out directly through the platform.`
+            : `${partnerName} has declined the RFP for ${projectTitle}.\n\nYou may want to broadcast this scope to additional vendors or reach out directly through the platform.`
         await sendTransactionalEmail({
           to: agencyUser.email,
           subject: responseSubject,
           html: buildBrandedEmailHtml({
-            title: status === 'accepted' ? "Partner accepted RFP" : "Partner declined RFP",
+            title: status === 'accepted' ? "Vendor accepted RFP" : "Vendor declined RFP",
             recipientName:
               agencyUser.company_name?.trim() ||
               agencyUser.full_name?.trim() ||

@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
           message: partnerProfileErr.message,
           code: partnerProfileErr.code,
         })
-        return NextResponse.json({ error: 'Failed to load partner profile' }, { status: 500, headers: noStoreHeaders })
+        return NextResponse.json({ error: 'Failed to load vendor profile' }, { status: 500, headers: noStoreHeaders })
       }
 
       // Get partnerships by partner_id
@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
 
     if (profile?.role !== 'agency') {
-      return NextResponse.json({ error: 'Only agencies can invite partners' }, { status: 403 })
+      return NextResponse.json({ error: 'Only agencies can invite vendors' }, { status: 403 })
     }
 
     const payload = (await request.json().catch(() => ({}))) as {
@@ -324,7 +324,7 @@ export async function POST(request: NextRequest) {
     const partnerEmail = typeof payload.partnerEmail === 'string' ? payload.partnerEmail.trim() : ''
 
     if (!partnerId && !partnerEmail) {
-      return NextResponse.json({ error: 'Partner ID or partner email required' }, { status: 400 })
+      return NextResponse.json({ error: 'Vendor ID or vendor email required' }, { status: 400 })
     }
 
     let partner: { id: string; email: string | null; role: string | null } | null = null
@@ -344,10 +344,10 @@ export async function POST(request: NextRequest) {
           message: partnerByIdErr.message,
           code: partnerByIdErr.code,
         })
-        return NextResponse.json({ error: 'Failed to look up partner' }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to look up vendor' }, { status: 500 })
       }
       if (!partnerById) {
-        return NextResponse.json({ error: 'Partner not found' }, { status: 404 })
+        return NextResponse.json({ error: 'Vendor not found' }, { status: 404 })
       }
       partner = partnerById
     } else {
@@ -366,7 +366,7 @@ export async function POST(request: NextRequest) {
           message: partnerLookupErr.message,
           code: partnerLookupErr.code,
         })
-        return NextResponse.json({ error: 'Failed to look up partner' }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to look up vendor' }, { status: 500 })
       }
       partner = partnerByEmail
     }
@@ -453,7 +453,7 @@ export async function POST(request: NextRequest) {
         try {
           const reinviteSent = await sendTransactionalEmail({
             to: normalizedPartnerEmail,
-            subject: `${agencyName} has re-invited you to their partner network on Ligament`,
+            subject: `${agencyName} has re-invited you to their vendor network on Ligament`,
             html: buildBrandedEmailHtml({
               title: "Partnership re-invitation",
               recipientName: normalizedPartnerEmail,
@@ -531,13 +531,13 @@ export async function POST(request: NextRequest) {
       const acceptUrl = partner
         ? `${siteUrl}/partner/invitations`
         : `${siteUrl}/auth/sign-up?invite_type=partnership&email=${encodeURIComponent(normalizedPartnerEmail)}&next=${encodeURIComponent("/partner/invitations")}`
-      let inviteBody = `${agencyName} has selected you as a potential partner on Ligament, a platform for vendor orchestration between creative and production agencies.\n\nJoining their network means you will be considered for scoped project opportunities they broadcast directly to their trusted partners.`
+      let inviteBody = `${agencyName} has selected you as a potential vendor on Ligament, a platform for vendor orchestration between creative and production agencies.\n\nJoining their network means you will be considered for scoped project opportunities they broadcast directly to their trusted vendors.`
       if (message && String(message).trim()) {
         inviteBody += `\n\nPersonal message:\n${String(message).trim()}`
       }
       const inviteSent = await sendTransactionalEmail({
         to: normalizedPartnerEmail,
-        subject: `${agencyName} has invited you to join their partner network on Ligament`,
+        subject: `${agencyName} has invited you to join their vendor network on Ligament`,
         html: buildBrandedEmailHtml({
           title: "Partnership invitation",
           recipientName: normalizedPartnerEmail,
@@ -776,7 +776,7 @@ export async function PATCH(request: NextRequest) {
           .eq('id', user.id)
           .single()
         
-        const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'A partner'
+        const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'A vendor'
         
         // Notify agency that partner accepted
         await notifyPartnershipAccepted(supabase, partnership.agency_id, partnerName, partnershipId)
@@ -792,14 +792,14 @@ export async function PATCH(request: NextRequest) {
             to: agencyProfile.email,
             subject: `${partnerName} accepted your partnership invitation`,
             html: buildBrandedEmailHtml({
-              title: "Partner accepted invitation",
+              title: "Vendor accepted invitation",
               recipientName:
                 agencyProfile.company_name?.trim() ||
                 agencyProfile.full_name?.trim() ||
                 agencyProfile.email?.trim() ||
                 "there",
-              body: `${partnerName} has accepted your invitation and joined your partner network on Ligament.\n\nThey are now available to receive RFP broadcasts from your agency.`,
-              ctaText: "View Partner",
+              body: `${partnerName} has accepted your invitation and joined your vendor network on Ligament.\n\nThey are now available to receive RFP broadcasts from your agency.`,
+              ctaText: "View Vendor",
               ctaUrl: `${siteBaseUrl()}/agency/pool`,
             }),
           })
@@ -824,7 +824,7 @@ export async function PATCH(request: NextRequest) {
           .eq('id', user.id)
           .single()
         
-        const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'A partner'
+        const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'A vendor'
         
         // Notify agency that partner declined
         const { notifyPartnershipDeclined } = await import('@/lib/notifications')
@@ -849,8 +849,8 @@ export async function PATCH(request: NextRequest) {
                   agencyProfile.full_name?.trim() ||
                   agencyProfile.email?.trim() ||
                   "there",
-                body: `${partnerName} has declined your partnership invitation on Ligament.\n\nYou can invite other partners from your partner pool or discover new ones in the marketplace.`,
-                ctaText: "View Partner Pool",
+                body: `${partnerName} has declined your partnership invitation on Ligament.\n\nYou can invite other vendors from your vendor pool or discover new ones in the marketplace.`,
+                ctaText: "View Vendor Pool",
                 ctaUrl: `${siteBaseUrl()}/agency/pool`,
               }),
             })

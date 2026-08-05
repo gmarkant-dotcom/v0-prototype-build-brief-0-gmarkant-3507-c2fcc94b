@@ -34,11 +34,11 @@ function ConfirmedContent() {
           </h1>
           
           <p className="text-foreground-muted mb-6">
-            Your email has been successfully verified. Your {isAgency ? "Lead Agency" : "Partner Agency"} account is now active.
+            Your email has been successfully verified. Your {isAgency ? "Lead Agency" : "Vendor"} account is now active.
           </p>
 
           <p className="text-foreground-muted text-sm mb-8">
-            Please log in to access your {isAgency ? "agency dashboard" : "partner portal"}.
+            Please log in to access your {isAgency ? "agency dashboard" : "vendor portal"}.
           </p>
 
           <Button asChild className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-mono">

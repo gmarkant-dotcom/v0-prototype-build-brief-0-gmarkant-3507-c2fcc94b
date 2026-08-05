@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     // Only block a pure agency profile that isn't currently acting as partner - a dual-role
     // account with active_role="partner" is legitimately submitting a bid in this session.
     if (profile?.role === "agency" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partners only" }, { status: 403 })
+      return NextResponse.json({ error: "Vendors only" }, { status: 403 })
     }
 
     const formData = await request.formData()

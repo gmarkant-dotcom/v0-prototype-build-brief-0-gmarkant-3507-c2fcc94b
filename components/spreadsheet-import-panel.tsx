@@ -103,7 +103,7 @@ export function SpreadsheetImportPanel({
   onImported,
 }: {
   active: boolean
-  /** Lowercased email -> display status ("Active partner", "Invited", "Discovered") for
+  /** Lowercased email -> display status ("Active vendor", "Invited", "Discovered") for
    *  every partnership already in this agency's pool, across all statuses. */
   existingStatusByEmail: Map<string, string>
   onDone: () => void
@@ -271,12 +271,12 @@ export function SpreadsheetImportPanel({
         body: JSON.stringify({ rows }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || "Failed to import partners")
+      if (!res.ok) throw new Error(data?.error || "Failed to import vendors")
       setImportResult(data as ImportResponse)
       setStage("done")
       onImported?.()
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : "Failed to import partners")
+      setImportError(err instanceof Error ? err.message : "Failed to import vendors")
       setStage("review")
     }
   }
@@ -465,7 +465,7 @@ export function SpreadsheetImportPanel({
                 disabled={selected.size === 0}
                 className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
               >
-                {`Add ${selected.size} partner${selected.size !== 1 ? "s" : ""} to Pool`}
+                {`Add ${selected.size} vendor${selected.size !== 1 ? "s" : ""} to Pool`}
               </Button>
             </div>
           </div>
@@ -483,7 +483,7 @@ export function SpreadsheetImportPanel({
           <div className="rounded-xl border border-accent/30 bg-accent/10 p-6 text-center space-y-3">
             <Check className="w-8 h-8 text-accent mx-auto" />
             <p className="text-sm font-display font-bold text-foreground">
-              {importResult.added} partner{importResult.added !== 1 ? "s" : ""} added to your pool
+              {importResult.added} vendor{importResult.added !== 1 ? "s" : ""} added to your pool
             </p>
             <p className="text-xs text-foreground-muted">
               {importResult.duplicates} already in your pool skipped

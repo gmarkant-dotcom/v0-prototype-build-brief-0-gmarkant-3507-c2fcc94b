@@ -130,7 +130,7 @@ export async function POST(request: Request) {
           }
         : {
             subject: `New RFP from ${agencyName}: ${scopeName}`,
-            heading: "New RFP in your partner inbox",
+            heading: "New RFP in your vendor inbox",
             paragraphs: [
               `${agencyName} has sent you an RFP for ${scopeName} on Ligament.`,
               "Review the scope, timeline, and budget details, then submit your bid directly through the platform.",

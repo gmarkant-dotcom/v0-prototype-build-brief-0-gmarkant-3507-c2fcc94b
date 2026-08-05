@@ -57,14 +57,14 @@ export async function POST(request: NextRequest) {
 
     const subject = isClaimed
       ? `${agencyName} wants to connect with you on Ligament`
-      : `${agencyName} added you to their partner network on Ligament`
+      : `${agencyName} added you to their vendor network on Ligament`
     const ctaUrl = isClaimed
       ? `${siteBaseUrl()}/partner/invitations`
       : `${siteBaseUrl()}/auth/sign-up?email=${encodeURIComponent(vendorEmail)}&source=pool_resend`
     const ctaText = isClaimed ? "View Invitation" : "Create Your Profile"
     const body_ = isClaimed
       ? `${agencyName} wants to connect with you on Ligament based on a bid you submitted.\n\nSign in to view and accept the invitation.`
-      : `${agencyName} has added you to their partner network on Ligament based on a bid you submitted.\n\nCreate your profile to be discoverable to other agencies and track all your bids in one place.`
+      : `${agencyName} has added you to their vendor network on Ligament based on a bid you submitted.\n\nCreate your profile to be discoverable to other agencies and track all your bids in one place.`
 
     const sent = await sendTransactionalEmail({
       to: vendorEmail,

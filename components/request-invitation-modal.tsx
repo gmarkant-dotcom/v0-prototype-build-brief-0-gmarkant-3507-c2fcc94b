@@ -123,7 +123,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
 
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-6">
               <p className="text-sm text-amber-200">
-                <strong>Partner accounts require an agency connection.</strong> Enter the details of a Lead Agency you&apos;d like to work with, and we&apos;ll send them your request.
+                <strong>Vendor accounts require an agency connection.</strong> Enter the details of a Lead Agency you&apos;d like to work with, and we&apos;ll send them your request.
               </p>
             </div>
 

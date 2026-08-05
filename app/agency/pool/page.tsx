@@ -129,7 +129,7 @@ const demoInvitations: PartnerInvitation[] = [
     status: "accepted",
     invitedAt: "2026-02-15",
     acceptedAt: "2026-02-18",
-    invitationMessage: "We'd love to have you join our partner network.",
+    invitationMessage: "We'd love to have you join our vendor network.",
   },
   {
     id: "demo-inv-2",
@@ -137,7 +137,7 @@ const demoInvitations: PartnerInvitation[] = [
     partnerName: "Tandem Social",
     status: "pending",
     invitedAt: "2026-03-20",
-    invitationMessage: "Looking for social media partners for Q2 campaigns.",
+    invitationMessage: "Looking for social media vendors for Q2 campaigns.",
   },
 ]
 
@@ -591,7 +591,7 @@ function PartnerPoolPageInner() {
           await loadPartnerships()
         } else {
           const data = await response.json()
-          alert(data.error || 'Failed to remove partner')
+          alert(data.error || 'Failed to remove vendor')
         }
       } else {
         // For demo partners without a partnership record, just remove locally
@@ -599,7 +599,7 @@ function PartnerPoolPageInner() {
       }
     } catch (error) {
       console.error('Error deleting partner:', error)
-      alert('Failed to remove partner')
+      alert('Failed to remove vendor')
     }
     setIsDeleting(false)
     setShowDeleteConfirm(false)
@@ -829,16 +829,16 @@ function PartnerPoolPageInner() {
         setSuccessModal({
           show: true,
           title: data.partnerExists ? 'Invitation Sent' : 'Invitation Created',
-          message: data.partnerExists 
-            ? 'Your invitation has been sent. The partner will receive a notification to accept.'
-            : 'The partner will see this invitation when they sign up with this email address.',
+          message: data.partnerExists
+            ? 'Your invitation has been sent. The vendor will receive a notification to accept.'
+            : 'The vendor will see this invitation when they sign up with this email address.',
           email: savedEmail
         })
       } else {
         setSuccessModal({
           show: true,
           title: 'Unable to Send Invitation',
-          message: data.error || 'Failed to invite partner. Please try again.',
+          message: data.error || 'Failed to invite vendor. Please try again.',
         })
       }
     } catch (error) {
@@ -897,7 +897,7 @@ function PartnerPoolPageInner() {
   // Sample partner template for production - shows all editable fields
   const samplePartnerTemplate: Partner = {
     id: "sample-1",
-    name: "Partner organization",
+    name: "Vendor organization",
     discipline: "Video Production",
     type: "agency",
     location: "New York, NY",
@@ -936,7 +936,7 @@ function PartnerPoolPageInner() {
     if (isDemo) {
       const newPartner: Partner = {
         id: `partner-${Date.now()}`,
-        name: data.companyName || data.contactName || "New Partner",
+        name: data.companyName || data.contactName || "New Vendor",
         discipline: "General",
         type: "agency",
         location: "",
@@ -978,12 +978,12 @@ function PartnerPoolPageInner() {
         }),
       })
       const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json?.error || 'Failed to add partner')
+      if (!res.ok) throw new Error(json?.error || 'Failed to add vendor')
       await loadPartnerships()
       setShowAddPartnerModal(false)
       setEditingPartner(null)
     } catch (err) {
-      setAddPartnerError(err instanceof Error ? err.message : 'Failed to add partner')
+      setAddPartnerError(err instanceof Error ? err.message : 'Failed to add vendor')
     } finally {
       setAddPartnerSaving(false)
     }
@@ -1204,8 +1204,8 @@ function PartnerPoolPageInner() {
       if (!email) continue
       const label = p.partnerId
         ? p.status === "active"
-          ? "Active partner"
-          : "Partner (pending)"
+          ? "Active vendor"
+          : "Vendor (pending)"
         : p.invitationSentAt
           ? "Invited"
           : "Discovered"
@@ -1245,8 +1245,8 @@ function PartnerPoolPageInner() {
         <div className="flex items-start justify-between mb-6">
           <StageHeader
             stageNumber="◈"
-            title="Partner Pool"
-            subtitle="Your curated roster of trusted partners. View credentials, track legal status, add notes, and manage relationships."
+            title="Vendor Pool"
+            subtitle="Your curated roster of trusted vendors. View credentials, track legal status, add notes, and manage relationships."
           />
           <div className="flex items-center gap-3">
             <Button
@@ -1255,7 +1255,7 @@ function PartnerPoolPageInner() {
               className="border-border text-foreground hover:bg-white/5 flex items-center gap-2"
             >
               <Upload className="w-4 h-4" />
-              Import partners
+              Import vendors
             </Button>
             <Button
               onClick={() => {
@@ -1266,7 +1266,7 @@ function PartnerPoolPageInner() {
               className="border-border text-foreground hover:bg-white/5 flex items-center gap-2"
             >
               <Compass className="w-4 h-4" />
-              Discover new partners
+              Discover new vendors
             </Button>
             <Button
               onClick={() => {
@@ -1277,14 +1277,14 @@ function PartnerPoolPageInner() {
               className="border-accent text-accent hover:bg-accent/10 flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Add partner
+              Add vendor
             </Button>
             <Button
               onClick={() => setShowInviteModal(true)}
               className="bg-accent text-accent-foreground hover:bg-accent/90 flex items-center gap-2"
             >
               <UserPlus className="w-4 h-4" />
-              Invite partner
+              Invite vendor
             </Button>
           </div>
         </div>
@@ -1297,7 +1297,7 @@ function PartnerPoolPageInner() {
             </div>
             <div className="font-display font-bold text-2xl text-foreground">{activePartnersStat}</div>
             <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">
-              Active partners
+              Active vendors
             </div>
           </GlassCard>
           <GlassCard className="p-4">
@@ -1306,7 +1306,7 @@ function PartnerPoolPageInner() {
             </div>
             <div className="font-display font-bold text-2xl text-foreground">{partnersWithActiveEngagementsStat}</div>
             <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">
-              Partners with active engagements
+              Vendors with active engagements
             </div>
           </GlassCard>
           <GlassCard className="p-4">
@@ -1493,15 +1493,15 @@ function PartnerPoolPageInner() {
               all three columns for search. */}
           <div className="rounded-xl border border-border bg-card p-5 flex flex-col">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="font-display font-bold text-sm text-foreground">Active partners</h2>
+              <h2 className="font-display font-bold text-sm text-foreground">Active vendors</h2>
               <span className="font-mono text-2xs text-foreground-muted">{filteredNetworkRows.length}</span>
             </div>
             <p className="text-xs text-foreground-muted mb-4">
-              Partners you can send RFPs to and collaborate with directly.
+              Vendors you can send RFPs to and collaborate with directly.
             </p>
             <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
               {filteredNetworkRows.length === 0 ? (
-                  <p className="text-sm text-foreground-muted">No active partners match your search or filters.</p>
+                  <p className="text-sm text-foreground-muted">No active vendors match your search or filters.</p>
                 ) : (
                     filteredNetworkRows.map((row) => {
                   if (row.mode === "demo") {
@@ -1633,7 +1633,7 @@ function PartnerPoolPageInner() {
                           )}
                         >
                           {p.partnerLogoUrl ? (
-                            <img src={p.partnerLogoUrl} alt={p.partnerCompany || p.partnerName || "Partner"} className="w-full h-full object-cover" />
+                            <img src={p.partnerLogoUrl} alt={p.partnerCompany || p.partnerName || "Vendor"} className="w-full h-full object-cover" />
                           ) : (
                             <Building2
                               className={cn(
@@ -1730,7 +1730,7 @@ function PartnerPoolPageInner() {
                 <span className="font-mono text-2xs text-foreground-muted">{filteredInvitedRows.length}</span>
               </div>
               <p className="text-xs text-foreground-muted mb-4">
-                Contacts who have been sent an invitation to join your partner network.
+                Contacts who have been sent an invitation to join your vendor network.
               </p>
               <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
               {filteredInvitedRows.length === 0 ? (
@@ -1873,7 +1873,7 @@ function PartnerPoolPageInner() {
             <h3 className="font-display font-bold text-lg text-foreground mb-4">Discovery</h3>
             {filteredPartners.length === 0 ? (
               <GlassCard className="p-8 text-center col-span-full mb-6">
-                <p className="text-foreground-muted">No partners match your filters.</p>
+                <p className="text-foreground-muted">No vendors match your filters.</p>
               </GlassCard>
             ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -1907,7 +1907,7 @@ function PartnerPoolPageInner() {
                     handleEditPartner(partner)
                   }}
                   className="w-8 h-8 rounded-full flex items-center justify-center transition-colors bg-white/5 text-foreground/90 hover:text-accent hover:bg-accent/10"
-                  title="Edit partner"
+                  title="Edit vendor"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
@@ -1922,7 +1922,7 @@ function PartnerPoolPageInner() {
                       ? "bg-accent/20 text-accent"
                       : "bg-white/5 text-foreground/90 hover:text-accent"
                   )}
-                  title="Bookmark partner"
+                  title="Bookmark vendor"
                 >
                   <Star className={cn("w-4 h-4", partner.bookmarked && "fill-current")} />
                 </button>
@@ -2004,10 +2004,10 @@ function PartnerPoolPageInner() {
               <UserPlus className="w-8 h-8 text-accent" />
             </div>
             <h3 className="font-display font-bold text-xl text-foreground mb-2">
-              Build Your Partner Network
+              Build Your Vendor Network
             </h3>
             <p className="text-foreground-muted max-w-md mx-auto mb-6">
-              Start by adding partners to your pool. You can manually add partners or invite them via email to join your network.
+              Start by adding vendors to your pool. You can manually add vendors or invite them via email to join your network.
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button
@@ -2018,7 +2018,7 @@ function PartnerPoolPageInner() {
                 className="bg-accent text-accent-foreground hover:bg-accent/90"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Add Partners
+                Add Vendors
               </Button>
               <Button
                 variant="outline"
@@ -2042,10 +2042,10 @@ function PartnerPoolPageInner() {
               </div>
               <div className="flex-1">
                 <h3 className="font-display font-bold text-foreground">
-                  {accessRequests.length} Partner Request{accessRequests.length > 1 ? 's' : ''} Pending
+                  {accessRequests.length} Vendor Request{accessRequests.length > 1 ? 's' : ''} Pending
                 </h3>
                 <p className="font-mono text-xs text-foreground-muted">
-                  Partners are requesting to join your network
+                  Vendors are requesting to join your network
                 </p>
               </div>
             </div>
@@ -2213,9 +2213,9 @@ function PartnerPoolPageInner() {
         }}>
           <DialogContent className="bg-card border-border text-foreground">
             <DialogHeader>
-              <DialogTitle className="font-display">Remove partner?</DialogTitle>
+              <DialogTitle className="font-display">Remove vendor?</DialogTitle>
               <DialogDescription className="text-foreground-muted">
-                Are you sure you want to remove <span className="font-semibold text-foreground">{partnerToDelete?.name}</span> from your partner pool? They will no longer have access to your projects. This action cannot be undone.
+                Are you sure you want to remove <span className="font-semibold text-foreground">{partnerToDelete?.name}</span> from your vendor pool? They will no longer have access to your projects. This action cannot be undone.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2">
@@ -2233,7 +2233,7 @@ function PartnerPoolPageInner() {
                 onClick={handleDeletePartner}
                 disabled={isDeleting}
               >
-                {isDeleting ? 'Removing...' : 'Remove partner'}
+                {isDeleting ? 'Removing...' : 'Remove vendor'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2277,7 +2277,7 @@ function PartnerPoolPageInner() {
                     <UserPlus className="w-5 h-5 text-accent" />
                   </div>
                   <div>
-                    <h2 className="font-display font-bold text-xl text-foreground">Invite partner</h2>
+                    <h2 className="font-display font-bold text-xl text-foreground">Invite vendor</h2>
                     <p className="font-mono text-xs text-foreground-muted">Send an invitation to join your network</p>
                   </div>
                 </div>
@@ -2289,13 +2289,13 @@ function PartnerPoolPageInner() {
               <div className="space-y-4">
                 <div>
                   <label className="font-mono text-2xs text-foreground-muted uppercase tracking-wider block mb-2">
-                    Partner Email *
+                    Vendor Email *
                   </label>
                   <Input
                     type="email"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="partner@company.com"
+                    placeholder="vendor@company.com"
                     className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                   />
                 </div>
@@ -2307,7 +2307,7 @@ function PartnerPoolPageInner() {
                   <Textarea
                     value={inviteMessage}
                     onChange={(e) => setInviteMessage(e.target.value)}
-                    placeholder="We'd love to have you join our partner network for upcoming projects..."
+                    placeholder="We'd love to have you join our vendor network for upcoming projects..."
                     rows={3}
                     className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 resize-none"
                   />
@@ -2319,8 +2319,8 @@ function PartnerPoolPageInner() {
                     <div className="text-xs text-blue-300">
                       <p className="font-medium mb-1">Invitation Process:</p>
                       <ol className="list-decimal list-inside space-y-0.5 text-blue-400">
-                        <li>Partner receives email invitation</li>
-                        <li>Partner accepts and creates account</li>
+                        <li>Vendor receives email invitation</li>
+                        <li>Vendor accepts and creates account</li>
                         <li>You confirm to complete the connection</li>
                       </ol>
                     </div>
@@ -2430,7 +2430,7 @@ function PartnerPoolPageInner() {
           className="w-full sm:max-w-[480px] overflow-y-auto"
         >
           <SheetHeader>
-            <SheetTitle>Discover new partners</SheetTitle>
+            <SheetTitle>Discover new vendors</SheetTitle>
           </SheetHeader>
           <div className="px-4 pb-4">
             {marketplaceOpened && <MarketplaceContent compact excludePartnerIds={activePartnerIds} />}
@@ -2495,10 +2495,10 @@ function AddEditPartnerModal({
             </div>
             <div>
               <h2 className="font-display font-bold text-xl text-foreground">
-                {partner?.id ? "Edit Partner" : "Add Partner"}
+                {partner?.id ? "Edit Vendor" : "Add Vendor"}
               </h2>
               <p className="font-mono text-xs text-foreground-muted">
-                {partner?.id ? "Update partner information" : "Manually add a partner to your pool"}
+                {partner?.id ? "Update vendor information" : "Manually add a vendor to your pool"}
               </p>
             </div>
           </div>
@@ -2551,7 +2551,7 @@ function AddEditPartnerModal({
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="contact@partner.com"
+                  placeholder="contact@vendor.com"
                   className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 />
               </div>
@@ -2573,7 +2573,7 @@ function AddEditPartnerModal({
                 <Input
                   value={formData.website}
                   onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                  placeholder="www.partner.com"
+                  placeholder="www.vendor.com"
                   className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                 />
               </div>
@@ -2606,7 +2606,7 @@ function AddEditPartnerModal({
               disabled={!canSave || saving}
               className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              {saving ? "Saving..." : partner?.id ? "Update Partner" : "Add Partner"}
+              {saving ? "Saving..." : partner?.id ? "Update Vendor" : "Add Vendor"}
             </Button>
           </div>
         </div>

@@ -236,7 +236,7 @@ export default function AdminUsersPage() {
               </div>
               <div>
                 <div className="text-2xl font-display font-bold text-white">{partnerCount}</div>
-                <div className="text-xs text-white/50">Partners</div>
+                <div className="text-xs text-white/50">Vendors</div>
               </div>
             </div>
           </div>
@@ -288,7 +288,7 @@ export default function AdminUsersPage() {
                         ? "bg-purple-500/10 text-purple-400"
                         : "bg-white/10 text-white/50"
                     )}>
-                      {user.role === 'agency' ? 'Lead Agency' : user.role === 'partner' ? 'Partner' : 'Unknown'}
+                      {user.role === 'agency' ? 'Lead Agency' : user.role === 'partner' ? 'Vendor' : 'Unknown'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-white/60">

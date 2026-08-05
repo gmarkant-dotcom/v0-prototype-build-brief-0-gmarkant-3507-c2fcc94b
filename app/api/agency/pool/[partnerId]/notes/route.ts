@@ -64,7 +64,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
   try {
     const { partnerId } = await params
     if (!partnerId) {
-      return NextResponse.json({ error: "Missing partner id" }, { status: 400, headers: noStore })
+      return NextResponse.json({ error: "Missing vendor id" }, { status: 400, headers: noStore })
     }
 
     const supabase = await createClient()
@@ -99,7 +99,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
   try {
     const { partnerId } = await params
     if (!partnerId) {
-      return NextResponse.json({ error: "Missing partner id" }, { status: 400, headers: noStore })
+      return NextResponse.json({ error: "Missing vendor id" }, { status: 400, headers: noStore })
     }
 
     const supabase = await createClient()

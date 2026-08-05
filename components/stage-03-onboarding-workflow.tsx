@@ -381,7 +381,7 @@ export function Stage03OnboardingWorkflow() {
     setError(null)
     if (!checkFeatureAccess("onboarding package send")) return
     if (!selectedProject?.id || !partnershipId) {
-      setError("Select a partner assignment.")
+      setError("Select a vendor assignment.")
       return
     }
 
@@ -473,7 +473,7 @@ export function Stage03OnboardingWorkflow() {
         <StageHeader
           stageNumber="03"
           title="Onboarding + Ways of Working"
-          subtitle="Build onboarding packages from your document library and send to assigned partners."
+          subtitle="Build onboarding packages from your document library and send to assigned vendors."
           aiPowered={false}
         />
         <div className="flex items-center gap-2 text-foreground-muted py-12">
@@ -491,7 +491,7 @@ export function Stage03OnboardingWorkflow() {
           <StageHeader
             stageNumber="03"
             title="Onboarding + Ways of Working"
-            subtitle="Build onboarding packages from your document library and send to assigned partners."
+            subtitle="Build onboarding packages from your document library and send to assigned vendors."
             aiPowered={false}
           />
           <div className="flex items-center gap-2 text-foreground-muted py-12">
@@ -506,7 +506,7 @@ export function Stage03OnboardingWorkflow() {
         <StageHeader
           stageNumber="03"
           title="Onboarding + Ways of Working"
-          subtitle="Build onboarding packages from your document library and send to assigned partners."
+          subtitle="Build onboarding packages from your document library and send to assigned vendors."
           aiPowered={false}
         />
         <EmptyState
@@ -523,7 +523,7 @@ export function Stage03OnboardingWorkflow() {
       <StageHeader
         stageNumber="03"
         title="Onboarding + Ways of Working"
-        subtitle="Select agency library documents, add project files or links, set kickoff preferences, and send to a partner."
+        subtitle="Select agency library documents, add project files or links, set kickoff preferences, and send to a vendor."
         aiPowered={false}
       />
 
@@ -534,19 +534,19 @@ export function Stage03OnboardingWorkflow() {
         </div>
       ) : onboardingPartners.length === 0 ? (
         <EmptyState
-          title="No awarded partner found for onboarding"
+          title="No awarded vendor found for onboarding"
           description="Award a bid in Bid Management (with the broadcast linked to this project), or ensure an active project assignment exists. Awarded bids without an assignment row still appear here when the inbox is tied to this project."
           icon="onboarding"
         />
       ) : (
         <div className="space-y-6 mt-6">
           <GlassCard className="p-6 space-y-4">
-            <GlassCardHeader title="Partner" description="One package per send - pick the partner (assignment or awarded bid)." />
+            <GlassCardHeader title="Vendor" description="One package per send - pick the vendor (assignment or awarded bid)." />
             <div className="space-y-2">
-              <Label>Partner</Label>
+              <Label>Vendor</Label>
               <Select value={partnerSelectionKey} onValueChange={setPartnerSelectionKey}>
                 <SelectTrigger className="bg-white/5 border-border">
-                  <SelectValue placeholder="Select partner" />
+                  <SelectValue placeholder="Select vendor" />
                 </SelectTrigger>
                 <SelectContent>
                   {onboardingPartners.map((a) => {
@@ -554,7 +554,7 @@ export function Stage03OnboardingWorkflow() {
                       a.partner?.company_name?.trim() ||
                       a.partner?.full_name?.trim() ||
                       a.partner?.email?.trim() ||
-                      "Partner"
+                      "Vendor"
                     const scope = a.scopeLabel ? ` · ${a.scopeLabel}` : ""
                     const src = a.source === "awarded_bid" ? "awarded bid" : a.status
                     return (
@@ -648,7 +648,7 @@ export function Stage03OnboardingWorkflow() {
           <GlassCard className="p-6 space-y-4">
             <GlassCardHeader
               title="Project documents"
-              description="Up to 10 items - paste a link or upload PDF/DOCX (same pattern as partner bid attachments)."
+              description="Up to 10 items - paste a link or upload PDF/DOCX (same pattern as vendor bid attachments)."
             />
             <div className="flex justify-end">
               <Button
@@ -853,7 +853,7 @@ export function Stage03OnboardingWorkflow() {
                     {(selectedPartnerRow.partner?.company_name || "").trim() ||
                       (selectedPartnerRow.partner?.full_name || "").trim() ||
                       (selectedPartnerRow.partner?.email || "").trim() ||
-                      "Partner"}
+                      "Vendor"}
                   </div>
                   <div className="font-mono text-2xs text-foreground-muted mt-1">Partnership</div>
                 </div>
@@ -990,7 +990,7 @@ export function Stage03OnboardingWorkflow() {
               Onboarding package sent
             </h2>
             <p className="mt-3 text-center text-sm text-foreground/90">
-              Your partner was emailed and can open <span className="font-mono text-foreground">/partner/onboarding</span> to
+              Your vendor was emailed and can open <span className="font-mono text-foreground">/partner/onboarding</span> to
               continue.
             </p>
             <Button

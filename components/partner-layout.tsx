@@ -34,7 +34,7 @@ const navGroups: NavItem[][] = [
   [
     { number: "00", title: "Agency Network", href: "/partner/network", tooltip: "Your agency partnerships, pending invitations, and discover new agencies" },
     { number: "01", title: "Open RFPs & Bids", href: "/partner/rfps", tooltip: "Active RFP invitations, submit bids, and track your bid history" },
-    { number: "02", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your agency partners" },
+    { number: "02", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your lead agencies" },
     { number: "03", title: "Delivery & Projects", href: "/partner/projects", tooltip: "Your active project engagements, status updates, and delivery performance" },
   ],
   [
@@ -55,8 +55,8 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [userName, setUserName] = useState("Partner")
-  const [userInitials, setUserInitials] = useState("P")
+  const [userName, setUserName] = useState("Vendor")
+  const [userInitials, setUserInitials] = useState("V")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarLoadError, setAvatarLoadError] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
@@ -77,10 +77,10 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
             .eq("id", user.id)
             .single()
           if (profile) {
-            setUserName(profile.company_name || profile.full_name || "Partner")
+            setUserName(profile.company_name || profile.full_name || "Vendor")
             setAvatarUrl(profile.company_logo_url || null)
             setAvatarLoadError(false)
-            const initials = (profile.company_name || profile.full_name || "P")
+            const initials = (profile.company_name || profile.full_name || "V")
               .split(" ")
               .map((n: string) => n[0])
               .join("")
@@ -186,7 +186,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                 >
                   <div className="text-right hidden sm:block">
                     <div className="font-display font-bold text-sm">{userName}</div>
-                    <div className="font-mono text-2xs text-[#C8F53C]">Partner Account</div>
+                    <div className="font-mono text-2xs text-[#C8F53C]">Vendor Account</div>
                   </div>
                   <div className="w-9 h-9 rounded-full bg-[#C8F53C]/20 flex items-center justify-center">
                     {avatarUrl && !avatarLoadError ? (

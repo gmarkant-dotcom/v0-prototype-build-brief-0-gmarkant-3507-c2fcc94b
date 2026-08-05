@@ -82,7 +82,7 @@ export async function POST(
 
     if (!partnerId || !partner?.email) {
       return NextResponse.json(
-        { error: 'Partner must have an account with an email before deploying onboarding' },
+        { error: 'Vendor must have an account with an email before deploying onboarding' },
         { status: 400 }
       )
     }
@@ -143,7 +143,7 @@ export async function POST(
       data: { projectId, assignmentId, deploymentId: deployment.id },
     })
 
-    let deployBody = `${agencyName} has sent your onboarding package for ${projectTitle}.\n\nInside you will find kickoff details, project documents, and next steps. Log in to your partner portal to review everything and get started.`
+    let deployBody = `${agencyName} has sent your onboarding package for ${projectTitle}.\n\nInside you will find kickoff details, project documents, and next steps. Log in to your vendor portal to review everything and get started.`
     if (customMessage && String(customMessage).trim()) {
       deployBody += `\n\nMessage from ${agencyName}:\n${String(customMessage).trim()}`
     }

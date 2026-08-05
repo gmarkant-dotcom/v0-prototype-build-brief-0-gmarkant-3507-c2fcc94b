@@ -65,7 +65,7 @@ export async function requireAgencyRole(_request?: Request): Promise<RoleAuthRes
 
 /** Usage: `const auth = await requirePartnerRole(); if (!auth.authorized) return auth.response` */
 export async function requirePartnerRole(_request?: Request): Promise<RoleAuthResult> {
-  return requireRole("partner", "Partners only")
+  return requireRole("partner", "Vendors only")
 }
 
 /**

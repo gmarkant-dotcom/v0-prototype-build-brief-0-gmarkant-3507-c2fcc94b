@@ -3,7 +3,7 @@ import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partn
 
 /**
  * Shared write path for adding a ghost/unclaimed contact to an agency's partner pool -
- * used by both the manual "Add Partner" route and the spreadsheet import route (Discovered
+ * used by both the manual "Add Vendor" route and the spreadsheet import route (Discovered
  * column, same table/status the email-scan importer writes to). Not used by the email-scan
  * importer itself, which has its own longer-standing implementation in
  * app/api/agency/email-scan/import/route.ts (mirrors the same consent rule below).

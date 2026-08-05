@@ -22,7 +22,7 @@ export default function PrivacyPage() {
             <p>
               This Privacy Policy explains how Liveligood, Inc. ("Ligament," "we," "our," or "us") collects, uses, and
               protects information when you use the Ligament platform. This policy applies to business users, agency teams,
-              and partner users accessing Ligament services.
+              and vendor users accessing Ligament services.
             </p>
           </section>
 

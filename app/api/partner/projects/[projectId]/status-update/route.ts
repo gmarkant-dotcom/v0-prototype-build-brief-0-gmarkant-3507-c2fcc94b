@@ -69,7 +69,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       .eq("id", user.id)
       .single()
     if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
+      return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStoreHeaders })
     }
 
     const { data: partnerships } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)
@@ -119,7 +119,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
       .eq("id", user.id)
       .single()
     if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
+      return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStoreHeaders })
     }
 
     const bodyRaw = await req.json().catch(() => null)
@@ -207,7 +207,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     }
 
     const partnerName =
-      profile.company_name?.trim() || profile.full_name?.trim() || profile.email?.trim() || "A partner"
+      profile.company_name?.trim() || profile.full_name?.trim() || profile.email?.trim() || "A vendor"
     try {
       const { data: project } = await supabase
         .from("projects")
@@ -233,7 +233,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
             to: recipientEmail,
             subject: `${partnerName} submitted a status update on ${projectName}`,
             html: buildBrandedEmailHtml({
-              title: "Partner status update",
+              title: "Vendor status update",
               recipientName: agencyRecipient,
               body: `${partnerName} has submitted a project status update for ${projectName}.\n\nCompletion: ${body.completion_pct}%\nStatus: ${statusFlag}\n\nLog in to review the update and respond.`,
               ctaText: "Review Update",

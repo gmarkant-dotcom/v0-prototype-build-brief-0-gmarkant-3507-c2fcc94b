@@ -735,7 +735,7 @@ export default function AgencyNetworkPage() {
               <p className="text-vendor-muted max-w-md mx-auto">
                 {searchQuery
                   ? "No invitations match your search."
-                  : "When lead agencies invite you to join their partner network, those invitations will appear here. Make sure your profile is complete to increase your chances of being discovered."}
+                  : "When lead agencies invite you to join their vendor network, those invitations will appear here. Make sure your profile is complete to increase your chances of being discovered."}
               </p>
             </div>
           ) : (
@@ -764,7 +764,7 @@ export default function AgencyNetworkPage() {
                         <strong className="text-accent">
                           {partnership.agency?.company_name || partnership.agency?.full_name || "This agency"}
                         </strong>{" "}
-                        has invited you to join their partner network on Ligament. By accepting, you&apos;ll be able to
+                        has invited you to join their vendor network on Ligament. By accepting, you&apos;ll be able to
                         receive project briefs and collaborate with them directly.
                       </p>
                     </div>
@@ -926,7 +926,7 @@ export default function AgencyNetworkPage() {
                     ? "No agencies match your search. Try different keywords."
                     : viewMode === "network"
                       ? "You do not have any agencies in your network yet. Switch to All Agencies to discover and connect with new ones."
-                      : "No lead agencies are currently accepting partner requests."}
+                      : "No lead agencies are currently accepting vendor requests."}
                 </p>
               </div>
             ) : (
@@ -974,7 +974,7 @@ export default function AgencyNetworkPage() {
                             {agency.partner_count && (
                               <span className="flex items-center gap-1">
                                 <Users className="w-3 h-3" />
-                                {agency.partner_count} partners
+                                {agency.partner_count} vendors
                               </span>
                             )}
                           </div>

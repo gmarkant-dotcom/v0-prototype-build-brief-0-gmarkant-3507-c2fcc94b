@@ -16,7 +16,7 @@ function partnerDisplayName(p: {
     (p.display_name || "").trim() ||
     (p.full_name || "").trim() ||
     (p.email || "").trim() ||
-    "Partner"
+    "Vendor"
   )
 }
 
@@ -101,7 +101,7 @@ export async function GET() {
           details: pErr.details,
           hint: pErr.hint,
         })
-        return NextResponse.json({ error: "Failed to load partner profiles" }, { status: 500, headers: noStore })
+        return NextResponse.json({ error: "Failed to load vendor profiles" }, { status: 500, headers: noStore })
       }
       for (const p of profs || []) {
         profById.set(p.id as string, {
@@ -120,7 +120,7 @@ export async function GET() {
       return {
         id: r.id as string,
         partnership_id: r.partnership_id as string,
-        partner_name: prof ? partnerDisplayName(prof) : "Partner",
+        partner_name: prof ? partnerDisplayName(prof) : "Vendor",
         status: r.status as string,
         document_url: (r.document_url as string | null) ?? null,
         signed_at: (r.signed_at as string | null) ?? null,

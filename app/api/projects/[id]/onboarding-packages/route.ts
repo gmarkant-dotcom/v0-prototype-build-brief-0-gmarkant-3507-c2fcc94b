@@ -225,7 +225,7 @@ export async function POST(
         return NextResponse.json(
           {
             error:
-              "Partner must be assigned or have an awarded bid on this project before sending onboarding.",
+              "Vendor must be assigned or have an awarded bid on this project before sending onboarding.",
           },
           { status: 400 }
         )
@@ -336,7 +336,7 @@ export async function POST(
     const base = siteBaseUrl()
     const onboardingUrl = `${base}/partner/onboarding`
 
-    let onboardingBody = `Your onboarding documents for ${projectTitle} are now available in your Ligament partner portal.\n\nReview the materials and reach out to ${agencyName} with any questions before your project kickoff.`
+    let onboardingBody = `Your onboarding documents for ${projectTitle} are now available in your Ligament vendor portal.\n\nReview the materials and reach out to ${agencyName} with any questions before your project kickoff.`
     if (customMessage && String(customMessage).trim()) {
       onboardingBody += `\n\nMessage from ${agencyName}:\n${String(customMessage).trim()}`
     }

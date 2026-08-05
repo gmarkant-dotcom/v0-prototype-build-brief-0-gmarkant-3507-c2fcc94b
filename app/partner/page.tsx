@@ -462,7 +462,7 @@ export default function PartnerDashboardPage() {
             <Briefcase className="w-12 h-12 mx-auto mb-4 text-vendor-muted/50" aria-hidden />
             <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">Welcome to Ligament</h3>
             <p className="text-vendor-muted-strong">
-              You don&apos;t have any open requests or active projects yet. Open RFPs from your lead agency partners
+              You don&apos;t have any open requests or active projects yet. Open RFPs from your lead agencies
               will appear here as soon as they send them.
             </p>
             <Button asChild variant="outline" className="mt-6 border-vendor-foreground/30 text-vendor-foreground hover:bg-vendor-foreground/5">

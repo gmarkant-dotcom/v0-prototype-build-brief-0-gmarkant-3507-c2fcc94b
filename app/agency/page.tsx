@@ -162,7 +162,7 @@ function AgencyRFPContent() {
       try {
         const res = await fetch("/api/partnerships")
         const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error((data?.error as string) || "Failed to load partners")
+        if (!res.ok) throw new Error((data?.error as string) || "Failed to load vendors")
         const rows = (data.partnerships || []) as PartnershipApiRow[]
 
         const active = rows
@@ -175,8 +175,8 @@ function AgencyRFPContent() {
 
         const mapped: Partner[] = active.map((p) => {
           const pr = p.partner!
-          const label = pr.full_name?.trim() || pr.company_name?.trim() || pr.email || "Partner"
-          const sub = pr.company_name?.trim() || pr.email || "Partner"
+          const label = pr.full_name?.trim() || pr.company_name?.trim() || pr.email || "Vendor"
+          const sub = pr.company_name?.trim() || pr.email || "Vendor"
           return {
             id: pr.id,
             partnershipId: p.id,
@@ -208,7 +208,7 @@ function AgencyRFPContent() {
         }
       } catch (e) {
         if (!cancelled) {
-          setPoolPartnersError(e instanceof Error ? e.message : "Failed to load partners")
+          setPoolPartnersError(e instanceof Error ? e.message : "Failed to load vendors")
           setPoolPartners([])
           setPendingPartnerInvites([])
         }
@@ -893,7 +893,7 @@ function AgencyRFPContent() {
     if (duplicateInExistingPartner) {
       setRecipientAddErrors((prev) => ({
         ...prev,
-        [scopeItemId]: "This email already exists in selected partners for this scope.",
+        [scopeItemId]: "This email already exists in selected vendors for this scope.",
       }))
       setRecipientAddSuccess((prev) => ({ ...prev, [scopeItemId]: null }))
       return
@@ -1303,7 +1303,7 @@ function AgencyRFPContent() {
         <StageHeader
           stageNumber="01"
           title="RFP Broadcast"
-          subtitle="Upload your client brief, generate a master RFP, allocate scope between internal and external partners, and broadcast targeted RFPs."
+          subtitle="Upload your client brief, generate a master RFP, allocate scope between internal and external vendors, and broadcast targeted RFPs."
           aiPowered
         />
 
@@ -1987,7 +1987,7 @@ function AgencyRFPContent() {
               <GlassCardHeader
                 label="Step 3"
                 title="Allocate scope"
-                description="For each deliverable, decide whether your team handles it internally or if you need an external partner."
+                description="For each deliverable, decide whether your team handles it internally or if you need an external vendor."
               />
               
               <div className="space-y-3 mt-6">
@@ -2150,9 +2150,9 @@ function AgencyRFPContent() {
               {/* Outsource */}
               <GlassCard>
                 <GlassCardHeader
-                  label="External Partners"
+                  label="External Vendors"
                   title="Outsourced"
-                  description={`${outsourcedItems.length} deliverables for external partners`}
+                  description={`${outsourcedItems.length} deliverables for external vendors`}
                 />
                 <div className="space-y-2 mt-4">
                   {outsourcedItems.map((item) => (
@@ -2175,7 +2175,7 @@ function AgencyRFPContent() {
               <GlassCardHeader
                 label="Optional"
                 title="Additional context for AI"
-                description="Provide any extra information the AI should consider when generating partner-specific RFPs."
+                description="Provide any extra information the AI should consider when generating vendor-specific RFPs."
               />
               <Textarea
                 placeholder="E.g., preferred vendors, budget flexibility, or fixed timeline constraints the AI should respect."
@@ -2209,7 +2209,7 @@ function AgencyRFPContent() {
               <GlassCardHeader
                 label="Step 5"
                 title="Select recipients"
-                description="Confirmed partners from your account load automatically below. For each outsourced deliverable, pick recipients or invite a new contact by email."
+                description="Confirmed vendors from your account load automatically below. For each outsourced deliverable, pick recipients or invite a new contact by email."
               />
             </GlassCard>
             
@@ -2512,7 +2512,7 @@ function AgencyRFPContent() {
               <GlassCardHeader
                 label="Step 6"
                 title="Ready to broadcast"
-                description="Review your RFP distribution and send to selected partners."
+                description="Review your RFP distribution and send to selected vendors."
               />
               
               <div className="space-y-4 mt-6">

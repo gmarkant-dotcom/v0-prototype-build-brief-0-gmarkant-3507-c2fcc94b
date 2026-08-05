@@ -77,7 +77,7 @@ export function Stage03OnboardingProduction() {
         <StageHeader
           stageNumber="03"
           title="Onboarding + Ways of Working"
-          subtitle="Deploy materials to awarded partners."
+          subtitle="Deploy materials to awarded vendors."
           aiPowered={false}
         />
         <div className="flex items-center gap-2 text-foreground-muted py-12">
@@ -95,7 +95,7 @@ export function Stage03OnboardingProduction() {
           <StageHeader
             stageNumber="03"
             title="Onboarding + Ways of Working"
-            subtitle="Deploy materials to awarded partners."
+            subtitle="Deploy materials to awarded vendors."
             aiPowered={false}
           />
           <div className="flex items-center gap-2 text-foreground-muted py-12">
@@ -110,7 +110,7 @@ export function Stage03OnboardingProduction() {
         <StageHeader
           stageNumber="03"
           title="Onboarding + Ways of Working"
-          subtitle="Deploy materials to awarded partners."
+          subtitle="Deploy materials to awarded vendors."
           aiPowered={false}
         />
         <EmptyState
@@ -157,25 +157,25 @@ export function Stage03OnboardingProduction() {
       <StageHeader
         stageNumber="03"
         title="Onboarding + Ways of Working"
-        subtitle="Send document packets and NDA / scope-of-work requests to partners on this project."
+        subtitle="Send document packets and NDA / scope-of-work requests to vendors on this project."
         aiPowered={false}
       />
 
       {loading ? (
         <div className="flex items-center gap-2 text-foreground-muted py-12">
           <Loader2 className="w-5 h-5 animate-spin" />
-          Loading partners…
+          Loading vendors…
         </div>
       ) : assignments.length === 0 ? (
         <EmptyState
-          title="No partner assignments yet"
-          description="Award a bid or assign an active partner to this project first."
+          title="No vendor assignments yet"
+          description="Award a bid or assign an active vendor to this project first."
           icon="onboarding"
         />
       ) : (
         <GlassCard className="p-6 space-y-6 mt-6">
           <div className="space-y-2">
-            <Label>Partner</Label>
+            <Label>Vendor</Label>
             <Select value={assignmentId} onValueChange={setAssignmentId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select assignment" />
@@ -185,7 +185,7 @@ export function Stage03OnboardingProduction() {
                   const name =
                     a.partnership?.partner?.company_name ||
                     a.partnership?.partner?.full_name ||
-                    "Partner"
+                    "Vendor"
                   return (
                     <SelectItem key={a.id} value={a.id}>
                       {name} ({a.status})
@@ -227,7 +227,7 @@ export function Stage03OnboardingProduction() {
           </div>
 
           <div className="space-y-2">
-            <Label>Message to partner (optional)</Label>
+            <Label>Message to vendor (optional)</Label>
             <Textarea
               value={customMessage}
               onChange={(e) => setCustomMessage(e.target.value)}

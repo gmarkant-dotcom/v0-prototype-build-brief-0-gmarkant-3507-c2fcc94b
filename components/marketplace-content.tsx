@@ -109,7 +109,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
         ])
 
         const payload = await discoverableResult.json().catch(() => ({}))
-        if (!discoverableResult.ok) throw new Error(payload?.error || "Failed to load discoverable partners")
+        if (!discoverableResult.ok) throw new Error(payload?.error || "Failed to load discoverable vendors")
         setPartners(payload?.profiles || [])
 
         if (partnershipsResult.ok) {
@@ -198,12 +198,12 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
         body: JSON.stringify({ partnerId: invitePartnerId, message: inviteMessage || null }),
       })
       const payload = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(payload?.error || "Failed to invite partner")
+      if (!res.ok) throw new Error(payload?.error || "Failed to invite vendor")
       setBanner("Invitation sent successfully.")
       setInvitePartnerId(null)
       setInviteMessage("")
     } catch (error) {
-      setBanner(error instanceof Error ? error.message : "Failed to invite partner.")
+      setBanner(error instanceof Error ? error.message : "Failed to invite vendor.")
     } finally {
       setSubmitting(false)
     }
@@ -212,24 +212,24 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
   return (
     <div className="space-y-8">
       <div className="space-y-4">
-        <h2 className="font-display font-bold text-xl text-foreground">Discover Partner Agencies</h2>
+        <h2 className="font-display font-bold text-xl text-foreground">Discover Vendors</h2>
         <div className="relative max-w-md">
           <Search className="w-4 h-4 text-foreground-muted absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search partner agencies..."
+            placeholder="Search vendors..."
             className="pl-10 bg-white/5 border-border text-foreground"
           />
         </div>
 
         {loading ? (
-          <GlassCard className="p-8 text-center text-foreground-muted">Loading discoverable partners...</GlassCard>
+          <GlassCard className="p-8 text-center text-foreground-muted">Loading discoverable vendors...</GlassCard>
         ) : filtered.length === 0 ? (
           <GlassCard className="p-10 text-center">
-            <div className="font-display font-bold text-lg text-foreground">No discoverable partners yet</div>
+            <div className="font-display font-bold text-lg text-foreground">No discoverable vendors yet</div>
             <p className="text-sm text-foreground-muted mt-2">
-              Partner agencies can opt in from their profile to appear in Marketplace discovery.
+              Vendors can opt in from their profile to appear in Marketplace discovery.
             </p>
           </GlassCard>
         ) : (
@@ -239,14 +239,14 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-10 h-10 rounded-lg overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
                     {partner.company_logo_url ? (
-                      <img src={partner.company_logo_url} alt={partner.company_name || "Partner"} className="w-full h-full object-cover" />
+                      <img src={partner.company_logo_url} alt={partner.company_name || "Vendor"} className="w-full h-full object-cover" />
                     ) : (
                       <Building2 className="w-5 h-5 text-foreground-muted" />
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <div className="font-display font-bold text-lg text-foreground leading-tight">
-                      {partner.company_name || partner.full_name || "Partner Agency"}
+                      {partner.company_name || partner.full_name || "Vendor"}
                     </div>
                     {(partner.vouch_count ?? 0) >= 3 && (
                       <span className="flex items-center gap-0.5 font-mono text-2xs px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
@@ -256,7 +256,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                   </div>
                 </div>
                 <p className="text-sm text-foreground-muted line-clamp-2">
-                  {partner.bio || "Discoverable partner agency on Ligament Marketplace."}
+                  {partner.bio || "Discoverable vendor on Ligament Marketplace."}
                 </p>
                 <div className="mt-3 space-y-1">
                   <p className="font-mono text-xs text-foreground-muted">{partner.location || "-"}</p>
@@ -318,9 +318,9 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
       {invitePartnerId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setInvitePartnerId(null)}>
           <GlassCard className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="font-display font-bold text-xl text-foreground">Invite partner to Pool</div>
+            <div className="font-display font-bold text-xl text-foreground">Invite vendor to Pool</div>
             <p className="font-mono text-xs text-foreground-muted mt-1">
-              {invitePartner?.company_name || invitePartner?.full_name || "Partner Agency"}
+              {invitePartner?.company_name || invitePartner?.full_name || "Vendor"}
             </p>
             <Input
               value={inviteMessage}
@@ -354,7 +354,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="font-display font-bold text-xl text-foreground">{selectedPartner.company_name || selectedPartner.full_name || "Partner"}</h2>
+                  <h2 className="font-display font-bold text-xl text-foreground">{selectedPartner.company_name || selectedPartner.full_name || "Vendor"}</h2>
                   {(selectedPartner.vouch_count ?? 0) >= 3 && (
                     <span className="flex items-center gap-0.5 font-mono text-2xs px-1.5 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
                       <Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" /><Zap className="w-2.5 h-2.5" />
@@ -362,7 +362,7 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
                     </span>
                   )}
                 </div>
-                  <p className="font-mono text-xs text-foreground-muted">{selectedPartner.agency_type || "Partner Agency"}</p>
+                  <p className="font-mono text-xs text-foreground-muted">{selectedPartner.agency_type || "Vendor"}</p>
                   {selectedPartner.location && <p className="font-mono text-xs text-foreground-muted">{selectedPartner.location}</p>}
                 </div>
               </div>

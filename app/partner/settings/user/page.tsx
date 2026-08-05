@@ -282,7 +282,7 @@ export default function PartnerUserProfilePage() {
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-vendor-foreground">Email me when a partner invitation is accepted</span>
+              <span className="text-sm text-vendor-foreground">Email me when a vendor invitation is accepted</span>
               <Switch
                 checked={notificationPrefs.partnerInvitationAccepted}
                 onCheckedChange={(checked) =>

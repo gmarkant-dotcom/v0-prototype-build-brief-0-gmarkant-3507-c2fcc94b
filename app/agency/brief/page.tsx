@@ -48,7 +48,7 @@ const LOADING_MESSAGES: Record<AnalysisType, string> = {
   timeline: "Estimating production phases...",
   budget: "Calculating scope and line items...",
   campaigns: "Finding comparable campaigns from the past 5 years...",
-  directors: "Identifying production partners...",
+  directors: "Identifying production vendors...",
 }
 
 const ANALYSIS_COLUMNS: Record<AnalysisType, string> = {

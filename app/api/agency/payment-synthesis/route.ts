@@ -36,7 +36,7 @@ function partnerDisplayFromProfile(profile: {
     (profile.display_name || "").trim() ||
     (profile.full_name || "").trim() ||
     (profile.email || "").trim() ||
-    "Partner"
+    "Vendor"
   )
 }
 
@@ -158,7 +158,7 @@ export async function POST(req: Request) {
           return {
             response_id: String(r.id),
             partnership_id: ib.partnership_id,
-            partner_name: ((r.partner_display_name as string | null) || "").trim() || "Partner",
+            partner_name: ((r.partner_display_name as string | null) || "").trim() || "Vendor",
             budget_proposal: ((r.budget_proposal as string | null) || "").trim(),
             payment_terms: (r.payment_terms as Record<string, unknown> | null) ?? null,
           }
@@ -214,7 +214,7 @@ export async function POST(req: Request) {
         for (const row of responseRows || []) {
           responseToPartner.set(
             String(row.id),
-            ((row.partner_display_name as string | null) || "").trim() || "Partner"
+            ((row.partner_display_name as string | null) || "").trim() || "Vendor"
           )
           responseToPaymentTerms.set(
             String(row.id),
@@ -229,7 +229,7 @@ export async function POST(req: Request) {
         const partner_name =
           (partnership_id ? partnershipToPartner.get(partnership_id) : null) ||
           (response_id ? responseToPartner.get(response_id) : null) ||
-          "Partner"
+          "Vendor"
         return {
           partner_name,
           title: String(m.title || "Milestone"),
@@ -260,7 +260,7 @@ export async function POST(req: Request) {
         return NextResponse.json(
           {
             error:
-              "No partner payment data found. Add milestones or ensure at least one awarded partner includes a budget proposal.",
+              "No vendor payment data found. Add milestones or ensure at least one awarded vendor includes a budget proposal.",
           },
           { status: 400, headers: noStore }
         )
@@ -302,7 +302,7 @@ export async function POST(req: Request) {
             .join("\n")
         : "- none",
       "",
-      "Existing partner payment milestones:",
+      "Existing vendor payment milestones:",
       milestoneItems.length > 0
         ? milestoneItems
             .map(
@@ -314,7 +314,7 @@ export async function POST(req: Request) {
             .join("\n")
         : "- none",
       "",
-      "Awarded partners without milestones (from partner_rfp_responses + partner_rfp_inbox):",
+      "Awarded vendors without milestones (from partner_rfp_responses + partner_rfp_inbox):",
       awardedWithoutMilestones.length > 0
         ? awardedWithoutMilestones
             .map(
@@ -327,9 +327,9 @@ export async function POST(req: Request) {
         : "- none",
       ].join("\n")
 
-      systemPrompt = `You are a cash flow protection advisor for a lead creative agency. Your job is to analyze partner payment obligations and recommend a unified payment schedule that protects the lead agency's margin and minimizes cash flow risk.
+      systemPrompt = `You are a cash flow protection advisor for a lead creative agency. Your job is to analyze vendor payment obligations and recommend a unified payment schedule that protects the lead agency's margin and minimizes cash flow risk.
 
-You will be given: the total client budget, the client payment schedule (when the agency gets paid by their client), and each partner's payment data (either structured milestones or a total bid amount).
+You will be given: the total client budget, the client payment schedule (when the agency gets paid by their client), and each vendor's payment data (either structured milestones or a total bid amount).
 
 Return ONLY a JSON array with no preamble, markdown, or explanation. Each item in the array represents one recommended payment milestone and must have these exact keys:
 - partner_name: string
@@ -339,7 +339,7 @@ Return ONLY a JSON array with no preamble, markdown, or explanation. Each item i
 - due_date: string (ISO date format YYYY-MM-DD)
 - rationale: string (one sentence explaining why this timing protects the agency)
 
-Prioritize: paying partners after the agency receives client funds, flagging any deposit requirements that create cash flow gaps, and ensuring total partner payments do not exceed client budget minus a reasonable margin buffer.`
+Prioritize: paying vendors after the agency receives client funds, flagging any deposit requirements that create cash flow gaps, and ensuring total vendor payments do not exceed client budget minus a reasonable margin buffer.`
     } catch (dataError) {
       console.error("[api/agency/payment-synthesis] data gathering error", dataError)
       return NextResponse.json(

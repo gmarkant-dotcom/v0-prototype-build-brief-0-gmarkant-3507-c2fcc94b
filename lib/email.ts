@@ -207,12 +207,12 @@ export function buildAgencyPoolNotificationEmail(opts: {
   budgetSummary: string
   timelineSummary: string
 }): EmailPayload {
-  const subject = `${opts.vendorNameOrEmail} was added to your partner pool`
+  const subject = `${opts.vendorNameOrEmail} was added to your vendor pool`
   const trimmedProposal = opts.proposalText.trim()
   const preview = trimmedProposal.slice(0, 150) + (trimmedProposal.length > 150 ? "..." : "")
-  const body = `${opts.vendorNameOrEmail} (${opts.vendorEmail}) submitted a bid via your magic link invitation and has been added to your partner pool.\n\n"${preview}"\n\nBudget: ${opts.budgetSummary}\nTimeline: ${opts.timelineSummary}`
+  const body = `${opts.vendorNameOrEmail} (${opts.vendorEmail}) submitted a bid via your magic link invitation and has been added to your vendor pool.\n\n"${preview}"\n\nBudget: ${opts.budgetSummary}\nTimeline: ${opts.timelineSummary}`
   const ctaUrl = `${siteBaseUrl()}/agency/pool`
-  const ctaText = "View Partner Pool"
+  const ctaText = "View Vendor Pool"
   return {
     subject,
     html: buildBrandedEmailHtml({ title: subject, recipientName: opts.agencyRecipientName, body, ctaText, ctaUrl }),

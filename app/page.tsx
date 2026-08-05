@@ -11,7 +11,7 @@ import { isDemoMode } from "@/lib/demo-data"
 import { User, Building2, Users } from "lucide-react"
 
 const stages = [
-  { number: "00", title: "Partner Pool", oneLiner: "Build your network. Get discovered.", ai: false },
+  { number: "00", title: "Vendor Pool", oneLiner: "Build your network. Get discovered.", ai: false },
   { number: "01", title: "RFP Broadcast", oneLiner: "Send scoped RFPs. Submit competitive bids.", ai: true },
   { number: "02", title: "Bid Management", oneLiner: "AI compares and scores. You decide and award.", ai: true },
   { number: "03", title: "Onboarding", oneLiner: "Share docs and guidelines. Get project-ready.", ai: false },
@@ -20,11 +20,11 @@ const stages = [
 
 const agencyFeatures = [
   {
-    title: "00 - Partner Pool",
-    description: "Build your vendor network by importing contacts from email, inviting directly, or discovering new partners on the marketplace.",
+    title: "00 - Vendor Pool",
+    description: "Build your vendor network by importing contacts from email, inviting directly, or discovering new vendors on the marketplace.",
     callout: {
       title: "Your network, imported in minutes",
-      description: "Scan your email or upload your existing vendor spreadsheet and your partner pool builds itself. No manual data entry.",
+      description: "Scan your email or upload your existing vendor spreadsheet and your vendor pool builds itself. No manual data entry.",
     },
   },
   {
@@ -45,7 +45,7 @@ const agencyFeatures = [
   },
   {
     title: "03 - Onboarding",
-    description: "Send kickoff packages and brand guidelines. Track partner onboarding across active projects.",
+    description: "Send kickoff packages and brand guidelines. Track vendor onboarding across active projects.",
   },
   {
     title: "04 - Delivery Performance",
@@ -68,7 +68,7 @@ const partnerFeatures = [
   },
   {
     title: "Onboarding",
-    description: "Access kickoff packages, brand guidelines, and project documents from your agency partners.",
+    description: "Access kickoff packages, brand guidelines, and project documents from your lead agencies.",
   },
   {
     title: "Delivery & Projects",
@@ -173,7 +173,7 @@ export default function HomePage() {
                 variant="outline"
                 className="border-border text-foreground hover:bg-white/10 font-display font-bold text-lg px-8 py-6 bg-transparent"
               >
-                <Link href="/auth/login">I&apos;m a Partner Agency</Link>
+                <Link href="/auth/login">I&apos;m a vendor</Link>
               </Button>
             </div>
           </div>
@@ -196,7 +196,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2 text-foreground-muted">
                   <Users className="w-5 h-5 text-foreground-muted shrink-0" />
-                  <span>Partner agencies showcase their work, respond to opportunities, and build their reputation.</span>
+                  <span>Vendors showcase their work, respond to opportunities, and build their reputation.</span>
                 </div>
               </div>
             </div>
@@ -250,15 +250,15 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* For Partner Agencies */}
+        {/* For Vendors */}
         <section className="border-t border-border py-10 md:py-14">
           <div className="max-w-6xl mx-auto px-6">
             <div className="text-center mb-12">
               <div className="font-mono text-xs text-foreground-muted tracking-wider uppercase mb-4">
-                For Partner Agencies
+                For Vendors
               </div>
               <h3 className="font-display font-bold text-4xl text-foreground mb-4">
-                Partner Agency Portal
+                Vendor Portal
               </h3>
               <p className="text-foreground-muted max-w-2xl mx-auto">
                 Get discovered, win work, and build your track record.
@@ -283,7 +283,7 @@ export default function HomePage() {
 
             <div className="text-center">
               <Button asChild variant="outline" className="border-border text-foreground hover:bg-white/10 font-display font-bold px-8 bg-transparent">
-                <Link href="/auth/login">Enter Partner Agency Portal →</Link>
+                <Link href="/auth/login">Enter Vendor Portal →</Link>
               </Button>
             </div>
           </div>
@@ -374,7 +374,7 @@ export default function HomePage() {
                   variant="outline"
                   className="border-border text-foreground hover:bg-white/10 font-display font-bold text-lg px-10 py-7 bg-transparent"
                 >
-                  <Link href="/auth/login">I&apos;m a Partner Agency</Link>
+                  <Link href="/auth/login">I&apos;m a vendor</Link>
                 </Button>
               </div>
             </GlassCard>
@@ -416,11 +416,11 @@ export default function HomePage() {
 
               <div>
                 <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-4">
-                  Partner Agencies
+                  Vendors
                 </div>
                 <div className="space-y-2">
                   <Link href="/partner" className="block text-sm text-foreground-secondary hover:text-foreground transition-colors">
-                    Partner Agency Portal
+                    Vendor Portal
                   </Link>
                   <Link href="/partner/rfps" className="block text-sm text-foreground-secondary hover:text-foreground transition-colors">
                     Open RFPs

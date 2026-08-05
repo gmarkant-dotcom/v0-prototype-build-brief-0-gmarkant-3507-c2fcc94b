@@ -75,7 +75,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Agency email not found" }, { status: 500 })
     }
 
-    const partnerName = profile?.company_name || profile?.full_name || profile?.email || "Partner"
+    const partnerName = profile?.company_name || profile?.full_name || profile?.email || "Vendor"
     const scopeName = inbox.scope_item_name || "Scope"
     const projectName = (projectRow as { title?: string } | null)?.title || "Project"
     const baseUrl = siteBaseUrl()
@@ -88,7 +88,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         to: agencyProfile.email,
         subject: `${partnerName} has signed the NDA for ${scopeName}`,
         html: buildBrandedEmailHtml({
-          title: "NDA completed by partner",
+          title: "NDA completed by vendor",
           recipientName: agencyRecipient,
           body: `${partnerName} has completed the NDA for ${scopeName} on ${projectName}.\n\nLog in to confirm the NDA and unlock their access to the RFP.`,
           ctaText: "Confirm NDA",

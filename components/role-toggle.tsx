@@ -37,7 +37,7 @@ export function RoleToggle() {
 
   const activeRole = profile.active_role || profile.role
   const targetRole = activeRole === "agency" ? "partner" : "agency"
-  const label = activeRole === "agency" ? "Switch to Partner Mode" : "Switch to Lead Agency"
+  const label = activeRole === "agency" ? "Switch to Vendor Mode" : "Switch to Lead Agency"
 
   const handleSwitch = async () => {
     setSwitching(true)

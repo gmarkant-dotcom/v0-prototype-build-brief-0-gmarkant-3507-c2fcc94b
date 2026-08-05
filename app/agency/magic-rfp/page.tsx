@@ -995,7 +995,7 @@ function MagicRfpContent() {
                             </span>
                           ) : r.checkResult?.is_existing_partner ? (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-300">
-                              In your partner pool
+                              In your vendor pool
                             </span>
                           ) : (
                             <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-white/10 text-foreground-muted">

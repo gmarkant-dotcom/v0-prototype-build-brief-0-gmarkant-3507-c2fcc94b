@@ -36,7 +36,7 @@ export async function GET() {
       .eq("id", user.id)
       .single()
     if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partners only" }, { status: 403, headers: noStoreHeaders })
+      return NextResponse.json({ error: "Vendors only" }, { status: 403, headers: noStoreHeaders })
     }
 
     // RLS: "Partners select own RFP responses" - USING (partner_id = auth.uid())

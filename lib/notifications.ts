@@ -61,7 +61,7 @@ export async function notifyPartnershipInvitation(
     userId: partnerId,
     type: 'partnership_invitation',
     title: 'New Partnership Invitation',
-    message: `${agencyName} has invited you to become a partner agency.`,
+    message: `${agencyName} has invited you to become a vendor.`,
     link: '/partner/invitations',
     data: { partnershipId, agencyName }
   })

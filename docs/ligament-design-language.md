@@ -31,7 +31,7 @@ Grade everything against these; they define the current ceiling:
 | /partner (rebuilt) | Response queue with urgency slots, calibrated stats ("1 of 1 awarded"), honest empty Performance card, payments consistency |
 | /agency/usage | Plan card hierarchy, progress bar semantics, upgrade CTA card |
 | /agency/bids (Bid Management) | Grouped accordions, status chip rail, per-row metadata line (who · what · due), consistent row action |
-| Import Partners sheet | Two-option segmented entry, mapping step with inline previews, grouped review (New / Already in pool / Invalid) with per-row reasons |
+| Import Vendors sheet | Two-option segmented entry, mapping step with inline previews, grouped review (New / Already in pool / Invalid) with per-row reasons |
 | /partner/payments empty states | The single-quiet-line empty pattern, verified passing (table never renders headerless over whitespace) |
 
 Known below-the-bar surfaces (audit targets): RFP Broadcast wizard steps [S2 walk], Onboarding, Delivery Performance, partner Legal & Compliance interior, auth pages, marketing site. The orphaned legacy /settings/* island (5 pages plus its second, dead /settings/billing page) was deleted in S3; /agency/settings/billing is a separate, intentional redirect stub to /agency/usage and is not a deletion target.
@@ -116,17 +116,17 @@ Arbitrary pixel sizes outside this scale are an audit finding. Stat numbers shar
 
 **Casing (ruled) - the three-tier system, one rule per tier:**
 1. MONO CAPS: chrome only - eyebrows, nav, table headers
-2. Title Case: page titles only (they are workflow surface names: Dashboard, Partner Pool, Bid Management) - one per page
+2. Title Case: page titles only (they are workflow surface names: Dashboard, Vendor Pool, Bid Management) - one per page
 3. Sentence case: everything else, including card titles
 
 If it's not the page title and not a mono eyebrow, it's sentence case. No debates.
 
-**Buttons (ruled):** sentence case everywhere ("Send invitation", "Add 10 partners to Pool"). Product nouns keep their capital (Pool, RFP, Partner Pool).
+**Buttons (ruled):** sentence case everywhere ("Send invitation", "Add 10 vendors to Pool"). Product nouns keep their capital (Pool, RFP, Vendor Pool).
 
 **Keep-capitals lexicon (ruled, S3).** Three categories of exception to sentence case, applied everywhere - card/section/dialog titles, empty-state headings, and button labels alike:
 1. Acronyms/initialisms always keep caps: RFP(s), NDA, MSA, IP, AI, PDF, DOCX, PPTX, CSV, FAQ, USD, MBE, MWBE, DBE, VBE, SDVOB, LGBTBE, DOBE, URL, ID, SOW (list illustrative, not closed - any genuine acronym follows the same rule).
-2. Product/brand nouns keep caps: Ligament, Pool, Partner Pool, Master RFP, Lightning RFP, Google, Gmail, Outlook, Excel, Calendly, LinkedIn, Net 30/Net 60-style terms, client/company names.
-3. Nav surface names keep Title Case when a string names or links to that surface (Summary Dashboard, Partner Pool, Agency Network, RFP Broadcast, Bid Management, Onboarding, Delivery & Projects, Delivery Performance, Legal & Compliance, Master Documents, Marketplace): "Go to Bid Management" and "Start Onboarding" (a real link to /agency/onboarding) keep caps; the same word used descriptively ("during onboarding", "Send onboarding packet") is sentence case.
+2. Product/brand nouns keep caps: Ligament, Pool, Vendor Pool, Master RFP, Lightning RFP, Google, Gmail, Outlook, Excel, Calendly, LinkedIn, Net 30/Net 60-style terms, client/company names.
+3. Nav surface names keep Title Case when a string names or links to that surface (Summary Dashboard, Vendor Pool, Agency Network, RFP Broadcast, Bid Management, Onboarding, Delivery & Projects, Delivery Performance, Legal & Compliance, Master Documents, Marketplace): "Go to Bid Management" and "Start Onboarding" (a real link to /agency/onboarding) keep caps; the same word used descriptively ("during onboarding", "Send onboarding packet") is sentence case.
 
 Mono-caps chrome (eyebrows, nav labels, table headers, form labels, wizard step-nav chips, metadata lines) is exempt from all of the above - it's chrome regardless of source-string case, since CSS uppercase renders it in caps either way.
 
@@ -144,7 +144,7 @@ Mono-caps chrome (eyebrows, nav labels, table headers, form labels, wizard step-
 ## 7. Components
 
 **Buttons (hierarchy - max one primary per view):**
-- Primary: lime fill, dark text ("+ New project", "Add 10 partners to Pool", "View plans")
+- Primary: lime fill, dark text ("+ New project", "Add 10 vendors to Pool", "View plans")
 - Secondary: outlined, transparent fill ("Close", "Back", "View profile")
 - Tertiary/link: text + arrow ("View all →", "Payment settings →")
 - Destructive (ruled, amended S3): red appears only at the moment of consequence. Inline/row-level destructive actions render secondary-outlined with red text, never solid. The confirming dialog's primary action is solid `--destructive` red with white text. No solid red button ever sits passively on a page. Implemented in the shared button component (`components/ui/button.tsx`) as `variant="destructive"` (solid, dialog confirms) and `variant="destructive-outline"` (outline, inline/row actions) - both built on the `--destructive` token, never a raw red hex.
@@ -187,7 +187,7 @@ Mono-caps chrome (eyebrows, nav labels, table headers, form labels, wizard step-
 ## 9. Copy voice
 
 - Plain verbs, active voice, user's vocabulary (partners, bids, RFPs - not records, entities).
-- Buttons say what happens: "Add 10 partners to Pool", not "Submit".
+- Buttons say what happens: "Add 10 vendors to Pool", not "Submit".
 - Headers are addressed to the reader and action-first: "Needs your attention", "Complete profile".
 - Helper text anticipates: export guidance, next-step hints, per-row reasons.
 - Errors say what happened and what to do; never apologize, never vague.
@@ -261,3 +261,4 @@ Buckets for findings: **mechanical** (batchable Claude Code fixes) / **copy** / 
 26. Overdue implemented in `summarizePartnerMilestones` (now returns `{ paid, pending, overdue }`, date comparison as plain "YYYY-MM-DD" string equality, no Date-object math) and rendered on the partner dashboard's Needs Your Response queue, Upcoming Payments table, and `/partner/projects`' own milestone list - the last of these is the real live payments surface. `app/partner/payments/page.tsx` was discovered to be dead code: its default export is a redirect to `/partner/projects` ("payments are now managed" there), so the rich milestone UI it still contains (now also updated for consistency) is unreachable by any real user. A second, more consequential bug surfaced in the same pass: the shared summarizer's "paid" check compared against a status value of `"paid"`, which the schema never writes - the real terminal status is `"payment_received"` (confirmed against the write site in `app/partner/projects/page.tsx`'s `handleConfirmPayment` and the API route's raw passthrough) - so every real milestone was silently miscounted as pending regardless of actual payment state. Fixed via a new shared `isMilestonePaid` helper, since overdue correctness depends on accurate unpaid detection and the same wrong literal was duplicated in three places. No agency-side attention-queue equivalent was built - `app/api/agency/dashboard/route.ts` does not fetch milestone data at all, and the ruling was to flag rather than add a new fetch.
 27. Agency metrics rows on `/agency/pool`, `/agency/project`, and `/agency/documents` restyled to the ruled icon-top-left anatomy, matching `/agency/dashboard`'s `FunnelMetrics`. Values and counts unchanged, anatomy only. `/agency/documents`' 5-metric grid gained a responsive `grid-cols-2 sm:grid-cols-3 lg:grid-cols-5` reflow to keep the new icon tiles from crowding at narrow widths.
 28. `--text-2xs` implemented as a real token (§5) and every `text-[9px]`/`text-[10px]`/`text-[11px]` arbitrary value in app/ and components/ (excluding the parked agency/msa, agency/cashflow, agency/utilization, agency/payments pages) migrated to it - 883 sites across 70 files. Three sites paired the arbitrary size with an explicit `leading-relaxed`/`leading-snug` modifier and were converted by hand rather than by script; the `leading-*` class was kept rather than removed, since it should still override the token's own built-in line-height via the shared CSS custom property. Post-pass grep found no other arbitrary `text-[Npx]` size anywhere in the codebase - the 9/10/11px family was the entire violation set. `components/ui/sidebar.tsx` (a wholly-unused shadcn scaffold, zero importers for the file or any of its 24 exports) and the unused `LeadAgencyFilterCompact` export in `lead-agency-filter.tsx` were deleted, each gated on a fresh full-repo grep.
+29. Vendor terminology ruling (Aug 5 2026): "partner"/"Partner Agency" as the vendor-side entity renamed to "vendor"/"Vendor" across user-facing copy app-wide - both portals, marketing, auth, FAQ, glossary, email/notification copy, and toasts/error strings. `Partner Pool` renamed to `Vendor Pool` everywhere it names that nav surface (§3 reference table, §5 keep-capitals lexicon and Title Case example, button copy examples), including the `Import Vendors sheet` reference-surface entry. Not touched, by design: `partnership`/`Partnership` (the relationship concept - "Active Partnership," "Partnered since" stand unchanged), `Lead Agency`, routes/URLs, DB columns and tables, API fields, and all component/file/function/variable names (e.g. `partner_id`, `partnerships` table, `partner-layout.tsx`, `requirePartnerRole()`) - code identifiers are stable regardless of the display-copy rename. This document's own historical narrative (session logs, file-path references, architecture descriptions using "partner" to mean the underlying role/portal/folder) is left as accurate history rather than rewritten, since it describes what the codebase was called at the time, not current user-facing copy.

@@ -13,15 +13,15 @@ type FAQ = { q: string; a: string }
 const generalFAQs: FAQ[] = [
   {
     q: "What is Ligament?",
-    a: "Ligament is an AI-powered vendor orchestration platform for independent creative agencies. Lead agencies build a partner pool, broadcast RFPs, compare and score bids with AI, and review delivery performance. Partner agencies get discovered, submit bids, and build a track record, all in one platform.",
+    a: "Ligament is an AI-powered vendor orchestration platform for independent creative agencies. Lead agencies build a vendor pool, broadcast RFPs, compare and score bids with AI, and review delivery performance. Vendors get discovered, submit bids, and build a track record, all in one platform.",
   },
   {
     q: "Who is Ligament for?",
-    a: "Two types of users. Lead Agencies manage their partner pool, broadcast RFPs, evaluate bids, run onboarding, and review delivery performance. Partner Agencies receive RFP invitations, submit bids, complete onboarding, and track their engagements and reliability score.",
+    a: "Two types of users. Lead Agencies manage their vendor pool, broadcast RFPs, evaluate bids, run onboarding, and review delivery performance. Vendors receive RFP invitations, submit bids, complete onboarding, and track their engagements and reliability score.",
   },
   {
-    q: "Is Ligament free for partner agencies?",
-    a: "Yes, completely free. Ligament charges lead agencies for platform access. Partner agencies, the vendors receiving RFPs and submitting bids, always use Ligament at no cost.",
+    q: "Is Ligament free for vendors?",
+    a: "Yes, completely free. Ligament charges lead agencies for platform access. Vendors, the ones receiving RFPs and submitting bids, always use Ligament at no cost.",
   },
   {
     q: "How much does Ligament cost for lead agencies?",
@@ -33,14 +33,14 @@ const generalFAQs: FAQ[] = [
   },
   {
     q: "Is my data secure?",
-    a: "Data is stored on Supabase hosted on AWS US-East. AI processing uses the Anthropic API. File storage uses Vercel Blob with private access controls. Row-level security ensures each agency and partner only sees their own data, and all connections use HTTPS.",
+    a: "Data is stored on Supabase hosted on AWS US-East. AI processing uses the Anthropic API. File storage uses Vercel Blob with private access controls. Row-level security ensures each agency and vendor only sees their own data, and all connections use HTTPS.",
   },
 ]
 
 const leadFAQs: FAQ[] = [
   {
-    q: "What is the Partner Pool?",
-    a: "Your Partner Pool is organized into three columns: Active Partners you already work with, partners you have Invited but who have not yet joined, and partners you have Discovered but not yet reached out to. Build it by inviting partners directly, importing contacts from your email, or discovering new agencies on the marketplace.",
+    q: "What is the Vendor Pool?",
+    a: "Your Vendor Pool is organized into three columns: Active Vendors you already work with, vendors you have Invited but who have not yet joined, and vendors you have Discovered but not yet reached out to. Build it by inviting vendors directly, importing contacts from your email, or discovering new agencies on the marketplace.",
   },
   {
     q: "Can I import my vendor contacts from email?",
@@ -48,7 +48,7 @@ const leadFAQs: FAQ[] = [
   },
   {
     q: "How does RFP Broadcast work?",
-    a: "Upload or create a client brief and Ligament's AI analyzes it into a structured master RFP with scope items. Allocate scope items to partners in your pool or send them via Lightning RFP Magic Link to any vendor, no account required on their end. Each recipient gets a scoped RFP tailored to their deliverable.",
+    a: "Upload or create a client brief and Ligament's AI analyzes it into a structured master RFP with scope items. Allocate scope items to vendors in your pool or send them via Lightning RFP Magic Link to any vendor, no account required on their end. Each recipient gets a scoped RFP tailored to their deliverable.",
   },
   {
     q: "What is Lightning RFP Magic Link?",
@@ -56,7 +56,7 @@ const leadFAQs: FAQ[] = [
   },
   {
     q: "How does Bid Management work?",
-    a: "All bids, from partner pool vendors and Magic Link guests alike, appear in one pipeline. Generate an AI summary and cost decomposition for any bid, or select several to compare side by side with an AI narrative that surfaces pricing gaps and scope risks. Shortlist, request meetings, leave feedback, award, or decline from the same view.",
+    a: "All bids, from your vendor pool and Magic Link guests alike, appear in one pipeline. Generate an AI summary and cost decomposition for any bid, or select several to compare side by side with an AI narrative that surfaces pricing gaps and scope risks. Shortlist, request meetings, leave feedback, award, or decline from the same view.",
   },
   {
     q: "How does AI bid scoring work?",
@@ -64,30 +64,30 @@ const leadFAQs: FAQ[] = [
   },
   {
     q: "What is Delivery Performance?",
-    a: "After a project wraps, rate the vendor's actual delivery against the same criteria you scored their bid on, plus on-time, on-budget, and satisfaction ratings. Ligament compares the delivery score to the original bid score and generates an AI summary of where the vendor over-delivered or under-delivered. This builds a reliability record that surfaces on the partner's profile and informs AI scoring on their future bids.",
+    a: "After a project wraps, rate the vendor's actual delivery against the same criteria you scored their bid on, plus on-time, on-budget, and satisfaction ratings. Ligament compares the delivery score to the original bid score and generates an AI summary of where the vendor over-delivered or under-delivered. This builds a reliability record that surfaces on the vendor's profile and informs AI scoring on their future bids.",
   },
   {
     q: "What is Onboarding?",
-    a: "After awarding a bid, send a structured onboarding package with kickoff details, brand guidelines, and key project documents. Partners acknowledge receipt through their portal, and you can track acknowledgment status across every active partnership from the Onboarding page.",
+    a: "After awarding a bid, send a structured onboarding package with kickoff details, brand guidelines, and key project documents. Vendors acknowledge receipt through their portal, and you can track acknowledgment status across every active partnership from the Onboarding page.",
   },
   {
     q: "What are business criteria and procurement requirements?",
-    a: "Track each partner's business designations (MBE, WBE, veteran-owned, and others), insurance coverage, and certificate of insurance on file. Set requirements on an RFP and Ligament flags any bidder who does not meet them, so compliance gaps surface automatically during bid review.",
+    a: "Track each vendor's business designations (MBE, WBE, veteran-owned, and others), insurance coverage, and certificate of insurance on file. Set requirements on an RFP and Ligament flags any bidder who does not meet them, so compliance gaps surface automatically during bid review.",
   },
   {
     q: "How do I get started as a Lead Agency?",
-    a: "Sign up, create your first project, and either invite partners from your existing network or build your Partner Pool by importing contacts, inviting directly, or discovering new agencies on the marketplace. No setup fee.",
+    a: "Sign up, create your first project, and either invite vendors from your existing network or build your Vendor Pool by importing contacts, inviting directly, or discovering new agencies on the marketplace. No setup fee.",
   },
 ]
 
 const partnerFAQs: FAQ[] = [
   {
-    q: "Do I need to pay to use Ligament as a partner agency?",
-    a: "Ligament is completely free for partner agencies. There are no fees to create a profile, receive RFP invitations, submit bids, or manage active projects. Lead agencies pay for platform access. Partners never do.",
+    q: "Do I need to pay to use Ligament as a vendor?",
+    a: "Ligament is completely free for vendors. There are no fees to create a profile, receive RFP invitations, submit bids, or manage active projects. Lead agencies pay for platform access. Vendors never do.",
   },
   {
-    q: "How do I join Ligament as a partner agency?",
-    a: "If a lead agency invites you to bid, you will get a direct platform invitation or a Lightning RFP Magic Link, either lets you respond right away. You can also sign up directly and complete your profile to become discoverable to agencies looking for partners.",
+    q: "How do I join Ligament as a vendor?",
+    a: "If a lead agency invites you to bid, you will get a direct platform invitation or a Lightning RFP Magic Link, either lets you respond right away. You can also sign up directly and complete your profile to become discoverable to agencies looking for vendors.",
   },
   {
     q: "What is the Agency Network page?",
@@ -95,7 +95,7 @@ const partnerFAQs: FAQ[] = [
   },
   {
     q: "How do I make my profile discoverable to agencies?",
-    a: "On your Partner Profile page, toggle on \"Make my profile discoverable.\" Once on, your profile appears in the marketplaces lead agencies browse when looking for new vendors. A complete profile with capabilities, credentials, business criteria, and work examples increases your odds of getting invited to bid.",
+    a: "On your Vendor Profile page, toggle on \"Make my profile discoverable.\" Once on, your profile appears in the marketplaces lead agencies browse when looking for new vendors. A complete profile with capabilities, credentials, business criteria, and work examples increases your odds of getting invited to bid.",
   },
   {
     q: "What information should I include in my profile?",
@@ -130,7 +130,7 @@ const termsFAQs: FAQ[] = [
   },
   {
     q: "Who sees my terms?",
-    a: "Disclosure is bilateral and scoped to the exchange. Partners see an agency's terms on the RFPs they receive; agencies see a partner's terms alongside their bid. Terms are not published anywhere publicly.",
+    a: "Disclosure is bilateral and scoped to the exchange. Vendors see an agency's terms on the RFPs they receive; agencies see a vendor's terms alongside their bid. Terms are not published anywhere publicly.",
   },
   {
     q: "What do Firm, Flexible, and Negotiable mean?",
@@ -172,8 +172,8 @@ export default function FAQPage() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "general", label: "General" },
-    { key: "lead", label: "For Lead Agency Users" },
-    { key: "partner", label: "For Partner Agency Users" },
+    { key: "lead", label: "For lead agencies" },
+    { key: "partner", label: "For vendors" },
     { key: "terms", label: "Terms & Disclosure" },
   ]
 

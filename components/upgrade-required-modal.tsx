@@ -50,7 +50,7 @@ export function UpgradeRequiredModal({ isOpen, onClose, featureName }: UpgradeRe
           <p className="text-foreground-muted mb-6">
             {featureName 
               ? `Access ${featureName} and all other premium features with a paid subscription.`
-              : "Unlock all features including file uploads, project management, partner collaboration, and more."
+              : "Unlock all features including file uploads, project management, vendor collaboration, and more."
             }
           </p>
 

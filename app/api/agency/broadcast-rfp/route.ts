@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
         if (!partnership) {
           return NextResponse.json(
             {
-              error: "One or more selected partners are not active partners of your agency.",
+              error: "One or more selected vendors are not active vendors of your agency.",
               partnerId,
             },
             { status: 400 }
@@ -219,7 +219,7 @@ export async function POST(request: NextRequest) {
           normalizedPartner?.company_name ||
           normalizedPartner?.full_name ||
           partnerEmail ||
-          "Partner"
+          "Vendor"
         if (!partnerEmail.trim()) {
           console.warn("[broadcast-rfp] active partner has no email; skipping notification", {
             partnerId,
@@ -382,7 +382,7 @@ export async function POST(request: NextRequest) {
           recipientEmail: email,
           recipientName,
           subject: `New RFP from ${agencyDisplay}: ${scopeItemName}`,
-          heading: "New RFP in your partner inbox",
+          heading: "New RFP in your vendor inbox",
           paragraphs: [
             `${agencyDisplay} has sent you an RFP for ${scopeItemName} on Ligament.`,
             "Review the scope, timeline, and budget details, then submit your bid directly through the platform.",
@@ -450,7 +450,7 @@ export async function POST(request: NextRequest) {
           to: first.partnerEmail,
           subject,
           html: buildBrandedEmailHtml({
-            title: anyNda ? "NDA required before access" : "New RFPs in your partner inbox",
+            title: anyNda ? "NDA required before access" : "New RFPs in your vendor inbox",
             recipientName: first.partnerName,
             body,
             ctaText: anyNda ? "Sign NDA & View RFPs" : "View RFPs",
@@ -493,7 +493,7 @@ export async function POST(request: NextRequest) {
           to: first.recipientEmail,
           subject,
           html: buildBrandedEmailHtml({
-            title: notifications.length === 1 ? first.heading : (anyNda ? "NDA required before access" : "New RFPs in your partner inbox"),
+            title: notifications.length === 1 ? first.heading : (anyNda ? "NDA required before access" : "New RFPs in your vendor inbox"),
             recipientName: first.recipientName,
             body,
             ctaText: anyNda ? "Sign NDA & View RFPs" : "View RFPs",

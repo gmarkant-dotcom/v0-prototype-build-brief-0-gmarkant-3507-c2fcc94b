@@ -76,14 +76,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
         const pr = row.partner as { company_name?: string | null; full_name?: string | null } | null
         const inner = Array.isArray(pr) ? pr[0] : pr
         const partnerName =
-          inner?.company_name?.trim() || inner?.full_name?.trim() || "Partner"
+          inner?.company_name?.trim() || inner?.full_name?.trim() || "Vendor"
         nameByPartnershipId.set(row.id as string, partnerName)
       }
     }
 
     const updates = (rows || []).map((r) => ({
       ...r,
-      partner_display_name: nameByPartnershipId.get(r.partnership_id as string) || "Partner",
+      partner_display_name: nameByPartnershipId.get(r.partnership_id as string) || "Vendor",
     }))
 
     console.log("[agency/status-updates] GET result", {

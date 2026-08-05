@@ -29,7 +29,7 @@ export async function GET(
       .single()
 
     if (profile?.role !== 'partner') {
-      return NextResponse.json({ error: 'Partner access only' }, { status: 403 })
+      return NextResponse.json({ error: 'Vendor access only' }, { status: 403 })
     }
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile.role })
 

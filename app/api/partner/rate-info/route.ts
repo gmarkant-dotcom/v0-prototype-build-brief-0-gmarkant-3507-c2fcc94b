@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
 
     const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
     if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partners only" }, { status: 403, headers: noStore })
+      return NextResponse.json({ error: "Vendors only" }, { status: 403, headers: noStore })
     }
 
     const partnershipId = request.nextUrl.searchParams.get("partnershipId")
@@ -234,7 +234,7 @@ export async function POST(req: Request) {
 
     const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
     if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partners only" }, { status: 403, headers: noStore })
+      return NextResponse.json({ error: "Vendors only" }, { status: 403, headers: noStore })
     }
 
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null

@@ -504,7 +504,7 @@ function PartnerRFPsContent() {
             {activeTab === "open"
               ? isLoading
                 ? "Loading…"
-                : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "agency" ? "agency partner" : groupBy === "client" ? "client" : "status"}${totalGroups !== 1 ? "s" : ""}`
+                : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "agency" ? "agency" : groupBy === "client" ? "client" : "status"}${totalGroups !== 1 ? "s" : ""}`
               : activeTab === "my-bids"
                 ? "Bids you've submitted that are still awaiting an outcome"
                 : "Every bid you've submitted, including awarded and declined"

@@ -193,7 +193,7 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
     rows.push({
       key: `rfp:${r.projectId}:${r.scopeItemName}`,
       icon: Send,
-      text: `RFP for ${r.scopeItemName} on ${r.projectName} - ${r.pending} of ${r.invited} partner${r.invited === 1 ? "" : "s"} ${r.pending === 1 ? "hasn't" : "haven't"} responded`,
+      text: `RFP for ${r.scopeItemName} on ${r.projectName} - ${r.pending} of ${r.invited} vendor${r.invited === 1 ? "" : "s"} ${r.pending === 1 ? "hasn't" : "haven't"} responded`,
       timeframe: relativeDeadline ? `closes ${relativeDeadline}` : undefined,
       href: r.href,
       urgent: Number.isFinite(daysLeft) && daysLeft <= URGENT_DAYS_THRESHOLD,
@@ -212,7 +212,7 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
     rows.push({
       key: `alert:${r.projectId}`,
       icon: FileWarning,
-      text: `${r.count} partner update${r.count === 1 ? "" : "s"} ${r.count === 1 ? "needs" : "need"} attention on ${r.projectName}`,
+      text: `${r.count} vendor update${r.count === 1 ? "" : "s"} ${r.count === 1 ? "needs" : "need"} attention on ${r.projectName}`,
       href: r.href,
       urgent: false,
     })
@@ -299,7 +299,7 @@ function GettingStartedChecklist({ checklist }: { checklist: ChecklistData }) {
     {
       key: "importPartners",
       done: checklist.importPartners,
-      title: "Import your partners",
+      title: "Import your vendors",
       description: "Bring in vendors from your email or a spreadsheet to build your pool.",
       icon: UserPlus,
       href: "/agency/pool?import=email",
@@ -413,7 +413,7 @@ function GettingStartedChecklist({ checklist }: { checklist: ChecklistData }) {
 
 function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
   const stats: { label: string; value: number; href: string; icon: typeof Users }[] = [
-    { label: "Active Partners", value: funnel.activePartners, href: "/agency/pool", icon: Users },
+    { label: "Active Vendors", value: funnel.activePartners, href: "/agency/pool", icon: Users },
     { label: "Open RFPs", value: funnel.openRfps, href: "/agency/bids", icon: Send },
     { label: "Bids Received (Month)", value: funnel.bidsReceivedThisMonth, href: "/agency/bids", icon: Gavel },
     { label: "Awarded (Quarter)", value: funnel.awardedThisQuarter, href: "/agency/bids", icon: Trophy },
@@ -441,7 +441,7 @@ function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
       <div className="glass rounded-xl p-4 mt-3">
         <div className="flex items-center justify-between mb-2 text-sm">
           <span className="text-foreground-muted">
-            Committed partner spend{" "}
+            Committed vendor spend{" "}
             <span className="text-foreground font-medium">{formatUsdWhole(funnel.committedPartnerSpend)}</span> of{" "}
             <span className="text-foreground font-medium">{formatUsdWhole(funnel.totalClientBudget)}</span> client budget
           </span>

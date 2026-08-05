@@ -49,7 +49,7 @@ const tiers: Tier[] = [
     features: [
       "Up to 5 active projects",
       "50 AI analyses per month",
-      "Unlimited partner pool",
+      "Unlimited vendor pool",
       "Unlimited user seats",
       "Full AI suite (bid analysis, comparison, scoring, vendor intelligence)",
       "Business criteria and compliance tracking",
@@ -104,7 +104,7 @@ const comparisonRows: ComparisonRow[] = [
   { label: "Active projects", starter: "5", professional: "20", enterprise: "Unlimited" },
   { label: "AI analyses per month", starter: "50", professional: "250", enterprise: "Unlimited" },
   { label: "User seats", starter: "Unlimited", professional: "Unlimited", enterprise: "Unlimited" },
-  { label: "Partner pool size", starter: "Unlimited", professional: "Unlimited", enterprise: "Unlimited" },
+  { label: "Vendor pool size", starter: "Unlimited", professional: "Unlimited", enterprise: "Unlimited" },
   { label: "RFP Broadcast", starter: true, professional: true, enterprise: true },
   { label: "Lightning RFP Magic Links", starter: true, professional: true, enterprise: true },
   { label: "AI Bid Analysis & Comparison", starter: true, professional: true, enterprise: true },
@@ -132,8 +132,8 @@ const pricingFaqs: FAQ[] = [
     a: "Yes. Upgrades take effect immediately. Downgrades take effect at the end of your current billing period.",
   },
   {
-    q: "Is there really no cost for partner agencies?",
-    a: "Correct. Partners access the platform for free, permanently. They can receive RFPs, submit bids, manage onboarding, and track project delivery at no cost.",
+    q: "Is there really no cost for vendors?",
+    a: "Correct. Vendors access the platform for free, permanently. They can receive RFPs, submit bids, manage onboarding, and track project delivery at no cost.",
   },
   {
     q: "What happens if I hit my project or analysis limit?",
@@ -159,7 +159,7 @@ const benefits: { title: string; body: string }[] = [
     body: "Delivery performance reviews and vendor reliability scores turn every engagement into a searchable record. What used to live in one person's head becomes a durable agency asset.",
   },
   {
-    title: "The right partner for every scope.",
+    title: "The right vendor for every scope.",
     body: "A curated pool of vetted vendors with performance track records, business credentials, and bid history on file. Match the right talent to the right scope with confidence.",
   },
   {
@@ -230,7 +230,7 @@ export default function PricingPage() {
 
         {/* Partner free callout */}
         <div className="max-w-3xl mx-auto mb-10 rounded-lg border border-[#C8F53C]/40 bg-[#C8F53C]/10 px-6 py-5 text-center">
-          <p className="font-display font-bold text-lg text-white">Partner agencies always access Ligament for free.</p>
+          <p className="font-display font-bold text-lg text-white">Vendors always access Ligament for free.</p>
           <p className="text-white/75 text-sm mt-1">No fees, no limits, no catch.</p>
         </div>
 
@@ -423,7 +423,7 @@ export default function PricingPage() {
                     $3,720 in annual labor value recovered
                   </p>
                   <p className="text-white/70 text-sm leading-relaxed">
-                    Your partner pool is built, your first RFP templates are in place, and you've stopped recreating
+                    Your vendor pool is built, your first RFP templates are in place, and you've stopped recreating
                     work from scratch.
                   </p>
                 </div>

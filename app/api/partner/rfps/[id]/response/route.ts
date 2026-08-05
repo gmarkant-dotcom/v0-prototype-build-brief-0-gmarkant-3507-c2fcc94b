@@ -94,7 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     console.log("[api] start", { route, method: "POST", userId: user.id, role: profile?.role ?? null })
 
     if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partners only" }, { status: 403 })
+      return NextResponse.json({ error: "Vendors only" }, { status: 403 })
     }
 
     const { data: inbox, error: inboxErr } = await supabase
@@ -182,7 +182,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       profile.company_name?.trim() ||
       profile.full_name?.trim() ||
       profile.email?.trim() ||
-      "Partner"
+      "Vendor"
 
     const row = {
       proposal_text,
@@ -312,7 +312,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             cc: "hello@withligament.com",
             subject: bidUpdateSubject,
             html: buildBrandedEmailHtml({
-              title: "Partner bid updated",
+              title: "Vendor bid updated",
               recipientName: agencyRecipient,
               body: `${partner_display_name} has submitted a revised bid for ${scopeItemName} on ${projectName}.\n\nLog in to review the updated submission and respond.`,
               ctaText: "Review Bid",

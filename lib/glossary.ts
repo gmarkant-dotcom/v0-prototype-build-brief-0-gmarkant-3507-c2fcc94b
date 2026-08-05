@@ -109,7 +109,7 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
     definition:
       "A business majority-owned and controlled by members of a recognized minority group, certified by a body such as the NMSDC or a state agency.",
     whyItMatters:
-      "many clients carry supplier-diversity commitments; certified partners help you meet them and document it.",
+      "many clients carry supplier-diversity commitments; certified vendors help you meet them and document it.",
   },
   wbe: {
     term: "Women Business Enterprise (WBE)",
@@ -227,7 +227,7 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   },
   delivery_performance: {
     term: "Delivery performance / reliability score",
-    definition: "A partner's track record from completed project reviews: how delivery matched what was bid.",
+    definition: "A vendor's track record from completed project reviews: how delivery matched what was bid.",
     whyItMatters: "past delivery is the best predictor you have. This is the evidence layer behind awarding with confidence.",
   },
 }

@@ -28,7 +28,7 @@ const AGENCY_SLOTS = [
 const TEMPLATE_SLOTS = [
   { kind: "client_brief", title: "Client Brief" },
   { kind: "master_brief", title: "Master Brief" },
-  { kind: "partner_brief", title: "Partner Brief" },
+  { kind: "partner_brief", title: "Vendor Brief" },
   { kind: "budget", title: "Budget" },
   { kind: "timeline", title: "Timeline" },
   { kind: "other", title: "Other" },
@@ -297,7 +297,7 @@ export function AgencyDocumentLibraryManager() {
       <GlassCard className="p-6">
         <GlassCardHeader
           title="Key templates"
-          description="Client Brief, Master Brief, Partner Brief, Budget, Timeline, and Other. Store files or external links."
+          description="Client Brief, Master Brief, Vendor Brief, Budget, Timeline, and Other. Store files or external links."
         />
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
           {TEMPLATE_SLOTS.map((s) => renderSlot("templates", s))}

@@ -23,7 +23,7 @@ async function loadVendorTrackRecord(
   currentResponseId: string
 ): Promise<string> {
   if (!partnerId) {
-    return "Vendor track record: this is a guest/unlinked submission with no partner account, so no prior history is available."
+    return "Vendor track record: this is a guest/unlinked submission with no vendor account, so no prior history is available."
   }
 
   const { data: partnerships } = await supabase

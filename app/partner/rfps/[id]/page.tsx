@@ -2032,7 +2032,7 @@ export default function PartnerRfpDetailPage() {
                 "Your updated bid has been submitted."
               ) : (
                 <>
-                  Your response was submitted successfully. The lead agency will see it under RFP Broadcast → Partner
+                  Your response was submitted successfully. The lead agency will see it under RFP Broadcast → Vendor
                   responses.
                 </>
               )}

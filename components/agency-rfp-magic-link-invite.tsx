@@ -152,7 +152,7 @@ export function AgencyRfpMagicLinkInvite({ projectId }: { projectId: string }) {
                   : checkResult?.has_expired_invite
                     ? "The previous link expired - a new one will be sent."
                     : checkResult?.is_existing_partner
-                      ? "Already in your partner pool"
+                      ? "Already in your vendor pool"
                       : "New vendor - will receive a guest invitation"}
             </p>
           )}

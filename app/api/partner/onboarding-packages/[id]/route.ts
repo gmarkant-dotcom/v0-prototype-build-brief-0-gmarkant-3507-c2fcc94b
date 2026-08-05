@@ -17,7 +17,7 @@ export async function PATCH(
 
     const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
     if (profile?.role !== "partner" && profile?.active_role !== "partner") {
-      return NextResponse.json({ error: "Partner only" }, { status: 403 })
+      return NextResponse.json({ error: "Vendor only" }, { status: 403 })
     }
 
     const body = await request.json()

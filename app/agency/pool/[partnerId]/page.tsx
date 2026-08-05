@@ -163,7 +163,7 @@ export default function AgencyPartnerProfilePage() {
       ])
       if (!prRes.ok) {
         const j = await prRes.json().catch(() => ({}))
-        setError((j as { error?: string }).error || "Could not load partner profile")
+        setError((j as { error?: string }).error || "Could not load vendor profile")
         setProfile(null)
         setLoading(false)
         return
@@ -281,11 +281,11 @@ export default function AgencyPartnerProfilePage() {
             className="inline-flex items-center gap-2 font-mono text-xs text-foreground-muted hover:text-accent mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Partner Pool
+            Back to Vendor Pool
           </Link>
           <GlassCard className="p-8 text-center">
             <p className="text-foreground-muted">
-              Partner profile pages load from your live partner relationships. Switch out of demo mode to view a
+              Vendor profile pages load from your live vendor relationships. Switch out of demo mode to view a
               profile.
             </p>
             <Button className="mt-6 bg-accent text-accent-foreground" onClick={() => router.push("/agency/pool")}>
@@ -302,7 +302,7 @@ export default function AgencyPartnerProfilePage() {
       <AgencyLayout>
         <div className="p-8 max-w-6xl mx-auto flex items-center justify-center gap-2 text-foreground-muted py-24">
           <Loader2 className="w-6 h-6 animate-spin shrink-0" />
-          Loading partner…
+          Loading vendor…
         </div>
       </AgencyLayout>
     )
@@ -317,10 +317,10 @@ export default function AgencyPartnerProfilePage() {
             className="inline-flex items-center gap-2 font-mono text-xs text-foreground-muted hover:text-accent mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Partner Pool
+            Back to Vendor Pool
           </Link>
           <GlassCard className="p-8 border-red-500/20">
-            <p className="text-red-300">{error || "Partner not found"}</p>
+            <p className="text-red-300">{error || "Vendor not found"}</p>
           </GlassCard>
         </div>
       </AgencyLayout>
@@ -330,7 +330,7 @@ export default function AgencyPartnerProfilePage() {
   const p = profile.partner
   const displayCompany = (p.company_name || "").trim()
   const displayPerson = (p.full_name || "").trim()
-  const headerTitle = displayCompany || displayPerson || p.display_name?.trim() || "Partner"
+  const headerTitle = displayCompany || displayPerson || p.display_name?.trim() || "Vendor"
   const subTitle = displayCompany && displayPerson ? displayPerson : p.email || ""
   const web = websiteHref(p.website)
   const meet = websiteHref(p.meeting_url)
@@ -359,7 +359,7 @@ export default function AgencyPartnerProfilePage() {
           className="inline-flex items-center gap-2 font-mono text-xs text-foreground-muted hover:text-accent"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Partner Pool
+          Back to Vendor Pool
         </Link>
 
         {/* Header */}
@@ -664,7 +664,7 @@ export default function AgencyPartnerProfilePage() {
         <GlassCard className="p-6 md:p-8 border-amber-500/20">
           <h2 className="font-display font-bold text-lg text-foreground mb-1">Agency notes</h2>
           <p className="text-xs text-foreground-muted mb-6">
-            Private to your agency - not visible to the partner
+            Private to your agency - not visible to the vendor
           </p>
 
           <div className="space-y-5">
@@ -675,7 +675,7 @@ export default function AgencyPartnerProfilePage() {
                 onChange={(e) => setNotesState((s) => ({ ...s, notes: e.target.value }))}
                 rows={4}
                 className="mt-1.5 bg-white/5 border-border text-foreground"
-                placeholder="Internal notes about this partner…"
+                placeholder="Internal notes about this vendor…"
               />
               {Array.isArray(notesState.notes_log) && notesState.notes_log.length > 0 && (
                 <div className="mt-3 space-y-2">
@@ -796,9 +796,9 @@ export default function AgencyPartnerProfilePage() {
         <Dialog open={blacklistDialogOpen} onOpenChange={setBlacklistDialogOpen}>
           <DialogContent className="bg-card border-border text-foreground">
             <DialogHeader>
-              <DialogTitle className="font-display">Blacklist this partner?</DialogTitle>
+              <DialogTitle className="font-display">Blacklist this vendor?</DialogTitle>
               <DialogDescription className="text-foreground-muted">
-                This flag is stored in your private agency notes. Confirm to mark the partner as blacklisted for your
+                This flag is stored in your private agency notes. Confirm to mark the vendor as blacklisted for your
                 team&apos;s reference.
               </DialogDescription>
             </DialogHeader>

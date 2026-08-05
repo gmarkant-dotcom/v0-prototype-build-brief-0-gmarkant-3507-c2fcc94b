@@ -93,7 +93,7 @@ const masterDocuments: MasterDocument[] = [
     name: "Master Client Mandatory Requirements",
     type: "agency",
     category: "requirements",
-    description: "Critical ways of working, compliance standards, and mandatory requirements all partners must follow",
+    description: "Critical ways of working, compliance standards, and mandatory requirements all vendors must follow",
     lastUpdated: "Feb 15, 2024",
     required: true,
     version: "v1.0"
@@ -283,9 +283,9 @@ export function Stage03Onboarding() {
   
   const steps = [
     { id: "select_documents", label: "Select Documents", number: 1 },
-    { id: "review_partner_status", label: "Review Partner Status", number: 2 },
+    { id: "review_partner_status", label: "Review Vendor Status", number: 2 },
     { id: "customize_packet", label: "Customize Packet", number: 3 },
-    { id: "send", label: "Send to Partner", number: 4 }
+    { id: "send", label: "Send to Vendor", number: 4 }
   ]
   
   const currentStepIndex = steps.findIndex(s => s.id === currentStep)
@@ -324,7 +324,7 @@ export function Stage03Onboarding() {
       <StageHeader
         stageNumber="03"
         title="Onboarding + Ways of Working"
-        subtitle="Select documents to send to awarded partners. The system will check their existing profile to avoid duplicate requests."
+        subtitle="Select documents to send to awarded vendors. The system will check their existing profile to avoid duplicate requests."
         aiPowered={false}
       />
       
@@ -575,7 +575,7 @@ export function Stage03Onboarding() {
                   disabled={selectedDocuments.length === 0}
                   className="bg-accent text-accent-foreground hover:bg-accent/90"
                 >
-                  Continue to Partner Review
+                  Continue to Vendor Review
                   <ChevronRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
@@ -728,10 +728,10 @@ export function Stage03Onboarding() {
                 </GlassCard>
               </div>
               
-              {/* Partner Profile Summary */}
+              {/* Vendor Profile Summary */}
               <GlassCard>
                 <GlassCardHeader
-                  label="Partner Profile"
+                  label="Vendor Profile"
                   title={currentPartner.name}
                   badge={currentPartner.discipline}
                 />
@@ -892,7 +892,7 @@ export function Stage03Onboarding() {
                         Preview
                       </div>
                       <p className="text-sm text-foreground-secondary">
-                        Partner will receive a link to schedule their kickoff call at: <span className="text-accent break-all">{schedulingLink}</span>
+                        Vendor will receive a link to schedule their kickoff call at: <span className="text-accent break-all">{schedulingLink}</span>
                       </p>
                     </div>
                   </div>
@@ -938,7 +938,7 @@ export function Stage03Onboarding() {
                   onClick={() => setCurrentStep("review_partner_status")}
                   className="text-foreground hover:text-foreground"
                 >
-                  Back to Partner Review
+                  Back to Vendor Review
                 </Button>
                 <Button
                   onClick={() => setCurrentStep("send")}
@@ -1067,7 +1067,7 @@ export function Stage03Onboarding() {
           <GlassCard className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <GlassCardHeader
               title={`Upload ${uploadingDocType === "insurance" ? "insurance certificate" : "document"}`}
-              description="Upload the required document for this partner."
+              description="Upload the required document for this vendor."
             />
             <div className="mt-4">
               <FileUpload

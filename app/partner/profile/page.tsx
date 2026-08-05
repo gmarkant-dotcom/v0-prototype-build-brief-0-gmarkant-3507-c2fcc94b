@@ -604,7 +604,7 @@ export default function PartnerProfilePage() {
         const { data: roleProfile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).maybeSingle()
         const isPartner = roleProfile?.role === "partner" || roleProfile?.active_role === "partner"
         if (!isPartner) {
-          setMessage("Only partner users can save this profile.")
+          setMessage("Only vendor users can save this profile.")
           return
         }
         const targetProfileId = profileId || user.id
@@ -1061,7 +1061,7 @@ export default function PartnerProfilePage() {
 
           {activePartnershipOptions.length === 0 ? (
             <div className="rounded-lg border border-dashed border-vendor-border p-4 text-sm text-vendor-muted">
-              No active partner partnerships found.
+              No active partnerships found.
             </div>
           ) : (
             <div className="space-y-6">

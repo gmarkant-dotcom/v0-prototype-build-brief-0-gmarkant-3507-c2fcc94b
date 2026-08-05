@@ -611,14 +611,14 @@ export default function AgencyProfileSettingsPage() {
               className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
             <p className="text-xs text-foreground-muted mt-1">
-              Paste your Calendly or scheduling link here - partners will see this when you request a meeting.
+              Paste your Calendly or scheduling link here - vendors will see this when you request a meeting.
             </p>
           </div>
           <label className="flex items-start justify-between gap-4 cursor-pointer">
             <div>
               <div className="text-foreground font-medium">Make my agency discoverable on the Ligament Marketplace</div>
               <p className="text-xs text-foreground-muted mt-1">
-                Discoverable agencies can be found by partner agencies and other lead agencies on the platform.
+                Discoverable agencies can be found by vendors and other lead agencies on the platform.
               </p>
             </div>
             <Switch checked={form.is_discoverable} onCheckedChange={toggleDiscoverable} />

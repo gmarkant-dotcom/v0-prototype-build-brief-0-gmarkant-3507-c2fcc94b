@@ -91,7 +91,7 @@ const STATUS_LABEL: Record<string, string> = {
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
 function partnerDisplayName(p: PartnerRow): string {
-  return p.partner.companyName || p.partner.fullName || p.partner.email || "Partner"
+  return p.partner.companyName || p.partner.fullName || p.partner.email || "Vendor"
 }
 function isAgencyOverride(notes: string | null | undefined): boolean {
   return typeof notes === "string" && notes.startsWith("[Agency override]")
@@ -172,7 +172,7 @@ function SummaryBar({ partners, project, loading }: {
       icon: <DollarSign className={cn("w-3.5 h-3.5", margin == null ? "text-foreground-muted" : margin >= 0 ? "text-success" : "text-red-400")} />,
       highlight: false,
     },
-    { label: "Partners",      value: String(totalPartners), icon: <Users className="w-3.5 h-3.5 text-sky-400" />, highlight: false },
+    { label: "Vendors",       value: String(totalPartners), icon: <Users className="w-3.5 h-3.5 text-sky-400" />, highlight: false },
     { label: "Avg Completion",value: `${avgCompletion}%`,  icon: <Activity className="w-3.5 h-3.5 text-accent" />, highlight: false },
     { label: "Open Alerts",   value: String(totalAlerts),  icon: <AlertTriangle className={cn("w-3.5 h-3.5", totalAlerts > 0 ? "text-amber-400" : "text-foreground-muted")} />, highlight: totalAlerts > 0 },
     { label: "On Track",      value: String(onTrack),      icon: <CheckCircle className="w-3.5 h-3.5 text-success" />, highlight: false },
@@ -403,10 +403,10 @@ function SlideOverPanel({ row, projectId, currentProject, resolving, onResolve, 
                 </p>
               </div>
 
-              {/* Latest partner note */}
+              {/* Latest vendor note */}
               {row.latest_partner_update && !agencySet && row.latest_partner_update.notes && (
                 <div className="space-y-1">
-                  <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Latest partner note</label>
+                  <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Latest vendor note</label>
                   <p className="text-sm text-foreground leading-relaxed italic">
                     &ldquo;{row.latest_partner_update.notes}&rdquo;
                   </p>
@@ -733,7 +733,7 @@ function ActiveEngagementsContent() {
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-foreground-muted" />
-              <Input placeholder="Search client, partner, or scope…" value={search} onChange={e => setSearch(e.target.value)}
+              <Input placeholder="Search client, vendor, or scope…" value={search} onChange={e => setSearch(e.target.value)}
                 className="pl-9 h-9 bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 text-sm" />
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -743,7 +743,7 @@ function ActiveEngagementsContent() {
                   <button key={g} type="button" onClick={() => setGroupBy(g)}
                     className={cn("px-3 py-1.5 font-mono text-2xs uppercase tracking-wider transition-colors",
                       groupBy === g ? "bg-accent text-accent-foreground" : "bg-white/5 text-foreground-muted hover:bg-white/10")}>
-                    {g === "client" ? "Client" : "Partner Agency"}
+                    {g === "client" ? "Client" : "Vendor"}
                   </button>
                 ))}
               </div>
@@ -754,12 +754,12 @@ function ActiveEngagementsContent() {
           {engLoading && (
             <div className="flex items-center gap-2 text-foreground-muted py-8">
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="font-mono text-sm">Loading partner data…</span>
+              <span className="font-mono text-sm">Loading vendor data…</span>
             </div>
           )}
           {!engLoading && partners.length === 0 && (
             <div className="rounded-xl border border-border/40 bg-white/5 p-10 text-center">
-              <p className="text-foreground-muted text-sm">No awarded partners for this project yet.</p>
+              <p className="text-foreground-muted text-sm">No awarded vendors for this project yet.</p>
             </div>
           )}
           {!engLoading && groups.length === 0 && partners.length > 0 && (

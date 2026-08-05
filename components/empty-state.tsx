@@ -31,9 +31,9 @@ const emptyStateConfig: Record<EmptyStateType, {
   },
   partners: {
     icon: <Users className="w-12 h-12 text-foreground-muted/50" />,
-    title: "No partners in your pool",
-    description: "Add vendors, freelancers, and agencies to your partner pool to start building your network.",
-    actionLabel: "Add partner"
+    title: "No vendors in your pool",
+    description: "Add vendors, freelancers, and agencies to your vendor pool to start building your network.",
+    actionLabel: "Add vendor"
   },
   documents: {
     icon: <FileText className="w-12 h-12 text-foreground-muted/50" />,
@@ -44,7 +44,7 @@ const emptyStateConfig: Record<EmptyStateType, {
   rfps: {
     icon: <Briefcase className="w-12 h-12 text-foreground-muted/50" />,
     title: "No RFPs created",
-    description: "Create an RFP to broadcast project opportunities to your partner network.",
+    description: "Create an RFP to broadcast project opportunities to your vendor network.",
     actionLabel: "Create RFP"
   },
   project: {
@@ -55,7 +55,7 @@ const emptyStateConfig: Record<EmptyStateType, {
   },
   onboarding: {
     icon: <UserPlus className="w-12 h-12 text-foreground-muted/50" />,
-    title: "No partners to onboard",
+    title: "No vendors to onboard",
     description: "When you award vendors from the Bids stage, you'll be able to onboard them here.",
     actionLabel: "View bids"
   },

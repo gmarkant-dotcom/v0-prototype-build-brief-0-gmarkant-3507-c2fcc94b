@@ -442,7 +442,7 @@ export const demoMasterProjects: DashboardDemoProject[] = [
         type: "utilization",
         severity: "warning",
         title: "Tandem Social approaching budget cap",
-        description: "Social media management partner has used 85% of allocated budget with 35% of work remaining.",
+        description: "Social media management vendor has used 85% of allocated budget with 35% of work remaining.",
         section: "Utilization",
         actionUrl: "/agency/utilization",
         createdAt: "2026-03-20"
@@ -606,7 +606,7 @@ export const demoPartnerInvitations: LeadAgencyInvitation[] = [
     invitedAt: "2025-12-15",
     acceptedAt: "2025-12-18",
     confirmedAt: "2025-12-20",
-    invitationMessage: "We'd love to have you join our partner network for upcoming sports content projects."
+    invitationMessage: "We'd love to have you join our vendor network for upcoming sports content projects."
   },
   {
     id: "inv-2",
@@ -616,7 +616,7 @@ export const demoPartnerInvitations: LeadAgencyInvitation[] = [
     status: "accepted",
     invitedAt: "2026-01-10",
     acceptedAt: "2026-01-15",
-    invitationMessage: "Looking for production partners for our Q2 experiential campaigns."
+    invitationMessage: "Looking for production vendors for our Q2 experiential campaigns."
   },
   {
     id: "inv-3",
@@ -663,7 +663,7 @@ export const demoPartnerRFPsWithAgency: PartnerRFPWithAgency[] = [
     deadline: "Apr 15, 2026",
     status: "open",
     projectName: "NWSL Creator Content Series",
-    description: "Seeking production partner for 12-part athlete content series."
+    description: "Seeking production vendor for 12-part athlete content series."
   },
   {
     id: "rfp-2",
@@ -711,7 +711,7 @@ export const demoPartnerProjectsWithAgency: PartnerProjectWithAgency[] = [
     leadAgencyId: "la-1",
     leadAgencyName: "Electric Animal",
     projectName: "NWSL Creator Content Series",
-    role: "Video Production Partner",
+    role: "Video Production Vendor",
     status: "active",
     startDate: "Feb 2026",
     endDate: "Jul 2026",
@@ -747,7 +747,7 @@ export type DemoNeedsResponseItem = {
 export const demoNeedsResponseItems: DemoNeedsResponseItem[] = [
   {
     id: "demo-inbox-1",
-    scopeItemName: "Video Production Partner - Sports Creator Series",
+    scopeItemName: "Video Production Vendor - Sports Creator Series",
     agencyName: "Electric Animal",
     clientName: "NWSL",
     deadline: "2026-08-06",
@@ -811,7 +811,7 @@ export type DemoActivityItem = { id: string; text: string; href: string; timesta
 export const demoPartnerActivity: DemoActivityItem[] = [
   {
     id: "demo-activity-1",
-    text: "Electric Animal sent an RFP for Video Production Partner - Sports Creator Series",
+    text: "Electric Animal sent an RFP for Video Production Vendor - Sports Creator Series",
     href: "/partner/rfps/demo-inbox-1",
     timestamp: "2026-07-28T15:00:00Z",
   },

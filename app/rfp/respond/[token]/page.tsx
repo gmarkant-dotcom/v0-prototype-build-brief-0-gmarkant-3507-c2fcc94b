@@ -483,7 +483,7 @@ export default function GuestRfpRespondPage() {
             ) : (
               <>
                 <p className="text-sm text-foreground/90 leading-relaxed max-w-md">
-                  You&apos;ve been added to {agencyDisplayName(agency)}&apos;s partner network. Create your profile
+                  You&apos;ve been added to {agencyDisplayName(agency)}&apos;s vendor network. Create your profile
                   to be discoverable to other agencies and track all your bids in one place.
                 </p>
                 <Button

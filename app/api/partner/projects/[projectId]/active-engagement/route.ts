@@ -83,7 +83,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       .eq("id", user.id)
       .single()
     if (profileErr || (profile?.role !== "partner" && profile?.active_role !== "partner")) {
-      return NextResponse.json({ error: "Partner only" }, { status: 403, headers: noStoreHeaders })
+      return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStoreHeaders })
     }
 
     const { data: partnerships, error: pErr } = await supabase

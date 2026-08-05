@@ -35,10 +35,10 @@ const navSections = [
   {
     label: "BID REQUESTS",
     items: [
-      { number: "00", title: "Partner Pool", href: "/agency/pool", hasPoolDropdown: true, tooltip: "Manage your vendor network across active partners, invited contacts, and discovered vendors" },
-      { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Analyze client briefs, build scoped RFPs, and send to your partner pool or any vendor via Magic Link" },
+      { number: "00", title: "Vendor Pool", href: "/agency/pool", hasPoolDropdown: true, tooltip: "Manage your vendor network across active vendors, invited contacts, and discovered vendors" },
+      { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Analyze client briefs, build scoped RFPs, and send to your vendor pool or any vendor via Magic Link" },
       { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Compare, evaluate, and score vendor bids with AI-powered analysis and side-by-side cost breakdowns" },
-      { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track partner onboarding across active projects" },
+      { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track vendor onboarding across active projects" },
       { number: "04", title: "Delivery Performance", href: "/agency/project", tooltip: "Track project delivery, evaluate vendor performance, and build institutional intelligence" },
     ]
   },
@@ -98,7 +98,7 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
           <HoverCardTrigger asChild>{link}</HoverCardTrigger>
           <HoverCardContent side="right" align="start" className="w-64 p-1.5 bg-background border-border">
             <p className="px-3 pt-1.5 pb-2 mb-1 border-b border-border text-xs text-foreground-muted">
-              Analyze client briefs, build scoped RFPs, and send to your partner pool or any vendor via Magic Link
+              Analyze client briefs, build scoped RFPs, and send to your vendor pool or any vendor via Magic Link
             </p>
             <Link
               href="/agency/brief"
@@ -145,7 +145,7 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
 }
 
 /**
- * Partner Pool nav item: same dropdown pattern as RFP Broadcast above - desktop shows a
+ * Vendor Pool nav item: same dropdown pattern as RFP Broadcast above - desktop shows a
  * HoverCard with the two pool paths; mobile lists both inline. Clicking the row itself
  * always goes to /agency/pool.
  */
@@ -173,7 +173,7 @@ function PoolNavItem({ pathname }: { pathname: string | null }) {
           "font-display font-bold text-sm leading-tight",
           isActive ? "text-accent" : "text-foreground group-hover:text-white"
         )}>
-          Partner Pool
+          Vendor Pool
         </div>
       </div>
       {isActive && (
@@ -190,20 +190,20 @@ function PoolNavItem({ pathname }: { pathname: string | null }) {
           <HoverCardTrigger asChild>{link}</HoverCardTrigger>
           <HoverCardContent side="right" align="start" className="w-64 p-1.5 bg-background border-border">
             <p className="px-3 pt-1.5 pb-2 mb-1 border-b border-border text-xs text-foreground-muted">
-              Manage your vendor network across active partners, invited contacts, and discovered vendors
+              Manage your vendor network across active vendors, invited contacts, and discovered vendors
             </p>
             <Link
               href="/agency/pool"
               className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
             >
-              Partner Pool
+              Vendor Pool
             </Link>
             <Link
               href="/agency/pool?import=email"
               className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
             >
               <Mail className="w-4 h-4 text-accent" />
-              Import Partners
+              Import Vendors
             </Link>
           </HoverCardContent>
         </HoverCard>
@@ -217,7 +217,7 @@ function PoolNavItem({ pathname }: { pathname: string | null }) {
             href="/agency/pool"
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
           >
-            Partner Pool
+            Vendor Pool
           </Link>
           <Link
             href="/agency/pool?import=email"
@@ -702,7 +702,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
           {isDemo && (
             <div className="flex items-center justify-between mt-3">
               <Link href="/partner" className="font-mono text-2xs text-foreground-muted hover:text-accent transition-colors">
-                Switch to Partner View →
+                Switch to Vendor View →
               </Link>
             </div>
           )}

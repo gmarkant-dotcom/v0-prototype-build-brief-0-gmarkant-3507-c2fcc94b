@@ -178,11 +178,11 @@ export async function GET() {
     }
     const partnershipById = new Map(partnerships.map((p) => [p.id as string, p]))
     function partnerNameForPartnership(partnershipId: string | null): string {
-      if (!partnershipId) return "A partner"
+      if (!partnershipId) return "A vendor"
       const partnership = partnershipById.get(partnershipId)
-      if (!partnership) return "A partner"
+      if (!partnership) return "A vendor"
       const byId = partnership.partner_id ? partnerNameById.get(partnership.partner_id as string) : null
-      return byId || (partnership.partner_email as string | null) || "A partner"
+      return byId || (partnership.partner_email as string | null) || "A vendor"
     }
 
     const projectById = new Map(projects.map((p) => [p.id as string, p]))
@@ -380,7 +380,7 @@ export async function GET() {
       const scopeName = (row.scope_item_name as string | null) || "a scope item"
       activity.push({
         id: `viewed:${row.id}`,
-        text: `${partnerName || row.recipient_email || "A partner"} viewed the RFP for ${scopeName}`,
+        text: `${partnerName || row.recipient_email || "A vendor"} viewed the RFP for ${scopeName}`,
         href: "/agency/bids",
         timestamp: row.viewed_at as string,
       })

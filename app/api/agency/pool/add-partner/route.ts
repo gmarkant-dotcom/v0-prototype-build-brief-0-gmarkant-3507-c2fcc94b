@@ -11,7 +11,7 @@ function getServiceSupabase() {
 }
 
 /**
- * Manual "Add Partner" - single-contact version of the spreadsheet importer's write path
+ * Manual "Add Vendor" - single-contact version of the spreadsheet importer's write path
  * (same table, same ghost-row shape), replacing the old client-only version that never
  * persisted anything (see LIGAMENT_CONTEXT.md / session notes on the pool page rebuild).
  */
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: result?.reason || "Invalid contact" }, { status: 400 })
   }
   if (result.outcome === "error") {
-    return NextResponse.json({ error: result.reason || "Failed to add partner" }, { status: 500 })
+    return NextResponse.json({ error: result.reason || "Failed to add vendor" }, { status: 500 })
   }
   if (result.outcome === "self") {
     return NextResponse.json({ error: result.reason || "This is your own account" }, { status: 400 })
