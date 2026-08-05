@@ -27,17 +27,14 @@ import { cn } from "@/lib/utils"
 import { Zap, Plus, Trash2, Check, X, FolderOpen, Copy, Send, ChevronDown, ChevronUp, Upload, Sparkles } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  DESIGNATION_KEYS,
-  DESIGNATION_LABELS,
-  INSURANCE_KEYS,
-  INSURANCE_LABELS,
   type BusinessCriteriaRequired,
   type DesignationKey,
   type InsuranceKey,
   type InsuranceRequirement,
+  type RequirementPriority,
   normalizeBusinessCriteriaRequired,
 } from "@/lib/business-criteria"
-import { HelpTerm } from "@/components/help-term"
+import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -121,24 +118,55 @@ function MagicRfpContent() {
   const updateRequiredDesignation = (key: DesignationKey, required: boolean) => {
     setBusinessCriteriaRequired((prev) => {
       const designations = { ...prev.designations }
-      if (required) designations[key] = true
-      else delete designations[key]
-      return { ...prev, designations }
+      const designationPriority = { ...prev.designationPriority }
+      if (required) {
+        designations[key] = true
+        // New requirement tiers default to preferred (S4-1 spec) - the agency opts a
+        // criterion up to required explicitly via the priority toggle.
+        if (!designationPriority[key]) designationPriority[key] = "preferred"
+      } else {
+        delete designations[key]
+        delete designationPriority[key]
+      }
+      return { ...prev, designations, designationPriority }
     })
+  }
+
+  const updateDesignationPriority = (key: DesignationKey, priority: RequirementPriority) => {
+    setBusinessCriteriaRequired((prev) => ({
+      ...prev,
+      designationPriority: { ...prev.designationPriority, [key]: priority },
+    }))
   }
 
   const updateRequiredInsurance = (key: InsuranceKey, patch: Partial<InsuranceRequirement>) => {
     setBusinessCriteriaRequired((prev) => {
       const current = prev.insurance[key] || { required: false, minimum: null }
-      return { ...prev, insurance: { ...prev.insurance, [key]: { ...current, ...patch } } }
+      const insurance = { ...prev.insurance, [key]: { ...current, ...patch } }
+      const insurancePriority = { ...prev.insurancePriority }
+      if (patch.required === true && !insurancePriority[key]) insurancePriority[key] = "preferred"
+      if (patch.required === false) delete insurancePriority[key]
+      return { ...prev, insurance, insurancePriority }
     })
+  }
+
+  const updateInsurancePriority = (key: InsuranceKey, priority: RequirementPriority) => {
+    setBusinessCriteriaRequired((prev) => ({
+      ...prev,
+      insurancePriority: { ...prev.insurancePriority, [key]: priority },
+    }))
   }
 
   const updateRequiredCoi = (required: boolean) => {
     setBusinessCriteriaRequired((prev) => ({
       ...prev,
       insurance: { ...prev.insurance, coi_on_file: required },
+      coiPriority: required ? prev.coiPriority || "preferred" : undefined,
     }))
+  }
+
+  const updateCoiPriority = (priority: RequirementPriority) => {
+    setBusinessCriteriaRequired((prev) => ({ ...prev, coiPriority: priority }))
   }
 
   const updateRequiredNotes = (notes: string) => {
@@ -853,75 +881,17 @@ function MagicRfpContent() {
                     )}
                   </button>
                   {businessCriteriaOpen && (
-                    <div className="px-4 pb-4 border-t border-border/30 pt-4 space-y-5">
-                      <div className="space-y-3">
-                        {DESIGNATION_KEYS.map((key) => (
-                          <label
-                            key={key}
-                            className="flex items-center gap-3 p-3 rounded-lg border border-border/40 bg-white/[0.02] cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={businessCriteriaRequired.designations[key] === true}
-                              onCheckedChange={(checked) => updateRequiredDesignation(key, checked === true)}
-                            />
-                            <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground">
-                              {DESIGNATION_LABELS[key]}
-                            </HelpTerm>
-                          </label>
-                        ))}
-                      </div>
-
-                      <div className="space-y-3">
-                        {INSURANCE_KEYS.map((key) => {
-                          const requirement = businessCriteriaRequired.insurance[key]
-                          return (
-                            <div
-                              key={key}
-                              className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border/40 bg-white/[0.02]"
-                            >
-                              <label className="flex items-center gap-3 min-w-0 cursor-pointer">
-                                <Checkbox
-                                  checked={requirement?.required === true}
-                                  onCheckedChange={(checked) =>
-                                    updateRequiredInsurance(key, { required: checked === true })
-                                  }
-                                />
-                                <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground truncate">
-                                  {INSURANCE_LABELS[key]}
-                                </HelpTerm>
-                              </label>
-                              <Input
-                                value={requirement?.minimum || ""}
-                                onChange={(e) => updateRequiredInsurance(key, { minimum: e.target.value || null })}
-                                placeholder="Minimum, e.g. $1M/$2M"
-                                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-48 shrink-0"
-                              />
-                            </div>
-                          )
-                        })}
-                      </div>
-
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <Checkbox
-                          checked={businessCriteriaRequired.insurance.coi_on_file === true}
-                          onCheckedChange={(checked) => updateRequiredCoi(checked === true)}
-                        />
-                        <span className="text-sm text-foreground">
-                          Require a <HelpTerm term="coi" theme="dark">Certificate of Insurance (COI)</HelpTerm> on file
-                        </span>
-                      </label>
-
-                      <div>
-                        <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
-                          Additional Notes
-                        </label>
-                        <Textarea
-                          value={businessCriteriaRequired.notes}
-                          onChange={(e) => updateRequiredNotes(e.target.value)}
-                          placeholder="Any other procurement requirements this vendor should know about."
-                          className="min-h-[80px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                        />
-                      </div>
+                    <div className="px-4 pb-4 border-t border-border/30 pt-4">
+                      <BusinessCriteriaEditor
+                        value={businessCriteriaRequired}
+                        onChangeDesignation={updateRequiredDesignation}
+                        onChangeDesignationPriority={updateDesignationPriority}
+                        onChangeInsurance={updateRequiredInsurance}
+                        onChangeInsurancePriority={updateInsurancePriority}
+                        onChangeCoi={updateRequiredCoi}
+                        onChangeCoiPriority={updateCoiPriority}
+                        onChangeNotes={updateRequiredNotes}
+                      />
                     </div>
                   )}
                 </div>

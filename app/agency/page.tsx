@@ -24,20 +24,14 @@ import { readTextStream } from "@/lib/read-text-stream"
 import { mapDbProjectToMaster } from "@/lib/project-mapper"
 import { toast } from "sonner"
 import {
-  DESIGNATION_KEYS,
-  DESIGNATION_LABELS,
-  INSURANCE_KEYS,
-  INSURANCE_LABELS,
   type BusinessCriteriaRequired,
   type DesignationKey,
   type InsuranceKey,
   type InsuranceRequirement,
   type RequirementPriority,
   normalizeBusinessCriteriaRequired,
-  getDesignationPriority,
-  getInsurancePriority,
-  getCoiPriority,
 } from "@/lib/business-criteria"
+import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { HelpTerm } from "@/components/help-term"
 
 // Types
@@ -92,33 +86,6 @@ type PartnershipApiRow = {
     full_name: string | null
     company_name: string | null
   } | null
-}
-
-/** Two-way segmented pill for a criterion's requirement tier (S4-1). Binary, no third state. */
-function PriorityToggle({
-  value,
-  onChange,
-}: {
-  value: RequirementPriority
-  onChange: (next: RequirementPriority) => void
-}) {
-  return (
-    <div className="flex rounded-md overflow-hidden border border-border shrink-0" onClick={(e) => e.stopPropagation()}>
-      {(["required", "preferred"] as RequirementPriority[]).map((tier) => (
-        <button
-          key={tier}
-          type="button"
-          onClick={() => onChange(tier)}
-          className={cn(
-            "px-2.5 py-1 font-mono text-2xs uppercase tracking-wider transition-colors",
-            value === tier ? "bg-accent text-accent-foreground" : "bg-white/5 text-foreground-muted hover:bg-white/10"
-          )}
-        >
-          {tier}
-        </button>
-      ))}
-    </div>
-  )
 }
 
 /** Primary brief + optional user augment, sent to /api/ai/master-brief */
@@ -1974,96 +1941,16 @@ function AgencyRFPContent() {
                 </p>
               </div>
 
-              <div className="space-y-3 mb-8">
-                {DESIGNATION_KEYS.map((key) => {
-                  const isRequired = masterRfp.business_criteria_required.designations[key] === true
-                  return (
-                    <label
-                      key={key}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white/[0.02] cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={isRequired}
-                        onCheckedChange={(checked) => updateRequiredDesignation(key, checked === true)}
-                      />
-                      <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground flex-1">
-                        {DESIGNATION_LABELS[key]}
-                      </HelpTerm>
-                      {isRequired && (
-                        <PriorityToggle
-                          value={getDesignationPriority(masterRfp.business_criteria_required, key)}
-                          onChange={(p) => updateDesignationPriority(key, p)}
-                        />
-                      )}
-                    </label>
-                  )
-                })}
-              </div>
-
-              <div className="space-y-3 mb-6">
-                {INSURANCE_KEYS.map((key) => {
-                  const requirement = masterRfp.business_criteria_required.insurance[key]
-                  const isRequired = requirement?.required === true
-                  return (
-                    <div
-                      key={key}
-                      className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border bg-white/[0.02] flex-wrap"
-                    >
-                      <label className="flex items-center gap-3 min-w-0 cursor-pointer">
-                        <Checkbox
-                          checked={isRequired}
-                          onCheckedChange={(checked) => updateRequiredInsurance(key, { required: checked === true })}
-                        />
-                        <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground truncate">
-                          {INSURANCE_LABELS[key]}
-                        </HelpTerm>
-                      </label>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Input
-                          value={requirement?.minimum || ""}
-                          onChange={(e) => updateRequiredInsurance(key, { minimum: e.target.value || null })}
-                          placeholder="Minimum, e.g. $1M/$2M"
-                          className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-48 shrink-0"
-                        />
-                        {isRequired && (
-                          <PriorityToggle
-                            value={getInsurancePriority(masterRfp.business_criteria_required, key)}
-                            onChange={(p) => updateInsurancePriority(key, p)}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              <label className="flex items-center gap-3 mb-6 cursor-pointer flex-wrap">
-                <Checkbox
-                  checked={masterRfp.business_criteria_required.insurance.coi_on_file === true}
-                  onCheckedChange={(checked) => updateRequiredCoi(checked === true)}
-                />
-                <span className="text-sm text-foreground flex-1">
-                  Require a <HelpTerm term="coi" theme="dark">Certificate of Insurance (COI)</HelpTerm> on file
-                </span>
-                {masterRfp.business_criteria_required.insurance.coi_on_file === true && (
-                  <PriorityToggle
-                    value={getCoiPriority(masterRfp.business_criteria_required)}
-                    onChange={updateCoiPriority}
-                  />
-                )}
-              </label>
-
-              <div>
-                <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">
-                  Additional Notes
-                </label>
-                <Textarea
-                  value={masterRfp.business_criteria_required.notes}
-                  onChange={(e) => updateRequiredNotes(e.target.value)}
-                  placeholder="Any other procurement requirements bidders should know about."
-                  className="min-h-[80px] bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                />
-              </div>
+              <BusinessCriteriaEditor
+                value={masterRfp.business_criteria_required}
+                onChangeDesignation={updateRequiredDesignation}
+                onChangeDesignationPriority={updateDesignationPriority}
+                onChangeInsurance={updateRequiredInsurance}
+                onChangeInsurancePriority={updateInsurancePriority}
+                onChangeCoi={updateRequiredCoi}
+                onChangeCoiPriority={updateCoiPriority}
+                onChangeNotes={updateRequiredNotes}
+              />
             </GlassCard>
 
             <div className="flex justify-between">
