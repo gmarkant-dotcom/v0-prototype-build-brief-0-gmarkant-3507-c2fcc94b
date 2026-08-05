@@ -1,0 +1,46 @@
+-- Requirement tiers (S4-1): every business criterion an RFP requires gets a priority,
+-- required or preferred, and a vendor who cannot meet a required item records why instead
+-- of being blocked from submitting.
+--
+-- SCOPE NOTE (flagged during S4-0 discovery, see docs/s4-discovery.md section 7): the
+-- product spec describes "a priority column on the criteria/requirements structure." In
+-- this schema, requirements are NOT normalized rows - business_criteria_required is a
+-- single JSONB blob (on rfp_magic_tokens.business_criteria_required, and nested inside
+-- partner_rfp_inbox.master_rfp_json for the wizard flow), with a fixed, code-defined set of
+-- possible criteria (DESIGNATION_KEYS / INSURANCE_KEYS in lib/business-criteria.ts) rather
+-- than a table of criterion rows. There is no per-criterion row to add a "priority column"
+-- to, and no reliable way to blind-backfill a nested per-key JSONB shape from a generic SQL
+-- migration without risking silent data corruption on shapes this migration was never
+-- shown. Priority is therefore added as new keys WITHIN the existing JSONB shape at the
+-- application layer (designationPriority / insurancePriority / coiPriority in
+-- BusinessCriteriaRequired, lib/business-criteria.ts) - no schema change is needed or made
+-- for that part of the feature. RFPs with no explicit priority data are treated as
+-- pre-tier by the app (computeRequirementCompliance's hasTierData flag) and render the
+-- legacy, untiered criteria UI - never a fabricated tier.
+--
+-- What DOES need a real column is cannot-meet acknowledgment storage - genuinely new data
+-- with no existing home. Added to partner_rfp_responses, which already carries the vendor's
+-- business_criteria_responses for both the portal and guest bid paths (guest bids share
+-- this table - see partner_id/inbox_item_id nullability from migration 057).
+--
+-- Shape (see lib/business-criteria.ts CriterionAcknowledgment / BusinessCriteriaAcknowledgments):
+--   { "designations": { "mbe": { "status": "cannot_meet", "reason": "..." } },
+--     "insurance":    { "cyber_liability": { "status": "cannot_meet", "reason": "..." } },
+--     "coi":          { "status": "cannot_meet", "reason": "..." } }
+-- NULL / absent key for a given criterion means "met, or not applicable" - never inferred
+-- as a red flag. Default NULL (not '{}'::jsonb) because NULL is the honest "no acknowledgment
+-- recorded" state pre-071, and the app already treats NULL and '{}' identically via
+-- normalizeAcknowledgments().
+ALTER TABLE partner_rfp_responses
+  ADD COLUMN IF NOT EXISTS business_criteria_acknowledgments jsonb NULL;
+
+-- Verification (run manually after applying, not part of the migration itself):
+--
+-- SELECT table_name, column_name, data_type, is_nullable, column_default
+-- FROM information_schema.columns
+-- WHERE table_name = 'partner_rfp_responses'
+--   AND column_name = 'business_criteria_acknowledgments';
+-- -- Expected: one row, data_type = jsonb, is_nullable = YES, column_default = NULL
+--
+-- SELECT count(*) FROM partner_rfp_responses WHERE business_criteria_acknowledgments IS NOT NULL;
+-- -- Expected: 0 immediately after applying (no existing bid has ever written this column)
