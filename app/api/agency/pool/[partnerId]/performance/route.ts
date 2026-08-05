@@ -57,11 +57,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
     }
     if (!partnership) return NextResponse.json({ error: "No active partnership with this partner" }, { status: 404 })
 
+    // Performance History is a completed track record, not a drafting surface (drafts and
+    // in-progress reviews are authored on the Delivery Performance page instead) - filtered
+    // at the query itself so the review list and every aggregate below derive from the exact
+    // same "complete" set. Previously the list rendered every status while the aggregates
+    // silently filtered to "complete", which could show a fully-filled-in but not-yet-marked-
+    // complete review card above a "Based on 0 completed reviews" / all-dashes stats row -
+    // same class of bug as the milestone "paid" vs "payment_received" status mismatch, though
+    // here the two sides disagreed on which STATUSES to include rather than on a wrong literal.
     const { data: reviewRows, error: reviewsErr } = await supabase
       .from("delivery_reviews")
       .select("id, project_id, status, composite_score, on_time, on_budget, overall_satisfaction, would_work_again, response_id, updated_at")
       .eq("agency_id", userId)
       .eq("partnership_id", partnership.id)
+      .eq("status", "complete")
       .order("updated_at", { ascending: false })
     if (reviewsErr) {
       console.error("[api] failure", { route, method: "GET", message: reviewsErr.message })
@@ -110,25 +119,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
       }
     })
 
-    // Only reviews an agency has actually finished ("complete") feed the reliability
-    // stats and AI summary - drafts are tentative and shouldn't move the aggregate.
-    const completed = reviews.filter((r) => r.status === "complete")
-    const completedOut = reviewsOut.filter((r) => r.status === "complete")
-
-    const deliveryScores = completed.map((r) => r.composite_score).filter((s): s is number => s != null)
+    // reviews / reviewsOut are already status="complete" only (filtered at the query above),
+    // so the list and every aggregate below derive from the exact same set - no second filter.
+    const deliveryScores = reviews.map((r) => r.composite_score).filter((s): s is number => s != null)
     const avgDeliveryScore = deliveryScores.length > 0 ? Math.round((deliveryScores.reduce((a, b) => a + b, 0) / deliveryScores.length) * 10) / 10 : null
 
-    const deltas = completedOut.map((r) => r.delta).filter((d): d is number => d != null)
+    const deltas = reviewsOut.map((r) => r.delta).filter((d): d is number => d != null)
     const avgDelta = deltas.length > 0 ? Math.round((deltas.reduce((a, b) => a + b, 0) / deltas.length) * 10) / 10 : null
 
-    const onTimeCount = completed.filter((r) => r.on_time === "yes").length
-    const onTimeRate = completed.length > 0 ? Math.round((onTimeCount / completed.length) * 100) : null
+    const onTimeCount = reviews.filter((r) => r.on_time === "yes").length
+    const onTimeRate = reviews.length > 0 ? Math.round((onTimeCount / reviews.length) * 100) : null
 
-    const wouldWorkAgainCount = completed.filter((r) => r.would_work_again === "yes" || r.would_work_again === "likely").length
-    const wouldWorkAgainRate = completed.length > 0 ? Math.round((wouldWorkAgainCount / completed.length) * 100) : null
+    const wouldWorkAgainCount = reviews.filter((r) => r.would_work_again === "yes" || r.would_work_again === "likely").length
+    const wouldWorkAgainRate = reviews.length > 0 ? Math.round((wouldWorkAgainCount / reviews.length) * 100) : null
 
     const stats = {
-      total_projects_reviewed: completed.length,
+      total_projects_reviewed: reviews.length,
       avg_delivery_score: avgDeliveryScore,
       avg_bid_to_delivery_delta: avgDelta,
       on_time_rate: onTimeRate,
@@ -138,15 +144,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
     let reliabilitySummary = (partnership.reliability_summary as string | null) ?? null
     let reliabilitySummaryGeneratedAt = (partnership.reliability_summary_generated_at as string | null) ?? null
 
-    const latestCompletedAt = completed.reduce<string | null>((max, r) => {
+    const latestCompletedAt = reviews.reduce<string | null>((max, r) => {
       if (!max || r.updated_at > max) return r.updated_at
       return max
     }, null)
     const isStale =
       latestCompletedAt != null && (!reliabilitySummaryGeneratedAt || reliabilitySummaryGeneratedAt < latestCompletedAt)
 
-    if (completed.length > 0 && (forceRegenerate || !reliabilitySummary || isStale)) {
-      const reviewIds = completed.map((r) => r.id)
+    if (reviews.length > 0 && (forceRegenerate || !reliabilitySummary || isStale)) {
+      const reviewIds = reviews.map((r) => r.id)
       const { data: scoreRows } = await supabase
         .from("delivery_review_scores")
         .select("criterion_id, score")
@@ -187,7 +193,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
         ...criterionAverages.map((c) => `- ${c.name}: ${c.avg}/10 (${c.n} review${c.n !== 1 ? "s" : ""})`),
         "",
         "Delivery composite score by project, most recent first:",
-        ...completedOut.map((r) => `- ${r.project_name}: ${r.composite_score ?? "unscored"}/100`),
+        ...reviewsOut.map((r) => `- ${r.project_name}: ${r.composite_score ?? "unscored"}/100`),
       ].filter(Boolean)
 
       const result = await callAnthropicAnalysis({
