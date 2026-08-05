@@ -172,11 +172,16 @@ export default function HomePage() {
         {/* Hero */}
         <section className="max-w-6xl mx-auto px-6 pt-16 md:pt-20 pb-10 md:pb-14">
           <div className="max-w-3xl">
-            <div className="font-mono text-base md:text-lg text-accent tracking-wider uppercase mb-6 flex items-center gap-3">
-              <span className="ai-badge">✦</span>
-              <span className="text-foreground/80">
-                Best Practice <HeroEyebrowRotator /> Procurement &amp; Orchestration for Independent Creative Agencies
-              </span>
+            <div className="font-mono text-base md:text-lg tracking-wider uppercase mb-6">
+              <div className="flex items-center gap-3">
+                <span className="ai-badge text-accent">✦</span>
+                <span className="text-foreground/80">
+                  Best Practice <HeroEyebrowRotator />
+                </span>
+              </div>
+              <div className="text-foreground/80">
+                Procurement &amp; Orchestration for Independent Creative Agencies
+              </div>
             </div>
             <h1 className="font-display font-black text-5xl md:text-7xl text-foreground leading-[0.95] mb-10">
               Brief to <span className="text-accent">bid</span> to <span className="text-accent">award</span>.<br />
