@@ -93,9 +93,23 @@ export interface InsuranceRequirement {
   minimum: string | null
 }
 
+/**
+ * Requirement tiers (S4-1). Binary, no third tier. "required" surfaces as a hard
+ * confirmation block agency-side (red compliance flag if unmet); "preferred" is a light
+ * optional toggle. Stored as a SEPARATE, optional map alongside the existing gate fields
+ * (designations / insurance / coi_on_file) rather than changing those fields' value shape -
+ * this keeps every pre-S4-1 `=== true` gate check working unchanged. Absence of an explicit
+ * priority entry for an otherwise-gated item means "this RFP predates requirement tiers";
+ * see hasExplicitPriorityData() - callers must not silently invent a tier for that case.
+ */
+export type RequirementPriority = "required" | "preferred"
+
 export interface BusinessCriteriaRequired {
   designations: Partial<Record<DesignationKey, true>>
+  designationPriority?: Partial<Record<DesignationKey, RequirementPriority>>
   insurance: Partial<Record<InsuranceKey, InsuranceRequirement>> & { coi_on_file?: boolean }
+  insurancePriority?: Partial<Record<InsuranceKey, RequirementPriority>>
+  coiPriority?: RequirementPriority
   notes: string
 }
 
@@ -188,11 +202,58 @@ export function normalizeBusinessCriteriaRequired(stored: unknown): BusinessCrit
     insurance.coi_on_file = s.insurance.coi_on_file
   }
 
+  const isPriority = (v: unknown): v is RequirementPriority => v === "required" || v === "preferred"
+
+  const designationPriority: Partial<Record<DesignationKey, RequirementPriority>> = {}
+  for (const key of DESIGNATION_KEYS) {
+    const p = s.designationPriority?.[key]
+    if (isPriority(p)) designationPriority[key] = p
+  }
+
+  const insurancePriority: Partial<Record<InsuranceKey, RequirementPriority>> = {}
+  for (const key of INSURANCE_KEYS) {
+    const p = s.insurancePriority?.[key]
+    if (isPriority(p)) insurancePriority[key] = p
+  }
+
+  const coiPriority = isPriority(s.coiPriority) ? s.coiPriority : undefined
+
   return {
     designations,
+    ...(Object.keys(designationPriority).length > 0 ? { designationPriority } : {}),
     insurance,
+    ...(Object.keys(insurancePriority).length > 0 ? { insurancePriority } : {}),
+    ...(coiPriority ? { coiPriority } : {}),
     notes: typeof s.notes === "string" ? s.notes : "",
   }
+}
+
+/**
+ * True only if this RFP's requirements carry at least one explicit priority tag. RFPs
+ * created before S4-1 (or created after but never touched by the new wizard toggle) have
+ * none - callers use this to decide "render the new tiered UI" vs "render exactly what
+ * existed before tiers" rather than guessing a tier for untagged data.
+ */
+export function hasExplicitPriorityData(required: BusinessCriteriaRequired): boolean {
+  return (
+    Object.keys(required.designationPriority || {}).length > 0 ||
+    Object.keys(required.insurancePriority || {}).length > 0 ||
+    required.coiPriority != null
+  )
+}
+
+/** Priority for a gated designation. Falls back to "required" (never silently softened) when this RFP has tier data for other items but not this one. */
+export function getDesignationPriority(required: BusinessCriteriaRequired, key: DesignationKey): RequirementPriority {
+  return required.designationPriority?.[key] || "required"
+}
+
+/** Priority for a gated insurance line. Same required-by-default fallback as designations. */
+export function getInsurancePriority(required: BusinessCriteriaRequired, key: InsuranceKey): RequirementPriority {
+  return required.insurancePriority?.[key] || "required"
+}
+
+export function getCoiPriority(required: BusinessCriteriaRequired): RequirementPriority {
+  return required.coiPriority || "required"
 }
 
 export interface BusinessCriteriaGapReport {
@@ -244,4 +305,162 @@ export function businessCriteriaHoldsMatchesSelection(
     if (!holds.insurance[key].has_coverage) return false
   }
   return true
+}
+
+/**
+ * Cannot-meet acknowledgments (S4-1). A vendor who cannot meet a required item never gets
+ * hard-blocked from submitting; instead they record an explicit reason here, which surfaces
+ * as a red compliance flag agency-side. Stored per bid, keyed the same way as
+ * business_criteria_responses, matching migration 071's business_criteria_acknowledgments
+ * column on partner_rfp_responses.
+ */
+export interface CriterionAcknowledgment {
+  status: "cannot_meet"
+  reason: string
+}
+
+export interface BusinessCriteriaAcknowledgments {
+  designations?: Partial<Record<DesignationKey, CriterionAcknowledgment>>
+  insurance?: Partial<Record<InsuranceKey, CriterionAcknowledgment>>
+  coi?: CriterionAcknowledgment
+}
+
+export function emptyAcknowledgments(): BusinessCriteriaAcknowledgments {
+  return {}
+}
+
+/** Sanitizes a stored/partial business_criteria_acknowledgments value (JSONB, may be absent on old rows). */
+export function normalizeAcknowledgments(stored: unknown): BusinessCriteriaAcknowledgments {
+  if (!stored || typeof stored !== "object") return {}
+  const s = stored as Partial<BusinessCriteriaAcknowledgments>
+
+  const isAck = (v: unknown): v is CriterionAcknowledgment =>
+    !!v && typeof v === "object" && (v as CriterionAcknowledgment).status === "cannot_meet" &&
+    typeof (v as CriterionAcknowledgment).reason === "string" && (v as CriterionAcknowledgment).reason.trim().length > 0
+
+  const designations: Partial<Record<DesignationKey, CriterionAcknowledgment>> = {}
+  for (const key of DESIGNATION_KEYS) {
+    const row = s.designations?.[key]
+    if (isAck(row)) designations[key] = row
+  }
+
+  const insurance: Partial<Record<InsuranceKey, CriterionAcknowledgment>> = {}
+  for (const key of INSURANCE_KEYS) {
+    const row = s.insurance?.[key]
+    if (isAck(row)) insurance[key] = row
+  }
+
+  const coi = isAck(s.coi) ? s.coi : undefined
+
+  return {
+    ...(Object.keys(designations).length > 0 ? { designations } : {}),
+    ...(Object.keys(insurance).length > 0 ? { insurance } : {}),
+    ...(coi ? { coi } : {}),
+  }
+}
+
+export interface RequirementComplianceItem {
+  key: string
+  kind: "designation" | "insurance" | "coi"
+  label: string
+  priority: RequirementPriority
+  met: boolean
+  cannotMeetReason: string | null
+}
+
+export interface RequirementComplianceReport {
+  /** False when this RFP predates requirement tiers - render nothing, not a fake pass. */
+  hasTierData: boolean
+  requiredItems: RequirementComplianceItem[]
+  preferredItems: RequirementComplianceItem[]
+  requiredConfirmedCount: number
+  requiredTotalCount: number
+  /** Only meaningful when hasTierData is true. */
+  meetsAllRequired: boolean
+}
+
+/**
+ * Single source of truth for the requirement-tier compliance picture of one bid against its
+ * RFP's requirements - used by the bid form's "N of M required confirmed" progress line and
+ * by the compare/detail compliance matrix row. Returns hasTierData: false (empty item lists)
+ * for any RFP that has no explicit priority data, so callers never fabricate a matrix for
+ * pre-S4-1 RFPs.
+ */
+export function computeRequirementCompliance(
+  required: BusinessCriteriaRequired,
+  holds: BusinessCriteriaHolds,
+  acknowledgments: BusinessCriteriaAcknowledgments,
+  labels: { designations: Record<DesignationKey, string>; insurance: Record<InsuranceKey, string> }
+): RequirementComplianceReport {
+  if (!hasExplicitPriorityData(required)) {
+    return {
+      hasTierData: false,
+      requiredItems: [],
+      preferredItems: [],
+      requiredConfirmedCount: 0,
+      requiredTotalCount: 0,
+      meetsAllRequired: false,
+    }
+  }
+
+  const requiredItems: RequirementComplianceItem[] = []
+  const preferredItems: RequirementComplianceItem[] = []
+
+  for (const key of DESIGNATION_KEYS) {
+    if (required.designations[key] !== true) continue
+    const priority = getDesignationPriority(required, key)
+    const met = holds.designations[key].holds
+    const ack = acknowledgments.designations?.[key]
+    const item: RequirementComplianceItem = {
+      key,
+      kind: "designation",
+      label: labels.designations[key],
+      priority,
+      met,
+      cannotMeetReason: !met && ack ? ack.reason : null,
+    }
+    ;(priority === "required" ? requiredItems : preferredItems).push(item)
+  }
+
+  for (const key of INSURANCE_KEYS) {
+    if (required.insurance[key]?.required !== true) continue
+    const priority = getInsurancePriority(required, key)
+    const met = holds.insurance[key].has_coverage
+    const ack = acknowledgments.insurance?.[key]
+    const item: RequirementComplianceItem = {
+      key,
+      kind: "insurance",
+      label: labels.insurance[key],
+      priority,
+      met,
+      cannotMeetReason: !met && ack ? ack.reason : null,
+    }
+    ;(priority === "required" ? requiredItems : preferredItems).push(item)
+  }
+
+  if (required.insurance.coi_on_file === true) {
+    const priority = getCoiPriority(required)
+    const met = holds.insurance.coi_on_file
+    const ack = acknowledgments.coi
+    const item: RequirementComplianceItem = {
+      key: "coi",
+      kind: "coi",
+      label: "Certificate of Insurance (COI)",
+      priority,
+      met,
+      cannotMeetReason: !met && ack ? ack.reason : null,
+    }
+    ;(priority === "required" ? requiredItems : preferredItems).push(item)
+  }
+
+  const requiredConfirmedCount = requiredItems.filter((i) => i.met || i.cannotMeetReason).length
+
+  return {
+    hasTierData: true,
+    requiredItems,
+    preferredItems,
+    requiredConfirmedCount,
+    requiredTotalCount: requiredItems.length,
+    meetsAllRequired: requiredItems.every((i) => i.met),
+  }
 }

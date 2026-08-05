@@ -7,7 +7,7 @@ import {
   buildAgencyPoolNotificationEmail,
   sendTransactionalEmail,
 } from "@/lib/email"
-import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults } from "@/lib/business-criteria"
+import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure } from "@/lib/terms-disclosure"
@@ -335,7 +335,26 @@ type PostBody = {
   terms_disclosure?: unknown
   attachments?: unknown
   business_criteria_responses?: unknown
+  /** Cannot-meet acknowledgments (S4-1). Column added by migration 071 - see the write
+   *  guard around `saveGuestResponseRow` below for pre-migration safety. */
+  business_criteria_acknowledgments?: unknown
   is_edit?: boolean
+}
+
+/**
+ * Writes/updates a partner_rfp_responses row, retrying once without
+ * business_criteria_acknowledgments if the column doesn't exist yet (Postgres
+ * undefined_column, 42703) - keeps guest bid submission working before migration 071 is
+ * applied, mirroring the same guard in the portal response route.
+ */
+async function saveGuestResponseRow<T>(
+  attempt: () => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
+  retryWithoutAcknowledgments: () => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>
+): Promise<{ data: T | null; error: { code?: string; message: string } | null }> {
+  const first = await attempt()
+  if (!first.error || first.error.code !== "42703") return first
+  console.warn("[rfp/guest] business_criteria_acknowledgments column missing (migration 071 not yet applied) - retrying without it")
+  return retryWithoutAcknowledgments()
 }
 
 export async function POST(req: Request) {
@@ -415,6 +434,12 @@ export async function POST(req: Request) {
 
     const attachments = normalizeGuestAttachments(body.attachments)
     const business_criteria_responses = withBusinessCriteriaDefaults(body.business_criteria_responses)
+    // Write guard (S4-1): only carries acknowledgment data when the request actually sent
+    // some - never invents an empty object on requests shaped like today's.
+    const hasAcknowledgments = body.business_criteria_acknowledgments != null
+    const business_criteria_acknowledgments = hasAcknowledgments
+      ? normalizeAcknowledgments(body.business_criteria_acknowledgments)
+      : null
     const budget_proposal = serializeBudget(amount, currency)
     // /agency/bids groups bids by this exact string (see app/agency/bids/page.tsx groupBy
     // "partner"). For a known vendor, use their real profile name so the bid lands in the
@@ -426,20 +451,26 @@ export async function POST(req: Request) {
 
     if (is_edit) {
       const submittedAt = new Date().toISOString()
-      const { error: updateErr } = await supabase
-        .from("partner_rfp_responses")
-        .update({
-          proposal_text,
-          budget_proposal,
-          timeline_proposal,
-          terms_disclosure,
-          attachments,
-          business_criteria_responses,
-          status: "submitted",
-          submitted_at: submittedAt,
-          updated_at: submittedAt,
-        })
-        .eq("id", tokenRow.response_id)
+      const editRow = {
+        proposal_text,
+        budget_proposal,
+        timeline_proposal,
+        terms_disclosure,
+        attachments,
+        business_criteria_responses,
+        status: "submitted",
+        submitted_at: submittedAt,
+        updated_at: submittedAt,
+        ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
+      }
+      const editRowWithoutAcknowledgments = (() => {
+        const { business_criteria_acknowledgments: _omit, ...rest } = editRow
+        return rest
+      })()
+      const { error: updateErr } = await saveGuestResponseRow(
+        () => supabase.from("partner_rfp_responses").update(editRow).eq("id", tokenRow.response_id),
+        () => supabase.from("partner_rfp_responses").update(editRowWithoutAcknowledgments).eq("id", tokenRow.response_id)
+      )
 
       if (updateErr) {
         console.error("[api] failure", { route, method: "POST", code: 500, message: updateErr.message })
@@ -467,24 +498,29 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, is_existing_partner, is_edit: true })
     }
 
-    const { data: saved, error: insertErr } = await supabase
-      .from("partner_rfp_responses")
-      .insert({
-        agency_id: tokenRow.agency_id,
-        partner_id: is_existing_partner ? matchedProfile!.id : null,
-        inbox_item_id: null,
-        proposal_text,
-        budget_proposal,
-        timeline_proposal,
-        terms_disclosure,
-        attachments,
-        business_criteria_responses,
-        partner_display_name,
-        status: "submitted",
-        updated_at: new Date().toISOString(),
-      })
-      .select()
-      .single()
+    const insertRow = {
+      agency_id: tokenRow.agency_id,
+      partner_id: is_existing_partner ? matchedProfile!.id : null,
+      inbox_item_id: null,
+      proposal_text,
+      budget_proposal,
+      timeline_proposal,
+      terms_disclosure,
+      attachments,
+      business_criteria_responses,
+      partner_display_name,
+      status: "submitted",
+      updated_at: new Date().toISOString(),
+      ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
+    }
+    const insertRowWithoutAcknowledgments = (() => {
+      const { business_criteria_acknowledgments: _omit, ...rest } = insertRow
+      return rest
+    })()
+    const { data: saved, error: insertErr } = await saveGuestResponseRow<{ id: string; [key: string]: unknown }>(
+      () => supabase.from("partner_rfp_responses").insert(insertRow).select().single(),
+      () => supabase.from("partner_rfp_responses").insert(insertRowWithoutAcknowledgments).select().single()
+    )
 
     if (insertErr || !saved) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: insertErr?.message })

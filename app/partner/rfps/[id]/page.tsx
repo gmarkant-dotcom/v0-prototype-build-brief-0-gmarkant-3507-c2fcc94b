@@ -24,9 +24,17 @@ import {
   type DesignationKey,
   type InsuranceHolds,
   type InsuranceKey,
+  type BusinessCriteriaAcknowledgments,
   normalizeBusinessCriteriaRequired,
   withBusinessCriteriaDefaults,
+  hasExplicitPriorityData,
+  normalizeAcknowledgments,
+  emptyAcknowledgments,
+  getDesignationPriority,
+  getInsurancePriority,
+  getCoiPriority,
 } from "@/lib/business-criteria"
+import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria-requirement-block"
 import {
   BUDGET_CURRENCY_OPTIONS,
   TIMELINE_UNIT_OPTIONS,
@@ -213,6 +221,8 @@ type ResponseRow = {
   terms_disclosure?: unknown
   attachments: SavedAttachment[] | null
   business_criteria_responses?: unknown
+  /** Absent on rows written before migration 071 - always read through normalizeAcknowledgments. */
+  business_criteria_acknowledgments?: unknown
   status: string
   agency_feedback?: string | null
   feedback_updated_at?: string | null
@@ -493,6 +503,10 @@ export default function PartnerRfpDetailPage() {
   const [businessCriteriaResponses, setBusinessCriteriaResponses] = useState<BusinessCriteriaHolds>(
     withBusinessCriteriaDefaults(null)
   )
+  const [businessCriteriaAcknowledgments, setBusinessCriteriaAcknowledgments] =
+    useState<BusinessCriteriaAcknowledgments>(emptyAcknowledgments())
+  /** Vendor's saved profile holds, fetched once for a fresh (no prior response) bid - powers the "Confirmed from your profile" badge. Portal path only; guest has no profile. */
+  const [profileCriteriaHolds, setProfileCriteriaHolds] = useState<BusinessCriteriaHolds | null>(null)
   const [uploadingId, setUploadingId] = useState<string | null>(null)
   const [savingKind, setSavingKind] = useState<null | "draft" | "submitted">(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -541,6 +555,55 @@ export default function PartnerRfpDetailPage() {
       ...prev,
       insurance: { ...prev.insurance, coi_on_file },
     }))
+  }
+
+  const setBusinessCriteriaAcknowledgment = (
+    kind: "designation" | "insurance" | "coi",
+    key: string | null,
+    reason: string | null
+  ) => {
+    setBusinessCriteriaAcknowledgments((prev) => {
+      const next: BusinessCriteriaAcknowledgments = {
+        designations: { ...prev.designations },
+        insurance: { ...prev.insurance },
+        coi: prev.coi,
+      }
+      if (kind === "coi") {
+        next.coi = reason == null ? undefined : { status: "cannot_meet", reason }
+      } else if (kind === "designation" && key) {
+        const d = next.designations as Record<string, { status: "cannot_meet"; reason: string }>
+        if (reason == null) delete d[key]
+        else d[key] = { status: "cannot_meet", reason }
+      } else if (kind === "insurance" && key) {
+        const i = next.insurance as Record<string, { status: "cannot_meet"; reason: string }>
+        if (reason == null) delete i[key]
+        else i[key] = { status: "cannot_meet", reason }
+      }
+      return next
+    })
+  }
+
+  const confirmAllRequiredCriteria = () => {
+    const req = requiredCriteria
+    setBusinessCriteriaResponses((prev) => {
+      const designations = { ...prev.designations }
+      for (const key of DESIGNATION_KEYS) {
+        if (req.designations[key] === true && getDesignationPriority(req, key) === "required") {
+          designations[key] = { ...designations[key], holds: true }
+        }
+      }
+      const insurance = { ...prev.insurance }
+      for (const key of INSURANCE_KEYS) {
+        if (req.insurance[key]?.required === true && getInsurancePriority(req, key) === "required") {
+          insurance[key] = { ...insurance[key], has_coverage: true }
+        }
+      }
+      if (req.insurance.coi_on_file === true && getCoiPriority(req) === "required") {
+        insurance.coi_on_file = true
+      }
+      return { ...prev, designations, insurance }
+    })
+    setBusinessCriteriaAcknowledgments(emptyAcknowledgments())
   }
 
   useEffect(() => {
@@ -602,6 +665,7 @@ export default function PartnerRfpDetailPage() {
             const att = Array.isArray(r.attachments) ? r.attachments : []
             setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
             setBusinessCriteriaResponses(withBusinessCriteriaDefaults(r.business_criteria_responses))
+            setBusinessCriteriaAcknowledgments(normalizeAcknowledgments(r.business_criteria_acknowledgments))
           } else {
             setExisting(null)
             setProposalText("")
@@ -613,8 +677,34 @@ export default function PartnerRfpDetailPage() {
             setTimelineUnit("Weeks")
             setTimelineLegacyHint(null)
             setDraftAttachments([])
-            setBusinessCriteriaResponses(withBusinessCriteriaDefaults(null))
+            setBusinessCriteriaAcknowledgments(emptyAcknowledgments())
             setVersions([])
+
+            // Profile prefill (S4-1, portal path only - guest has no profile). A fresh bid
+            // (no prior response on this RFP) seeds from the vendor's saved business
+            // criteria; profileCriteriaHolds is kept alongside so the UI can badge which
+            // fields came from the profile vs. were typed fresh.
+            try {
+              const supabase = createClient()
+              const { data: auth } = await supabase.auth.getUser()
+              if (auth?.user && !cancelled) {
+                const { data: profileRow } = await supabase
+                  .from("profiles")
+                  .select("business_criteria")
+                  .eq("id", auth.user.id)
+                  .maybeSingle()
+                const prefill = withBusinessCriteriaDefaults(profileRow?.business_criteria ?? null)
+                if (!cancelled) {
+                  setProfileCriteriaHolds(prefill)
+                  setBusinessCriteriaResponses(prefill)
+                }
+              } else if (!cancelled) {
+                setBusinessCriteriaResponses(withBusinessCriteriaDefaults(null))
+              }
+            } catch (prefillErr) {
+              console.error("[partner/rfps] profile business_criteria prefill failed", prefillErr)
+              if (!cancelled) setBusinessCriteriaResponses(withBusinessCriteriaDefaults(null))
+            }
           }
         }
       } catch (e) {
@@ -820,6 +910,10 @@ export default function PartnerRfpDetailPage() {
     setSavingKind(status)
     try {
       const attachments = draftsToPayload(draftAttachments)
+      const hasAcknowledgments =
+        Object.keys(businessCriteriaAcknowledgments.designations || {}).length > 0 ||
+        Object.keys(businessCriteriaAcknowledgments.insurance || {}).length > 0 ||
+        businessCriteriaAcknowledgments.coi != null
       const payload = {
         proposal_text: proposalText,
         budget_proposal,
@@ -827,6 +921,9 @@ export default function PartnerRfpDetailPage() {
         terms_disclosure,
         attachments,
         business_criteria_responses: businessCriteriaResponses,
+        // Write guard (S4-1): only sent when the vendor actually recorded a cannot-meet
+        // reason, so requests shaped like today's never carry this key.
+        ...(hasAcknowledgments ? { business_criteria_acknowledgments: businessCriteriaAcknowledgments } : {}),
         status,
         change_notes: changeNotes,
       }
@@ -1585,7 +1682,25 @@ export default function PartnerRfpDetailPage() {
               onSaveAsDefaultChange={setSaveTermsAsDefault}
             />
 
-            {hasRequiredCriteriaForBid && (
+            {/* S4-1: RFPs with explicit requirement-tier data get the new required/preferred
+                block; RFPs authored before tiers existed (hasExplicitPriorityData false) fall
+                through to the legacy untiered block below, unchanged. */}
+            {hasExplicitPriorityData(requiredCriteria) && (
+              <BusinessCriteriaRequirementBlock
+                required={requiredCriteria}
+                responses={businessCriteriaResponses}
+                acknowledgments={businessCriteriaAcknowledgments}
+                onUpdateDesignation={updateBusinessCriteriaDesignation}
+                onUpdateInsurance={updateBusinessCriteriaInsurance}
+                onUpdateCoi={updateBusinessCriteriaCoi}
+                onSetAcknowledgment={setBusinessCriteriaAcknowledgment}
+                onConfirmAll={confirmAllRequiredCriteria}
+                canEdit={canEdit}
+                profileHolds={profileCriteriaHolds}
+              />
+            )}
+
+            {hasRequiredCriteriaForBid && !hasExplicitPriorityData(requiredCriteria) && (
               <div className="rounded-xl border border-vendor-border bg-vendor-background/70 p-4">
                 <h3 className="font-display font-bold text-sm text-vendor-foreground mb-1">Business criteria</h3>
                 <p className="text-xs text-vendor-muted-strong mb-3">

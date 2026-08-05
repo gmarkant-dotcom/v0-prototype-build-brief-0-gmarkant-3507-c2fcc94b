@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
-import { withBusinessCriteriaDefaults } from "@/lib/business-criteria"
+import { withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureDefaults } from "@/lib/terms-disclosure"
 
@@ -16,8 +16,27 @@ type Body = {
   terms_disclosure?: unknown
   attachments?: unknown
   business_criteria_responses?: unknown
+  /** Cannot-meet acknowledgments (S4-1). Column added by migration 071 - see the write
+   *  guard around `saveResponseRow` below for pre-migration safety. */
+  business_criteria_acknowledgments?: unknown
   status?: "draft" | "submitted"
   change_notes?: string
+}
+
+/**
+ * Writes a partner_rfp_responses row, retrying once without
+ * business_criteria_acknowledgments if the column doesn't exist yet (Postgres
+ * undefined_column, 42703) - keeps bid submission working before migration 071 is applied,
+ * per the S4-1 pre-migration safety requirement. Once 071 ships this retry never triggers.
+ */
+async function saveResponseRow<T>(
+  attempt: () => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
+  retryWithoutAcknowledgments: () => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>
+): Promise<{ data: T | null; error: { code?: string; message: string } | null }> {
+  const first = await attempt()
+  if (!first.error || first.error.code !== "42703") return first
+  console.warn("[partner/rfps/[id]/response] business_criteria_acknowledgments column missing (migration 071 not yet applied) - retrying without it")
+  return retryWithoutAcknowledgments()
 }
 
 const ALLOWED_TYPES = new Set([
@@ -132,6 +151,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const timeline_proposal = (body.timeline_proposal ?? "").toString()
     const attachments = normalizeAttachments(body.attachments)
     const business_criteria_responses = withBusinessCriteriaDefaults(body.business_criteria_responses)
+    // Write guard (S4-1): only carries acknowledgment data when the request actually sent
+    // some - never invents an empty object on requests shaped like today's.
+    const hasAcknowledgments = body.business_criteria_acknowledgments != null
+    const business_criteria_acknowledgments = hasAcknowledgments
+      ? normalizeAcknowledgments(body.business_criteria_acknowledgments)
+      : null
     const changeNotes = (body.change_notes ?? "").toString().trim()
 
     if (status === "submitted") {
@@ -194,13 +219,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       partner_display_name,
       status,
       updated_at: new Date().toISOString(),
+      ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
     }
+    const rowWithoutAcknowledgments = (() => {
+      const { business_criteria_acknowledgments: _omit, ...rest } = row
+      return rest
+    })()
 
     const insertRow = {
       inbox_item_id: inboxId,
       partner_id: user.id,
       agency_id: inbox.agency_id,
       ...row,
+    }
+    const insertRowWithoutAcknowledgments = {
+      inbox_item_id: inboxId,
+      partner_id: user.id,
+      agency_id: inbox.agency_id,
+      ...rowWithoutAcknowledgments,
     }
 
     const { data: existing } = await supabase
@@ -210,16 +246,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .eq("partner_id", user.id)
       .maybeSingle()
 
-    let saved
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let saved: any
     let wasUpdate = false
     if (existing?.id) {
       wasUpdate = true
-      const { data, error } = await supabase
-        .from("partner_rfp_responses")
-        .update(row)
-        .eq("id", existing.id)
-        .select()
-        .single()
+      const { data, error } = await saveResponseRow(
+        () => supabase.from("partner_rfp_responses").update(row).eq("id", existing.id).select().single(),
+        () => supabase.from("partner_rfp_responses").update(rowWithoutAcknowledgments).eq("id", existing.id).select().single()
+      )
       if (error) {
         console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 500, message: error.message })
         return NextResponse.json(
@@ -229,7 +264,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
       saved = data
     } else {
-      const { data, error } = await supabase.from("partner_rfp_responses").insert(insertRow).select().single()
+      const { data, error } = await saveResponseRow(
+        () => supabase.from("partner_rfp_responses").insert(insertRow).select().single(),
+        () => supabase.from("partner_rfp_responses").insert(insertRowWithoutAcknowledgments).select().single()
+      )
       if (error) {
         console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 500, message: error.message })
         return NextResponse.json(
@@ -238,6 +276,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         )
       }
       saved = data
+    }
+    if (!saved) {
+      console.error("[api] failure", { route, method: "POST", userId: user.id, role: profile?.role ?? null, code: 500, message: "Save returned no row" })
+      return NextResponse.json({ error: "Save failed" }, { status: 500 })
     }
 
     if (status === "submitted") {

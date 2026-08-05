@@ -137,6 +137,14 @@ The weighted overall 0-100 score for a bid, combining your scoring criteria - AI
 A vendor's track record from completed project reviews: how delivery matched what was bid.
 *Why it matters: past delivery is the best predictor you have. This is the evidence layer behind awarding with confidence.*
 
+**Required criterion**
+A business criterion or scope requirement the agency has marked as non-negotiable. A vendor who cannot meet it is never blocked from submitting, but must record why - that reason shows as a red compliance flag on the agency's side.
+*Why it matters: sharper signal than a flat pass/fail: you see exactly which bids meet your hard requirements and why any gaps exist, before you start scoring.*
+
+**Preferred criterion**
+A business criterion or scope requirement the agency would like to see but hasn't made a condition of the bid. Renders as a light, optional toggle on the vendor's bid form.
+*Why it matters: lets you flag what matters without turning every nice-to-have into a hard blocker that discourages good vendors from bidding.*
+
 ---
 
 ## Open questions for your review

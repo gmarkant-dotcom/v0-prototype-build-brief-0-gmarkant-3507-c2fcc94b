@@ -20,6 +20,8 @@ import {
   compareBusinessCriteria,
   normalizeBusinessCriteriaRequired,
   withBusinessCriteriaDefaults,
+  normalizeAcknowledgments,
+  computeRequirementCompliance,
 } from "@/lib/business-criteria"
 import { meetsInsuranceMinimum } from "@/lib/insurance-limit-parser"
 import {
@@ -125,6 +127,14 @@ function BidDetailSheetInner({
   const businessCriteriaResponses = withBusinessCriteriaDefaults(row.business_criteria_responses)
   const businessCriteriaRequired = normalizeBusinessCriteriaRequired(row.business_criteria_required)
   const businessCriteriaGap = compareBusinessCriteria(businessCriteriaRequired, businessCriteriaResponses)
+  /** S4-1 requirement-tier compliance matrix - separate from the legacy gap above, which is
+   *  unchanged. hasTierData is false (nothing rendered) for RFPs that predate tiers. */
+  const requirementCompliance = computeRequirementCompliance(
+    businessCriteriaRequired,
+    businessCriteriaResponses,
+    normalizeAcknowledgments(row.business_criteria_acknowledgments),
+    { designations: DESIGNATION_LABELS, insurance: INSURANCE_LABELS }
+  )
   const requiredDesignationKeys = DESIGNATION_KEYS.filter((key) => businessCriteriaRequired.designations[key] === true)
   const requiredInsuranceKeys = INSURANCE_KEYS.filter((key) => businessCriteriaRequired.insurance[key]?.required === true)
   const designationKeysToShow = DESIGNATION_KEYS.filter(
@@ -430,6 +440,32 @@ function BidDetailSheetInner({
               </div>
 
               <TabsContent value="analysis" className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {/* S4-1 compliance matrix - before scoring/analysis, per spec. Renders nothing
+                    for RFPs that predate requirement tiers. */}
+                {requirementCompliance.hasTierData && requirementCompliance.requiredTotalCount > 0 && (
+                  <div className="rounded-lg border border-border/40 bg-white/5 p-3">
+                    <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                      <div className="font-mono text-2xs uppercase text-foreground-muted">Meets required</div>
+                      <span className={cn("text-sm font-bold", requirementCompliance.meetsAllRequired ? "text-success" : "text-red-400")}>
+                        {requirementCompliance.meetsAllRequired ? "Yes" : "No"}
+                        <span className="text-foreground-muted text-xs font-normal ml-1">
+                          ({requirementCompliance.requiredConfirmedCount} of {requirementCompliance.requiredTotalCount})
+                        </span>
+                      </span>
+                    </div>
+                    <ul className="space-y-1">
+                      {requirementCompliance.requiredItems.map((item) => (
+                        <li key={item.key} className="flex items-start justify-between gap-3 text-xs">
+                          <span className="text-foreground-muted">{item.label}</span>
+                          <span className={item.met ? "text-success" : "text-red-400"}>
+                            {item.met ? "Met" : item.cannotMeetReason ? `Cannot meet: ${item.cannotMeetReason}` : "Unmet"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 <div>
                   <div className="font-mono text-2xs uppercase text-foreground-muted mb-1 flex items-center gap-1.5">
                     <Sparkles className="w-3 h-3 text-accent" /> AI Analysis

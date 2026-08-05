@@ -14,9 +14,14 @@ import { formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import {
   DESIGNATION_KEYS,
   INSURANCE_KEYS,
+  DESIGNATION_LABELS,
+  INSURANCE_LABELS,
   compareBusinessCriteria,
   normalizeBusinessCriteriaRequired,
   withBusinessCriteriaDefaults,
+  normalizeAcknowledgments,
+  computeRequirementCompliance,
+  hasExplicitPriorityData,
 } from "@/lib/business-criteria"
 import { cn } from "@/lib/utils"
 import { HelpTerm } from "@/components/help-term"
@@ -41,6 +46,22 @@ import { ChevronRight, Star, Sparkles, Loader2 } from "lucide-react"
 const RFP_RESPONSES_URL = "/api/agency/rfp-responses"
 
 type LineItem = { category: string; amount: number; percentage_of_total: number; description: string }
+
+/**
+ * Requirement-tier compliance matrix (S4-1) - renders nothing for any row whose RFP predates
+ * tiers (hasTierData false), so old RFPs never show a fake pass/fail. Distinct from the
+ * legacy "Business Criteria" row below, which is unchanged and shows the old presence-based
+ * gap count for every RFP regardless of tiers.
+ */
+function rowRequirementCompliance(row: BidRow) {
+  const required = normalizeBusinessCriteriaRequired(row.business_criteria_required)
+  const responses = withBusinessCriteriaDefaults(row.business_criteria_responses)
+  const acknowledgments = normalizeAcknowledgments(row.business_criteria_acknowledgments)
+  return computeRequirementCompliance(required, responses, acknowledgments, {
+    designations: DESIGNATION_LABELS,
+    insurance: INSURANCE_LABELS,
+  })
+}
 
 function businessCriteriaCounts(row: BidRow): { required: number; missing: number } {
   const responses = withBusinessCriteriaDefaults(row.business_criteria_responses)
@@ -375,6 +396,51 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
               </TableRow>
             </TableHeader>
             <TableBody>
+              {/* S4-1 compliance matrix - before scoring, per spec. Renders only when at
+                  least one row's RFP has explicit requirement-tier data; a mix of tiered and
+                  pre-tier rows shows "-" for the pre-tier ones rather than omitting them. */}
+              {rows.some((r) => hasExplicitPriorityData(normalizeBusinessCriteriaRequired(r.business_criteria_required))) && (
+                <TableRow className="border-border/30">
+                  <TableCell className="text-foreground-muted font-mono text-2xs uppercase">
+                    Meets required
+                  </TableCell>
+                  {rows.map((row) => {
+                    const compliance = rowRequirementCompliance(row)
+                    if (!compliance.hasTierData) {
+                      return (
+                        <TableCell key={row.id} className="text-foreground-muted text-xs">-</TableCell>
+                      )
+                    }
+                    if (compliance.requiredTotalCount === 0) {
+                      return (
+                        <TableCell key={row.id} className="text-foreground-muted text-xs">No required criteria</TableCell>
+                      )
+                    }
+                    return (
+                      <TableCell key={row.id} className="whitespace-normal">
+                        <span className={cn("text-xs font-medium", compliance.meetsAllRequired ? "text-success" : "text-red-400")}>
+                          {compliance.meetsAllRequired ? "Yes" : "No"}
+                        </span>
+                        <span className="text-foreground-muted text-2xs ml-1">
+                          ({compliance.requiredConfirmedCount} of {compliance.requiredTotalCount})
+                        </span>
+                        {!compliance.meetsAllRequired && (
+                          <ul className="mt-1 space-y-0.5">
+                            {compliance.requiredItems
+                              .filter((i) => !i.met)
+                              .map((i) => (
+                                <li key={i.key} className="text-2xs text-red-400/90">
+                                  {i.label}
+                                  {i.cannotMeetReason ? `: ${i.cannotMeetReason}` : ""}
+                                </li>
+                              ))}
+                          </ul>
+                        )}
+                      </TableCell>
+                    )
+                  })}
+                </TableRow>
+              )}
               <TableRow className="border-border/30">
                 <TableCell className="text-foreground-muted font-mono text-2xs uppercase">
                   <HelpTerm term="composite_score" theme="dark">Score</HelpTerm>

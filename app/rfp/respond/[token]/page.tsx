@@ -32,9 +32,17 @@ import {
   type DesignationKey,
   type InsuranceHolds,
   type InsuranceKey,
+  type BusinessCriteriaAcknowledgments,
   normalizeBusinessCriteriaRequired,
   withBusinessCriteriaDefaults,
+  hasExplicitPriorityData,
+  normalizeAcknowledgments,
+  emptyAcknowledgments,
+  getDesignationPriority,
+  getInsurancePriority,
+  getCoiPriority,
 } from "@/lib/business-criteria"
+import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria-requirement-block"
 import {
   emptyTermsDisclosure,
   withTermsDisclosureDefaults,
@@ -86,6 +94,8 @@ type SubmittedResponse = {
   terms_disclosure?: unknown
   attachments: { type: string; label: string; url: string }[] | null
   business_criteria_responses?: unknown
+  /** Absent on rows written before migration 071 - always read through normalizeAcknowledgments. */
+  business_criteria_acknowledgments?: unknown
   status: string
   agency_feedback?: string | null
   feedback_updated_at?: string | null
@@ -212,6 +222,8 @@ export default function GuestRfpRespondPage() {
   const [businessCriteriaResponses, setBusinessCriteriaResponses] = useState<BusinessCriteriaHolds>(
     withBusinessCriteriaDefaults(null)
   )
+  const [businessCriteriaAcknowledgments, setBusinessCriteriaAcknowledgments] =
+    useState<BusinessCriteriaAcknowledgments>(emptyAcknowledgments())
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [linkUrl, setLinkUrl] = useState("")
@@ -296,6 +308,7 @@ export default function GuestRfpRespondPage() {
     setTermsErrors([])
     setAttachments([])
     setBusinessCriteriaResponses(withBusinessCriteriaDefaults(null))
+    setBusinessCriteriaAcknowledgments(emptyAcknowledgments())
   }
 
   const startEditingBid = () => {
@@ -320,6 +333,7 @@ export default function GuestRfpRespondPage() {
       }))
     )
     setBusinessCriteriaResponses(withBusinessCriteriaDefaults(response.business_criteria_responses))
+    setBusinessCriteriaAcknowledgments(normalizeAcknowledgments(response.business_criteria_acknowledgments))
     setSubmitError(null)
     setIsEditingBid(true)
   }
@@ -345,6 +359,56 @@ export default function GuestRfpRespondPage() {
     }))
   }
 
+  const setBusinessCriteriaAcknowledgment = (
+    kind: "designation" | "insurance" | "coi",
+    key: string | null,
+    reason: string | null
+  ) => {
+    setBusinessCriteriaAcknowledgments((prev) => {
+      const next: BusinessCriteriaAcknowledgments = {
+        designations: { ...prev.designations },
+        insurance: { ...prev.insurance },
+        coi: prev.coi,
+      }
+      if (kind === "coi") {
+        next.coi = reason == null ? undefined : { status: "cannot_meet", reason }
+      } else if (kind === "designation" && key) {
+        const d = next.designations as Record<string, { status: "cannot_meet"; reason: string }>
+        if (reason == null) delete d[key]
+        else d[key] = { status: "cannot_meet", reason }
+      } else if (kind === "insurance" && key) {
+        const i = next.insurance as Record<string, { status: "cannot_meet"; reason: string }>
+        if (reason == null) delete i[key]
+        else i[key] = { status: "cannot_meet", reason }
+      }
+      return next
+    })
+  }
+
+  const confirmAllRequiredCriteria = () => {
+    if (!payload) return
+    const req = normalizeBusinessCriteriaRequired(payload.business_criteria_required)
+    setBusinessCriteriaResponses((prev) => {
+      const designations = { ...prev.designations }
+      for (const key of DESIGNATION_KEYS) {
+        if (req.designations[key] === true && getDesignationPriority(req, key) === "required") {
+          designations[key] = { ...designations[key], holds: true }
+        }
+      }
+      const insurance = { ...prev.insurance }
+      for (const key of INSURANCE_KEYS) {
+        if (req.insurance[key]?.required === true && getInsurancePriority(req, key) === "required") {
+          insurance[key] = { ...insurance[key], has_coverage: true }
+        }
+      }
+      if (req.insurance.coi_on_file === true && getCoiPriority(req) === "required") {
+        insurance.coi_on_file = true
+      }
+      return { ...prev, designations, insurance }
+    })
+    setBusinessCriteriaAcknowledgments(emptyAcknowledgments())
+  }
+
   const cancelEditingBid = () => {
     setIsEditingBid(false)
     resetForm()
@@ -365,6 +429,10 @@ export default function GuestRfpRespondPage() {
     setTermsErrors([])
     setSubmitting(true)
     const wasEditing = isEditingBid
+    const hasAcknowledgments =
+      Object.keys(businessCriteriaAcknowledgments.designations || {}).length > 0 ||
+      Object.keys(businessCriteriaAcknowledgments.insurance || {}).length > 0 ||
+      businessCriteriaAcknowledgments.coi != null
     try {
       const res = await fetch(`/api/rfp/guest/${token}`, {
         method: "POST",
@@ -377,6 +445,9 @@ export default function GuestRfpRespondPage() {
           terms_disclosure: termsValidation.value,
           attachments: attachments.map((a) => ({ type: a.type, label: a.label, url: a.url })),
           business_criteria_responses: businessCriteriaResponses,
+          // Write guard (S4-1): only sent when the vendor actually recorded a cannot-meet
+          // reason, so requests shaped like today's never carry this key.
+          ...(hasAcknowledgments ? { business_criteria_acknowledgments: businessCriteriaAcknowledgments } : {}),
           ...(wasEditing ? { is_edit: true } : {}),
         }),
       })
@@ -743,7 +814,26 @@ export default function GuestRfpRespondPage() {
                   disabled={submitting}
                 />
 
-                {hasRequiredCriteriaForBid && (
+                {/* S4-1: RFPs with explicit requirement-tier data get the new required/preferred
+                    block (dark theme, matching this page's chrome); RFPs authored before tiers
+                    existed fall through to the legacy untiered block below, unchanged. No profile
+                    prefill on the guest path - there is no profile. */}
+                {hasExplicitPriorityData(requiredCriteria) && (
+                  <BusinessCriteriaRequirementBlock
+                    theme="dark"
+                    required={requiredCriteria}
+                    responses={businessCriteriaResponses}
+                    acknowledgments={businessCriteriaAcknowledgments}
+                    onUpdateDesignation={updateBusinessCriteriaDesignation}
+                    onUpdateInsurance={updateBusinessCriteriaInsurance}
+                    onUpdateCoi={updateBusinessCriteriaCoi}
+                    onSetAcknowledgment={setBusinessCriteriaAcknowledgment}
+                    onConfirmAll={confirmAllRequiredCriteria}
+                    canEdit={!submitting}
+                  />
+                )}
+
+                {hasRequiredCriteriaForBid && !hasExplicitPriorityData(requiredCriteria) && (
                   <div className="p-4 rounded-lg border border-border/40 bg-white/5 space-y-4">
                     <div>
                       <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">

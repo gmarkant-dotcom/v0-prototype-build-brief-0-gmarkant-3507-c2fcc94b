@@ -31,6 +31,8 @@ export type BidRow = {
   attachments?: BidAttachment[] | null
   business_criteria_responses?: unknown
   business_criteria_required?: unknown
+  /** Absent until migration 071's column is added to this row's source SELECT (S4-1 follow-up) - always read through normalizeAcknowledgments, which returns {} for undefined. */
+  business_criteria_acknowledgments?: unknown
   agency_feedback?: string | null
   feedback_updated_at?: string | null
   submitted_at?: string | null

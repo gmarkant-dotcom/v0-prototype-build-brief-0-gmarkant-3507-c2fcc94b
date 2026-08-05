@@ -32,7 +32,11 @@ import {
   type DesignationKey,
   type InsuranceKey,
   type InsuranceRequirement,
+  type RequirementPriority,
   normalizeBusinessCriteriaRequired,
+  getDesignationPriority,
+  getInsurancePriority,
+  getCoiPriority,
 } from "@/lib/business-criteria"
 import { HelpTerm } from "@/components/help-term"
 
@@ -88,6 +92,33 @@ type PartnershipApiRow = {
     full_name: string | null
     company_name: string | null
   } | null
+}
+
+/** Two-way segmented pill for a criterion's requirement tier (S4-1). Binary, no third state. */
+function PriorityToggle({
+  value,
+  onChange,
+}: {
+  value: RequirementPriority
+  onChange: (next: RequirementPriority) => void
+}) {
+  return (
+    <div className="flex rounded-md overflow-hidden border border-border shrink-0" onClick={(e) => e.stopPropagation()}>
+      {(["required", "preferred"] as RequirementPriority[]).map((tier) => (
+        <button
+          key={tier}
+          type="button"
+          onClick={() => onChange(tier)}
+          className={cn(
+            "px-2.5 py-1 font-mono text-2xs uppercase tracking-wider transition-colors",
+            value === tier ? "bg-accent text-accent-foreground" : "bg-white/5 text-foreground-muted hover:bg-white/10"
+          )}
+        >
+          {tier}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 /** Primary brief + optional user augment, sent to /api/ai/master-brief */
@@ -383,9 +414,28 @@ function AgencyRFPContent() {
     setMasterRfp((prev) => {
       if (!prev) return prev
       const designations = { ...prev.business_criteria_required.designations }
-      if (required) designations[key] = true
-      else delete designations[key]
-      return { ...prev, business_criteria_required: { ...prev.business_criteria_required, designations } }
+      const designationPriority = { ...prev.business_criteria_required.designationPriority }
+      if (required) {
+        designations[key] = true
+        // New requirement tiers default to preferred (S4-1 spec) - the agency opts a
+        // criterion up to required explicitly via the priority toggle.
+        if (!designationPriority[key]) designationPriority[key] = "preferred"
+      } else {
+        delete designations[key]
+        delete designationPriority[key]
+      }
+      return {
+        ...prev,
+        business_criteria_required: { ...prev.business_criteria_required, designations, designationPriority },
+      }
+    })
+  }
+
+  const updateDesignationPriority = (key: DesignationKey, priority: RequirementPriority) => {
+    setMasterRfp((prev) => {
+      if (!prev) return prev
+      const designationPriority = { ...prev.business_criteria_required.designationPriority, [key]: priority }
+      return { ...prev, business_criteria_required: { ...prev.business_criteria_required, designationPriority } }
     })
   }
 
@@ -394,7 +444,21 @@ function AgencyRFPContent() {
       if (!prev) return prev
       const current = prev.business_criteria_required.insurance[key] || { required: false, minimum: null }
       const insurance = { ...prev.business_criteria_required.insurance, [key]: { ...current, ...patch } }
-      return { ...prev, business_criteria_required: { ...prev.business_criteria_required, insurance } }
+      const insurancePriority = { ...prev.business_criteria_required.insurancePriority }
+      if (patch.required === true && !insurancePriority[key]) insurancePriority[key] = "preferred"
+      if (patch.required === false) delete insurancePriority[key]
+      return {
+        ...prev,
+        business_criteria_required: { ...prev.business_criteria_required, insurance, insurancePriority },
+      }
+    })
+  }
+
+  const updateInsurancePriority = (key: InsuranceKey, priority: RequirementPriority) => {
+    setMasterRfp((prev) => {
+      if (!prev) return prev
+      const insurancePriority = { ...prev.business_criteria_required.insurancePriority, [key]: priority }
+      return { ...prev, business_criteria_required: { ...prev.business_criteria_required, insurancePriority } }
     })
   }
 
@@ -406,8 +470,17 @@ function AgencyRFPContent() {
             business_criteria_required: {
               ...prev.business_criteria_required,
               insurance: { ...prev.business_criteria_required.insurance, coi_on_file: required },
+              coiPriority: required ? prev.business_criteria_required.coiPriority || "preferred" : undefined,
             },
           }
+        : prev
+    )
+  }
+
+  const updateCoiPriority = (priority: RequirementPriority) => {
+    setMasterRfp((prev) =>
+      prev
+        ? { ...prev, business_criteria_required: { ...prev.business_criteria_required, coiPriority: priority } }
         : prev
     )
   }
@@ -1902,58 +1975,82 @@ function AgencyRFPContent() {
               </div>
 
               <div className="space-y-3 mb-8">
-                {DESIGNATION_KEYS.map((key) => (
-                  <label
-                    key={key}
-                    className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white/[0.02] cursor-pointer"
-                  >
-                    <Checkbox
-                      checked={masterRfp.business_criteria_required.designations[key] === true}
-                      onCheckedChange={(checked) => updateRequiredDesignation(key, checked === true)}
-                    />
-                    <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground">
-                      {DESIGNATION_LABELS[key]}
-                    </HelpTerm>
-                  </label>
-                ))}
+                {DESIGNATION_KEYS.map((key) => {
+                  const isRequired = masterRfp.business_criteria_required.designations[key] === true
+                  return (
+                    <label
+                      key={key}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white/[0.02] cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={isRequired}
+                        onCheckedChange={(checked) => updateRequiredDesignation(key, checked === true)}
+                      />
+                      <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground flex-1">
+                        {DESIGNATION_LABELS[key]}
+                      </HelpTerm>
+                      {isRequired && (
+                        <PriorityToggle
+                          value={getDesignationPriority(masterRfp.business_criteria_required, key)}
+                          onChange={(p) => updateDesignationPriority(key, p)}
+                        />
+                      )}
+                    </label>
+                  )
+                })}
               </div>
 
               <div className="space-y-3 mb-6">
                 {INSURANCE_KEYS.map((key) => {
                   const requirement = masterRfp.business_criteria_required.insurance[key]
+                  const isRequired = requirement?.required === true
                   return (
                     <div
                       key={key}
-                      className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border bg-white/[0.02]"
+                      className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border bg-white/[0.02] flex-wrap"
                     >
                       <label className="flex items-center gap-3 min-w-0 cursor-pointer">
                         <Checkbox
-                          checked={requirement?.required === true}
+                          checked={isRequired}
                           onCheckedChange={(checked) => updateRequiredInsurance(key, { required: checked === true })}
                         />
                         <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground truncate">
                           {INSURANCE_LABELS[key]}
                         </HelpTerm>
                       </label>
-                      <Input
-                        value={requirement?.minimum || ""}
-                        onChange={(e) => updateRequiredInsurance(key, { minimum: e.target.value || null })}
-                        placeholder="Minimum, e.g. $1M/$2M"
-                        className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-48 shrink-0"
-                      />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Input
+                          value={requirement?.minimum || ""}
+                          onChange={(e) => updateRequiredInsurance(key, { minimum: e.target.value || null })}
+                          placeholder="Minimum, e.g. $1M/$2M"
+                          className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-48 shrink-0"
+                        />
+                        {isRequired && (
+                          <PriorityToggle
+                            value={getInsurancePriority(masterRfp.business_criteria_required, key)}
+                            onChange={(p) => updateInsurancePriority(key, p)}
+                          />
+                        )}
+                      </div>
                     </div>
                   )
                 })}
               </div>
 
-              <label className="flex items-center gap-3 mb-6 cursor-pointer">
+              <label className="flex items-center gap-3 mb-6 cursor-pointer flex-wrap">
                 <Checkbox
                   checked={masterRfp.business_criteria_required.insurance.coi_on_file === true}
                   onCheckedChange={(checked) => updateRequiredCoi(checked === true)}
                 />
-                <span className="text-sm text-foreground">
+                <span className="text-sm text-foreground flex-1">
                   Require a <HelpTerm term="coi" theme="dark">Certificate of Insurance (COI)</HelpTerm> on file
                 </span>
+                {masterRfp.business_criteria_required.insurance.coi_on_file === true && (
+                  <PriorityToggle
+                    value={getCoiPriority(masterRfp.business_criteria_required)}
+                    onChange={updateCoiPriority}
+                  />
+                )}
               </label>
 
               <div>
