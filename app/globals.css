@@ -235,6 +235,61 @@
   animation: ai-pulse 2s ease-in-out infinite;
 }
 
+/* Hero eyebrow word rotator - words share one grid cell so the widest word
+   (PRODUCTION PARTNER) sets a fixed track width and the line never jumps. */
+@keyframes hero-eyebrow-cycle {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  2.65% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  14.02% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  16.67% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  16.68% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.hero-eyebrow-rotator {
+  display: inline-grid;
+  vertical-align: baseline;
+}
+
+.hero-eyebrow-word {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+  opacity: 0;
+  animation-name: hero-eyebrow-cycle;
+  animation-duration: 13.2s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-fill-mode: backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-eyebrow-word {
+    animation: none;
+    opacity: 0;
+  }
+  .hero-eyebrow-word:first-child {
+    opacity: 1;
+  }
+}
+
 /* Streaming text animation */
 @keyframes blink {
   0%, 50% {

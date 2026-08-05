@@ -10,6 +10,24 @@ import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { User, Building2, Users } from "lucide-react"
 
+const HERO_EYEBROW_WORDS = ["Vendor", "Freelancer", "Studio", "Agency", "Production Partner", "Specialist"]
+
+function HeroEyebrowRotator() {
+  return (
+    <span className="hero-eyebrow-rotator">
+      {HERO_EYEBROW_WORDS.map((word, i) => (
+        <span
+          key={word}
+          className="hero-eyebrow-word text-accent"
+          style={{ animationDelay: `${i * 2.2}s` }}
+        >
+          {word}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 const stages = [
   { number: "00", title: "Vendor Pool", oneLiner: "Build your network. Get discovered.", ai: false },
   { number: "01", title: "RFP Broadcast", oneLiner: "Send scoped RFPs. Submit competitive bids.", ai: true },
@@ -154,8 +172,11 @@ export default function HomePage() {
         {/* Hero */}
         <section className="max-w-6xl mx-auto px-6 pt-16 md:pt-20 pb-10 md:pb-14">
           <div className="max-w-3xl">
-            <div className="font-mono text-xs text-accent tracking-wider uppercase mb-6 flex items-center gap-3">
-              <span className="ai-badge">✦</span> Best Practice Vendor Procurement & Orchestration for Independent Creative Agencies
+            <div className="font-mono text-base md:text-lg text-accent tracking-wider uppercase mb-6 flex items-center gap-3">
+              <span className="ai-badge">✦</span>
+              <span className="text-foreground/80">
+                Best Practice <HeroEyebrowRotator /> Procurement &amp; Orchestration for Independent Creative Agencies
+              </span>
             </div>
             <h1 className="font-display font-black text-5xl md:text-7xl text-foreground leading-[0.95] mb-10">
               Brief to <span className="text-accent">bid</span> to <span className="text-accent">award</span>.<br />
