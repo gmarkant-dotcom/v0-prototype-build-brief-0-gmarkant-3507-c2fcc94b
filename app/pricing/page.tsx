@@ -230,8 +230,8 @@ export default function PricingPage() {
 
         {/* Partner free callout */}
         <div className="max-w-3xl mx-auto mb-10 rounded-lg border border-[#C8F53C]/40 bg-[#C8F53C]/10 px-6 py-5 text-center">
-          <p className="font-display font-bold text-lg text-white">Vendors always access Ligament for free.</p>
-          <p className="text-white/75 text-sm mt-1">No fees, no limits, no catch.</p>
+          <p className="font-display font-bold text-lg text-white">Lead Agency users pay for full functionality.</p>
+          <p className="text-white/75 text-sm mt-1">Vendors access Ligament to collaborate with Lead Agency users for free.</p>
         </div>
 
         {/* Monthly / Annual toggle */}
