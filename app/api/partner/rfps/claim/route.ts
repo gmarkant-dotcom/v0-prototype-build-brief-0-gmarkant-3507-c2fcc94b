@@ -47,6 +47,7 @@ async function claimByToken(
 
   if (inbox.claimed_at) {
     if (inbox.partner_id === userId) {
+      await switchActiveRoleToPartner(supabase, userId)
       return { ok: true, inboxItemId: inbox.id, ndaGateEnforced: inbox.nda_gate_enforced === true }
     }
     return { ok: false, status: 409, error: "Invite already claimed" }
@@ -71,7 +72,31 @@ async function claimByToken(
     return { ok: false, status: 500, error: "Failed to claim invite" }
   }
 
+  // An existing account opening a vendor invitation link is a vendor-flavored navigation
+  // even if it was last active as an agency - switch it for this navigation so middleware's
+  // active_role gate doesn't bounce the user straight back to the agency portal.
+  await switchActiveRoleToPartner(supabase, userId)
+
   return { ok: true, inboxItemId: inbox.id, ndaGateEnforced: inbox.nda_gate_enforced === true }
+}
+
+/** Best-effort - claiming the RFP invite itself already succeeded above, so a failure here
+ *  is logged, not surfaced, rather than turning an otherwise-successful claim into an error. */
+async function switchActiveRoleToPartner(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("active_role")
+    .eq("id", userId)
+    .maybeSingle<{ active_role: string | null }>()
+  if (error) {
+    console.error("[api] partner/rfps/claim: active_role lookup failed", { userId, message: error.message })
+    return
+  }
+  if (profile?.active_role === "partner") return
+  const { error: switchErr } = await supabase.from("profiles").update({ active_role: "partner" }).eq("id", userId)
+  if (switchErr) {
+    console.error("[api] partner/rfps/claim: active_role switch failed", { userId, message: switchErr.message })
+  }
 }
 
 export async function POST(request: Request) {

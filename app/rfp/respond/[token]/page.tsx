@@ -562,7 +562,9 @@ export default function GuestRfpRespondPage() {
                   variant="outline"
                   className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0"
                 >
-                  <a href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link`}>
+                  <a
+                href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link&next=${encodeURIComponent("/partner/rfps")}`}
+              >
                     Create profile
                   </a>
                 </Button>
@@ -579,7 +581,9 @@ export default function GuestRfpRespondPage() {
               variant="outline"
               className="border-teal-400/40 text-teal-200 hover:bg-teal-400/10 shrink-0"
             >
-              <a href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link`}>
+              <a
+                href={`/auth/sign-up?email=${encodeURIComponent(tokenRow.vendor_email)}&source=magic_link&next=${encodeURIComponent("/partner/rfps")}`}
+              >
                 Create profile
               </a>
             </Button>

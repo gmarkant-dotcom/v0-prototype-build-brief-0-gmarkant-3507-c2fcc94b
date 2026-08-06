@@ -8,11 +8,11 @@ async function syncUserProfile(supabase: any, user: any) {
   // Force partner role when the user arrived via an RFP invite or partnership invite
   const hasInviteContext = !!(metadata.invite || metadata.invite_token || metadata.invite_type)
   const role = hasInviteContext ? 'partner' : (metadata.role || 'partner')
-  
+
   // Check if profile exists
   const { data: existingProfile } = await supabase
     .from('profiles')
-    .select('id, role, is_paid, demo_access')
+    .select('id, role, active_role, is_paid, demo_access')
     .eq('id', user.id)
     .single()
 
@@ -31,9 +31,22 @@ async function syncUserProfile(supabase: any, user: any) {
       demo_access: true,
     })
   } else {
-    // Update role if not set, and always sync company_linkedin_url if present
     const updatePayload: Record<string, unknown> = {}
-    if (!existingProfile.role) updatePayload.role = role
+    // migration 056's handle_new_user() trigger inserts every brand-new profile with
+    // role='agency'/active_role='agency' unconditionally, ignoring signup metadata - so by
+    // the time this route runs (right after email confirmation), existingProfile.role is
+    // never null and the old "only set role if not set" guard never fired, silently keeping
+    // every vendor-flavored signup (RFP invite, partnership invite, magic-link "Create
+    // profile") on the agency side. This route only runs once per confirmation link (not on
+    // routine logins - those go through /auth/login directly), so correcting role/active_role
+    // here whenever the signup's own metadata says "partner" cannot clobber an established
+    // dual-role user's later, deliberate active_role choice.
+    if (role === 'partner' && (existingProfile.role !== 'partner' || existingProfile.active_role !== 'partner')) {
+      updatePayload.role = 'partner'
+      updatePayload.active_role = 'partner'
+    } else if (!existingProfile.role) {
+      updatePayload.role = role
+    }
     if (metadata.company_linkedin_url) updatePayload.company_linkedin_url = metadata.company_linkedin_url
     // Self-heal: restore access if it was ever lost, without touching is_admin
     if (!existingProfile.is_paid) updatePayload.is_paid = true
@@ -42,7 +55,7 @@ async function syncUserProfile(supabase: any, user: any) {
       await supabase.from('profiles').update(updatePayload).eq('id', user.id)
     }
   }
-  
+
   return role
 }
 
@@ -134,6 +147,13 @@ export async function GET(request: Request) {
         if (agency) claimUrl.searchParams.set("agency", agency)
         if (next) claimUrl.searchParams.set("next", next)
         return NextResponse.redirect(claimUrl.toString())
+      }
+
+      // If a specific next path was provided (e.g. the guest-bid "Create profile" flow
+      // pointing back at /partner/rfps), use that instead of falling through to the signed-
+      // out confirmation page - matches the PKCE branch below, which already does this.
+      if (next && next !== "/") {
+        return NextResponse.redirect(`${origin}${next}`)
       }
 
       // Sign out the user so they need to log in manually after confirmation
