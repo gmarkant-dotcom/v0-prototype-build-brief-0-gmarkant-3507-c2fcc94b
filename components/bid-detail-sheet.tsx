@@ -423,6 +423,11 @@ function BidDetailSheetInner({
             {nextError && (
               <p className="px-0 pb-2 text-xs text-red-300">{nextError}</p>
             )}
+            {actionError && (
+              <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+                {actionError}
+              </div>
+            )}
           </SheetHeader>
 
           {!row.response_exists ? (
@@ -797,12 +802,6 @@ function BidDetailSheetInner({
                         </span>
                       )}
                     </div>
-                  </div>
-                )}
-
-                {actionError && (
-                  <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
-                    {actionError}
                   </div>
                 )}
               </TabsContent>

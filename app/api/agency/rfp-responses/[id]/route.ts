@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { notifyProjectAwarded } from "@/lib/notifications"
 
 export const dynamic = "force-dynamic"
 
@@ -334,20 +335,39 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     if (awardContext) {
       const now = new Date().toISOString()
-      // UNIQUE(project_id, partnership_id) — upsert sets status to awarded (allowed by project_assignments_status_check).
-      const { error: paErr } = await supabase.from("project_assignments").upsert(
-        {
-          project_id: awardContext.projectId,
-          partnership_id: awardContext.partnershipId,
-          status: "awarded",
-          awarded_at: now,
-          updated_at: now,
-        },
-        { onConflict: "project_id,partnership_id" }
-      )
+      // Select-then-insert-or-update rather than .upsert(..., {onConflict}) — an onConflict
+      // upsert requires a real UNIQUE(project_id, partnership_id) constraint in the DB to
+      // target, and this table predates the migration log (no CREATE TABLE on disk to confirm
+      // one exists). This matches the pattern already used for project_assignments writes in
+      // app/api/projects/[id]/assignments/route.ts and does not depend on that constraint.
+      const { data: existingAssignment, error: paLookupErr } = await supabase
+        .from("project_assignments")
+        .select("id")
+        .eq("project_id", awardContext.projectId)
+        .eq("partnership_id", awardContext.partnershipId)
+        .maybeSingle()
+
+      const paErr = paLookupErr
+        ? paLookupErr
+        : existingAssignment
+          ? (
+              await supabase
+                .from("project_assignments")
+                .update({ status: "awarded", awarded_at: now, updated_at: now })
+                .eq("id", existingAssignment.id)
+            ).error
+          : (
+              await supabase.from("project_assignments").insert({
+                project_id: awardContext.projectId,
+                partnership_id: awardContext.partnershipId,
+                status: "awarded",
+                awarded_at: now,
+                updated_at: now,
+              })
+            ).error
 
       if (paErr) {
-        console.error("[api] bid award: project_assignments upsert failed (onConflict project_id,partnership_id)", {
+        console.error("[api] bid award: project_assignments write failed", {
           route,
           responseId: id,
           projectId: awardContext.projectId,
@@ -443,6 +463,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             route,
             responseId: id,
             message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+          })
+        }
+      }
+
+      if (existing.partner_id) {
+        try {
+          await notifyProjectAwarded(supabase, existing.partner_id, projectName, leadAgencyName, awardContext.projectId)
+        } catch (notifyErr) {
+          console.error("[api] bid award: in-app notification failed (award already recorded)", {
+            route,
+            responseId: id,
+            message: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
           })
         }
       }

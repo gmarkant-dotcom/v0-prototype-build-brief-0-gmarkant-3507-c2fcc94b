@@ -78,6 +78,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
   const [rows, setRows] = useState(initialRows)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [awardTarget, setAwardTarget] = useState<BidRow | null>(null)
+  const [patchError, setPatchError] = useState<string | null>(null)
 
   const [decompositions, setDecompositions] = useState<Map<string, LineItem[]>>(new Map())
   const [checkingDecompositions, setCheckingDecompositions] = useState(true)
@@ -283,6 +284,7 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
 
   const patchRow = async (row: BidRow, payload: Record<string, unknown>) => {
     setBusyId(row.id)
+    setPatchError(null)
     try {
       const res = await fetch(`/api/agency/rfp-responses/${row.id}`, {
         method: "PATCH",
@@ -293,9 +295,10 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
       if (!res.ok) throw new Error(data?.error || "Failed to update response")
       setRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, ...(data.response || {}) } : r)))
       void mutate(RFP_RESPONSES_URL)
-    } catch {
-      // Column-header actions are a quick-decision surface; a failed action leaves status
-      // unchanged and the agency can retry from the sheet, which surfaces a full error message.
+    } catch (e) {
+      // Column-header actions are a quick-decision surface, but a failure must still be
+      // visible - status stays unchanged in that case and the agency needs to know to retry.
+      setPatchError(e instanceof Error ? e.message : "Failed to update response")
     } finally {
       setBusyId(null)
     }
@@ -317,6 +320,12 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
           {rows.length} vendors for {rows[0]?.inbox?.scope_item_name || rows[0]?.project_name || "this scope"}
         </p>
       </div>
+
+      {patchError && (
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+          {patchError}
+        </div>
+      )}
 
       {/* At a Glance - existing data only, no AI, renders instantly */}
       <div className="rounded-xl border border-border/40 bg-white/[0.02] overflow-hidden">
