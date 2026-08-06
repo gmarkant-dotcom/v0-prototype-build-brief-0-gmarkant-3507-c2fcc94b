@@ -224,19 +224,35 @@ export function buildAgencyBidNotificationEmail(opts: {
   agencyRecipientName: string
   vendorNameOrEmail: string
   projectName: string
+  scopeItemName: string
   proposalText: string
   budgetSummary: string
   timelineSummary: string
+  isRevision?: boolean
 }): EmailPayload {
-  const subject = `New bid received — ${opts.projectName}`
+  const subject = opts.isRevision
+    ? `${opts.vendorNameOrEmail} updated their bid on ${opts.scopeItemName}`
+    : `${opts.vendorNameOrEmail} submitted a bid on ${opts.scopeItemName}`
   const trimmedProposal = opts.proposalText.trim()
-  const preview = trimmedProposal.slice(0, 150) + (trimmedProposal.length > 150 ? "…" : "")
-  const body = `${opts.vendorNameOrEmail} has submitted a bid via your magic link invitation.\n\n"${preview}"\n\nBudget: ${opts.budgetSummary}\nTimeline: ${opts.timelineSummary}`
-  const ctaUrl = "https://withligament.com/agency/bids"
-  const ctaText = "View Bid in Dashboard"
+  const preview = trimmedProposal.slice(0, 150) + (trimmedProposal.length > 150 ? "..." : "")
+  const body = `${opts.vendorNameOrEmail} has ${opts.isRevision ? "submitted a revised bid" : "submitted a bid"} for ${opts.scopeItemName} on ${opts.projectName}.\n\n"${preview}"\n\nBudget: ${opts.budgetSummary}\nTimeline: ${opts.timelineSummary}`
+  const ctaUrl = `${siteBaseUrl()}/agency/bids`
+  const ctaText = "View Bid in Bid Management"
   return {
     subject,
-    html: buildBrandedEmailHtml({ title: subject, recipientName: opts.agencyRecipientName, body, ctaText, ctaUrl }),
-    text: buildBrandedEmailText({ title: subject, recipientName: opts.agencyRecipientName, body, ctaText, ctaUrl }),
+    html: buildBrandedEmailHtml({
+      title: opts.isRevision ? "Vendor bid updated" : "New vendor bid",
+      recipientName: opts.agencyRecipientName,
+      body,
+      ctaText,
+      ctaUrl,
+    }),
+    text: buildBrandedEmailText({
+      title: opts.isRevision ? "Vendor bid updated" : "New vendor bid",
+      recipientName: opts.agencyRecipientName,
+      body,
+      ctaText,
+      ctaUrl,
+    }),
   }
 }

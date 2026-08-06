@@ -11,6 +11,7 @@ import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults, normal
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure } from "@/lib/terms-disclosure"
+import { notifyBidSubmitted } from "@/lib/notifications"
 
 export const dynamic = "force-dynamic"
 
@@ -494,6 +495,65 @@ export async function POST(req: Request) {
         })
       })
 
+      // Guest revisions previously sent no agency notification at all (email or in-app) -
+      // the mirror-image gap of the portal path, which only notified on revision, not on
+      // first submission. Both paths now notify on every submitted transition.
+      const [{ data: editProject }, { data: editAgencyProfile }] = await Promise.all([
+        supabase.from("projects").select("name").eq("id", tokenRow.project_id).maybeSingle(),
+        supabase
+          .from("profiles")
+          .select("email, company_name, display_name, full_name")
+          .eq("id", tokenRow.agency_id)
+          .maybeSingle(),
+      ])
+      const editVendorName = (tokenRow.vendor_name || "").trim() || vendorEmail
+      const editScopeItemName = (tokenRow.scope_item_name as string | null) || "Scope item"
+      if (editAgencyProfile?.email) {
+        try {
+          const editAgencyRecipient =
+            editAgencyProfile.company_name?.trim() ||
+            editAgencyProfile.display_name?.trim() ||
+            editAgencyProfile.full_name?.trim() ||
+            "there"
+          const editNotification = buildAgencyBidNotificationEmail({
+            agencyRecipientName: editAgencyRecipient,
+            vendorNameOrEmail: editVendorName,
+            projectName: editProject?.name || "Project",
+            scopeItemName: editScopeItemName,
+            proposalText: proposal_text,
+            budgetSummary: formatBudgetForDisplay(budget_proposal),
+            timelineSummary: timeline_proposal,
+            isRevision: true,
+          })
+          await sendTransactionalEmail({ to: editAgencyProfile.email, ...editNotification })
+        } catch (emailErr) {
+          console.error("[api] guest bid revision: agency notification email failed", {
+            route,
+            message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+          })
+        }
+      } else {
+        console.error("[api] guest bid revision: agency has no email on file, notification skipped", {
+          route,
+          agencyId: tokenRow.agency_id,
+        })
+      }
+      try {
+        await notifyBidSubmitted(
+          supabase,
+          tokenRow.agency_id as string,
+          editVendorName,
+          editScopeItemName,
+          tokenRow.response_id as string,
+          true
+        )
+      } catch (notifyErr) {
+        console.error("[api] guest bid revision: in-app notification failed", {
+          route,
+          message: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+        })
+      }
+
       console.log("[api] success", { route, method: "POST", token, is_existing_partner, is_edit: true })
       return NextResponse.json({ success: true, is_existing_partner, is_edit: true })
     }
@@ -633,23 +693,41 @@ export async function POST(req: Request) {
 
     const agencyRecipient =
       agencyProfile?.company_name?.trim() || agencyProfile?.display_name?.trim() || agencyProfile?.full_name?.trim() || "there"
+    const submissionVendorName = (tokenRow.vendor_name || "").trim() || vendorEmail
+    const submissionScopeItemName = (tokenRow.scope_item_name as string | null) || "Scope item"
 
-    try {
-      if (agencyProfile?.email) {
+    if (agencyProfile?.email) {
+      try {
         const notification = buildAgencyBidNotificationEmail({
           agencyRecipientName: agencyRecipient,
-          vendorNameOrEmail: (tokenRow.vendor_name || "").trim() || vendorEmail,
+          vendorNameOrEmail: submissionVendorName,
           projectName,
+          scopeItemName: submissionScopeItemName,
           proposalText: proposal_text,
           budgetSummary,
           timelineSummary: timeline_proposal,
+          isRevision: false,
         })
         await sendTransactionalEmail({ to: agencyProfile.email, ...notification })
+      } catch (emailErr) {
+        console.error("[api] agency notification email failed", {
+          route,
+          message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+        })
       }
-    } catch (emailErr) {
-      console.error("[api] agency notification email failed", {
+    } else {
+      console.error("[api] guest bid submission: agency has no email on file, notification skipped", {
         route,
-        message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+        agencyId: tokenRow.agency_id,
+      })
+    }
+
+    try {
+      await notifyBidSubmitted(supabase, tokenRow.agency_id as string, submissionVendorName, submissionScopeItemName, saved.id as string, false)
+    } catch (notifyErr) {
+      console.error("[api] guest bid submission: in-app notification failed", {
+        route,
+        message: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
       })
     }
 

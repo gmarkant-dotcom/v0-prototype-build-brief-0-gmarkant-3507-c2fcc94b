@@ -11,6 +11,7 @@ export type NotificationType =
   | 'document_uploaded'
   | 'project_awarded'
   | 'onboarding_deployed'
+  | 'bid_submitted'
 
 interface CreateNotificationParams {
   supabase: SupabaseClient
@@ -176,6 +177,25 @@ export async function notifyDocumentUploaded(
     message: `${uploaderName} uploaded "${documentName}" to "${projectName}".`,
     link: `/agency/project?tab=documents`,
     data: { projectId, projectName, documentName, uploaderName }
+  })
+}
+
+export async function notifyBidSubmitted(
+  supabase: SupabaseClient,
+  agencyId: string,
+  vendorNameOrEmail: string,
+  scopeItemName: string,
+  responseId: string,
+  isRevision: boolean
+) {
+  return createNotification({
+    supabase,
+    userId: agencyId,
+    type: 'bid_submitted',
+    title: isRevision ? 'Vendor Bid Updated' : 'New Vendor Bid',
+    message: `${vendorNameOrEmail} ${isRevision ? "updated their bid" : "submitted a bid"} on "${scopeItemName}".`,
+    link: `/agency/bids`,
+    data: { responseId, scopeItemName, vendorNameOrEmail, isRevision }
   })
 }
 

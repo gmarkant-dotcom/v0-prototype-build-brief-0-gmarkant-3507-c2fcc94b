@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
-import { isBudgetValidForSubmit, isTimelineValidForSubmit } from "@/lib/rfp-response-fields"
-import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { isBudgetValidForSubmit, isTimelineValidForSubmit, formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
+import { buildAgencyBidNotificationEmail, sendTransactionalEmail } from "@/lib/email"
 import { withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureDefaults } from "@/lib/terms-disclosure"
+import { notifyBidSubmitted } from "@/lib/notifications"
 
 export const dynamic = "force-dynamic"
 
@@ -332,36 +333,54 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         })
       })
 
-      if (wasUpdate) {
-        const [{ data: agencyProfile }, { data: inboxDetail }] = await Promise.all([
-          supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.agency_id).maybeSingle(),
-          supabase.from("partner_rfp_inbox").select("scope_item_name, master_rfp_json").eq("id", inboxId).maybeSingle(),
-        ])
-        if (agencyProfile?.email) {
-          const projectName =
-            (inboxDetail?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
-          const scopeItemName = inboxDetail?.scope_item_name || "Scope item"
-          const bidUpdateSubject = scopeItemName
-            ? `${partner_display_name} updated their bid on ${scopeItemName}`
-            : `${partner_display_name} resubmitted a bid`
-          const baseUrl = siteBaseUrl()
+      // Agency notification (email + in-app) on every submitted transition - initial
+      // submission previously sent nothing at all here (only revisions did); both now
+      // notify the same way the guest/magic-link path does, via the shared email builder.
+      const [{ data: agencyProfile }, { data: inboxDetail }] = await Promise.all([
+        supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.agency_id).maybeSingle(),
+        supabase.from("partner_rfp_inbox").select("scope_item_name, master_rfp_json").eq("id", inboxId).maybeSingle(),
+      ])
+      const projectName =
+        (inboxDetail?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
+      const scopeItemName = inboxDetail?.scope_item_name || "Scope item"
+      if (agencyProfile?.email) {
+        try {
           const agencyRecipient =
             agencyProfile.company_name?.trim() ||
             agencyProfile.full_name?.trim() ||
             agencyProfile.email.trim()
-          await sendTransactionalEmail({
-            to: agencyProfile.email,
-            cc: "hello@withligament.com",
-            subject: bidUpdateSubject,
-            html: buildBrandedEmailHtml({
-              title: "Vendor bid updated",
-              recipientName: agencyRecipient,
-              body: `${partner_display_name} has submitted a revised bid for ${scopeItemName} on ${projectName}.\n\nLog in to review the updated submission and respond.`,
-              ctaText: "Review Bid",
-              ctaUrl: `${baseUrl}/agency/bids`,
-            }),
+          const notification = buildAgencyBidNotificationEmail({
+            agencyRecipientName: agencyRecipient,
+            vendorNameOrEmail: partner_display_name,
+            projectName,
+            scopeItemName,
+            proposalText: proposal_text,
+            budgetSummary: formatBudgetForDisplay(budget_proposal),
+            timelineSummary: formatTimelineForDisplay(timeline_proposal),
+            isRevision: wasUpdate,
+          })
+          await sendTransactionalEmail({ to: agencyProfile.email, cc: "hello@withligament.com", ...notification })
+        } catch (emailErr) {
+          console.error("[api] bid submission: agency notification email failed", {
+            route,
+            responseId: saved.id,
+            message: emailErr instanceof Error ? emailErr.message : String(emailErr),
           })
         }
+      } else {
+        console.error("[api] bid submission: agency has no email on file, notification skipped", {
+          route,
+          agencyId: inbox.agency_id,
+        })
+      }
+      try {
+        await notifyBidSubmitted(supabase, inbox.agency_id, partner_display_name, scopeItemName, saved.id, wasUpdate)
+      } catch (notifyErr) {
+        console.error("[api] bid submission: in-app notification failed", {
+          route,
+          responseId: saved.id,
+          message: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+        })
       }
     }
 
