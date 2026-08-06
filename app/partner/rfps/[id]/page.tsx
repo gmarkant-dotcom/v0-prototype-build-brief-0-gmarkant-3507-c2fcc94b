@@ -1157,6 +1157,14 @@ export default function PartnerRfpDetailPage() {
   const requiredInsuranceKeysForBid = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
   const hasRequiredCriteriaForBid =
     requiredDesignationKeysForBid.length > 0 || requiredInsuranceKeysForBid.length > 0 || requiredCriteria.insurance.coi_on_file
+  // Bid-form section order (S4-2): terms disclosure (when required) and the tiered business-criteria
+  // block share one "Required by this agency" wrapper so they read as a single section. hasTierData
+  // inside BusinessCriteriaRequirementBlock is computed from hasExplicitPriorityData(requiredCriteria),
+  // so this mirrors it exactly rather than guessing - keeps the wrapper's own presence/absence in sync
+  // with the component's null-render behavior.
+  const termsRequired = inbox.require_terms_disclosure === true
+  const hasCriteriaTierData = hasExplicitPriorityData(requiredCriteria)
+  const hasRequiredSection = termsRequired || hasCriteriaTierData
 
   const updatePartnerIntent = async (nextIntent: PartnerIntent) => {
     if (isDemoDetail) {
@@ -1553,12 +1561,6 @@ export default function PartnerRfpDetailPage() {
               Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, shortlisted, or meeting requested.
           </p>
 
-          {inbox.require_terms_disclosure && (
-            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
-              This agency requires basic term disclosures with your bid.
-            </div>
-          )}
-
           {successMsg && (
             <div
               role="status"
@@ -1670,37 +1672,70 @@ export default function PartnerRfpDetailPage() {
               </div>
             </div>
 
-            <TermsDisclosureSection
-              value={termsDisclosure}
-              onChange={setTermsDisclosure}
-              required={inbox.require_terms_disclosure === true}
-              theme="light"
-              errors={termsErrors}
-              disabled={!canEdit}
-              showSaveDefaultOption
-              saveAsDefault={saveTermsAsDefault}
-              onSaveAsDefaultChange={setSaveTermsAsDefault}
-            />
-
-            {/* S4-1: RFPs with explicit requirement-tier data get the new required/preferred
-                block; RFPs authored before tiers existed (hasExplicitPriorityData false) fall
-                through to the legacy untiered block below, unchanged. */}
-            {hasExplicitPriorityData(requiredCriteria) && (
-              <BusinessCriteriaRequirementBlock
-                required={requiredCriteria}
-                responses={businessCriteriaResponses}
-                acknowledgments={businessCriteriaAcknowledgments}
-                onUpdateDesignation={updateBusinessCriteriaDesignation}
-                onUpdateInsurance={updateBusinessCriteriaInsurance}
-                onUpdateCoi={updateBusinessCriteriaCoi}
-                onSetAcknowledgment={setBusinessCriteriaAcknowledgment}
-                onConfirmAll={confirmAllRequiredCriteria}
-                canEdit={canEdit}
-                profileHolds={profileCriteriaHolds}
+            {/* S4-2: term disclosures (when required) and the tiered required/preferred criteria
+                block are grouped under one "Required by this agency" heading so they read as a
+                single section. Nothing renders here at all when neither applies - no empty box,
+                no orphaned heading. When terms aren't required, TermsDisclosureSection still
+                renders in the same relative slot (unwrapped, its own optional "+ Add your terms"
+                affordance), exactly as before reordering. */}
+            {!termsRequired && (
+              <TermsDisclosureSection
+                value={termsDisclosure}
+                onChange={setTermsDisclosure}
+                required={false}
+                theme="light"
+                errors={termsErrors}
+                disabled={!canEdit}
+                showSaveDefaultOption
+                saveAsDefault={saveTermsAsDefault}
+                onSaveAsDefaultChange={setSaveTermsAsDefault}
               />
             )}
 
-            {hasRequiredCriteriaForBid && !hasExplicitPriorityData(requiredCriteria) && (
+            {hasRequiredSection && (
+              <div className="space-y-4">
+                <h3 className="font-display font-bold text-sm text-vendor-foreground">Required by this agency</h3>
+                {termsRequired && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
+                    This agency requires basic term disclosures with your bid.
+                  </div>
+                )}
+                {termsRequired && (
+                  <TermsDisclosureSection
+                    value={termsDisclosure}
+                    onChange={setTermsDisclosure}
+                    required={termsRequired}
+                    theme="light"
+                    errors={termsErrors}
+                    disabled={!canEdit}
+                    showSaveDefaultOption
+                    saveAsDefault={saveTermsAsDefault}
+                    onSaveAsDefaultChange={setSaveTermsAsDefault}
+                  />
+                )}
+
+                {/* S4-1: RFPs with explicit requirement-tier data get the new required/preferred
+                    block (renders required-then-preferred internally); RFPs authored before tiers
+                    existed (hasExplicitPriorityData false) fall through to the legacy untiered
+                    block below, unchanged. */}
+                {hasCriteriaTierData && (
+                  <BusinessCriteriaRequirementBlock
+                    required={requiredCriteria}
+                    responses={businessCriteriaResponses}
+                    acknowledgments={businessCriteriaAcknowledgments}
+                    onUpdateDesignation={updateBusinessCriteriaDesignation}
+                    onUpdateInsurance={updateBusinessCriteriaInsurance}
+                    onUpdateCoi={updateBusinessCriteriaCoi}
+                    onSetAcknowledgment={setBusinessCriteriaAcknowledgment}
+                    onConfirmAll={confirmAllRequiredCriteria}
+                    canEdit={canEdit}
+                    profileHolds={profileCriteriaHolds}
+                  />
+                )}
+              </div>
+            )}
+
+            {hasRequiredCriteriaForBid && !hasCriteriaTierData && (
               <div className="rounded-xl border border-vendor-border bg-vendor-background/70 p-4">
                 <h3 className="font-display font-bold text-sm text-vendor-foreground mb-1">Business criteria</h3>
                 <p className="text-xs text-vendor-muted-strong mb-3">
