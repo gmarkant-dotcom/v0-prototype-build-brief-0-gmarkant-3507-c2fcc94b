@@ -75,6 +75,7 @@ export function BusinessCriteriaRequirementBlock({
   canEdit,
   profileHolds,
   theme = "light",
+  hideTitle = false,
 }: {
   required: BusinessCriteriaRequired
   responses: BusinessCriteriaHolds
@@ -89,6 +90,12 @@ export function BusinessCriteriaRequirementBlock({
   profileHolds?: BusinessCriteriaHolds | null
   /** "light" (vendor portal tokens, default) or "dark" (guest page, agency-dark tokens). */
   theme?: Theme
+  /** F1: when the caller wraps this in its own BidFormCollapsibleSection titled "Business
+   *  criteria" (the bid-form "Business criteria" section), this component's own internal
+   *  heading would duplicate the outer wrapper's title. Set true to omit just the heading -
+   *  "Confirm all" and the "N of M required confirmed" line stay, since both are meaningful
+   *  in-context content, not chrome. */
+  hideTitle?: boolean
 }) {
   const t = THEME_CLASSES[theme]
   const helpTermTheme = theme
@@ -249,7 +256,7 @@ export function BusinessCriteriaRequirementBlock({
   return (
     <div className={t.container}>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
-        <h3 className={t.heading}>Business criteria</h3>
+        {hideTitle ? <span /> : <h3 className={t.heading}>Business criteria</h3>}
         {canEdit && compliance.requiredTotalCount > 0 && (
           <button type="button" onClick={onConfirmAll} className={cn("font-mono text-2xs uppercase tracking-wider", t.link)}>
             Confirm all

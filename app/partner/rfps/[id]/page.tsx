@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
-import { cn, normalizeMeetingUrlForHref, formatSubmittedAt } from "@/lib/utils"
+import { cn, normalizeMeetingUrlForHref, formatSubmittedAt, formatRelativeTime } from "@/lib/utils"
 import { buildBidTimeline } from "@/lib/bid-timeline"
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { isDemoMode } from "@/lib/demo-data"
@@ -33,8 +33,16 @@ import {
   getDesignationPriority,
   getInsurancePriority,
   getCoiPriority,
+  computeRequirementCompliance,
 } from "@/lib/business-criteria"
 import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria-requirement-block"
+import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
+import {
+  getTermsReadiness,
+  getCriteriaSummaryLabel,
+  getAttachmentsSummaryLabel,
+  computeReadinessLabel,
+} from "@/lib/bid-form-readiness"
 import {
   BUDGET_CURRENCY_OPTIONS,
   TIMELINE_UNIT_OPTIONS,
@@ -302,6 +310,14 @@ function parsePaymentTerms(raw: unknown): {
   }
 }
 
+/** F1 preflight line: sentence-case, no em dash, Oxford comma for 3+ items. */
+function joinWithOxfordComma(parts: string[]): string {
+  if (parts.length === 0) return ""
+  if (parts.length === 1) return parts[0]
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`
+}
+
 function partnerIntentLabel(intent: PartnerIntent): string {
   if (intent === "will_respond") return "I plan to respond"
   if (intent === "has_questions") return "I have questions"
@@ -524,19 +540,46 @@ export default function PartnerRfpDetailPage() {
   const [ndaNotifyBusy, setNdaNotifyBusy] = useState(false)
   const [ndaNotifyMessage, setNdaNotifyMessage] = useState<string | null>(null)
 
+  /** F1: controlled open/closed state for the four collapsible bid-form sections - no
+   *  persistence, every page load defaults everything open. */
+  const [openSections, setOpenSections] = useState<Record<"bidResponse" | "attachments" | "terms" | "criteria", boolean>>({
+    bidResponse: true,
+    attachments: true,
+    terms: true,
+    criteria: true,
+  })
+  const toggleSection = useCallback((key: "bidResponse" | "attachments" | "terms" | "criteria") => {
+    setOpenSections((s) => ({ ...s, [key]: !s[key] }))
+  }, [])
+
+  /** F1 autosave (portal only): a ref, not state, so a genuine user edit can be recorded
+   *  without an extra render or racing the effect that reads it. Set to true inside every
+   *  state-mutating handler a real user interaction calls - never inferred from a bare
+   *  effect watching form state, which would risk firing on server-fetched hydration. */
+  const formTouchedRef = useRef(false)
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [autosaveStatus, setAutosaveStatus] = useState<{
+    state: "idle" | "pending" | "saved" | "unsaved"
+    savedAt: string | null
+  }>({ state: "idle", savedAt: null })
+
   const updateDraft = useCallback((draftId: string, patch: Partial<DraftAttachment>) => {
+    formTouchedRef.current = true
     setDraftAttachments((prev) => prev.map((d) => (d.id === draftId ? { ...d, ...patch } : d)))
   }, [])
 
   const removeDraft = useCallback((draftId: string) => {
+    formTouchedRef.current = true
     setDraftAttachments((prev) => prev.filter((d) => d.id !== draftId))
   }, [])
 
   const addDraft = useCallback(() => {
+    formTouchedRef.current = true
     setDraftAttachments((prev) => (prev.length >= 6 ? prev : [...prev, newDraft()]))
   }, [])
 
   const updateBusinessCriteriaDesignation = (key: DesignationKey, patch: Partial<DesignationHolds>) => {
+    formTouchedRef.current = true
     setBusinessCriteriaResponses((prev) => ({
       ...prev,
       designations: { ...prev.designations, [key]: { ...prev.designations[key], ...patch } },
@@ -544,6 +587,7 @@ export default function PartnerRfpDetailPage() {
   }
 
   const updateBusinessCriteriaInsurance = (key: InsuranceKey, patch: Partial<InsuranceHolds>) => {
+    formTouchedRef.current = true
     setBusinessCriteriaResponses((prev) => ({
       ...prev,
       insurance: { ...prev.insurance, [key]: { ...prev.insurance[key], ...patch } },
@@ -551,6 +595,7 @@ export default function PartnerRfpDetailPage() {
   }
 
   const updateBusinessCriteriaCoi = (coi_on_file: boolean) => {
+    formTouchedRef.current = true
     setBusinessCriteriaResponses((prev) => ({
       ...prev,
       insurance: { ...prev.insurance, coi_on_file },
@@ -562,6 +607,7 @@ export default function PartnerRfpDetailPage() {
     key: string | null,
     reason: string | null
   ) => {
+    formTouchedRef.current = true
     setBusinessCriteriaAcknowledgments((prev) => {
       const next: BusinessCriteriaAcknowledgments = {
         designations: { ...prev.designations },
@@ -584,6 +630,7 @@ export default function PartnerRfpDetailPage() {
   }
 
   const confirmAllRequiredCriteria = () => {
+    formTouchedRef.current = true
     const req = requiredCriteria
     setBusinessCriteriaResponses((prev) => {
       const designations = { ...prev.designations }
@@ -843,22 +890,25 @@ export default function PartnerRfpDetailPage() {
     setActiveTab(shouldDefaultToStatus ? "status" : "bid")
   }, [loading, inbox, existing?.agency_feedback, existing?.status, inbox?.status])
 
-  const save = async (status: "draft" | "submitted") => {
-    setSubmitError(null)
-    setSuccessMsg(null)
+  const save = async (status: "draft" | "submitted", opts?: { silent?: boolean }): Promise<boolean> => {
+    const silent = opts?.silent === true
+    if (!silent) {
+      setSubmitError(null)
+      setSuccessMsg(null)
+    }
     if (isDemoDetail) {
       if (status === "submitted") {
         const inboxStatus = inbox?.status ?? "new"
         const pre = existing?.status || (inboxStatus === "bid_submitted" ? "submitted" : inboxStatus)
         setBidSubmittedModalIsRevision(["under_review", "shortlisted", "meeting_requested"].includes(pre))
         setBidSubmittedModalOpen(true)
-      } else {
+      } else if (!silent) {
         setSuccessMsg("Demo mode - draft not saved.")
       }
-      return
+      return true
     }
     const authOk = await ensurePartnerAuth()
-    if (!authOk) return
+    if (!authOk) return false
 
     const budget_proposal = buildBudgetProposalForSave(
       budgetAmount,
@@ -874,18 +924,23 @@ export default function PartnerRfpDetailPage() {
 
     if (status === "submitted") {
       if (!proposalText.trim()) {
-        setSubmitError("Proposal text is required to submit.")
-        return
+        setOpenSections((s) => ({ ...s, bidResponse: true }))
+        if (!silent) setSubmitError("Proposal text is required to submit.")
+        return false
       }
       if (!isBudgetValidForSubmit(budget_proposal)) {
-        setSubmitError(
-          "Budget: enter a positive amount, choose a currency, and if you pick Other, specify the currency or region."
-        )
-        return
+        setOpenSections((s) => ({ ...s, bidResponse: true }))
+        if (!silent) {
+          setSubmitError(
+            "Budget: enter a positive amount, choose a currency, and if you pick Other, specify the currency or region."
+          )
+        }
+        return false
       }
       if (!isTimelineValidForSubmit(timeline_proposal)) {
-        setSubmitError("Timeline: enter a positive duration and choose Days, Weeks, or Months.")
-        return
+        setOpenSections((s) => ({ ...s, bidResponse: true }))
+        if (!silent) setSubmitError("Timeline: enter a positive duration and choose Days, Weeks, or Months.")
+        return false
       }
     }
 
@@ -896,8 +951,9 @@ export default function PartnerRfpDetailPage() {
     const termsValidation = validateTermsDisclosure(termsDisclosure, status === "submitted" && termsRequired)
     if (status === "submitted" && !termsValidation.ok) {
       setTermsErrors(termsValidation.errors)
-      setSubmitError("Please complete the required term disclosures before submitting.")
-      return
+      setOpenSections((s) => ({ ...s, terms: true }))
+      if (!silent) setSubmitError("Please complete the required term disclosures before submitting.")
+      return false
     }
     setTermsErrors([])
     const terms_disclosure =
@@ -971,10 +1027,12 @@ export default function PartnerRfpDetailPage() {
         const inboxStatus = inbox?.status ?? "new"
         const preSubmitStatus =
           existing?.status || (inboxStatus === "bid_submitted" ? "submitted" : inboxStatus)
-        setBidSubmittedModalIsRevision(
-          ["under_review", "shortlisted", "meeting_requested"].includes(preSubmitStatus)
-        )
-        setBidSubmittedModalOpen(true)
+        if (!silent) {
+          setBidSubmittedModalIsRevision(
+            ["under_review", "shortlisted", "meeting_requested"].includes(preSubmitStatus)
+          )
+          setBidSubmittedModalOpen(true)
+        }
         if (saveTermsAsDefault && terms_disclosure) {
           try {
             const supabase = createClient()
@@ -996,26 +1054,80 @@ export default function PartnerRfpDetailPage() {
             console.error("[partner/rfps] save default_terms failed", { message: e instanceof Error ? e.message : String(e) })
           }
         }
-      } else {
+      } else if (!silent) {
         setSuccessMsg("Draft saved. You can return anytime to finish and submit.")
       }
       if (status === "submitted" && inbox) {
         setInbox({ ...inbox, status: "bid_submitted" })
         setExisting((prev) => (prev ? { ...prev, status: "submitted" } : prev))
       }
+      return true
     } catch (e) {
       console.error("[partner/rfps] save error:", e)
-      setSubmitError(e instanceof Error ? e.message : "Save failed. Check your connection and try again.")
+      if (!silent) setSubmitError(e instanceof Error ? e.message : "Save failed. Check your connection and try again.")
+      return false
     } finally {
       setSavingKind(null)
     }
   }
+
+  // F1 autosave (portal only): null-safe duplicate of the canEdit computation below - needed
+  // because hooks must be declared before the loading/error early returns further down, at
+  // which point `inbox` may still be null. Mirrors the same status list; intentional
+  // duplication of a pure boolean check (same pattern as the criteria compliance duplication),
+  // not a second source of truth.
+  const currentStatusForAutosave = existing?.status || (inbox?.status === "bid_submitted" ? "submitted" : inbox?.status)
+  const canEditForAutosave =
+    isDemoDetail ||
+    (!!currentStatusForAutosave &&
+      ["submitted", "under_review", "shortlisted", "meeting_requested", "draft", "new", "viewed", "bid_submitted", "feedback_received"].includes(
+        currentStatusForAutosave
+      ))
+
+  useEffect(() => {
+    if (!canEditForAutosave || isDemoDetail) return
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+    if (formTouchedRef.current) {
+      setAutosaveStatus((prev) => (prev.state === "pending" ? prev : { state: "pending", savedAt: prev.savedAt }))
+    }
+    autosaveTimerRef.current = setTimeout(() => {
+      if (!formTouchedRef.current) return
+      if (savingKind !== null) return // suspended while a manual save/submit is already in flight
+      formTouchedRef.current = false
+      void save("draft", { silent: true }).then((ok) => {
+        setAutosaveStatus((prev) => ({
+          state: ok ? "saved" : "unsaved",
+          savedAt: ok ? new Date().toISOString() : prev.savedAt,
+        }))
+      })
+    }, 2000)
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    proposalText,
+    budgetAmount,
+    budgetCurrency,
+    budgetCurrencyOther,
+    timelineDuration,
+    timelineUnit,
+    termsDisclosure,
+    businessCriteriaResponses,
+    businessCriteriaAcknowledgments,
+    draftAttachments,
+    changeNotes,
+    savingKind,
+    canEditForAutosave,
+    isDemoDetail,
+  ])
 
   const onFileForDraft = async (draftId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) {
       return
     }
+    formTouchedRef.current = true
     const authOk = await ensurePartnerAuth()
     if (!authOk) return
     setUploadingId(draftId)
@@ -1157,14 +1269,70 @@ export default function PartnerRfpDetailPage() {
   const requiredInsuranceKeysForBid = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
   const hasRequiredCriteriaForBid =
     requiredDesignationKeysForBid.length > 0 || requiredInsuranceKeysForBid.length > 0 || requiredCriteria.insurance.coi_on_file
-  // Bid-form section order (S4-2): terms disclosure (when required) and the tiered business-criteria
-  // block share one "Required by this agency" wrapper so they read as a single section. hasTierData
-  // inside BusinessCriteriaRequirementBlock is computed from hasExplicitPriorityData(requiredCriteria),
-  // so this mirrors it exactly rather than guessing - keeps the wrapper's own presence/absence in sync
-  // with the component's null-render behavior.
+  // F1: the old "Required by this agency" wrapper (terms + tiered criteria sharing one heading)
+  // is dismantled - Terms and Business criteria are now separate BidFormCollapsibleSection
+  // instances (see the "bid" tab render below). hasCriteriaTierData mirrors
+  // hasExplicitPriorityData(requiredCriteria), the same check BusinessCriteriaRequirementBlock
+  // makes internally, so the tiered-vs-legacy branch below never disagrees with the component's
+  // own null-render behavior.
   const termsRequired = inbox.require_terms_disclosure === true
   const hasCriteriaTierData = hasExplicitPriorityData(requiredCriteria)
-  const hasRequiredSection = termsRequired || hasCriteriaTierData
+
+  // F1: page-level compliance call - same pure function BusinessCriteriaRequirementBlock calls
+  // internally to render its own "N of M required confirmed" line, so the collapsed-header
+  // summary can never disagree with it (intentional duplication of a pure/deterministic call).
+  const compliance = computeRequirementCompliance(requiredCriteria, businessCriteriaResponses, businessCriteriaAcknowledgments, {
+    designations: DESIGNATION_LABELS,
+    insurance: INSURANCE_LABELS,
+  })
+  const criteriaSummaryLabel = getCriteriaSummaryLabel(
+    compliance.hasTierData,
+    compliance.requiredTotalCount,
+    compliance.requiredConfirmedCount
+  )
+  // Legacy (untiered) business-criteria confirmation count - driven by the exact same state
+  // (businessCriteriaResponses, requiredDesignationKeysForBid, requiredInsuranceKeysForBid)
+  // already powering the legacy block's checkboxes below, not a new data source.
+  const legacyDesignationConfirmed = requiredDesignationKeysForBid.filter((k) => businessCriteriaResponses.designations[k].holds).length
+  const legacyInsuranceConfirmed = requiredInsuranceKeysForBid.filter((k) => businessCriteriaResponses.insurance[k].has_coverage).length
+  const legacyCoiRequired = requiredCriteria.insurance.coi_on_file === true
+  const legacyCoiConfirmed = legacyCoiRequired && businessCriteriaResponses.insurance.coi_on_file ? 1 : 0
+  const legacyCriteriaTotal = requiredDesignationKeysForBid.length + requiredInsuranceKeysForBid.length + (legacyCoiRequired ? 1 : 0)
+  const legacyCriteriaConfirmed = legacyDesignationConfirmed + legacyInsuranceConfirmed + legacyCoiConfirmed
+  const legacyCriteriaSummaryLabel = getCriteriaSummaryLabel(true, legacyCriteriaTotal, legacyCriteriaConfirmed)
+  const criteriaOpenCount = hasCriteriaTierData
+    ? compliance.requiredTotalCount - compliance.requiredConfirmedCount
+    : hasRequiredCriteriaForBid
+      ? legacyCriteriaTotal - legacyCriteriaConfirmed
+      : 0
+
+  const termsReadiness = getTermsReadiness(termsDisclosure, termsRequired)
+  const proposalMissingForReadiness = !proposalText.trim()
+  const budgetInvalidForReadiness = !isBudgetValidForSubmit(
+    buildBudgetProposalForSave(budgetAmount, budgetCurrency, budgetCurrencyOther, budgetLegacyHint)
+  )
+  const timelineInvalidForReadiness = !isTimelineValidForSubmit(
+    buildTimelineProposalForSave(timelineDuration, timelineUnit, timelineLegacyHint)
+  )
+  const readiness = computeReadinessLabel(
+    proposalMissingForReadiness ? 1 : 0,
+    budgetInvalidForReadiness ? 1 : 0,
+    timelineInvalidForReadiness ? 1 : 0,
+    termsRequired && !termsReadiness.satisfied ? 1 : 0,
+    criteriaOpenCount
+  )
+
+  const preflightParts = ["a proposal, budget, and timeline"]
+  if (termsRequired) preflightParts.push("term disclosures")
+  if (hasCriteriaTierData || hasRequiredCriteriaForBid) preflightParts.push("certification details for designations you claim")
+  const preflightLine = `This bid needs ${joinWithOxfordComma(preflightParts)}.`
+
+  const autosaveStatusLine =
+    autosaveStatus.state === "saved" && autosaveStatus.savedAt
+      ? `Saved ${formatRelativeTime(autosaveStatus.savedAt)}`
+      : autosaveStatus.state === "pending" || autosaveStatus.state === "unsaved"
+        ? "Unsaved changes"
+        : null
 
   const updatePartnerIntent = async (nextIntent: PartnerIntent) => {
     if (isDemoDetail) {
@@ -1209,7 +1377,7 @@ export default function PartnerRfpDetailPage() {
 
   return (
     <PartnerChrome>
-      <div className="max-w-4xl mx-auto space-y-6 pb-16">
+      <div className={cn("max-w-4xl mx-auto space-y-6", activeTab === "bid" && canEdit ? "pb-28" : "pb-16")}>
         <Link href="/partner/rfps" className="font-mono text-xs text-vendor-muted hover:text-vendor-foreground inline-flex items-center gap-1">
           ← Back to Open RFPs
         </Link>
@@ -1556,10 +1724,7 @@ export default function PartnerRfpDetailPage() {
               )}
             </div>
           )}
-          <h2 className="font-display font-bold text-lg text-vendor-foreground mb-2">Your bid response</h2>
-          <p className="text-sm text-vendor-muted-strong mb-6">
-              Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, shortlisted, or meeting requested.
-          </p>
+          <p className="text-xs text-vendor-muted-strong mb-4">{preflightLine}</p>
 
           {successMsg && (
             <div
@@ -1575,12 +1740,24 @@ export default function PartnerRfpDetailPage() {
           )}
 
           {canEdit ? (
-          <div className="space-y-5">
+          <div className="space-y-4">
+            <BidFormCollapsibleSection
+              title="Your bid response"
+              open={openSections.bidResponse}
+              onToggle={() => toggleSection("bidResponse")}
+              theme="light"
+            >
+            <p className="text-sm text-vendor-muted-strong">
+              Submit your proposal below. You can save a draft and return later. You may update and re-submit while this bid is submitted, under review, shortlisted, or meeting requested.
+            </p>
             <div>
               <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Proposal *</label>
               <Textarea
                 value={proposalText}
-                onChange={(e) => setProposalText(e.target.value)}
+                onChange={(e) => {
+                  formTouchedRef.current = true
+                  setProposalText(e.target.value)
+                }}
                 placeholder="Your pitch, approach, and how you’ll deliver this scope…"
                 className={textareaClass}
                 disabled={!canEdit}
@@ -1593,6 +1770,7 @@ export default function PartnerRfpDetailPage() {
                   <CurrencyInput
                     value={budgetAmount}
                     onChange={(raw) => {
+                      formTouchedRef.current = true
                       setBudgetAmount(raw)
                       if (budgetLegacyHint) setBudgetLegacyHint(null)
                     }}
@@ -1603,6 +1781,7 @@ export default function PartnerRfpDetailPage() {
                   <select
                     value={budgetCurrency}
                     onChange={(e) => {
+                      formTouchedRef.current = true
                       setBudgetCurrency(e.target.value)
                       if (budgetLegacyHint) setBudgetLegacyHint(null)
                     }}
@@ -1619,7 +1798,10 @@ export default function PartnerRfpDetailPage() {
                 {budgetCurrency === "Other" && (
                   <Input
                     value={budgetCurrencyOther}
-                    onChange={(e) => setBudgetCurrencyOther(e.target.value)}
+                    onChange={(e) => {
+                      formTouchedRef.current = true
+                      setBudgetCurrencyOther(e.target.value)
+                    }}
                     placeholder="Specify currency (e.g. CHF, INR)"
                     className={cn(inputClass, "mt-2")}
                     disabled={!canEdit}
@@ -1641,6 +1823,7 @@ export default function PartnerRfpDetailPage() {
                     step={1}
                     value={timelineDuration}
                     onChange={(e) => {
+                      formTouchedRef.current = true
                       setTimelineDuration(e.target.value)
                       if (timelineLegacyHint) setTimelineLegacyHint(null)
                     }}
@@ -1651,6 +1834,7 @@ export default function PartnerRfpDetailPage() {
                   <select
                     value={timelineUnit}
                     onChange={(e) => {
+                      formTouchedRef.current = true
                       setTimelineUnit(e.target.value as "Days" | "Weeks" | "Months")
                       if (timelineLegacyHint) setTimelineLegacyHint(null)
                     }}
@@ -1671,224 +1855,37 @@ export default function PartnerRfpDetailPage() {
                 )}
               </div>
             </div>
+            </BidFormCollapsibleSection>
 
-            {/* S4-2: term disclosures (when required) and the tiered required/preferred criteria
-                block are grouped under one "Required by this agency" heading so they read as a
-                single section. Nothing renders here at all when neither applies - no empty box,
-                no orphaned heading. When terms aren't required, TermsDisclosureSection still
-                renders in the same relative slot (unwrapped, its own optional "+ Add your terms"
-                affordance), exactly as before reordering. */}
-            {!termsRequired && (
-              <TermsDisclosureSection
-                value={termsDisclosure}
-                onChange={setTermsDisclosure}
-                required={false}
-                theme="light"
-                errors={termsErrors}
-                disabled={!canEdit}
-                showSaveDefaultOption
-                saveAsDefault={saveTermsAsDefault}
-                onSaveAsDefaultChange={setSaveTermsAsDefault}
-              />
-            )}
-
-            {hasRequiredSection && (
-              <div className="space-y-4">
-                <h3 className="font-display font-bold text-sm text-vendor-foreground">Required by this agency</h3>
-                {termsRequired && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900">
-                    This agency requires basic term disclosures with your bid.
-                  </div>
-                )}
-                {termsRequired && (
-                  <TermsDisclosureSection
-                    value={termsDisclosure}
-                    onChange={setTermsDisclosure}
-                    required={termsRequired}
-                    theme="light"
-                    errors={termsErrors}
-                    disabled={!canEdit}
-                    showSaveDefaultOption
-                    saveAsDefault={saveTermsAsDefault}
-                    onSaveAsDefaultChange={setSaveTermsAsDefault}
-                  />
-                )}
-
-                {/* S4-1: RFPs with explicit requirement-tier data get the new required/preferred
-                    block (renders required-then-preferred internally); RFPs authored before tiers
-                    existed (hasExplicitPriorityData false) fall through to the legacy untiered
-                    block below, unchanged. */}
-                {hasCriteriaTierData && (
-                  <BusinessCriteriaRequirementBlock
-                    required={requiredCriteria}
-                    responses={businessCriteriaResponses}
-                    acknowledgments={businessCriteriaAcknowledgments}
-                    onUpdateDesignation={updateBusinessCriteriaDesignation}
-                    onUpdateInsurance={updateBusinessCriteriaInsurance}
-                    onUpdateCoi={updateBusinessCriteriaCoi}
-                    onSetAcknowledgment={setBusinessCriteriaAcknowledgment}
-                    onConfirmAll={confirmAllRequiredCriteria}
-                    canEdit={canEdit}
-                    profileHolds={profileCriteriaHolds}
-                  />
-                )}
-              </div>
-            )}
-
-            {hasRequiredCriteriaForBid && !hasCriteriaTierData && (
-              <div className="rounded-xl border border-vendor-border bg-vendor-background/70 p-4">
-                <h3 className="font-display font-bold text-sm text-vendor-foreground mb-1">Business criteria</h3>
-                <p className="text-xs text-vendor-muted-strong mb-3">
-                  This RFP requires confirmation of the following. Confirm what applies to your company.
-                </p>
-                {requiredCriteria.notes.trim() && (
-                  <p className="text-xs text-vendor-muted-strong mb-3 whitespace-pre-wrap">{requiredCriteria.notes}</p>
-                )}
-
-                {requiredDesignationKeysForBid.length > 0 && (
-                  <div className="space-y-3 mb-4">
-                    {requiredDesignationKeysForBid.map((key) => {
-                      const designation = businessCriteriaResponses.designations[key]
-                      return (
-                        <div key={key} className="rounded-lg border border-vendor-border bg-vendor-surface p-3">
-                          <label className="flex items-start gap-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={designation.holds}
-                              disabled={!canEdit}
-                              onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
-                              className="mt-0.5 w-4 h-4 rounded border-vendor-border"
-                            />
-                            <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-vendor-foreground">
-                              {DESIGNATION_LABELS[key]}
-                            </HelpTerm>
-                          </label>
-                          {designation.holds && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pl-7">
-                              <Input
-                                value={designation.certifying_body || ""}
-                                onChange={(e) =>
-                                  updateBusinessCriteriaDesignation(key, { certifying_body: e.target.value || null })
-                                }
-                                placeholder="Certifying body (e.g. NMSDC, WBENC)"
-                                className={inputClass}
-                                disabled={!canEdit || designation.self_certified}
-                              />
-                              <Input
-                                value={designation.certification_number || ""}
-                                onChange={(e) =>
-                                  updateBusinessCriteriaDesignation(key, {
-                                    certification_number: e.target.value || null,
-                                  })
-                                }
-                                placeholder="Certification number"
-                                className={inputClass}
-                                disabled={!canEdit || designation.self_certified}
-                              />
-                              <label className="flex items-center gap-2 sm:col-span-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={designation.self_certified}
-                                  disabled={!canEdit}
-                                  onChange={(e) =>
-                                    updateBusinessCriteriaDesignation(key, {
-                                      self_certified: e.target.checked,
-                                      ...(e.target.checked
-                                        ? { certifying_body: null, certification_number: null }
-                                        : {}),
-                                    })
-                                  }
-                                  className="w-4 h-4 rounded border-vendor-border"
-                                />
-                                <span className="text-sm text-vendor-foreground">Self-certified (no third-party certification)</span>
-                              </label>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {requiredInsuranceKeysForBid.length > 0 && (
-                  <div className="space-y-3 mb-4">
-                    {requiredInsuranceKeysForBid.map((key) => {
-                      const coverage = businessCriteriaResponses.insurance[key]
-                      const minimum = requiredCriteria.insurance[key]?.minimum
-                      return (
-                        <div
-                          key={key}
-                          className="flex items-center justify-between gap-4 p-3 rounded-lg border border-vendor-border bg-vendor-surface"
-                        >
-                          <label className="flex items-center gap-3 min-w-0 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={coverage.has_coverage}
-                              disabled={!canEdit}
-                              onChange={(e) => updateBusinessCriteriaInsurance(key, { has_coverage: e.target.checked })}
-                              className="w-4 h-4 rounded border-vendor-border"
-                            />
-                            <span className="font-display font-bold text-sm text-vendor-foreground truncate">
-                              <HelpTerm term={key} theme="light">{INSURANCE_LABELS[key]}</HelpTerm>
-                              {minimum ? ` (min. ${minimum})` : ""}
-                            </span>
-                          </label>
-                          <Input
-                            value={coverage.limit || ""}
-                            onChange={(e) => updateBusinessCriteriaInsurance(key, { limit: e.target.value || null })}
-                            placeholder="Your limit, e.g. $1M/$2M"
-                            disabled={!canEdit}
-                            className={cn(inputClass, "w-44 shrink-0")}
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {requiredCriteria.insurance.coi_on_file && (
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={businessCriteriaResponses.insurance.coi_on_file}
-                      disabled={!canEdit}
-                      onChange={(e) => updateBusinessCriteriaCoi(e.target.checked)}
-                      className="w-4 h-4 rounded border-vendor-border"
-                    />
-                    <span className="text-sm text-vendor-foreground">
-                      <HelpTerm term="coi" theme="light">Certificate of Insurance (COI)</HelpTerm> on file
-                    </span>
-                  </label>
-                )}
-              </div>
-            )}
-
-            <div className="border border-vendor-border rounded-xl p-4 bg-vendor-background/80">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                <div>
-                  <h3 className="font-display font-bold text-sm text-vendor-foreground">Attachments</h3>
-                  <p className="text-xs text-vendor-muted-strong mt-0.5">Up to 6 - link or file (PDF, PPTX, DOCX) per row.</p>
-                </div>
-                {canEdit && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={btnOutlineLight}
-                    disabled={draftAttachments.length >= 6}
-                    onClick={() => addDraft()}
-                  >
-                    <Plus className="w-4 h-4 mr-1" />
-                    Add attachment
-                  </Button>
-                )}
-              </div>
-
-              {draftAttachments.length === 0 && (
-                <p className="text-sm text-vendor-muted mb-2">No attachments yet. Add one to include portfolio links or documents.</p>
+            <BidFormCollapsibleSection
+              title="Attachments"
+              summary={getAttachmentsSummaryLabel(draftAttachments.length)}
+              open={openSections.attachments}
+              onToggle={() => toggleSection("attachments")}
+              theme="light"
+            >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-vendor-muted-strong">Up to 6 - link or file (PDF, PPTX, DOCX) per row.</p>
+              {canEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={btnOutlineLight}
+                  disabled={draftAttachments.length >= 6}
+                  onClick={() => addDraft()}
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add attachment
+                </Button>
               )}
+            </div>
 
-              <div className="space-y-4">
+            {draftAttachments.length === 0 && (
+              <p className="text-sm text-vendor-muted">No attachments yet. Add one to include portfolio links or documents.</p>
+            )}
+
+            <div className="space-y-4">
                 {draftAttachments.map((d) => (
                   <div key={d.id} className="rounded-lg border border-vendor-border bg-vendor-surface p-4 space-y-3">
                     <div className="flex flex-wrap gap-3 items-start justify-between">
@@ -2050,8 +2047,198 @@ export default function PartnerRfpDetailPage() {
                     )}
                   </div>
                 ))}
-              </div>
             </div>
+            </BidFormCollapsibleSection>
+
+            <BidFormCollapsibleSection
+              title="Terms"
+              summary={termsReadiness.label}
+              open={openSections.terms}
+              onToggle={() => toggleSection("terms")}
+              theme="light"
+            >
+            {termsErrors.length > 0 && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                Complete the required term disclosures below.
+              </div>
+            )}
+            <TermsDisclosureSection
+              value={termsDisclosure}
+              onChange={(next) => {
+                formTouchedRef.current = true
+                setTermsDisclosure(next)
+              }}
+              required={termsRequired}
+              theme="light"
+              errors={termsErrors}
+              disabled={!canEdit}
+              showSaveDefaultOption
+              saveAsDefault={saveTermsAsDefault}
+              onSaveAsDefaultChange={setSaveTermsAsDefault}
+              forceExpanded
+            />
+            </BidFormCollapsibleSection>
+
+            {/* S4-1: RFPs with explicit requirement-tier data get the new required/preferred
+                block (renders required-then-preferred internally); RFPs authored before tiers
+                existed (hasExplicitPriorityData false) fall through to the legacy untiered
+                block below, unchanged. */}
+            {hasCriteriaTierData && (
+              <BidFormCollapsibleSection
+                title="Business criteria"
+                summary={criteriaSummaryLabel}
+                open={openSections.criteria}
+                onToggle={() => toggleSection("criteria")}
+                theme="light"
+              >
+              <BusinessCriteriaRequirementBlock
+                required={requiredCriteria}
+                responses={businessCriteriaResponses}
+                acknowledgments={businessCriteriaAcknowledgments}
+                onUpdateDesignation={updateBusinessCriteriaDesignation}
+                onUpdateInsurance={updateBusinessCriteriaInsurance}
+                onUpdateCoi={updateBusinessCriteriaCoi}
+                onSetAcknowledgment={setBusinessCriteriaAcknowledgment}
+                onConfirmAll={confirmAllRequiredCriteria}
+                canEdit={canEdit}
+                profileHolds={profileCriteriaHolds}
+                hideTitle
+              />
+              </BidFormCollapsibleSection>
+            )}
+
+            {hasRequiredCriteriaForBid && !hasCriteriaTierData && (
+              <BidFormCollapsibleSection
+                title="Business criteria"
+                summary={legacyCriteriaSummaryLabel}
+                open={openSections.criteria}
+                onToggle={() => toggleSection("criteria")}
+                theme="light"
+              >
+              <p className="text-xs text-vendor-muted-strong">
+                This RFP requires confirmation of the following. Confirm what applies to your company.
+              </p>
+              {requiredCriteria.notes.trim() && (
+                <p className="text-xs text-vendor-muted-strong whitespace-pre-wrap">{requiredCriteria.notes}</p>
+              )}
+
+              {requiredDesignationKeysForBid.length > 0 && (
+                <div className="space-y-3">
+                  {requiredDesignationKeysForBid.map((key) => {
+                    const designation = businessCriteriaResponses.designations[key]
+                    return (
+                      <div key={key} className="rounded-lg border border-vendor-border bg-vendor-surface p-3">
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={designation.holds}
+                            disabled={!canEdit}
+                            onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
+                            className="mt-0.5 w-4 h-4 rounded border-vendor-border"
+                          />
+                          <HelpTerm term={key} theme="light" className="font-display font-bold text-sm text-vendor-foreground">
+                            {DESIGNATION_LABELS[key]}
+                          </HelpTerm>
+                        </label>
+                        {designation.holds && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pl-7">
+                            <Input
+                              value={designation.certifying_body || ""}
+                              onChange={(e) =>
+                                updateBusinessCriteriaDesignation(key, { certifying_body: e.target.value || null })
+                              }
+                              placeholder="Certifying body (e.g. NMSDC, WBENC)"
+                              className={inputClass}
+                              disabled={!canEdit || designation.self_certified}
+                            />
+                            <Input
+                              value={designation.certification_number || ""}
+                              onChange={(e) =>
+                                updateBusinessCriteriaDesignation(key, {
+                                  certification_number: e.target.value || null,
+                                })
+                              }
+                              placeholder="Certification number"
+                              className={inputClass}
+                              disabled={!canEdit || designation.self_certified}
+                            />
+                            <label className="flex items-center gap-2 sm:col-span-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={designation.self_certified}
+                                disabled={!canEdit}
+                                onChange={(e) =>
+                                  updateBusinessCriteriaDesignation(key, {
+                                    self_certified: e.target.checked,
+                                    ...(e.target.checked
+                                      ? { certifying_body: null, certification_number: null }
+                                      : {}),
+                                  })
+                                }
+                                className="w-4 h-4 rounded border-vendor-border"
+                              />
+                              <span className="text-sm text-vendor-foreground">Self-certified (no third-party certification)</span>
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {requiredInsuranceKeysForBid.length > 0 && (
+                <div className="space-y-3">
+                  {requiredInsuranceKeysForBid.map((key) => {
+                    const coverage = businessCriteriaResponses.insurance[key]
+                    const minimum = requiredCriteria.insurance[key]?.minimum
+                    return (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between gap-4 p-3 rounded-lg border border-vendor-border bg-vendor-surface"
+                      >
+                        <label className="flex items-center gap-3 min-w-0 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={coverage.has_coverage}
+                            disabled={!canEdit}
+                            onChange={(e) => updateBusinessCriteriaInsurance(key, { has_coverage: e.target.checked })}
+                            className="w-4 h-4 rounded border-vendor-border"
+                          />
+                          <span className="font-display font-bold text-sm text-vendor-foreground truncate">
+                            <HelpTerm term={key} theme="light">{INSURANCE_LABELS[key]}</HelpTerm>
+                            {minimum ? ` (min. ${minimum})` : ""}
+                          </span>
+                        </label>
+                        <Input
+                          value={coverage.limit || ""}
+                          onChange={(e) => updateBusinessCriteriaInsurance(key, { limit: e.target.value || null })}
+                          placeholder="Your limit, e.g. $1M/$2M"
+                          disabled={!canEdit}
+                          className={cn(inputClass, "w-44 shrink-0")}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {requiredCriteria.insurance.coi_on_file && (
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={businessCriteriaResponses.insurance.coi_on_file}
+                    disabled={!canEdit}
+                    onChange={(e) => updateBusinessCriteriaCoi(e.target.checked)}
+                    className="w-4 h-4 rounded border-vendor-border"
+                  />
+                  <span className="text-sm text-vendor-foreground">
+                    <HelpTerm term="coi" theme="light">Certificate of Insurance (COI)</HelpTerm> on file
+                  </span>
+                </label>
+              )}
+              </BidFormCollapsibleSection>
+            )}
           </div>
           ) : (
             (() => {
@@ -2100,7 +2287,10 @@ export default function PartnerRfpDetailPage() {
                   </label>
                   <Textarea
                     value={changeNotes}
-                    onChange={(e) => setChangeNotes(e.target.value)}
+                    onChange={(e) => {
+                      formTouchedRef.current = true
+                      setChangeNotes(e.target.value)
+                    }}
                     placeholder="Briefly describe what you updated in this version..."
                     className={cn(fieldClass, "min-h-[90px]")}
                     disabled={savingKind !== null}
@@ -2199,6 +2389,51 @@ export default function PartnerRfpDetailPage() {
             >
               Got it
             </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* F1 sticky readiness bar - only while the editable bid form itself is showing (the
+          "bid" tab, canEdit). Buttons call the exact same save() handlers as the buttons at
+          the bottom of the form - no second code path. */}
+      {activeTab === "bid" && canEdit ? (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-40 border-t border-vendor-border bg-vendor-surface/95 backdrop-blur"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          <div className="max-w-4xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-mono text-xs text-vendor-foreground">{readiness.label}</p>
+              {autosaveStatusLine && (
+                <p className="font-mono text-2xs text-vendor-muted-strong mt-0.5">{autosaveStatusLine}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className={btnOutlineLight}
+                disabled={savingKind !== null}
+                onClick={() => {
+                  void save("draft")
+                }}
+              >
+                {savingKind === "draft" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save draft"}
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                className={btnPrimaryDark}
+                disabled={savingKind !== null}
+                onClick={() => {
+                  void save("submitted")
+                }}
+              >
+                {savingKind === "submitted" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Submit"}
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

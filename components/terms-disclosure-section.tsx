@@ -33,6 +33,11 @@ interface TermsDisclosureSectionProps {
   showSaveDefaultOption?: boolean
   saveAsDefault?: boolean
   onSaveAsDefaultChange?: (v: boolean) => void
+  /** F1: when the caller wraps this in its own BidFormCollapsibleSection (the "Terms" bid-form
+   *  section), this component's own internal collapse/expand and "Terms" heading would double
+   *  up with the outer wrapper's. Set true to always render the full body with no internal
+   *  heading or Collapse control - the outer wrapper becomes the single collapse point. */
+  forceExpanded?: boolean
 }
 
 const KILL_FEE_LABELS: Record<KillFeeType, string> = {
@@ -226,13 +231,14 @@ export function TermsDisclosureSection({
   showSaveDefaultOption = false,
   saveAsDefault = false,
   onSaveAsDefaultChange,
+  forceExpanded = false,
 }: TermsDisclosureSectionProps) {
   const [expanded, setExpanded] = useState(required || isTermsDisclosureStarted(value))
 
   const errorsFor = (field: TermsDisclosureValidationError["field"]) =>
     errors.filter((e) => e.field === field).map((e) => e.message)
 
-  if (!expanded) {
+  if (!forceExpanded && !expanded) {
     return (
       <div className={rowWrapperClass(theme)}>
         <button
@@ -257,23 +263,31 @@ export function TermsDisclosureSection({
 
   return (
     <div
-      className={theme === "light" ? "rounded-xl border border-gray-200 bg-gray-50/70 p-4" : "rounded-xl border border-border bg-white/5 p-4"}
+      className={
+        forceExpanded
+          ? ""
+          : theme === "light"
+            ? "rounded-xl border border-gray-200 bg-gray-50/70 p-4"
+            : "rounded-xl border border-border bg-white/5 p-4"
+      }
     >
-      <div className="flex items-center justify-between mb-1">
-        <h3 className={cn("font-display font-bold text-sm", theme === "light" ? "text-[#0C3535]" : "text-foreground")}>
-          Terms
-        </h3>
-        {!required && (
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            disabled={disabled}
-            className={cn("font-mono text-2xs", theme === "light" ? "text-gray-500 hover:text-gray-700" : "text-foreground-muted hover:text-foreground")}
-          >
-            Collapse
-          </button>
-        )}
-      </div>
+      {!forceExpanded && (
+        <div className="flex items-center justify-between mb-1">
+          <h3 className={cn("font-display font-bold text-sm", theme === "light" ? "text-[#0C3535]" : "text-foreground")}>
+            Terms
+          </h3>
+          {!required && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              disabled={disabled}
+              className={cn("font-mono text-2xs", theme === "light" ? "text-gray-500 hover:text-gray-700" : "text-foreground-muted hover:text-foreground")}
+            >
+              Collapse
+            </button>
+          )}
+        </div>
+      )}
       <p className={cn("text-xs mb-3", theme === "light" ? "text-gray-600" : "text-foreground-muted")}>
         {required
           ? "This agency requires basic term disclosures with your bid."

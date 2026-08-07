@@ -41,8 +41,16 @@ import {
   getDesignationPriority,
   getInsurancePriority,
   getCoiPriority,
+  computeRequirementCompliance,
 } from "@/lib/business-criteria"
 import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria-requirement-block"
+import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
+import {
+  getTermsReadiness,
+  getCriteriaSummaryLabel,
+  getAttachmentsSummaryLabel,
+  computeReadinessLabel,
+} from "@/lib/bid-form-readiness"
 import {
   emptyTermsDisclosure,
   withTermsDisclosureDefaults,
@@ -121,6 +129,14 @@ function formatDateOnly(raw: string | null | undefined): string | null {
   const d = new Date(raw)
   if (Number.isNaN(d.getTime())) return null
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
+/** F1 preflight line: sentence-case, no em dash, Oxford comma for 3+ items. */
+function joinWithOxfordComma(parts: string[]): string {
+  if (parts.length === 0) return ""
+  if (parts.length === 1) return parts[0]
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`
 }
 
 function labelFromUrl(url: string): string {
@@ -230,6 +246,19 @@ export default function GuestRfpRespondPage() {
   const [linkLabel, setLinkLabel] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  /** F1: controlled open/closed state for the four collapsible bid-form sections - no
+   *  persistence, every page load defaults everything open. No autosave on this page (guest
+   *  submissions have no draft/status concept - see final report Open Questions). */
+  const [openSections, setOpenSections] = useState<Record<"bidResponse" | "attachments" | "terms" | "criteria", boolean>>({
+    bidResponse: true,
+    attachments: true,
+    terms: true,
+    criteria: true,
+  })
+  const toggleSection = useCallback((key: "bidResponse" | "attachments" | "terms" | "criteria") => {
+    setOpenSections((s) => ({ ...s, [key]: !s[key] }))
+  }, [])
 
   const loadPayload = useCallback(async () => {
     setLoading(true)
@@ -417,12 +446,23 @@ export default function GuestRfpRespondPage() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setSubmitError(null)
+    // F1: the "Your bid response" section can now be collapsed, which removes its native
+    // `required` inputs from the DOM entirely - so the browser's own required-field gate no
+    // longer reliably blocks an incomplete submit the way it used to when these fields were
+    // always mounted. This JS-level check restores that guarantee and gives the auto-expand
+    // behavior something to hook into, matching the portal page's validation-driven approach.
+    if (!proposalText.trim() || !budgetAmount || !timelineText.trim()) {
+      setOpenSections((s) => ({ ...s, bidResponse: true }))
+      setSubmitError("Complete your proposal, budget, and timeline before submitting.")
+      return
+    }
     // Guest submissions are always final (no draft concept here), so this always enforces
     // the RFP's requirement when set.
     const termsRequired = payload?.token.require_terms_disclosure === true
     const termsValidation = validateTermsDisclosure(termsDisclosure, termsRequired)
     if (!termsValidation.ok) {
       setTermsErrors(termsValidation.errors)
+      setOpenSections((s) => ({ ...s, terms: true }))
       setSubmitError("Please complete the required term disclosures before submitting.")
       return
     }
@@ -526,18 +566,60 @@ export default function GuestRfpRespondPage() {
   const requiredInsuranceKeysForBid = INSURANCE_KEYS.filter((key) => requiredCriteria.insurance[key]?.required === true)
   const hasRequiredCriteriaForBid =
     requiredDesignationKeysForBid.length > 0 || requiredInsuranceKeysForBid.length > 0 || requiredCriteria.insurance.coi_on_file
-  // Bid-form section order (S4-2): terms disclosure (when required) and the tiered business-criteria
-  // block share one "Required by this agency" wrapper so they read as a single section. hasTierData
-  // inside BusinessCriteriaRequirementBlock is computed from hasExplicitPriorityData(requiredCriteria),
-  // so this mirrors it exactly rather than guessing - keeps the wrapper's own presence/absence in sync
-  // with the component's null-render behavior.
+  // F1: the old "Required by this agency" wrapper (terms + tiered criteria sharing one heading)
+  // is dismantled - Terms and Business criteria are now separate BidFormCollapsibleSection
+  // instances (see the "My Bid" tab render below). hasCriteriaTierData mirrors
+  // hasExplicitPriorityData(requiredCriteria), the same check BusinessCriteriaRequirementBlock
+  // makes internally, so the tiered-vs-legacy branch below never disagrees with the component's
+  // own null-render behavior.
   const termsRequired = tokenRow.require_terms_disclosure === true
   const hasCriteriaTierData = hasExplicitPriorityData(requiredCriteria)
-  const hasRequiredSection = termsRequired || hasCriteriaTierData
+
+  // F1: page-level compliance call - same pure function BusinessCriteriaRequirementBlock calls
+  // internally to render its own "N of M required confirmed" line, so the collapsed-header
+  // summary can never disagree with it (intentional duplication of a pure/deterministic call).
+  const compliance = computeRequirementCompliance(requiredCriteria, businessCriteriaResponses, businessCriteriaAcknowledgments, {
+    designations: DESIGNATION_LABELS,
+    insurance: INSURANCE_LABELS,
+  })
+  const criteriaSummaryLabel = getCriteriaSummaryLabel(
+    compliance.hasTierData,
+    compliance.requiredTotalCount,
+    compliance.requiredConfirmedCount
+  )
+  // Legacy (untiered) business-criteria confirmation count - driven by the exact same state
+  // (businessCriteriaResponses, requiredDesignationKeysForBid, requiredInsuranceKeysForBid)
+  // already powering the legacy block's checkboxes below, not a new data source.
+  const legacyDesignationConfirmed = requiredDesignationKeysForBid.filter((k) => businessCriteriaResponses.designations[k].holds).length
+  const legacyInsuranceConfirmed = requiredInsuranceKeysForBid.filter((k) => businessCriteriaResponses.insurance[k].has_coverage).length
+  const legacyCoiRequired = requiredCriteria.insurance.coi_on_file === true
+  const legacyCoiConfirmed = legacyCoiRequired && businessCriteriaResponses.insurance.coi_on_file ? 1 : 0
+  const legacyCriteriaTotal = requiredDesignationKeysForBid.length + requiredInsuranceKeysForBid.length + (legacyCoiRequired ? 1 : 0)
+  const legacyCriteriaConfirmed = legacyDesignationConfirmed + legacyInsuranceConfirmed + legacyCoiConfirmed
+  const legacyCriteriaSummaryLabel = getCriteriaSummaryLabel(true, legacyCriteriaTotal, legacyCriteriaConfirmed)
+  const criteriaOpenCount = hasCriteriaTierData
+    ? compliance.requiredTotalCount - compliance.requiredConfirmedCount
+    : hasRequiredCriteriaForBid
+      ? legacyCriteriaTotal - legacyCriteriaConfirmed
+      : 0
+
+  const termsReadiness = getTermsReadiness(termsDisclosure, termsRequired)
+  const readiness = computeReadinessLabel(
+    proposalText.trim() ? 0 : 1,
+    budgetAmount ? 0 : 1,
+    timelineText.trim() ? 0 : 1,
+    termsRequired && !termsReadiness.satisfied ? 1 : 0,
+    criteriaOpenCount
+  )
+
+  const preflightParts = ["a proposal, budget, and timeline"]
+  if (termsRequired) preflightParts.push("term disclosures")
+  if (hasCriteriaTierData || hasRequiredCriteriaForBid) preflightParts.push("certification details for designations you claim")
+  const preflightLine = `This bid needs ${joinWithOxfordComma(preflightParts)}.`
 
   return (
     <div className="min-h-screen bg-background px-4 py-12">
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className={cn("max-w-2xl mx-auto space-y-6", activeTab === "my-bid" && showForm && "pb-24")}>
         <div>
           <div className="font-display font-black text-2xl tracking-tight text-foreground">LIGAMENT</div>
           <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider mt-1">
@@ -738,7 +820,13 @@ export default function GuestRfpRespondPage() {
           {/* TAB 2: My Bid */}
           <TabsContent value="my-bid">
             {showForm ? (
-              <form onSubmit={handleSubmit} className="rounded-lg border border-border/30 bg-white/5 p-6 space-y-5">
+              <>
+              <p className="text-xs text-foreground-muted mb-4">{preflightLine}</p>
+              <form
+                id="guest-bid-form"
+                onSubmit={handleSubmit}
+                className="rounded-lg border border-border/30 bg-white/5 p-6 space-y-4"
+              >
                 {isEditingBid && (
                   <div className="flex items-center justify-between p-3 rounded-lg bg-accent/5 border border-accent/20">
                     <span className="font-mono text-2xs text-accent uppercase tracking-wider">Editing your bid</span>
@@ -751,6 +839,13 @@ export default function GuestRfpRespondPage() {
                     </button>
                   </div>
                 )}
+
+                <BidFormCollapsibleSection
+                  title="Your bid response"
+                  open={openSections.bidResponse}
+                  onToggle={() => toggleSection("bidResponse")}
+                  theme="dark"
+                >
                 <div>
                   <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                     Proposal
@@ -811,205 +906,16 @@ export default function GuestRfpRespondPage() {
                     className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                   />
                 </div>
+                </BidFormCollapsibleSection>
 
-                {/* S4-2: term disclosures (when required) and the tiered required/preferred criteria
-                    block are grouped under one "Required by this agency" heading so they read as a
-                    single section. Nothing renders here at all when neither applies - no empty box,
-                    no orphaned heading. When terms aren't required, TermsDisclosureSection still
-                    renders in the same relative slot (unwrapped, its own optional "+ Add your terms"
-                    affordance), exactly as before reordering. */}
-                {!termsRequired && (
-                  <TermsDisclosureSection
-                    value={termsDisclosure}
-                    onChange={setTermsDisclosure}
-                    required={false}
-                    theme="dark"
-                    errors={termsErrors}
-                    disabled={submitting}
-                  />
-                )}
-
-                {hasRequiredSection && (
-                  <div className="space-y-4">
-                    <h3 className="font-display font-bold text-sm text-foreground">Required by this agency</h3>
-                    {termsRequired && (
-                      <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 text-sm text-foreground">
-                        This agency requires basic term disclosures with your bid.
-                      </div>
-                    )}
-                    {termsRequired && (
-                      <TermsDisclosureSection
-                        value={termsDisclosure}
-                        onChange={setTermsDisclosure}
-                        required={termsRequired}
-                        theme="dark"
-                        errors={termsErrors}
-                        disabled={submitting}
-                      />
-                    )}
-
-                    {/* S4-1: RFPs with explicit requirement-tier data get the new required/preferred
-                        block (dark theme, matching this page's chrome, renders required-then-preferred
-                        internally); RFPs authored before tiers existed fall through to the legacy
-                        untiered block below, unchanged. No profile prefill on the guest path - there
-                        is no profile. */}
-                    {hasCriteriaTierData && (
-                      <BusinessCriteriaRequirementBlock
-                        theme="dark"
-                        required={requiredCriteria}
-                        responses={businessCriteriaResponses}
-                        acknowledgments={businessCriteriaAcknowledgments}
-                        onUpdateDesignation={updateBusinessCriteriaDesignation}
-                        onUpdateInsurance={updateBusinessCriteriaInsurance}
-                        onUpdateCoi={updateBusinessCriteriaCoi}
-                        onSetAcknowledgment={setBusinessCriteriaAcknowledgment}
-                        onConfirmAll={confirmAllRequiredCriteria}
-                        canEdit={!submitting}
-                      />
-                    )}
-                  </div>
-                )}
-
-                {hasRequiredCriteriaForBid && !hasCriteriaTierData && (
-                  <div className="p-4 rounded-lg border border-border/40 bg-white/5 space-y-4">
-                    <div>
-                      <div className="font-mono text-2xs text-foreground-muted uppercase tracking-wider">
-                        Business Criteria
-                      </div>
-                      <p className="text-xs text-foreground-muted mt-1">
-                        This RFP requires confirmation of the following. Confirm what applies to your company.
-                      </p>
-                      {requiredCriteria.notes.trim() && (
-                        <p className="text-xs text-foreground-muted mt-1 whitespace-pre-wrap">{requiredCriteria.notes}</p>
-                      )}
-                    </div>
-
-                    {requiredDesignationKeysForBid.length > 0 && (
-                      <div className="space-y-3">
-                        {requiredDesignationKeysForBid.map((key) => {
-                          const designation = businessCriteriaResponses.designations[key]
-                          return (
-                            <div key={key} className="rounded-lg border border-border/40 bg-white/[0.02] p-3">
-                              <label className="flex items-start gap-3 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={designation.holds}
-                                  onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
-                                  className="mt-0.5 w-4 h-4 rounded border-foreground-muted"
-                                />
-                                <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground">
-                                  {DESIGNATION_LABELS[key]}
-                                </HelpTerm>
-                              </label>
-                              {designation.holds && (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pl-7">
-                                  <Input
-                                    value={designation.certifying_body || ""}
-                                    onChange={(e) =>
-                                      updateBusinessCriteriaDesignation(key, {
-                                        certifying_body: e.target.value || null,
-                                      })
-                                    }
-                                    placeholder="Certifying body (e.g. NMSDC, WBENC)"
-                                    className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                                    disabled={designation.self_certified}
-                                  />
-                                  <Input
-                                    value={designation.certification_number || ""}
-                                    onChange={(e) =>
-                                      updateBusinessCriteriaDesignation(key, {
-                                        certification_number: e.target.value || null,
-                                      })
-                                    }
-                                    placeholder="Certification number"
-                                    className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                                    disabled={designation.self_certified}
-                                  />
-                                  <label className="flex items-center gap-2 sm:col-span-2 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={designation.self_certified}
-                                      onChange={(e) =>
-                                        updateBusinessCriteriaDesignation(key, {
-                                          self_certified: e.target.checked,
-                                          ...(e.target.checked
-                                            ? { certifying_body: null, certification_number: null }
-                                            : {}),
-                                        })
-                                      }
-                                      className="w-4 h-4 rounded border-foreground-muted"
-                                    />
-                                    <span className="text-sm text-foreground-muted">
-                                      Self-certified (no third-party certification)
-                                    </span>
-                                  </label>
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {requiredInsuranceKeysForBid.length > 0 && (
-                      <div className="space-y-3">
-                        {requiredInsuranceKeysForBid.map((key) => {
-                          const coverage = businessCriteriaResponses.insurance[key]
-                          const minimum = requiredCriteria.insurance[key]?.minimum
-                          return (
-                            <div
-                              key={key}
-                              className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border/40 bg-white/[0.02]"
-                            >
-                              <label className="flex items-center gap-3 min-w-0 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={coverage.has_coverage}
-                                  onChange={(e) =>
-                                    updateBusinessCriteriaInsurance(key, { has_coverage: e.target.checked })
-                                  }
-                                  className="w-4 h-4 rounded border-foreground-muted"
-                                />
-                                <span className="font-display font-bold text-sm text-foreground truncate">
-                                  <HelpTerm term={key} theme="dark">{INSURANCE_LABELS[key]}</HelpTerm>
-                                  {minimum ? ` (min. ${minimum})` : ""}
-                                </span>
-                              </label>
-                              <Input
-                                value={coverage.limit || ""}
-                                onChange={(e) =>
-                                  updateBusinessCriteriaInsurance(key, { limit: e.target.value || null })
-                                }
-                                placeholder="Your limit, e.g. $1M/$2M"
-                                className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-44 shrink-0"
-                              />
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {requiredCriteria.insurance.coi_on_file && (
-                      <label className="flex items-center gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={businessCriteriaResponses.insurance.coi_on_file}
-                          onChange={(e) => updateBusinessCriteriaCoi(e.target.checked)}
-                          className="w-4 h-4 rounded border-foreground-muted"
-                        />
-                        <span className="text-sm text-foreground-muted">
-                          <HelpTerm term="coi" theme="dark">Certificate of Insurance (COI)</HelpTerm> on file
-                        </span>
-                      </label>
-                    )}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
-                    Attachments
-                  </label>
-                  <div className="flex flex-col sm:flex-row gap-2">
+                <BidFormCollapsibleSection
+                  title="Attachments"
+                  summary={getAttachmentsSummaryLabel(attachments.length)}
+                  open={openSections.attachments}
+                  onToggle={() => toggleSection("attachments")}
+                  theme="dark"
+                >
+                <div className="flex flex-col sm:flex-row gap-2">
                     <div className="flex-1 flex gap-2">
                       <Input
                         value={linkUrl}
@@ -1063,10 +969,10 @@ export default function GuestRfpRespondPage() {
                         onChange={handleFileSelect}
                       />
                     </label>
-                  </div>
-                  {uploadError && <p className="text-xs text-red-400 mt-2">{uploadError}</p>}
+                </div>
+                {uploadError && <p className="text-xs text-red-400 mt-2">{uploadError}</p>}
 
-                  {attachments.length > 0 && (
+                {attachments.length > 0 && (
                     <div className="mt-3 space-y-2">
                       {attachments.map((a, i) => (
                         <div
@@ -1093,8 +999,196 @@ export default function GuestRfpRespondPage() {
                         </div>
                       ))}
                     </div>
+                )}
+                </BidFormCollapsibleSection>
+
+                <BidFormCollapsibleSection
+                  title="Terms"
+                  summary={termsReadiness.label}
+                  open={openSections.terms}
+                  onToggle={() => toggleSection("terms")}
+                  theme="dark"
+                >
+                {termsErrors.length > 0 && (
+                  <div className="text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                    Complete the required term disclosures below.
+                  </div>
+                )}
+                <TermsDisclosureSection
+                  value={termsDisclosure}
+                  onChange={setTermsDisclosure}
+                  required={termsRequired}
+                  theme="dark"
+                  errors={termsErrors}
+                  disabled={submitting}
+                  forceExpanded
+                />
+                </BidFormCollapsibleSection>
+
+                {/* S4-1: RFPs with explicit requirement-tier data get the new required/preferred
+                    block (dark theme, matching this page's chrome, renders required-then-preferred
+                    internally); RFPs authored before tiers existed fall through to the legacy
+                    untiered block below, unchanged. No profile prefill on the guest path - there
+                    is no profile. */}
+                {hasCriteriaTierData && (
+                  <BidFormCollapsibleSection
+                    title="Business criteria"
+                    summary={criteriaSummaryLabel}
+                    open={openSections.criteria}
+                    onToggle={() => toggleSection("criteria")}
+                    theme="dark"
+                  >
+                  <BusinessCriteriaRequirementBlock
+                    theme="dark"
+                    required={requiredCriteria}
+                    responses={businessCriteriaResponses}
+                    acknowledgments={businessCriteriaAcknowledgments}
+                    onUpdateDesignation={updateBusinessCriteriaDesignation}
+                    onUpdateInsurance={updateBusinessCriteriaInsurance}
+                    onUpdateCoi={updateBusinessCriteriaCoi}
+                    onSetAcknowledgment={setBusinessCriteriaAcknowledgment}
+                    onConfirmAll={confirmAllRequiredCriteria}
+                    canEdit={!submitting}
+                    hideTitle
+                  />
+                  </BidFormCollapsibleSection>
+                )}
+
+                {hasRequiredCriteriaForBid && !hasCriteriaTierData && (
+                  <BidFormCollapsibleSection
+                    title="Business criteria"
+                    summary={legacyCriteriaSummaryLabel}
+                    open={openSections.criteria}
+                    onToggle={() => toggleSection("criteria")}
+                    theme="dark"
+                  >
+                  <p className="text-xs text-foreground-muted">
+                    This RFP requires confirmation of the following. Confirm what applies to your company.
+                  </p>
+                  {requiredCriteria.notes.trim() && (
+                    <p className="text-xs text-foreground-muted whitespace-pre-wrap">{requiredCriteria.notes}</p>
                   )}
-                </div>
+
+                  {requiredDesignationKeysForBid.length > 0 && (
+                    <div className="space-y-3">
+                      {requiredDesignationKeysForBid.map((key) => {
+                        const designation = businessCriteriaResponses.designations[key]
+                        return (
+                          <div key={key} className="rounded-lg border border-border/40 bg-white/[0.02] p-3">
+                            <label className="flex items-start gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={designation.holds}
+                                onChange={(e) => updateBusinessCriteriaDesignation(key, { holds: e.target.checked })}
+                                className="mt-0.5 w-4 h-4 rounded border-foreground-muted"
+                              />
+                              <HelpTerm term={key} theme="dark" className="font-display font-bold text-sm text-foreground">
+                                {DESIGNATION_LABELS[key]}
+                              </HelpTerm>
+                            </label>
+                            {designation.holds && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pl-7">
+                                <Input
+                                  value={designation.certifying_body || ""}
+                                  onChange={(e) =>
+                                    updateBusinessCriteriaDesignation(key, {
+                                      certifying_body: e.target.value || null,
+                                    })
+                                  }
+                                  placeholder="Certifying body (e.g. NMSDC, WBENC)"
+                                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                                  disabled={designation.self_certified}
+                                />
+                                <Input
+                                  value={designation.certification_number || ""}
+                                  onChange={(e) =>
+                                    updateBusinessCriteriaDesignation(key, {
+                                      certification_number: e.target.value || null,
+                                    })
+                                  }
+                                  placeholder="Certification number"
+                                  className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                                  disabled={designation.self_certified}
+                                />
+                                <label className="flex items-center gap-2 sm:col-span-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={designation.self_certified}
+                                    onChange={(e) =>
+                                      updateBusinessCriteriaDesignation(key, {
+                                        self_certified: e.target.checked,
+                                        ...(e.target.checked
+                                          ? { certifying_body: null, certification_number: null }
+                                          : {}),
+                                      })
+                                    }
+                                    className="w-4 h-4 rounded border-foreground-muted"
+                                  />
+                                  <span className="text-sm text-foreground-muted">
+                                    Self-certified (no third-party certification)
+                                  </span>
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {requiredInsuranceKeysForBid.length > 0 && (
+                    <div className="space-y-3">
+                      {requiredInsuranceKeysForBid.map((key) => {
+                        const coverage = businessCriteriaResponses.insurance[key]
+                        const minimum = requiredCriteria.insurance[key]?.minimum
+                        return (
+                          <div
+                            key={key}
+                            className="flex items-center justify-between gap-4 p-3 rounded-lg border border-border/40 bg-white/[0.02]"
+                          >
+                            <label className="flex items-center gap-3 min-w-0 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={coverage.has_coverage}
+                                onChange={(e) =>
+                                  updateBusinessCriteriaInsurance(key, { has_coverage: e.target.checked })
+                                }
+                                className="w-4 h-4 rounded border-foreground-muted"
+                              />
+                              <span className="font-display font-bold text-sm text-foreground truncate">
+                                <HelpTerm term={key} theme="dark">{INSURANCE_LABELS[key]}</HelpTerm>
+                                {minimum ? ` (min. ${minimum})` : ""}
+                              </span>
+                            </label>
+                            <Input
+                              value={coverage.limit || ""}
+                              onChange={(e) =>
+                                updateBusinessCriteriaInsurance(key, { limit: e.target.value || null })
+                              }
+                              placeholder="Your limit, e.g. $1M/$2M"
+                              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50 w-44 shrink-0"
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {requiredCriteria.insurance.coi_on_file && (
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={businessCriteriaResponses.insurance.coi_on_file}
+                        onChange={(e) => updateBusinessCriteriaCoi(e.target.checked)}
+                        className="w-4 h-4 rounded border-foreground-muted"
+                      />
+                      <span className="text-sm text-foreground-muted">
+                        <HelpTerm term="coi" theme="dark">Certificate of Insurance (COI)</HelpTerm> on file
+                      </span>
+                    </label>
+                  )}
+                  </BidFormCollapsibleSection>
+                )}
 
                 {submitError && (
                   <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-200">
@@ -1118,6 +1212,35 @@ export default function GuestRfpRespondPage() {
                   )}
                 </Button>
               </form>
+
+              {/* F1 sticky readiness bar - guest has no draft concept, so this is Submit-only.
+                  Uses the form="guest-bid-form" association (button lives outside the <form> in
+                  the DOM) so it triggers the exact same handleSubmit - no second code path. */}
+              <div
+                className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/40 bg-background/95 backdrop-blur"
+                style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+              >
+                <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+                  <p className="font-mono text-xs text-foreground min-w-0 truncate">{readiness.label}</p>
+                  <Button
+                    type="submit"
+                    form="guest-bid-form"
+                    disabled={submitting}
+                    className="bg-accent text-accent-foreground hover:bg-accent/90 shrink-0"
+                  >
+                    {submitting ? (
+                      <span className="flex items-center gap-2">
+                        <Spinner className="size-4" /> {isEditingBid ? "Saving…" : "Submitting…"}
+                      </span>
+                    ) : isEditingBid ? (
+                      "Save Changes"
+                    ) : (
+                      "Submit My Bid"
+                    )}
+                  </Button>
+                </div>
+              </div>
+              </>
             ) : (
               response && (
                 <div className="rounded-lg border border-border/30 bg-white/5 p-6 space-y-4">
