@@ -117,12 +117,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     /**
-     * Award requires a project_assignment row keyed by (project_id, partnership_id) from partner_rfp_inbox.
-     * partner_rfp_responses links to inbox only via inbox_item_id → partner_rfp_inbox.id (there is no inbox_id on responses).
+     * Award requires a project_assignment row keyed by (project_id, partnership_id). Portal-
+     * origin bids get both from partner_rfp_inbox via inbox_item_id. Guest/magic-link bids
+     * (migration 057 - inbox_item_id nullable) have no such row: `.eq("id", null)` on a uuid
+     * column is a Postgres type error ("invalid input syntax for type uuid: null"), not an
+     * empty result, which is exactly what surfaced as "Failed to load broadcast inbox for
+     * award." Three cases handled below: a real inbox row (portal-origin, sync as before), no
+     * inbox row anywhere (guest-origin, resolve project/partnership from the originating
+     * rfp_magic_tokens row instead and skip inbox sync entirely), and a G1-synthesized inbox
+     * row that already exists for this same invitation (found via the master_rfp_json.
+     * _magic_token marker) - linked onto the response permanently so this and every future
+     * PATCH takes the normal first path from then on.
      */
     type AwardContext = {
       inbox: {
-        id: string
+        id: string | null
         scope_item_name: string | null
         master_rfp_json: unknown
       }
@@ -130,32 +139,126 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       partnershipId: string
     }
     let awardContext: AwardContext | null = null
+    // Tracks which inbox row (if any) status-sync below should target - starts as whatever
+    // the response already had, and gains the id of a newly-linked G1-synthesized row.
+    let resolvedInboxItemId: string | null = (existing.inbox_item_id as string | null) ?? null
 
     if (existing.status !== "awarded" && nextStatus === "awarded") {
-      const { data: inboxRow, error: inboxFetchErr } = await supabase
-        .from("partner_rfp_inbox")
-        .select("id, project_id, partner_id, partnership_id, scope_item_name, master_rfp_json")
-        .eq("id", existing.inbox_item_id)
-        .eq("agency_id", user.id)
-        .maybeSingle()
-
-      if (inboxFetchErr) {
-        console.error("[api] bid award: failed to load partner_rfp_inbox (join key: partner_rfp_responses.inbox_item_id)", {
-          route,
-          responseId: id,
-          inbox_item_id: existing.inbox_item_id,
-          message: inboxFetchErr.message,
-          code: inboxFetchErr.code,
-        })
-        return NextResponse.json({ error: "Failed to load broadcast inbox for award." }, { status: 500 })
+      type InboxForAward = {
+        id: string | null
+        project_id: string | null
+        partner_id: string | null
+        partnership_id: string | null
+        scope_item_name: string | null
+        master_rfp_json: unknown
       }
-      if (!inboxRow) {
-        console.error("[api] bid award: partner_rfp_inbox row not found for inbox_item_id", {
-          route,
-          responseId: id,
-          inbox_item_id: existing.inbox_item_id,
-        })
-        return NextResponse.json({ error: "Broadcast inbox row not found for this response." }, { status: 500 })
+      let inboxRow: InboxForAward | null = null
+
+      if (resolvedInboxItemId) {
+        const { data, error: inboxFetchErr } = await supabase
+          .from("partner_rfp_inbox")
+          .select("id, project_id, partner_id, partnership_id, scope_item_name, master_rfp_json")
+          .eq("id", resolvedInboxItemId)
+          .eq("agency_id", user.id)
+          .maybeSingle()
+        if (inboxFetchErr) {
+          console.error("[api] bid award: failed to load partner_rfp_inbox (join key: partner_rfp_responses.inbox_item_id)", {
+            route,
+            responseId: id,
+            inbox_item_id: resolvedInboxItemId,
+            message: inboxFetchErr.message,
+            code: inboxFetchErr.code,
+          })
+          return NextResponse.json({ error: "Failed to load broadcast inbox for award." }, { status: 500 })
+        }
+        if (!data) {
+          console.error("[api] bid award: partner_rfp_inbox row not found for inbox_item_id", {
+            route,
+            responseId: id,
+            inbox_item_id: resolvedInboxItemId,
+          })
+          return NextResponse.json({ error: "Broadcast inbox row not found for this response." }, { status: 500 })
+        }
+        inboxRow = data as InboxForAward
+      } else {
+        // Guest/magic-link bid - find the originating token to check for a G1-synthesized
+        // inbox row before falling back to a token-only context.
+        const { data: tokenRow, error: tokenErr } = await supabase
+          .from("rfp_magic_tokens")
+          .select("token, project_id, scope_item_name")
+          .eq("response_id", id)
+          .maybeSingle()
+        if (tokenErr) {
+          console.error("[api] bid award: failed to load originating magic token", {
+            route,
+            responseId: id,
+            message: tokenErr.message,
+            code: tokenErr.code,
+          })
+          return NextResponse.json({ error: "Failed to load invitation for award." }, { status: 500 })
+        }
+
+        if (tokenRow?.token) {
+          const { data: synthesized, error: synthErr } = await supabase
+            .from("partner_rfp_inbox")
+            .select("id, project_id, partner_id, partnership_id, scope_item_name, master_rfp_json")
+            .eq("agency_id", user.id)
+            .contains("master_rfp_json", { _magic_token: tokenRow.token })
+            .maybeSingle()
+          if (synthErr) {
+            console.error("[api] bid award: G1-synthesized inbox lookup failed", {
+              route,
+              responseId: id,
+              token: tokenRow.token,
+              message: synthErr.message,
+              code: synthErr.code,
+            })
+            return NextResponse.json({ error: "Failed to load broadcast inbox for award." }, { status: 500 })
+          }
+          if (synthesized) {
+            inboxRow = synthesized as InboxForAward
+            const { error: linkErr } = await supabase
+              .from("partner_rfp_responses")
+              .update({ inbox_item_id: synthesized.id })
+              .eq("id", id)
+              .eq("agency_id", user.id)
+            if (linkErr) {
+              // Non-fatal - the award can still proceed against synthesized data this once,
+              // it just won't self-heal into the normal path until a future attempt succeeds.
+              console.error("[api] bid award: failed to link response to synthesized inbox row (non-fatal)", {
+                route,
+                responseId: id,
+                inboxId: synthesized.id,
+                message: linkErr.message,
+                code: linkErr.code,
+              })
+            } else {
+              resolvedInboxItemId = synthesized.id as string
+            }
+          }
+        }
+
+        if (!inboxRow) {
+          const projectIdFromToken = (tokenRow?.project_id as string | null) ?? null
+          if (!projectIdFromToken) {
+            console.error("[api] bid award: guest bid has no resolvable project (no inbox row, no magic token project_id)", {
+              route,
+              responseId: id,
+            })
+            return NextResponse.json(
+              { error: "Cannot award this bid: no project could be resolved for it." },
+              { status: 500 }
+            )
+          }
+          inboxRow = {
+            id: null,
+            project_id: projectIdFromToken,
+            partner_id: (existing.partner_id as string | null) ?? null,
+            partnership_id: null,
+            scope_item_name: (tokenRow?.scope_item_name as string | null) ?? null,
+            master_rfp_json: null,
+          }
+        }
       }
 
       const projectId = inboxRow.project_id as string | null
@@ -222,8 +325,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       awardContext = {
         inbox: {
-          id: inboxRow.id as string,
-          scope_item_name: inboxRow.scope_item_name as string | null,
+          id: inboxRow.id,
+          scope_item_name: inboxRow.scope_item_name,
           master_rfp_json: inboxRow.master_rfp_json,
         },
         projectId,
@@ -246,17 +349,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Guest (Lightning RFP Magic Link) submissions have no partner_rfp_inbox row — inbox_item_id
     // is null by design (see app/api/rfp/guest/[token]/route.ts). Skip the sync silently rather
     // than attempting a query with a null id and treating the no-op as a failure.
-    if (existing.inbox_item_id) {
+    // resolvedInboxItemId (not existing.inbox_item_id) so a G1-synthesized row linked during
+    // award resolution above gets its status synced too, on this same request.
+    if (resolvedInboxItemId) {
       const { error: inboxStatusErr } = await supabase
         .from("partner_rfp_inbox")
         .update({ status: mapResponseStatusToInboxStatus(nextStatus), updated_at: new Date().toISOString() })
-        .eq("id", existing.inbox_item_id)
+        .eq("id", resolvedInboxItemId)
         .eq("agency_id", user.id)
       if (inboxStatusErr) {
         console.error("[api] PATCH partner_rfp_inbox status sync failed", {
           route,
           responseId: id,
-          inbox_item_id: existing.inbox_item_id,
+          inbox_item_id: resolvedInboxItemId,
           userId: user.id,
           nextStatus,
           message: inboxStatusErr.message,
@@ -267,6 +372,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     if (shouldSendAgencyFeedbackEmail) {
+      // Same broad fix as the inbox-status-sync block above: `.eq("id", null)` on a uuid
+      // column errors rather than returning no rows, so guest bids (inbox_item_id null) must
+      // skip this query entirely rather than attempt it.
       const [{ data: partner, error: partnerErr }, { data: inboxRow, error: inboxErr }] =
         await Promise.all([
           supabase
@@ -274,12 +382,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             .select("email, full_name, company_name")
             .eq("id", existing.partner_id)
             .maybeSingle(),
-          supabase
-            .from("partner_rfp_inbox")
-            .select("scope_item_name")
-            .eq("id", existing.inbox_item_id)
-            .eq("agency_id", user.id)
-            .maybeSingle(),
+          existing.inbox_item_id
+            ? supabase
+                .from("partner_rfp_inbox")
+                .select("scope_item_name")
+                .eq("id", existing.inbox_item_id)
+                .eq("agency_id", user.id)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
         ])
 
       if (partnerErr) {
@@ -481,13 +591,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     if (existing.status !== "declined" && nextStatus === "declined") {
+      // Same broad fix as above - guest bids (inbox_item_id null) must skip this query
+      // entirely rather than send `.eq("id", null)`, which errors on a uuid column.
       const [partnerRes, inboxRes] = await Promise.all([
         supabase.from("profiles").select("email, full_name, company_name").eq("id", existing.partner_id).maybeSingle(),
-        supabase
-          .from("partner_rfp_inbox")
-          .select("scope_item_name, master_rfp_json")
-          .eq("id", existing.inbox_item_id)
-          .maybeSingle(),
+        existing.inbox_item_id
+          ? supabase
+              .from("partner_rfp_inbox")
+              .select("scope_item_name, master_rfp_json")
+              .eq("id", existing.inbox_item_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
       ])
       const partner = partnerRes.data
       const inbox = inboxRes.data
