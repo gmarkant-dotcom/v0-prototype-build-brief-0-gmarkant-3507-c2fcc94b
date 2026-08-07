@@ -1,5 +1,74 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
+
+function getServiceSupabase() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null
+  }
+  // Service role required for the on-login sweep below - rfp_magic_tokens has no
+  // partner-facing RLS policy letting a vendor read invitations addressed to their own
+  // email, since that table was built purely for the anonymous guest-link flow.
+  return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+}
+
+const MAGIC_TOKEN_SWEEP_COLUMNS =
+  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at"
+const MAGIC_TOKEN_SWEEP_COLUMNS_NO_DEADLINE =
+  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at"
+
+/**
+ * G1 on-login sweep: attach any outstanding, unexpired magic-link invitations sent to this
+ * vendor's email that haven't reached their portal inbox yet - retroactively surfaces
+ * invitations sent before this feature existed. Attach itself is idempotent (see
+ * lib/magic-token-attach.ts), so calling this on every list load is safe; a failure here
+ * must never break the RFP list itself, only be logged.
+ */
+async function sweepOutstandingMagicTokens(vendorEmail: string, partnerId: string) {
+  const service = getServiceSupabase()
+  if (!service || !vendorEmail) return
+  try {
+    let outstandingTokens: MagicTokenForAttach[] | null = null
+    let tokensErr: { message: string; code?: string } | null = null
+    const first = await service
+      .from("rfp_magic_tokens")
+      .select(MAGIC_TOKEN_SWEEP_COLUMNS)
+      .ilike("vendor_email", vendorEmail)
+      .gt("expires_at", new Date().toISOString())
+    outstandingTokens = first.data as unknown as MagicTokenForAttach[] | null
+    tokensErr = first.error
+    // Pre-migration safety: migration 074 (response_deadline) may not be applied yet.
+    if (tokensErr?.code === "42703") {
+      const retry = await service
+        .from("rfp_magic_tokens")
+        .select(MAGIC_TOKEN_SWEEP_COLUMNS_NO_DEADLINE)
+        .ilike("vendor_email", vendorEmail)
+        .gt("expires_at", new Date().toISOString())
+      outstandingTokens = retry.data as unknown as MagicTokenForAttach[] | null
+      tokensErr = retry.error
+    }
+    if (tokensErr) {
+      console.error("[partner/rfps] on-login sweep: token lookup failed", { partnerId, message: tokensErr.message })
+      return
+    }
+    for (const tokenRow of outstandingTokens || []) {
+      const result = await attachMagicTokenToPartnerInbox(service, { tokenRow, partnerId })
+      if (!result.attached) {
+        console.error("[partner/rfps] on-login sweep: attach failed", {
+          partnerId,
+          token: tokenRow.token,
+          reason: result.reason,
+        })
+      }
+    }
+  } catch (sweepErr) {
+    console.error("[partner/rfps] on-login sweep failed", {
+      partnerId,
+      message: sweepErr instanceof Error ? sweepErr.message : String(sweepErr),
+    })
+  }
+}
 
 /** Never cache this handler — avoids empty JSON stuck behind 304 on Vercel/CDN. */
 export const dynamic = "force-dynamic"
@@ -39,6 +108,9 @@ export async function GET() {
       )
       return NextResponse.json({ error: "Vendors only" }, { status: 403, headers: noStoreHeaders })
     }
+
+    const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
+    await sweepOutstandingMagicTokens(vendorEmail, user.id)
 
     // RLS applies: partner sees rows where partner_id = auth.uid() OR recipient_email matches profile email
     const { data, error } = await supabase

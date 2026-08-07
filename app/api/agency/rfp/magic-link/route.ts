@@ -4,6 +4,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
+import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
 
 export const dynamic = "force-dynamic"
 
@@ -223,6 +224,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to create invitation" }, { status: 500 })
     }
 
+    // G1 send-time attach: the recipient already has a Ligament account (matchedProfile,
+    // looked up above for is_existing_partner) - also surface this RFP in their portal
+    // inbox, not just as a bearer link in the invitation email below. Idempotent, so a
+    // resend through this same route never creates a duplicate inbox row.
+    let attached = false
+    if (matchedProfile?.id) {
+      const attachResult = await attachMagicTokenToPartnerInbox(service, {
+        tokenRow: tokenRow as unknown as MagicTokenForAttach,
+        partnerId: matchedProfile.id as string,
+      })
+      if (attachResult.attached) {
+        attached = true
+      } else {
+        console.error("[api] rfp/magic-link: send-time portal attach failed", {
+          route,
+          token: tokenRow.token,
+          reason: attachResult.reason,
+        })
+      }
+    }
+
     const agencyName =
       auth.profile.company_name?.trim() || auth.profile.full_name?.trim() || auth.profile.display_name?.trim() || "A lead agency"
     const scopeSummary = [
@@ -282,8 +304,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log("[api] success", { route, method: "POST", userId: auth.userId, projectId, is_existing_partner, emailSent })
-    return NextResponse.json({ token: tokenRow.token, is_existing_partner, expires_at, email_sent: emailSent })
+    console.log("[api] success", { route, method: "POST", userId: auth.userId, projectId, is_existing_partner, emailSent, attached })
+    return NextResponse.json({ token: tokenRow.token, is_existing_partner, expires_at, email_sent: emailSent, attached })
   } catch (error) {
     console.error("[api] failure", {
       route,

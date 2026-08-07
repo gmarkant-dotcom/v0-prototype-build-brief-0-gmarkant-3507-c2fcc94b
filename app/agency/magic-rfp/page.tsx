@@ -82,6 +82,9 @@ type SendResult = {
   success: boolean
   token?: string
   error?: string
+  /** G1: true when the recipient already had a Ligament account and this invitation was
+   *  also attached into their portal inbox, not just sent as a bearer link in email. */
+  attached?: boolean
 }
 
 function formatDateOnly(raw: string | null | undefined): string | null {
@@ -565,7 +568,7 @@ function MagicRfpContent() {
           results.push({ email: r.email, name: r.name, success: false, error: data?.error || "Failed to send invitation" })
           setRecipients((prev) => prev.map((x) => (x.id === r.id ? { ...x, sendStatus: "error" } : x)))
         } else {
-          results.push({ email: r.email, name: r.name, success: true, token: data.token })
+          results.push({ email: r.email, name: r.name, success: true, token: data.token, attached: data.attached === true })
           setRecipients((prev) => prev.map((x) => (x.id === r.id ? { ...x, sendStatus: "sent" } : x)))
         }
       } catch {
@@ -1092,7 +1095,11 @@ function MagicRfpContent() {
                         {r.name ? `${r.name} · ${r.email}` : r.email}
                       </div>
                       <div className={cn("font-mono text-2xs", r.success ? "text-teal-300" : "text-red-400")}>
-                        {r.success ? "Invitation sent - expires in 72 hours" : r.error || "Failed to send invitation"}
+                        {r.success
+                          ? r.attached
+                            ? "Invitation sent - already in their portal inbox"
+                            : "Invitation sent - expires in 72 hours"
+                          : r.error || "Failed to send invitation"}
                       </div>
                     </div>
                   </div>

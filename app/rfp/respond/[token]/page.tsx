@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic"
 import { useCallback, useEffect, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -220,12 +220,21 @@ function CenteredCard({ children }: { children: React.ReactNode }) {
 
 export default function GuestRfpRespondPage() {
   const params = useParams()
+  const router = useRouter()
   const token = (params?.token as string) || ""
 
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<"expired" | "not_found" | "error" | null>(null)
   const [expiredAgencyName, setExpiredAgencyName] = useState<string | null>(null)
   const [payload, setPayload] = useState<GuestPayload | null>(null)
+
+  /** G1: whether a logged-in session's account email matches this invite's target email.
+   *  "checking"/"redirecting" hold off rendering the guest view so a matching account never
+   *  flashes it before landing on the portal RFP; "mismatch" blocks it with an interstitial
+   *  that can never silently claim into the wrong account; "guest" is every other case
+   *  (no session, or the vendor explicitly chose to continue viewing as a guest anyway). */
+  const [accountState, setAccountState] = useState<"checking" | "redirecting" | "mismatch" | "guest">("checking")
+  const [currentAccountLabel, setCurrentAccountLabel] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"rfp-details" | "my-bid" | "status">("rfp-details")
   const [isEditingBid, setIsEditingBid] = useState(false)
   const [proposalExpanded, setProposalExpanded] = useState(false)
@@ -294,6 +303,63 @@ export default function GuestRfpRespondPage() {
     if (!token) return
     void loadPayload()
   }, [token, loadPayload])
+
+  /** G1: once the invite has loaded, check whether the browser is logged into an account -
+   *  and if so, whether that account's email matches the invite's target email. A match
+   *  attaches (idempotent - see lib/magic-token-attach.ts) and redirects into the portal RFP;
+   *  a mismatch shows the interstitial; no session leaves this as a normal guest view. */
+  useEffect(() => {
+    if (!payload || accountState !== "checking") return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { createClient } = await import("@/lib/supabase/client")
+        const supabase = createClient()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) {
+          if (!cancelled) setAccountState("guest")
+          return
+        }
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email, company_name, full_name, display_name")
+          .eq("id", user.id)
+          .maybeSingle()
+        const accountEmail = (profile?.email || user.email || "").trim().toLowerCase()
+        const inviteEmail = (payload.token.vendor_email || "").trim().toLowerCase()
+        if (!accountEmail || !inviteEmail || accountEmail !== inviteEmail) {
+          if (!cancelled) {
+            setCurrentAccountLabel(
+              profile?.company_name?.trim() ||
+                profile?.full_name?.trim() ||
+                profile?.display_name?.trim() ||
+                accountEmail ||
+                "your account"
+            )
+            setAccountState("mismatch")
+          }
+          return
+        }
+        if (!cancelled) setAccountState("redirecting")
+        const res = await fetch(`/api/rfp/guest/${token}/attach-existing-account`, { method: "POST" })
+        const data = await res.json().catch(() => ({}))
+        if (res.ok && data?.inboxId) {
+          router.push(`/partner/rfps/${data.inboxId}`)
+        } else if (!cancelled) {
+          // Attach failed server-side - fail safe to the normal guest view rather than a
+          // dead end on a blank "redirecting" screen.
+          setAccountState("guest")
+        }
+      } catch {
+        if (!cancelled) setAccountState("guest")
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [payload, accountState, token, router])
 
   const handleFileSelect = useCallback(
     async (e: ChangeEvent<HTMLInputElement>) => {
@@ -546,6 +612,44 @@ export default function GuestRfpRespondPage() {
           We could not load this invitation. Try refreshing the page, or contact the agency if the problem
           continues.
         </p>
+      </CenteredCard>
+    )
+  }
+
+  // G1: hold off on the guest view while the account-match check (and, on a match, the
+  // attach + redirect) is in flight - a matching account should never see a flash of the
+  // guest form before landing on its portal RFP.
+  if (accountState === "checking" || accountState === "redirecting") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Spinner className="size-6 text-accent" />
+      </div>
+    )
+  }
+
+  if (accountState === "mismatch") {
+    return (
+      <CenteredCard>
+        <h1 className="font-display font-black text-2xl text-foreground mb-3">Sent to a different account</h1>
+        <p className="text-foreground-muted text-sm leading-relaxed">
+          This invitation was sent to {payload.token.vendor_email}. Sign out to accept it, or continue as{" "}
+          {currentAccountLabel}.
+        </p>
+        <div className="mt-5 flex flex-col gap-2">
+          <Button
+            onClick={async () => {
+              const { createClient } = await import("@/lib/supabase/client")
+              await createClient().auth.signOut()
+              window.location.reload()
+            }}
+            className="bg-accent text-accent-foreground hover:bg-accent/90"
+          >
+            Sign out to accept it
+          </Button>
+          <Button variant="outline" onClick={() => setAccountState("guest")}>
+            Continue as {currentAccountLabel}
+          </Button>
+        </div>
       </CenteredCard>
     )
   }
