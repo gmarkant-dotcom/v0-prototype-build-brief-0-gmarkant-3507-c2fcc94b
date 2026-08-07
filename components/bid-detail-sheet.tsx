@@ -347,13 +347,16 @@ function BidDetailSheetInner({
                       <Star className={cn("w-3.5 h-3.5 mr-1.5", row.status === "shortlisted" && !shortlistHover && "fill-current")} />
                       {row.status === "shortlisted" ? (shortlistHover ? "Remove from shortlist" : "Shortlisted") : "Shortlist"}
                     </Button>
+                    {/* H2: award now establishes the partnership rather than requiring one to
+                        already exist, so guest/magic-link submissions (isGuest) are no longer
+                        excluded here - the old disable + tooltip were a real business rule
+                        when award required a pre-existing partnership, not anymore. */}
                     <Button
                       type="button"
                       size="sm"
                       className="bg-success hover:bg-success/90 text-accent-foreground"
                       onClick={() => setAwardConfirmOpen(true)}
-                      disabled={busy || isAwarded || isGuest}
-                      title={isGuest ? "Award isn't available yet for guest submissions, since they aren't linked to a vendor account." : undefined}
+                      disabled={busy || isAwarded}
                     >
                       Award
                     </Button>

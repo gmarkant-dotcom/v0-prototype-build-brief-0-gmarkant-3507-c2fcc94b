@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { notifyProjectAwarded } from "@/lib/notifications"
+import { resolvePartnershipForAward } from "@/lib/award-partnership-resolution"
 
 export const dynamic = "force-dynamic"
 
@@ -278,49 +279,66 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         )
       }
 
+      // a. Partnership already linked to this broadcast/inbox row - today's behavior, unchanged.
       let partnershipId = inboxRow.partnership_id as string | null
       const partnerIdForResolution = (inboxRow.partner_id as string | null) || existing.partner_id
-      if (!partnershipId && partnerIdForResolution) {
-        const { data: rel, error: relErr } = await supabase
-          .from("partnerships")
-          .select("id")
-          .eq("agency_id", user.id)
-          .eq("partner_id", partnerIdForResolution)
-          .eq("status", "active")
-          .maybeSingle()
-        if (relErr) {
-          console.error("[api] bid award: active partnership lookup failed", {
-            route,
-            responseId: id,
-            partnerId: partnerIdForResolution,
-            message: relErr.message,
-            code: relErr.code,
-          })
-          return NextResponse.json({ error: "Failed to resolve partnership for award." }, { status: 500 })
-        }
-        partnershipId = rel?.id ?? null
-      }
 
       if (!partnershipId) {
-        console.error(
-          "[api] bid award: partnership_id unresolved — inbox.partnership_id null and no active partnerships row for partner (project_assignments requires partnership_id)",
-          {
+        // H2: award is mutual consent - resolve (claim or create) the partnership rather
+        // than refuse. Need the vendor's email/display name/contact name regardless of which
+        // branch above produced inboxRow: a profile-linked bidder has them on profiles; a
+        // pure guest only has them on the originating rfp_magic_tokens row.
+        let vendorEmail: string | null = null
+        let vendorDisplayName = "Vendor"
+        let vendorContactName: string | null = null
+        if (partnerIdForResolution) {
+          const { data: partnerProfile } = await supabase
+            .from("profiles")
+            .select("email, full_name, company_name")
+            .eq("id", partnerIdForResolution)
+            .maybeSingle()
+          vendorEmail = (partnerProfile?.email as string | null) || null
+          vendorDisplayName =
+            partnerProfile?.company_name?.trim() ||
+            partnerProfile?.full_name?.trim() ||
+            partnerProfile?.email?.trim() ||
+            "Vendor"
+          vendorContactName = (partnerProfile?.full_name as string | null) || null
+        } else {
+          const { data: tokenForVendor } = await supabase
+            .from("rfp_magic_tokens")
+            .select("vendor_email, vendor_name")
+            .eq("response_id", id)
+            .maybeSingle()
+          vendorEmail = (tokenForVendor?.vendor_email as string | null) || null
+          vendorContactName = (tokenForVendor?.vendor_name as string | null) || null
+          vendorDisplayName = vendorContactName || vendorEmail || "Vendor"
+        }
+
+        const resolution = await resolvePartnershipForAward(supabase, {
+          agencyId: user.id,
+          partnerIdForResolution,
+          vendorEmail,
+          vendorDisplayName,
+          vendorContactName,
+        })
+        if ("error" in resolution) {
+          console.error("[api] bid award: partnership resolution failed", {
             route,
             responseId: id,
             inbox_item_id: existing.inbox_item_id,
             inboxId: inboxRow.id,
             projectId,
-            inboxPartnershipId: inboxRow.partnership_id,
             partnerIdForResolution,
-          }
-        )
-        return NextResponse.json(
-          {
-            error:
-              "Cannot award this bid: no partnership is linked to this broadcast and no active agency–partner relationship was found.",
-          },
-          { status: 500 }
-        )
+            vendorEmail,
+            message: resolution.error,
+          })
+          return NextResponse.json(
+            { error: "Cannot award this bid: no vendor account or email is linked to it, so no relationship could be established." },
+            { status: 500 }
+          )
+        }
+        partnershipId = resolution.partnershipId
       }
 
       awardContext = {

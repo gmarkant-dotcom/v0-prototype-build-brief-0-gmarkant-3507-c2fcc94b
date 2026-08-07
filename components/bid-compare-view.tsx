@@ -356,10 +356,13 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                     <div className="space-y-2">
                       <div className="font-display font-bold text-sm">{row.partner_display_name}</div>
                       <div className="flex items-center gap-1.5">
+                        {/* H2: award now establishes the partnership rather than requiring one
+                            to already exist, so guest/magic-link rows are no longer excluded
+                            here (see the matching change in bid-detail-sheet.tsx). */}
                         <Button
                           size="sm"
                           className="h-6 px-2 text-2xs bg-success hover:bg-success/90 text-accent-foreground"
-                          disabled={busyId === row.id || row.status === "awarded" || (!row.partner_id && row.response_exists)}
+                          disabled={busyId === row.id || row.status === "awarded"}
                           onClick={() => setAwardTarget(row)}
                         >
                           Award
