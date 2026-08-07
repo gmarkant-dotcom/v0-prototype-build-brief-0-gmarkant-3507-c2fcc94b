@@ -281,7 +281,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       // a. Partnership already linked to this broadcast/inbox row - today's behavior, unchanged.
       let partnershipId = inboxRow.partnership_id as string | null
-      const partnerIdForResolution = (inboxRow.partner_id as string | null) || existing.partner_id
+      let partnerIdForResolution = (inboxRow.partner_id as string | null) || existing.partner_id
 
       if (!partnershipId) {
         // H2: award is mutual consent - resolve (claim or create) the partnership rather
@@ -313,6 +313,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           vendorEmail = (tokenForVendor?.vendor_email as string | null) || null
           vendorContactName = (tokenForVendor?.vendor_name as string | null) || null
           vendorDisplayName = vendorContactName || vendorEmail || "Vendor"
+
+          // H3: partner_id was captured once at guest-submission time from an email->profile
+          // match at that moment (app/api/rfp/guest/[token]/route.ts) and is never re-checked
+          // later - so a vendor who creates/links an account AFTER submitting still resolves
+          // as a "pure guest" here otherwise, producing a partner_id-null partnership that
+          // never surfaces on My Bids or Delivery & Projects even after they have an account.
+          // Re-check by email now, and backfill the response row so this is fixed going
+          // forward too, not just for this one award.
+          if (vendorEmail) {
+            const { data: matchedProfile } = await supabase
+              .from("profiles")
+              .select("id")
+              .ilike("email", vendorEmail)
+              .maybeSingle()
+            if (matchedProfile?.id) {
+              partnerIdForResolution = matchedProfile.id as string
+              const { error: backfillErr } = await supabase
+                .from("partner_rfp_responses")
+                .update({ partner_id: matchedProfile.id })
+                .eq("id", id)
+                .eq("agency_id", user.id)
+                .is("partner_id", null)
+              if (backfillErr) {
+                console.error("[api] bid award: response partner_id backfill failed (non-fatal)", {
+                  route,
+                  responseId: id,
+                  message: backfillErr.message,
+                })
+              }
+            }
+          }
         }
 
         const resolution = await resolvePartnershipForAward(supabase, {

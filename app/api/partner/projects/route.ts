@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
 
 export const dynamic = "force-dynamic"
+
+function getServiceSupabase() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null
+  }
+  return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+}
 
 const noStoreHeaders = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate",
@@ -29,11 +38,23 @@ export async function GET() {
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("role, active_role")
+      .select("role, active_role, email")
       .eq("id", user.id)
       .single()
     if (profileErr || (profile?.role !== "partner" && profile?.active_role !== "partner")) {
       return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStoreHeaders })
+    }
+
+    // H3 retroactive fix: this route's whole result is gated on partnerships.partner_id below
+    // - an awarded-but-still-partner_id-null ghost partnership (H2's pure-guest branch,
+    // before this vendor had/linked an account) would return an empty project list forever
+    // without this, even though the engagement is real. Same claim the RFP list's sweep
+    // performs, run here too so this page works standalone without depending on the vendor
+    // having visited /partner/rfps first in the same session.
+    const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
+    const service = getServiceSupabase()
+    if (service && vendorEmail) {
+      await claimAwardedGhostPartnershipsByEmail(service, { partnerId: user.id, vendorEmail })
     }
 
     const { data: userPartnerships, error: pErr } = await supabase

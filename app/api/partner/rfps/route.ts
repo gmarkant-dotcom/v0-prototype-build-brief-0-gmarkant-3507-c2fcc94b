@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
+import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
 
 function getServiceSupabase() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -14,14 +15,20 @@ function getServiceSupabase() {
 }
 
 const MAGIC_TOKEN_SWEEP_COLUMNS =
-  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at"
+  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, response_id"
 const MAGIC_TOKEN_SWEEP_COLUMNS_NO_DEADLINE =
-  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at"
+  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, response_id"
+// H3: an invite you already answered still belongs in your portal - the 72-hour expiry only
+// bounds how long a NEW invitation stays open to a response, it's irrelevant once a response
+// exists (and by award time, an invite is essentially always past that window anyway, which
+// was silently excluding every submitted/awarded guest bid from ever being swept).
+const UNEXPIRED_OR_RESPONDED_FILTER = `expires_at.gt.${new Date().toISOString()},response_id.not.is.null`
 
 /**
- * G1 on-login sweep: attach any outstanding, unexpired magic-link invitations sent to this
- * vendor's email that haven't reached their portal inbox yet - retroactively surfaces
- * invitations sent before this feature existed. Attach itself is idempotent (see
+ * G1/H3 on-login sweep: attach any outstanding magic-link invitations sent to this vendor's
+ * email that haven't reached their portal inbox yet - unexpired ones (open invitations) and
+ * expired-but-already-responded ones alike - retroactively surfaces invitations sent (and
+ * bids submitted/awarded) before this feature existed. Attach itself is idempotent (see
  * lib/magic-token-attach.ts), so calling this on every list load is safe; a failure here
  * must never break the RFP list itself, only be logged.
  */
@@ -35,7 +42,7 @@ async function sweepOutstandingMagicTokens(vendorEmail: string, partnerId: strin
       .from("rfp_magic_tokens")
       .select(MAGIC_TOKEN_SWEEP_COLUMNS)
       .ilike("vendor_email", vendorEmail)
-      .gt("expires_at", new Date().toISOString())
+      .or(UNEXPIRED_OR_RESPONDED_FILTER)
     outstandingTokens = first.data as unknown as MagicTokenForAttach[] | null
     tokensErr = first.error
     // Pre-migration safety: migration 074 (response_deadline) may not be applied yet.
@@ -44,7 +51,7 @@ async function sweepOutstandingMagicTokens(vendorEmail: string, partnerId: strin
         .from("rfp_magic_tokens")
         .select(MAGIC_TOKEN_SWEEP_COLUMNS_NO_DEADLINE)
         .ilike("vendor_email", vendorEmail)
-        .gt("expires_at", new Date().toISOString())
+        .or(UNEXPIRED_OR_RESPONDED_FILTER)
       outstandingTokens = retry.data as unknown as MagicTokenForAttach[] | null
       tokensErr = retry.error
     }
@@ -111,6 +118,14 @@ export async function GET() {
 
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
     await sweepOutstandingMagicTokens(vendorEmail, user.id)
+    // H3 retroactive fix: an award made before this account existed/was linked (H2's pure-
+    // guest branch) leaves its partnerships row partner_id-null forever otherwise - nothing
+    // else claims it automatically. Service-role, same reasoning as the sweep above (RLS on
+    // project_assignments would otherwise need to already know about a not-yet-linked row).
+    const service = getServiceSupabase()
+    if (service) {
+      await claimAwardedGhostPartnershipsByEmail(service, { partnerId: user.id, vendorEmail })
+    }
 
     // RLS applies: partner sees rows where partner_id = auth.uid() OR recipient_email matches profile email
     const { data, error } = await supabase

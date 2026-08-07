@@ -1,5 +1,54 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
+import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
+
+function getServiceSupabase() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null
+  }
+  return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+}
+
+/** H3: this route's own filter (partner_rfp_responses.partner_id = auth.uid()) never sees a
+ *  response whose partner_id is still null - independent of GET /api/partner/rfps's own
+ *  sweep, since the two routes are fetched in parallel from app/partner/rfps/page.tsx with no
+ *  ordering between them. Backfilling here too makes this route self-sufficient rather than
+ *  racing the other one. */
+async function backfillGuestResponseLinkage(vendorEmail: string, partnerId: string) {
+  const service = getServiceSupabase()
+  if (!service || !vendorEmail) return
+  try {
+    const { data: tokens, error: tokensErr } = await service
+      .from("rfp_magic_tokens")
+      .select(
+        "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, response_id"
+      )
+      .ilike("vendor_email", vendorEmail)
+      .not("response_id", "is", null)
+    if (tokensErr) {
+      console.error("[partner/rfps/bids] linkage backfill: token lookup failed", { partnerId, message: tokensErr.message })
+      return
+    }
+    for (const tokenRow of (tokens || []) as unknown as MagicTokenForAttach[]) {
+      const result = await attachMagicTokenToPartnerInbox(service, { tokenRow, partnerId })
+      if (!result.attached) {
+        console.error("[partner/rfps/bids] linkage backfill: attach failed", {
+          partnerId,
+          token: tokenRow.token,
+          reason: result.reason,
+        })
+      }
+    }
+    await claimAwardedGhostPartnershipsByEmail(service, { partnerId, vendorEmail })
+  } catch (err) {
+    console.error("[partner/rfps/bids] linkage backfill failed", {
+      partnerId,
+      message: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
 
 /** Never cache this handler - avoids empty JSON stuck behind 304 on Vercel/CDN. */
 export const dynamic = "force-dynamic"
@@ -32,12 +81,15 @@ export async function GET() {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role")
+      .select("role, active_role, email")
       .eq("id", user.id)
       .single()
     if (profile?.role !== "partner" && profile?.active_role !== "partner") {
       return NextResponse.json({ error: "Vendors only" }, { status: 403, headers: noStoreHeaders })
     }
+
+    const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
+    await backfillGuestResponseLinkage(vendorEmail, user.id)
 
     // RLS: "Partners select own RFP responses" - USING (partner_id = auth.uid())
     const { data: responses, error } = await supabase

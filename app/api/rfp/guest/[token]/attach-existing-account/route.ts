@@ -43,7 +43,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
     const { data: tokenRow, error: tokenErr } = await service
       .from("rfp_magic_tokens")
       .select(
-        "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at"
+        "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, response_id"
       )
       .eq("token", token)
       .maybeSingle()

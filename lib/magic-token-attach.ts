@@ -16,6 +16,12 @@ export type MagicTokenForAttach = {
   require_terms_disclosure?: boolean | null
   response_deadline?: string | null
   expires_at: string
+  /** H3: when this token already has a submitted bid, that response gets backfilled with
+   *  this attach's inbox row/partner id below - without this, "My Bids" and Delivery &
+   *  Projects never pick up a guest-origin response even after its RFP is visible in the
+   *  portal, since they key off partner_rfp_responses.partner_id / inbox_item_id directly,
+   *  not off partner_rfp_inbox at all. */
+  response_id?: string | null
 }
 
 export type AttachResult =
@@ -46,8 +52,34 @@ export async function attachMagicTokenToPartnerInbox(
 ): Promise<AttachResult> {
   const { tokenRow, partnerId } = params
 
-  if (new Date(tokenRow.expires_at).getTime() <= Date.now()) {
+  // H3: an expired token still needs attaching (and its response backfilled below) once it
+  // already has a submitted bid - the invite link's 72-hour window is about how long it
+  // stays open to a NEW response, not about whether an answer already given should stay
+  // visible in the vendor's portal. Only a genuinely-expired, never-answered invite refuses.
+  if (!tokenRow.response_id && new Date(tokenRow.expires_at).getTime() <= Date.now()) {
     return { attached: false, reason: "expired" }
+  }
+
+  const backfillResponseLinkage = async (inboxId: string) => {
+    if (!tokenRow.response_id) return
+    const { data: responseRow, error: responseErr } = await supabase
+      .from("partner_rfp_responses")
+      .select("id, partner_id, inbox_item_id")
+      .eq("id", tokenRow.response_id)
+      .maybeSingle()
+    if (responseErr || !responseRow) return
+    const patch: Record<string, unknown> = {}
+    if (!responseRow.partner_id) patch.partner_id = partnerId
+    if (!responseRow.inbox_item_id) patch.inbox_item_id = inboxId
+    if (Object.keys(patch).length === 0) return
+    const { error: patchErr } = await supabase.from("partner_rfp_responses").update(patch).eq("id", responseRow.id)
+    if (patchErr) {
+      console.error("[magic-token-attach] response linkage backfill failed (non-fatal)", {
+        responseId: responseRow.id,
+        inboxId,
+        message: patchErr.message,
+      })
+    }
   }
 
   const { data: existing, error: existingErr } = await supabase
@@ -64,6 +96,7 @@ export async function attachMagicTokenToPartnerInbox(
     return { attached: false, reason: existingErr.message }
   }
   if (existing) {
+    await backfillResponseLinkage(existing.id as string)
     return { attached: true, inboxId: existing.id as string, created: false }
   }
 
@@ -128,6 +161,7 @@ export async function attachMagicTokenToPartnerInbox(
   }
 
   const inboxId = inserted.id as string
+  await backfillResponseLinkage(inboxId)
   try {
     await createNotification({
       supabase,
