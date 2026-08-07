@@ -61,7 +61,9 @@ export async function GET() {
         .from("partner_rfp_responses")
         .select("id, inbox_item_id, status, submitted_at, shortlisted_at, meeting_requested_at, declined_at")
         .eq("partner_id", partnerId),
-      supabase.from("partnerships").select("id, agency_id, status, reliability_summary, reliability_summary_generated_at").eq("partner_id", partnerId),
+      // F3: no reliability_summary/reliability_summary_generated_at here - see the note above
+      // the reliability computation below, this route must never carry that column at all.
+      supabase.from("partnerships").select("id, agency_id, status").eq("partner_id", partnerId),
     ])
 
     for (const [label, res] of [
@@ -256,18 +258,18 @@ export async function GET() {
     const agencyRelationships = partnerships.filter((p) => p.status === "active").length
 
     // ── Reliability ──────────────────────────────────────────────────────────────
+    // F3 stopgap: reliability_summary (agency-facing AI text) is not selected or returned
+    // here at all - a vendor-reachable payload must not carry it, not just hide it in the
+    // UI. Structured metrics (avgCompositeScore, reviewCount) are unaffected. The real
+    // per-review sharing gate ships later as migration 073.
     let reliability: {
       hasCompletedReviews: boolean
       avgCompositeScore: number | null
       reviewCount: number
-      reliabilitySummary: string | null
-      reliabilitySummaryAgencyName: string | null
     } = {
       hasCompletedReviews: false,
       avgCompositeScore: null,
       reviewCount: 0,
-      reliabilitySummary: null,
-      reliabilitySummaryAgencyName: null,
     }
 
     if (partnershipIds.length > 0) {
@@ -288,21 +290,7 @@ export async function GET() {
           hasCompletedReviews: (reviews || []).length > 0,
           avgCompositeScore: avg,
           reviewCount: (reviews || []).length,
-          reliabilitySummary: null,
-          reliabilitySummaryAgencyName: null,
         }
-      }
-
-      const withSummary = partnerships
-        .filter((p) => p.reliability_summary)
-        .sort((a, b) =>
-          String(b.reliability_summary_generated_at || "").localeCompare(String(a.reliability_summary_generated_at || ""))
-        )
-      if (withSummary.length > 0) {
-        const latest = withSummary[0]
-        reliability.reliabilitySummary = latest.reliability_summary as string
-        reliability.reliabilitySummaryAgencyName =
-          (latest.agency_id && agencyNameById.get(latest.agency_id as string)) || "Lead agency"
       }
     }
 

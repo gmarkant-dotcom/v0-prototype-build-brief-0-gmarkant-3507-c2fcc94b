@@ -801,9 +801,6 @@ export const demoReliability = {
   hasCompletedReviews: true,
   avgCompositeScore: 8.7,
   reviewCount: 3,
-  reliabilitySummary:
-    "Consistently delivers on time and on budget across engagements, with strong creative execution noted by lead agencies.",
-  reliabilitySummaryAgencyName: "Electric Animal",
 }
 
 export type DemoActivityItem = { id: string; text: string; href: string; timestamp: string }
