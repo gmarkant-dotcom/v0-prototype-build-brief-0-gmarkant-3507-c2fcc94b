@@ -105,6 +105,16 @@ export async function POST(request: NextRequest) {
     // ON CONFLICT DO UPDATE leaves the originally-set requirement untouched.
     const hasRequireTermsDisclosure = typeof body.require_terms_disclosure === "boolean"
     const requireTermsDisclosure = body.require_terms_disclosure === true
+    // F2: mirrors the same parsing broadcast-rfp/route.ts already does for
+    // partner_rfp_inbox.response_deadline - this flow just never read it at all.
+    const responseDeadlineRaw =
+      typeof body.response_deadline === "string" && body.response_deadline.trim().length > 0
+        ? body.response_deadline.trim()
+        : null
+    const responseDeadline =
+      responseDeadlineRaw && !Number.isNaN(new Date(responseDeadlineRaw).getTime())
+        ? new Date(responseDeadlineRaw).toISOString()
+        : null
 
     if (!vendorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vendorEmail)) {
       return NextResponse.json({ error: "A valid vendor email is required" }, { status: 400 })
@@ -167,31 +177,46 @@ export async function POST(request: NextRequest) {
     // reused - resending is exactly how an agency extends a vendor's window to respond.
     const expires_at = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
 
-    const { data: tokenRow, error: upsertErr } = await service
+    const tokenUpsertPayload = {
+      agency_id: auth.userId,
+      project_id: projectId,
+      vendor_email: vendorEmail,
+      vendor_name: vendorName,
+      scope_item_id: scopeItemId,
+      scope_item_name: scopeItemName,
+      scope_item_description: scopeItemDescription,
+      reference_materials: { materials: referenceMaterials, output_template_config: outputTemplateConfig },
+      business_criteria_required: businessCriteriaRequired,
+      token,
+      expires_at,
+      // Never reset status/submitted_at/response_id for a row that already has a
+      // submitted bid - a resend (or a second invite surface hitting the same recipient)
+      // must not sever a live submission from its token.
+      ...(wasSubmitted ? {} : { status: "pending", submitted_at: null, response_id: null }),
+      ...(hasRequireTermsDisclosure ? { require_terms_disclosure: requireTermsDisclosure } : {}),
+      response_deadline: responseDeadline,
+    }
+
+    let { data: tokenRow, error: upsertErr } = await service
       .from("rfp_magic_tokens")
-      .upsert(
-        {
-          agency_id: auth.userId,
-          project_id: projectId,
-          vendor_email: vendorEmail,
-          vendor_name: vendorName,
-          scope_item_id: scopeItemId,
-          scope_item_name: scopeItemName,
-          scope_item_description: scopeItemDescription,
-          reference_materials: { materials: referenceMaterials, output_template_config: outputTemplateConfig },
-          business_criteria_required: businessCriteriaRequired,
-          token,
-          expires_at,
-          // Never reset status/submitted_at/response_id for a row that already has a
-          // submitted bid - a resend (or a second invite surface hitting the same recipient)
-          // must not sever a live submission from its token.
-          ...(wasSubmitted ? {} : { status: "pending", submitted_at: null, response_id: null }),
-          ...(hasRequireTermsDisclosure ? { require_terms_disclosure: requireTermsDisclosure } : {}),
-        },
-        { onConflict: "agency_id,project_id,vendor_email" }
-      )
+      .upsert(tokenUpsertPayload, { onConflict: "agency_id,project_id,vendor_email" })
       .select()
       .single()
+
+    // F2 pre-migration safety: migration 074 (rfp_magic_tokens.response_deadline) may not be
+    // applied yet - retry once without the column on Postgres undefined_column (42703), same
+    // guard pattern already used for business_criteria_acknowledgments pre-migration-071.
+    if (upsertErr?.code === "42703") {
+      console.warn(
+        "[api] rfp/magic-link: response_deadline column missing (migration 074 not yet applied) - retrying without it"
+      )
+      const { response_deadline: _omitDeadline, ...payloadWithoutDeadline } = tokenUpsertPayload
+      ;({ data: tokenRow, error: upsertErr } = await service
+        .from("rfp_magic_tokens")
+        .upsert(payloadWithoutDeadline, { onConflict: "agency_id,project_id,vendor_email" })
+        .select()
+        .single())
+    }
 
     if (upsertErr || !tokenRow) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: upsertErr?.message })

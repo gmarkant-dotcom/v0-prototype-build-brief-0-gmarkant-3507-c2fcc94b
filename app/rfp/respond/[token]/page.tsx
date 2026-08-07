@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/spinner"
 import { HolographicBlobs } from "@/components/holographic-blobs"
 import { formatSubmittedAt, cn } from "@/lib/utils"
 import { buildBidTimeline } from "@/lib/bid-timeline"
+import { getDeadlineUrgency } from "@/lib/deadline-urgency"
 import { isVercelBlobStorageUrl, parseGuestUploadBlobPathFromUrl } from "@/lib/vercel-blob-url"
 import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal } from "@/lib/rfp-response-fields"
 import type { ReferenceMaterial } from "@/components/reference-materials-input"
@@ -73,6 +74,8 @@ type TokenRow = {
   submitted_at: string | null
   created_at: string
   require_terms_disclosure?: boolean
+  /** F2: absent on tokens minted before migration 074 applies - always null-safe. */
+  response_deadline?: string | null
 }
 
 type ProjectData = {
@@ -612,6 +615,9 @@ export default function GuestRfpRespondPage() {
     criteriaOpenCount
   )
 
+  const responseDeadlineLabel = formatDateOnly(tokenRow.response_deadline)
+  const responseDeadlineUrgency = getDeadlineUrgency(tokenRow.response_deadline)
+
   const preflightParts = ["a proposal, budget, and timeline"]
   if (termsRequired) preflightParts.push("term disclosures")
   if (hasCriteriaTierData || hasRequiredCriteriaForBid) preflightParts.push("certification details for designations you claim")
@@ -626,6 +632,23 @@ export default function GuestRfpRespondPage() {
             Powered by Ligament
           </div>
         </div>
+
+        {/* F2: response_deadline is absent on tokens minted before migration 074 applies -
+            renders nothing rather than a fake/omitted deadline, matching the honest-empty-state
+            rule everywhere else this value is shown. */}
+        {responseDeadlineLabel && (
+          <div
+            className={cn(
+              "rounded-lg border px-3 py-2 text-sm font-mono inline-flex items-center gap-2",
+              responseDeadlineUrgency === "amber" && "border-amber-300 bg-amber-500/10 text-amber-300",
+              responseDeadlineUrgency === "red" && "border-red-300 bg-red-500/10 text-red-300",
+              responseDeadlineUrgency === "none" && "border-border/40 bg-white/5 text-foreground"
+            )}
+          >
+            Respond by {responseDeadlineLabel}
+            {responseDeadlineUrgency === "red" && " (past due)"}
+          </div>
+        )}
 
         {/* Persistent guest banner - visible on every tab, not just Status & Feedback, so the
             account-status confirmation is seen immediately regardless of which tab a guest

@@ -114,6 +114,7 @@ function MagicRfpContent() {
 
   // Step 1: Require term disclosures with bids (wizard-level, applies to every recipient)
   const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
+  const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
 
   const updateRequiredDesignation = (key: DesignationKey, required: boolean) => {
     setBusinessCriteriaRequired((prev) => {
@@ -525,6 +526,12 @@ function MagicRfpContent() {
 
   const sendLightningRfps = async () => {
     setSending(true)
+    // Same conversion app/agency/page.tsx's standard wizard already applies - end of the
+    // chosen day, local time, serialized to an ISO instant.
+    const responseDeadline =
+      responseDeadlineDate.trim().length > 0
+        ? new Date(`${responseDeadlineDate.trim()}T23:59:59`).toISOString()
+        : null
     const results: SendResult[] = []
     for (let i = 0; i < recipients.length; i++) {
       const r = recipients[i]
@@ -542,6 +549,7 @@ function MagicRfpContent() {
             reference_materials: referenceMaterials,
             business_criteria_required: businessCriteriaRequired,
             require_terms_disclosure: requireTermsDisclosure,
+            response_deadline: responseDeadline,
             output_template_config: {
               mode: templateMode,
               templateStyle,
@@ -907,6 +915,21 @@ function MagicRfpContent() {
                   </label>
                   <p className="font-mono text-2xs text-foreground-muted">
                     Vendors state payment, cancellation, IP, and rate-validity terms up front.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-lg border border-border bg-white/5 space-y-2">
+                  <label className="font-mono text-2xs text-foreground-muted uppercase block">
+                    Response Deadline
+                  </label>
+                  <Input
+                    type="date"
+                    value={responseDeadlineDate}
+                    onChange={(e) => setResponseDeadlineDate(e.target.value)}
+                    className="bg-white/5 border-border text-foreground"
+                  />
+                  <p className="font-mono text-2xs text-foreground-muted">
+                    Optional. If set, vendors will see &quot;Respond by&quot; on this RFP.
                   </p>
                 </div>
 

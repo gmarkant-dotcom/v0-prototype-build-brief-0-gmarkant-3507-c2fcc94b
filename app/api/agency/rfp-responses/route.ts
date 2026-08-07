@@ -117,13 +117,43 @@ export async function GET(request: Request) {
         project_id: string | null
         business_criteria_required: unknown
         created_at: string | null
+        response_deadline?: string | null
       }
     > = {}
     if (guestResponseIds.length > 0) {
-      const { data: magicRows, error: magicRowsErr } = await supabase
+      type MagicRow = {
+        response_id: string
+        vendor_email: string
+        vendor_name: string | null
+        scope_item_name: string | null
+        project_id: string | null
+        business_criteria_required: unknown
+        created_at: string | null
+        response_deadline?: string | null
+      }
+      let magicRows: MagicRow[] | null = null
+      let magicRowsErr: { message: string; code?: string } | null = null
+      const first = await supabase
         .from("rfp_magic_tokens")
-        .select("response_id, vendor_email, vendor_name, scope_item_name, project_id, business_criteria_required, created_at")
+        .select(
+          "response_id, vendor_email, vendor_name, scope_item_name, project_id, business_criteria_required, created_at, response_deadline"
+        )
         .in("response_id", guestResponseIds)
+      magicRows = first.data as MagicRow[] | null
+      magicRowsErr = first.error
+      // F2 pre-migration safety: migration 074 (rfp_magic_tokens.response_deadline) may not be
+      // applied yet - retry once without the column on Postgres undefined_column (42703).
+      if (magicRowsErr?.code === "42703") {
+        console.warn(
+          "[agency/rfp-responses] rfp_magic_tokens.response_deadline missing (migration 074 not yet applied) - retrying without it"
+        )
+        const retry = await supabase
+          .from("rfp_magic_tokens")
+          .select("response_id, vendor_email, vendor_name, scope_item_name, project_id, business_criteria_required, created_at")
+          .in("response_id", guestResponseIds)
+        magicRows = retry.data as MagicRow[] | null
+        magicRowsErr = retry.error
+      }
       if (magicRowsErr) {
         console.error("[agency/rfp-responses] rfp_magic_tokens enrichment select error", {
           route,
@@ -233,7 +263,7 @@ export async function GET(request: Request) {
         project_name: inboxRow ? (inboxRow as Record<string,unknown>).project_name as string | null : (magicProjectMeta?.project_name ?? null),
         client_name: inboxRow ? (inboxRow as Record<string,unknown>).client_name as string | null : (magicProjectMeta?.client_name ?? null),
         inbox: inboxRow ?? (magicToken
-          ? { scope_item_name: magicToken.scope_item_name, response_deadline: null, project_id: magicToken.project_id }
+          ? { scope_item_name: magicToken.scope_item_name, response_deadline: magicToken.response_deadline ?? null, project_id: magicToken.project_id }
           : null),
         vendor_email: magicToken?.vendor_email ?? null,
         business_criteria_required: normalizeBusinessCriteriaRequired(businessCriteriaRequiredSource),

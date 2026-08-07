@@ -1093,6 +1093,9 @@ function AgencyRFPContent() {
                 scope_item_description: recipient.scopeItem.description,
                 reference_materials: referenceMaterials,
                 require_terms_disclosure: requireTermsDisclosure,
+                // F2: same responseDeadline computed above for the standard-broadcast body -
+                // was captured by the wizard but never sent on this path at all.
+                response_deadline: responseDeadline,
               }),
             })
           } catch (magicLinkErr) {

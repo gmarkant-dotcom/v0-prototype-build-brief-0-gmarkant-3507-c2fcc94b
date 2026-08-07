@@ -7,6 +7,7 @@ import { PartnerLayout } from "@/components/partner-layout"
 import { useFetch } from "@/hooks/useFetch"
 import { cn } from "@/lib/utils"
 import { formatBudgetForDisplay } from "@/lib/rfp-response-fields"
+import { getDeadlineUrgency } from "@/lib/deadline-urgency"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, FileText, AlertTriangle, Clock, Loader2,
@@ -106,12 +107,6 @@ function formatDate(raw?: string | null): string | null {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
-function isDeadlineSoon(raw?: string | null): boolean {
-  if (!raw) return false
-  const diff = new Date(raw).getTime() - Date.now()
-  return diff > 0 && diff <= 48 * 60 * 60 * 1000
-}
-
 function ndaBlocked(row: PartnerInboxRow): boolean {
   return row.nda_gate_enforced === true && !row.nda_confirmed_at
 }
@@ -122,7 +117,7 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
   const st = rowStatus(row)
   const b = badge(st)
   const deadline = formatDate(row.response_deadline)
-  const soon = isDeadlineSoon(row.response_deadline)
+  const urgency = getDeadlineUrgency(row.response_deadline)
   const blocked = ndaBlocked(row)
 
   return (
@@ -162,7 +157,13 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
           {deadline && (
             <>
               <span className="text-vendor-muted/50">·</span>
-              <span className={cn("flex items-center gap-1", soon && "text-red-600 font-medium")}>
+              <span
+                className={cn(
+                  "flex items-center gap-1",
+                  urgency === "amber" && "text-amber-700 font-medium",
+                  urgency === "red" && "text-red-600 font-medium"
+                )}
+              >
                 <Clock className="w-3 h-3" />
                 Due {deadline}
               </span>

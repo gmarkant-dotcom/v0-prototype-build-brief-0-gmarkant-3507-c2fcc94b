@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import { cn, normalizeMeetingUrlForHref, formatSubmittedAt, formatRelativeTime } from "@/lib/utils"
+import { getDeadlineUrgency } from "@/lib/deadline-urgency"
 import { buildBidTimeline } from "@/lib/bid-timeline"
 import { displayFilenameFromBlobUrl, isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
 import { isDemoMode } from "@/lib/demo-data"
@@ -333,14 +334,6 @@ function formatDeadlineDate(value?: string | null): string | null {
     day: "numeric",
     year: "numeric",
   })
-}
-
-function isDeadlineWithin48Hours(value?: string | null): boolean {
-  if (!value) return false
-  const ts = new Date(value).getTime()
-  if (Number.isNaN(ts)) return false
-  const diff = ts - Date.now()
-  return diff > 0 && diff <= 48 * 60 * 60 * 1000
 }
 
 function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
@@ -1260,7 +1253,7 @@ export default function PartnerRfpDetailPage() {
     awardedAt: inbox.awarded_at ?? null,
   })
   const responseDeadlineLabel = formatDeadlineDate(inbox.response_deadline)
-  const responseDeadlineSoon = isDeadlineWithin48Hours(inbox.response_deadline)
+  const responseDeadlineUrgency = getDeadlineUrgency(inbox.response_deadline)
 
   const requiredCriteria = normalizeBusinessCriteriaRequired(
     (inbox.master_rfp_json as Record<string, unknown> | null)?.business_criteria_required
@@ -1416,12 +1409,13 @@ export default function PartnerRfpDetailPage() {
             <div
               className={cn(
                 "mb-4 rounded-lg border px-3 py-2 text-sm font-mono inline-flex items-center gap-2",
-                responseDeadlineSoon
-                  ? "border-amber-300 bg-amber-50 text-amber-900"
-                  : "border-vendor-border bg-vendor-background text-vendor-foreground"
+                responseDeadlineUrgency === "amber" && "border-amber-300 bg-amber-50 text-amber-900",
+                responseDeadlineUrgency === "red" && "border-red-300 bg-red-50 text-red-800",
+                responseDeadlineUrgency === "none" && "border-vendor-border bg-vendor-background text-vendor-foreground"
               )}
             >
               Respond by {responseDeadlineLabel}
+              {responseDeadlineUrgency === "red" && " (past due)"}
             </div>
           )}
           {inbox.scope_item_description && (

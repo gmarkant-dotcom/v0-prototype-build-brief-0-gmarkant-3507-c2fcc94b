@@ -16,6 +16,7 @@ import {
   demoPartnerActivity,
 } from "@/lib/demo-data"
 import { summarizePartnerMilestones, isMilestonePaid, isMilestoneOverdue } from "@/lib/partner-payments"
+import { getDeadlineUrgency } from "@/lib/deadline-urgency"
 import { useLeadAgencyFilter } from "@/contexts/lead-agency-filter-context"
 import { createClient } from "@/lib/supabase/client"
 import { useSectionCollapse, useCappedList } from "@/lib/dashboard-section-state"
@@ -98,8 +99,6 @@ type DashboardData = {
     hasCompletedReviews: boolean
     avgCompositeScore: number | null
     reviewCount: number
-    reliabilitySummary: string | null
-    reliabilitySummaryAgencyName: string | null
   }
   activity: ActivityItem[]
 }
@@ -554,7 +553,7 @@ export default function PartnerDashboardPage() {
                 }
 
                 const item = row.item
-                const soon = item.daysLeft != null && item.daysLeft <= 7
+                const urgency = getDeadlineUrgency(item.deadline)
                 return (
                   <Link
                     key={row.key}
@@ -589,7 +588,9 @@ export default function PartnerDashboardPage() {
                         <span
                           className={cn(
                             "flex items-center gap-1 font-mono text-xs",
-                            soon ? "text-red-600 font-bold" : "text-vendor-muted"
+                            urgency === "amber" && "text-amber-700 font-bold",
+                            urgency === "red" && "text-red-600 font-bold",
+                            urgency === "none" && "text-vendor-muted"
                           )}
                         >
                           <Clock className="w-3 h-3" />
@@ -750,14 +751,6 @@ export default function PartnerDashboardPage() {
                 <div className="text-sm text-vendor-muted-strong">
                   Average score across {reliability.reviewCount} completed review{reliability.reviewCount === 1 ? "" : "s"}
                 </div>
-                {reliability.reliabilitySummary && (
-                  <p className="text-sm text-vendor-foreground mt-2 italic">
-                    &quot;{reliability.reliabilitySummary}&quot;
-                    {reliability.reliabilitySummaryAgencyName && (
-                      <span className="not-italic text-vendor-muted/70"> - {reliability.reliabilitySummaryAgencyName}</span>
-                    )}
-                  </p>
-                )}
               </div>
             </div>
           )}
