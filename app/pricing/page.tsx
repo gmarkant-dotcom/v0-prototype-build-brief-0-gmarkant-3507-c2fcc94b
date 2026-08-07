@@ -133,7 +133,7 @@ const pricingFaqs: FAQ[] = [
   },
   {
     q: "Is there really no cost for vendors?",
-    a: "Correct. Vendors access the platform for free, permanently. They can receive RFPs, submit bids, manage onboarding, and track project delivery at no cost.",
+    a: "Correct. Vendors access Ligament to collaborate with Lead Agency users for free. They can receive RFPs, submit bids, manage onboarding, and track project delivery at no cost. Lead Agency users pay for full platform functionality.",
   },
   {
     q: "What happens if I hit my project or analysis limit?",

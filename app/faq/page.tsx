@@ -21,7 +21,7 @@ const generalFAQs: FAQ[] = [
   },
   {
     q: "Is Ligament free for vendors?",
-    a: "Yes, completely free. Ligament charges lead agencies for platform access. Vendors, the ones receiving RFPs and submitting bids, always use Ligament at no cost.",
+    a: "Yes. Vendors access Ligament to collaborate with Lead Agency users for free, receiving RFP invitations and submitting bids at no cost. Lead Agency users pay for full platform functionality.",
   },
   {
     q: "How much does Ligament cost for lead agencies?",
