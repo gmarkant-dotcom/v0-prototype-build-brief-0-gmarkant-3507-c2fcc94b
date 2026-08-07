@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import { Checkbox } from "@/components/ui/checkbox"
+import { CurrencyInput } from "@/components/ui/currency-input"
 import { HelpTerm } from "@/components/help-term"
 import {
   type TermsDisclosure,
@@ -384,11 +385,11 @@ export function TermsDisclosureSection({
               </button>
             ))}
           </div>
-          {value.kill_fee.fee_type && value.kill_fee.fee_type !== "none" && (
+          {value.kill_fee.fee_type === "percent" && (
             <input
               type="number"
               min={0}
-              max={value.kill_fee.fee_type === "percent" ? 100 : undefined}
+              max={100}
               step="any"
               value={value.kill_fee.amount ?? ""}
               onChange={(e) =>
@@ -398,7 +399,21 @@ export function TermsDisclosureSection({
                 })
               }
               disabled={disabled}
-              placeholder={value.kill_fee.fee_type === "percent" ? "0-100" : "Amount"}
+              placeholder="0-100"
+              className={cn(inputClass(theme, killFeeErrors.length > 0 && value.kill_fee.amount == null), "w-32")}
+            />
+          )}
+          {value.kill_fee.fee_type === "flat" && (
+            <CurrencyInput
+              value={value.kill_fee.amount != null ? String(value.kill_fee.amount) : ""}
+              onChange={(raw) =>
+                onChange({
+                  ...value,
+                  kill_fee: { ...value.kill_fee, amount: raw === "" ? null : Number(raw) },
+                })
+              }
+              disabled={disabled}
+              placeholder="$0"
               className={cn(inputClass(theme, killFeeErrors.length > 0 && value.kill_fee.amount == null), "w-32")}
             />
           )}

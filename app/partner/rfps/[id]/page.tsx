@@ -47,6 +47,7 @@ import {
 import {
   BUDGET_CURRENCY_OPTIONS,
   TIMELINE_UNIT_OPTIONS,
+  currencySymbolFor,
   parseBudgetProposal,
   parseTimelineProposal,
   buildBudgetProposalForSave,
@@ -1768,7 +1769,8 @@ export default function PartnerRfpDetailPage() {
                       setBudgetAmount(raw)
                       if (budgetLegacyHint) setBudgetLegacyHint(null)
                     }}
-                    placeholder="$0"
+                    currencySymbol={currencySymbolFor(budgetCurrency)}
+                    placeholder={`${currencySymbolFor(budgetCurrency)}0`}
                     className={cn(inputClass, "min-w-[120px] flex-1 sm:max-w-[200px]")}
                     disabled={!canEdit}
                   />

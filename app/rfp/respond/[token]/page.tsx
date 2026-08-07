@@ -17,7 +17,8 @@ import { formatSubmittedAt, cn } from "@/lib/utils"
 import { buildBidTimeline } from "@/lib/bid-timeline"
 import { getDeadlineUrgency } from "@/lib/deadline-urgency"
 import { isVercelBlobStorageUrl, parseGuestUploadBlobPathFromUrl } from "@/lib/vercel-blob-url"
-import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal } from "@/lib/rfp-response-fields"
+import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal, currencySymbolFor } from "@/lib/rfp-response-fields"
+import { CurrencyInput } from "@/components/ui/currency-input"
 import type { ReferenceMaterial } from "@/components/reference-materials-input"
 import {
   Paperclip, X, ChevronDown, ChevronUp, ExternalLink, Pencil, Download, FileText,
@@ -992,13 +993,12 @@ export default function GuestRfpRespondPage() {
                     <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                       Budget Amount
                     </label>
-                    <Input
-                      type="number"
-                      min="0"
+                    <CurrencyInput
                       required
                       value={budgetAmount}
-                      onChange={(e) => setBudgetAmount(e.target.value)}
-                      placeholder="50000"
+                      onChange={setBudgetAmount}
+                      currencySymbol={currencySymbolFor(budgetCurrency)}
+                      placeholder={`${currencySymbolFor(budgetCurrency)}50,000`}
                       className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                     />
                   </div>

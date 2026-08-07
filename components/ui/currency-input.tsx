@@ -4,15 +4,16 @@ import { forwardRef, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
-/** Strip non-numeric chars (except one decimal point), format with commas, prepend $. */
-function formatUSD(raw: string): string {
+/** Strip non-numeric chars (except one decimal point), format with commas (en-US grouping),
+ *  prepend the given symbol. */
+function formatWithSymbol(raw: string, symbol: string): string {
   const clean = raw.replace(/[^0-9.]/g, "")
   if (!clean) return ""
   const parts = clean.split(".")
   const integer = parts[0].replace(/^0+(?=\d)/, "") || "0"
   const intFormatted = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
   const result = parts.length > 1 ? `${intFormatted}.${parts[1].slice(0, 2)}` : intFormatted
-  return `$${result}`
+  return `${symbol}${result}`
 }
 
 export interface CurrencyInputProps
@@ -21,6 +22,11 @@ export interface CurrencyInputProps
   value: string
   /** Always called with the raw numeric string (digits only, no $ or commas). */
   onChange: (raw: string) => void
+  /** Symbol shown before the formatted amount - pass the symbol matching an adjacent
+   *  currency-code dropdown's current selection (see lib/rfp-response-fields.ts's
+   *  CURRENCY_SYMBOLS) so the two never disagree. Defaults to "$" for the common USD-only
+   *  call sites that have no dropdown at all. */
+  currencySymbol?: string
   className?: string
 }
 
@@ -30,8 +36,8 @@ export interface CurrencyInputProps
  * Existing parsers (strip [$,\s] then parseFloat) continue to work unchanged.
  */
 export const CurrencyInput = forwardRef<HTMLInputElement, CurrencyInputProps>(
-  ({ value, onChange, className, ...props }, ref) => {
-    const display = formatUSD(value)
+  ({ value, onChange, currencySymbol = "$", className, ...props }, ref) => {
+    const display = formatWithSymbol(value, currencySymbol)
 
     const handleChange = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => {

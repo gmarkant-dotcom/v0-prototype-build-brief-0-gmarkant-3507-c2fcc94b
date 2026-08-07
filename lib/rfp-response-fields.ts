@@ -294,4 +294,25 @@ export const BUDGET_CURRENCY_OPTIONS = [
   "Other",
 ] as const
 
+/** G2: one shared currency-code -> symbol map so every CurrencyInput next to a currency
+ *  dropdown shows the symbol matching the actual selection, never a hardcoded "$" regardless
+ *  of currency. "Other" and any unrecognized code intentionally have no symbol - there's
+ *  nothing honest to prefix until the vendor types their own currency in the follow-up field. */
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  CAD: "$",
+  AUD: "$",
+  SGD: "$",
+  EUR: "€",
+  GBP: "£",
+  JPY: "¥",
+  MXN: "$",
+  BRL: "R$",
+  AED: "AED ",
+}
+
+export function currencySymbolFor(code: string): string {
+  return CURRENCY_SYMBOLS[code.toUpperCase()] ?? ""
+}
+
 export const TIMELINE_UNIT_OPTIONS = ["Days", "Weeks", "Months"] as const
