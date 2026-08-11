@@ -48,6 +48,12 @@ import {
 import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria-requirement-block"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { BidBudgetCategories } from "@/components/bid-budget-categories"
+import { BidProposalSectionsEditor } from "@/components/bid-proposal-sections"
+import {
+  buildProposalSectionsForSave,
+  normalizeProposalSections,
+  type ProposalSections,
+} from "@/lib/proposal-sections"
 import {
   buildBudgetLinesForSave,
   categoriesSummaryLabel,
@@ -126,6 +132,8 @@ type SubmittedResponse = {
   business_criteria_acknowledgments?: unknown
   /** P2-1. Absent before migration 072 and on every bid to an RFP without categories. */
   budget_lines?: unknown
+  /** P2-2. Absent before migration 076 and on every prose-only bid. */
+  proposal_sections?: unknown
   status: string
   agency_feedback?: string | null
   feedback_updated_at?: string | null
@@ -262,6 +270,7 @@ export default function GuestRfpRespondPage() {
   const [proposalText, setProposalText] = useState("")
   const [budgetAmount, setBudgetAmount] = useState("")
   const [budgetDraft, setBudgetDraft] = useState<BudgetDraft>({})
+  const [proposalSections, setProposalSections] = useState<ProposalSections>({})
   const [budgetCurrency, setBudgetCurrency] = useState("USD")
   const [timelineText, setTimelineText] = useState("")
   const [termsDisclosure, setTermsDisclosure] = useState<TermsDisclosure>(emptyTermsDisclosure())
@@ -451,6 +460,7 @@ export default function GuestRfpRespondPage() {
       }))
     )
     setBusinessCriteriaResponses(withBusinessCriteriaDefaults(response.business_criteria_responses))
+    setProposalSections(normalizeProposalSections(response.proposal_sections))
     setBudgetDraft(
       seedBudgetDraft(
         normalizeBudgetCategories((payload.token as TokenRow | undefined)?.budget_categories),
@@ -531,6 +541,7 @@ export default function GuestRfpRespondPage() {
       return { ...prev, designations, insurance }
     })
     setBusinessCriteriaAcknowledgments(emptyAcknowledgments())
+    setProposalSections({})
     setBudgetDraft(emptyBudgetDraft(normalizeBudgetCategories(payload?.token?.budget_categories)))
   }
 
@@ -609,6 +620,11 @@ export default function GuestRfpRespondPage() {
           ...(() => {
             const lines = buildBudgetLinesForSave(submitCategories, budgetDraft, budgetCurrency)
             return lines ? { budget_lines: lines } : {}
+          })(),
+          // Write guard (P2-2): only sent when the vendor actually wrote a guided section.
+          ...(() => {
+            const sections = buildProposalSectionsForSave(proposalSections)
+            return sections ? { proposal_sections: sections } : {}
           })(),
           // Write guard (S4-1): only sent when the vendor actually recorded a cannot-meet
           // reason, so requests shaped like today's never carry this key.
@@ -1057,6 +1073,8 @@ export default function GuestRfpRespondPage() {
                     className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                   />
                 </div>
+                {/* P2-2. Optional and skippable - deliberately absent from the readiness count. */}
+                <BidProposalSectionsEditor value={proposalSections} onChange={setProposalSections} theme="dark" />
 
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>

@@ -5,6 +5,7 @@ import { isBudgetValidForSubmit, isTimelineValidForSubmit, formatBudgetForDispla
 import { buildAgencyBidNotificationEmail, sendTransactionalEmail } from "@/lib/email"
 import { withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { normalizeBudgetLines } from "@/lib/budget-categories"
+import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureDefaults } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
@@ -21,8 +22,9 @@ type Body = {
   /** Cannot-meet acknowledgments (S4-1). Column added by migration 071 - see the write
    *  guard around `saveResponseRow` below for pre-migration safety. */
   business_criteria_acknowledgments?: unknown
-  /** P2-1. Absent on every request shaped like today's. */
+  /** P2-1/P2-2. Absent on every request shaped like today's. */
   budget_lines?: unknown
+  proposal_sections?: unknown
   status?: "draft" | "submitted"
   change_notes?: string
 }
@@ -32,10 +34,11 @@ type Body = {
  * first. saveResponseRow drops them one at a time on Postgres undefined_column (42703), so a
  * partially-migrated database still persists everything it can actually hold rather than
  * failing the whole save or discarding every optional field at once.
+ *   proposal_sections                  - migration 076 (P2-2)
  *   budget_lines                       - migration 072 (P2-1)
  *   business_criteria_acknowledgments  - migration 071 (S4-1), applied
  */
-const OPTIONAL_RESPONSE_COLUMNS = ["budget_lines", "business_criteria_acknowledgments"] as const
+const OPTIONAL_RESPONSE_COLUMNS = ["proposal_sections", "budget_lines", "business_criteria_acknowledgments"] as const
 
 async function saveResponseRow<T>(
   attempt: (row: Record<string, unknown>) => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
@@ -171,6 +174,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // P2-1: never trust the client payload. normalizeBudgetLines returns null for anything
     // malformed, which is the same state as "this RFP has no categories".
     const budget_lines = normalizeBudgetLines(body.budget_lines)
+    const proposal_sections = buildProposalSectionsForSave(normalizeProposalSections(body.proposal_sections))
     const hasAcknowledgments = body.business_criteria_acknowledgments != null
     const business_criteria_acknowledgments = hasAcknowledgments
       ? normalizeAcknowledgments(body.business_criteria_acknowledgments)
@@ -239,6 +243,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       updated_at: new Date().toISOString(),
       ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
       ...(budget_lines ? { budget_lines } : {}),
+      ...(proposal_sections ? { proposal_sections } : {}),
     }
 
     const insertRow = {

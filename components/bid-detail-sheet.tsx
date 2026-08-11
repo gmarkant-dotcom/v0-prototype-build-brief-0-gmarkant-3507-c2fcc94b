@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { BidBudgetBreakdown } from "@/components/bid-budget-comparison"
+import { ProposalSectionsDisplay } from "@/components/bid-proposal-sections"
 import Link from "next/link"
 import { mutate } from "swr"
 import {
@@ -508,6 +509,9 @@ function BidDetailSheetInner({
                     </p>
                   </div>
                 )}
+                {/* P2-2. Renders nothing for a prose-only bid, and an unanswered section never
+                    renders its heading. */}
+                <ProposalSectionsDisplay sections={row.proposal_sections} theme="dark" />
                 {(budget || timeline) && (
                   <div className="grid sm:grid-cols-2 gap-4">
                     {budget && (

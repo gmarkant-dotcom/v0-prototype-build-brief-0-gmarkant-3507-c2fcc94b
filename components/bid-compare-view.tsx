@@ -34,6 +34,11 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { BidBudgetComparison } from "@/components/bid-budget-comparison"
 import { normalizeBudgetLines } from "@/lib/budget-categories"
 import {
+  PROPOSAL_SECTION_KEYS,
+  PROPOSAL_SECTION_LABELS,
+  normalizeProposalSections,
+} from "@/lib/proposal-sections"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -495,6 +500,33 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
                   )
                 })}
               </TableRow>
+              {/* P2-2. One row per guided section, rendered only when at least one bid answered
+                  it - a section nobody answered never appears, and a bid that skipped a section
+                  another answered shows a dash rather than a fabricated summary. Absent entirely
+                  when no bid in this comparison has structured sections. */}
+              {PROPOSAL_SECTION_KEYS.filter((key) =>
+                rows.some((row) => normalizeProposalSections(row.proposal_sections)[key])
+              ).map((key) => (
+                <TableRow key={`proposal-${key}`} className="border-border/30">
+                  <TableCell className="text-foreground-muted font-mono text-2xs uppercase">
+                    {PROPOSAL_SECTION_LABELS[key]}
+                  </TableCell>
+                  {rows.map((row) => {
+                    const text = normalizeProposalSections(row.proposal_sections)[key]
+                    return (
+                      <TableCell key={row.id} className="text-xs whitespace-normal">
+                        {text ? (
+                          <span className="text-foreground line-clamp-4" title={text}>
+                            {text}
+                          </span>
+                        ) : (
+                          <span className="text-foreground-muted">-</span>
+                        )}
+                      </TableCell>
+                    )
+                  })}
+                </TableRow>
+              ))}
               <TableRow className="border-border/30">
                 <TableCell className="text-foreground-muted font-mono text-2xs uppercase">Timeline</TableCell>
                 {rows.map((row) => (

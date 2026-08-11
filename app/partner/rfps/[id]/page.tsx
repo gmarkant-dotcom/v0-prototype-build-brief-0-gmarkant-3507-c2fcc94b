@@ -39,6 +39,12 @@ import {
 import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria-requirement-block"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { BidBudgetCategories } from "@/components/bid-budget-categories"
+import { BidProposalSectionsEditor } from "@/components/bid-proposal-sections"
+import {
+  buildProposalSectionsForSave,
+  normalizeProposalSections,
+  type ProposalSections,
+} from "@/lib/proposal-sections"
 import {
   buildBudgetLinesForSave,
   categoriesSummaryLabel,
@@ -247,6 +253,8 @@ type ResponseRow = {
   /** P2-1. Optional: absent before migration 072, and absent on every bid to an RFP that
    *  defines no categories. Read through normalizeBudgetLines, never directly. */
   budget_lines?: unknown
+  /** P2-2. Absent before migration 076 and on every prose-only bid. */
+  proposal_sections?: unknown
   /** Absent on rows written before migration 071 - always read through normalizeAcknowledgments. */
   business_criteria_acknowledgments?: unknown
   status: string
@@ -514,6 +522,7 @@ export default function PartnerRfpDetailPage() {
   const [proposalText, setProposalText] = useState("")
   const [budgetAmount, setBudgetAmount] = useState("")
   const [budgetDraft, setBudgetDraft] = useState<BudgetDraft>({})
+  const [proposalSections, setProposalSections] = useState<ProposalSections>({})
   const [budgetCurrency, setBudgetCurrency] = useState<string>("USD")
   const [budgetCurrencyOther, setBudgetCurrencyOther] = useState("")
   const [budgetLegacyHint, setBudgetLegacyHint] = useState<string | null>(null)
@@ -724,6 +733,7 @@ export default function PartnerRfpDetailPage() {
             setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
             setBusinessCriteriaResponses(withBusinessCriteriaDefaults(r.business_criteria_responses))
             setBusinessCriteriaAcknowledgments(normalizeAcknowledgments(r.business_criteria_acknowledgments))
+            setProposalSections(normalizeProposalSections(r.proposal_sections))
             setBudgetDraft(
               seedBudgetDraft(
                 readCategoriesFromMasterRfpJson((data.inbox as InboxRow)?.master_rfp_json),
@@ -741,6 +751,7 @@ export default function PartnerRfpDetailPage() {
             setTimelineUnit("Weeks")
             setTimelineLegacyHint(null)
             setDraftAttachments([])
+            setProposalSections({})
             setBudgetDraft(emptyBudgetDraft(readCategoriesFromMasterRfpJson((data.inbox as InboxRow)?.master_rfp_json)))
             setBusinessCriteriaAcknowledgments(emptyAcknowledgments())
             setVersions([])
@@ -1029,6 +1040,11 @@ export default function PartnerRfpDetailPage() {
         // answered at least one, so requests shaped like today's never carry this key and the
         // API never has to touch a column migration 072 may not have created yet.
         ...(budget_lines ? { budget_lines } : {}),
+        // Write guard (P2-2): only sent when the vendor actually wrote a guided section.
+        ...(() => {
+          const sections = buildProposalSectionsForSave(proposalSections)
+          return sections ? { proposal_sections: sections } : {}
+        })(),
         // Write guard (S4-1): only sent when the vendor actually recorded a cannot-meet
         // reason, so requests shaped like today's never carry this key.
         ...(hasAcknowledgments ? { business_criteria_acknowledgments: businessCriteriaAcknowledgments } : {}),
@@ -1829,6 +1845,16 @@ export default function PartnerRfpDetailPage() {
                 disabled={!canEdit}
               />
             </div>
+            {/* P2-2. Optional and skippable - deliberately absent from the readiness count. */}
+            <BidProposalSectionsEditor
+              value={proposalSections}
+              onChange={(next) => {
+                formTouchedRef.current = true
+                setProposalSections(next)
+              }}
+              theme="light"
+              disabled={!canEdit}
+            />
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Budget proposal *</label>

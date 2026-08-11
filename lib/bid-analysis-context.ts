@@ -1,6 +1,8 @@
 import { createHash } from "crypto"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
+import { formatProposalSectionsForPrompt } from "@/lib/proposal-sections"
+import { normalizeBudgetLines, categorySubtotal } from "@/lib/budget-categories"
 
 // Accepts either the cookie-scoped server client (@/lib/supabase/server) or a
 // service-role client (@supabase/supabase-js) - both are SupabaseClient instances,
@@ -17,6 +19,10 @@ export type BidAnalysisContext = {
   partnerDisplayName: string
   scopeItemName: string | null
   scopeItemDescription: string | null
+  /** P2-2/P2-1. Both fetched through a guarded query below, so both are simply absent before
+   *  migrations 076/072 and on every bid that carries no structured data. */
+  proposalSections: unknown
+  budgetLines: unknown
 }
 
 /**
@@ -38,6 +44,25 @@ export async function loadBidAnalysisContext(
     .eq("agency_id", agencyId)
     .maybeSingle()
   if (!response) return null
+
+  // P2-1/P2-2 pre-migration safety: proposal_sections (076) and budget_lines (072) are kept out
+  // of the explicit select above, because selecting a column that does not exist yet errors the
+  // whole query. Fetched separately, and any failure simply means the AI prompt gains nothing.
+  let structured: { proposal_sections?: unknown; budget_lines?: unknown } = {}
+  const { data: structuredRow, error: structuredErr } = await supabase
+    .from("partner_rfp_responses")
+    .select("proposal_sections, budget_lines")
+    .eq("id", responseId)
+    .eq("agency_id", agencyId)
+    .maybeSingle()
+  if (structuredErr) {
+    console.warn("[bid-analysis-context] structured bid columns unavailable, prompting without them", {
+      code: structuredErr.code,
+      message: structuredErr.message,
+    })
+  } else if (structuredRow) {
+    structured = structuredRow as { proposal_sections?: unknown; budget_lines?: unknown }
+  }
 
   let scopeItemName: string | null = null
   let scopeItemDescription: string | null = null
@@ -72,6 +97,8 @@ export async function loadBidAnalysisContext(
     partnerDisplayName: (response.partner_display_name as string) || "Vendor",
     scopeItemName,
     scopeItemDescription,
+    proposalSections: structured.proposal_sections,
+    budgetLines: structured.budget_lines,
   }
 }
 
@@ -86,9 +113,28 @@ export function formatBidContextForPrompt(ctx: BidAnalysisContext): string {
   if (ctx.paymentTerms && typeof ctx.paymentTerms === "object") {
     lines.push(`Payment terms: ${JSON.stringify(ctx.paymentTerms)}`)
   }
+  // P2-1: the vendor's own category breakdown, as submitted. Never converted across
+  // currencies and never inferred - absent when the bid has none.
+  const budgetLines = normalizeBudgetLines(ctx.budgetLines)
+  if (budgetLines) {
+    lines.push("")
+    lines.push(`Budget by category (as submitted, ${budgetLines.currency}):`)
+    for (const entry of budgetLines.categories) {
+      lines.push(`- ${entry.name_snapshot}: ${categorySubtotal(entry)}`)
+      for (const item of entry.items) lines.push(`    - ${item.description}: ${item.amount}`)
+    }
+  }
   lines.push("")
   lines.push("Proposal text:")
   lines.push(ctx.proposalText || "(no proposal text provided)")
+  // P2-2: labelled structured sections when the vendor filled any in. Returns "" otherwise, so
+  // a prose-only bid's prompt is byte-for-byte what it was before this feature existed.
+  const structuredProposal = formatProposalSectionsForPrompt(ctx.proposalSections)
+  if (structuredProposal) {
+    lines.push("")
+    lines.push("Structured proposal sections (the vendor answered these guided prompts):")
+    lines.push(structuredProposal)
+  }
   return lines.join("\n")
 }
 

@@ -9,6 +9,7 @@ import {
 } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { normalizeBudgetLines } from "@/lib/budget-categories"
+import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure } from "@/lib/terms-disclosure"
@@ -340,8 +341,9 @@ type PostBody = {
   /** Cannot-meet acknowledgments (S4-1). Column added by migration 071 - see the write
    *  guard around `saveGuestResponseRow` below for pre-migration safety. */
   business_criteria_acknowledgments?: unknown
-  /** P2-1. Absent on every request shaped like today's. */
+  /** P2-1/P2-2. Absent on every request shaped like today's. */
   budget_lines?: unknown
+  proposal_sections?: unknown
   is_edit?: boolean
 }
 
@@ -350,10 +352,11 @@ type PostBody = {
  * first. Dropped one at a time on Postgres undefined_column (42703) so a partially-migrated
  * database still persists everything it can hold. Mirrors the identical guard in the portal
  * response route - the two bid paths write the same table and must degrade the same way.
+ *   proposal_sections                  - migration 076 (P2-2)
  *   budget_lines                       - migration 072 (P2-1)
  *   business_criteria_acknowledgments  - migration 071 (S4-1), applied
  */
-const OPTIONAL_RESPONSE_COLUMNS = ["budget_lines", "business_criteria_acknowledgments"] as const
+const OPTIONAL_RESPONSE_COLUMNS = ["proposal_sections", "budget_lines", "business_criteria_acknowledgments"] as const
 
 async function saveGuestResponseRow<T>(
   attempt: (row: Record<string, unknown>) => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
@@ -454,6 +457,7 @@ export async function POST(req: Request) {
     // P2-1: never trust the client payload. Malformed input normalizes to null, which is the
     // same state as "this RFP has no budget categories".
     const budget_lines = normalizeBudgetLines(body.budget_lines)
+    const proposal_sections = buildProposalSectionsForSave(normalizeProposalSections(body.proposal_sections))
     const hasAcknowledgments = body.business_criteria_acknowledgments != null
     const business_criteria_acknowledgments = hasAcknowledgments
       ? normalizeAcknowledgments(body.business_criteria_acknowledgments)
@@ -481,6 +485,8 @@ export async function POST(req: Request) {
         updated_at: submittedAt,
         ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
         ...(budget_lines ? { budget_lines } : {}),
+      ...(proposal_sections ? { proposal_sections } : {}),
+        ...(proposal_sections ? { proposal_sections } : {}),
       }
       const { error: updateErr } = await saveGuestResponseRow(
         (attemptRow) => supabase.from("partner_rfp_responses").update(attemptRow).eq("id", tokenRow.response_id),
