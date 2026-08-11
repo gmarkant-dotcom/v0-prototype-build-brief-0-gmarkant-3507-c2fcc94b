@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { notifyProjectAwarded } from "@/lib/notifications"
 import { resolvePartnershipForAward } from "@/lib/award-partnership-resolution"
+import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
 
 export const dynamic = "force-dynamic"
 
@@ -13,14 +14,6 @@ type PatchBody = {
 }
 
 const ALLOWED_STATUS = new Set(["submitted", "under_review", "shortlisted", "meeting_requested", "awarded", "declined"])
-
-function mapResponseStatusToInboxStatus(status: string): string {
-  if (status === "shortlisted") return "shortlisted"
-  if (status === "meeting_requested") return "meeting_requested"
-  if (status === "awarded") return "awarded"
-  if (status === "declined") return "declined"
-  return "bid_submitted"
-}
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const route = "/api/agency/rfp-responses/[id]"

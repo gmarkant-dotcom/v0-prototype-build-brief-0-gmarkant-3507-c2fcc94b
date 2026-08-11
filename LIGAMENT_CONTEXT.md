@@ -56,7 +56,7 @@ bid management, onboarding, active engagements, and cash flow.
 | 058 | Added submitted_at timestamptz to partner_rfp_responses (backfilled from updated_at); required for the guest "Edit Bid" flow to re-stamp submission time |
 | 059 | Added reference_materials jsonb (default '[]') to rfp_magic_tokens; Lightning RFP files/links shown on the guest response page |
 | 060 | Business Criteria / Procurement Requirements: added business_criteria jsonb (default '{}') to profiles, business_criteria_required jsonb (default '{}') to rfp_magic_tokens, business_criteria_responses jsonb (default '{}') to partner_rfp_responses. Shape shared via lib/business-criteria.ts. Applied and verified - all three columns confirmed jsonb. |
-| 061 | Magic link auto-add to partner pool: added profile_status text (default 'active') to partnerships (partner_email already existed pre-migration-log, not re-added); added pool_status text and domain_match_profile_id uuid (references profiles) to rfp_magic_tokens. WRITTEN, NOT YET APPLIED - run in Supabase SQL Editor before deploying app/api/rfp/guest/[token]/route.ts's classification logic. |
+| 061 | Magic link auto-add to partner pool: added profile_status text (default 'active') to partnerships (partner_email already existed pre-migration-log, not re-added); added pool_status text and domain_match_profile_id uuid (references profiles) to rfp_magic_tokens. APPLIED (confirmed against live data Aug 11, 2026 - live token rows hold real pool_status values, and partnerships.profile_status is populated; this row previously read "WRITTEN, NOT YET APPLIED"). |
 | 062 | Email import (partner pool seeding), Phase 1 Google/Gmail: created email_connections table (user_id references auth.users, provider check 'google'/'microsoft', encrypted token columns, scan_status/scan_results/status enums, scan_run_token uuid for guarding against overlapping scan runs), RLS policy user_id = auth.uid(). WRITTEN, NOT YET APPLIED. |
 | 063 | Partner pool state redesign: added invitation_sent_at timestamptz to partnerships (distinguishes Invited from Discovered on /agency/pool); conditionally widens partnerships.status check constraint to include 'removed' if one already exists (a no-op guard - status appears to be unconstrained text pre-migration-log). WRITTEN, NOT YET APPLIED - run in Supabase SQL Editor before deploying app/agency/pool/page.tsx's three-section redesign and the invitation_sent_at wiring in app/api/partnerships, app/api/agency/rfp/magic-link, app/api/agency/pool/resend-invitation, and app/api/rfp/guest/[token]. |
 | 064 | Bid Management rebuild Phase 1: added ai_summary_short, ai_summary_detailed, ai_summary_generated_at to partner_rfp_responses; created bid_decompositions (per-bid AI cost breakdown, unique on response_id) and bid_comparisons (cached multi-bid comparison narrative, unique on agency_id + response_ids_hash). RLS on both new tables matches client_cash_flow's pattern - single FOR ALL policy, agency_id = auth.uid(). APPLIED. |
@@ -65,7 +65,7 @@ bid management, onboarding, active engagements, and cash flow.
 | 068 | Partner import (spreadsheet + manual Add Partner fix): added contact_name text, company_name text, phone text, website text to partnerships - ghost/unclaimed (Discovered) rows have no profiles row to join, so these four columns are the only place to persist that data pre-claim. Discipline/type and any unmapped import fields deliberately have no dedicated column; they're namespaced into the existing partnership_notes jsonb instead, alongside the {blacklisted} flag already stored there. No RLS changes - existing partnerships policies are row-level. APPLIED. |
 | 069 | Bid action timestamps (P14): added shortlisted_at, declined_at, meeting_requested_at (all timestamptz, nullable) to partner_rfp_responses. Set going forward in app/api/agency/rfp-responses/[id]/route.ts's PATCH handler, the only write site for these status transitions, on the transition into each status only. No backfill - historical transitions have no known time. APPLIED. |
 | 070 | Terms Alignment Phase 1: added require_terms_disclosure boolean NOT NULL DEFAULT true to partner_rfp_inbox and rfp_magic_tokens (the two RFP creation flows have no shared config record, so each gets its own column; default is intentionally retroactive - every already-broadcast RFP starts requiring disclosure from the next bid/edit onward). Added terms_disclosure jsonb NULL to partner_rfp_responses (structured four-term disclosure: payment, kill_fee, ip_rights, rate_validity - shape in lib/terms-disclosure.ts) and default_terms jsonb NULL to profiles (partner's saved defaults, prefilled on future bids). Supersedes the ad-hoc partner_rfp_responses.payment_terms block in both bid forms going forward; that column and its legacy display are left untouched for old bids. No RLS changes - existing policies on all four tables are row-level. APPLIED. |
-| 074 | Response deadline for the magic-link / Lightning RFP flow (F2): added response_deadline timestamptz to rfp_magic_tokens, mirroring migration 041's identical column on partner_rfp_inbox for the standard broadcast flow - rfp_magic_tokens never had an equivalent, which is why every magic-link/Lightning RFP vendor row always rendered "No deadline set" regardless of what the wizard's deadline field held. WRITTEN, NOT YET APPLIED - run in Supabase SQL Editor before this becomes load-bearing; all reading/writing code (app/agency/page.tsx's magic-link queue body, app/agency/magic-rfp/page.tsx's new deadline input, app/api/agency/rfp/magic-link/route.ts, app/rfp/respond/[token]/page.tsx, app/api/agency/rfp-responses/route.ts) is coded null-safe against the column's absence in the meantime, retrying the write without response_deadline on a 42703 error same as the business_criteria_acknowledgments pre-071 guard. |
+| 074 | Response deadline for the magic-link / Lightning RFP flow (F2): added response_deadline timestamptz to rfp_magic_tokens, mirroring migration 041's identical column on partner_rfp_inbox for the standard broadcast flow - rfp_magic_tokens never had an equivalent, which is why every magic-link/Lightning RFP vendor row always rendered "No deadline set" regardless of what the wizard's deadline field held. APPLIED (confirmed against live data Aug 11, 2026 - live token rows hold real response_deadline values; this row previously read "WRITTEN, NOT YET APPLIED"). The 42703 retry guards in the reading/writing code are kept as-is, harmless now that the column exists. |
 
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
@@ -127,7 +127,29 @@ model: anthropic("claude-sonnet-4-20250514")
 
 **Anthropic API key:** `ANTHROPIC_API_KEY` is set in Vercel env vars (Production + Preview). The Anthropic account must have credits - Claude.ai subscription does NOT cover API usage.
 
-### 4. Cursor/Claude.ai markdown link corruption
+### 4. partner_rfp_inbox.scope_item_id is text NOT NULL, rfp_magic_tokens.scope_item_id is a nullable uuid
+
+The two RFP flows disagree about what a scope item id is, and the column types encode that
+disagreement:
+
+- `partner_rfp_inbox.scope_item_id` is **text, NOT NULL**. It holds an opaque client-side id
+  minted by the agency UI (`Date.now().toString()`, or a hand-authored `"SI-03"` / `"04"`).
+  `app/api/agency/broadcast-rfp/route.ts` rejects a broadcast item that has no id.
+- `rfp_magic_tokens.scope_item_id` is **uuid, nullable**, and
+  `app/api/agency/rfp/magic-link/route.ts` deliberately writes null whenever the incoming id is
+  not a valid uuid, which is always, because the agency UI does not mint uuids.
+
+Anything copying a magic token into an inbox row must therefore synthesize a non-null text id
+rather than pass the token's null through. `lib/magic-token-attach.ts` uses `magic:<token>`,
+which is stable per invitation and cannot collide with a broadcast-flow id. Getting this wrong
+fails as Postgres 23502 `not_null_violation` at insert time, and every caller of that helper
+only logs a failed attach, so the symptom is a silently empty vendor portal rather than an
+error anywhere a user or an agency can see it.
+
+There is **no** unique constraint on `partner_rfp_inbox (agency_id, project_id,
+recipient_email)`. Many rows per project per recipient is the normal shape, one per scope item.
+
+### 5. Cursor/Claude.ai markdown link corruption
 Claude.ai renders property access as markdown links in code blocks. When pasted into Cursor, these sometimes get written to files literally.
 
 **Detection - run after every Cursor file write (Mac Terminal):**

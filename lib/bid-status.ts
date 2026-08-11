@@ -12,6 +12,21 @@ export type BidStatus =
   | "feedback_received"
   | "revision_submitted"
 
+/**
+ * partner_rfp_responses.status -> partner_rfp_inbox.status. The two tables use different
+ * vocabularies for the same lifecycle (a response is "submitted", the inbox row it belongs to
+ * is "bid_submitted"), and every write site that keeps them in sync must agree on the mapping.
+ * Shared by the agency award/decision PATCH and by the magic-link portal attach, which seeds a
+ * synthesized inbox row from an already-decided response.
+ */
+export function mapResponseStatusToInboxStatus(status: string): string {
+  if (status === "shortlisted") return "shortlisted"
+  if (status === "meeting_requested") return "meeting_requested"
+  if (status === "awarded") return "awarded"
+  if (status === "declined") return "declined"
+  return "bid_submitted"
+}
+
 export function getBidStatusLabel(status: string, userType: "agency" | "partner"): string {
   const normalized = (status || "").toLowerCase() as BidStatus
 

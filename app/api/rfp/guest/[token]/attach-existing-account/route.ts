@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { createClient as createAnonClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
+import {
+  attachMagicTokenToPartnerInbox,
+  MAGIC_TOKEN_ATTACH_COLUMNS,
+  type MagicTokenForAttach,
+} from "@/lib/magic-token-attach"
 
 function getServiceSupabase() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -42,9 +46,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
 
     const { data: tokenRow, error: tokenErr } = await service
       .from("rfp_magic_tokens")
-      .select(
-        "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, response_id"
-      )
+      .select(MAGIC_TOKEN_ATTACH_COLUMNS)
       .eq("token", token)
       .maybeSingle()
     if (tokenErr) {

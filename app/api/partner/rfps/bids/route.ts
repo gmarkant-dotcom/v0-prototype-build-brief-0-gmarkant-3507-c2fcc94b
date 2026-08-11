@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
+import {
+  attachMagicTokenToPartnerInbox,
+  MAGIC_TOKEN_ATTACH_COLUMNS,
+  MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE,
+  type MagicTokenForAttach,
+} from "@/lib/magic-token-attach"
 import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
 
 function getServiceSupabase() {
@@ -20,18 +25,32 @@ async function backfillGuestResponseLinkage(vendorEmail: string, partnerId: stri
   const service = getServiceSupabase()
   if (!service || !vendorEmail) return
   try {
-    const { data: tokens, error: tokensErr } = await service
+    // H4: was selecting a hand-copied column list without response_deadline, so whether a
+    // synthesized inbox row carried a deadline depended on which of the two routes won the
+    // race to create it (both are fetched in parallel from app/partner/rfps/page.tsx, and the
+    // row is only created once). Shared constants + the same 42703 fallback as the sweep.
+    let tokens: MagicTokenForAttach[] | null = null
+    const first = await service
       .from("rfp_magic_tokens")
-      .select(
-        "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, response_id"
-      )
+      .select(MAGIC_TOKEN_ATTACH_COLUMNS)
       .ilike("vendor_email", vendorEmail)
       .not("response_id", "is", null)
+    tokens = first.data as unknown as MagicTokenForAttach[] | null
+    let tokensErr: { message: string; code?: string } | null = first.error
+    if (tokensErr?.code === "42703") {
+      const retry = await service
+        .from("rfp_magic_tokens")
+        .select(MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE)
+        .ilike("vendor_email", vendorEmail)
+        .not("response_id", "is", null)
+      tokens = retry.data as unknown as MagicTokenForAttach[] | null
+      tokensErr = retry.error
+    }
     if (tokensErr) {
       console.error("[partner/rfps/bids] linkage backfill: token lookup failed", { partnerId, message: tokensErr.message })
       return
     }
-    for (const tokenRow of (tokens || []) as unknown as MagicTokenForAttach[]) {
+    for (const tokenRow of tokens || []) {
       const result = await attachMagicTokenToPartnerInbox(service, { tokenRow, partnerId })
       if (!result.attached) {
         console.error("[partner/rfps/bids] linkage backfill: attach failed", {

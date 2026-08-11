@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createNotification } from "@/lib/notifications"
+import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
 
 /** Fields this module actually reads off a rfp_magic_tokens row - callers pass whatever
  *  shape they already have (select("*") or a narrower select), this just documents the
@@ -24,9 +25,40 @@ export type MagicTokenForAttach = {
   response_id?: string | null
 }
 
+/** Every column attachMagicTokenToPartnerInbox reads. Shared by all four callers so a row
+ *  synthesized by one of them is never poorer than one synthesized by another - which one wins
+ *  is a race (the RFP list and the bids list are fetched in parallel), and the row is only
+ *  created once. The _NO_DEADLINE variant is the pre-migration-074 fallback (42703). */
+export const MAGIC_TOKEN_ATTACH_COLUMNS =
+  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, response_id"
+export const MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE =
+  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, response_id"
+
 export type AttachResult =
   | { attached: true; inboxId: string; created: boolean }
   | { attached: false; reason: string }
+
+/**
+ * H4 - the actual reason no magic-link RFP has ever reached a vendor's portal inbox.
+ *
+ * `partner_rfp_inbox.scope_item_id` is `text NOT NULL`: an opaque id minted by the agency UI
+ * (`Date.now().toString()` - see app/api/agency/broadcast-rfp/route.ts, which rejects a
+ * broadcast item without one). `rfp_magic_tokens.scope_item_id` is a `uuid` column, and
+ * app/api/agency/rfp/magic-link/route.ts deliberately stores null there for exactly those
+ * non-uuid ids. Passing that null straight through to the insert below made every attach fail
+ * with 23502 not_null_violation - silently, since both the sweep and the send-time attach only
+ * log a failed result. Live data confirms it: all 15 rfp_magic_tokens rows have a null
+ * scope_item_id, and none of the 61 partner_rfp_inbox rows carries a _magic_token marker.
+ *
+ * Derived from the token instead: non-null, stable across every call for the same invitation
+ * (so repeat sweeps keep hitting the same row rather than minting new ones), and unique per
+ * invitation, so it never collides with a real scope item id from the broadcast flow.
+ */
+function inboxScopeItemId(tokenRow: MagicTokenForAttach): string {
+  return (tokenRow.scope_item_id || "").trim() || `magic:${tokenRow.token}`
+}
+
+type ExistingResponse = { id: string; partner_id: string | null; inbox_item_id: string | null; status: string | null }
 
 /**
  * Attaches a magic-link RFP invitation into the matching vendor's portal inbox
@@ -38,8 +70,13 @@ export type AttachResult =
  * flagged, not fixed here since no migrations are permitted this pass). Instead the
  * originating token is stashed at master_rfp_json._magic_token on the synthesized row, and
  * that's the dedupe key this function checks before inserting - safe to call repeatedly
- * from send-time, the on-login sweep, and a logged-in vendor opening the link directly,
- * with no risk of a duplicate inbox row from any combination of the three.
+ * from send-time, the on-login sweep, the bids-list backfill, and a logged-in vendor opening
+ * the link directly, with no risk of a duplicate inbox row from any combination of the four.
+ * H4 adds a second, independent key on the same row: scope_item_id is now derived from the
+ * token (see inboxScopeItemId), so a row whose master_rfp_json is later replaced wholesale by
+ * some other write is still recognised rather than duplicated. Both lookups take limit(1) -
+ * if a duplicate ever does exist, this must still resolve to one of them rather than error
+ * out on every call from then on and leave the vendor's portal permanently empty.
  *
  * Callers are responsible for having already verified vendorEmail matches the target
  * profile's email (this function trusts partnerId, it does not re-derive it) - the one
@@ -60,33 +97,45 @@ export async function attachMagicTokenToPartnerInbox(
     return { attached: false, reason: "expired" }
   }
 
-  const backfillResponseLinkage = async (inboxId: string) => {
-    if (!tokenRow.response_id) return
-    const { data: responseRow, error: responseErr } = await supabase
+  // Read once, used twice: to seed the synthesized row's own status below (a bid that was
+  // already decided must not land in the vendor's portal reading "New"), and to backfill the
+  // response's linkage afterwards.
+  let existingResponse: ExistingResponse | null = null
+  if (tokenRow.response_id) {
+    const { data: responseRow } = await supabase
       .from("partner_rfp_responses")
-      .select("id, partner_id, inbox_item_id")
+      .select("id, partner_id, inbox_item_id, status")
       .eq("id", tokenRow.response_id)
       .maybeSingle()
-    if (responseErr || !responseRow) return
+    existingResponse = (responseRow as ExistingResponse | null) ?? null
+  }
+
+  const backfillResponseLinkage = async (inboxId: string) => {
+    if (!existingResponse) return
     const patch: Record<string, unknown> = {}
-    if (!responseRow.partner_id) patch.partner_id = partnerId
-    if (!responseRow.inbox_item_id) patch.inbox_item_id = inboxId
+    if (!existingResponse.partner_id) patch.partner_id = partnerId
+    if (!existingResponse.inbox_item_id) patch.inbox_item_id = inboxId
     if (Object.keys(patch).length === 0) return
-    const { error: patchErr } = await supabase.from("partner_rfp_responses").update(patch).eq("id", responseRow.id)
+    const { error: patchErr } = await supabase
+      .from("partner_rfp_responses")
+      .update(patch)
+      .eq("id", existingResponse.id)
     if (patchErr) {
       console.error("[magic-token-attach] response linkage backfill failed (non-fatal)", {
-        responseId: responseRow.id,
+        responseId: existingResponse.id,
         inboxId,
         message: patchErr.message,
       })
     }
   }
 
+  const scopeItemId = inboxScopeItemId(tokenRow)
   const { data: existing, error: existingErr } = await supabase
     .from("partner_rfp_inbox")
     .select("id")
     .eq("agency_id", tokenRow.agency_id)
     .contains("master_rfp_json", { _magic_token: tokenRow.token })
+    .limit(1)
     .maybeSingle()
   if (existingErr) {
     console.error("[magic-token-attach] idempotency check failed", {
@@ -95,9 +144,30 @@ export async function attachMagicTokenToPartnerInbox(
     })
     return { attached: false, reason: existingErr.message }
   }
-  if (existing) {
-    await backfillResponseLinkage(existing.id as string)
-    return { attached: true, inboxId: existing.id as string, created: false }
+  let existingId = (existing?.id as string | undefined) ?? null
+  // Only the synthetic `magic:<token>` form is safe to match on. A token carrying a real uuid
+  // scope_item_id shares that id with the broadcast flow's own rows for the same scope item,
+  // and matching there would attach this invitation onto someone else's inbox row.
+  if (!existingId && scopeItemId.startsWith("magic:")) {
+    const { data: byScope, error: byScopeErr } = await supabase
+      .from("partner_rfp_inbox")
+      .select("id")
+      .eq("agency_id", tokenRow.agency_id)
+      .eq("scope_item_id", scopeItemId)
+      .limit(1)
+      .maybeSingle()
+    if (byScopeErr) {
+      console.error("[magic-token-attach] secondary idempotency check failed", {
+        token: tokenRow.token,
+        message: byScopeErr.message,
+      })
+      return { attached: false, reason: byScopeErr.message }
+    }
+    existingId = (byScope?.id as string | undefined) ?? null
+  }
+  if (existingId) {
+    await backfillResponseLinkage(existingId)
+    return { attached: true, inboxId: existingId, created: false }
   }
 
   const [{ data: agencyProfile }, { data: project }] = await Promise.all([
@@ -132,12 +202,18 @@ export async function attachMagicTokenToPartnerInbox(
     partner_id: partnerId,
     recipient_email: tokenRow.vendor_email,
     project_id: tokenRow.project_id,
-    scope_item_id: tokenRow.scope_item_id,
-    scope_item_name: tokenRow.scope_item_name,
+    // Both NOT NULL on partner_rfp_inbox - see inboxScopeItemId above for scope_item_id, and
+    // note the magic-link wizard does not require a scope item name at all, unlike the
+    // broadcast flow, so the project name is the honest fallback rather than a fabricated one.
+    scope_item_id: scopeItemId,
+    scope_item_name: (tokenRow.scope_item_name || "").trim() || project?.name?.trim() || "Scope item",
     scope_item_description: tokenRow.scope_item_description,
     master_rfp_json: masterRfpJson,
     agency_company_name: agencyCompanyName,
-    status: "new",
+    // A retroactively attached invitation whose bid was already submitted (and possibly already
+    // awarded or declined) must carry that outcome, not "new" - the award PATCH's own inbox
+    // status sync could not have run for it, since no inbox row existed at award time.
+    status: existingResponse?.status ? mapResponseStatusToInboxStatus(existingResponse.status) : "new",
     nda_gate_enforced: false,
   }
   if (typeof tokenRow.require_terms_disclosure === "boolean") {
@@ -162,21 +238,26 @@ export async function attachMagicTokenToPartnerInbox(
 
   const inboxId = inserted.id as string
   await backfillResponseLinkage(inboxId)
-  try {
-    await createNotification({
-      supabase,
-      userId: partnerId,
-      type: "project_assignment",
-      title: "New RFP in your inbox",
-      message: `${agencyCompanyName} sent you an RFP${tokenRow.scope_item_name ? ` for ${tokenRow.scope_item_name}` : ""}.`,
-      link: `/partner/rfps/${inboxId}`,
-      data: { inboxId, magicToken: tokenRow.token },
-    })
-  } catch (notifyErr) {
-    console.error("[magic-token-attach] in-app notification failed", {
-      inboxId,
-      message: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
-    })
+  // Only a genuinely new invitation is announced. A retroactive attach is backfilling history
+  // the vendor already lived through - they answered this RFP, so "New RFP in your inbox"
+  // would be false, and for an awarded bid it would arrive after the award notification.
+  if (!existingResponse) {
+    try {
+      await createNotification({
+        supabase,
+        userId: partnerId,
+        type: "project_assignment",
+        title: "New RFP in your inbox",
+        message: `${agencyCompanyName} sent you an RFP${tokenRow.scope_item_name ? ` for ${tokenRow.scope_item_name}` : ""}.`,
+        link: `/partner/rfps/${inboxId}`,
+        data: { inboxId, magicToken: tokenRow.token },
+      })
+    } catch (notifyErr) {
+      console.error("[magic-token-attach] in-app notification failed", {
+        inboxId,
+        message: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+      })
+    }
   }
 
   return { attached: true, inboxId, created: true }

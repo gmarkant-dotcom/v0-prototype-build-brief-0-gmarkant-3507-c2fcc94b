@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
+import {
+  attachMagicTokenToPartnerInbox,
+  MAGIC_TOKEN_ATTACH_COLUMNS,
+  MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE,
+  type MagicTokenForAttach,
+} from "@/lib/magic-token-attach"
 import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
 
 function getServiceSupabase() {
@@ -14,15 +19,13 @@ function getServiceSupabase() {
   return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
-const MAGIC_TOKEN_SWEEP_COLUMNS =
-  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, response_id"
-const MAGIC_TOKEN_SWEEP_COLUMNS_NO_DEADLINE =
-  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, response_id"
 // H3: an invite you already answered still belongs in your portal - the 72-hour expiry only
 // bounds how long a NEW invitation stays open to a response, it's irrelevant once a response
 // exists (and by award time, an invite is essentially always past that window anyway, which
 // was silently excluding every submitted/awarded guest bid from ever being swept).
-const UNEXPIRED_OR_RESPONDED_FILTER = `expires_at.gt.${new Date().toISOString()},response_id.not.is.null`
+// H4: evaluated per request, not once at module load - a warm serverless instance would
+// otherwise keep comparing against the timestamp of its own cold start indefinitely.
+const unexpiredOrRespondedFilter = () => `expires_at.gt.${new Date().toISOString()},response_id.not.is.null`
 
 /**
  * G1/H3 on-login sweep: attach any outstanding magic-link invitations sent to this vendor's
@@ -36,22 +39,23 @@ async function sweepOutstandingMagicTokens(vendorEmail: string, partnerId: strin
   const service = getServiceSupabase()
   if (!service || !vendorEmail) return
   try {
+    const tokenFilter = unexpiredOrRespondedFilter()
     let outstandingTokens: MagicTokenForAttach[] | null = null
     let tokensErr: { message: string; code?: string } | null = null
     const first = await service
       .from("rfp_magic_tokens")
-      .select(MAGIC_TOKEN_SWEEP_COLUMNS)
+      .select(MAGIC_TOKEN_ATTACH_COLUMNS)
       .ilike("vendor_email", vendorEmail)
-      .or(UNEXPIRED_OR_RESPONDED_FILTER)
+      .or(tokenFilter)
     outstandingTokens = first.data as unknown as MagicTokenForAttach[] | null
     tokensErr = first.error
     // Pre-migration safety: migration 074 (response_deadline) may not be applied yet.
     if (tokensErr?.code === "42703") {
       const retry = await service
         .from("rfp_magic_tokens")
-        .select(MAGIC_TOKEN_SWEEP_COLUMNS_NO_DEADLINE)
+        .select(MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE)
         .ilike("vendor_email", vendorEmail)
-        .or(UNEXPIRED_OR_RESPONDED_FILTER)
+        .or(tokenFilter)
       outstandingTokens = retry.data as unknown as MagicTokenForAttach[] | null
       tokensErr = retry.error
     }
