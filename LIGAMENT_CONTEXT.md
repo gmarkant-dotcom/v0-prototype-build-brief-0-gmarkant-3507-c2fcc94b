@@ -149,7 +149,40 @@ error anywhere a user or an agency can see it.
 There is **no** unique constraint on `partner_rfp_inbox (agency_id, project_id,
 recipient_email)`. Many rows per project per recipient is the normal shape, one per scope item.
 
-### 5. Cursor/Claude.ai markdown link corruption
+### 5. One magic-link invitation means one partner_rfp_inbox row, enforced by convergence
+
+Nothing in the schema stops two rows being created for the same magic token, and
+`/api/partner/rfps` and `/api/partner/rfps/bids` are fetched **in parallel** by
+`app/partner/rfps/page.tsx`, both running the same attach. A check-then-insert therefore
+duplicates under a race: partner71's awarded bid was listed twice, from two rows created 11ms
+apart carrying identical dedupe keys.
+
+`lib/magic-token-attach.ts` holds the invariant instead of the database:
+
+- The invitation is identified by two keys, `master_rfp_json._magic_token` and the derived
+  `scope_item_id` (`magic:<token>`). A row may carry either.
+- Every call re-scans and collapses whatever it finds, **including immediately after its own
+  insert**, so the loser of a race is cleaned up by the winner of it.
+- The surviving row is the first in `(created_at, id)` order, not the richest row. That order
+  is computed from immutable columns, so two concurrent callers always agree; picking "the
+  richest" instead lets them disagree and delete each other's pick. Richness is preserved by
+  merging linkage onto the survivor and repointing `partner_rfp_responses.inbox_item_id`, the
+  only foreign key into this table, before anything is deleted.
+
+Recommended hardening, not applied (no migration this pass): a partial unique index,
+`CREATE UNIQUE INDEX ON partner_rfp_inbox (agency_id, scope_item_id) WHERE scope_item_id LIKE
+'magic:%'`, would let Postgres enforce this outright. The attach already treats a 23505 as
+"someone else created it" rather than as a failure, so adding it needs no code change.
+
+### 6. Received date on an attached invitation comes from the token, not the attach
+
+`/partner/rfps` renders `partner_rfp_inbox.created_at` as "Received". A retroactive attach runs
+whenever the vendor next loads their portal, which may be days after the agency sent the
+invitation, so the row's `created_at` is written from `rfp_magic_tokens.created_at` rather than
+left to `now()`. That value survives a resend: the magic-link route upserts on
+`(agency_id, project_id, vendor_email)` and never touches `created_at`.
+
+### 7. Cursor/Claude.ai markdown link corruption
 Claude.ai renders property access as markdown links in code blocks. When pasted into Cursor, these sometimes get written to files literally.
 
 **Detection - run after every Cursor file write (Mac Terminal):**
