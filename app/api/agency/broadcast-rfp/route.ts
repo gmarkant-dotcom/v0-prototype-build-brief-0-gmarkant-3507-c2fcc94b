@@ -88,6 +88,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const projectId =
       typeof body.projectId === "string" && body.projectId.length > 0 ? body.projectId : null
+    // P2-4. Never trust the client payload: an explicit true is the only thing that closes an
+    // RFP; anything else, including a missing key, leaves it open.
+    const closeBiddingAtDeadline = body.close_bidding_at_deadline === true
     const masterRfp = body.masterRfp
     const ndaRequired = body.ndaRequired === true
     const requireTermsDisclosure = body.requireTermsDisclosure !== false
@@ -210,6 +213,7 @@ export async function POST(request: NextRequest) {
           estimated_budget: estimatedBudget || null,
           timeline: timeline || null,
           response_deadline: responseDeadline,
+          close_bidding_at_deadline: closeBiddingAtDeadline,
           master_rfp_json: { ...(masterRfp as Record<string, unknown>), nda_link: ndaLink || null },
           agency_company_name: agencyDisplay,
           nda_gate_enforced: false,
@@ -325,6 +329,7 @@ export async function POST(request: NextRequest) {
           estimated_budget: estimatedBudget || null,
           timeline: timeline || null,
           response_deadline: responseDeadline,
+          close_bidding_at_deadline: closeBiddingAtDeadline,
           master_rfp_json: { ...(masterRfp as Record<string, unknown>), nda_link: ndaLink || null },
           agency_company_name: agencyDisplay,
           invite_token: inviteToken,
@@ -408,7 +413,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No recipients to broadcast to" }, { status: 400 })
     }
 
-    const { error: insertError } = await supabase.from("partner_rfp_inbox").insert(rows)
+    // P2-4 pre-migration safety: close_bidding_at_deadline does not exist until 076. Retry once
+    // without it on Postgres undefined_column (42703) so a broadcast never fails for a column
+    // the schema has not gained yet - the RFP simply behaves as it does today, staying open.
+    let { error: insertError } = await supabase.from("partner_rfp_inbox").insert(rows)
+    if (insertError?.code === "42703") {
+      console.warn("[api] broadcast-rfp: close_bidding_at_deadline column missing, retrying without it")
+      const rowsWithoutClose = rows.map((row) => {
+        const { close_bidding_at_deadline: _omitted, ...rest } = row as Record<string, unknown>
+        return rest
+      })
+      ;({ error: insertError } = await supabase.from("partner_rfp_inbox").insert(rowsWithoutClose))
+    }
 
     if (insertError) {
       console.error("partner_rfp_inbox insert:", insertError)

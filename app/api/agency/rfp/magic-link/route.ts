@@ -107,6 +107,8 @@ export async function POST(request: NextRequest) {
     // P2-1. Never trust the client payload, same posture as business criteria above.
     const budgetCategories = normalizeBudgetCategories(body.budget_categories)
     const evaluationCriteria = normalizeRfpEvaluationCriteria(body.evaluation_criteria)
+    // P2-4. Explicit true only - anything else leaves the RFP open, per the standing ruling.
+    const closeBiddingAtDeadline = body.close_bidding_at_deadline === true
     // Only set on an explicit value (initial send). Resends omit this field so the upsert's
     // ON CONFLICT DO UPDATE leaves the originally-set requirement untouched.
     const hasRequireTermsDisclosure = typeof body.require_terms_disclosure === "boolean"
@@ -203,6 +205,7 @@ export async function POST(request: NextRequest) {
       response_deadline: responseDeadline,
       budget_categories: budgetCategories,
       evaluation_criteria: evaluationCriteria,
+      close_bidding_at_deadline: closeBiddingAtDeadline,
     }
 
     // Pre-migration safety, progressive. Each retry drops one more optional column that a
@@ -210,7 +213,7 @@ export async function POST(request: NextRequest) {
     // partially-migrated database still persists everything it can actually hold. Same 42703
     // (undefined_column) guard already used for business_criteria_acknowledgments pre-071.
     // Extend OPTIONAL_TOKEN_COLUMNS when a later phase adds another optional token column.
-    const OPTIONAL_TOKEN_COLUMNS = ["evaluation_criteria", "budget_categories", "response_deadline"] as const
+    const OPTIONAL_TOKEN_COLUMNS = ["close_bidding_at_deadline", "evaluation_criteria", "budget_categories", "response_deadline"] as const
     let payloadAttempt: Record<string, unknown> = tokenUpsertPayload
     let { data: tokenRow, error: upsertErr } = await service
       .from("rfp_magic_tokens")

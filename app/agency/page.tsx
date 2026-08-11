@@ -504,6 +504,9 @@ function AgencyRFPContent() {
   const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
   const [defaultNdaUrl, setDefaultNdaUrl] = useState("")
   const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
+  // P2-4. Default OFF is the standing ruling: bidding stays open past the deadline unless the
+  // agency deliberately opts in.
+  const [closeBiddingAtDeadline, setCloseBiddingAtDeadline] = useState(false)
   const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
   const [agencyId, setAgencyId] = useState<string | null>(null)
   const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterial[]>([])
@@ -1090,6 +1093,7 @@ function AgencyRFPContent() {
             ndaLink: ndaSignatureRequired ? ndaSigningLink.trim() : "",
             requireTermsDisclosure,
             response_deadline: responseDeadline,
+            close_bidding_at_deadline: closeBiddingAtDeadline,
             newRecipientsByScope: normalizedNewRecipientsByScope,
             items,
           }),
@@ -2604,6 +2608,20 @@ function AgencyRFPContent() {
                 />
                 <p className="font-mono text-2xs text-foreground-muted">
                   Optional. If set, partners will see “Respond by” in their inbox and RFP detail view.
+                </p>
+                <label className="flex items-center gap-2 cursor-pointer pt-2">
+                  <Checkbox
+                    checked={closeBiddingAtDeadline}
+                    onCheckedChange={(v) => setCloseBiddingAtDeadline(v === true)}
+                    disabled={!responseDeadlineDate.trim()}
+                    className="border-border"
+                  />
+                  <span className="font-mono text-xs text-foreground">Close bidding at deadline</span>
+                </label>
+                <p className="font-mono text-2xs text-foreground-muted">
+                  {responseDeadlineDate.trim()
+                    ? "Off by default. Left off, vendors can still submit after the deadline and you decide what to accept. You can always see and award bids either way."
+                    : "Set a deadline above to use this."}
                 </p>
               </div>
 

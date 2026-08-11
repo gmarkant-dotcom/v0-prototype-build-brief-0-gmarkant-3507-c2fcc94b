@@ -119,6 +119,7 @@ function MagicRfpContent() {
   // not being applied yet. Empty means this RFP uses no budget categories.
   const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([])
   const [budgetCategoriesOpen, setBudgetCategoriesOpen] = useState(false)
+  const [closeBiddingAtDeadline, setCloseBiddingAtDeadline] = useState(false)
   const [evaluationCriteria, setEvaluationCriteria] = useState<RfpEvaluationCriterion[]>([])
   const [evaluationCriteriaOpen, setEvaluationCriteriaOpen] = useState(false)
   const [businessCriteriaRequired, setBusinessCriteriaRequired] = useState<BusinessCriteriaRequired>(
@@ -563,6 +564,7 @@ function MagicRfpContent() {
             business_criteria_required: businessCriteriaRequired,
             budget_categories: budgetCategories,
             evaluation_criteria: evaluationCriteria,
+            close_bidding_at_deadline: closeBiddingAtDeadline,
             require_terms_disclosure: requireTermsDisclosure,
             response_deadline: responseDeadline,
             output_template_config: {
@@ -1002,6 +1004,20 @@ function MagicRfpContent() {
                   />
                   <p className="font-mono text-2xs text-foreground-muted">
                     Optional. If set, vendors will see &quot;Respond by&quot; on this RFP.
+                  </p>
+                  <label className="flex items-center gap-2 cursor-pointer pt-2">
+                    <Checkbox
+                      checked={closeBiddingAtDeadline}
+                      onCheckedChange={(v) => setCloseBiddingAtDeadline(v === true)}
+                      disabled={!responseDeadlineDate.trim()}
+                      className="border-border"
+                    />
+                    <span className="font-mono text-xs text-foreground">Close bidding at deadline</span>
+                  </label>
+                  <p className="font-mono text-2xs text-foreground-muted">
+                    {responseDeadlineDate.trim()
+                      ? "Off by default. Left off, vendors can still submit after the deadline and you decide what to accept."
+                      : "Set a deadline above to use this."}
                   </p>
                 </div>
 

@@ -40,6 +40,7 @@ import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { BidBudgetCategories } from "@/components/bid-budget-categories"
 import { BidProposalSectionsEditor } from "@/components/bid-proposal-sections"
+import { isBiddingClosed, BIDDING_CLOSED_VENDOR_MESSAGE, BIDDING_CLOSED_BADGE } from "@/lib/bid-close"
 import {
   buildProposalSectionsForSave,
   normalizeProposalSections,
@@ -115,6 +116,8 @@ const btnPrimaryDark =
   "!bg-vendor-foreground !text-white hover:!bg-vendor-foreground/90 font-display font-bold border-transparent"
 
 type InboxRow = {
+  /** P2-4. Undefined before migration 076, which reads as false: bidding stays open. */
+  close_bidding_at_deadline?: boolean | null
   id: string
   agency_id: string
   scope_item_id: string
@@ -928,6 +931,12 @@ export default function PartnerRfpDetailPage() {
     [inbox]
   )
   const hasBudgetCategories = budgetCategories.length > 0
+  // P2-4. False for every RFP that did not opt in, every RFP with no deadline, and every RFP at
+  // all before migration 076 - which is today's behavior exactly.
+  const biddingClosed = isBiddingClosed({
+    close_bidding_at_deadline: inbox?.close_bidding_at_deadline,
+    response_deadline: inbox?.response_deadline,
+  })
   const budgetCategoryTotal = draftGrandTotal(budgetCategories, budgetDraft)
   const budgetCategoryCompleteness = countCategoryCompleteness(budgetCategories, draftEnteredKeys(budgetDraft))
 
@@ -947,6 +956,10 @@ export default function PartnerRfpDetailPage() {
         setSuccessMsg("Demo mode - draft not saved.")
       }
       return true
+    }
+    if (biddingClosed) {
+      if (!silent) setSubmitError(BIDDING_CLOSED_VENDOR_MESSAGE)
+      return false
     }
     const authOk = await ensurePartnerAuth()
     if (!authOk) return false
@@ -1153,7 +1166,7 @@ export default function PartnerRfpDetailPage() {
       ))
 
   useEffect(() => {
-    if (!canEditForAutosave || isDemoDetail) return
+    if (!canEditForAutosave || isDemoDetail || biddingClosed) return
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
     if (formTouchedRef.current) {
       setAutosaveStatus((prev) => (prev.state === "pending" ? prev : { state: "pending", savedAt: prev.savedAt }))
@@ -1328,6 +1341,7 @@ export default function PartnerRfpDetailPage() {
     awardedAt: inbox.awarded_at ?? null,
   })
   const responseDeadlineLabel = formatDeadlineDate(inbox.response_deadline)
+  const deadlineStateLabel = biddingClosed ? BIDDING_CLOSED_BADGE : null
   const responseDeadlineUrgency = getDeadlineUrgency(inbox.response_deadline)
 
   const requiredCriteria = normalizeBusinessCriteriaRequired(
@@ -1498,7 +1512,11 @@ export default function PartnerRfpDetailPage() {
               )}
             >
               Respond by {responseDeadlineLabel}
-              {responseDeadlineUrgency === "red" && " (past due)"}
+              {/* P2-4: one deadline chip, one state. A closed RFP says closed rather than
+                  "past due", which would imply a vendor could still act on it. */}
+              {deadlineStateLabel
+                ? ` (${deadlineStateLabel.toLowerCase()})`
+                : responseDeadlineUrgency === "red" && " (past due)"}
             </div>
           )}
           {inbox.scope_item_description && (
@@ -1801,7 +1819,13 @@ export default function PartnerRfpDetailPage() {
               )}
             </div>
           )}
-          <p className="text-xs text-vendor-muted-strong mb-4">{preflightLine}</p>
+          {biddingClosed ? (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 mb-4">
+              {BIDDING_CLOSED_VENDOR_MESSAGE}
+            </p>
+          ) : (
+            <p className="text-xs text-vendor-muted-strong mb-4">{preflightLine}</p>
+          )}
 
           {successMsg && (
             <div
@@ -2527,9 +2551,18 @@ export default function PartnerRfpDetailPage() {
         >
           <div className="max-w-4xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-mono text-xs text-vendor-foreground">{readiness.label}</p>
-              {autosaveStatusLine && (
-                <p className="font-mono text-2xs text-vendor-muted-strong mt-0.5">{autosaveStatusLine}</p>
+              {/* P2-4: a closed RFP is a gate, not an open item. The readiness count still
+                  renders, because a vendor looking at a closed form should still be able to
+                  see what their draft was missing. */}
+              <p className="font-mono text-xs text-vendor-foreground">
+                {biddingClosed ? "Bidding closed" : readiness.label}
+              </p>
+              {biddingClosed ? (
+                <p className="font-mono text-2xs text-vendor-muted-strong mt-0.5">{readiness.label}</p>
+              ) : (
+                autosaveStatusLine && (
+                  <p className="font-mono text-2xs text-vendor-muted-strong mt-0.5">{autosaveStatusLine}</p>
+                )
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -2538,7 +2571,7 @@ export default function PartnerRfpDetailPage() {
                 variant="outline"
                 size="sm"
                 className={btnOutlineLight}
-                disabled={savingKind !== null}
+                disabled={savingKind !== null || biddingClosed}
                 onClick={() => {
                   void save("draft")
                 }}
@@ -2550,7 +2583,7 @@ export default function PartnerRfpDetailPage() {
                 variant="default"
                 size="sm"
                 className={btnPrimaryDark}
-                disabled={savingKind !== null}
+                disabled={savingKind !== null || biddingClosed}
                 onClick={() => {
                   void save("submitted")
                 }}

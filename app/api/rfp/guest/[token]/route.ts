@@ -9,6 +9,7 @@ import {
 } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { normalizeBudgetLines } from "@/lib/budget-categories"
+import { isBiddingClosed, BIDDING_CLOSED_API_MESSAGE } from "@/lib/bid-close"
 import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
@@ -403,6 +404,15 @@ export async function POST(req: Request) {
     }
     if (new Date(tokenRow.expires_at as string).getTime() <= Date.now()) {
       return NextResponse.json({ error: "expired" }, { status: 400 })
+    }
+    // P2-4 trust boundary: the form disables its own submit, so this is the check that actually
+    // enforces it. tokenRow comes from select("*"), so the flag is simply undefined before
+    // migration 076 and reads as "open", which is today's behavior.
+    if (isBiddingClosed({
+      close_bidding_at_deadline: tokenRow.close_bidding_at_deadline as boolean | null | undefined,
+      response_deadline: tokenRow.response_deadline as string | null | undefined,
+    })) {
+      return NextResponse.json({ error: BIDDING_CLOSED_API_MESSAGE }, { status: 403 })
     }
     const is_edit = body.is_edit === true
     if (tokenRow.status === "submitted" && !is_edit) {

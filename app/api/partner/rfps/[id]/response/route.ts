@@ -6,6 +6,7 @@ import { buildAgencyBidNotificationEmail, sendTransactionalEmail } from "@/lib/e
 import { withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { normalizeBudgetLines } from "@/lib/budget-categories"
 import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
+import { isBiddingClosed, BIDDING_CLOSED_API_MESSAGE } from "@/lib/bid-close"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureDefaults } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
@@ -173,6 +174,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // some - never invents an empty object on requests shaped like today's.
     // P2-1: never trust the client payload. normalizeBudgetLines returns null for anything
     // malformed, which is the same state as "this RFP has no categories".
+    // P2-4 trust boundary. close_bidding_at_deadline is kept out of the inbox select above,
+    // because selecting a column that does not exist yet errors the whole route - it is read
+    // separately here, and a failed read means "open", which is today's behavior.
+    const { data: closeConfig, error: closeErr } = await supabase
+      .from("partner_rfp_inbox")
+      .select("close_bidding_at_deadline, response_deadline")
+      .eq("id", inboxId)
+      .maybeSingle()
+    if (closeErr && closeErr.code !== "42703") {
+      console.warn("[partner/rfps/[id]/response] close-at-deadline config unavailable, treating RFP as open", {
+        code: closeErr.code,
+        message: closeErr.message,
+      })
+    }
+    if (isBiddingClosed(closeConfig)) {
+      return NextResponse.json({ error: BIDDING_CLOSED_API_MESSAGE }, { status: 403 })
+    }
+
     const budget_lines = normalizeBudgetLines(body.budget_lines)
     const proposal_sections = buildProposalSectionsForSave(normalizeProposalSections(body.proposal_sections))
     const hasAcknowledgments = body.business_criteria_acknowledgments != null

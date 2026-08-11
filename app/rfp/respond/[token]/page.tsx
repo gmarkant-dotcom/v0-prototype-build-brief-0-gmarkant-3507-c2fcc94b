@@ -49,6 +49,7 @@ import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { BidBudgetCategories } from "@/components/bid-budget-categories"
 import { BidProposalSectionsEditor } from "@/components/bid-proposal-sections"
+import { isBiddingClosed, BIDDING_CLOSED_VENDOR_MESSAGE, BIDDING_CLOSED_BADGE } from "@/lib/bid-close"
 import {
   buildProposalSectionsForSave,
   normalizeProposalSections,
@@ -88,9 +89,10 @@ const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "MXN", "BRL"
 
 type TokenRow = {
   token: string
-  /** P2-1. The guest GET selects * on rfp_magic_tokens, so this arrives automatically once
-   *  migration 072 is applied, and is simply undefined before it. */
+  /** P2-1/P2-4. The guest GET selects * on rfp_magic_tokens, so these arrive automatically
+   *  once migrations 072/076 are applied, and are simply undefined before them. */
   budget_categories?: unknown
+  close_bidding_at_deadline?: boolean | null
   vendor_email: string
   vendor_name: string | null
   status: string
@@ -560,6 +562,15 @@ export default function GuestRfpRespondPage() {
     // behavior something to hook into, matching the portal page's validation-driven approach.
     // P2-1: with categories defined, the single budget amount is derived from them, so
     // completeness is the real gate. An honest 0 in a category is a complete answer.
+    if (
+      isBiddingClosed({
+        close_bidding_at_deadline: payload?.token?.close_bidding_at_deadline,
+        response_deadline: payload?.token?.response_deadline,
+      })
+    ) {
+      setSubmitError(BIDDING_CLOSED_VENDOR_MESSAGE)
+      return
+    }
     const submitCategories = normalizeBudgetCategories(payload?.token?.budget_categories)
     const submitHasCategories = submitCategories.length > 0
     const submitCategoryTotal = draftGrandTotal(submitCategories, budgetDraft)
@@ -785,6 +796,12 @@ export default function GuestRfpRespondPage() {
   // P2-1. Empty for an RFP with no categories and for every RFP before migration 072, in which
   // case every budget surface below behaves exactly as it did before this feature existed.
   const budgetCategories = normalizeBudgetCategories(tokenRow.budget_categories)
+  // P2-4. False for every RFP that did not opt in, every RFP with no deadline, and every RFP at
+  // all before migration 076 - today's behavior exactly.
+  const biddingClosed = isBiddingClosed({
+    close_bidding_at_deadline: tokenRow.close_bidding_at_deadline,
+    response_deadline: tokenRow.response_deadline,
+  })
   const hasBudgetCategories = budgetCategories.length > 0
   const budgetCategoryTotal = draftGrandTotal(budgetCategories, budgetDraft)
   const budgetCategoryCompleteness = countCategoryCompleteness(budgetCategories, draftEnteredKeys(budgetDraft))
@@ -832,6 +849,8 @@ export default function GuestRfpRespondPage() {
             )}
           >
             Respond by {responseDeadlineLabel}
+            {/* P2-4: one deadline chip, one state. */}
+            {biddingClosed && ` (${BIDDING_CLOSED_BADGE.toLowerCase()})`}
             {responseDeadlineUrgency === "red" && " (past due)"}
           </div>
         )}
@@ -1030,7 +1049,13 @@ export default function GuestRfpRespondPage() {
           <TabsContent value="my-bid">
             {showForm ? (
               <>
-              <p className="text-xs text-foreground-muted mb-4">{preflightLine}</p>
+              {biddingClosed ? (
+                <p className="text-xs text-warning border border-warning/40 bg-warning/10 rounded-md px-3 py-2 mb-4">
+                  {BIDDING_CLOSED_VENDOR_MESSAGE}
+                </p>
+              ) : (
+                <p className="text-xs text-foreground-muted mb-4">{preflightLine}</p>
+              )}
               <form
                 id="guest-bid-form"
                 onSubmit={handleSubmit}
@@ -1258,7 +1283,7 @@ export default function GuestRfpRespondPage() {
                   required={termsRequired}
                   theme="dark"
                   errors={termsErrors}
-                  disabled={submitting}
+                  disabled={submitting || biddingClosed}
                   forceExpanded
                 />
                 </BidFormCollapsibleSection>
@@ -1436,7 +1461,7 @@ export default function GuestRfpRespondPage() {
 
                 <Button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || biddingClosed}
                   className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
                 >
                   {submitting ? (
@@ -1463,7 +1488,7 @@ export default function GuestRfpRespondPage() {
                   <Button
                     type="submit"
                     form="guest-bid-form"
-                    disabled={submitting}
+                    disabled={submitting || biddingClosed}
                     className="bg-accent text-accent-foreground hover:bg-accent/90 shrink-0"
                   >
                     {submitting ? (
