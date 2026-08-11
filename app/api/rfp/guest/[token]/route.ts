@@ -8,6 +8,7 @@ import {
   sendTransactionalEmail,
 } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
+import { normalizeBudgetLines } from "@/lib/budget-categories"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure } from "@/lib/terms-disclosure"
@@ -339,23 +340,36 @@ type PostBody = {
   /** Cannot-meet acknowledgments (S4-1). Column added by migration 071 - see the write
    *  guard around `saveGuestResponseRow` below for pre-migration safety. */
   business_criteria_acknowledgments?: unknown
+  /** P2-1. Absent on every request shaped like today's. */
+  budget_lines?: unknown
   is_edit?: boolean
 }
 
 /**
- * Writes/updates a partner_rfp_responses row, retrying once without
- * business_criteria_acknowledgments if the column doesn't exist yet (Postgres
- * undefined_column, 42703) - keeps guest bid submission working before migration 071 is
- * applied, mirroring the same guard in the portal response route.
+ * Optional columns a not-yet-applied migration may not have created yet, newest migration
+ * first. Dropped one at a time on Postgres undefined_column (42703) so a partially-migrated
+ * database still persists everything it can hold. Mirrors the identical guard in the portal
+ * response route - the two bid paths write the same table and must degrade the same way.
+ *   budget_lines                       - migration 072 (P2-1)
+ *   business_criteria_acknowledgments  - migration 071 (S4-1), applied
  */
+const OPTIONAL_RESPONSE_COLUMNS = ["budget_lines", "business_criteria_acknowledgments"] as const
+
 async function saveGuestResponseRow<T>(
-  attempt: () => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
-  retryWithoutAcknowledgments: () => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>
+  attempt: (row: Record<string, unknown>) => PromiseLike<{ data: T | null; error: { code?: string; message: string } | null }>,
+  row: Record<string, unknown>
 ): Promise<{ data: T | null; error: { code?: string; message: string } | null }> {
-  const first = await attempt()
-  if (!first.error || first.error.code !== "42703") return first
-  console.warn("[rfp/guest] business_criteria_acknowledgments column missing (migration 071 not yet applied) - retrying without it")
-  return retryWithoutAcknowledgments()
+  let current = row
+  let result = await attempt(current)
+  for (const column of OPTIONAL_RESPONSE_COLUMNS) {
+    if (!result.error || result.error.code !== "42703") break
+    if (!(column in current)) continue
+    console.warn(`[rfp/guest] optional column missing, retrying without it - ${column}`)
+    const { [column]: _omitted, ...rest } = current
+    current = rest
+    result = await attempt(current)
+  }
+  return result
 }
 
 export async function POST(req: Request) {
@@ -437,6 +451,9 @@ export async function POST(req: Request) {
     const business_criteria_responses = withBusinessCriteriaDefaults(body.business_criteria_responses)
     // Write guard (S4-1): only carries acknowledgment data when the request actually sent
     // some - never invents an empty object on requests shaped like today's.
+    // P2-1: never trust the client payload. Malformed input normalizes to null, which is the
+    // same state as "this RFP has no budget categories".
+    const budget_lines = normalizeBudgetLines(body.budget_lines)
     const hasAcknowledgments = body.business_criteria_acknowledgments != null
     const business_criteria_acknowledgments = hasAcknowledgments
       ? normalizeAcknowledgments(body.business_criteria_acknowledgments)
@@ -463,14 +480,11 @@ export async function POST(req: Request) {
         submitted_at: submittedAt,
         updated_at: submittedAt,
         ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
+        ...(budget_lines ? { budget_lines } : {}),
       }
-      const editRowWithoutAcknowledgments = (() => {
-        const { business_criteria_acknowledgments: _omit, ...rest } = editRow
-        return rest
-      })()
       const { error: updateErr } = await saveGuestResponseRow(
-        () => supabase.from("partner_rfp_responses").update(editRow).eq("id", tokenRow.response_id),
-        () => supabase.from("partner_rfp_responses").update(editRowWithoutAcknowledgments).eq("id", tokenRow.response_id)
+        (attemptRow) => supabase.from("partner_rfp_responses").update(attemptRow).eq("id", tokenRow.response_id),
+        editRow
       )
 
       if (updateErr) {
@@ -572,14 +586,11 @@ export async function POST(req: Request) {
       status: "submitted",
       updated_at: new Date().toISOString(),
       ...(hasAcknowledgments ? { business_criteria_acknowledgments } : {}),
+      ...(budget_lines ? { budget_lines } : {}),
     }
-    const insertRowWithoutAcknowledgments = (() => {
-      const { business_criteria_acknowledgments: _omit, ...rest } = insertRow
-      return rest
-    })()
     const { data: saved, error: insertErr } = await saveGuestResponseRow<{ id: string; [key: string]: unknown }>(
-      () => supabase.from("partner_rfp_responses").insert(insertRow).select().single(),
-      () => supabase.from("partner_rfp_responses").insert(insertRowWithoutAcknowledgments).select().single()
+      (attemptRow) => supabase.from("partner_rfp_responses").insert(attemptRow).select().single(),
+      insertRow
     )
 
     if (insertErr || !saved) {

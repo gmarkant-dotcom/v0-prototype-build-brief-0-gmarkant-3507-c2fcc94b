@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Resend } from "resend"
 import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
+import { normalizeBudgetCategories } from "@/lib/budget-categories"
 
 type ScopeItemPayload = {
   id: string
@@ -110,6 +111,12 @@ export async function POST(request: NextRequest) {
     if (!masterRfp || typeof masterRfp !== "object") {
       return NextResponse.json({ error: "masterRfp is required" }, { status: 400 })
     }
+    // P2-1: budget categories ride inside master_rfp_json with everything else the wizard
+    // sends, so no new column and no new write path - but the client payload is still not
+    // trusted, same as business_criteria_required directly below.
+    ;(masterRfp as Record<string, unknown>).budget_categories = normalizeBudgetCategories(
+      (masterRfp as Record<string, unknown>).budget_categories
+    )
     ;(masterRfp as Record<string, unknown>).business_criteria_required = normalizeBusinessCriteriaRequired(
       (masterRfp as Record<string, unknown>).business_criteria_required
     )

@@ -47,6 +47,19 @@ import {
 } from "@/lib/business-criteria"
 import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria-requirement-block"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
+import { BidBudgetCategories } from "@/components/bid-budget-categories"
+import {
+  buildBudgetLinesForSave,
+  categoriesSummaryLabel,
+  countCategoryCompleteness,
+  draftEnteredKeys,
+  draftGrandTotal,
+  emptyBudgetDraft,
+  normalizeBudgetCategories,
+  normalizeBudgetLines,
+  seedBudgetDraft,
+  type BudgetDraft,
+} from "@/lib/budget-categories"
 import {
   getTermsReadiness,
   getCriteriaSummaryLabel,
@@ -69,6 +82,9 @@ const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "MXN", "BRL"
 
 type TokenRow = {
   token: string
+  /** P2-1. The guest GET selects * on rfp_magic_tokens, so this arrives automatically once
+   *  migration 072 is applied, and is simply undefined before it. */
+  budget_categories?: unknown
   vendor_email: string
   vendor_name: string | null
   status: string
@@ -108,6 +124,8 @@ type SubmittedResponse = {
   business_criteria_responses?: unknown
   /** Absent on rows written before migration 071 - always read through normalizeAcknowledgments. */
   business_criteria_acknowledgments?: unknown
+  /** P2-1. Absent before migration 072 and on every bid to an RFP without categories. */
+  budget_lines?: unknown
   status: string
   agency_feedback?: string | null
   feedback_updated_at?: string | null
@@ -243,6 +261,7 @@ export default function GuestRfpRespondPage() {
 
   const [proposalText, setProposalText] = useState("")
   const [budgetAmount, setBudgetAmount] = useState("")
+  const [budgetDraft, setBudgetDraft] = useState<BudgetDraft>({})
   const [budgetCurrency, setBudgetCurrency] = useState("USD")
   const [timelineText, setTimelineText] = useState("")
   const [termsDisclosure, setTermsDisclosure] = useState<TermsDisclosure>(emptyTermsDisclosure())
@@ -432,6 +451,12 @@ export default function GuestRfpRespondPage() {
       }))
     )
     setBusinessCriteriaResponses(withBusinessCriteriaDefaults(response.business_criteria_responses))
+    setBudgetDraft(
+      seedBudgetDraft(
+        normalizeBudgetCategories((payload.token as TokenRow | undefined)?.budget_categories),
+        normalizeBudgetLines(response.budget_lines)
+      )
+    )
     setBusinessCriteriaAcknowledgments(normalizeAcknowledgments(response.business_criteria_acknowledgments))
     setSubmitError(null)
     setIsEditingBid(true)
@@ -506,6 +531,7 @@ export default function GuestRfpRespondPage() {
       return { ...prev, designations, insurance }
     })
     setBusinessCriteriaAcknowledgments(emptyAcknowledgments())
+    setBudgetDraft(emptyBudgetDraft(normalizeBudgetCategories(payload?.token?.budget_categories)))
   }
 
   const cancelEditingBid = () => {
@@ -521,9 +547,27 @@ export default function GuestRfpRespondPage() {
     // longer reliably blocks an incomplete submit the way it used to when these fields were
     // always mounted. This JS-level check restores that guarantee and gives the auto-expand
     // behavior something to hook into, matching the portal page's validation-driven approach.
-    if (!proposalText.trim() || !budgetAmount || !timelineText.trim()) {
+    // P2-1: with categories defined, the single budget amount is derived from them, so
+    // completeness is the real gate. An honest 0 in a category is a complete answer.
+    const submitCategories = normalizeBudgetCategories(payload?.token?.budget_categories)
+    const submitHasCategories = submitCategories.length > 0
+    const submitCategoryTotal = draftGrandTotal(submitCategories, budgetDraft)
+    const submitCategoryOpen = countCategoryCompleteness(submitCategories, draftEnteredKeys(budgetDraft)).open
+    if (!proposalText.trim() || !timelineText.trim() || (!submitHasCategories && !budgetAmount)) {
       setOpenSections((s) => ({ ...s, bidResponse: true }))
       setSubmitError("Complete your proposal, budget, and timeline before submitting.")
+      return
+    }
+    if (submitHasCategories && submitCategoryOpen > 0) {
+      setOpenSections((s) => ({ ...s, bidResponse: true }))
+      setSubmitError(
+        `${submitCategoryOpen} budget categor${submitCategoryOpen === 1 ? "y" : "ies"} still need a number. Enter 0 for anything that genuinely costs nothing.`
+      )
+      return
+    }
+    if (submitHasCategories && submitCategoryTotal <= 0) {
+      setOpenSections((s) => ({ ...s, bidResponse: true }))
+      setSubmitError("Your category subtotals add up to nothing. At least one category needs a real amount.")
       return
     }
     // Guest submissions are always final (no draft concept here), so this always enforces
@@ -550,11 +594,22 @@ export default function GuestRfpRespondPage() {
         body: JSON.stringify({
           token,
           proposal_text: proposalText,
-          budget_proposal: { amount: Number(budgetAmount), currency: budgetCurrency },
+          // One source per number: with categories the total IS their sum, never a second
+          // editable figure that could disagree with the breakdown.
+          budget_proposal: {
+            amount: submitHasCategories ? submitCategoryTotal : Number(budgetAmount),
+            currency: budgetCurrency,
+          },
           timeline_proposal: timelineText,
           terms_disclosure: termsValidation.value,
           attachments: attachments.map((a) => ({ type: a.type, label: a.label, url: a.url })),
           business_criteria_responses: businessCriteriaResponses,
+          // Write guard (P2-1): only sent when this RFP uses categories and the vendor answered
+          // at least one, so requests shaped like today's never carry this key.
+          ...(() => {
+            const lines = buildBudgetLinesForSave(submitCategories, budgetDraft, budgetCurrency)
+            return lines ? { budget_lines: lines } : {}
+          })(),
           // Write guard (S4-1): only sent when the vendor actually recorded a cannot-meet
           // reason, so requests shaped like today's never carry this key.
           ...(hasAcknowledgments ? { business_criteria_acknowledgments: businessCriteriaAcknowledgments } : {}),
@@ -711,10 +766,20 @@ export default function GuestRfpRespondPage() {
       ? legacyCriteriaTotal - legacyCriteriaConfirmed
       : 0
 
+  // P2-1. Empty for an RFP with no categories and for every RFP before migration 072, in which
+  // case every budget surface below behaves exactly as it did before this feature existed.
+  const budgetCategories = normalizeBudgetCategories(tokenRow.budget_categories)
+  const hasBudgetCategories = budgetCategories.length > 0
+  const budgetCategoryTotal = draftGrandTotal(budgetCategories, budgetDraft)
+  const budgetCategoryCompleteness = countCategoryCompleteness(budgetCategories, draftEnteredKeys(budgetDraft))
+
   const termsReadiness = getTermsReadiness(termsDisclosure, termsRequired)
   const readiness = computeReadinessLabel(
     proposalText.trim() ? 0 : 1,
-    budgetAmount ? 0 : 1,
+    // With categories the total is derived from them, so counting an empty total as well as an
+    // incomplete category would report the same gap twice.
+    hasBudgetCategories ? 0 : budgetAmount ? 0 : 1,
+    budgetCategoryCompleteness.open,
     timelineText.trim() ? 0 : 1,
     termsRequired && !termsReadiness.satisfied ? 1 : 0,
     criteriaOpenCount
@@ -723,7 +788,7 @@ export default function GuestRfpRespondPage() {
   const responseDeadlineLabel = formatDateOnly(tokenRow.response_deadline)
   const responseDeadlineUrgency = getDeadlineUrgency(tokenRow.response_deadline)
 
-  const preflightParts = ["a proposal, budget, and timeline"]
+  const preflightParts = [hasBudgetCategories ? "a proposal, a budget by category, and a timeline" : "a proposal, budget, and timeline"]
   if (termsRequired) preflightParts.push("term disclosures")
   if (hasCriteriaTierData || hasRequiredCriteriaForBid) preflightParts.push("certification details for designations you claim")
   const preflightLine = `This bid needs ${joinWithOxfordComma(preflightParts)}.`
@@ -970,6 +1035,11 @@ export default function GuestRfpRespondPage() {
 
                 <BidFormCollapsibleSection
                   title="Your bid response"
+                  summary={
+                    hasBudgetCategories
+                      ? categoriesSummaryLabel(budgetCategoryCompleteness.total, budgetCategoryCompleteness.complete)
+                      : undefined
+                  }
                   open={openSections.bidResponse}
                   onToggle={() => toggleSection("bidResponse")}
                   theme="dark"
@@ -993,14 +1063,29 @@ export default function GuestRfpRespondPage() {
                     <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
                       Budget Amount
                     </label>
-                    <CurrencyInput
-                      required
-                      value={budgetAmount}
-                      onChange={setBudgetAmount}
-                      currencySymbol={currencySymbolFor(budgetCurrency)}
-                      placeholder={`${currencySymbolFor(budgetCurrency)}50,000`}
-                      className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
-                    />
+                    {hasBudgetCategories ? (
+                      /* One source per number: the sum of the categories below, never a second
+                         editable total that could disagree with them. */
+                      <div
+                        className="h-10 rounded-md border border-border bg-white/10 px-3 flex items-center font-mono text-sm text-foreground"
+                        aria-readonly="true"
+                      >
+                        {currencySymbolFor(budgetCurrency)}
+                        {budgetCategoryTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                      </div>
+                    ) : (
+                      <CurrencyInput
+                        required
+                        value={budgetAmount}
+                        onChange={setBudgetAmount}
+                        currencySymbol={currencySymbolFor(budgetCurrency)}
+                        placeholder={`${currencySymbolFor(budgetCurrency)}50,000`}
+                        className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+                      />
+                    )}
+                    {hasBudgetCategories && (
+                      <p className="font-mono text-2xs text-foreground-muted mt-2">Added up from your categories below.</p>
+                    )}
                   </div>
                   <div>
                     <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
@@ -1033,6 +1118,14 @@ export default function GuestRfpRespondPage() {
                     className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
                   />
                 </div>
+                {/* P2-1. Renders nothing when this RFP defines no categories. */}
+                <BidBudgetCategories
+                  categories={budgetCategories}
+                  draft={budgetDraft}
+                  onChange={setBudgetDraft}
+                  currency={budgetCurrency}
+                  theme="dark"
+                />
                 </BidFormCollapsibleSection>
 
                 <BidFormCollapsibleSection

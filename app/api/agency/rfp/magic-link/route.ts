@@ -3,6 +3,7 @@ import { createClient as createAnonClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
+import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
 import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
 
@@ -102,6 +103,8 @@ export async function POST(request: NextRequest) {
       : []
     const outputTemplateConfig = normalizeOutputTemplateConfig(body.output_template_config)
     const businessCriteriaRequired = normalizeBusinessCriteriaRequired(body.business_criteria_required)
+    // P2-1. Never trust the client payload, same posture as business criteria above.
+    const budgetCategories = normalizeBudgetCategories(body.budget_categories)
     // Only set on an explicit value (initial send). Resends omit this field so the upsert's
     // ON CONFLICT DO UPDATE leaves the originally-set requirement untouched.
     const hasRequireTermsDisclosure = typeof body.require_terms_disclosure === "boolean"
@@ -196,25 +199,29 @@ export async function POST(request: NextRequest) {
       ...(wasSubmitted ? {} : { status: "pending", submitted_at: null, response_id: null }),
       ...(hasRequireTermsDisclosure ? { require_terms_disclosure: requireTermsDisclosure } : {}),
       response_deadline: responseDeadline,
+      budget_categories: budgetCategories,
     }
 
+    // Pre-migration safety, progressive. Each retry drops one more optional column that a
+    // not-yet-applied migration may not have created yet, newest migration first, so a
+    // partially-migrated database still persists everything it can actually hold. Same 42703
+    // (undefined_column) guard already used for business_criteria_acknowledgments pre-071.
+    // Extend OPTIONAL_TOKEN_COLUMNS when a later phase adds another optional token column.
+    const OPTIONAL_TOKEN_COLUMNS = ["budget_categories", "response_deadline"] as const
+    let payloadAttempt: Record<string, unknown> = tokenUpsertPayload
     let { data: tokenRow, error: upsertErr } = await service
       .from("rfp_magic_tokens")
-      .upsert(tokenUpsertPayload, { onConflict: "agency_id,project_id,vendor_email" })
+      .upsert(payloadAttempt, { onConflict: "agency_id,project_id,vendor_email" })
       .select()
       .single()
-
-    // F2 pre-migration safety: migration 074 (rfp_magic_tokens.response_deadline) may not be
-    // applied yet - retry once without the column on Postgres undefined_column (42703), same
-    // guard pattern already used for business_criteria_acknowledgments pre-migration-071.
-    if (upsertErr?.code === "42703") {
-      console.warn(
-        "[api] rfp/magic-link: response_deadline column missing (migration 074 not yet applied) - retrying without it"
-      )
-      const { response_deadline: _omitDeadline, ...payloadWithoutDeadline } = tokenUpsertPayload
+    for (const column of OPTIONAL_TOKEN_COLUMNS) {
+      if (upsertErr?.code !== "42703") break
+      console.warn(`[api] rfp/magic-link: optional column missing, retrying without it - ${column}`)
+      const { [column]: _omitted, ...rest } = payloadAttempt
+      payloadAttempt = rest
       ;({ data: tokenRow, error: upsertErr } = await service
         .from("rfp_magic_tokens")
-        .upsert(payloadWithoutDeadline, { onConflict: "agency_id,project_id,vendor_email" })
+        .upsert(payloadAttempt, { onConflict: "agency_id,project_id,vendor_email" })
         .select()
         .single())
     }

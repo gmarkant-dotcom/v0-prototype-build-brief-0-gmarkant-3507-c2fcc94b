@@ -48,6 +48,7 @@ export type GlossaryKey =
   | "delivery_performance"
   | "required_criterion"
   | "preferred_criterion"
+  | "budget_category"
 
 export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   net_days: {
@@ -243,5 +244,11 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
     definition:
       "A business criterion or scope requirement the agency would like to see but hasn't made a condition of the bid. Renders as a light, optional toggle on the vendor's bid form.",
     whyItMatters: "lets you flag what matters without turning every nice-to-have into a hard blocker that discourages good vendors from bidding.",
+  },
+  budget_category: {
+    term: "Budget category",
+    definition:
+      "A cost heading the agency defines on an RFP - production, post, travel, and so on - that every bidder fills in with their own subtotal. A vendor can expand any category to itemize it, and the subtotal then becomes the sum of those items. Every categorized budget also carries an \"Additional items\" category for anything the headings missed.",
+    whyItMatters: "one total tells you which bid is cheaper. Categories tell you why, and where a bid is thin or padded, before you commit.",
   },
 }

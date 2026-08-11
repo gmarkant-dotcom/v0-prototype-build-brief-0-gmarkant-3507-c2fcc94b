@@ -31,6 +31,8 @@ import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
+import { BidBudgetComparison } from "@/components/bid-budget-comparison"
+import { normalizeBudgetLines } from "@/lib/budget-categories"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -560,6 +562,19 @@ export function BidCompareView({ initialRows, onBack }: { initialRows: BidRow[];
           </Table>
         </div>
       </div>
+
+      {/* P2-1 budget categories. Structurally a second table, not one more row in the first:
+          there are N categories, each needing its own row, so it cannot fold into the
+          one-row-per-dimension table above. Renders nothing when no bid carries a structured
+          budget, so RFPs without categories look exactly as they did before. */}
+      <BidBudgetComparison
+        categoriesSource={rows.find((r) => r.budget_categories)?.budget_categories}
+        bids={rows.map((r) => ({
+          id: r.id,
+          label: r.partner_display_name,
+          lines: normalizeBudgetLines(r.budget_lines),
+        }))}
+      />
 
       {/* Detailed Comparison - AI-powered */}
       <div className="rounded-xl border border-border/40 bg-white/[0.02] overflow-hidden">

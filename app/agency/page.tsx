@@ -32,6 +32,8 @@ import {
   normalizeBusinessCriteriaRequired,
 } from "@/lib/business-criteria"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
+import { BudgetCategoryEditor } from "@/components/budget-category-editor"
+import { normalizeBudgetCategories, type BudgetCategory } from "@/lib/budget-categories"
 import { HelpTerm } from "@/components/help-term"
 
 // Types
@@ -372,10 +374,19 @@ function AgencyRFPContent() {
     totalBudget: string
     timeline: string
     business_criteria_required: BusinessCriteriaRequired
+    /** P2-1. Travels inside master_rfp_json on broadcast, exactly as business_criteria_required
+     *  does - no new column and no broadcast-API change, since the whole masterRfp object is
+     *  spread into master_rfp_json. Empty array means this RFP uses no budget categories and
+     *  every bid form renders exactly as it did before the feature existed. */
+    budget_categories: BudgetCategory[]
   } | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [masterBriefLoadingMessageIndex, setMasterBriefLoadingMessageIndex] = useState(0)
   const [generateMasterBriefError, setGenerateMasterBriefError] = useState<string | null>(null)
+
+  const updateBudgetCategories = (next: BudgetCategory[]) => {
+    setMasterRfp((prev) => (prev ? { ...prev, budget_categories: next } : prev))
+  }
 
   const updateRequiredDesignation = (key: DesignationKey, required: boolean) => {
     setMasterRfp((prev) => {
@@ -703,6 +714,7 @@ function AgencyRFPContent() {
         timeline: generated.timeline || "TBD",
         scopeItems: normalizedScope,
         business_criteria_required: normalizeBusinessCriteriaRequired(null),
+        budget_categories: [],
       }
 
       setMasterRfp(normalized)
@@ -1205,6 +1217,7 @@ function AgencyRFPContent() {
           ? {
               ...draftMasterRfp,
               business_criteria_required: normalizeBusinessCriteriaRequired(draftMasterRfp.business_criteria_required),
+              budget_categories: normalizeBudgetCategories(draftMasterRfp.budget_categories),
             }
           : draftMasterRfp
       )
@@ -1954,6 +1967,22 @@ function AgencyRFPContent() {
                 onChangeCoiPriority={updateCoiPriority}
                 onChangeNotes={updateRequiredNotes}
               />
+            </GlassCard>
+
+            {/* P2-1 budget categories. Its own card inside this existing step rather than a new
+                wizard step: a new step renumbers 3 through 6, rewrites the step-nav rail, and
+                breaks every in-flight localStorage draft (currentStep is persisted), which is
+                structural work the design pass owns. See docs/p2-reconciliation.md, call 1. */}
+            <GlassCard>
+              <div className="mb-6">
+                <h2 className="font-display font-bold text-xl text-foreground">Budget categories</h2>
+                <p className="text-sm text-foreground-muted mt-1">
+                  Ask every bidder for the same cost breakdown so you can compare them line by line. Optional - leave
+                  this empty and vendors bid one total figure, exactly as they do today.
+                </p>
+              </div>
+
+              <BudgetCategoryEditor value={masterRfp.budget_categories} onChange={updateBudgetCategories} />
             </GlassCard>
 
             <div className="flex justify-between">

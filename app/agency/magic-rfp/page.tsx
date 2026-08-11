@@ -35,6 +35,8 @@ import {
   normalizeBusinessCriteriaRequired,
 } from "@/lib/business-criteria"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
+import { BudgetCategoryEditor } from "@/components/budget-category-editor"
+import { type BudgetCategory } from "@/lib/budget-categories"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -111,6 +113,10 @@ function MagicRfpContent() {
 
   // Step 1: Additional Business Criteria (collapsed by default)
   const [businessCriteriaOpen, setBusinessCriteriaOpen] = useState(false)
+  // P2-1: posted to /api/agency/rfp/magic-link, which write-guards it against migration 072
+  // not being applied yet. Empty means this RFP uses no budget categories.
+  const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([])
+  const [budgetCategoriesOpen, setBudgetCategoriesOpen] = useState(false)
   const [businessCriteriaRequired, setBusinessCriteriaRequired] = useState<BusinessCriteriaRequired>(
     normalizeBusinessCriteriaRequired(null)
   )
@@ -551,6 +557,7 @@ function MagicRfpContent() {
             scope_item_description: brief.scopeDescription,
             reference_materials: referenceMaterials,
             business_criteria_required: businessCriteriaRequired,
+            budget_categories: budgetCategories,
             require_terms_disclosure: requireTermsDisclosure,
             response_deadline: responseDeadline,
             output_template_config: {
@@ -903,6 +910,35 @@ function MagicRfpContent() {
                         onChangeCoiPriority={updateCoiPriority}
                         onChangeNotes={updateRequiredNotes}
                       />
+                    </div>
+                  )}
+                </div>
+
+                {/* P2-1 budget categories, same collapsible card pattern as the criteria block
+                    directly above it. */}
+                <div className="rounded-lg border border-border bg-white/5 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setBudgetCategoriesOpen((o) => !o)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  >
+                    <div>
+                      <div className="font-display font-bold text-sm text-foreground">Budget categories</div>
+                      <p className="font-mono text-2xs text-foreground-muted mt-0.5">
+                        {budgetCategories.length > 0
+                          ? `${budgetCategories.length} defined`
+                          : "Optional. Ask for a cost breakdown instead of one total."}
+                      </p>
+                    </div>
+                    {budgetCategoriesOpen ? (
+                      <ChevronUp className="w-4 h-4 text-foreground-muted shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-foreground-muted shrink-0" />
+                    )}
+                  </button>
+                  {budgetCategoriesOpen && (
+                    <div className="px-4 pb-4 border-t border-border/30 pt-4">
+                      <BudgetCategoryEditor value={budgetCategories} onChange={setBudgetCategories} />
                     </div>
                   )}
                 </div>

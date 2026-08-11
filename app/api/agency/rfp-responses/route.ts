@@ -105,6 +105,37 @@ export async function GET(request: Request) {
 
     const list = responses || []
 
+    // P2-1/P2-2 pre-migration safety: budget_lines (072) and proposal_sections (076) are NOT
+    // added to the explicit column list above on purpose - selecting a column that does not
+    // exist yet 500s this whole route, which is exactly the breakage the S4 discovery flagged.
+    // They are fetched separately instead, and any failure (including 42703) simply leaves the
+    // structured data absent, which every consumer already renders as "this bid has none".
+    const phase2ById = new Map<string, { budget_lines?: unknown; proposal_sections?: unknown }>()
+    if (list.length > 0) {
+      const { data: phase2Rows, error: phase2Err } = await supabase
+        .from("partner_rfp_responses")
+        .select("id, budget_lines, proposal_sections")
+        .eq("agency_id", user.id)
+        .in("id", list.map((r) => r.id as string))
+      if (phase2Err) {
+        console.warn("[agency/rfp-responses] structured bid columns unavailable, rendering without them", {
+          code: phase2Err.code,
+          message: phase2Err.message,
+        })
+      } else {
+        for (const row of phase2Rows || []) {
+          phase2ById.set(row.id as string, {
+            budget_lines: (row as Record<string, unknown>).budget_lines,
+            proposal_sections: (row as Record<string, unknown>).proposal_sections,
+          })
+        }
+      }
+      for (const row of list) {
+        const extra = phase2ById.get(row.id as string)
+        if (extra) Object.assign(row, extra)
+      }
+    }
+
     // Guest (magic-link) responses have no inbox_item_id — resolve their display
     // context (project, scope item, vendor identity) via rfp_magic_tokens instead.
     const guestResponseIds = list.filter((r) => !r.inbox_item_id).map((r) => r.id as string)
@@ -267,6 +298,12 @@ export async function GET(request: Request) {
           : null),
         vendor_email: magicToken?.vendor_email ?? null,
         business_criteria_required: normalizeBusinessCriteriaRequired(businessCriteriaRequiredSource),
+        // P2-1. Wizard-flow only: master_rfp_json is already selected, so this needs no
+        // migration. The magic-token select above is an explicit column list, and adding
+        // budget_categories to it would 500 this route before 072 is applied - guest bids
+        // therefore fall back to the union of what their own budget lines carry, which the
+        // comparison component already handles.
+        budget_categories: inboxMasterRfp?.budget_categories ?? null,
         rfp_sent_at: inboxRow
           ? ((inboxRow as Record<string, unknown>).created_at as string | null) ?? null
           : magicToken?.created_at ?? null,

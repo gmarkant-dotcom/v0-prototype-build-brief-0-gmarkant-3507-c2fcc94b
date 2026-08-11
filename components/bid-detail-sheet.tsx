@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { BidBudgetBreakdown } from "@/components/bid-budget-comparison"
 import Link from "next/link"
 import { mutate } from "swr"
 import {
@@ -810,6 +811,10 @@ function BidDetailSheetInner({
               </TabsContent>
 
               <TabsContent value="cost" className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                {/* P2-1: what the vendor actually submitted, above the AI's inferred breakdown.
+                    Renders nothing for a bid with no structured budget, which is every bid to
+                    an RFP without categories and every bid predating this feature. */}
+                <BidBudgetBreakdown lines={row.budget_lines} />
                 {decomposing ? (
                   <div className="space-y-2">
                     <p className="text-xs text-foreground-muted">Analyzing cost structure...</p>

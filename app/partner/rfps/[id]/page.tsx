@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { PartnerChrome } from "@/components/partner-layout"
@@ -38,6 +38,19 @@ import {
 } from "@/lib/business-criteria"
 import { BusinessCriteriaRequirementBlock } from "@/components/business-criteria-requirement-block"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
+import { BidBudgetCategories } from "@/components/bid-budget-categories"
+import {
+  buildBudgetLinesForSave,
+  categoriesSummaryLabel,
+  countCategoryCompleteness,
+  draftEnteredKeys,
+  draftGrandTotal,
+  emptyBudgetDraft,
+  normalizeBudgetLines,
+  readCategoriesFromMasterRfpJson,
+  seedBudgetDraft,
+  type BudgetDraft,
+} from "@/lib/budget-categories"
 import {
   getTermsReadiness,
   getCriteriaSummaryLabel,
@@ -231,6 +244,9 @@ type ResponseRow = {
   terms_disclosure?: unknown
   attachments: SavedAttachment[] | null
   business_criteria_responses?: unknown
+  /** P2-1. Optional: absent before migration 072, and absent on every bid to an RFP that
+   *  defines no categories. Read through normalizeBudgetLines, never directly. */
+  budget_lines?: unknown
   /** Absent on rows written before migration 071 - always read through normalizeAcknowledgments. */
   business_criteria_acknowledgments?: unknown
   status: string
@@ -497,6 +513,7 @@ export default function PartnerRfpDetailPage() {
 
   const [proposalText, setProposalText] = useState("")
   const [budgetAmount, setBudgetAmount] = useState("")
+  const [budgetDraft, setBudgetDraft] = useState<BudgetDraft>({})
   const [budgetCurrency, setBudgetCurrency] = useState<string>("USD")
   const [budgetCurrencyOther, setBudgetCurrencyOther] = useState("")
   const [budgetLegacyHint, setBudgetLegacyHint] = useState<string | null>(null)
@@ -707,6 +724,12 @@ export default function PartnerRfpDetailPage() {
             setDraftAttachments(att.length > 0 ? savedToDrafts(att as SavedAttachment[]) : [])
             setBusinessCriteriaResponses(withBusinessCriteriaDefaults(r.business_criteria_responses))
             setBusinessCriteriaAcknowledgments(normalizeAcknowledgments(r.business_criteria_acknowledgments))
+            setBudgetDraft(
+              seedBudgetDraft(
+                readCategoriesFromMasterRfpJson((data.inbox as InboxRow)?.master_rfp_json),
+                normalizeBudgetLines(r.budget_lines)
+              )
+            )
           } else {
             setExisting(null)
             setProposalText("")
@@ -718,6 +741,7 @@ export default function PartnerRfpDetailPage() {
             setTimelineUnit("Weeks")
             setTimelineLegacyHint(null)
             setDraftAttachments([])
+            setBudgetDraft(emptyBudgetDraft(readCategoriesFromMasterRfpJson((data.inbox as InboxRow)?.master_rfp_json)))
             setBusinessCriteriaAcknowledgments(emptyAcknowledgments())
             setVersions([])
 
@@ -884,6 +908,18 @@ export default function PartnerRfpDetailPage() {
     setActiveTab(shouldDefaultToStatus ? "status" : "bid")
   }, [loading, inbox, existing?.agency_feedback, existing?.status, inbox?.status])
 
+  /** P2-1. Empty for every RFP that defines no categories, and for every RFP at all before
+   *  migration 072 - in which case every budget surface below behaves exactly as it did
+   *  before this feature existed. Declared here, above save(), so the submit path and the
+   *  render path read the same list. */
+  const budgetCategories = useMemo(
+    () => readCategoriesFromMasterRfpJson(inbox?.master_rfp_json),
+    [inbox]
+  )
+  const hasBudgetCategories = budgetCategories.length > 0
+  const budgetCategoryTotal = draftGrandTotal(budgetCategories, budgetDraft)
+  const budgetCategoryCompleteness = countCategoryCompleteness(budgetCategories, draftEnteredKeys(budgetDraft))
+
   const save = async (status: "draft" | "submitted", opts?: { silent?: boolean }): Promise<boolean> => {
     const silent = opts?.silent === true
     if (!silent) {
@@ -904,12 +940,16 @@ export default function PartnerRfpDetailPage() {
     const authOk = await ensurePartnerAuth()
     if (!authOk) return false
 
+    // One source per number (P2-1): with categories defined, the stored budget_proposal total
+    // IS the sum of the categories. There is never a second editable total that could disagree
+    // with the breakdown beneath it. Without categories this is untouched, exactly as today.
     const budget_proposal = buildBudgetProposalForSave(
-      budgetAmount,
+      hasBudgetCategories ? String(budgetCategoryTotal) : budgetAmount,
       budgetCurrency,
       budgetCurrencyOther,
-      budgetLegacyHint
+      hasBudgetCategories ? null : budgetLegacyHint
     )
+    const budget_lines = buildBudgetLinesForSave(budgetCategories, budgetDraft, budgetCurrency)
     const timeline_proposal = buildTimelineProposalForSave(
       timelineDuration,
       timelineUnit,
@@ -922,11 +962,25 @@ export default function PartnerRfpDetailPage() {
         if (!silent) setSubmitError("Proposal text is required to submit.")
         return false
       }
+      // Category completeness is checked BEFORE the total, because "one category is blank" is
+      // a more useful thing to be told than "your total is 0". An honest 0 in a category is a
+      // complete answer (the container test) - only an empty field is incomplete.
+      if (hasBudgetCategories && budgetCategoryCompleteness.open > 0) {
+        setOpenSections((s) => ({ ...s, bidResponse: true }))
+        if (!silent) {
+          setSubmitError(
+            `Budget: ${budgetCategoryCompleteness.open} of ${budgetCategoryCompleteness.total} categories still need a number. Enter 0 for anything that genuinely costs nothing.`
+          )
+        }
+        return false
+      }
       if (!isBudgetValidForSubmit(budget_proposal)) {
         setOpenSections((s) => ({ ...s, bidResponse: true }))
         if (!silent) {
           setSubmitError(
-            "Budget: enter a positive amount, choose a currency, and if you pick Other, specify the currency or region."
+            hasBudgetCategories
+              ? "Budget: your category subtotals add up to nothing. At least one category needs a real amount."
+              : "Budget: enter a positive amount, choose a currency, and if you pick Other, specify the currency or region."
           )
         }
         return false
@@ -971,6 +1025,10 @@ export default function PartnerRfpDetailPage() {
         terms_disclosure,
         attachments,
         business_criteria_responses: businessCriteriaResponses,
+        // Write guard (P2-1): only sent when this RFP actually uses categories and the vendor
+        // answered at least one, so requests shaped like today's never carry this key and the
+        // API never has to touch a column migration 072 may not have created yet.
+        ...(budget_lines ? { budget_lines } : {}),
         // Write guard (S4-1): only sent when the vendor actually recorded a cannot-meet
         // reason, so requests shaped like today's never carry this key.
         ...(hasAcknowledgments ? { business_criteria_acknowledgments: businessCriteriaAcknowledgments } : {}),
@@ -1303,20 +1361,28 @@ export default function PartnerRfpDetailPage() {
   const termsReadiness = getTermsReadiness(termsDisclosure, termsRequired)
   const proposalMissingForReadiness = !proposalText.trim()
   const budgetInvalidForReadiness = !isBudgetValidForSubmit(
-    buildBudgetProposalForSave(budgetAmount, budgetCurrency, budgetCurrencyOther, budgetLegacyHint)
+    buildBudgetProposalForSave(
+      hasBudgetCategories ? String(budgetCategoryTotal) : budgetAmount,
+      budgetCurrency,
+      budgetCurrencyOther,
+      hasBudgetCategories ? null : budgetLegacyHint
+    )
   )
   const timelineInvalidForReadiness = !isTimelineValidForSubmit(
     buildTimelineProposalForSave(timelineDuration, timelineUnit, timelineLegacyHint)
   )
   const readiness = computeReadinessLabel(
     proposalMissingForReadiness ? 1 : 0,
-    budgetInvalidForReadiness ? 1 : 0,
+    // With categories, the total is derived, so an invalid total is always a symptom of an
+    // incomplete category - counting both would report the same gap twice.
+    hasBudgetCategories ? 0 : budgetInvalidForReadiness ? 1 : 0,
+    budgetCategoryCompleteness.open,
     timelineInvalidForReadiness ? 1 : 0,
     termsRequired && !termsReadiness.satisfied ? 1 : 0,
     criteriaOpenCount
   )
 
-  const preflightParts = ["a proposal, budget, and timeline"]
+  const preflightParts = [hasBudgetCategories ? "a proposal, a budget by category, and a timeline" : "a proposal, budget, and timeline"]
   if (termsRequired) preflightParts.push("term disclosures")
   if (hasCriteriaTierData || hasRequiredCriteriaForBid) preflightParts.push("certification details for designations you claim")
   const preflightLine = `This bid needs ${joinWithOxfordComma(preflightParts)}.`
@@ -1738,6 +1804,11 @@ export default function PartnerRfpDetailPage() {
           <div className="space-y-4">
             <BidFormCollapsibleSection
               title="Your bid response"
+              summary={
+                hasBudgetCategories
+                  ? categoriesSummaryLabel(budgetCategoryCompleteness.total, budgetCategoryCompleteness.complete)
+                  : undefined
+              }
               open={openSections.bidResponse}
               onToggle={() => toggleSection("bidResponse")}
               theme="light"
@@ -1762,18 +1833,34 @@ export default function PartnerRfpDetailPage() {
               <div>
                 <label className="block font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Budget proposal *</label>
                 <div className="flex flex-wrap gap-2 items-center">
-                  <CurrencyInput
-                    value={budgetAmount}
-                    onChange={(raw) => {
-                      formTouchedRef.current = true
-                      setBudgetAmount(raw)
-                      if (budgetLegacyHint) setBudgetLegacyHint(null)
-                    }}
-                    currencySymbol={currencySymbolFor(budgetCurrency)}
-                    placeholder={`${currencySymbolFor(budgetCurrency)}0`}
-                    className={cn(inputClass, "min-w-[120px] flex-1 sm:max-w-[200px]")}
-                    disabled={!canEdit}
-                  />
+                  {hasBudgetCategories ? (
+                    /* One source per number: with categories defined this is the sum of them,
+                       displayed and never editable, so the total and the breakdown can never
+                       disagree. Without categories the input below is untouched. */
+                    <div
+                      className={cn(
+                        inputClass,
+                        "min-w-[120px] flex-1 sm:max-w-[200px] h-10 rounded-md flex items-center px-3 font-mono text-sm bg-gray-100"
+                      )}
+                      aria-readonly="true"
+                    >
+                      {currencySymbolFor(budgetCurrency)}
+                      {budgetCategoryTotal.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                    </div>
+                  ) : (
+                    <CurrencyInput
+                      value={budgetAmount}
+                      onChange={(raw) => {
+                        formTouchedRef.current = true
+                        setBudgetAmount(raw)
+                        if (budgetLegacyHint) setBudgetLegacyHint(null)
+                      }}
+                      currencySymbol={currencySymbolFor(budgetCurrency)}
+                      placeholder={`${currencySymbolFor(budgetCurrency)}0`}
+                      className={cn(inputClass, "min-w-[120px] flex-1 sm:max-w-[200px]")}
+                      disabled={!canEdit}
+                    />
+                  )}
                   <select
                     value={budgetCurrency}
                     onChange={(e) => {
@@ -1803,7 +1890,10 @@ export default function PartnerRfpDetailPage() {
                     disabled={!canEdit}
                   />
                 )}
-                {budgetLegacyHint && (
+                {hasBudgetCategories && (
+                  <p className="font-mono text-2xs text-vendor-muted mt-2">Added up from your categories below.</p>
+                )}
+                {!hasBudgetCategories && budgetLegacyHint && (
                   <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 mt-2">
                     Previous value (edit above to replace): <span className="font-mono">{budgetLegacyHint}</span>
                   </p>
@@ -1851,6 +1941,18 @@ export default function PartnerRfpDetailPage() {
                 )}
               </div>
             </div>
+            {/* P2-1. Renders nothing when this RFP defines no categories. */}
+            <BidBudgetCategories
+              categories={budgetCategories}
+              draft={budgetDraft}
+              onChange={(next) => {
+                formTouchedRef.current = true
+                setBudgetDraft(next)
+              }}
+              currency={budgetCurrency}
+              theme="light"
+              disabled={!canEdit}
+            />
             </BidFormCollapsibleSection>
 
             <BidFormCollapsibleSection
