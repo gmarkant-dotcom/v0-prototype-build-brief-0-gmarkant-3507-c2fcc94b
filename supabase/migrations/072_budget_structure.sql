@@ -1,95 +1,87 @@
--- Budget structure (Phase 2 PLAN - authored tonight per S4-M, NOT applied, NOT wired to any
--- application code yet; see docs/s4-phase2-plan.md for the execution plan that consumes
--- this schema). Do not run this migration until Phase 2 execution day.
+-- Budget structure (Phase 2). RE-AUTHORED Aug 11, 2026 - this file previously created two
+-- relational tables (rfp_budget_categories, bid_budget_lines). That draft was never applied
+-- (verified: neither table exists live), so replacing it costs nothing.
 --
--- Agencies define 5-10 budget categories per RFP in the wizard (presets, custom, or CSV
--- seeding). Vendors enter one subtotal per category, or expand to itemize with sub-lines
--- that roll up (the subtotal then becomes derived/read-only in the UI, not stored). An
--- "Additional items" category is always present and flagged. Guest path parity is
--- mandatory - both bid_budget_lines and rfp_budget_categories are keyed the same way
--- business_criteria_required is today (nullable FK to each of the two RFP-creation-flow
--- parent tables, mirroring the dual-path pattern from migration 070).
-
-CREATE TABLE IF NOT EXISTS rfp_budget_categories (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  -- Exactly one of these two is set, matching which broadcast flow created the RFP
-  -- (wizard -> partner_rfp_inbox, magic link -> rfp_magic_tokens). Both nullable + a CHECK
-  -- rather than a single polymorphic column, matching how business_criteria_required is
-  -- already split across the two tables rather than unified.
-  inbox_item_id uuid NULL REFERENCES partner_rfp_inbox(id) ON DELETE CASCADE,
-  magic_token_id uuid NULL REFERENCES rfp_magic_tokens(id) ON DELETE CASCADE,
-  name text NOT NULL,
-  -- 'preset:<key>' for a picked preset, 'custom' for agency-typed, 'csv' for CSV-seeded.
-  -- Free text, not an enum - the preset key list lives in application code
-  -- (docs/s4-phase2-plan.md) and will grow without a migration if left as text.
-  preset_origin text NULL,
-  -- The always-present, always-flagged "Additional items" category - exactly one per RFP,
-  -- enforced by the partial unique index below, not a CHECK (CHECK can't count sibling rows).
-  is_additional_items boolean NOT NULL DEFAULT false,
-  sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT rfp_budget_categories_exactly_one_parent
-    CHECK (
-      (inbox_item_id IS NOT NULL AND magic_token_id IS NULL) OR
-      (inbox_item_id IS NULL AND magic_token_id IS NOT NULL)
-    )
-);
-
--- At most one "Additional items" category per RFP per flow (partial unique index, since a
--- plain UNIQUE constraint can't be conditional on is_additional_items = true).
-CREATE UNIQUE INDEX IF NOT EXISTS rfp_budget_categories_one_additional_per_inbox
-  ON rfp_budget_categories (inbox_item_id)
-  WHERE is_additional_items = true AND inbox_item_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS rfp_budget_categories_one_additional_per_token
-  ON rfp_budget_categories (magic_token_id)
-  WHERE is_additional_items = true AND magic_token_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS rfp_budget_categories_inbox_item_id_idx ON rfp_budget_categories (inbox_item_id);
-CREATE INDEX IF NOT EXISTS rfp_budget_categories_magic_token_id_idx ON rfp_budget_categories (magic_token_id);
-
-CREATE TABLE IF NOT EXISTS bid_budget_lines (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  response_id uuid NOT NULL REFERENCES partner_rfp_responses(id) ON DELETE CASCADE,
-  -- ON DELETE SET NULL, not CASCADE: if an agency edits/removes a category after a vendor
-  -- has already bid against it, the vendor's submitted line survives as history rather than
-  -- silently vanishing from their own bid. category_name_snapshot preserves the label.
-  category_id uuid NULL REFERENCES rfp_budget_categories(id) ON DELETE SET NULL,
-  category_name_snapshot text NOT NULL,
-  -- NULL for the category's single subtotal line; set for each itemized sub-line under it.
-  -- A category has either one subtotal row (is_subtotal = true, description NULL) or N
-  -- itemized rows (is_subtotal = false each) - never both. The subtotal-when-itemized value
-  -- is derived client-side as SUM(amount), never stored, so it can never drift from its
-  -- sub-lines.
-  description text NULL,
-  amount numeric(12, 2) NOT NULL,
-  is_subtotal boolean NOT NULL DEFAULT true,
-  sort_order integer NOT NULL DEFAULT 0,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT bid_budget_lines_subtotal_has_no_description
-    CHECK (NOT is_subtotal OR description IS NULL)
-);
-
-CREATE INDEX IF NOT EXISTS bid_budget_lines_response_id_idx ON bid_budget_lines (response_id);
-CREATE INDEX IF NOT EXISTS bid_budget_lines_category_id_idx ON bid_budget_lines (category_id);
-
--- RLS: matches the existing partner_rfp_responses / partner_rfp_inbox pattern - agencies
--- manage their own RFPs' categories, vendors read the categories for RFPs they can already
--- see (via the same access path partner_inbox_access.ts already gates), and each side
--- manages its own budget lines. Deliberately not enabled yet (RLS off, like every table
--- above is created with default Postgres behavior) - Phase 2 execution should write and
--- test these policies against the real access patterns rather than have them guessed here
--- blind. Flagged in docs/s4-phase2-plan.md as a required Phase 2 task, not an oversight.
-
--- Verification (run manually after applying, not part of the migration itself):
+-- Why it was replaced, in full - see docs/p2-reconciliation.md section 3:
 --
--- SELECT table_name FROM information_schema.tables
--- WHERE table_name IN ('rfp_budget_categories', 'bid_budget_lines');
--- -- Expected: both rows present
+-- app/api/agency/broadcast-rfp/route.ts writes ONE partner_rfp_inbox row per (scope item x
+-- recipient). A broadcast to 6 vendors across 3 scope items is 18 rows. Parenting a budget
+-- category on a single inbox_item_id therefore forces the wizard's one set of categories to be
+-- copied 18 times, each copy with its own UUIDs. Two vendors bidding the SAME scope item would
+-- then hold budget lines pointing at different category rows carrying the same name, and the
+-- compare view would have to reconcile by name anyway - defeating the entire point of the
+-- relational model, and falsifying the Phase 2 plan's stated premise that "category identity is
+-- shared across all bids being compared."
 --
--- SELECT conname FROM pg_constraint
--- WHERE conname IN ('rfp_budget_categories_exactly_one_parent', 'bid_budget_lines_subtotal_has_no_description');
--- -- Expected: both rows present
+-- This codebase already solved that exact problem for business_criteria_required: the config
+-- lives inside JSONB that fans out with the rows, and the KEYS inside the blob stay stable and
+-- identical across every copy, so identity survives the fan-out for free. Budget categories
+-- follow that precedent rather than fighting it.
 --
--- SELECT count(*) FROM rfp_budget_categories;
--- SELECT count(*) FROM bid_budget_lines;
--- -- Expected: 0, 0 (brand new tables, nothing writes to them until Phase 2 code ships)
+-- Storage map (mirrors business_criteria_required exactly):
+--   wizard flow     -> partner_rfp_inbox.master_rfp_json.budget_categories  (no column needed)
+--   magic-link flow -> rfp_magic_tokens.budget_categories                   (added below)
+--   vendor's numbers-> partner_rfp_responses.budget_lines                   (added below)
+--
+-- Consequences, all of them simplifications:
+--   * No new tables, so no new RLS surface. The Phase 2 plan's open item 3 ("write RLS policies
+--     for both new tables before shipping") and its judgment call 2 (guest direct-write vs
+--     service-role route) both dissolve - budget data inherits the row-level policies already
+--     governing partner_rfp_inbox / rfp_magic_tokens / partner_rfp_responses.
+--   * Guest bids need no new access model: app/api/rfp/guest/[token]/route.ts already writes
+--     business_criteria_responses on this same row with the service client.
+--   * Pre-migration safety uses the 42703 retry guard this repo already runs twice
+--     (saveGuestResponseRow, saveResponseRow) rather than a new mechanism.
+--
+-- Shapes are documented and normalized in lib/budget-categories.ts. Summarized here so this
+-- file stands alone:
+--
+--   budget_categories: [
+--     { key: string,            -- stable id, generated once at authoring time, never reused
+--       name: string,
+--       note: string | null,    -- optional agency guidance shown under the category
+--       origin: 'preset:<bundle>:<slug>' | 'custom' | 'paste',
+--       is_additional_items: boolean,   -- exactly one true per RFP, enforced app-side
+--       sort_order: number }
+--   ]
+--
+--   budget_lines: {
+--     currency: string,                 -- snapshot of the bid's currency at submit time
+--     categories: [
+--       { key: string,                  -- matches budget_categories[].key
+--         name_snapshot: string,        -- survives an agency renaming the category later
+--         subtotal: number,             -- honest 0 is valid and meaningful (container test)
+--         items: [ { description: string, amount: number } ] | []  -- when itemized, subtotal
+--       }                                                          -- is SUM(items) and is
+--     ]                                                            -- derived, never a second
+--   }                                                              -- editable number
+--
+-- One source per number: when items is non-empty, subtotal is written as the computed sum and
+-- the UI renders it read-only. It is stored (not left null) so every reader gets the number
+-- without re-summing, but no surface ever lets it be edited independently of its items.
+
+ALTER TABLE rfp_magic_tokens
+  ADD COLUMN IF NOT EXISTS budget_categories jsonb NULL;
+
+ALTER TABLE partner_rfp_responses
+  ADD COLUMN IF NOT EXISTS budget_lines jsonb NULL;
+
+-- NULL, not '[]'/'{}': "this RFP defines no categories" and "this bid entered no category
+-- numbers" must both be distinguishable from "defined, and empty". Every reader treats NULL and
+-- an empty array identically today, but a default would destroy the distinction permanently.
+
+-- Verification (run manually after applying; not part of the migration):
+--
+-- SELECT table_name, column_name, data_type, is_nullable, column_default
+-- FROM information_schema.columns
+-- WHERE (table_name = 'rfp_magic_tokens' AND column_name = 'budget_categories')
+--    OR (table_name = 'partner_rfp_responses' AND column_name = 'budget_lines')
+-- ORDER BY table_name;
+-- -- Expected: 2 rows, both data_type = jsonb, is_nullable = YES, column_default = NULL
+--
+-- SELECT count(*) FROM rfp_magic_tokens WHERE budget_categories IS NOT NULL;
+-- SELECT count(*) FROM partner_rfp_responses WHERE budget_lines IS NOT NULL;
+-- -- Expected: 0, 0 (nothing has ever written these columns - they did not exist until now)
+--
+-- SELECT count(*) FROM partner_rfp_inbox WHERE master_rfp_json ? 'budget_categories';
+-- -- Expected: 0 (the wizard flow's storage location, also never written before Phase 2 code)
