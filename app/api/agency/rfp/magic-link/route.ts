@@ -4,6 +4,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
+import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
 import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
 
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
     const businessCriteriaRequired = normalizeBusinessCriteriaRequired(body.business_criteria_required)
     // P2-1. Never trust the client payload, same posture as business criteria above.
     const budgetCategories = normalizeBudgetCategories(body.budget_categories)
+    const evaluationCriteria = normalizeRfpEvaluationCriteria(body.evaluation_criteria)
     // Only set on an explicit value (initial send). Resends omit this field so the upsert's
     // ON CONFLICT DO UPDATE leaves the originally-set requirement untouched.
     const hasRequireTermsDisclosure = typeof body.require_terms_disclosure === "boolean"
@@ -200,6 +202,7 @@ export async function POST(request: NextRequest) {
       ...(hasRequireTermsDisclosure ? { require_terms_disclosure: requireTermsDisclosure } : {}),
       response_deadline: responseDeadline,
       budget_categories: budgetCategories,
+      evaluation_criteria: evaluationCriteria,
     }
 
     // Pre-migration safety, progressive. Each retry drops one more optional column that a
@@ -207,7 +210,7 @@ export async function POST(request: NextRequest) {
     // partially-migrated database still persists everything it can actually hold. Same 42703
     // (undefined_column) guard already used for business_criteria_acknowledgments pre-071.
     // Extend OPTIONAL_TOKEN_COLUMNS when a later phase adds another optional token column.
-    const OPTIONAL_TOKEN_COLUMNS = ["budget_categories", "response_deadline"] as const
+    const OPTIONAL_TOKEN_COLUMNS = ["evaluation_criteria", "budget_categories", "response_deadline"] as const
     let payloadAttempt: Record<string, unknown> = tokenUpsertPayload
     let { data: tokenRow, error: upsertErr } = await service
       .from("rfp_magic_tokens")

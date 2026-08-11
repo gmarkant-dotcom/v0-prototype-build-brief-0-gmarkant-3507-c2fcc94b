@@ -149,6 +149,10 @@ A business criterion or scope requirement the agency would like to see but hasn'
 A cost heading the agency defines on an RFP - production, post, travel, and so on - that every bidder fills in with their own subtotal. A vendor can expand any category to itemize it, and the subtotal then becomes the sum of those items. Every categorized budget also carries an "Additional items" category for anything the headings missed.
 *Why it matters: one total tells you which bid is cheaper. Categories tell you why, and where a bid is thin or padded, before you commit.*
 
+**Evaluation criteria**
+The quality dimensions you score bids against - creative approach, production capability, timeline feasibility and so on - each scored out of 10 and weighted. Set per RFP, or fall back to your standard set. Not the same thing as business criteria, which are compliance facts a vendor either holds or does not.
+*Why it matters: scoring against the dimensions that matter for this particular brief beats scoring every RFP against the same generic seven.*
+
 ---
 
 ## Open questions for your review

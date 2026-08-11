@@ -36,6 +36,8 @@ import {
 } from "@/lib/business-criteria"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
+import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
+import { type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
 import { type BudgetCategory } from "@/lib/budget-categories"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -117,6 +119,8 @@ function MagicRfpContent() {
   // not being applied yet. Empty means this RFP uses no budget categories.
   const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([])
   const [budgetCategoriesOpen, setBudgetCategoriesOpen] = useState(false)
+  const [evaluationCriteria, setEvaluationCriteria] = useState<RfpEvaluationCriterion[]>([])
+  const [evaluationCriteriaOpen, setEvaluationCriteriaOpen] = useState(false)
   const [businessCriteriaRequired, setBusinessCriteriaRequired] = useState<BusinessCriteriaRequired>(
     normalizeBusinessCriteriaRequired(null)
   )
@@ -558,6 +562,7 @@ function MagicRfpContent() {
             reference_materials: referenceMaterials,
             business_criteria_required: businessCriteriaRequired,
             budget_categories: budgetCategories,
+            evaluation_criteria: evaluationCriteria,
             require_terms_disclosure: requireTermsDisclosure,
             response_deadline: responseDeadline,
             output_template_config: {
@@ -939,6 +944,34 @@ function MagicRfpContent() {
                   {budgetCategoriesOpen && (
                     <div className="px-4 pb-4 border-t border-border/30 pt-4">
                       <BudgetCategoryEditor value={budgetCategories} onChange={setBudgetCategories} />
+                    </div>
+                  )}
+                </div>
+
+                {/* P2-3, same collapsible card pattern. */}
+                <div className="rounded-lg border border-border bg-white/5 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setEvaluationCriteriaOpen((o) => !o)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  >
+                    <div>
+                      <div className="font-display font-bold text-sm text-foreground">Evaluation criteria</div>
+                      <p className="font-mono text-2xs text-foreground-muted mt-0.5">
+                        {evaluationCriteria.length > 0
+                          ? `${evaluationCriteria.length} defined for this RFP`
+                          : "Optional. Scored against your standard criteria otherwise."}
+                      </p>
+                    </div>
+                    {evaluationCriteriaOpen ? (
+                      <ChevronUp className="w-4 h-4 text-foreground-muted shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-foreground-muted shrink-0" />
+                    )}
+                  </button>
+                  {evaluationCriteriaOpen && (
+                    <div className="px-4 pb-4 border-t border-border/30 pt-4">
+                      <EvaluationCriteriaEditor value={evaluationCriteria} onChange={setEvaluationCriteria} />
                     </div>
                   )}
                 </div>

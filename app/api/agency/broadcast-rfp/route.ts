@@ -4,6 +4,7 @@ import { Resend } from "resend"
 import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
+import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 
 type ScopeItemPayload = {
   id: string
@@ -116,6 +117,9 @@ export async function POST(request: NextRequest) {
     // trusted, same as business_criteria_required directly below.
     ;(masterRfp as Record<string, unknown>).budget_categories = normalizeBudgetCategories(
       (masterRfp as Record<string, unknown>).budget_categories
+    )
+    ;(masterRfp as Record<string, unknown>).evaluation_criteria = normalizeRfpEvaluationCriteria(
+      (masterRfp as Record<string, unknown>).evaluation_criteria
     )
     ;(masterRfp as Record<string, unknown>).business_criteria_required = normalizeBusinessCriteriaRequired(
       (masterRfp as Record<string, unknown>).business_criteria_required

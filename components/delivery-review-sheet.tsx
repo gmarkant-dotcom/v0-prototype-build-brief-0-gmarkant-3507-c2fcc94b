@@ -38,7 +38,7 @@ type Review = {
 }
 
 type DeltaRow = { criterion_id: string; criterion_name: string; bid_score: number; delivery_score: number; delta: number }
-type Comparison = { hasEvaluation: boolean; rows: DeltaRow[] } | null
+type Comparison = { hasEvaluation: boolean; rows: DeltaRow[]; unavailableReason?: string | null } | null
 
 type ScoreDraft = { score: string; notes: string }
 
@@ -422,6 +422,12 @@ export function DeliveryReviewSheet({
                 <h3 className="font-display font-bold text-sm text-foreground">Bid vs Delivery Delta</h3>
                 {comparison && comparison.hasEvaluation ? (
                   <>
+                    {/* P2-3 cross-surface guard: a bid scored against its own RFP's criteria has
+                        no shared criterion to compare delivery against. Say so - an empty delta
+                        table would read as delivery matching the bid exactly. */}
+                    {comparison.rows.length === 0 && comparison.unavailableReason && (
+                      <p className="text-sm text-foreground-muted">{comparison.unavailableReason}</p>
+                    )}
                     {comparison.rows.length > 0 && (
                       <div className="overflow-x-auto rounded-lg border border-border/40">
                         <table className="w-full text-sm border-collapse">

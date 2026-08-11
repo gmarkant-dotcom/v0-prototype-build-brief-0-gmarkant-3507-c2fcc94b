@@ -73,6 +73,7 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [criteria, setCriteria] = useState<Criterion[]>([])
+  const [usingRfpCriteria, setUsingRfpCriteria] = useState(false)
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [draft, setDraft] = useState<Record<string, Draft>>({})
   const [weightDraft, setWeightDraft] = useState<Record<string, string>>({})
@@ -126,8 +127,16 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
       if (!criteriaRes.ok) throw new Error(criteriaData?.error || "Failed to load criteria")
       if (!evalRes.ok) throw new Error(evalData?.error || "Failed to load evaluation")
 
-      const activeCriteria = ((criteriaData.criteria || []) as Criterion[]).filter((c) => c.is_active)
+      // P2-3: this RFP's own rubric wins when it defines one. Empty means the agency's global
+      // criteria, which is every legacy RFP and every RFP before migration 075 - identical
+      // behavior to before this feature existed, including the is_active filter.
+      const rfpCriteria = (evalData.rfp_criteria || []) as Criterion[]
+      const activeCriteria =
+        rfpCriteria.length > 0
+          ? rfpCriteria
+          : ((criteriaData.criteria || []) as Criterion[]).filter((c) => c.is_active)
       setCriteria(activeCriteria)
+      setUsingRfpCriteria(rfpCriteria.length > 0)
       const loadedEvaluation = evalData.evaluation as Evaluation | null
       setEvaluation(loadedEvaluation)
 
@@ -296,13 +305,22 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3">
+        {/* P2-3: an agency scoring against a per-RFP rubric must know that is what they are
+            doing, and that Scoring Settings edits the global set, not this one. */}
+        {usingRfpCriteria ? (
+          <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
+            Scored against this RFP&apos;s own criteria
+          </span>
+        ) : (
+          <span />
+        )}
         <button
           type="button"
           onClick={() => setScoringSettingsOpen(true)}
-          className="flex items-center gap-1.5 font-mono text-2xs text-foreground-muted hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 font-mono text-2xs text-foreground-muted hover:text-foreground transition-colors shrink-0"
         >
-          <Settings className="w-3.5 h-3.5" /> Scoring Settings
+          <Settings className="w-3.5 h-3.5" /> {usingRfpCriteria ? "Standard scoring settings" : "Scoring Settings"}
         </button>
       </div>
 

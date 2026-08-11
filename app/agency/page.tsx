@@ -33,6 +33,8 @@ import {
 } from "@/lib/business-criteria"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
+import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
+import { normalizeRfpEvaluationCriteria, type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
 import { normalizeBudgetCategories, type BudgetCategory } from "@/lib/budget-categories"
 import { HelpTerm } from "@/components/help-term"
 
@@ -379,6 +381,9 @@ function AgencyRFPContent() {
      *  spread into master_rfp_json. Empty array means this RFP uses no budget categories and
      *  every bid form renders exactly as it did before the feature existed. */
     budget_categories: BudgetCategory[]
+    /** P2-3. Travels inside master_rfp_json alongside budget_categories. Empty means this RFP
+     *  is scored against the agency's global bid_scoring_criteria, exactly as today. */
+    evaluation_criteria: RfpEvaluationCriterion[]
   } | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [masterBriefLoadingMessageIndex, setMasterBriefLoadingMessageIndex] = useState(0)
@@ -386,6 +391,10 @@ function AgencyRFPContent() {
 
   const updateBudgetCategories = (next: BudgetCategory[]) => {
     setMasterRfp((prev) => (prev ? { ...prev, budget_categories: next } : prev))
+  }
+
+  const updateEvaluationCriteria = (next: RfpEvaluationCriterion[]) => {
+    setMasterRfp((prev) => (prev ? { ...prev, evaluation_criteria: next } : prev))
   }
 
   const updateRequiredDesignation = (key: DesignationKey, required: boolean) => {
@@ -715,6 +724,7 @@ function AgencyRFPContent() {
         scopeItems: normalizedScope,
         business_criteria_required: normalizeBusinessCriteriaRequired(null),
         budget_categories: [],
+        evaluation_criteria: [],
       }
 
       setMasterRfp(normalized)
@@ -1218,6 +1228,7 @@ function AgencyRFPContent() {
               ...draftMasterRfp,
               business_criteria_required: normalizeBusinessCriteriaRequired(draftMasterRfp.business_criteria_required),
               budget_categories: normalizeBudgetCategories(draftMasterRfp.budget_categories),
+              evaluation_criteria: normalizeRfpEvaluationCriteria(draftMasterRfp.evaluation_criteria),
             }
           : draftMasterRfp
       )
@@ -1983,6 +1994,21 @@ function AgencyRFPContent() {
               </div>
 
               <BudgetCategoryEditor value={masterRfp.budget_categories} onChange={updateBudgetCategories} />
+            </GlassCard>
+
+            {/* P2-3. Its own card, deliberately separated from Business criteria above by the
+                Budget categories card - scored quality dimensions and confirmable compliance
+                facts must never read as two settings of one control. */}
+            <GlassCard>
+              <div className="mb-6">
+                <h2 className="font-display font-bold text-xl text-foreground">Evaluation criteria</h2>
+                <p className="text-sm text-foreground-muted mt-1">
+                  The dimensions you will score these bids against, each out of 10 and weighted. Optional - leave this
+                  empty and bids are scored against your standard criteria, exactly as they are today.
+                </p>
+              </div>
+
+              <EvaluationCriteriaEditor value={masterRfp.evaluation_criteria} onChange={updateEvaluationCriteria} />
             </GlassCard>
 
             <div className="flex justify-between">

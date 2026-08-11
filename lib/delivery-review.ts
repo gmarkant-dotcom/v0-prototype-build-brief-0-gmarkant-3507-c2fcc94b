@@ -11,6 +11,11 @@ export type DeltaRow = {
 export type DeltaComparison = {
   hasEvaluation: boolean
   rows: DeltaRow[]
+  /** P2-3 cross-surface guard. Set when an evaluation exists but no per-criterion comparison is
+   *  possible, so the sheet can say why instead of rendering an empty delta table - an empty
+   *  table there reads as "delivery matched the bid exactly", which would be a fabricated
+   *  agreement. Null when there is nothing to explain. */
+  unavailableReason: string | null
 }
 
 /**
@@ -25,7 +30,7 @@ export async function loadBidDeltaComparison(
   responseId: string | null,
   deliveryScores: { criterion_id: string; score: number | null }[]
 ): Promise<DeltaComparison> {
-  if (!responseId) return { hasEvaluation: false, rows: [] }
+  if (!responseId) return { hasEvaluation: false, rows: [], unavailableReason: null }
 
   const { data: evaluation } = await supabase
     .from("bid_evaluations")
@@ -33,7 +38,7 @@ export async function loadBidDeltaComparison(
     .eq("response_id", responseId)
     .eq("agency_id", agencyId)
     .maybeSingle()
-  if (!evaluation) return { hasEvaluation: false, rows: [] }
+  if (!evaluation) return { hasEvaluation: false, rows: [], unavailableReason: null }
 
   const { data: bidScores } = await supabase
     .from("bid_evaluation_scores")
@@ -41,8 +46,17 @@ export async function loadBidDeltaComparison(
     .eq("evaluation_id", evaluation.id)
 
   const bidActiveByCriterion = new Map<string, number>()
+  let perRfpScoreCount = 0
   for (const s of bidScores || []) {
     const active = s.is_overridden ? (s.human_score as number | null) : (s.ai_score as number | null)
+    // P2-3: a per-RFP score has a NULL criterion_id (its identity is rfp_criterion_key, which
+    // has no row in bid_scoring_criteria at all). It is counted, then excluded - never matched
+    // against a delivery criterion, because two criteria can share a name and mean different
+    // things, and a delta built on that would be a number invented from a coincidence.
+    if (s.criterion_id == null) {
+      if (active != null) perRfpScoreCount += 1
+      continue
+    }
     if (active != null) bidActiveByCriterion.set(s.criterion_id as string, active)
   }
 
@@ -51,7 +65,11 @@ export async function loadBidDeltaComparison(
   )
 
   const criterionIds = [...new Set([...bidActiveByCriterion.keys(), ...deliveryByCriterion.keys()])]
-  if (criterionIds.length === 0) return { hasEvaluation: true, rows: [] }
+  const perRfpOnly = perRfpScoreCount > 0 && bidActiveByCriterion.size === 0
+  const unavailableReason = perRfpOnly
+    ? "This bid was scored against criteria defined for its own RFP, and delivery is reviewed against your standard criteria. There is no shared criterion to compare, so no per-criterion delta is shown. The composite scores above are still directly comparable."
+    : null
+  if (criterionIds.length === 0) return { hasEvaluation: true, rows: [], unavailableReason }
 
   const { data: criteriaRows } = await supabase.from("bid_scoring_criteria").select("id, name").in("id", criterionIds)
   const nameByCriterion = new Map((criteriaRows || []).map((c) => [c.id as string, c.name as string]))
@@ -70,5 +88,5 @@ export async function loadBidDeltaComparison(
     })
   }
 
-  return { hasEvaluation: true, rows }
+  return { hasEvaluation: true, rows, unavailableReason: rows.length === 0 ? unavailableReason : null }
 }

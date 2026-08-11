@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { resolveRfpRubricForResponse } from "@/lib/rfp-evaluation-criteria-server"
+import { parseSyntheticCriterionId, toSyntheticCriterionId } from "@/lib/rfp-evaluation-criteria"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
@@ -175,7 +177,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       console.error("[api] failure", { route, method: "POST", message: criteriaErr.message })
       return NextResponse.json({ error: "Failed to load scoring criteria" }, { status: 500 })
     }
-    const activeCriteria = (criteria || []) as Criterion[]
+    // P2-3. The model must score against the rubric the agency actually wrote for this RFP,
+    // not against the seven built-in dimensions. Empty rubric means the global criteria above,
+    // which is every legacy RFP and every RFP before migration 075.
+    const rubric = await resolveRfpRubricForResponse(supabase, responseId, user.id)
+    const usingRfpRubric = rubric.length > 0
+    const activeCriteria: Criterion[] = usingRfpRubric
+      ? rubric.map((c) => ({
+          id: toSyntheticCriterionId(c.key),
+          name: c.name,
+          description: c.description || null,
+          default_weight: c.weight,
+        }))
+      : ((criteria || []) as Criterion[])
     if (activeCriteria.length === 0) {
       return NextResponse.json({ error: "No active scoring criteria - add criteria in Scoring Settings first" }, { status: 400 })
     }
@@ -255,10 +269,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     // the criterion's agency-wide default.
     const { data: existingWeightRows } = await supabase
       .from("bid_evaluation_scores")
-      .select("criterion_id, weight")
+      .select(usingRfpRubric ? "rfp_criterion_key, weight" : "criterion_id, weight")
       .eq("evaluation_id", evaluation.id)
+    // Keyed by the same synthetic id activeCriteria carries, so the "never reset a customized
+    // weight" rule below works identically for both rubric kinds.
     const existingWeightByCriterion = new Map(
-      (existingWeightRows || []).map((r) => [r.criterion_id as string, r.weight as number])
+      ((existingWeightRows || []) as unknown as Record<string, unknown>[]).map((r) => [
+        usingRfpRubric ? toSyntheticCriterionId(r.rfp_criterion_key as string) : (r.criterion_id as string),
+        r.weight as number,
+      ])
     )
 
     const criteriaByName = new Map(activeCriteria.map((c) => [c.name.trim().toLowerCase(), c]))
@@ -285,16 +304,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "AI scoring failed, please try again." }, { status: 502 })
     }
 
-    const { error: upsertErr } = await supabase.from("bid_evaluation_scores").upsert(
-      scoreRows.map((s) => ({
-        evaluation_id: evaluation.id,
-        criterion_id: s.criterion_id,
-        weight: s.weight,
-        ai_score: s.ai_score,
-        ai_rationale: s.ai_rationale,
-      })),
-      { onConflict: "evaluation_id,criterion_id" }
-    )
+    // A per-RFP score is stored under rfp_criterion_key, never under a bid_scoring_criteria
+    // uuid - see migration 075's header for why borrowing one would corrupt cross-RFP math.
+    const nameByKey = new Map(rubric.map((c) => [c.key, c.name]))
+    const { error: upsertErr } = usingRfpRubric
+      ? await supabase.from("bid_evaluation_scores").upsert(
+          scoreRows.map((s) => {
+            const key = parseSyntheticCriterionId(s.criterion_id) as string
+            return {
+              evaluation_id: evaluation.id,
+              rfp_criterion_key: key,
+              criterion_name_snapshot: nameByKey.get(key) ?? null,
+              weight: s.weight,
+              ai_score: s.ai_score,
+              ai_rationale: s.ai_rationale,
+            }
+          }),
+          { onConflict: "evaluation_id,rfp_criterion_key" }
+        )
+      : await supabase.from("bid_evaluation_scores").upsert(
+          scoreRows.map((s) => ({
+            evaluation_id: evaluation.id,
+            criterion_id: s.criterion_id,
+            weight: s.weight,
+            ai_score: s.ai_score,
+            ai_rationale: s.ai_rationale,
+          })),
+          { onConflict: "evaluation_id,criterion_id" }
+        )
     if (upsertErr) {
       console.error("[api] failure", { route, method: "POST", responseId, message: upsertErr.message })
       return NextResponse.json({ error: "Failed to save AI scores" }, { status: 500 })
