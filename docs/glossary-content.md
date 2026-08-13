@@ -185,6 +185,10 @@ This budget category has no figure in it yet. Every category the agency defined 
 Your own optional caveat on one budget category - what the figure assumes, what it excludes, how many days or rounds it covers. Different from the guidance the agency wrote under the category name, which is what they are asking you for.
 *Why it matters: it stops a number being read the wrong way. A cheap-looking line with a stated exclusion beats a cheap-looking line that gets queried later.*
 
+**Client profile**
+A reusable record of an end client you work with - their key documents, the requirements you always ask vendors to meet for them, and your own internal notes. Select it anywhere a client is named and those documents and defaults apply to that RFP automatically, as editable starting points.
+*Why it matters: the same client's NDA and the same standing requirements stop being re-entered on every brief, and every RFP for that client starts consistent instead of starting blank.*
+
 ---
 
 ## Open questions for your review

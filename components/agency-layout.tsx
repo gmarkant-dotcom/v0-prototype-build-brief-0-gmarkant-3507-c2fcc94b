@@ -16,6 +16,7 @@ import { UsageLimitBanner } from "@/components/usage-limit-banner"
 import { UsageLimitModalProvider } from "@/contexts/usage-limit-modal-context"
 import { RoleToggle } from "@/components/role-toggle"
 import { NewProjectDialog } from "@/components/new-project-dialog"
+import { NewClientDialog } from "@/components/new-client-dialog"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -45,6 +46,7 @@ const navSections = [
   {
     label: "Resources",
     items: [
+      { icon: "◐", title: "Client Profiles", href: "/agency/clients", tooltip: "Reusable end-client records - documents, standing requirements, and internal notes that auto-apply to new RFPs" },
       { icon: "□", title: "Master Documents", href: "/agency/documents", tooltip: "Central repository for project documents and reference files" },
       { icon: "▤", title: "Usage", href: "/agency/usage", tooltip: "Track active-project and AI-analysis usage against your plan" },
       { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
@@ -378,7 +380,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
               button (components/new-project-dialog.tsx), so every agency page (mobile
               included, since this sidebar is the only agency nav) can start a project
               without navigating to the dashboard first. */}
-          <div className="mb-5">
+          <div className="mb-5 space-y-2">
             <NewProjectDialog
               trigger={
                 <button
@@ -387,6 +389,20 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                 >
                   <Plus className="w-4 h-4" />
                   New project
+                </button>
+              }
+            />
+            {/* A1: directly beside New project, same dialog contract. Secondary styling on
+                purpose - the design language allows one primary per view, and starting a project
+                is the more common act. */}
+            <NewClientDialog
+              trigger={
+                <button
+                  type="button"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border text-foreground font-mono text-sm transition-colors [@media(hover:hover)]:hover:bg-white/5 active:bg-white/10 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  <Plus className="w-4 h-4" />
+                  New client profile
                 </button>
               }
             />

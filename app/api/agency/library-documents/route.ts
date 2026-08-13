@@ -3,16 +3,25 @@ import { requireAgencyRole } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const auth = await requireAgencyRole()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
-    const { data: rows, error } = await supabase
+    // A1: `?client_id=<id>` narrows to one client profile's documents; its absence keeps the
+    // agency's own library exactly as it was - client_id IS NULL, so nothing a client owns can
+    // appear in the Master Documents slots and nothing the agency owns appears under a client.
+    const clientId = new URL(request.url).searchParams.get("client_id")
+    let query = supabase
       .from("agency_library_documents")
       .select("*")
       .eq("agency_id", user.id)
+    // Pre-migration the column does not exist, so the filter is applied ONLY when the caller
+    // asked for client scoping. An unscoped call never mentions client_id and therefore keeps
+    // working untouched before 077.
+    if (clientId) query = query.eq("client_id", clientId)
+    const { data: rows, error } = await query
       .order("section", { ascending: true })
       .order("kind", { ascending: true })
       .order("updated_at", { ascending: false })
@@ -52,8 +61,14 @@ export async function POST(request: NextRequest) {
       file_size = null,
     } = body as Record<string, unknown>
 
-    if (section !== "agency" && section !== "templates") {
+    // A1: 'client' joins the two existing sections. section/kind are API-validated rather than
+    // CHECK-constrained (see docs/client-profiles-discovery.md), so this is a code change only.
+    if (section !== "agency" && section !== "templates" && section !== "client") {
       return NextResponse.json({ error: "Invalid section" }, { status: 400 })
+    }
+    const clientId = typeof (body as Record<string, unknown>).client_id === "string" ? (body as Record<string, unknown>).client_id : null
+    if (section === "client" && !clientId) {
+      return NextResponse.json({ error: "A client document needs a client_id" }, { status: 400 })
     }
 
     const allowedKinds = new Set([
@@ -95,6 +110,10 @@ export async function POST(request: NextRequest) {
         file_type,
         file_size,
         updated_at: new Date().toISOString(),
+        // A1 write guard: only ever sent for a client document, so every request shaped like
+        // today's carries no client_id at all and cannot touch a column migration 077 may not
+        // have created yet.
+        ...(clientId ? { client_id: clientId } : {}),
       })
       .select()
       .single()

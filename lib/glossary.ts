@@ -58,6 +58,7 @@ export type GlossaryKey =
   | "guided_proposal_sections"
   | "budget_needed"
   | "budget_category_note"
+  | "client_profile"
 
 export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   net_days: {
@@ -313,5 +314,11 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
     definition:
       "Your own optional caveat on one budget category - what the figure assumes, what it excludes, how many days or rounds it covers. Different from the guidance the agency wrote under the category name, which is what they are asking you for.",
     whyItMatters: "it stops a number being read the wrong way. A cheap-looking line with a stated exclusion beats a cheap-looking line that gets queried later.",
+  },
+  client_profile: {
+    term: "Client profile",
+    definition:
+      "A reusable record of an end client you work with - their key documents, the requirements you always ask vendors to meet for them, and your own internal notes. Select it anywhere a client is named and those documents and defaults apply to that RFP automatically, as editable starting points.",
+    whyItMatters: "the same client's NDA and the same standing requirements stop being re-entered on every brief, and every RFP for that client starts consistent instead of starting blank.",
   },
 }
