@@ -429,7 +429,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
               </TooltipTrigger>
               <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
                 <p className="font-mono text-2xs text-foreground-muted leading-relaxed">
-                  Store a client's documents and standing requirements once, then reuse them on
+                  Store a client&apos;s documents and standing requirements once, then reuse them on
                   every RFP you run for that client.
                 </p>
               </TooltipContent>
