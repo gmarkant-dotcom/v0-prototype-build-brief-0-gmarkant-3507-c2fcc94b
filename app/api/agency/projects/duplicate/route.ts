@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     const { data: sourceProject, error: sourceErr } = await supabase
       .from("projects")
-      .select("id, name, client_name, description, budget_range")
+      .select("id, name, client_name, client_id, description, budget_range")
       .eq("id", projectId)
       .eq("agency_id", user.id)
       .maybeSingle()
@@ -73,6 +73,10 @@ export async function POST(request: NextRequest) {
         name: newName,
         status: "draft",
         client_name: sourceProject.client_name,
+        // ITEM 1. A duplicate of a project that belongs to a client profile belongs to the same
+        // client. Carrying only the name string would silently downgrade the copy to a legacy
+        // typed-name project and hide it from every client-scoped surface.
+        client_id: (sourceProject as Record<string, unknown>).client_id ?? null,
         description: sourceProject.description,
         budget_range: sourceProject.budget_range,
         start_date: null,

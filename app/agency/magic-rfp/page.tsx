@@ -39,6 +39,7 @@ import { summarizeRequirementTiers } from "@/lib/business-criteria"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
 import { ClientSelector, type ClientSelection } from "@/components/client-selector"
 import { clientDocumentToReferenceMaterial } from "@/lib/client-attach"
+import { persistProjectClientLink } from "@/lib/client-project-link"
 import { hasClientDefaults, type ClientProfile } from "@/lib/clients"
 import type { ClientDocument } from "@/components/client-documents-panel"
 import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
@@ -140,6 +141,13 @@ function MagicRfpContent() {
    *  (keyed on URL), defaults pre-fill both criteria blocks as fully editable values, and
    *  nothing here writes back to the profile. */
   const applyClientProfile = (profile: ClientProfile, documents: ClientDocument[]) => {
+    // ITEM 1. Same link the wizard writes. A0 flagged that rfp_magic_tokens has no client column
+    // and derives its client through project_id - which is exactly why the link belongs on the
+    // PROJECT. Writing it here makes the magic-link flow's client selection persist without any
+    // token column, and without changing magic-link persistence.
+    void persistProjectClientLink(selectedProject?.id, profile.id).then((r) => {
+      if (!r.ok) console.error("[magic-rfp] could not link project to client profile", r.error)
+    })
     setClientSeedMaterials(
       documents.map(clientDocumentToReferenceMaterial).filter((m): m is ReferenceMaterial => m != null)
     )
@@ -1062,7 +1070,12 @@ function MagicRfpContent() {
                 <div className="p-4 rounded-lg border border-border bg-white/5 space-y-3">
                   <ClientSelector
                     value={clientSelection}
-                    onChange={setClientSelection}
+                    onChange={(next) => {
+                      if (clientSelection.clientId && !next.clientId) {
+                        void persistProjectClientLink(selectedProject?.id, null)
+                      }
+                      setClientSelection(next)
+                    }}
                     onProfileApplied={applyClientProfile}
                   />
                   {appliedClientName && (

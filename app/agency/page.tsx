@@ -38,6 +38,7 @@ import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
 import { ClientSelector, type ClientSelection } from "@/components/client-selector"
 import { clientDocumentToReferenceMaterial } from "@/lib/client-attach"
+import { persistProjectClientLink } from "@/lib/client-project-link"
 import { hasClientDefaults, type ClientProfile } from "@/lib/clients"
 import type { ClientDocument } from "@/components/client-documents-panel"
 import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
@@ -621,6 +622,13 @@ function AgencyRFPContent() {
    * the profile, and there is deliberately no path that could.
    */
   const applyClientProfile = (profile: ClientProfile, documents: ClientDocument[]) => {
+    // ITEM 1. Record the entity on the project itself, not only in the RFP snapshot. Without
+    // this the project keeps client_id null and every client-scoped surface downstream -
+    // onboarding's document group above all - has nothing to match on. Soft failure: naming a
+    // client on an RFP must never block the broadcast.
+    void persistProjectClientLink(selectedProject?.id, profile.id).then((r) => {
+      if (!r.ok) console.error("[agency/rfp] could not link project to client profile", r.error)
+    })
     setClientSeedMaterials(
       documents.map(clientDocumentToReferenceMaterial).filter((m): m is ReferenceMaterial => m != null)
     )
@@ -1835,7 +1843,14 @@ function AgencyRFPContent() {
               </div>
               <ClientSelector
                 value={clientSelection}
-                onChange={setClientSelection}
+                onChange={(next) => {
+                  // Going back to a typed name drops the entity link on the project too, so the
+                  // project never claims a client the RFP no longer names.
+                  if (clientSelection.clientId && !next.clientId) {
+                    void persistProjectClientLink(selectedProject?.id, null)
+                  }
+                  setClientSelection(next)
+                }}
                 onProfileApplied={applyClientProfile}
               />
               {appliedClientName && (

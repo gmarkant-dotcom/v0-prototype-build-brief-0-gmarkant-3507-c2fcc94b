@@ -71,6 +71,34 @@ export async function PATCH(
       if (key in body) updates[key] = body[key] ?? null
     }
 
+    // ITEM 1. client_id is handled separately from the allow-list because it is the only field
+    // here that points at another row, and a client belonging to a different agency must never
+    // be attachable. Ownership is verified before the value is accepted. Passing null is a
+    // legitimate clear (the user went back to a typed name).
+    if ('client_id' in body) {
+      const raw = body.client_id
+      const clientId = typeof raw === 'string' && raw.trim() ? raw.trim() : null
+      if (clientId) {
+        const { data: owned, error: ownedErr } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('id', clientId)
+          .eq('agency_id', user.id)
+          .maybeSingle()
+        if (ownedErr) {
+          console.error('[api/projects/[id]] client ownership check failed', {
+            message: ownedErr.message,
+            code: ownedErr.code,
+          })
+          return NextResponse.json({ error: 'Could not verify that client profile' }, { status: 500 })
+        }
+        if (!owned) {
+          return NextResponse.json({ error: 'Unknown client profile' }, { status: 400 })
+        }
+      }
+      updates.client_id = clientId
+    }
+
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
     }
