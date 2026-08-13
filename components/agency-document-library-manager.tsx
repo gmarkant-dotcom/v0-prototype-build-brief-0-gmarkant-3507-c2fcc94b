@@ -1,12 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { GlassCard, GlassCardHeader } from "@/components/glass-card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { Loader2, Upload, ExternalLink, Trash2 } from "lucide-react"
 import { isClientScopedDocument } from "@/lib/library-documents"
+import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
+import { cn } from "@/lib/utils"
 
 type LibraryRow = {
   id: string
@@ -58,6 +59,13 @@ export function AgencyDocumentLibraryManager() {
   const [forms, setForms] = useState<Record<string, { label: string; url: string }>>({})
   /** id -> name, joined from the clients table by the API. Never a string stored on the row. */
   const [clientNames, setClientNames] = useState<Record<string, string>>({})
+  // ITEM 3. Presentation only. No section changes what it queries. Default open, no
+  // persistence, consistent with the wizard's use of the same shared wrapper.
+  const [openSections, setOpenSections] = useState({ agency: true, templates: true, client: true })
+  const toggleSection = (key: keyof typeof openSections) =>
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
+  const [clientSort, setClientSort] = useState<"client" | "updated">("client")
+  const [clientFilter, setClientFilter] = useState<string>("all")
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -84,6 +92,34 @@ export function AgencyDocumentLibraryManager() {
   const agencyRows = useMemo(() => rows.filter((r) => !isClientScopedDocument(r)), [rows])
   const clientRows = useMemo(() => rows.filter((r) => isClientScopedDocument(r)), [rows])
 
+  /** Clients actually present in the list, so the filter can never offer an option that
+   *  returns nothing. Derived from the same rows the section renders - one source. */
+  const clientFilterOptions = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; count: number }>()
+    for (const row of clientRows) {
+      const id = row.client_id as string
+      const name = clientNames[id] || "Client"
+      const entry = byId.get(id)
+      if (entry) entry.count += 1
+      else byId.set(id, { id, name, count: 1 })
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
+  }, [clientRows, clientNames])
+
+  const visibleClientRows = useMemo(() => {
+    const filtered =
+      clientFilter === "all" ? clientRows : clientRows.filter((r) => r.client_id === clientFilter)
+    return [...filtered].sort((a, b) => {
+      if (clientSort === "updated") {
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      }
+      const an = clientNames[a.client_id as string] || ""
+      const bn = clientNames[b.client_id as string] || ""
+      const byName = an.localeCompare(bn)
+      return byName !== 0 ? byName : a.label.localeCompare(b.label)
+    })
+  }, [clientRows, clientFilter, clientSort, clientNames])
+
   // ITEM 2. The slot grid is built from AGENCY documents only. Client documents are written
   // under section 'agency' (the CHECK allows nothing else), so without this filter a client's
   // file could occupy the agency's own NDA or Other slot and silently change what the existing
@@ -102,6 +138,11 @@ export function AgencyDocumentLibraryManager() {
   }, [agencyRows])
 
   const latest = (section: string, kind: string) => bySectionKind.get(`${section}:${kind}`)?.[0]
+
+  // Collapsed-header counts, derived from the SAME latest() lookup the slots render, so a
+  // header can never disagree with what is inside it.
+  const agencyFilledSlotCount = AGENCY_SLOTS.filter((slot) => latest("agency", slot.kind)).length
+  const templateFilledSlotCount = TEMPLATE_SLOTS.filter((slot) => latest("templates", slot.kind)).length
 
   const setForm = (key: string, patch: Partial<{ label: string; url: string }>) => {
     setForms((prev) => ({
@@ -297,25 +338,39 @@ export function AgencyDocumentLibraryManager() {
         </div>
       )}
 
-      <GlassCard className="p-6">
-        <GlassCardHeader
-          title="Agency documents"
-          description="NDA, MSA, and SOW - upload, replace, or link. Used when building onboarding packages."
-        />
-        <div className="grid md:grid-cols-3 gap-4 mt-4">
+      {/* ITEM 3. The same F1 shared wrapper the wizard uses, not a new one. Default open,
+          collapsed headers carry a count, no persistence. The slot grids inside are NOT
+          sorted or restructured: they are fixed named slots, not lists. */}
+      <BidFormCollapsibleSection
+        title="Agency documents"
+        summary={`${agencyFilledSlotCount} of ${AGENCY_SLOTS.length} filled`}
+        open={openSections.agency}
+        onToggle={() => toggleSection("agency")}
+        theme="dark"
+      >
+        <p className="text-sm text-foreground-muted">
+          NDA, MSA, and SOW - upload, replace, or link. Used when building onboarding packages.
+        </p>
+        <div className="grid md:grid-cols-3 gap-4">
           {AGENCY_SLOTS.map((s) => renderSlot("agency", s))}
         </div>
-      </GlassCard>
+      </BidFormCollapsibleSection>
 
-      <GlassCard className="p-6">
-        <GlassCardHeader
-          title="Key templates"
-          description="Client Brief, Master Brief, Vendor Brief, Budget, Timeline, and Other. Store files or external links."
-        />
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+      <BidFormCollapsibleSection
+        title="Key templates"
+        summary={`${templateFilledSlotCount} of ${TEMPLATE_SLOTS.length} filled`}
+        open={openSections.templates}
+        onToggle={() => toggleSection("templates")}
+        theme="dark"
+      >
+        <p className="text-sm text-foreground-muted">
+          Client Brief, Master Brief, Vendor Brief, Budget, Timeline, and Other. Store files or
+          external links.
+        </p>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {TEMPLATE_SLOTS.map((s) => renderSlot("templates", s))}
         </div>
-      </GlassCard>
+      </BidFormCollapsibleSection>
 
       {/* ITEM 2. One library shelf, honest about scope. Client-scoped documents cannot live in
           the slot grid above - that grid is a fixed set of named slots holding one latest row
@@ -323,13 +378,81 @@ export function AgencyDocumentLibraryManager() {
           carrying a chip naming its client. Agency documents carry NO chip: absence of a chip is
           the agency signal. Renders nothing at all when no client has documents. */}
       {clientRows.length > 0 && (
-        <GlassCard className="p-6">
-          <GlassCardHeader
-            title="Client documents"
-            description="Documents attached to a client profile. They apply to RFPs for that client and appear on that client's engagements only."
-          />
-          <div className="space-y-2 mt-4">
-            {clientRows.map((row) => (
+        <BidFormCollapsibleSection
+          title="Client documents"
+          summary={`${clientRows.length} across ${clientFilterOptions.length} client${clientFilterOptions.length === 1 ? "" : "s"}`}
+          open={openSections.client}
+          onToggle={() => toggleSection("client")}
+          theme="dark"
+        >
+          <p className="text-sm text-foreground-muted">
+            Documents attached to a client profile. They apply to RFPs for that client and appear
+            on that client&apos;s engagements only.
+          </p>
+
+          {/* ITEM 3. Sorting and filtering apply to THIS section only. The slot grids above are
+              fixed named slots, not lists, and are deliberately left alone. The filter is driven
+              by the clients actually present, so it can never offer an option that returns
+              nothing. No general search was built. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Sort</span>
+            {([
+              { key: "client" as const, label: "Client name" },
+              { key: "updated" as const, label: "Updated" },
+            ]).map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setClientSort(option.key)}
+                className={cn(
+                  "font-mono text-2xs px-2 py-1 rounded border transition-colors",
+                  clientSort === option.key
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-foreground/90"
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+
+            {clientFilterOptions.length > 1 && (
+              <>
+                <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted ml-2">
+                  Client
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setClientFilter("all")}
+                  className={cn(
+                    "font-mono text-2xs px-2 py-1 rounded border transition-colors",
+                    clientFilter === "all"
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-foreground/90"
+                  )}
+                >
+                  All
+                </button>
+                {clientFilterOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setClientFilter(option.id)}
+                    className={cn(
+                      "font-mono text-2xs px-2 py-1 rounded border transition-colors",
+                      clientFilter === option.id
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-border text-foreground/90"
+                    )}
+                  >
+                    {option.name} ({option.count})
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {visibleClientRows.map((row) => (
               <div
                 key={row.id}
                 className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-white/5 p-3"
@@ -368,7 +491,7 @@ export function AgencyDocumentLibraryManager() {
               </div>
             ))}
           </div>
-        </GlassCard>
+        </BidFormCollapsibleSection>
       )}
     </div>
   )
