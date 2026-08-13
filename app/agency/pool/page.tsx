@@ -308,6 +308,14 @@ function PartnerPoolPageInner() {
   const [selectedLegal, setSelectedLegal] = useState("All")
   const [selectedStatus, setSelectedStatus] = useState("All")
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false)
+  /** A3: derived strictly from award history - see /api/agency/pool/client-history. Empty until
+   *  it loads, and empty forever for an agency with no awarded work, which is why the filter row
+   *  below renders only when there is something real to filter by. */
+  const [clientHistory, setClientHistory] = useState<{
+    options: { key: string; label: string; vendorCount: number }[]
+    byPartnership: Record<string, string[]>
+  }>({ options: [], byPartnership: {} })
+  const [selectedClientKey, setSelectedClientKey] = useState<string>("All")
   const [selectedDesignationFilters, setSelectedDesignationFilters] = useState<DesignationKey[]>([])
   const [selectedInsuranceFilters, setSelectedInsuranceFilters] = useState<InsuranceKey[]>([])
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null)
@@ -389,6 +397,7 @@ function PartnerPoolPageInner() {
       setPartners([])
       loadPartnerships()
       loadAccessRequests()
+      void loadClientHistory()
     }
     setIsLoaded(true)
   }, [isDemo])
@@ -415,6 +424,17 @@ function PartnerPoolPageInner() {
     }
   }, [isDemo, isLoaded])
   
+  const loadClientHistory = async () => {
+    try {
+      const res = await fetch("/api/agency/pool/client-history", { credentials: "same-origin", cache: "no-store" })
+      if (!res.ok) return
+      const data = await res.json().catch(() => ({}))
+      setClientHistory({ options: data?.options || [], byPartnership: data?.byPartnership || {} })
+    } catch {
+      // A filter that cannot load is a filter that does not render. Never a blocking error.
+    }
+  }
+
   const loadPartnerships = async () => {
     try {
       const response = await fetch('/api/partnerships')
@@ -1026,6 +1046,15 @@ function PartnerPoolPageInner() {
   const filteredNetworkRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return allNetworkRows.filter((row) => {
+      // A3: "worked with client", from award history only. A vendor with no awarded work has no
+      // entry at all, so any client filter correctly excludes them - there is no self-reported
+      // fallback to fall back to. Demo rows carry no real award history and are excluded for the
+      // same reason rather than being given a fabricated one.
+      if (selectedClientKey !== "All") {
+        if (row.mode !== "prod") return false
+        const worked = clientHistory.byPartnership[row.p.id] || []
+        if (!worked.includes(selectedClientKey)) return false
+      }
       if (row.mode === "demo") {
         const { inv, partner } = row
         if (q) {
@@ -1077,6 +1106,8 @@ function PartnerPoolPageInner() {
     })
   }, [
     allNetworkRows,
+    selectedClientKey,
+    clientHistory,
     searchQuery,
     selectedType,
     selectedStatus,
@@ -1465,6 +1496,45 @@ function PartnerPoolPageInner() {
               </div>
             ))}
           </div>
+
+          {/* A3: "Worked with client". Sixth row, after Insurance, identical chip markup to the
+              five above it. The only filter here derived from history rather than from what a
+              vendor declares about itself, which the label says out loud. Renders only when
+              there is real award history to filter by - an agency with none sees nothing rather
+              than an empty control. */}
+          {clientHistory.options.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
+              <span className="font-mono text-2xs text-foreground-muted mr-2">Worked with client:</span>
+              <button
+                onClick={() => setSelectedClientKey("All")}
+                className={cn(
+                  "font-mono text-2xs px-2 py-1 rounded border transition-colors",
+                  selectedClientKey === "All"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-foreground/90 hover:border-white/30"
+                )}
+              >
+                All
+              </button>
+              {clientHistory.options.map((option) => (
+                <button
+                  key={option.key}
+                  onClick={() => setSelectedClientKey(option.key)}
+                  className={cn(
+                    "font-mono text-2xs px-2 py-1 rounded border transition-colors",
+                    selectedClientKey === option.key
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-foreground/90 hover:border-white/30"
+                  )}
+                >
+                  {option.label} ({option.vendorCount})
+                </button>
+              ))}
+              <span className="font-mono text-2xs text-foreground-muted/70 ml-1">
+                From awarded work only
+              </span>
+            </div>
+          )}
         </GlassCard>
 
         {(allNetworkRows.length > 0 || partners.length > 0) && (
