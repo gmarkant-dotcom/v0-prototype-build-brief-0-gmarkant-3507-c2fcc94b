@@ -95,19 +95,27 @@ export const PRESET_BUNDLES: PresetBundle[] = [
       { slug: "equipment", name: "Equipment" },
       { slug: "crew", name: "Crew" },
       { slug: "travel", name: "Travel and per diem" },
-      { slug: "contingency", name: "Contingency" },
-      { slug: "agency_fee", name: "Agency fee" },
+      // R3: both of these are habitually quoted as a percentage. The field takes a cash
+      // amount, so the guidance says so rather than letting a vendor enter "10".
+      { slug: "contingency", name: "Contingency", note: "As a cash amount, not a percentage." },
+      { slug: "agency_fee", name: "Agency fee", note: "As a cash amount, not a percentage." },
     ],
   },
   {
     slug: "retainer",
     label: "Retainer",
-    description: "Ongoing monthly engagement. Rate, hours, and what sits outside the retainer.",
+    description: "Ongoing monthly engagement. The recurring fee and anything billed outside it.",
     categories: [
-      { slug: "monthly_retainer", name: "Monthly retainer" },
-      { slug: "included_hours", name: "Included hours" },
-      { slug: "overage_rate", name: "Overage rate" },
-      { slug: "pass_through", name: "Pass-through costs" },
+      {
+        slug: "monthly_retainer",
+        name: "Monthly retainer",
+        // R3: "Included hours" and "Overage rate" used to be categories of their own. They are
+        // TERMS, not cost buckets - there is no dollar figure that answers "included hours" -
+        // and a vendor duly entered $235 under one of them. Folded into the guidance for the
+        // money category they actually qualify.
+        note: "The recurring monthly fee. State how many hours it includes and your overage rate in your note.",
+      },
+      { slug: "pass_through", name: "Pass-through costs", note: "Costs you bill on at cost, outside the retainer." },
     ],
   },
   {
@@ -117,7 +125,13 @@ export const PRESET_BUNDLES: PresetBundle[] = [
     categories: [
       { slug: "project_fee", name: "Project fee" },
       { slug: "expenses", name: "Expenses" },
-      { slug: "revisions", name: "Revisions" },
+      // R3: a genuine cost bucket - revision rounds can be priced - but the name invites a
+      // COUNT. The guidance pins it to money and sends the count to the note.
+      {
+        slug: "revisions",
+        name: "Revisions",
+        note: "The cost of the revision rounds you are including. State how many rounds that covers in your note.",
+      },
     ],
   },
 ]
