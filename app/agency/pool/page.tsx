@@ -1677,27 +1677,50 @@ function PartnerPoolPageInner() {
                             <ChevronRight className="w-3 h-3" />
                           </Link>
                         )}
-                        {isActive && !p.ndaConfirmedAt && !bl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={confirmingNdaFor === p.id}
-                            onClick={() => handleConfirmNdaSigned(p.id)}
-                            className="h-7 border-success/40 text-success hover:bg-success/10"
-                          >
-                            {confirmingNdaFor === p.id ? "Saving..." : "Confirm NDA Signed"}
-                          </Button>
-                        )}
-                        {isActive && !p.msaConfirmedAt && !bl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={confirmingMsaFor === p.id}
-                            onClick={() => handleConfirmMsaSigned(p.id)}
-                            className="h-7 border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
-                          >
-                            {confirmingMsaFor === p.id ? "Saving..." : "Confirm MSA Signed"}
-                          </Button>
+                        {/* Q4. These two are not duplicates - they are the NDA control and the
+                            MSA control, and an Active vendor with neither document confirmed
+                            correctly gets both. They READ as duplicates because they were two
+                            same-size, same-variant outline pills whose labels differed only by
+                            a three-letter acronym buried mid-string ("Confirm NDA Signed" /
+                            "Confirm MSA Signed"), sitting in a flex-wrap row that stacks them
+                            directly on top of each other at narrow widths.
+
+                            Fixed by making them read as two members of one document group
+                            rather than two competing actions: a shared bordered group with the
+                            acronym leading each label, so the differing word is the first thing
+                            read rather than the middle one, at roughly half the previous width.
+                            The group does not wrap internally, so they can never stack into
+                            identical-looking twins. */}
+                        {isActive && !bl && (!p.ndaConfirmedAt || !p.msaConfirmedAt) && (
+                          <div className="flex items-center gap-1 shrink-0 rounded-md border border-border/60 p-0.5">
+                            <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted px-1.5">
+                              Confirm
+                            </span>
+                            {!p.ndaConfirmedAt && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={confirmingNdaFor === p.id}
+                                onClick={() => handleConfirmNdaSigned(p.id)}
+                                aria-label={`Confirm the NDA has been signed by ${title}`}
+                                className="h-6 px-2 border-success/40 text-success hover:bg-success/10"
+                              >
+                                {confirmingNdaFor === p.id ? "Saving..." : "NDA signed"}
+                              </Button>
+                            )}
+                            {!p.msaConfirmedAt && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={confirmingMsaFor === p.id}
+                                onClick={() => handleConfirmMsaSigned(p.id)}
+                                aria-label={`Confirm the MSA has been signed by ${title}`}
+                                className="h-6 px-2 border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+                              >
+                                {confirmingMsaFor === p.id ? "Saving..." : "MSA signed"}
+                              </Button>
+                            )}
+                          </div>
                         )}
                         <span
                           className={cn(
