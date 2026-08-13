@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ChangeEvent, KeyboardEvent } from "react"
 import { Link as LinkIcon, FileText, Plus, X, ChevronUp, ChevronDown, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -37,13 +37,22 @@ interface ReferenceMaterialsInputProps {
   projectId: string | null
   agencyId: string
   onChange: (materials: ReferenceMaterial[]) => void
+  /** A2: materials supplied by something outside this control - today, a selected client
+   *  profile's documents. Merged INTO the visible list rather than held separately, so the
+   *  agency can see, reorder and remove them like anything else they attached. Idempotent by
+   *  URL: re-selecting the same client, or re-rendering, adds nothing twice. */
+  seedMaterials?: ReferenceMaterial[]
 }
 
-export function ReferenceMaterialsInput({ projectId, agencyId, onChange }: ReferenceMaterialsInputProps) {
+export function ReferenceMaterialsInput({ projectId, agencyId, onChange, seedMaterials }: ReferenceMaterialsInputProps) {
   const [items, setItems] = useState<InternalItem[]>([])
   const [linkUrl, setLinkUrl] = useState("")
   const [linkLabel, setLinkLabel] = useState("")
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  /** URLs already seeded, so the effect below can never re-add one the agency deliberately
+   *  removed - and never loops when onChange hands a fresh array identity back to the parent. */
+  const seededUrlsRef = useRef<Set<string>>(new Set())
 
   const commit = (updater: (prev: InternalItem[]) => InternalItem[]) => {
     setItems((prev) => {
@@ -52,6 +61,23 @@ export function ReferenceMaterialsInput({ projectId, agencyId, onChange }: Refer
       return next
     })
   }
+
+  useEffect(() => {
+    if (!seedMaterials || seedMaterials.length === 0) return
+    const fresh = seedMaterials.filter((m) => m.url && !seededUrlsRef.current.has(m.url))
+    if (fresh.length === 0) return
+    for (const m of fresh) seededUrlsRef.current.add(m.url)
+    commit((prev) => {
+      const present = new Set(prev.map((item) => item.url))
+      const additions = fresh
+        .filter((m) => !present.has(m.url))
+        .map((m) => ({ ...m, id: `${m.url}-${m.created_at}` }))
+      return additions.length > 0 ? [...prev, ...additions] : prev
+    })
+    // commit is stable enough for this use - it only closes over onChange, and re-running on a
+    // new onChange identity would re-check an already-seeded set and no-op.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedMaterials])
 
   const addLink = () => {
     const url = linkUrl.trim()

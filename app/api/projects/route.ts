@@ -512,12 +512,31 @@ export async function POST(request: NextRequest) {
       start_date: startDate || null,
       end_date: endDate || null,
     }
+    // A2: the entity link, ADDED to the string rather than replacing it. client_name is still
+    // written exactly as before, so a project created from a profile and one created by typing a
+    // name are indistinguishable to every existing reader.
+    const clientIdRaw = (body as Record<string, unknown>).client_id
+    const clientId = typeof clientIdRaw === 'string' && clientIdRaw.trim() ? clientIdRaw.trim() : null
+    if (clientId) insertPayload.client_id = clientId
 
-    const { data: project, error: insertError } = await supabase
+    let { data: project, error: insertError } = await supabase
       .from('projects')
       .insert(insertPayload)
       .select('*')
       .single()
+
+    // Pre-migration guard: projects.client_id does not exist until 077, and a request carrying
+    // one would 42703 the whole creation. Retry once without it - the project is still created,
+    // with its client name, and only the entity link is lost.
+    if (insertError?.code === '42703' && clientId) {
+      console.warn('[api/projects] client_id column missing (migration 077 not applied) - creating without the entity link')
+      const { client_id: _omit, ...withoutClientId } = insertPayload
+      ;({ data: project, error: insertError } = await supabase
+        .from('projects')
+        .insert(withoutClientId)
+        .select('*')
+        .single())
+    }
 
     if (insertError || !project) {
       const msg = insertError?.message || insertError?.details || insertError?.hint || 'Project creation failed'

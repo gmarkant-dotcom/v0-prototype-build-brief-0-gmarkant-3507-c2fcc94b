@@ -36,6 +36,10 @@ import {
 } from "@/lib/business-criteria"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
+import { ClientSelector, type ClientSelection } from "@/components/client-selector"
+import { clientDocumentToReferenceMaterial } from "@/lib/client-attach"
+import { hasClientDefaults, type ClientProfile } from "@/lib/clients"
+import type { ClientDocument } from "@/components/client-documents-panel"
 import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { HelpTerm } from "@/components/help-term"
@@ -121,8 +125,27 @@ function MagicRfpContent() {
   // not being applied yet. Empty means this RFP uses no budget categories.
   const [budgetCategories, setBudgetCategories] = useState<BudgetCategory[]>([])
   const [budgetCategoriesOpen, setBudgetCategoriesOpen] = useState(false)
+  // A2 client profile selection at the start of this flow. Per A0's flag, rfp_magic_tokens has
+  // NO client column - this flow's client is derived from its project - so the selection here is
+  // in-flow only: it pre-fills criteria and attaches documents, and does not persist a client
+  // independently of the project. Logged as an open question.
+  const [clientSelection, setClientSelection] = useState<ClientSelection>({ clientId: null, clientName: "" })
+  const [appliedClientName, setAppliedClientName] = useState<string | null>(null)
+  const [clientSeedMaterials, setClientSeedMaterials] = useState<ReferenceMaterial[]>([])
   const [closeBiddingAtDeadline, setCloseBiddingAtDeadline] = useState(false)
   const [evaluationCriteria, setEvaluationCriteria] = useState<RfpEvaluationCriterion[]>([])
+
+  /** A2: starting points only. Documents merge into the reference materials list idempotently
+   *  (keyed on URL), defaults pre-fill both criteria blocks as fully editable values, and
+   *  nothing here writes back to the profile. */
+  const applyClientProfile = (profile: ClientProfile, documents: ClientDocument[]) => {
+    setClientSeedMaterials(
+      documents.map(clientDocumentToReferenceMaterial).filter((m): m is ReferenceMaterial => m != null)
+    )
+    if (profile.default_business_criteria) setBusinessCriteriaRequired(profile.default_business_criteria)
+    if (profile.default_evaluation_criteria.length > 0) setEvaluationCriteria(profile.default_evaluation_criteria)
+    setAppliedClientName(hasClientDefaults(profile) ? profile.name : null)
+  }
   const [evaluationCriteriaOpen, setEvaluationCriteriaOpen] = useState(false)
   const [businessCriteriaRequired, setBusinessCriteriaRequired] = useState<BusinessCriteriaRequired>(
     normalizeBusinessCriteriaRequired(null)
@@ -1008,10 +1031,28 @@ function MagicRfpContent() {
                   </p>
                 </div>
 
+                {/* A2: select-or-create the client at the start, so its documents join the
+                    reference materials below and its defaults pre-fill the criteria blocks.
+                    Typing a name stays first-class. */}
+                <div className="p-4 rounded-lg border border-border bg-white/5 space-y-3">
+                  <ClientSelector
+                    value={clientSelection}
+                    onChange={setClientSelection}
+                    onProfileApplied={applyClientProfile}
+                  />
+                  {appliedClientName && (
+                    <p className="font-mono text-2xs text-success">
+                      {appliedClientName} defaults applied below. Everything stays editable, and
+                      editing it never changes the profile.
+                    </p>
+                  )}
+                </div>
+
                 <ReferenceMaterialsInput
                   projectId={selectedProject?.id ?? null}
                   agencyId={agencyId ?? ""}
                   onChange={setReferenceMaterials}
+                  seedMaterials={clientSeedMaterials}
                 />
               </div>
             </GlassCard>

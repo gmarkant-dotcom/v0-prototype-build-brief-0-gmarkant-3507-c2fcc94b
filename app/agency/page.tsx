@@ -37,6 +37,10 @@ import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-sec
 import { MAX_RFP_EVALUATION_CRITERIA } from "@/lib/rfp-evaluation-criteria"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
+import { ClientSelector, type ClientSelection } from "@/components/client-selector"
+import { clientDocumentToReferenceMaterial } from "@/lib/client-attach"
+import { hasClientDefaults, type ClientProfile } from "@/lib/clients"
+import type { ClientDocument } from "@/components/client-documents-panel"
 import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
 import { normalizeRfpEvaluationCriteria, type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
 import { normalizeBudgetCategories, type BudgetCategory } from "@/lib/budget-categories"
@@ -601,6 +605,46 @@ function AgencyRFPContent() {
   const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
   const [agencyId, setAgencyId] = useState<string | null>(null)
   const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterial[]>([])
+  /** A2 client profile selection at the start of the flow. */
+  const [clientSelection, setClientSelection] = useState<ClientSelection>({ clientId: null, clientName: "" })
+  const [appliedClientName, setAppliedClientName] = useState<string | null>(null)
+  /** Defaults captured at selection time and applied when the master RFP is generated - the
+   *  criteria blocks do not exist until then. Applied immediately if it already does. */
+  const [pendingClientDefaults, setPendingClientDefaults] = useState<{
+    business: BusinessCriteriaRequired
+    evaluation: RfpEvaluationCriterion[]
+  } | null>(null)
+  /** Handed to ReferenceMaterialsInput, which merges them into its own visible list so the
+   *  agency can see, reorder and remove them like any other attachment. */
+  const [clientSeedMaterials, setClientSeedMaterials] = useState<ReferenceMaterial[]>([])
+
+  /**
+   * A2: a profile supplies STARTING POINTS. Documents merge into the flow's reference materials
+   * idempotently (keyed on URL, so re-selecting or re-broadcasting never duplicates), and the
+   * defaults pre-fill the criteria blocks as fully editable values. Nothing here writes back to
+   * the profile, and there is deliberately no path that could.
+   */
+  const applyClientProfile = (profile: ClientProfile, documents: ClientDocument[]) => {
+    setClientSeedMaterials(
+      documents.map(clientDocumentToReferenceMaterial).filter((m): m is ReferenceMaterial => m != null)
+    )
+    setAppliedClientName(hasClientDefaults(profile) ? profile.name : null)
+    const defaults = {
+      business: profile.default_business_criteria ?? normalizeBusinessCriteriaRequired(null),
+      evaluation: profile.default_evaluation_criteria,
+    }
+    setPendingClientDefaults(defaults)
+    setMasterRfp((prev) =>
+      prev
+        ? {
+            ...prev,
+            client: profile.name,
+            business_criteria_required: defaults.business,
+            evaluation_criteria: defaults.evaluation,
+          }
+        : prev
+    )
+  }
 
   const DRAFT_KEY = (projectId: string) => `ligament-rfp-draft-${projectId}`
 
@@ -810,15 +854,16 @@ function AgencyRFPContent() {
 
       const normalized = {
         projectName: generated.projectName || selectedProject?.name || "New Project",
-        client: generated.client || selectedProject?.client || "Client TBD",
+        // A2: an explicitly selected client wins over whatever the model inferred.
+        client: clientSelection.clientName.trim() || generated.client || selectedProject?.client || "Client TBD",
         overview: generated.overview || "",
         objectives: generated.objectives || [],
         totalBudget: generated.totalBudget || "TBD",
         timeline: generated.timeline || "TBD",
         scopeItems: normalizedScope,
-        business_criteria_required: normalizeBusinessCriteriaRequired(null),
+        business_criteria_required: pendingClientDefaults?.business ?? normalizeBusinessCriteriaRequired(null),
         budget_categories: [],
-        evaluation_criteria: [],
+        evaluation_criteria: pendingClientDefaults?.evaluation ?? [],
       }
 
       setMasterRfp(normalized)
@@ -1759,10 +1804,35 @@ function AgencyRFPContent() {
             </GlassCard>
             )}
 
+            {/* A2: select-or-create the client at the START of the flow, so its documents can
+                join the reference materials below and its defaults can pre-fill Step 2's
+                criteria blocks. Typing a name is the legacy path and stays first-class. */}
+            <GlassCard>
+              <div className="mb-4">
+                <h2 className="font-display font-bold text-xl text-foreground">Client</h2>
+                <p className="text-sm text-foreground-muted mt-1">
+                  Pick a client profile to bring its documents and standing requirements into this
+                  RFP, or just type a name.
+                </p>
+              </div>
+              <ClientSelector
+                value={clientSelection}
+                onChange={setClientSelection}
+                onProfileApplied={applyClientProfile}
+              />
+              {appliedClientName && (
+                <p className="font-mono text-2xs text-success mt-3">
+                  {appliedClientName} defaults will pre-fill Step 2. Everything stays editable
+                  there, and editing it never changes the profile.
+                </p>
+              )}
+            </GlassCard>
+
             <ReferenceMaterialsInput
               projectId={selectedProject?.id ?? null}
               agencyId={agencyId ?? ""}
               onChange={setReferenceMaterials}
+              seedMaterials={clientSeedMaterials}
             />
 
             {/* Output format template + SOW (RFP format drives Generate Master RFP) */}

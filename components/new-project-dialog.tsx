@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { ClientSelector, type ClientSelection } from "@/components/client-selector"
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,9 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
 
   const [open, setOpen] = useState(false)
   const [newProject, setNewProject] = useState(emptyForm)
+  // A2: the entity link rides ALONGSIDE the name string. `client` stays the source of truth for
+  // what gets written to projects.client_name, so a typed name behaves exactly as it does today.
+  const [clientSelection, setClientSelection] = useState<ClientSelection>({ clientId: null, clientName: "" })
   const [createProjectError, setCreateProjectError] = useState<string | null>(null)
   const [createProjectWarning, setCreateProjectWarning] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -71,6 +75,7 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
         setSelectedProject(createdProject)
         setOpen(false)
         setNewProject(emptyForm)
+    setClientSelection({ clientId: null, clientName: "" })
         router.push("/agency")
         return
       }
@@ -83,6 +88,9 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
         body: JSON.stringify({
           name: newProject.name,
           clientName: newProject.client,
+          // Only sent when a profile was actually selected, so a typed-name request is byte-for-
+          // byte what it is today and cannot touch a column migration 077 may not have created.
+          ...(clientSelection.clientId ? { client_id: clientSelection.clientId } : {}),
           description: newProject.description || undefined,
           budgetRange: newProject.budget || undefined,
           startDate: newProject.startDate || undefined,
@@ -105,6 +113,7 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
       setSelectedProject(mapDbProjectToMaster(project))
       setOpen(false)
       setNewProject(emptyForm)
+    setClientSelection({ clientId: null, clientName: "" })
       router.push("/agency")
     } catch {
       setCreateProjectError("Project creation failed. Please try again.")
@@ -145,16 +154,19 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
               className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
+          {/* A2: select an existing client profile, create one inline, or type a name exactly as
+              before. The typed name remains the source of truth for projects.client_name; the
+              profile id is an addition, and is dropped the moment the name is edited. */}
           <div className="grid gap-2">
-            <Label htmlFor="new-client-name" className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
-              Client Name
-            </Label>
-            <Input
+            <ClientSelector
               id="new-client-name"
+              label="Client name"
               placeholder="Legal entity name"
-              value={newProject.client}
-              onChange={(e) => setNewProject((prev) => ({ ...prev, client: e.target.value }))}
-              className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
+              value={{ clientId: clientSelection.clientId, clientName: newProject.client }}
+              onChange={(next) => {
+                setClientSelection(next)
+                setNewProject((prev) => ({ ...prev, client: next.clientName }))
+              }}
             />
           </div>
           <div className="grid grid-cols-3 gap-4">
