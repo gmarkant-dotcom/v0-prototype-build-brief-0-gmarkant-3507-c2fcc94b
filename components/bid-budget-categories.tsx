@@ -142,8 +142,11 @@ export function BidBudgetCategories({
         <span className={cn("font-mono text-2xs", t.muted)}>{categories.length} required</span>
       </div>
       <p className={t.note}>
-        This agency asked for a breakdown. Give every category a number - if something genuinely
-        costs nothing, enter 0 and say so honestly.
+        This agency asked for a breakdown. Give every category a{" "}
+        <HelpTerm term="itemized_line" theme={theme}>
+          subtotal, or itemize it
+        </HelpTerm>
+        . If something genuinely costs nothing, enter 0 and say so honestly.
       </p>
 
       {categories.map((category) => {
@@ -156,7 +159,15 @@ export function BidBudgetCategories({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   {category.is_additional_items && <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0" />}
-                  <span className={t.name}>{category.name}</span>
+                  <span className={t.name}>
+                    {category.is_additional_items ? (
+                      <HelpTerm term="additional_items" theme={theme}>
+                        {category.name}
+                      </HelpTerm>
+                    ) : (
+                      category.name
+                    )}
+                  </span>
                 </div>
                 {category.note && <p className={cn(t.note, "mt-0.5")}>{category.note}</p>}
               </div>

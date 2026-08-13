@@ -73,8 +73,9 @@ export function EvaluationCriteriaEditor({
       {value.length === 0 ? (
         <div className="rounded-lg border border-border bg-white/5 p-4 space-y-3">
           <p className="text-sm text-foreground-muted">
-            This RFP will be scored against your standard evaluation criteria, the same seven dimensions every other
-            RFP uses. Load them here to change them for this RFP only.
+            This RFP will be scored against your{" "}
+            <HelpTerm term="standard_criteria">standard evaluation criteria</HelpTerm>, the same seven dimensions
+            every other RFP uses. Load them here to change them for this RFP only.
           </p>
           <Button type="button" size="sm" onClick={() => commit(seedRfpEvaluationCriteria())}>
             Load the standard criteria
@@ -110,7 +111,11 @@ export function EvaluationCriteriaEditor({
                   className="bg-background border-border text-foreground"
                 />
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Weight</label>
+                  {/* Q3: one cue per term per view region - the weight cue appears on the first
+                      row only, not on all eight. */}
+                  <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
+                    {index === 0 ? <HelpTerm term="criterion_weight">Weight</HelpTerm> : "Weight"}
+                  </label>
                   <Input
                     type="number"
                     inputMode="decimal"

@@ -38,6 +38,7 @@ import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
 import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
+import { HelpTerm } from "@/components/help-term"
 import { MAX_RFP_EVALUATION_CRITERIA, type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
 import { type BudgetCategory } from "@/lib/budget-categories"
 
@@ -996,7 +997,9 @@ function MagicRfpContent() {
                       disabled={!responseDeadlineDate.trim()}
                       className="border-border"
                     />
-                    <span className="font-mono text-xs text-foreground">Close bidding at deadline</span>
+                    <span className="font-mono text-xs text-foreground">
+                      <HelpTerm term="close_bidding_at_deadline">Close bidding at deadline</HelpTerm>
+                    </span>
                   </label>
                   <p className="font-mono text-2xs text-foreground-muted">
                     {responseDeadlineDate.trim()

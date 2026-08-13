@@ -50,6 +50,12 @@ export type GlossaryKey =
   | "preferred_criterion"
   | "budget_category"
   | "evaluation_criteria"
+  | "additional_items"
+  | "itemized_line"
+  | "criterion_weight"
+  | "standard_criteria"
+  | "close_bidding_at_deadline"
+  | "guided_proposal_sections"
 
 export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   net_days: {
@@ -257,5 +263,41 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
     definition:
       "The quality dimensions you score bids against - creative approach, production capability, timeline feasibility and so on - each scored out of 10 and weighted. Set per RFP, or fall back to your standard set. Not the same thing as business criteria, which are compliance facts a vendor either holds or does not.",
     whyItMatters: "scoring against the dimensions that matter for this particular brief beats scoring every RFP against the same generic seven.",
+  },
+  additional_items: {
+    term: "Additional items",
+    definition:
+      "The catch-all category every categorized budget carries. It cannot be renamed or removed. A vendor puts anything the agency's categories did not cover here rather than burying it inside an unrelated line or leaving it out.",
+    whyItMatters: "the costs nobody thought to ask about are the ones that surprise you later. This gives them somewhere honest to go.",
+  },
+  itemized_line: {
+    term: "Subtotal and itemized lines",
+    definition:
+      "Each budget category takes either one subtotal figure or a set of itemized lines. Itemize a category and its subtotal becomes the sum of those lines, calculated and read-only - there is never a total you can edit separately from the lines beneath it.",
+    whyItMatters: "one number per category is enough to compare bids. Itemizing is how you show your working where it matters, without being made to do it everywhere.",
+  },
+  criterion_weight: {
+    term: "Weight",
+    definition:
+      "How much one evaluation criterion counts relative to the others when the composite score is calculated. Weights are relative, not percentages - a criterion at 2.0 counts twice as much as one at 1.0. They do not need to add up to anything.",
+    whyItMatters: "it lets one rubric serve different briefs. The same seven dimensions can lean on creative for one project and on timeline for the next.",
+  },
+  standard_criteria: {
+    term: "Standard criteria",
+    definition:
+      "The evaluation criteria an agency uses by default across every RFP, edited in Scoring Settings. An RFP that defines its own criteria is scored against those instead; one that does not falls back to the standard set.",
+    whyItMatters: "most RFPs are judged the same way and should not need setting up. Per-RFP criteria are for the ones that genuinely are not.",
+  },
+  close_bidding_at_deadline: {
+    term: "Close bidding at deadline",
+    definition:
+      "An option on an RFP that stops accepting new and revised bids once the response deadline passes. Off by default, so bidding stays open past the deadline unless you turn this on. Either way you keep full access to bids already submitted, including awarding them.",
+    whyItMatters: "a hard close is right when you are running a fair process against a fixed date, and wrong when a good vendor is a day late. This makes it your call rather than the system's.",
+  },
+  guided_proposal_sections: {
+    term: "Guided proposal sections",
+    definition:
+      "Four optional prompts on the bid form - approach, relevant experience, team and capacity, assumptions and risks - that a vendor can answer instead of, or as well as, writing one block of prose. Every one is skippable, and a section left blank is simply left out of the bid.",
+    whyItMatters: "structure makes bids comparable section by section, but forcing it makes vendors pad. Optional prompts get the structure from whoever finds it useful.",
   },
 }

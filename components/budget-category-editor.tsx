@@ -316,7 +316,9 @@ export function BudgetCategoryEditor({
             <div className="rounded-lg border border-warning/40 bg-warning/10 p-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
-                <span className="font-display font-bold text-sm text-foreground">{ADDITIONAL_ITEMS_NAME}</span>
+                <span className="font-display font-bold text-sm text-foreground">
+                  <HelpTerm term="additional_items">{ADDITIONAL_ITEMS_NAME}</HelpTerm>
+                </span>
                 <span className="font-mono text-2xs uppercase tracking-wider text-warning ml-auto">Always included</span>
               </div>
               <p className="text-xs text-foreground-muted mt-1.5">

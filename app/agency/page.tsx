@@ -2738,7 +2738,9 @@ function AgencyRFPContent() {
                     disabled={!responseDeadlineDate.trim()}
                     className="border-border"
                   />
-                  <span className="font-mono text-xs text-foreground">Close bidding at deadline</span>
+                  <span className="font-mono text-xs text-foreground">
+                    <HelpTerm term="close_bidding_at_deadline">Close bidding at deadline</HelpTerm>
+                  </span>
                 </label>
                 <p className="font-mono text-2xs text-foreground-muted">
                   {responseDeadlineDate.trim()

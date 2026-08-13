@@ -2,6 +2,7 @@
 
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
+import { HelpTerm } from "@/components/help-term"
 import {
   PROPOSAL_SECTION_KEYS,
   PROPOSAL_SECTION_LABELS,
@@ -51,7 +52,11 @@ export function BidProposalSectionsEditor({
   return (
     <div className="space-y-3">
       <div>
-        <span className={t.label}>Guided sections (optional)</span>
+        <span className={t.label}>
+          <HelpTerm term="guided_proposal_sections" theme={theme}>
+            Guided sections (optional)
+          </HelpTerm>
+        </span>
         <p className={cn(t.help, "mt-1")}>
           Answer any of these that help. Anything you leave blank is simply left out of your bid, and the agency never
           sees an empty heading.

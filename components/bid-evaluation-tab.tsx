@@ -310,7 +310,9 @@ export const BidEvaluationTab = forwardRef<BidEvaluationTabHandle, { responseId:
             doing, and that Scoring Settings edits the global set, not this one. */}
         {usingRfpCriteria ? (
           <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
-            Scored against this RFP&apos;s own criteria
+            Scored against this RFP&apos;s own{" "}
+            <HelpTerm term="evaluation_criteria">criteria</HelpTerm>, not your{" "}
+            <HelpTerm term="standard_criteria">standard set</HelpTerm>
           </span>
         ) : (
           <span />
