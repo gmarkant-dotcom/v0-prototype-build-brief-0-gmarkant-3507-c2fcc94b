@@ -49,6 +49,10 @@ export type BudgetLineCategory = {
   /** Empty when the vendor gave a single subtotal. Non-empty when they itemized, in which case
    *  subtotal is the computed sum and is read-only everywhere. */
   items: BudgetLineItem[]
+  /** R2: the VENDOR's caveat on this category - exclusions, day counts, what a number assumes.
+   *  Distinct from BudgetCategory.note, which is the AGENCY's guidance for what to put here.
+   *  Optional and absent on every bid submitted before R2, which reads as "no note". */
+  note?: string
 }
 
 export type BudgetLines = {
@@ -368,11 +372,13 @@ export function normalizeBudgetLines(raw: unknown): BudgetLines | null {
         items.push({ description, amount: coerceAmount(it.amount) })
       }
     }
+    const note = coerceString(e.note).trim()
     categories.push({
       key,
       name_snapshot: coerceString(e.name_snapshot).trim() || key,
       subtotal: items.length > 0 ? sumItems(items) : coerceAmount(e.subtotal),
       items,
+      ...(note ? { note } : {}),
     })
   }
   if (categories.length === 0) return null
@@ -417,11 +423,13 @@ export type BudgetDraftEntry = {
   items: { description: string; amount: string }[]
   /** Itemized categories derive their subtotal from items and render it read-only. */
   itemized: boolean
+  /** R2 vendor note. Held as a plain string; empty means no note and is never stored. */
+  note: string
 }
 
 export type BudgetDraft = Record<string, BudgetDraftEntry>
 
-const EMPTY_ENTRY: BudgetDraftEntry = { subtotal: "", items: [], itemized: false }
+const EMPTY_ENTRY: BudgetDraftEntry = { subtotal: "", items: [], itemized: false, note: "" }
 
 export function emptyBudgetDraft(categories: BudgetCategory[]): BudgetDraft {
   const draft: BudgetDraft = {}
@@ -442,6 +450,7 @@ export function seedBudgetDraft(categories: BudgetCategory[], lines: BudgetLines
       itemized,
       items: saved.items.map((i) => ({ description: i.description, amount: String(i.amount) })),
       subtotal: itemized ? "" : String(saved.subtotal),
+      note: saved.note ?? "",
     }
   }
   return draft
@@ -494,6 +503,8 @@ export function buildBudgetLinesForSave(
   for (const category of categories) {
     const entry = draft[category.key]
     const total = draftEntryTotal(entry)
+    // A note without a number is not an answer - it must not make an unanswered category look
+    // answered to the readiness count, and there is nothing meaningful to store against it.
     if (total == null) continue
     const items =
       entry?.itemized
@@ -501,11 +512,13 @@ export function buildBudgetLinesForSave(
             .map((i) => ({ description: i.description.trim(), amount: draftAmount(i.amount) }))
             .filter((i): i is { description: string; amount: number } => Boolean(i.description) && i.amount != null)
         : []
+    const note = (entry?.note ?? "").trim()
     out.push({
       key: category.key,
       name_snapshot: category.name,
       subtotal: items.length > 0 ? sumItems(items) : total,
       items,
+      ...(note ? { note } : {}),
     })
   }
   if (out.length === 0) return null

@@ -129,6 +129,10 @@ export function BidBudgetComparison({
               const anyItemized = bids.some(
                 (b) => (b.lines?.categories.find((c) => c.key === row.key)?.items.length ?? 0) > 0
               )
+              // R2: a note is worth knowing about but must not push prose into a number table.
+              // It earns a quiet marker on the category label and lives in the expand panel.
+              const anyNote = bids.some((b) => Boolean(b.lines?.categories.find((c) => c.key === row.key)?.note))
+              const expandable = anyItemized || anyNote
               const isOpen = expanded.has(row.key)
               return (
                 <Fragment key={row.key}>
@@ -141,7 +145,7 @@ export function BidBudgetComparison({
                     >
                       <span className="flex items-center gap-1.5">
                         {row.is_additional_items && <AlertTriangle className="w-3 h-3 shrink-0" />}
-                        {anyItemized ? (
+                        {expandable ? (
                           <button
                             type="button"
                             onClick={() => toggle(row.key)}
@@ -150,6 +154,15 @@ export function BidBudgetComparison({
                           >
                             <ChevronRight className={cn("w-3 h-3 transition-transform", isOpen && "rotate-90")} />
                             {row.name}
+                            {anyNote && (
+                              <span
+                                className="text-foreground-muted/70 normal-case"
+                                title="One or more vendors left a note on this category"
+                                aria-label="Has vendor notes"
+                              >
+                                *
+                              </span>
+                            )}
                           </button>
                         ) : (
                           row.name
@@ -187,6 +200,11 @@ export function BidBudgetComparison({
                                       </span>
                                     </div>
                                   ))
+                                )}
+                                {entry?.note && (
+                                  <p className="text-xs text-foreground-muted/90 italic whitespace-pre-wrap pt-1">
+                                    {entry.note}
+                                  </p>
                                 )}
                               </div>
                             )
@@ -248,6 +266,10 @@ export function BidBudgetBreakdown({ lines: rawLines }: { lines: unknown }) {
                 </span>
               </div>
             ))}
+            {/* R2: the vendor's own caveat on this category, under the number it qualifies. */}
+            {entry.note && (
+              <p className="text-xs text-foreground-muted/90 italic pl-3 whitespace-pre-wrap">{entry.note}</p>
+            )}
           </div>
         ))}
         <div className="p-3 flex items-baseline justify-between gap-3">

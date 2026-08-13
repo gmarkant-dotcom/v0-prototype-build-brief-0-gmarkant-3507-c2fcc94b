@@ -93,12 +93,12 @@ export function BidBudgetCategories({
   if (categories.length === 0) return null
 
   const patch = (key: string, changes: Partial<BudgetDraftEntry>) => {
-    const current = draft[key] ?? { subtotal: "", items: [], itemized: false }
+    const current = draft[key] ?? { subtotal: "", items: [], itemized: false, note: "" }
     onChange({ ...draft, [key]: { ...current, ...changes } })
   }
 
   const toggleItemize = (key: string) => {
-    const current = draft[key] ?? { subtotal: "", items: [], itemized: false }
+    const current = draft[key] ?? { subtotal: "", items: [], itemized: false, note: "" }
     if (current.itemized) {
       // Collapsing back to a single figure keeps the number the vendor already arrived at
       // rather than blanking it - their items become the starting subtotal.
@@ -116,7 +116,7 @@ export function BidBudgetCategories({
     const { items, skipped } = parseBudgetLinePaste(pasteText)
     setPasteSkipped(skipped)
     if (items.length === 0) return
-    const current = draft[key] ?? { subtotal: "", items: [], itemized: false }
+    const current = draft[key] ?? { subtotal: "", items: [], itemized: false, note: "" }
     const existing = current.items.filter((i) => i.description.trim() || i.amount.trim())
     onChange({
       ...draft,
@@ -150,7 +150,7 @@ export function BidBudgetCategories({
       </p>
 
       {categories.map((category) => {
-        const entry = draft[category.key] ?? { subtotal: "", items: [], itemized: false }
+        const entry = draft[category.key] ?? { subtotal: "", items: [], itemized: false, note: "" }
         const total = draftEntryTotal(entry)
         const answered = total != null
         return (
@@ -301,6 +301,21 @@ export function BidBudgetCategories({
                 </button>
               </div>
             )}
+
+            {/* R2: the VENDOR's note. Deliberately below the money, with its own label, so it
+                never reads as a second copy of the agency's guidance line that sits above the
+                money under the category name. One is what was asked for, this is what is being
+                answered. */}
+            <div>
+              <label className={cn("block mb-1", t.label)}>Note or assumptions (optional)</label>
+              <Input
+                value={entry.note}
+                onChange={(e) => patch(category.key, { note: e.target.value })}
+                disabled={disabled}
+                placeholder="What this figure assumes, or excludes"
+                className={cn(t.input, "text-xs")}
+              />
+            </div>
           </div>
         )
       })}
