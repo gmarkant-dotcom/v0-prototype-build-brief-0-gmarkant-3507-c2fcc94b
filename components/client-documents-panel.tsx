@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Loader2, Upload, ExternalLink, Trash2, FileText } from "lucide-react"
 import { MOMENTARY_ACTION_DARK } from "@/lib/interactive-styles"
+import { CLIENT_DOCUMENT_SECTION, DEFAULT_LIBRARY_KIND } from "@/lib/library-documents"
 import { cn } from "@/lib/utils"
 
 export type ClientDocument = {
@@ -51,9 +52,15 @@ export function ClientDocumentsPanel({ clientId }: { clientId: string }) {
         cache: "no-store",
       })
       const data = await res.json().catch(() => ({}))
-      // A failure here is nearly always "migration 077 is not applied yet", which is an honest
-      // empty list rather than an error the agency can act on.
-      setDocs(res.ok ? ((data.documents || []) as ClientDocument[]) : [])
+      // Migration 077 is applied, so a failure here is a real failure. Say so rather than
+      // rendering an empty list that reads as "this client has no documents".
+      if (!res.ok) {
+        setDocs([])
+        setError((data?.error as string) || "Could not load this client's documents.")
+        return
+      }
+      setError(null)
+      setDocs((data.documents || []) as ClientDocument[])
     } finally {
       setLoading(false)
     }
@@ -63,33 +70,54 @@ export function ClientDocumentsPanel({ clientId }: { clientId: string }) {
     void refresh()
   }, [refresh])
 
+  /**
+   * ITEM 1. ONE write path, genuinely shared. Upload and link previously duplicated this insert
+   * with their own hardcoded literals - they only looked like one path from outside, which is
+   * why both broke identically and had to be fixed twice.
+   *
+   * section is CLIENT_DOCUMENT_SECTION ('agency'), because the live database carries
+   * agency_library_documents_section_check restricting section to ('agency','templates'). There
+   * is no 'client' section. client_id is the discriminator, per migration 077.
+   */
+  const saveClientDocument = async (
+    payload: Record<string, unknown>,
+    onSuccess: () => void
+  ): Promise<boolean> => {
+    const res = await fetch("/api/agency/library-documents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({
+        section: CLIENT_DOCUMENT_SECTION,
+        kind: DEFAULT_LIBRARY_KIND,
+        client_id: clientId,
+        ...payload,
+      }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      // The inline red error surface is correct behavior for a genuine failure. Never swallow.
+      setError((data?.error as string) || "Could not save that document.")
+      return false
+    }
+    onSuccess()
+    await refresh()
+    return true
+  }
+
   const addLink = async () => {
     const url = linkUrl.trim()
     if (!url || busy) return
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch("/api/agency/library-documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          section: "client",
-          kind: "other",
-          client_id: clientId,
-          label: linkLabel.trim() || url,
-          source_type: "url",
-          external_url: url,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError((data?.error as string) || "Could not save that link.")
-        return
-      }
-      setLinkLabel("")
-      setLinkUrl("")
-      await refresh()
+      await saveClientDocument(
+        { label: linkLabel.trim() || url, source_type: "url", external_url: url },
+        () => {
+          setLinkLabel("")
+          setLinkUrl("")
+        }
+      )
     } finally {
       setBusy(false)
     }
@@ -108,29 +136,19 @@ export function ClientDocumentsPanel({ clientId }: { clientId: string }) {
         setError((uploaded?.error as string) || "Upload failed.")
         return
       }
-      const res = await fetch("/api/agency/library-documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          section: "client",
-          kind: "other",
-          client_id: clientId,
-          label: file.name,
-          source_type: "file",
-          blob_url: uploaded.url,
-          blob_path: uploaded.pathname ?? null,
-          file_name: file.name,
-          file_type: file.type || null,
-          file_size: file.size ?? null,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError((data?.error as string) || "Could not save that document.")
-        return
-      }
-      await refresh()
+      // NOTE (reported, not fixed here): the blob is written before this row is. A rejected
+      // insert therefore leaves the uploaded object in storage with no row pointing at it.
+      // Every failed save before this fix did exactly that. Deleting orphans is out of scope for
+      // this batch - see the report.
+      await saveClientDocument({
+        label: file.name,
+        source_type: "file",
+        blob_url: uploaded.url,
+        blob_path: uploaded.pathname ?? null,
+        file_name: file.name,
+        file_type: file.type || null,
+        file_size: file.size ?? null,
+      }, () => {})
     } finally {
       setBusy(false)
     }

@@ -1133,7 +1133,29 @@ function AgencyRFPContent() {
   }
   
   const saveReferenceMaterialsToLibrary = async (materials: ReferenceMaterial[]) => {
+    // ITEM 1 (0.6 consequence). This loop copies every reference material onto the AGENCY shelf
+    // with client_id null. Once a selected client's documents flow into reference materials,
+    // that would republish a client-scoped file as an agency-wide one - and item 3 then has to
+    // show it on every other client's picker, because agency documents are always shown. It
+    // would also duplicate a row on every re-broadcast, which it already did before client
+    // profiles existed. Skipping URLs the library already holds fixes both.
+    let existingUrls = new Set<string>()
+    try {
+      const res = await fetch("/api/agency/library-documents", { credentials: "same-origin", cache: "no-store" })
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        for (const row of (data.documents || []) as Record<string, unknown>[]) {
+          const url = (row.external_url as string | null) || (row.blob_url as string | null)
+          if (url) existingUrls.add(url)
+        }
+      }
+    } catch {
+      // A failed lookup means we cannot prove a duplicate. Fall through and save as before -
+      // an extra agency row is recoverable, a missing one is a lost reference material.
+      existingUrls = new Set<string>()
+    }
     for (const material of materials) {
+      if (existingUrls.has(material.url)) continue
       try {
         await fetch("/api/agency/library-documents", {
           method: "POST",

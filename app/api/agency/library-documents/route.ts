@@ -1,5 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
+import {
+  fetchScopedLibraryDocuments,
+  isValidLibraryKind,
+  isValidLibrarySection,
+  type LibraryScope,
+} from "@/lib/library-documents"
 
 export const dynamic = "force-dynamic"
 
@@ -9,35 +15,36 @@ export async function GET(request: NextRequest) {
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
-    // A1: `?client_id=<id>` narrows to one client profile's documents; its absence keeps the
-    // agency's own library exactly as it was - client_id IS NULL, so nothing a client owns can
-    // appear in the Master Documents slots and nothing the agency owns appears under a client.
-    const clientId = new URL(request.url).searchParams.get("client_id")
-    let query = supabase
-      .from("agency_library_documents")
-      .select("*")
-      .eq("agency_id", user.id)
-    // Pre-migration the column does not exist, so the filter is applied ONLY when the caller
-    // asked for client scoping. An unscoped call never mentions client_id and therefore keeps
-    // working untouched before 077.
-    if (clientId) query = query.eq("client_id", clientId)
-    const { data: rows, error } = await query
-      .order("section", { ascending: true })
-      .order("kind", { ascending: true })
-      .order("updated_at", { ascending: false })
+    // Scope is resolved in ONE place - lib/library-documents.ts - so no surface can drift.
+    //   ?client_id=  exactly that client (the client profile page)
+    //   ?project_id= agency documents plus the project's client's (every do-the-work picker)
+    //   neither      everything this agency owns (Master Documents, the sole browse-everything
+    //                surface)
+    const params = new URL(request.url).searchParams
+    const clientId = params.get("client_id")
+    const projectId = params.get("project_id")
+    const scope: LibraryScope = clientId
+      ? { mode: "client", clientId }
+      : projectId
+        ? { mode: "project", projectId }
+        : { mode: "all" }
 
-    if (error) {
-      console.error("[agency/library-documents] GET", error)
-      return NextResponse.json(
-        { error: error.message || "Failed to load documents", documents: [] },
-        { status: error.code === "42P01" ? 503 : 500 }
-      )
+    const result = await fetchScopedLibraryDocuments(supabase, user.id, scope)
+    if (result.error) {
+      console.error("[agency/library-documents] GET", result.error)
+      return NextResponse.json({ error: result.error || "Failed to load documents", documents: [] }, { status: 500 })
     }
 
-    return NextResponse.json({ documents: rows || [] })
+    return NextResponse.json({
+      documents: result.documents,
+      // Lets a picker name its client group without a second round trip, and lets it render no
+      // heading at all when the project has no client_id.
+      clientId: result.clientId,
+      clientName: result.clientName,
+    })
   } catch (e) {
     console.error("[agency/library-documents] GET", e)
-    return NextResponse.json({ error: "Failed to load" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to load", documents: [] }, { status: 500 })
   }
 }
 
@@ -61,28 +68,18 @@ export async function POST(request: NextRequest) {
       file_size = null,
     } = body as Record<string, unknown>
 
-    // A1: 'client' joins the two existing sections. section/kind are API-validated rather than
-    // CHECK-constrained (see docs/client-profiles-discovery.md), so this is a code change only.
-    if (section !== "agency" && section !== "templates" && section !== "client") {
+    // ITEM 1. A0 recorded that section/kind were API-validated only. That was WRONG: the live
+    // database carries agency_library_documents_section_check restricting section to
+    // ('agency','templates'), so every client document write was rejected at insert time. There
+    // is no 'client' section and there must not be one - client_id is the discriminator
+    // migration 077 added for exactly this. Validation now matches the constraint.
+    if (!isValidLibrarySection(section)) {
       return NextResponse.json({ error: "Invalid section" }, { status: 400 })
     }
-    const clientId = typeof (body as Record<string, unknown>).client_id === "string" ? (body as Record<string, unknown>).client_id : null
-    if (section === "client" && !clientId) {
-      return NextResponse.json({ error: "A client document needs a client_id" }, { status: 400 })
-    }
+    const clientIdRaw = (body as Record<string, unknown>).client_id
+    const clientId = typeof clientIdRaw === "string" && clientIdRaw.trim() ? clientIdRaw.trim() : null
 
-    const allowedKinds = new Set([
-      "nda",
-      "msa",
-      "sow",
-      "client_brief",
-      "master_brief",
-      "partner_brief",
-      "budget",
-      "timeline",
-      "other",
-    ])
-    if (typeof kind !== "string" || !allowedKinds.has(kind)) {
+    if (!isValidLibraryKind(kind)) {
       return NextResponse.json({ error: "Invalid kind" }, { status: 400 })
     }
     if (typeof label !== "string" || !label.trim()) {

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { isMissingClientsTable } from "@/lib/clients"
+import { fetchScopedLibraryDocuments } from "@/lib/library-documents"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 
@@ -30,24 +31,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     }
     if (!data) return NextResponse.json({ error: "Client profile not found" }, { status: 404 })
 
-    // Documents live in agency_library_documents, scoped by client_id - reuse, not a new table.
-    // Guarded separately: before 077 that column does not exist and this select would 42703 the
-    // whole route, so a failure here degrades to "no documents" rather than to an error.
-    let documents: unknown[] = []
-    const { data: docs, error: docsErr } = await supabase
-      .from("agency_library_documents")
-      .select("id, kind, label, source_type, external_url, blob_url, file_name, file_type, file_size, updated_at")
-      .eq("agency_id", user.id)
-      .eq("client_id", id)
-      .order("updated_at", { ascending: false })
-    if (docsErr) {
-      console.warn("[agency/clients/[id]] documents unavailable, rendering without them", {
-        code: docsErr.code,
-        message: docsErr.message,
-      })
-    } else {
-      documents = docs || []
+    // Documents come through the ONE scoped query (lib/library-documents.ts) so this surface
+    // cannot drift from the pickers. mode 'client' means exactly this client: never agency-wide
+    // rows, never another client's.
+    const scoped = await fetchScopedLibraryDocuments(supabase, user.id, { mode: "client", clientId: id })
+    if (scoped.error) {
+      console.warn("[agency/clients/[id]] documents unavailable, rendering without them", { message: scoped.error })
     }
+    const documents = scoped.documents
 
     return NextResponse.json({ client: data, documents, available: true })
   } catch (e) {
