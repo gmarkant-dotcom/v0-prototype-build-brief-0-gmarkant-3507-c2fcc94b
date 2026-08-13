@@ -89,6 +89,10 @@ export type ScopedLibraryResult = {
    *  produces - and why no client heading should render for it. */
   clientId: string | null
   clientName: string | null
+  /** id -> name for every client whose documents appear in `documents`. Sourced from the
+   *  clients table by join, never from a string copied onto the document row - item 2's chip
+   *  must be able to go stale only when the client is genuinely renamed. */
+  clientNamesById: Record<string, string>
   error: string | null
 }
 
@@ -118,7 +122,7 @@ export async function fetchScopedLibraryDocuments(
       .eq("agency_id", agencyId)
       .maybeSingle()
     if (projectErr) {
-      return { documents: [], clientId: null, clientName: null, error: projectErr.message }
+      return { documents: [], clientId: null, clientName: null, clientNamesById: {}, error: projectErr.message }
     }
     const resolved = (project as Record<string, unknown> | null)?.client_id
     clientId = typeof resolved === "string" && resolved ? resolved : null
@@ -155,7 +159,29 @@ export async function fetchScopedLibraryDocuments(
     .order("updated_at", { ascending: false })
 
   if (error) {
-    return { documents: [], clientId, clientName, error: error.message }
+    return { documents: [], clientId, clientName, clientNamesById: {}, error: error.message }
   }
-  return { documents: (data || []) as Record<string, unknown>[], clientId, clientName, error: null }
+
+  const documents = (data || []) as Record<string, unknown>[]
+
+  // Resolve a name for every client actually represented in the result, by join.
+  const clientNamesById: Record<string, string> = {}
+  if (clientId && clientName) clientNamesById[clientId] = clientName
+  const unresolved = [
+    ...new Set(
+      documents
+        .map((d) => d.client_id)
+        .filter((v): v is string => typeof v === "string" && v.length > 0 && !clientNamesById[v])
+    ),
+  ]
+  if (unresolved.length > 0) {
+    const { data: clientRows } = await supabase
+      .from("clients")
+      .select("id, name")
+      .eq("agency_id", agencyId)
+      .in("id", unresolved)
+    for (const row of clientRows || []) clientNamesById[row.id as string] = row.name as string
+  }
+
+  return { documents, clientId, clientName, clientNamesById, error: null }
 }

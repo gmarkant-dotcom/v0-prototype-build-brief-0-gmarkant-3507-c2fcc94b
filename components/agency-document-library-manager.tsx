@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { Loader2, Upload, ExternalLink, Trash2 } from "lucide-react"
+import { isClientScopedDocument } from "@/lib/library-documents"
 
 type LibraryRow = {
   id: string
@@ -17,6 +18,8 @@ type LibraryRow = {
   blob_url: string | null
   file_name: string | null
   updated_at: string
+  /** ITEM 2. Null for an agency document, set for a client-scoped one. */
+  client_id?: string | null
 }
 
 const AGENCY_SLOTS = [
@@ -53,6 +56,8 @@ export function AgencyDocumentLibraryManager() {
   const [error, setError] = useState<string | null>(null)
   const [pendingKind, setPendingKind] = useState<string | null>(null)
   const [forms, setForms] = useState<Record<string, { label: string; url: string }>>({})
+  /** id -> name, joined from the clients table by the API. Never a string stored on the row. */
+  const [clientNames, setClientNames] = useState<Record<string, string>>({})
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -66,6 +71,7 @@ export function AgencyDocumentLibraryManager() {
         return
       }
       setRows((data.documents || []) as LibraryRow[])
+      setClientNames((data.clientNamesById || {}) as Record<string, string>)
     } finally {
       setLoading(false)
     }
@@ -75,9 +81,16 @@ export function AgencyDocumentLibraryManager() {
     void refresh()
   }, [refresh])
 
+  const agencyRows = useMemo(() => rows.filter((r) => !isClientScopedDocument(r)), [rows])
+  const clientRows = useMemo(() => rows.filter((r) => isClientScopedDocument(r)), [rows])
+
+  // ITEM 2. The slot grid is built from AGENCY documents only. Client documents are written
+  // under section 'agency' (the CHECK allows nothing else), so without this filter a client's
+  // file could occupy the agency's own NDA or Other slot and silently change what the existing
+  // slot lookup returns. Scope is decided by isClientScopedDocument, the one shared predicate.
   const bySectionKind = useMemo(() => {
     const m = new Map<string, LibraryRow[]>()
-    for (const r of rows) {
+    for (const r of agencyRows) {
       const k = `${r.section}:${r.kind}`
       if (!m.has(k)) m.set(k, [])
       m.get(k)!.push(r)
@@ -86,7 +99,7 @@ export function AgencyDocumentLibraryManager() {
       arr.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     }
     return m
-  }, [rows])
+  }, [agencyRows])
 
   const latest = (section: string, kind: string) => bySectionKind.get(`${section}:${kind}`)?.[0]
 
@@ -303,6 +316,60 @@ export function AgencyDocumentLibraryManager() {
           {TEMPLATE_SLOTS.map((s) => renderSlot("templates", s))}
         </div>
       </GlassCard>
+
+      {/* ITEM 2. One library shelf, honest about scope. Client-scoped documents cannot live in
+          the slot grid above - that grid is a fixed set of named slots holding one latest row
+          each, and a client's documents are an open set. They list here instead, every row
+          carrying a chip naming its client. Agency documents carry NO chip: absence of a chip is
+          the agency signal. Renders nothing at all when no client has documents. */}
+      {clientRows.length > 0 && (
+        <GlassCard className="p-6">
+          <GlassCardHeader
+            title="Client documents"
+            description="Documents attached to a client profile. They apply to RFPs for that client and appear on that client's engagements only."
+          />
+          <div className="space-y-2 mt-4">
+            {clientRows.map((row) => (
+              <div
+                key={row.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-white/5 p-3"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-foreground truncate">{row.label}</span>
+                    <span className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-accent/40 bg-accent/10 text-accent shrink-0">
+                      {clientNames[row.client_id as string] || "Client"}
+                    </span>
+                  </div>
+                  <div className="font-mono text-2xs text-foreground-muted mt-0.5">
+                    Updated {formatDate(row.updated_at)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button type="button" variant="outline" size="sm" className="border-border/60" asChild>
+                    <a
+                      href={`/api/agency/library-documents/file?id=${encodeURIComponent(row.id)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Download / Open
+                    </a>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive"
+                    onClick={() => void remove(row.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
     </div>
   )
 }

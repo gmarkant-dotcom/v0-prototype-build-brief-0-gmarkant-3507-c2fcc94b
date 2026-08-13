@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
       // heading at all when the project has no client_id.
       clientId: result.clientId,
       clientName: result.clientName,
+      clientNamesById: result.clientNamesById,
     })
   } catch (e) {
     console.error("[agency/library-documents] GET", e)
