@@ -56,6 +56,8 @@ export type GlossaryKey =
   | "standard_criteria"
   | "close_bidding_at_deadline"
   | "guided_proposal_sections"
+  | "budget_needed"
+  | "budget_category_note"
 
 export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
   net_days: {
@@ -299,5 +301,17 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
     definition:
       "Four optional prompts on the bid form - approach, relevant experience, team and capacity, assumptions and risks - that a vendor can answer instead of, or as well as, writing one block of prose. Every one is skippable, and a section left blank is simply left out of the bid.",
     whyItMatters: "structure makes bids comparable section by section, but forcing it makes vendors pad. Optional prompts get the structure from whoever finds it useful.",
+  },
+  budget_needed: {
+    term: "Needed",
+    definition:
+      "This budget category has no figure in it yet. Every category the agency defined needs one before the bid can be submitted. An honest 0 counts - if something genuinely costs nothing, enter 0 and the badge clears.",
+    whyItMatters: "a blank is ambiguous: it could mean free, or forgotten. A number, even a zero, is an answer the agency can compare.",
+  },
+  budget_category_note: {
+    term: "Note or assumptions",
+    definition:
+      "Your own optional caveat on one budget category - what the figure assumes, what it excludes, how many days or rounds it covers. Different from the guidance the agency wrote under the category name, which is what they are asking you for.",
+    whyItMatters: "it stops a number being read the wrong way. A cheap-looking line with a stated exclusion beats a cheap-looking line that gets queried later.",
   },
 }

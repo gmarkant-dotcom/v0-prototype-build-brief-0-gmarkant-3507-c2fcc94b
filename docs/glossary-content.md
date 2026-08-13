@@ -177,6 +177,14 @@ An option on an RFP that stops accepting new and revised bids once the response 
 Four optional prompts on the bid form - approach, relevant experience, team and capacity, assumptions and risks - that a vendor can answer instead of, or as well as, writing one block of prose. Every one is skippable, and a section left blank is simply left out of the bid.
 *Why it matters: structure makes bids comparable section by section, but forcing it makes vendors pad. Optional prompts get the structure from whoever finds it useful.*
 
+**Needed**
+This budget category has no figure in it yet. Every category the agency defined needs one before the bid can be submitted. An honest 0 counts - if something genuinely costs nothing, enter 0 and the badge clears.
+*Why it matters: a blank is ambiguous: it could mean free, or forgotten. A number, even a zero, is an answer the agency can compare.*
+
+**Note or assumptions**
+Your own optional caveat on one budget category - what the figure assumes, what it excludes, how many days or rounds it covers. Different from the guidance the agency wrote under the category name, which is what they are asking you for.
+*Why it matters: it stops a number being read the wrong way. A cheap-looking line with a stated exclusion beats a cheap-looking line that gets queried later.*
+
 ---
 
 ## Open questions for your review

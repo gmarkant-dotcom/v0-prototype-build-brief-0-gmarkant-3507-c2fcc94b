@@ -171,7 +171,13 @@ export function BidBudgetCategories({
                 </div>
                 {category.note && <p className={cn(t.note, "mt-0.5")}>{category.note}</p>}
               </div>
-              {!answered && <span className="font-mono text-2xs uppercase tracking-wider text-warning shrink-0">Needed</span>}
+              {!answered && (
+                <span className="font-mono text-2xs uppercase tracking-wider text-warning shrink-0">
+                  <HelpTerm term="budget_needed" theme={theme}>
+                    Needed
+                  </HelpTerm>
+                </span>
+              )}
             </div>
 
             {entry.itemized ? (
@@ -307,7 +313,12 @@ export function BidBudgetCategories({
                 money under the category name. One is what was asked for, this is what is being
                 answered. */}
             <div>
-              <label className={cn("block mb-1", t.label)}>Note or assumptions (optional)</label>
+              <label className={cn("block mb-1", t.label)}>
+                <HelpTerm term="budget_category_note" theme={theme}>
+                  Note or assumptions
+                </HelpTerm>{" "}
+                (optional)
+              </label>
               <Input
                 value={entry.note}
                 onChange={(e) => patch(category.key, { note: e.target.value })}
