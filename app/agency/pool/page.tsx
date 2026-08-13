@@ -1737,7 +1737,16 @@ function PartnerPoolPageInner() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      {/* ITEM 2. Was `flex items-center gap-2 shrink-0`. This card lives in a
+                          md:grid-cols-3 column, so it is roughly a third of the content width,
+                          and this group carries View profile plus the CONFIRM group plus the
+                          status pill - well over 400px that shrink-0 forbade from shrinking OR
+                          wrapping. The parent list is md:overflow-y-auto, and per CSS a
+                          non-visible overflow on one axis forces the other axis to compute as
+                          auto, so the excess produced a horizontal scrollbar inside the card
+                          rather than simply spilling. Allowing the group to wrap removes the
+                          overflow at source; ml-auto keeps it right-aligned on its own line. */}
+                      <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 ml-auto">
                         {p.partnerId && !bl && (
                           <Link
                             href={`/agency/pool/${encodeURIComponent(p.partnerId)}`}
@@ -1762,7 +1771,7 @@ function PartnerPoolPageInner() {
                             The group does not wrap internally, so they can never stack into
                             identical-looking twins. */}
                         {isActive && !bl && (!p.ndaConfirmedAt || !p.msaConfirmedAt) && (
-                          <div className="flex items-center gap-1 shrink-0 rounded-md border border-border/60 p-0.5">
+                          <div className="flex items-center gap-1 flex-nowrap rounded-md border border-border/60 p-0.5">
                             <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted px-1.5">
                               Confirm
                             </span>
@@ -1801,7 +1810,7 @@ function PartnerPoolPageInner() {
                         )}
                         <span
                           className={cn(
-                            "font-mono text-2xs px-2 py-1 rounded-full",
+                            "font-mono text-2xs px-2 py-1 rounded-full whitespace-nowrap shrink-0",
                             bl
                               ? "bg-red-500/10 text-red-400"
                               : pending
@@ -1865,7 +1874,7 @@ function PartnerPoolPageInner() {
                           )}
                           {row.poolStatus === "already_on_ligament" && (
                             <span
-                              className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-sky-400/40 bg-sky-400/10 text-sky-300"
+                              className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-border bg-white/5 text-foreground-muted"
                               title="This contact's email already matches a Ligament account."
                             >
                               Already on Ligament
@@ -1940,7 +1949,10 @@ function PartnerPoolPageInner() {
                           <span> · Added {formatDateTime(row.partnershipCreatedAt)}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      {/* ITEM 2. Same class as the Active card's control row: two full-size
+                          buttons held at shrink-0 inside a one-third-width column. Checked at
+                          the other pipeline states rather than tuning the fix to one row. */}
+                      <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 ml-auto">
                         <Button
                           type="button"
                           size="sm"
