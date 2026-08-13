@@ -13,6 +13,7 @@ three outstanding files, in order, with the result to expect from each verificat
 | `074_magic_token_response_deadline.sql` | **APPLIED** (confirmed Aug 11 - live token rows carry real `response_deadline` values) | Magic-link response deadline (F2) |
 | `075_rfp_evaluation_criteria.sql` | NOT APPLIED (new) | Per-RFP evaluation criteria (P2-3) |
 | `076_structured_proposal_and_bid_close.sql` | NOT APPLIED (new) | Structured proposal sub-fields (P2-2), close bidding at deadline (P2-4) |
+| `077_client_profiles.sql` | NOT APPLIED (new, Aug 13) | Client profiles (Workstream A) |
 
 There is no 073 on disk. That gap predates this run and is not filled by it - renumbering a
 sequence other people have already read is worse than a gap.
@@ -190,6 +191,80 @@ ALTER TABLE rfp_magic_tokens DROP COLUMN IF EXISTS close_bidding_at_deadline;
 Safe at any point. After deploy, rolling back means structured proposal sub-fields stop
 persisting (prose is unaffected) and every RFP reverts to staying open past its deadline, which
 is the pre-Phase-2 behavior.
+
+---
+
+---
+
+## Applying 077 (client profiles)
+
+Independent of 072/075/076 - it touches none of the same tables. Apply it after them only
+because they were authored first.
+
+1. **Before applying, record the baseline:**
+
+   ```sql
+   SELECT count(*) FROM projects WHERE client_name IS NOT NULL;
+   ```
+   **Write this number down.** It must be unchanged afterwards. This migration performs no
+   backfill of any kind, and that query is how you prove it.
+
+2. Paste everything in `supabase/migrations/077_client_profiles.sql` above the `Verification`
+   comment block. It contains a `DO $$ ... $$` block for the RLS policy (Postgres
+   `CREATE POLICY` has no `IF NOT EXISTS`), so paste it whole - do not split it at the
+   semicolons inside that block. Run. Expect **Success. No rows returned.**
+
+3. Verification:
+
+   ```sql
+   SELECT column_name, data_type, is_nullable FROM information_schema.columns
+   WHERE table_name = 'clients' ORDER BY ordinal_position;
+   ```
+   **Expected:** 8 rows - `id` uuid NO, `agency_id` uuid NO, `name` text NO, `notes` text YES,
+   `default_business_criteria` jsonb YES, `default_evaluation_criteria` jsonb YES, `created_at`
+   timestamptz NO, `updated_at` timestamptz NO.
+
+   ```sql
+   SELECT column_name, data_type, is_nullable FROM information_schema.columns
+   WHERE (table_name = 'agency_library_documents' AND column_name = 'client_id')
+      OR (table_name = 'projects' AND column_name = 'client_id');
+   ```
+   **Expected:** 2 rows, both `uuid`, both `is_nullable = YES`.
+
+   ```sql
+   SELECT policyname FROM pg_policies WHERE tablename = 'clients';
+   ```
+   **Expected:** one row, `Agencies manage own clients`.
+
+   ```sql
+   SELECT count(*) FROM clients;
+   SELECT count(*) FROM agency_library_documents WHERE client_id IS NOT NULL;
+   SELECT count(*) FROM projects WHERE client_id IS NOT NULL;
+   ```
+   **Expected:** `0`, `0`, `0`. The last two matter most: a non-zero result means applying this
+   migration attached existing documents or existing projects to a client, which it must never
+   do.
+
+   ```sql
+   SELECT count(*) FROM projects WHERE client_name IS NOT NULL;
+   ```
+   **Expected:** identical to the baseline from step 1.
+
+### Rollback (077)
+
+```sql
+ALTER TABLE projects DROP COLUMN IF EXISTS client_id;
+ALTER TABLE agency_library_documents DROP COLUMN IF EXISTS client_id;
+DROP TABLE IF EXISTS clients;
+```
+
+**Order matters** - drop the referencing columns before the table they point at, or the
+`DROP TABLE` fails on the dependent foreign keys.
+
+Safe at any point. After deploy, rolling back means client profiles stop existing and every
+surface reverts to the plain-typed client name it uses today - which is the path all the
+Workstream A code already takes when the table is absent. It does NOT touch
+`projects.client_name`, so no project loses its client.
 
 ---
 
