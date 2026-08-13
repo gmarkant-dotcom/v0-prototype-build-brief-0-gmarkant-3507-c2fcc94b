@@ -29,12 +29,35 @@ import {
  * The two must never read as variations of one control - the scale icon, the weight column,
  * and the explanatory line all exist to keep them apart.
  */
+/** ITEM 5. The empty state's copy is RFP-scoped by default, so no existing caller changes
+ *  behavior. The client profile page passes "client", where "this RFP" is simply wrong. */
+export type EvaluationCriteriaSurface = "rfp" | "client"
+
+const EMPTY_STATE_COPY: Record<EvaluationCriteriaSurface, React.ReactNode> = {
+  rfp: (
+    <>
+      This RFP will be scored against your{" "}
+      <HelpTerm term="standard_criteria">standard evaluation criteria</HelpTerm>, the same seven
+      dimensions every other RFP uses. Load them here to change them for this RFP only.
+    </>
+  ),
+  client: (
+    <>
+      RFPs for this client are scored against your{" "}
+      <HelpTerm term="standard_criteria">standard evaluation criteria</HelpTerm>, the same seven
+      dimensions every other RFP uses. Load them here to set different defaults for this client.
+    </>
+  ),
+}
+
 export function EvaluationCriteriaEditor({
   value,
   onChange,
+  surface = "rfp",
 }: {
   value: RfpEvaluationCriterion[]
   onChange: (next: RfpEvaluationCriterion[]) => void
+  surface?: EvaluationCriteriaSurface
 }) {
   const [customName, setCustomName] = useState("")
 
@@ -72,11 +95,7 @@ export function EvaluationCriteriaEditor({
     <div className="space-y-5">
       {value.length === 0 ? (
         <div className="rounded-lg border border-border bg-white/5 p-4 space-y-3">
-          <p className="text-sm text-foreground-muted">
-            This RFP will be scored against your{" "}
-            <HelpTerm term="standard_criteria">standard evaluation criteria</HelpTerm>, the same seven dimensions
-            every other RFP uses. Load them here to change them for this RFP only.
-          </p>
+          <p className="text-sm text-foreground-muted">{EMPTY_STATE_COPY[surface]}</p>
           <Button type="button" size="sm" onClick={() => commit(seedRfpEvaluationCriteria())}>
             Load the standard criteria
           </Button>

@@ -5,7 +5,7 @@ import { resolveRfpRubricForResponse } from "@/lib/rfp-evaluation-criteria-serve
 import { formatRubricForPrompt } from "@/lib/rfp-evaluation-criteria"
 
 const ANALYST_SYSTEM_PROMPT =
-  "You are a procurement analyst helping a creative or production agency evaluate a vendor bid. Be specific and concrete, always grounded in the bid content provided. Never use markdown formatting in your response - plain prose only."
+  "You are a procurement analyst helping a creative or production agency evaluate a vendor bid. Be specific and concrete, always grounded in the bid content provided. Never use markdown formatting in your response - plain prose only. Never use a long dash of any kind; use a plain hyphen, a comma, or rewrite."
 
 export type BidSummaryGenerationResult =
   | {

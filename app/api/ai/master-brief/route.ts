@@ -80,7 +80,9 @@ export async function POST(req: Request) {
     const groundingRules = `CRITICAL GROUNDING (must follow):
 1) The CLIENT BRIEF text below is the ONLY source of truth for requirements, audiences, deliverables, constraints, names, budgets, dates, and success metrics.
 2) Do NOT invent campaigns, brands, products, KPIs, or scope that are not clearly stated or strongly implied in the CLIENT BRIEF.
-3) "overview" must be a faithful synthesis of the brief (specific themes, goals, and constraints from the brief — not generic agency filler).
+0) PUNCTUATION: never use a long dash of any kind in any output. Use a plain hyphen, a comma, or
+   rewrite the sentence. This applies to every field you return, including scope item titles.
+3) "overview" must be a faithful synthesis of the brief (specific themes, goals, and constraints from the brief - not generic agency filler).
 4) "objectives" must map to goals/outcomes described in the brief (or split one stated goal into clear bullets). If the brief lists none, derive the minimum from the brief context; use "TBD" only if truly absent.
 5) "scopeItems" must reflect actual workstreams/deliverables from the brief. Name and describe them using terminology from the brief when possible. Prefer 5–10 items unless the brief implies fewer.
 6) "totalBudget" and "timeline" must come from the brief when present; otherwise "TBD" or a short honest placeholder.
@@ -102,7 +104,7 @@ Template file label: ${templateHint}
 
 ---
 
-CLIENT BRIEF (read first — primary content):
+CLIENT BRIEF (read first - primary content):
 ${briefText}
 
 ---

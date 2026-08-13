@@ -22,7 +22,7 @@ Keep the tone professional but approachable. The RFP should be clear and compreh
 SCORING CRITERIA & WEIGHTS (Total: 100 Points)
 ═══════════════════════════════════════════════════════════════
 
-1. RELEVANT EXPERIENCE — 25 Points (25% Weight)
+1. RELEVANT EXPERIENCE - 25 Points (25% Weight)
    Evaluates: Portfolio quality, similar project experience, industry knowledge
    Scoring Guidelines:
    • 23-25: Exceptional - Multiple directly relevant projects, industry leader
@@ -31,7 +31,7 @@ SCORING CRITERIA & WEIGHTS (Total: 100 Points)
    • 6-11: Limited - Minimal directly relevant work
    • 0-5: Insufficient - No relevant experience demonstrated
 
-2. TEAM QUALITY — 20 Points (20% Weight)
+2. TEAM QUALITY - 20 Points (20% Weight)
    Evaluates: Key personnel expertise, team availability, relevant credentials
    Scoring Guidelines:
    • 18-20: Exceptional - Senior team with proven track records, full availability
@@ -40,7 +40,7 @@ SCORING CRITERIA & WEIGHTS (Total: 100 Points)
    • 5-9: Limited - Junior team or key gaps
    • 0-4: Insufficient - Unclear team structure or availability
 
-3. CREATIVE APPROACH — 20 Points (20% Weight)
+3. CREATIVE APPROACH - 20 Points (20% Weight)
    Evaluates: Strategic thinking, innovation, alignment with brief requirements
    Scoring Guidelines:
    • 18-20: Exceptional - Innovative approach that exceeds brief expectations
@@ -49,7 +49,7 @@ SCORING CRITERIA & WEIGHTS (Total: 100 Points)
    • 5-9: Limited - Generic approach, misses key brief elements
    • 0-4: Insufficient - Does not address brief requirements
 
-4. TIMELINE REALISM — 20 Points (20% Weight)
+4. TIMELINE REALISM - 20 Points (20% Weight)
    Evaluates: Feasibility of proposed schedule, milestone clarity, contingency planning
    Scoring Guidelines:
    • 18-20: Exceptional - Detailed timeline with realistic buffers, clear dependencies
@@ -58,7 +58,7 @@ SCORING CRITERIA & WEIGHTS (Total: 100 Points)
    • 5-9: Limited - Aggressive timeline or unclear milestones
    • 0-4: Insufficient - Unrealistic or missing timeline
 
-5. VALUE FOR BUDGET — 15 Points (15% Weight)
+5. VALUE FOR BUDGET - 15 Points (15% Weight)
    Evaluates: Competitive pricing, clear deliverables, transparency, no hidden costs
    Scoring Guidelines:
    • 14-15: Exceptional - Competitive rate, clear breakdown, excellent value
@@ -82,7 +82,7 @@ Format your response EXACTLY as:
 | Creative Approach | XX/20 | 20% | XX pts |
 | Timeline Realism | XX/20 | 20% | XX pts |
 | Value for Budget | XX/15 | 15% | XX pts |
-| **TOTAL** | — | 100% | **XX/100** |
+| **TOTAL** | - | 100% | **XX/100** |
 
 **═══ DETAILED ASSESSMENT ═══**
 

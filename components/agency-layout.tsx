@@ -381,31 +381,59 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
               included, since this sidebar is the only agency nav) can start a project
               without navigating to the dashboard first. */}
           <div className="mb-5 space-y-2">
-            <NewProjectDialog
-              trigger={
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-accent text-accent-foreground font-mono text-sm font-medium hover:bg-accent/90 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  New project
-                </button>
-              }
-            />
+            {/* ITEM 6. Same Tooltip primitive and same side/width/styling as every other nav
+                entry - no new tooltip mechanism. The primitive already carries
+                pointer-events-none and sideOffset 8, so the caption cannot sit over either
+                button and swallow the click that opens its dialog. */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <NewProjectDialog
+                    trigger={
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-accent text-accent-foreground font-mono text-sm font-medium hover:bg-accent/90 transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        New project
+                      </button>
+                    }
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                <p className="font-mono text-2xs text-foreground-muted leading-relaxed">
+                  Start a project to hold a brief, its scope, and every bid and engagement that
+                  follows from it.
+                </p>
+              </TooltipContent>
+            </Tooltip>
             {/* A1: directly beside New project, same dialog contract. Secondary styling on
                 purpose - the design language allows one primary per view, and starting a project
                 is the more common act. */}
-            <NewClientDialog
-              trigger={
-                <button
-                  type="button"
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border text-foreground font-mono text-sm transition-colors [@media(hover:hover)]:hover:bg-white/5 active:bg-white/10 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                  <Plus className="w-4 h-4" />
-                  New client profile
-                </button>
-              }
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <NewClientDialog
+                    trigger={
+                      <button
+                        type="button"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border text-foreground font-mono text-sm transition-colors [@media(hover:hover)]:hover:bg-white/5 active:bg-white/10 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                      >
+                        <Plus className="w-4 h-4" />
+                        New client profile
+                      </button>
+                    }
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                <p className="font-mono text-2xs text-foreground-muted leading-relaxed">
+                  Store a client's documents and standing requirements once, then reuse them on
+                  every RFP you run for that client.
+                </p>
+              </TooltipContent>
+            </Tooltip>
           </div>
 
           {/* Overview Section */}

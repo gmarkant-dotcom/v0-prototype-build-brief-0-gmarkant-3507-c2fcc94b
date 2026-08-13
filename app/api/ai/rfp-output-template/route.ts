@@ -113,14 +113,16 @@ export async function POST(req: Request) {
 
     const prompt = `You are helping a lead agency produce an OUTPUT FORMAT TEMPLATE for a Master RFP document.
 
-This template defines STRUCTURE, HEADINGS, and SECTION ORDER only — not the final factual RFP. Another step will merge the real client brief into this shape.
+PUNCTUATION: never use a long dash of any kind. Use a plain hyphen, a comma, or rewrite.
+
+This template defines STRUCTURE, HEADINGS, and SECTION ORDER only - not the final factual RFP. Another step will merge the real client brief into this shape.
 
 ${styleLine}
 
 ${formatLine}
 
-Sensitivity (apply to how you label sections and placeholder examples in the template only — the CLIENT BRIEF below is still the source for any example phrasing you echo):
-${scrubRules || "No extra scrubbing rules — use neutral placeholder examples where needed."}
+Sensitivity (apply to how you label sections and placeholder examples in the template only - the CLIENT BRIEF below is still the source for any example phrasing you echo):
+${scrubRules || "No extra scrubbing rules - use neutral placeholder examples where needed."}
 
 Write a plain-text outline the Master RFP generator can follow. Include:
 - Title block pattern
@@ -134,7 +136,7 @@ Do not output JSON. Use markdown-style headings (##) for sections. Keep it under
 
 ---
 
-CLIENT BRIEF (for context — respect scrubbing rules only when illustrating placeholder style):
+CLIENT BRIEF (for context - respect scrubbing rules only when illustrating placeholder style):
 ${briefText}`
 
     const result = streamText({

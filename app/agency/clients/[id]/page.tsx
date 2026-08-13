@@ -254,7 +254,7 @@ export default function ClientProfileDetailPage() {
                 The dimensions you normally score bids on for this client. Leave empty and RFPs
                 use your standard criteria.
               </p>
-              <EvaluationCriteriaEditor value={evaluation} onChange={setEvaluation} />
+              <EvaluationCriteriaEditor value={evaluation} onChange={setEvaluation} surface="client" />
             </BidFormCollapsibleSection>
 
             <div className="flex items-center gap-3">

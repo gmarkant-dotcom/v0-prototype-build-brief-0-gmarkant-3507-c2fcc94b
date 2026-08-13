@@ -1785,7 +1785,14 @@ function PartnerPoolPageInner() {
                                 disabled={confirmingMsaFor === p.id}
                                 onClick={() => handleConfirmMsaSigned(p.id)}
                                 aria-label={`Confirm the MSA has been signed by ${title}`}
-                                className="h-6 px-2 border-sky-500/40 text-sky-300 hover:bg-sky-500/10"
+                                /* ITEM 7b. Was border-sky-500/40 text-sky-300, a literal with no
+                                   token behind it. The design language sanctions success,
+                                   warning, destructive and accent; there is no blue token. This
+                                   is a secondary neutral action, so it takes the ruled secondary
+                                   treatment - outlined, neutral fill. It also raises contrast
+                                   against the success-green NDA control beside it, which is the
+                                   confusion 7a reports. */
+                                className="h-6 px-2 border-border text-foreground [@media(hover:hover)]:hover:bg-white/10"
                               >
                                 {confirmingMsaFor === p.id ? "Saving..." : "MSA signed"}
                               </Button>
