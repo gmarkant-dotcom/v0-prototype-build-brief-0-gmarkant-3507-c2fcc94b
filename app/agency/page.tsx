@@ -30,7 +30,11 @@ import {
   type InsuranceRequirement,
   type RequirementPriority,
   normalizeBusinessCriteriaRequired,
+  DESIGNATION_KEYS,
+  INSURANCE_KEYS,
 } from "@/lib/business-criteria"
+import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
+import { MAX_RFP_EVALUATION_CRITERIA } from "@/lib/rfp-evaluation-criteria"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
 import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
@@ -388,6 +392,93 @@ function AgencyRFPContent() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [masterBriefLoadingMessageIndex, setMasterBriefLoadingMessageIndex] = useState(0)
   const [generateMasterBriefError, setGenerateMasterBriefError] = useState<string | null>(null)
+
+  /**
+   * Q1: collapse state for the Master RFP step's sections. Deliberately its OWN useState and
+   * deliberately NOT part of masterRfp - the draft's saveDraft payload is an explicit key list
+   * (see the persistence effect below) and masterRfp is one of those keys, so anything living
+   * inside it would be serialized. Collapse is view state, not the agency's work; a draft must
+   * round-trip byte-identical to what it did before this change.
+   */
+  const [step2Open, setStep2Open] = useState({
+    summary: true,
+    scope: true,
+    business: true,
+    budget: true,
+    evaluation: true,
+  })
+  type Step2SectionKey = keyof typeof step2Open
+  const toggleStep2Section = (key: Step2SectionKey) =>
+    setStep2Open((prev) => ({ ...prev, [key]: !prev[key] }))
+  /** Gate integration: a blocking problem inside a collapsed section must never be invisible. */
+  const expandStep2Sections = (keys: Step2SectionKey[]) =>
+    setStep2Open((prev) => ({ ...prev, ...Object.fromEntries(keys.map((k) => [k, true])) }))
+  const [step2Error, setStep2Error] = useState<string | null>(null)
+
+  /**
+   * Step 2 had no Continue validation at all before Q1 - it called setCurrentStep(3)
+   * unconditionally. Rather than build the auto-expand plumbing against nothing, it is wired to
+   * the one genuinely blocking problem the step can now hold: a budget category or evaluation
+   * criterion whose name has been cleared. Both are silently DROPPED by their normalizers on
+   * save today, so an agency loses that row without ever being told. Logged as an open question
+   * in docs/q-batch-report.md, since this is a small behavior addition rather than a pure
+   * rendering change.
+   */
+  const validateStep2 = (): { sections: Step2SectionKey[]; message: string } | null => {
+    if (!masterRfp) return null
+    const blanks: string[] = []
+    const sections: Step2SectionKey[] = []
+    if (masterRfp.budget_categories.some((c) => !c.name.trim())) {
+      blanks.push("a budget category")
+      sections.push("budget")
+    }
+    if (masterRfp.evaluation_criteria.some((c) => !c.name.trim())) {
+      blanks.push("an evaluation criterion")
+      sections.push("evaluation")
+    }
+    if (sections.length === 0) return null
+    return {
+      sections,
+      message: `Name ${blanks.join(" and ")} before continuing, or remove the empty row. Rows without a name are not saved.`,
+    }
+  }
+
+  /**
+   * Collapsed-header summaries. Each is computed from the same state its section edits, so a
+   * collapsed header can never disagree with what is inside it - the F1 rule that a collapsed
+   * section must summarize its state rather than hide it.
+   */
+  const businessCriteriaSummary = (() => {
+    const required = masterRfp?.business_criteria_required
+    if (!required) return "None required"
+    const designations = DESIGNATION_KEYS.filter((k) => required.designations[k] === true).length
+    const insurance = INSURANCE_KEYS.filter((k) => required.insurance[k]?.required === true).length
+    const coi = required.insurance.coi_on_file === true ? 1 : 0
+    const total = designations + insurance + coi
+    return total === 0 ? "None required" : `${total} required`
+  })()
+
+  const budgetCategoriesSummary = (() => {
+    const count = masterRfp?.budget_categories.length ?? 0
+    if (count === 0) return "None - vendors bid one total"
+    return `${count} categor${count === 1 ? "y" : "ies"}`
+  })()
+
+  const evaluationCriteriaSummary = (() => {
+    const count = masterRfp?.evaluation_criteria.length ?? 0
+    return count === 0 ? "Standard criteria" : `${count} of ${MAX_RFP_EVALUATION_CRITERIA}`
+  })()
+
+  const handleContinueFromStep2 = () => {
+    const issue = validateStep2()
+    if (issue) {
+      expandStep2Sections(issue.sections)
+      setStep2Error(issue.message)
+      return
+    }
+    setStep2Error(null)
+    setCurrentStep(3)
+  }
 
   const updateBudgetCategories = (next: BudgetCategory[]) => {
     setMasterRfp((prev) => (prev ? { ...prev, budget_categories: next } : prev))
@@ -1895,6 +1986,8 @@ function AgencyRFPContent() {
         {/* STEP 2: Master RFP Review */}
         {currentStep === 2 && masterRfp && (
           <div className="space-y-6">
+            {/* Identity header stays always-visible: it names the thing every section below
+                belongs to, so collapsing it would leave the step unlabelled. */}
             <GlassCard>
               <div className="flex items-start justify-between mb-6">
                 <div>
@@ -1913,8 +2006,8 @@ function AgencyRFPContent() {
                   </Button>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-2 gap-4 mb-6">
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 rounded-lg bg-accent/10 border border-accent/20">
                   <div className="font-mono text-2xs text-foreground-muted uppercase mb-1">Total Budget</div>
                   <div className="font-display font-bold text-xl text-accent">{masterRfp.totalBudget}</div>
@@ -1924,53 +2017,70 @@ function AgencyRFPContent() {
                   <div className="font-display font-bold text-xl text-foreground">{masterRfp.timeline}</div>
                 </div>
               </div>
-              
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-display font-bold text-sm text-foreground mb-2">Project overview</h3>
-                  <p className="text-sm text-foreground-muted leading-relaxed">{masterRfp.overview}</p>
-                </div>
-                
-                <div>
-                  <h3 className="font-display font-bold text-sm text-foreground mb-2">Objectives</h3>
-                  <ul className="space-y-2">
-                    {masterRfp.objectives.map((obj, i) => (
-                      <li key={i} className="text-sm text-foreground-muted flex items-start gap-2">
-                        <span className="text-accent mt-1">•</span>
-                        <span>{obj}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                
-                <div>
-                  <h3 className="font-display font-bold text-sm text-foreground mb-3">
-                    Scope of Work ({scopeItems.length} deliverables)
-                  </h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    {scopeItems.map((item) => (
-                      <div key={item.id} className="p-3 rounded-lg bg-white/5 border border-border">
-                        <div className="font-display font-bold text-sm text-foreground mb-1">{item.name}</div>
-                        <div className="font-mono text-2xs text-foreground-muted line-clamp-2 mb-2">{item.description}</div>
-                        <div className="flex gap-3">
-                          <span className="font-mono text-2xs text-accent">{item.estimatedBudget}</span>
-                          <span className="font-mono text-2xs text-foreground-muted">{item.timeline}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
             </GlassCard>
 
-            <GlassCard>
-              <div className="mb-6">
-                <h2 className="font-display font-bold text-xl text-foreground">Business criteria</h2>
-                <p className="text-sm text-foreground-muted mt-1">
-                  Require any diversity designation or insurance coverage from bidders. Left unchecked, a
-                  requirement is optional.
-                </p>
+            {/* Q1: every section below uses the same shared wrapper F1 built for the bid form -
+                one component, no wizard-specific variant. All default open; each collapsed
+                header carries a summary so nothing can hide behind a chevron. The wrapper's
+                header is a real <button> with aria-expanded, so it is keyboard-operable for
+                free. Collapse state is view-only and never reaches the draft. */}
+            <BidFormCollapsibleSection
+              title="Master RFP summary"
+              summary={`${masterRfp.objectives.length} objective${masterRfp.objectives.length === 1 ? "" : "s"}`}
+              open={step2Open.summary}
+              onToggle={() => toggleStep2Section("summary")}
+              theme="dark"
+            >
+              <div>
+                <h3 className="font-display font-bold text-sm text-foreground mb-2">Project overview</h3>
+                <p className="text-sm text-foreground-muted leading-relaxed">{masterRfp.overview}</p>
               </div>
+
+              <div>
+                <h3 className="font-display font-bold text-sm text-foreground mb-2">Objectives</h3>
+                <ul className="space-y-2">
+                  {masterRfp.objectives.map((obj, i) => (
+                    <li key={i} className="text-sm text-foreground-muted flex items-start gap-2">
+                      <span className="text-accent mt-1">•</span>
+                      <span>{obj}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </BidFormCollapsibleSection>
+
+            <BidFormCollapsibleSection
+              title="Scope items"
+              summary={`${scopeItems.length} deliverable${scopeItems.length === 1 ? "" : "s"}`}
+              open={step2Open.scope}
+              onToggle={() => toggleStep2Section("scope")}
+              theme="dark"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                {scopeItems.map((item) => (
+                  <div key={item.id} className="p-3 rounded-lg bg-white/5 border border-border">
+                    <div className="font-display font-bold text-sm text-foreground mb-1">{item.name}</div>
+                    <div className="font-mono text-2xs text-foreground-muted line-clamp-2 mb-2">{item.description}</div>
+                    <div className="flex gap-3">
+                      <span className="font-mono text-2xs text-accent">{item.estimatedBudget}</span>
+                      <span className="font-mono text-2xs text-foreground-muted">{item.timeline}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </BidFormCollapsibleSection>
+
+            <BidFormCollapsibleSection
+              title="Business criteria"
+              summary={businessCriteriaSummary}
+              open={step2Open.business}
+              onToggle={() => toggleStep2Section("business")}
+              theme="dark"
+            >
+              <p className="text-sm text-foreground-muted">
+                Require any diversity designation or insurance coverage from bidders. Left unchecked, a
+                requirement is optional.
+              </p>
 
               <BusinessCriteriaEditor
                 value={masterRfp.business_criteria_required}
@@ -1982,44 +2092,56 @@ function AgencyRFPContent() {
                 onChangeCoiPriority={updateCoiPriority}
                 onChangeNotes={updateRequiredNotes}
               />
-            </GlassCard>
+            </BidFormCollapsibleSection>
 
-            {/* P2-1 budget categories. Its own card inside this existing step rather than a new
-                wizard step: a new step renumbers 3 through 6, rewrites the step-nav rail, and
-                breaks every in-flight localStorage draft (currentStep is persisted), which is
-                structural work the design pass owns. See docs/p2-reconciliation.md, call 1. */}
-            <GlassCard>
-              <div className="mb-6">
-                <h2 className="font-display font-bold text-xl text-foreground">Budget categories</h2>
-                <p className="text-sm text-foreground-muted mt-1">
-                  Ask every bidder for the same cost breakdown so you can compare them line by line. Optional - leave
-                  this empty and vendors bid one total figure, exactly as they do today.
-                </p>
-              </div>
+            {/* P2-1 budget categories. Its own section inside this existing step rather than a
+                new wizard step: a new step renumbers 3 through 6, rewrites the step-nav rail,
+                and breaks every in-flight localStorage draft (currentStep is persisted), which
+                is structural work the design pass owns. See docs/p2-reconciliation.md, call 1. */}
+            <BidFormCollapsibleSection
+              title="Budget categories"
+              summary={budgetCategoriesSummary}
+              open={step2Open.budget}
+              onToggle={() => toggleStep2Section("budget")}
+              theme="dark"
+            >
+              <p className="text-sm text-foreground-muted">
+                Ask every bidder for the same cost breakdown so you can compare them line by line. Optional - leave
+                this empty and vendors bid one total figure, exactly as they do today.
+              </p>
 
               <BudgetCategoryEditor value={masterRfp.budget_categories} onChange={updateBudgetCategories} />
-            </GlassCard>
+            </BidFormCollapsibleSection>
 
-            {/* P2-3. Its own card, deliberately separated from Business criteria above by the
-                Budget categories card - scored quality dimensions and confirmable compliance
+            {/* P2-3. Its own section, deliberately separated from Business criteria above by the
+                Budget categories section - scored quality dimensions and confirmable compliance
                 facts must never read as two settings of one control. */}
-            <GlassCard>
-              <div className="mb-6">
-                <h2 className="font-display font-bold text-xl text-foreground">Evaluation criteria</h2>
-                <p className="text-sm text-foreground-muted mt-1">
-                  The dimensions you will score these bids against, each out of 10 and weighted. Optional - leave this
-                  empty and bids are scored against your standard criteria, exactly as they are today.
-                </p>
-              </div>
+            <BidFormCollapsibleSection
+              title="Evaluation criteria"
+              summary={evaluationCriteriaSummary}
+              open={step2Open.evaluation}
+              onToggle={() => toggleStep2Section("evaluation")}
+              theme="dark"
+            >
+              <p className="text-sm text-foreground-muted">
+                The dimensions you will score these bids against, each out of 10 and weighted. Optional - leave this
+                empty and bids are scored against your standard criteria, exactly as they are today.
+              </p>
 
               <EvaluationCriteriaEditor value={masterRfp.evaluation_criteria} onChange={updateEvaluationCriteria} />
-            </GlassCard>
+            </BidFormCollapsibleSection>
+
+            {step2Error && (
+              <p className="font-mono text-xs text-warning" role="alert">
+                {step2Error}
+              </p>
+            )}
 
             <div className="flex justify-between">
               <Button variant="outline" onClick={() => setCurrentStep(1)} className="border-border text-foreground hover:bg-white/5">
                 Back
               </Button>
-              <Button onClick={() => setCurrentStep(3)} className="bg-accent text-accent-foreground hover:bg-accent/90">
+              <Button onClick={handleContinueFromStep2} className="bg-accent text-accent-foreground hover:bg-accent/90">
                 Continue to Scope Allocation
               </Button>
             </div>

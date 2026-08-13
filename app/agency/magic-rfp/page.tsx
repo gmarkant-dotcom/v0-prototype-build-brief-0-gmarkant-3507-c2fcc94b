@@ -37,7 +37,8 @@ import {
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
 import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
-import { type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
+import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
+import { MAX_RFP_EVALUATION_CRITERIA, type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
 import { type BudgetCategory } from "@/lib/budget-categories"
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -921,62 +922,45 @@ function MagicRfpContent() {
                   )}
                 </div>
 
-                {/* P2-1 budget categories, same collapsible card pattern as the criteria block
-                    directly above it. */}
-                <div className="rounded-lg border border-border bg-white/5 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setBudgetCategoriesOpen((o) => !o)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left"
-                  >
-                    <div>
-                      <div className="font-display font-bold text-sm text-foreground">Budget categories</div>
-                      <p className="font-mono text-2xs text-foreground-muted mt-0.5">
-                        {budgetCategories.length > 0
-                          ? `${budgetCategories.length} defined`
-                          : "Optional. Ask for a cost breakdown instead of one total."}
-                      </p>
-                    </div>
-                    {budgetCategoriesOpen ? (
-                      <ChevronUp className="w-4 h-4 text-foreground-muted shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-foreground-muted shrink-0" />
-                    )}
-                  </button>
-                  {budgetCategoriesOpen && (
-                    <div className="px-4 pb-4 border-t border-border/30 pt-4">
-                      <BudgetCategoryEditor value={budgetCategories} onChange={setBudgetCategories} />
-                    </div>
-                  )}
-                </div>
+                {/* Q1: these two were hand-rolled accordions when P2-1 and P2-3 added them two
+                    days ago - ad-hoc variants of a component that already existed. Converted to
+                    the shared wrapper, which also gives them a real aria-expanded header for
+                    free. The two NATIVE accordions above (Advanced Options, Additional business
+                    criteria) keep their own mechanism and are not wrapped: nesting two collapse
+                    layers would be worse than an inconsistency.
 
-                {/* P2-3, same collapsible card pattern. */}
-                <div className="rounded-lg border border-border bg-white/5 overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setEvaluationCriteriaOpen((o) => !o)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left"
-                  >
-                    <div>
-                      <div className="font-display font-bold text-sm text-foreground">Evaluation criteria</div>
-                      <p className="font-mono text-2xs text-foreground-muted mt-0.5">
-                        {evaluationCriteria.length > 0
-                          ? `${evaluationCriteria.length} defined for this RFP`
-                          : "Optional. Scored against your standard criteria otherwise."}
-                      </p>
-                    </div>
-                    {evaluationCriteriaOpen ? (
-                      <ChevronUp className="w-4 h-4 text-foreground-muted shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-foreground-muted shrink-0" />
-                    )}
-                  </button>
-                  {evaluationCriteriaOpen && (
-                    <div className="px-4 pb-4 border-t border-border/30 pt-4">
-                      <EvaluationCriteriaEditor value={evaluationCriteria} onChange={setEvaluationCriteria} />
-                    </div>
-                  )}
-                </div>
+                    They stay default CLOSED, unlike the wizard step's sections. On this page
+                    they sit in a dense settings column beside two accordions that are also
+                    closed, and every one of them is optional - opening them all by default
+                    would bury the brief this page exists to write. Logged as a deliberate
+                    divergence from F1's default-open rule. */}
+                <BidFormCollapsibleSection
+                  title="Budget categories"
+                  summary={
+                    budgetCategories.length > 0
+                      ? `${budgetCategories.length} defined`
+                      : "None - vendors bid one total"
+                  }
+                  open={budgetCategoriesOpen}
+                  onToggle={() => setBudgetCategoriesOpen((o) => !o)}
+                  theme="dark"
+                >
+                  <BudgetCategoryEditor value={budgetCategories} onChange={setBudgetCategories} />
+                </BidFormCollapsibleSection>
+
+                <BidFormCollapsibleSection
+                  title="Evaluation criteria"
+                  summary={
+                    evaluationCriteria.length > 0
+                      ? `${evaluationCriteria.length} of ${MAX_RFP_EVALUATION_CRITERIA}`
+                      : "Standard criteria"
+                  }
+                  open={evaluationCriteriaOpen}
+                  onToggle={() => setEvaluationCriteriaOpen((o) => !o)}
+                  theme="dark"
+                >
+                  <EvaluationCriteriaEditor value={evaluationCriteria} onChange={setEvaluationCriteria} />
+                </BidFormCollapsibleSection>
 
                 <div className="p-4 rounded-lg border border-border bg-white/5 space-y-2">
                   <label className="flex items-center gap-2 cursor-pointer">
