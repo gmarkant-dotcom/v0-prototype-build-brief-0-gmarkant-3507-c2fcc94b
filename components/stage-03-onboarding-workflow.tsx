@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useSelectedProject } from "@/contexts/selected-project-context"
+import { isAgencyDocument, isClientScopedDocument } from "@/lib/library-documents"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { EmptyState } from "@/components/empty-state"
 import { createClient } from "@/lib/supabase/client"
@@ -44,6 +45,8 @@ function partnerOptionKey(p: OnboardingPartnerRow): string {
 }
 
 type LibraryRow = {
+  /** ITEM 3. Null for an agency document, set for a client-scoped one. */
+  client_id?: string | null
   id: string
   section: string
   kind: string
@@ -98,6 +101,8 @@ export function Stage03OnboardingWorkflow() {
   const { selectedProject, setSelectedProject, projects, refreshProjects, isLoadingProjects } = useSelectedProject()
   const [onboardingPartners, setOnboardingPartners] = useState<OnboardingPartnerRow[]>([])
   const [library, setLibrary] = useState<LibraryRow[]>([])
+  /** Name of the client behind this project, when it has one. Null means no client group. */
+  const [libraryClientName, setLibraryClientName] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadLib, setLoadLib] = useState(false)
   const [partnerSelectionKey, setPartnerSelectionKey] = useState("")
@@ -171,13 +176,32 @@ export function Stage03OnboardingWorkflow() {
     }
   }, [selectedProject?.id])
 
+  /**
+   * ITEM 3. Onboarding is a do-the-work surface: it must offer agency documents plus THIS
+   * project's client's documents, and nothing belonging to any other client. That is a
+   * correctness requirement, not a preference.
+   *
+   * Scoping is done server-side by project_id, through the one shared query in
+   * lib/library-documents.ts, because client_id lives on the project and this component only
+   * has selectedProject.id. A project with a typed client name and no client_id - which is all
+   * six live projects - resolves to agency documents only, with no client group rendered.
+   */
   const refreshLibrary = useCallback(async () => {
+    if (!selectedProject?.id) {
+      setLibrary([])
+      setLibraryClientName(null)
+      return
+    }
     setLoadLib(true)
     try {
-      const res = await fetch("/api/agency/library-documents", { credentials: "same-origin" })
+      const res = await fetch(
+        `/api/agency/library-documents?project_id=${encodeURIComponent(selectedProject.id)}`,
+        { credentials: "same-origin" }
+      )
       const data = await res.json().catch(() => ({}))
       if (res.ok) {
         setLibrary((data.documents || []) as LibraryRow[])
+        setLibraryClientName((data.clientName as string | null) ?? null)
       } else {
         console.error("[onboarding] library-documents fetch failed", {
           status: res.status,
@@ -187,7 +211,7 @@ export function Stage03OnboardingWorkflow() {
     } finally {
       setLoadLib(false)
     }
-  }, [])
+  }, [selectedProject?.id])
 
   useEffect(() => {
     if (!selectedProject?.id) return
@@ -195,7 +219,7 @@ export function Stage03OnboardingWorkflow() {
   }, [selectedProject?.id, loadOnboardingPartners])
 
   useEffect(() => {
-    refreshLibrary()
+    void refreshLibrary()
   }, [refreshLibrary])
 
   useEffect(() => {
@@ -257,8 +281,17 @@ export function Stage03OnboardingWorkflow() {
   const assignmentIdForSend = selectedPartnerRow?.assignmentId ?? ""
   const selectedPartnerAgreement = partnershipId ? latestAgreementByPartnership.get(partnershipId) : undefined
 
-  const agencyDocs = useMemo(() => library.filter((d) => d.section === "agency"), [library])
-  const templateDocs = useMemo(() => library.filter((d) => d.section === "templates"), [library])
+  // Partitioned through the one shared predicate. Client documents are written under section
+  // 'agency' (the live CHECK allows nothing else), so section alone cannot separate them.
+  const agencyDocs = useMemo(
+    () => library.filter((d) => d.section === "agency" && isAgencyDocument(d)),
+    [library]
+  )
+  const templateDocs = useMemo(
+    () => library.filter((d) => d.section === "templates" && isAgencyDocument(d)),
+    [library]
+  )
+  const clientDocs = useMemo(() => library.filter((d) => isClientScopedDocument(d)), [library])
 
   const toggleLib = (id: string) => {
     setSelectedLibIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
@@ -567,6 +600,45 @@ export function Stage03OnboardingWorkflow() {
               </Select>
             </div>
           </GlassCard>
+
+          {/* ITEM 3. Rendered only when this project resolves a client AND that client has
+              documents. A project with a typed client name and no client_id renders no heading
+              at all, which is exactly today's behavior for every live project. */}
+          {libraryClientName && clientDocs.length > 0 && (
+            <GlassCard className="p-6 space-y-4">
+              <GlassCardHeader
+                title={`${libraryClientName} documents`}
+                description="Attached to this client's profile. Only this client's documents appear here."
+              />
+              <div className="space-y-2">
+                {clientDocs.map((d) => {
+                  const u = libraryUrl(d)
+                  const disabled = !u
+                  return (
+                    <label
+                      key={d.id}
+                      className={cn(
+                        "flex items-start gap-3 rounded-lg border border-border/60 p-3",
+                        disabled && "opacity-50"
+                      )}
+                    >
+                      <Checkbox
+                        checked={selectedLibIds.includes(d.id)}
+                        onCheckedChange={() => !disabled && toggleLib(d.id)}
+                        disabled={disabled}
+                      />
+                      <div className="min-w-0">
+                        <div className="text-sm text-foreground">{d.label}</div>
+                        <div className="font-mono text-2xs text-foreground-muted">
+                          {disabled ? "No file or link on this document" : d.source_type === "url" ? "Link" : "File"}
+                        </div>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            </GlassCard>
+          )}
 
           <GlassCard className="p-6 space-y-4">
             <GlassCardHeader
