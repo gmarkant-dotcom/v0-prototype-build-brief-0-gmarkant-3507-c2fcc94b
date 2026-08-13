@@ -865,14 +865,22 @@ export default function PartnerRfpDetailPage() {
     setTermsHydrated(true)
   }, [loading, isDemoDetail, existing, defaultTermsFromProfile, defaultTermsLoaded, termsHydrated])
 
-  /** No separate awarded-state Submission History branch — it lives under Status & Feedback. Open that tab for terminal outcomes so history is visible (default tab is My Bid). */
+  /** No separate awarded-state Submission History branch — it lives under Status & Feedback. Open that tab for terminal outcomes so history is visible (default tab is My Bid).
+   *
+   *  R1: only on the TRANSITION into a terminal status, not on every render that observes one.
+   *  Previously a vendor viewing an awarded bid could not stay on any other tab, because every
+   *  refetch re-read the same "awarded" and pulled them back. Now the outcome opens the tab the
+   *  moment it lands, then leaves them alone. */
+  const terminalStatusHandledRef = useRef<string | null>(null)
   useEffect(() => {
     if (loading || isDemoDetail) return
     const st = existing?.status
-    if (st === "awarded" || st === "declined") {
-      setActiveTab("status")
-    }
-  }, [loading, isDemoDetail, existing?.status])
+    if (st !== "awarded" && st !== "declined") return
+    const marker = `${id}:${st}`
+    if (terminalStatusHandledRef.current === marker) return
+    terminalStatusHandledRef.current = marker
+    setActiveTab("status")
+  }, [loading, isDemoDetail, existing?.status, id])
 
   /** Session + `profiles.role === partner` only — no subscription / plan checks. */
   const ensurePartnerAuth = useCallback(async (): Promise<boolean> => {
@@ -911,16 +919,34 @@ export default function PartnerRfpDetailPage() {
     return true
   }, [isDemoDetail, router])
 
-  /** Must run before any early return — same hook order on loading vs loaded. */
+  /**
+   * R1: picks the DEFAULT tab, once per RFP, and never again.
+   *
+   * This effect used to call setActiveTab unconditionally on every run, with `inbox` and
+   * `existing?.status` in its dependency list. `inbox` is a fresh object on every refetch, and
+   * `existing.status` changes the moment a draft is first saved - so a vendor typing on My Bid
+   * was thrown back to Status & Feedback by their own autosave. Deterministically, in fact: an
+   * unanswered RFP has currentStatus "new", which is not in the submitted list, so
+   * shouldDefaultToStatus is true; the first autosave flips existing from null to a row and
+   * re-runs the effect, which then reasserts "status" over whatever tab the vendor was on.
+   *
+   * A default is a starting position, not an invariant to re-impose. It is applied once per
+   * RFP id (not once per mount - the App Router reuses this component when navigating between
+   * two RFPs, so a ref alone would leave the second one on the first one's tab), and after that
+   * the tab moves only when the vendor moves it.
+   */
+  const tabDefaultAppliedForRef = useRef<string | null>(null)
   useEffect(() => {
     if (loading || !inbox) return
+    if (tabDefaultAppliedForRef.current === id) return
+    tabDefaultAppliedForRef.current = id
     const currentStatus =
       existing?.status || (inbox.status === "bid_submitted" ? "submitted" : inbox.status)
     const shouldDefaultToStatus =
       !!existing?.agency_feedback ||
       (Boolean(currentStatus) && !["submitted", "bid_submitted"].includes(currentStatus))
     setActiveTab(shouldDefaultToStatus ? "status" : "bid")
-  }, [loading, inbox, existing?.agency_feedback, existing?.status, inbox?.status])
+  }, [loading, inbox, existing?.agency_feedback, existing?.status, inbox?.status, id])
 
   /** P2-1. Empty for every RFP that defines no categories, and for every RFP at all before
    *  migration 072 - in which case every budget surface below behaves exactly as it did
