@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { HelpTerm } from "@/components/help-term"
 import { cn } from "@/lib/utils"
+import { MOMENTARY_ACTION_DARK, MOMENTARY_LINK_DARK } from "@/lib/interactive-styles"
 import {
   MAX_RFP_EVALUATION_CRITERIA,
   MIN_CRITERION_WEIGHT,
@@ -85,10 +86,15 @@ export function EvaluationCriteriaEditor({
             <div className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">
               {value.length} of {MAX_RFP_EVALUATION_CRITERIA}
             </div>
+            {/* Q2: momentary, not a mode. It clears the per-RFP rubric in one action; nothing
+                about it stays "on" afterwards, so nothing about it may stay lit afterwards. */}
             <button
               type="button"
               onClick={() => commit([])}
-              className="font-mono text-2xs text-foreground-muted hover:text-foreground underline decoration-dotted underline-offset-4"
+              className={cn(
+                "font-mono text-2xs text-foreground-muted underline decoration-dotted underline-offset-4",
+                MOMENTARY_LINK_DARK
+              )}
             >
               Use my standard criteria instead
             </button>
@@ -129,7 +135,7 @@ export function EvaluationCriteriaEditor({
                     onClick={() => move(criterion.key, -1)}
                     disabled={index === 0}
                     aria-label={`Move ${criterion.name} up`}
-                    className="p-1.5 rounded-md text-foreground-muted hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
+                    className={cn("p-1.5 rounded-md text-foreground-muted disabled:opacity-30", MOMENTARY_ACTION_DARK)}
                   >
                     <ChevronUp className="w-4 h-4" />
                   </button>
@@ -138,7 +144,7 @@ export function EvaluationCriteriaEditor({
                     onClick={() => move(criterion.key, 1)}
                     disabled={index === value.length - 1}
                     aria-label={`Move ${criterion.name} down`}
-                    className="p-1.5 rounded-md text-foreground-muted hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
+                    className={cn("p-1.5 rounded-md text-foreground-muted disabled:opacity-30", MOMENTARY_ACTION_DARK)}
                   >
                     <ChevronDown className="w-4 h-4" />
                   </button>
@@ -146,7 +152,7 @@ export function EvaluationCriteriaEditor({
                     type="button"
                     onClick={() => commit(value.filter((c) => c.key !== criterion.key))}
                     aria-label={`Remove ${criterion.name}`}
-                    className="p-1.5 rounded-md text-destructive hover:bg-destructive/10"
+                    className="p-1.5 rounded-md text-destructive [@media(hover:hover)]:hover:bg-destructive/10 active:bg-destructive/20 outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>

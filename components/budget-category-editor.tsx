@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { HelpTerm } from "@/components/help-term"
 import { cn } from "@/lib/utils"
+import { MOMENTARY_ACTION_DARK, TOGGLE_CONTROL_DARK } from "@/lib/interactive-styles"
 import {
   PRESET_BUNDLES,
   ADDITIONAL_ITEMS_NAME,
@@ -137,6 +138,9 @@ export function BudgetCategoryEditor({
       {/* Seeding */}
       <div className="space-y-3">
         <div className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Start from a preset</div>
+        {/* Q2: the three presets are momentary. They ADD categories, they are not modes - no
+            aria-pressed, no persistent styling, a brief :active press that releases, and hover
+            behind @media (hover:hover) so a tap on a touch device cannot latch it. */}
         <div className="flex flex-wrap gap-2">
           {PRESET_BUNDLES.map((bundle) => (
             <button
@@ -144,17 +148,27 @@ export function BudgetCategoryEditor({
               type="button"
               onClick={() => addBundle(bundle.slug)}
               title={bundle.description}
-              className="px-3 py-1.5 rounded-md border border-border bg-white/5 text-foreground hover:bg-white/10 transition-colors text-sm"
+              className={cn(
+                "px-3 py-1.5 rounded-md border border-border bg-white/5 text-foreground text-sm",
+                MOMENTARY_ACTION_DARK
+              )}
             >
               {bundle.label}
             </button>
           ))}
+          {/* Q2: this one IS a toggle - it opens and closes the paste panel - so persistent
+              active styling is correct and stays. aria-expanded makes that state real rather
+              than only visual. */}
           <button
             type="button"
             onClick={() => setPasteOpen((o) => !o)}
+            aria-expanded={pasteOpen}
             className={cn(
-              "px-3 py-1.5 rounded-md border transition-colors text-sm",
-              pasteOpen ? "border-accent/40 bg-accent/10 text-foreground" : "border-border bg-white/5 text-foreground hover:bg-white/10"
+              "px-3 py-1.5 rounded-md border text-sm",
+              TOGGLE_CONTROL_DARK,
+              pasteOpen
+                ? "border-accent/40 bg-accent/10 text-foreground"
+                : cn("border-border bg-white/5 text-foreground", MOMENTARY_ACTION_DARK)
             )}
           >
             Paste a list
@@ -266,7 +280,7 @@ export function BudgetCategoryEditor({
                     onClick={() => move(category.key, -1)}
                     disabled={index === 0}
                     aria-label={`Move ${category.name} up`}
-                    className="p-1.5 rounded-md text-foreground-muted hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
+                    className={cn("p-1.5 rounded-md text-foreground-muted disabled:opacity-30", MOMENTARY_ACTION_DARK)}
                   >
                     <ChevronUp className="w-4 h-4" />
                   </button>
@@ -275,7 +289,7 @@ export function BudgetCategoryEditor({
                     onClick={() => move(category.key, 1)}
                     disabled={index === editable.length - 1}
                     aria-label={`Move ${category.name} down`}
-                    className="p-1.5 rounded-md text-foreground-muted hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
+                    className={cn("p-1.5 rounded-md text-foreground-muted disabled:opacity-30", MOMENTARY_ACTION_DARK)}
                   >
                     <ChevronDown className="w-4 h-4" />
                   </button>
@@ -283,7 +297,7 @@ export function BudgetCategoryEditor({
                     type="button"
                     onClick={() => remove(category.key)}
                     aria-label={`Remove ${category.name}`}
-                    className="p-1.5 rounded-md text-destructive hover:bg-destructive/10"
+                    className={cn("p-1.5 rounded-md text-destructive [@media(hover:hover)]:hover:bg-destructive/10 active:bg-destructive/20 outline-none focus-visible:ring-2 focus-visible:ring-destructive/50 transition-colors")}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
