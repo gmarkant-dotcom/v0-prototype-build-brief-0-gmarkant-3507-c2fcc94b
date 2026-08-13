@@ -218,6 +218,15 @@ function BidDetailSheetInner({
         ai_summary_detailed: data.ai_summary_detailed ?? prev.ai_summary_detailed,
         ai_summary_generated_at: data.ai_summary_generated_at ?? prev.ai_summary_generated_at,
       }))
+      // S1: a 200 is not the same as a success. generate-summary makes two AI calls and returns
+      // ok when EITHER lands, so the detailed analysis could fail while the one-line summary
+      // saved beside it - which left this tab reading "No analysis available yet" forever with
+      // no error, no retry, and a stamped generated_at implying it had run fine. The route has
+      // always returned detailed_failed; nothing read it until now.
+      if (data.detailed_failed) {
+        setAnalysisError("Analysis timed out - try again")
+        return
+      }
       void mutate(RFP_RESPONSES_URL)
     } catch {
       setAnalysisError("Analysis unavailable - try again")

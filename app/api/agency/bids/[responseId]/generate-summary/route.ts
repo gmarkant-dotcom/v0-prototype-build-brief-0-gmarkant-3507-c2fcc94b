@@ -5,7 +5,10 @@ import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 30
+// S1: raised from 30. The detailed analysis alone is now given 50s (see
+// lib/bid-summary-generation.ts) because it was timing out against the shared 25s default and
+// silently leaving ai_summary_detailed null while the short summary saved beside it.
+export const maxDuration = 60
 
 export async function POST(req: Request, { params }: { params: Promise<{ responseId: string }> }) {
   const route = "/api/agency/bids/[responseId]/generate-summary"

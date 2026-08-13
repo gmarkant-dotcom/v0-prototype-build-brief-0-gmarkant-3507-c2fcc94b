@@ -3,8 +3,13 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { computeCompositeScore } from "@/lib/bid-scoring"
-import { resolveRfpRubricForResponse, rfpScoreColumnsAvailable } from "@/lib/rfp-evaluation-criteria-server"
 import {
+  resolveRfpRubricForResponse,
+  rfpScoreColumnsAvailable,
+  writeRfpCriterionScores,
+} from "@/lib/rfp-evaluation-criteria-server"
+import {
+  formatRubricForPrompt,
   parseSyntheticCriterionId,
   toSyntheticCriterionId,
   type RfpEvaluationCriterion,
@@ -223,18 +228,36 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
                 evaluation_id: evaluation.id,
                 rfp_criterion_key: key,
                 criterion_name_snapshot: criterion.name,
-                ...scalarsFor(s, existingByRfpKey.get(key), criterion.weight),
+                // ai_score is deliberately NOT sent: the writer leaves any column a caller
+                // omits untouched, so a human save can never blank the AI's score.
+                ...(() => {
+                  const { ai_score: _aiScore, ...rest } = scalarsFor(s, existingByRfpKey.get(key), criterion.weight)
+                  return rest
+                })(),
               }
             })
             .filter((r): r is NonNullable<typeof r> => r != null)
         : []
 
       if (rfpRows.length > 0) {
-        const { error: rfpUpsertErr } = await supabase
-          .from("bid_evaluation_scores")
-          .upsert(rfpRows, { onConflict: "evaluation_id,rfp_criterion_key" })
-        if (rfpUpsertErr) {
-          console.error("[api] failure", { route, method: "PUT", message: rfpUpsertErr.message, code: "rfp_scores_upsert" })
+        // S1: NOT .upsert({onConflict:"evaluation_id,rfp_criterion_key"}) - 075 backs that pair
+        // with a PARTIAL unique index, which Postgres refuses as an ON CONFLICT arbiter unless
+        // the statement repeats the predicate, and PostgREST emits none. Probed live: 42P10.
+        // See writeRfpCriterionScores for the full evidence.
+        const { error: rfpWriteErr } = await writeRfpCriterionScores(
+          supabase,
+          evaluation.id,
+          rfpRows.map((r) => ({
+            rfp_criterion_key: r.rfp_criterion_key,
+            criterion_name_snapshot: r.criterion_name_snapshot,
+            weight: r.weight,
+            human_score: r.human_score,
+            human_notes: r.human_notes,
+            is_overridden: r.is_overridden,
+          }))
+        )
+        if (rfpWriteErr) {
+          console.error("[api] failure", { route, method: "PUT", message: rfpWriteErr, code: "rfp_scores_write" })
           return NextResponse.json({ error: "Failed to save scores" }, { status: 500 })
         }
       }
@@ -314,10 +337,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
           composite != null
             ? `Composite evaluation score: ${composite}/100.`
             : "No criteria were scored."
+        // S1: the recommendation must know WHICH dimensions produced that composite. Without
+        // this it reasons about a number with no rubric behind it.
+        const rubricForPrompt = formatRubricForPrompt(rubric)
+        const rubricBlock = rubricForPrompt
+          ? `\n\nScored against this RFP's own criteria:\n${rubricForPrompt}`
+          : ""
         const result = await callAnthropicAnalysis({
           systemPrompt:
             "You are a procurement analyst. Based on this bid and its evaluation composite score, write one sentence recommending whether to move forward with this vendor and why. Plain prose, no markdown.",
-          userContent: `${bidContext}\n\n${scoreSummary}`,
+          userContent: `${bidContext}${rubricBlock}\n\n${scoreSummary}`,
           maxTokens: 200,
         })
         if (result.success) aiRecommendation = result.text.trim()

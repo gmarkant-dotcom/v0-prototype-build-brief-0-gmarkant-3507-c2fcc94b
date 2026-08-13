@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { resolveRfpRubricForResponse } from "@/lib/rfp-evaluation-criteria-server"
+import { resolveRfpRubricForResponse, writeRfpCriterionScores } from "@/lib/rfp-evaluation-criteria-server"
 import { parseSyntheticCriterionId, toSyntheticCriterionId } from "@/lib/rfp-evaluation-criteria"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
@@ -307,21 +307,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     // A per-RFP score is stored under rfp_criterion_key, never under a bid_scoring_criteria
     // uuid - see migration 075's header for why borrowing one would corrupt cross-RFP math.
     const nameByKey = new Map(rubric.map((c) => [c.key, c.name]))
+    // S1: the per-RFP half cannot use PostgREST's on_conflict - 075 backs it with a PARTIAL
+    // unique index, which Postgres refuses as an ON CONFLICT arbiter without its predicate.
+    // Probed live: 42P10. Only ai_score/ai_rationale are sent, so a rescore never blanks a
+    // human score a reviewer already entered. See writeRfpCriterionScores.
     const { error: upsertErr } = usingRfpRubric
-      ? await supabase.from("bid_evaluation_scores").upsert(
+      ? await writeRfpCriterionScores(
+          supabase,
+          evaluation.id,
           scoreRows.map((s) => {
             const key = parseSyntheticCriterionId(s.criterion_id) as string
             return {
-              evaluation_id: evaluation.id,
               rfp_criterion_key: key,
               criterion_name_snapshot: nameByKey.get(key) ?? null,
               weight: s.weight,
               ai_score: s.ai_score,
               ai_rationale: s.ai_rationale,
             }
-          }),
-          { onConflict: "evaluation_id,rfp_criterion_key" }
-        )
+          })
+        ).then((r) => ({ error: r.error ? { message: r.error } : null }))
       : await supabase.from("bid_evaluation_scores").upsert(
           scoreRows.map((s) => ({
             evaluation_id: evaluation.id,
