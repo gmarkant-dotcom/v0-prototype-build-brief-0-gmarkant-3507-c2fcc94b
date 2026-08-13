@@ -464,3 +464,75 @@ export function computeRequirementCompliance(
     meetsAllRequired: requiredItems.every((i) => i.met),
   }
 }
+
+export type RequirementTierCounts = {
+  /** Criteria explicitly on the Required tier. Zero when tier data exists but nothing is Required. */
+  required: number
+  /** Criteria explicitly on the Preferred tier. */
+  preferred: number
+  /** Every checked criterion, whatever its tier. */
+  checked: number
+  /** False for an RFP authored before requirement tiers existed. */
+  hasTierData: boolean
+}
+
+/**
+ * ITEM 4. The one authoring-side count of what an RFP asks for, by TIER.
+ *
+ * The bug this replaces: several surfaces counted CHECKED criteria and labelled the result
+ * "N required". A criterion set to Preferred is checked, so it was counted as required - the
+ * header read the same whether the tier said Required or Preferred, and only dropped to zero
+ * when the box was unchecked. That is an honest-data violation: a displayed count must derive
+ * from the field it claims to count.
+ *
+ * Legacy RFPs (hasTierData false) predate tiers, and for them "checked" genuinely WAS the
+ * requirement - everything checked was implicitly required. So required falls back to the
+ * checked count there, which is honest rather than a fudge.
+ *
+ * This deliberately mirrors how computeRequirementCompliance already partitions the vendor-facing
+ * side, so the agency's header and the vendor's block can never disagree about the same RFP.
+ */
+export function countRequirementsByTier(required: BusinessCriteriaRequired): RequirementTierCounts {
+  const hasTierData = hasExplicitPriorityData(required)
+  let requiredCount = 0
+  let preferredCount = 0
+  let checked = 0
+
+  for (const key of DESIGNATION_KEYS) {
+    if (required.designations[key] !== true) continue
+    checked++
+    if (getDesignationPriority(required, key) === "required") requiredCount++
+    else preferredCount++
+  }
+  for (const key of INSURANCE_KEYS) {
+    if (required.insurance[key]?.required !== true) continue
+    checked++
+    if (getInsurancePriority(required, key) === "required") requiredCount++
+    else preferredCount++
+  }
+  if (required.insurance.coi_on_file === true) {
+    checked++
+    if (getCoiPriority(required) === "required") requiredCount++
+    else preferredCount++
+  }
+
+  if (!hasTierData) {
+    return { required: checked, preferred: 0, checked, hasTierData: false }
+  }
+  return { required: requiredCount, preferred: preferredCount, checked, hasTierData: true }
+}
+
+/**
+ * The collapsed-header summary string. Stated zero case, per item 4: when criteria are checked
+ * but every one is Preferred, the header must NOT claim required items exist - it says
+ * "N preferred" instead, which cannot be misread. When both exist it shows both.
+ */
+export function summarizeRequirementTiers(required: BusinessCriteriaRequired): string {
+  const counts = countRequirementsByTier(required)
+  if (counts.checked === 0) return "None required"
+  if (counts.required > 0 && counts.preferred > 0) {
+    return `${counts.required} required, ${counts.preferred} preferred`
+  }
+  if (counts.required > 0) return `${counts.required} required`
+  return `${counts.preferred} preferred`
+}

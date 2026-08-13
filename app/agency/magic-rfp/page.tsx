@@ -35,6 +35,7 @@ import {
   normalizeBusinessCriteriaRequired,
 } from "@/lib/business-criteria"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
+import { summarizeRequirementTiers } from "@/lib/business-criteria"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
 import { ClientSelector, type ClientSelection } from "@/components/client-selector"
 import { clientDocumentToReferenceMaterial } from "@/lib/client-attach"
@@ -942,8 +943,10 @@ function MagicRfpContent() {
                   >
                     <div>
                       <div className="font-display font-bold text-sm text-foreground">Additional business criteria</div>
+                      {/* ITEM 4: same shared tier-derived summary as the wizard header and the
+                          client profile page, so all three read identically for one RFP. */}
                       <p className="font-mono text-2xs text-foreground-muted mt-0.5">
-                        Require diversity designations or insurance coverage from this vendor.
+                        {summarizeRequirementTiers(businessCriteriaRequired)}
                       </p>
                     </div>
                     {businessCriteriaOpen ? (

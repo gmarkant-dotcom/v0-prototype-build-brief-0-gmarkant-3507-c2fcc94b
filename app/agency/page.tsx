@@ -30,8 +30,7 @@ import {
   type InsuranceRequirement,
   type RequirementPriority,
   normalizeBusinessCriteriaRequired,
-  DESIGNATION_KEYS,
-  INSURANCE_KEYS,
+  summarizeRequirementTiers,
 } from "@/lib/business-criteria"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { MAX_RFP_EVALUATION_CRITERIA } from "@/lib/rfp-evaluation-criteria"
@@ -452,15 +451,12 @@ function AgencyRFPContent() {
    * collapsed header can never disagree with what is inside it - the F1 rule that a collapsed
    * section must summarize its state rather than hide it.
    */
-  const businessCriteriaSummary = (() => {
-    const required = masterRfp?.business_criteria_required
-    if (!required) return "None required"
-    const designations = DESIGNATION_KEYS.filter((k) => required.designations[k] === true).length
-    const insurance = INSURANCE_KEYS.filter((k) => required.insurance[k]?.required === true).length
-    const coi = required.insurance.coi_on_file === true ? 1 : 0
-    const total = designations + insurance + coi
-    return total === 0 ? "None required" : `${total} required`
-  })()
+  // ITEM 4. Was counting CHECKED criteria and calling the result "N required", so a Preferred
+  // criterion counted as required and the header read identically either way. Derives from the
+  // tier now, through the one shared counter.
+  const businessCriteriaSummary = masterRfp?.business_criteria_required
+    ? summarizeRequirementTiers(masterRfp.business_criteria_required)
+    : "None required"
 
   const budgetCategoriesSummary = (() => {
     const count = masterRfp?.budget_categories.length ?? 0

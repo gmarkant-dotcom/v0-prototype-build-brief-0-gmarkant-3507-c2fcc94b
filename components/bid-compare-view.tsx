@@ -21,6 +21,7 @@ import {
   withBusinessCriteriaDefaults,
   normalizeAcknowledgments,
   computeRequirementCompliance,
+  countRequirementsByTier,
   hasExplicitPriorityData,
 } from "@/lib/business-criteria"
 import { cn } from "@/lib/utils"
@@ -74,9 +75,11 @@ function businessCriteriaCounts(row: BidRow): { required: number; missing: numbe
   const responses = withBusinessCriteriaDefaults(row.business_criteria_responses)
   const required = normalizeBusinessCriteriaRequired(row.business_criteria_required)
   const gap = compareBusinessCriteria(required, responses)
-  const requiredDesignationCount = DESIGNATION_KEYS.filter((key) => required.designations[key] === true).length
-  const requiredInsuranceCount = INSURANCE_KEYS.filter((key) => required.insurance[key]?.required === true).length
-  const requiredCount = requiredDesignationCount + requiredInsuranceCount + (required.insurance.coi_on_file ? 1 : 0)
+  // ITEM 4. Same class as the wizard header: this counted every CHECKED criterion and the cell
+  // says "None required" / "N of N met". For a tiered RFP that claimed Preferred criteria were
+  // required. countRequirementsByTier returns the tier count when tier data exists, and falls
+  // back to the checked count for legacy RFPs, where checked genuinely WAS the requirement.
+  const requiredCount = countRequirementsByTier(required).required
   const missingCount = gap.missingDesignations.length + gap.missingInsurance.length + (gap.missingCoi ? 1 : 0)
   return { required: requiredCount, missing: missingCount }
 }

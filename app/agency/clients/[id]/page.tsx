@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ChevronLeft, Loader2 } from "lucide-react"
 import {
   normalizeBusinessCriteriaRequired,
+  summarizeRequirementTiers,
   type BusinessCriteriaRequired,
   type DesignationKey,
   type InsuranceKey,
@@ -221,6 +222,7 @@ export default function ClientProfileDetailPage() {
 
             <BidFormCollapsibleSection
               title="Default business criteria"
+              summary={summarizeRequirementTiers(criteria)}
               open={open.business}
               onToggle={() => toggle("business")}
               theme="dark"
