@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
+import { hasLigamentAccount } from '@/lib/server/account-existence'
 
 export const dynamic = 'force-dynamic'
 
@@ -377,6 +378,12 @@ export async function POST(request: NextRequest) {
     }
 
     const normalizedPartnerEmail = (partner?.email || partnerEmail).trim().toLowerCase()
+    // `partner` above is resolved with the session client, so it is null for any invitee
+    // this agency has no partnership with and who is not discoverable - which is most new
+    // invitations. It still governs partnership linkage and the in-app notification, both of
+    // which need a readable profile row. Only the EMAIL branch moves to this service-role
+    // boolean, so someone who already has a login stops receiving signup copy.
+    const inviteeHasAccount = Boolean(partner) || (await hasLigamentAccount(normalizedPartnerEmail))
     if (!normalizedPartnerEmail) {
       return NextResponse.json({ error: 'Partner email required' }, { status: 400 })
     }
@@ -443,7 +450,7 @@ export async function POST(request: NextRequest) {
         
     // Send email for re-invitation
         const siteUrl = siteBaseUrl()
-        const acceptUrl = partner
+        const acceptUrl = inviteeHasAccount
           ? `${siteUrl}/partner/invitations`
           : `${siteUrl}/auth/sign-up?invite_type=partnership&email=${encodeURIComponent(normalizedPartnerEmail)}&next=${encodeURIComponent("/partner/invitations")}`
         let reinviteBody = `${agencyName} would like to reconnect with you on Ligament and has sent a new partnership invitation.`
@@ -458,7 +465,7 @@ export async function POST(request: NextRequest) {
               title: "Partnership re-invitation",
               recipientName: normalizedPartnerEmail,
               body: reinviteBody,
-              ctaText: partner ? "View Invitation" : "Accept Invitation",
+              ctaText: inviteeHasAccount ? "View Invitation" : "Accept Invitation",
               ctaUrl: acceptUrl,
             }),
           })
@@ -528,7 +535,7 @@ export async function POST(request: NextRequest) {
     // Send email invitation to partner (whether they have account or not)
     try {
       const siteUrl = siteBaseUrl()
-      const acceptUrl = partner
+      const acceptUrl = inviteeHasAccount
         ? `${siteUrl}/partner/invitations`
         : `${siteUrl}/auth/sign-up?invite_type=partnership&email=${encodeURIComponent(normalizedPartnerEmail)}&next=${encodeURIComponent("/partner/invitations")}`
       let inviteBody = `${agencyName} has selected you as a potential vendor on Ligament, a platform for vendor orchestration between creative and production agencies.\n\nJoining their network means you will be considered for scoped project opportunities they broadcast directly to their trusted vendors.`
@@ -542,7 +549,7 @@ export async function POST(request: NextRequest) {
           title: "Partnership invitation",
           recipientName: normalizedPartnerEmail,
           body: inviteBody,
-          ctaText: partner ? "View Invitation" : "Accept Invitation",
+          ctaText: inviteeHasAccount ? "View Invitation" : "Accept Invitation",
           ctaUrl: acceptUrl,
         }),
       })

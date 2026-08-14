@@ -277,6 +277,10 @@ export async function GET() {
     const bidsAwaitingReview = Array.from(bidsAwaitingByProject.entries()).map(([projectId, count]) => ({
       projectId,
       projectName: (projectById.get(projectId)?.name as string | undefined) || "Untitled project",
+      // Display name only. client_name is kept reconciled with the linked client profile
+      // by lib/clients-server.ts, so it is the single source for this and no client_id is
+      // ever sent to the browser.
+      clientName: (projectById.get(projectId)?.client_name as string | null | undefined) || null,
       count,
       href: "/agency/bids",
     }))
@@ -292,6 +296,10 @@ export async function GET() {
       .map((g) => ({
         projectId: g.projectId,
         projectName: (projectById.get(g.projectId)?.name as string | undefined) || "Untitled project",
+      // Display name only. client_name is kept reconciled with the linked client profile
+      // by lib/clients-server.ts, so it is the single source for this and no client_id is
+      // ever sent to the browser.
+      clientName: (projectById.get(g.projectId)?.client_name as string | null | undefined) || null,
         scopeItemName: g.scopeItemName,
         deadline: g.deadline as string,
         invited: g.invited,
@@ -317,6 +325,10 @@ export async function GET() {
     const pendingDeliveryEvaluations = Array.from(pendingDeliveryByProject.entries()).map(([projectId, count]) => ({
       projectId,
       projectName: (projectById.get(projectId)?.name as string | undefined) || "Untitled project",
+      // Display name only. client_name is kept reconciled with the linked client profile
+      // by lib/clients-server.ts, so it is the single source for this and no client_id is
+      // ever sent to the browser.
+      clientName: (projectById.get(projectId)?.client_name as string | null | undefined) || null,
       count,
       href: `/agency/project?projectId=${encodeURIComponent(projectId)}`,
     }))
@@ -330,6 +342,10 @@ export async function GET() {
     const alerts = Array.from(alertsByProject.entries()).map(([projectId, count]) => ({
       projectId,
       projectName: (projectById.get(projectId)?.name as string | undefined) || "Untitled project",
+      // Display name only. client_name is kept reconciled with the linked client profile
+      // by lib/clients-server.ts, so it is the single source for this and no client_id is
+      // ever sent to the browser.
+      clientName: (projectById.get(projectId)?.client_name as string | null | undefined) || null,
       count,
       href: `/agency/project?projectId=${encodeURIComponent(projectId)}`,
     }))

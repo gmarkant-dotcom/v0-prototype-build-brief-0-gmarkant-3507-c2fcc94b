@@ -334,7 +334,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
 type PostBody = {
   token?: string
   proposal_text?: string
-  budget_proposal?: { amount?: unknown; currency?: unknown }
+  budget_proposal?: { amount?: unknown; currency?: unknown; custom?: unknown }
   timeline_proposal?: string
   terms_disclosure?: unknown
   attachments?: unknown
@@ -424,7 +424,12 @@ export async function POST(req: Request) {
 
     const proposal_text = (body.proposal_text || "").toString().trim()
     const amount = Number(body.budget_proposal?.amount)
-    const currency = String(body.budget_proposal?.currency || "").trim().toUpperCase()
+    // "Other" is the one option that is not an ISO code, so it must survive the uppercase
+    // that normalizes the rest - serializeBudget matches it case-sensitively, and an "OTHER"
+    // that misses that check stores an amount whose currency reads as a literal "OTHER".
+    const currencyRaw = String(body.budget_proposal?.currency || "").trim()
+    const currency = currencyRaw.toLowerCase() === "other" ? "Other" : currencyRaw.toUpperCase()
+    const currencyCustom = String(body.budget_proposal?.custom || "").trim()
     const timeline_proposal = (body.timeline_proposal || "").toString().trim()
 
     if (!proposal_text) {
@@ -472,7 +477,7 @@ export async function POST(req: Request) {
     const business_criteria_acknowledgments = hasAcknowledgments
       ? normalizeAcknowledgments(body.business_criteria_acknowledgments)
       : null
-    const budget_proposal = serializeBudget(amount, currency)
+    const budget_proposal = serializeBudget(amount, currency, currencyCustom || undefined)
     // /agency/bids groups bids by this exact string (see app/agency/bids/page.tsx groupBy
     // "partner"). For a known vendor, use their real profile name so the bid lands in the
     // same group as every other bid tied to partner_id - not a separate group keyed off

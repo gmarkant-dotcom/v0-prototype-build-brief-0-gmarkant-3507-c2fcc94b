@@ -17,7 +17,7 @@ import { formatSubmittedAt, cn } from "@/lib/utils"
 import { buildBidTimeline } from "@/lib/bid-timeline"
 import { getDeadlineUrgency } from "@/lib/deadline-urgency"
 import { isVercelBlobStorageUrl, parseGuestUploadBlobPathFromUrl } from "@/lib/vercel-blob-url"
-import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal, currencySymbolFor } from "@/lib/rfp-response-fields"
+import { formatBudgetForDisplay, formatTimelineForDisplay, parseBudgetProposal, currencySymbolFor, BUDGET_CURRENCY_OPTIONS } from "@/lib/rfp-response-fields"
 import { CurrencyInput } from "@/components/ui/currency-input"
 import type { ReferenceMaterial } from "@/components/reference-materials-input"
 import {
@@ -85,7 +85,10 @@ import {
 import { TermsDisclosureSection } from "@/components/terms-disclosure-section"
 import { HelpTerm } from "@/components/help-term"
 
-const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "MXN", "BRL", "AED", "SGD"]
+// One source for the option list, shared with the portal bid form
+// (app/partner/rfps/[id]/page.tsx). The guest list previously omitted "Other", so a vendor
+// billing in a currency outside the top ten could submit here but not in the portal.
+const CURRENCY_OPTIONS = BUDGET_CURRENCY_OPTIONS
 
 type TokenRow = {
   token: string
@@ -274,6 +277,7 @@ export default function GuestRfpRespondPage() {
   const [budgetDraft, setBudgetDraft] = useState<BudgetDraft>({})
   const [proposalSections, setProposalSections] = useState<ProposalSections>({})
   const [budgetCurrency, setBudgetCurrency] = useState("USD")
+  const [budgetCurrencyOther, setBudgetCurrencyOther] = useState("")
   const [timelineText, setTimelineText] = useState("")
   const [termsDisclosure, setTermsDisclosure] = useState<TermsDisclosure>(emptyTermsDisclosure())
   const [termsErrors, setTermsErrors] = useState<TermsDisclosureValidationError[]>([])
@@ -432,6 +436,7 @@ export default function GuestRfpRespondPage() {
     setProposalText("")
     setBudgetAmount("")
     setBudgetCurrency("USD")
+    setBudgetCurrencyOther("")
     setTimelineText("")
     setTermsDisclosure(emptyTermsDisclosure())
     setTermsErrors([])
@@ -446,7 +451,8 @@ export default function GuestRfpRespondPage() {
     setProposalText(response.proposal_text || "")
     const parsedBudget = parseBudgetProposal(response.budget_proposal || "")
     setBudgetAmount(parsedBudget.amount)
-    setBudgetCurrency(CURRENCY_OPTIONS.includes(parsedBudget.currency) ? parsedBudget.currency : "USD")
+    setBudgetCurrency(CURRENCY_OPTIONS.includes(parsedBudget.currency as (typeof CURRENCY_OPTIONS)[number]) ? parsedBudget.currency : "USD")
+    setBudgetCurrencyOther(parsedBudget.customOther)
     setTimelineText(response.timeline_proposal || "")
     setTermsDisclosure(
       response.terms_disclosure
@@ -580,6 +586,13 @@ export default function GuestRfpRespondPage() {
       setSubmitError("Complete your proposal, budget, and timeline before submitting.")
       return
     }
+    // "Other" without a written currency stores nothing usable - serializeBudget drops the
+    // custom value and the agency sees an amount with no currency at all.
+    if (budgetCurrency === "Other" && !budgetCurrencyOther.trim()) {
+      setOpenSections((s) => ({ ...s, bidResponse: true }))
+      setSubmitError("You picked Other for currency. Specify which currency or region you bill in.")
+      return
+    }
     if (submitHasCategories && submitCategoryOpen > 0) {
       setOpenSections((s) => ({ ...s, bidResponse: true }))
       setSubmitError(
@@ -621,6 +634,8 @@ export default function GuestRfpRespondPage() {
           budget_proposal: {
             amount: submitHasCategories ? submitCategoryTotal : Number(budgetAmount),
             currency: budgetCurrency,
+            // Only meaningful when currency is "Other"; the server ignores it otherwise.
+            custom: budgetCurrency === "Other" ? budgetCurrencyOther.trim() : "",
           },
           timeline_proposal: timelineText,
           terms_disclosure: termsValidation.value,
@@ -1148,6 +1163,20 @@ export default function GuestRfpRespondPage() {
                     </Select>
                   </div>
                 </div>
+
+                {budgetCurrency === "Other" && (
+                  <div>
+                    <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">
+                      Which currency
+                    </label>
+                    <Input
+                      value={budgetCurrencyOther}
+                      onChange={(e) => setBudgetCurrencyOther(e.target.value)}
+                      placeholder="e.g. CHF, or the region you bill in"
+                      className="bg-white/5 border-border text-foreground"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block font-mono text-2xs text-foreground-muted uppercase tracking-wider mb-2">

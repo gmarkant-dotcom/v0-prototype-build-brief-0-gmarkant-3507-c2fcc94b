@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { buildBrandedEmailHtml, buildBrandedEmailText, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { hasLigamentAccount } from "@/lib/server/account-existence"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
 import { requireAgencyRole } from "@/lib/api-auth"
 
@@ -44,12 +45,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A valid vendor email is required" }, { status: 400 })
     }
 
-    const { data: matchedProfile } = await supabase
-      .from("profiles")
-      .select("id")
-      .ilike("email", vendorEmail)
-      .maybeSingle()
-    const isClaimed = Boolean(matchedProfile?.id)
+    // Service role, not the session client: an agency cannot SELECT the profile of a vendor
+    // they have no partnership with and who is not discoverable, so the old session-scoped
+    // lookup returned null for exactly the vendors this branch exists to detect.
+    const isClaimed = await hasLigamentAccount(vendorEmail)
 
     const agencyName =
       profile?.company_name?.trim() || profile?.full_name?.trim() || profile?.display_name?.trim() || "A lead agency"

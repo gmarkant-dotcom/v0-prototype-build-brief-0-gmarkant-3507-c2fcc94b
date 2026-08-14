@@ -42,18 +42,19 @@ import {
 
 // ── Types (mirrors the GET /api/agency/dashboard response) ──────────────────────
 
-type AttentionBidsRow = { projectId: string; projectName: string; count: number; href: string }
+type AttentionBidsRow = { projectId: string; projectName: string; clientName: string | null; count: number; href: string }
 type AttentionRfpRow = {
   projectId: string
   projectName: string
+  clientName: string | null
   scopeItemName: string
   deadline: string
   invited: number
   pending: number
   href: string
 }
-type AttentionDeliveryRow = { projectId: string; projectName: string; count: number; href: string }
-type AttentionAlertRow = { projectId: string; projectName: string; count: number; href: string }
+type AttentionDeliveryRow = { projectId: string; projectName: string; clientName: string | null; count: number; href: string }
+type AttentionAlertRow = { projectId: string; projectName: string; clientName: string | null; count: number; href: string }
 
 type ChecklistData = {
   importPartners: boolean
@@ -172,7 +173,7 @@ function ProjectSearch({
 
 // ── Attention queue ───────────────────────────────────────────────────────────
 
-type AttentionRow = { key: string; icon: typeof AlertTriangle; text: string; timeframe?: string; href: string; urgent: boolean }
+type AttentionRow = { key: string; icon: typeof AlertTriangle; text: string; clientName?: string | null; timeframe?: string; href: string; urgent: boolean }
 
 function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
   const { collapsed, toggle } = useSectionCollapse("agency", "needs-attention")
@@ -182,6 +183,7 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
     rows.push({
       key: `bids:${r.projectId}`,
       icon: Gavel,
+      clientName: r.clientName,
       text: `${r.count} bid${r.count === 1 ? "" : "s"} awaiting review on ${r.projectName}`,
       href: r.href,
       urgent: false,
@@ -193,6 +195,7 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
     rows.push({
       key: `rfp:${r.projectId}:${r.scopeItemName}`,
       icon: Send,
+      clientName: r.clientName,
       text: `RFP for ${r.scopeItemName} on ${r.projectName} - ${r.pending} of ${r.invited} vendor${r.invited === 1 ? "" : "s"} ${r.pending === 1 ? "hasn't" : "haven't"} responded`,
       timeframe: relativeDeadline ? `closes ${relativeDeadline}` : undefined,
       href: r.href,
@@ -203,6 +206,7 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
     rows.push({
       key: `delivery:${r.projectId}`,
       icon: ClipboardCheck,
+      clientName: r.clientName,
       text: `${r.count} delivery evaluation${r.count === 1 ? "" : "s"} pending on ${r.projectName}`,
       href: r.href,
       urgent: false,
@@ -212,6 +216,7 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
     rows.push({
       key: `alert:${r.projectId}`,
       icon: FileWarning,
+      clientName: r.clientName,
       text: `${r.count} vendor update${r.count === 1 ? "" : "s"} ${r.count === 1 ? "needs" : "need"} attention on ${r.projectName}`,
       href: r.href,
       urgent: false,
@@ -252,6 +257,11 @@ function AttentionQueue({ data }: { data: DashboardData["attention"] }) {
                   >
                     <Icon className="w-4 h-4 text-amber-400 shrink-0" />
                     <span className="flex-1 text-sm text-foreground min-w-0 truncate">{row.text}</span>
+                    {row.clientName && (
+                      <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted shrink-0">
+                        {row.clientName}
+                      </span>
+                    )}
                     {row.timeframe && (
                       <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted shrink-0">
                         {row.timeframe}
