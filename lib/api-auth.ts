@@ -69,13 +69,25 @@ export async function requirePartnerRole(_request?: Request): Promise<RoleAuthRe
 }
 
 /**
- * Checks profiles.is_admin. Note: the real /api/admin/* routes in this codebase (e.g.
- * app/api/admin/users/route.ts) do NOT use is_admin today - they gate on a hardcoded
- * OWNER_EMAIL match against user.email instead, and is_admin is otherwise only read as a
- * paid-feature-access bypass alongside is_paid, never as a standalone route gate. This
- * helper is provided per spec for future admin routes that want a real is_admin check,
- * but swapping it into the existing OWNER_EMAIL-gated routes would be a genuine
- * authorization behavior change, not a refactor - not done here, see session report.
+ * The single authorization gate for every human-invoked /api/admin/* route. Checks
+ * profiles.is_admin and nothing else - no hardcoded email may appear in an authorization
+ * path. Superseded the OWNER_EMAIL === user.email checks that previously gated
+ * app/api/admin/users and app/api/admin/grant-agency-access; see
+ * docs/admin-security-fix-report.md for the accounts that change access as a result.
+ *
+ * The is_admin read deliberately uses the caller's own cookie-scoped session client, never
+ * the service role. A check performed with a key that bypasses row level security is not a
+ * check: it would read is_admin for an arbitrary id regardless of whether the caller may
+ * see that row, so the gate has to sit inside the same trust boundary it is protecting.
+ *
+ * Failure bodies are deliberately terse and identical in shape ("Unauthorized" / a bare
+ * "Forbidden" rather than "Admin only"), so an unauthenticated prober cannot use the
+ * response text to tell an admin route that exists from one that does not.
+ *
+ * Routes with a NON-HUMAN caller must not use this - a webhook or auth-hook caller has no
+ * session and would get a silent 401. app/api/admin/notify-new-user is the live example:
+ * it is invoked by a Supabase DB webhook and is protected by a WEBHOOK_SECRET header
+ * instead.
  */
 export async function requireAdminRole(_request?: Request): Promise<RoleAuthResult> {
   const auth = await requireAuth()
@@ -88,7 +100,7 @@ export async function requireAdminRole(_request?: Request): Promise<RoleAuthResu
     .maybeSingle()
 
   if (!profile?.is_admin) {
-    return { authorized: false, response: NextResponse.json({ error: "Admin only" }, { status: 403 }) }
+    return { authorized: false, response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
 
   return { authorized: true, user: auth.user, supabase: auth.supabase, profile: profile as Profile }
