@@ -345,12 +345,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Vendor ID or vendor email required' }, { status: 400 })
     }
 
-    let partner: { id: string; email: string | null; role: string | null } | null = null
+    // The invitee's own `role` is deliberately not selected and not tested. See the note
+    // above the linkage below.
+    let partner: { id: string; email: string | null } | null = null
 
     if (partnerId) {
       const { data: partnerById, error: partnerByIdErr } = await supabase
         .from('profiles')
-        .select('id, email, role')
+        .select('id, email')
         .eq('id', partnerId)
         .maybeSingle()
 
@@ -372,7 +374,7 @@ export async function POST(request: NextRequest) {
       // Backward-compatible path: look up by email and resolve to profile.
       const { data: partnerByEmail, error: partnerLookupErr } = await supabase
         .from('profiles')
-        .select('id, email, role')
+        .select('id, email')
         .ilike('email', partnerEmail)
         .maybeSingle()
 
@@ -389,11 +391,22 @@ export async function POST(request: NextRequest) {
       partner = partnerByEmail
     }
 
-    // Partner exists - verify they are a partner role
-    if (partner && partner.role !== 'partner') {
-      return NextResponse.json({ error: 'Can only invite partner agencies, not lead agencies' }, { status: 400 })
-    }
-
+    // There is deliberately no check on the invitee's `profiles.role` here. There used to be
+    // one - `if (partner && partner.role !== 'partner') return 400 "Can only invite partner
+    // agencies, not lead agencies"` - and it was correct before migration 056. 056 made every
+    // new signup `role='agency', secondary_role='partner'` unconditionally, so `role` stopped
+    // carrying the lead-agency-versus-vendor signal the check was reading. Against live data
+    // it rejected 12 of 14 accounts, including three that are operating as vendors right now.
+    //
+    // It was also enforced arbitrarily: `partner` is resolved with the session client, so the
+    // check only ever fired when row level security let this agency read the invitee's profile
+    // (an existing partnership, or a discoverable profile). Brand-new invitees were never
+    // tested at all. A guard absent from the majority path is not a guard.
+    //
+    // Do not reinstate it against `secondary_role` either: that predicate rejects
+    // gmarkant@icloud.com, whose `secondary_role` is 'agency' and who is the one unambiguous
+    // vendor in the system. If the product ever needs to distinguish "this account offers
+    // vendor services" it needs a field that means that, not `role`.
     const normalizedPartnerEmail = (partner?.email || partnerEmail).trim().toLowerCase()
     // `partner` above is resolved with the session client, so it is null for any invitee
     // this agency has no partnership with and who is not discoverable - which is most new
