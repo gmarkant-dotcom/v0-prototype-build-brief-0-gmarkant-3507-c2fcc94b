@@ -22,10 +22,42 @@ bid management, onboarding, active engagements, and cash flow.
 
 | Role | Email | Notes |
 |------|-------|-------|
-| Lead Agency | gmarkant@gmail.com | Primary test account, is_paid=true, is_admin=false |
+| Lead Agency | gmarkant@gmail.com | Primary test account, is_paid=true, **is_admin=true** (corrected Aug 13, 2026 - live query returned two accounts with is_admin=true, this one and greg@withligament.com; the previous "is_admin=false" here was stale and made the admin-panel access rules look narrower than they are) |
 | Partner Agency | gmarkant@icloud.com | Primary partner test |
 | Partner (manual) | gmarkant+partner8@gmail.com | Gmail plus-address, lands in gmarkant@gmail.com |
 | Partnership ID | c0851865-8bb0-4417-aaf0-9185d1c83c7f | Active partnership between above accounts |
+
+---
+
+## Row level security: the snapshot is authoritative, this file and the migrations are not
+
+`docs/schema-snapshot-2026-08-13.md` is a `pg_policies` dump taken directly from the live
+database. **It is the only trustworthy record of what policies exist.** Read it before
+writing anything that depends on a policy.
+
+The on-disk migration history cannot reproduce the live database. The evidence, collected in
+`docs/organizations-m1-discovery.md` (Finding Zero):
+
+- Migrations 001-038 are not in `supabase/migrations/` at all - they are in `scripts/`, under
+  a different naming convention.
+- The live `projects` policies (`projects_agency_select` and four others) appear nowhere in
+  this repository. They were applied out of band. A migration that drops the on-disk names
+  will silently no-op.
+- Migration 077 carried a "NOT APPLIED" header while its policy was live. 048 is documented as
+  applied with no file on disk. 073 does not exist.
+- `rfp_magic_tokens`, `msa_agreements`, `payment_milestones` and `partnership_profile_context`
+  have no `CREATE TABLE` anywhere in the repo.
+
+Two consequences worth knowing before touching data access:
+
+1. **`profiles` has no admin UPDATE policy.** Its only UPDATE policy is "Users can update own
+   profile", `qual (auth.uid() = id)`. Any browser-side write to another user's profile row
+   matches zero rows and is reported as success. This is why the admin panel's toggles go
+   through `PATCH /api/admin/users/[userId]/flags` and not through the browser client.
+2. **An agency cannot read most invitees' profiles.** `profiles` SELECT is limited to your own
+   row, `is_discoverable = true`, and profiles linked by an existing partnership. Any "does
+   this person already have an account" check must run server-side with the service role - see
+   `lib/server/account-existence.ts`.
 
 ---
 

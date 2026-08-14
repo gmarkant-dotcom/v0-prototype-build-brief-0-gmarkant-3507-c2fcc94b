@@ -1,4 +1,12 @@
--- Client profiles (Workstream A). Authored Aug 13, 2026. NOT APPLIED.
+-- Client profiles (Workstream A). Authored Aug 13, 2026. APPLIED.
+--
+-- APPLIED, confirmed Aug 13, 2026 against docs/schema-snapshot-2026-08-13.md, which is a
+-- pg_policies dump taken from the live database: the "Agencies manage own clients" policy
+-- created at the bottom of this file is present there, on table "clients", ALL,
+-- {authenticated}, qual and with_check both (agency_id = auth.uid()). This header previously
+-- read "NOT APPLIED" while the policy was live, which is the kind of contradiction that makes
+-- the on-disk migration history unsafe to reason from. The snapshot is authoritative for
+-- policies; this file is not.
 --
 -- An agency sets up a reusable client profile once - Samsung, adidas - carrying key documents,
 -- standing requirements and internal notes, then selects it anywhere a client is named so those

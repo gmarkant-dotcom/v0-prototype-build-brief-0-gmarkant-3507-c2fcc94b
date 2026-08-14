@@ -1,6 +1,12 @@
 -- Structured proposal sub-fields + close-bidding-at-deadline (Phase 2, P2-2 and P2-4).
 -- Authored Aug 11, 2026. NOT APPLIED.
 --
+-- STATUS NOT SETTLED BY THE SNAPSHOT: docs/schema-snapshot-2026-08-13.md is a pg_policies
+-- dump, and this migration adds columns rather than policies, so the snapshot can neither
+-- confirm nor refute the line above. Migration 077 carried an identical "NOT APPLIED" header
+-- while its policy was live, so do not trust this status either. Settle it with:
+--   SELECT table_name, column_name FROM information_schema.columns
+--   WHERE table_schema = 'public' AND table_name = '<table>';
 -- Split from 075 deliberately: 075 alters an existing NOT NULL and adds a CHECK to a live
 -- scoring table. This file is purely additive - two nullable columns and two boolean flags with
 -- a safe default - so it can be applied and rolled back independently of the scoring work.

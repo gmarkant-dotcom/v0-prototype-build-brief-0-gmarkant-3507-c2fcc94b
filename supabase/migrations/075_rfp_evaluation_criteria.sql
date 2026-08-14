@@ -1,5 +1,11 @@
 -- Per-RFP evaluation criteria (Phase 2, P2-3). Authored Aug 11, 2026. NOT APPLIED.
 --
+-- STATUS NOT SETTLED BY THE SNAPSHOT: docs/schema-snapshot-2026-08-13.md is a pg_policies
+-- dump, and this migration adds columns rather than policies, so the snapshot can neither
+-- confirm nor refute the line above. Migration 077 carried an identical "NOT APPLIED" header
+-- while its policy was live, so do not trust this status either. Settle it with:
+--   SELECT table_name, column_name FROM information_schema.columns
+--   WHERE table_schema = 'public' AND table_name = '<table>';
 -- Today an agency has ONE global rubric: bid_scoring_criteria rows keyed by agency_id, seeded
 -- from lib/bid-scoring-defaults.ts, scored per bid through bid_evaluations ->
 -- bid_evaluation_scores.criterion_id. Every RFP that agency ever broadcasts is judged against
