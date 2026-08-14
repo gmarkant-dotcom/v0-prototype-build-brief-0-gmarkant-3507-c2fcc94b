@@ -35,11 +35,21 @@ function normalize(value: string | null | undefined): ActingRole | null {
   return v === "agency" || v === "partner" ? v : null
 }
 
-/** Returns the portal the caller is acting in, or null when neither column resolves. */
+function isSet(value: string | null | undefined): boolean {
+  return typeof value === "string" && value.trim() !== ""
+}
+
+/**
+ * Returns the portal the caller is acting in, or null when neither column resolves.
+ *
+ * `role` is consulted only when active_role is genuinely UNSET. An active_role that holds
+ * some other string is a set value that this code does not understand, and falling back to
+ * role there would silently hand the caller a portal nobody asked for - the same shape of
+ * mistake this module exists to remove. It resolves to null instead.
+ */
 export function actingRole(profile: RoleBearingProfile): ActingRole | null {
   if (!profile) return null
-  const active = normalize(profile.active_role)
-  if (active) return active
+  if (isSet(profile.active_role)) return normalize(profile.active_role)
   return normalize(profile.role)
 }
 
