@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { isActivePartnership } from "@/lib/partnership-state"
 
 export const dynamic = "force-dynamic"
 
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest) {
       const otherId = (p.agency_id === user.id ? p.partner_id : p.agency_id) as string | null
       if (!otherId) continue
       partnerIdsWithPartnership.add(otherId)
-      if (p.status === "active") activePartnerIds.add(otherId)
+      if (isActivePartnership(p)) activePartnerIds.add(otherId)
     }
 
     // Unmask email for self + anyone with an active partnership (bidirectional)

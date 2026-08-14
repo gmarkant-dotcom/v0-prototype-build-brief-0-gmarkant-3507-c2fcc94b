@@ -32,10 +32,12 @@ import {
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
 import { HelpTerm } from "@/components/help-term"
+import { partnershipPoolColumn, partnershipStateLabel } from "@/lib/partnership-state"
 
-// Partnership type (Tier 1 - business relationship). Covers all three pool states: an
-// Active Partner (partnerId set), an Invited contact (partnerId null, invitationSentAt
-// set), or a Discovered contact (partnerId null, invitationSentAt null).
+// Partnership type (Tier 1 - business relationship). Which of the three pool columns a row
+// belongs in is NOT decided here - it is decided once, by partnershipPoolColumn() in
+// lib/partnership-state.ts, from `status` plus `invitationSentAt`. partnerId is an account
+// fact (has this contact claimed a login) and never a relationship fact.
 type Partnership = {
   id: string
   partnerId?: string
@@ -43,9 +45,9 @@ type Partnership = {
   partnerName?: string
   partnerCompany?: string
   status: "pending" | "active" | "suspended" | "terminated" | "removed"
-  invitedAt: string
-  /** Raw partnerships.created_at - distinct from invitedAt (which falls back to created_at
-   *  when invited_at is unset); used for the Discovered section's "Added" timestamp. */
+  /** Raw partnerships.created_at - when the contact entered the pool. The legacy
+   *  partnerships.invited_at is deliberately not read: it is DB-defaulted at insert and
+   *  equals created_at on every live row, so it says "added", not "invited". */
   partnershipCreatedAt: string
   acceptedAt?: string
   ndaConfirmedAt?: string | null
@@ -62,7 +64,8 @@ type Partnership = {
   partnerJoinedAt?: string | null
   partnerBusinessCriteria?: unknown
   msaConfirmedAt?: string | null
-  /** Ghost/unclaimed rows only (partnerId unset) - when the invite email actually sent. */
+  /** partnerships.invitation_sent_at (migration 063) - written only after a confirmed
+   *  successful send, so it is the only timestamp that means an email went out. */
   invitationSentAt?: string | null
   /** Ghost/unclaimed rows only - cross-referenced from rfp_magic_tokens by email. */
   vendorName?: string | null
@@ -222,7 +225,7 @@ function disciplineMatches(
 
 function partnershipIsNew(p: Partnership): boolean {
   if (p.status !== "active" || isPartnershipNotesBlacklisted(p.partnership_notes)) return false
-  const raw = p.acceptedAt || p.invitedAt
+  const raw = p.acceptedAt || p.invitationSentAt || p.partnershipCreatedAt
   if (!raw) return false
   const t = new Date(raw).getTime()
   if (Number.isNaN(t)) return false
@@ -448,7 +451,6 @@ function PartnerPoolPageInner() {
         partnerName: (p.partner as { full_name?: string } | undefined)?.full_name,
         partnerCompany: (p.partner as { company_name?: string } | undefined)?.company_name,
         status: p.status as Partnership["status"],
-        invitedAt: (p.invited_at || p.created_at) as string,
         partnershipCreatedAt: p.created_at as string,
         acceptedAt: p.accepted_at as string | undefined,
         ndaConfirmedAt: (p.nda_confirmed_at as string | null) ?? null,
@@ -1038,9 +1040,14 @@ function PartnerPoolPageInner() {
           partner: partners.find((x) => x.email.toLowerCase() === inv.partnerEmail.toLowerCase()),
         }))
     }
-    // Active Partners only - ghost/unclaimed rows (no partnerId) surface in the
-    // Invited/Discovered sections instead, computed separately from `partnerships`.
-    return partnerships.filter((p) => p.partnerId).map((p) => ({ mode: "prod" as const, p }))
+    // Column A holds every row whose relationship has moved past the invitation - active,
+    // and the paused/ended states that were once active. Membership is decided by `status`
+    // via lib/partnership-state.ts, never by partnerId: partnerId only says the contact has
+    // claimed a login, and the claim runs automatically on their next page load, which is
+    // what used to promote never-accepted invitations into this column.
+    return partnerships
+      .filter((p) => partnershipPoolColumn(p) === "network")
+      .map((p) => ({ mode: "prod" as const, p }))
   }, [isDemo, isLoaded, invitations, partners, partnerships])
 
   const filteredNetworkRows = useMemo(() => {
@@ -1154,16 +1161,17 @@ function PartnerPoolPageInner() {
     showBookmarkedOnly,
   ])
 
-  // Invited: a ghost/unclaimed contact who was actually sent an invitation email.
+  // Invited: still pending, and an invitation email was confirmed sent. A contact who has
+  // since claimed a Ligament login stays here until they accept - claiming is not accepting.
   const invitedRows = useMemo(
-    () => partnerships.filter((p) => !p.partnerId && p.partnerEmail && p.invitationSentAt),
+    () => partnerships.filter((p) => p.partnerEmail && partnershipPoolColumn(p) === "invited"),
     [partnerships],
   )
 
-  // Discovered: a ghost/unclaimed contact added to the pool (email import, or a guest bid
-  // via a shared magic link) with nobody invited yet.
+  // Discovered: still pending, with no confirmed invitation send (email import, spreadsheet
+  // import, or a guest bid via a shared magic link).
   const discoveredRows = useMemo(
-    () => partnerships.filter((p) => !p.partnerId && p.partnerEmail && !p.invitationSentAt),
+    () => partnerships.filter((p) => p.partnerEmail && partnershipPoolColumn(p) === "discovered"),
     [partnerships],
   )
 
@@ -1233,14 +1241,7 @@ function PartnerPoolPageInner() {
     for (const p of partnerships) {
       const email = (p.partnerEmail || "").trim().toLowerCase()
       if (!email) continue
-      const label = p.partnerId
-        ? p.status === "active"
-          ? "Active vendor"
-          : "Vendor (pending)"
-        : p.invitationSentAt
-          ? "Invited"
-          : "Discovered"
-      map.set(email, label)
+      map.set(email, partnershipStateLabel(p))
     }
     return map
   }, [partnerships])
@@ -1653,15 +1654,18 @@ function PartnerPoolPageInner() {
                   }
                   const p = row.p
                   const bl = isPartnershipNotesBlacklisted(p.partnership_notes)
+                  // A pending row cannot reach this column any more - partnershipPoolColumn()
+                  // sends it to Invited or Discovered - but the flag is kept so the amber
+                  // treatment below stays correct if that ever changes.
                   const pending = p.status === "pending"
                   const isActive = p.status === "active" && !bl
                   const isNew = partnershipIsNew(p)
                   const title = p.partnerCompany || p.partnerName || p.partnerEmail
-                  const subLine = pending
-                    ? `Invited ${new Date(p.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-                    : p.acceptedAt
-                      ? `Active since ${new Date(p.acceptedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-                      : `Since ${new Date(p.invitedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                  // Only two dates are real here: when they accepted, and when the contact
+                  // entered the pool. Nothing invents an "active since" out of an invitation.
+                  const subLine = p.acceptedAt
+                    ? `Active since ${new Date(p.acceptedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                    : `Added ${new Date(p.partnershipCreatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
                   const badgeLabel = bl
                     ? "Blacklisted"
                     : pending
@@ -1853,7 +1857,10 @@ function PartnerPoolPageInner() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-display font-bold text-sm text-foreground truncate">
-                            {row.vendorName || row.partnerEmail}
+                            {/* A contact who has claimed a login stays in Invited until they
+                                accept, so this column now sees rows that DO have a profile
+                                behind them. Prefer that name over the bare email. */}
+                            {row.partnerCompany || row.partnerName || row.vendorName || row.partnerEmail}
                           </span>
                           <span className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 text-amber-300">
                             Invited
@@ -1923,7 +1930,7 @@ function PartnerPoolPageInner() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-display font-bold text-sm text-foreground truncate">
-                            {row.companyName || row.contactName || row.vendorName || row.partnerEmail}
+                            {row.partnerCompany || row.partnerName || row.companyName || row.contactName || row.vendorName || row.partnerEmail}
                           </span>
                           <span className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-foreground-muted">
                             Not Yet Invited

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { isActivePartnership } from '@/lib/partnership-state'
 import { isDemoMode, demoLeadAgencies, demoPartnerInvitations, type LeadAgency, type LeadAgencyInvitation } from "@/lib/demo-data"
 
 // Partnership connection (Tier 1 - using new partnerships table)
@@ -85,7 +86,9 @@ export function LeadAgencyFilterProvider({ children }: { children: ReactNode }) 
         agencyEmail: p.agency?.email,
         agencyLocation: p.agency?.location || '',
         status: p.status,
-        invitedAt: p.invited_at,
+        // invitation_sent_at, never the legacy invited_at - only the former means an
+        // invitation email was confirmed sent. See lib/partnership-state.ts.
+        invitedAt: p.invitation_sent_at,
         acceptedAt: p.accepted_at,
         invitationMessage: p.invitation_message,
       }))
@@ -104,7 +107,7 @@ export function LeadAgencyFilterProvider({ children }: { children: ReactNode }) 
   }, [])
 
   // Active partnerships (Tier 1 confirmed relationships)
-  const confirmedAgencies = connections.filter(c => c.status === 'active')
+  const confirmedAgencies = connections.filter((c) => isActivePartnership(c))
 
   const acceptInvitation = async (partnershipId: string) => {
     if (isDemoMode()) {

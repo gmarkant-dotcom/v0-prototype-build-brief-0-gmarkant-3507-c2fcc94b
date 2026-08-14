@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
+import { isActivePartnership, partnershipPoolColumn } from "@/lib/partnership-state"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn } from "@/lib/utils"
 import {
@@ -529,8 +530,12 @@ export default function AgencyNetworkPage() {
     })
   }
 
-  const pendingPartnerships = useMemo(() => partnerships.filter((p) => p.status === "pending"), [partnerships])
-  const activePartnerships = useMemo(() => partnerships.filter((p) => p.status === "active"), [partnerships])
+  // One definition of the state, shared with the agency pool - see lib/partnership-state.ts.
+  const pendingPartnerships = useMemo(
+    () => partnerships.filter((p) => partnershipPoolColumn(p) !== "network"),
+    [partnerships],
+  )
+  const activePartnerships = useMemo(() => partnerships.filter((p) => isActivePartnership(p)), [partnerships])
 
   const matchesSearch = (name: string, email: string | undefined, q: string) =>
     !q || name.toLowerCase().includes(q) || (email || "").toLowerCase().includes(q)

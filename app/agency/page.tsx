@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
+import { isActivePartnership, partnershipPoolColumn } from "@/lib/partnership-state"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
@@ -89,7 +90,7 @@ type PartnershipApiRow = {
   status: string
   partner_id: string | null
   partner_email: string | null
-  invited_at: string | null
+  invitation_sent_at: string | null
   accepted_at: string | null
   nda_confirmed_at?: string | null
   partner: {
@@ -176,7 +177,9 @@ function AgencyRFPContent() {
         const rows = (data.partnerships || []) as PartnershipApiRow[]
 
         const active = rows
-          .filter((p) => p.status === "active" && p.partner?.id)
+          // `p.partner?.id` is a rendering requirement (this card needs a profile to link
+          // to), never part of the state test - that is isActivePartnership() alone.
+          .filter((p) => isActivePartnership(p) && p.partner?.id)
           .sort((a, b) => {
             const ta = a.accepted_at ? new Date(a.accepted_at).getTime() : 0
             const tb = b.accepted_at ? new Date(b.accepted_at).getTime() : 0
@@ -205,7 +208,7 @@ function AgencyRFPContent() {
         })
 
         const pending = rows
-          .filter((p) => p.status === "pending")
+          .filter((p) => partnershipPoolColumn(p) !== "network")
           .map((p) => ({
             id: p.id,
             email: (p.partner_email || p.partner?.email || "").trim(),

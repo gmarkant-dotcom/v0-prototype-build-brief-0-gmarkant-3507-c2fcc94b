@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { isActivePartnership } from "@/lib/partnership-state"
 import {
   isMissingRateInfoColumnError,
   resolveRateInfoForPartnership,
@@ -75,19 +76,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // The row is fetched at ANY status and the state test is applied in one place, by the
+    // shared predicate - see lib/partnership-state.ts. Filtering status in the query made
+    // this route a third, private definition of "active" that disagreed with the pool list.
     const { data: partnership, error: pErr } = await supabase
       .from("partnerships")
       .select("id, status, nda_confirmed_at, msa_confirmed_at")
       .eq("agency_id", user.id)
       .eq("partner_id", partnerId)
-      .eq("status", "active")
       .maybeSingle()
 
     if (pErr) {
       console.error("[api/agency/pool/partner] partnership load", pErr)
       return NextResponse.json({ error: "Failed to verify partnership" }, { status: 500, headers: noStore })
     }
-    if (!partnership) {
+    if (!partnership || !isActivePartnership(partnership)) {
       return NextResponse.json({ error: "No active partnership with this partner" }, { status: 404, headers: noStore })
     }
 

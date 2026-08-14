@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { isActivePartnership } from "@/lib/partnership-state"
 import { parseDoubleJson } from "@/lib/active-engagement-parse"
 
 export const dynamic = "force-dynamic"
@@ -240,7 +241,7 @@ export async function GET() {
     const openRfpGroups = allRfpGroups.filter((g) => g.responded < g.invited)
 
     // ── Funnel metrics ──────────────────────────────────────────────────────────
-    const activePartners = partnerships.filter((p) => p.status === "active").length
+    const activePartners = partnerships.filter((p) => isActivePartnership(p)).length
     // Distinct projects with at least one open RFP scope item, not a count of open scope
     // items themselves - a project broadcasting 3 open scopes should read as 1 open RFP.
     const openRfps = new Set(openRfpGroups.map((g) => g.projectId)).size

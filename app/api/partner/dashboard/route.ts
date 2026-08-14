@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requirePartnerRole } from "@/lib/api-auth"
+import { isActivePartnership } from "@/lib/partnership-state"
 
 export const dynamic = "force-dynamic"
 
@@ -255,7 +256,7 @@ export async function GET() {
     const terminalCount = bidsByStatus.awarded + bidsByStatus.declined
     const winRate = terminalCount > 0 ? bidsByStatus.awarded / terminalCount : null
 
-    const agencyRelationships = partnerships.filter((p) => p.status === "active").length
+    const agencyRelationships = partnerships.filter((p) => isActivePartnership(p)).length
 
     // ── Reliability ──────────────────────────────────────────────────────────────
     // F3 stopgap: reliability_summary (agency-facing AI text) is not selected or returned

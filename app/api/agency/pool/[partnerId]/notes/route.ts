@@ -50,6 +50,8 @@ async function assertActiveAgencyPartnership(
     .select("id, partnership_notes")
     .eq("agency_id", agencyId)
     .eq("partner_id", partnerId)
+    // The same single predicate as isActivePartnership() in lib/partnership-state.ts,
+    // expressed in SQL because this gate can be pushed into the query.
     .eq("status", "active")
     .maybeSingle()
 
