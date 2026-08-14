@@ -1858,6 +1858,18 @@ function PartnerPoolPageInner() {
                           {row.invitationSentAt && <span> · Invited {formatDateTime(row.invitationSentAt)}</span>}
                         </div>
                       </div>
+                      {/* A claimed contact now stays in this column until they accept, so the
+                          profile they DO have needs a way in. The tier the page shows is decided
+                          server-side by /api/agency/pool/[partnerId]. */}
+                      {row.partnerId && (
+                        <Link
+                          href={`/agency/pool/${encodeURIComponent(row.partnerId)}`}
+                          className="inline-flex items-center gap-1 font-mono text-2xs text-accent hover:underline px-2 py-1 rounded-md border border-accent/30 hover:bg-accent/10 shrink-0"
+                        >
+                          View profile
+                          <ChevronRight className="w-3 h-3" />
+                        </Link>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
@@ -1925,6 +1937,15 @@ function PartnerPoolPageInner() {
                           buttons held at shrink-0 inside a one-third-width column. Checked at
                           the other pipeline states rather than tuning the fix to one row. */}
                       <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 ml-auto">
+                        {row.partnerId && (
+                          <Link
+                            href={`/agency/pool/${encodeURIComponent(row.partnerId)}`}
+                            className="inline-flex items-center gap-1 font-mono text-2xs text-accent hover:underline px-2 py-1 rounded-md border border-accent/30 hover:bg-accent/10 shrink-0"
+                          >
+                            View profile
+                            <ChevronRight className="w-3 h-3" />
+                          </Link>
+                        )}
                         <Button
                           type="button"
                           size="sm"

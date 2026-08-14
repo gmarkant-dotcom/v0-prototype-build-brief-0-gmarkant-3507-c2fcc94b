@@ -99,8 +99,22 @@ function initials(company: string | null | undefined, full: string | null | unde
   return src.slice(0, 2).toUpperCase()
 }
 
+type AccessPayload = {
+  /** Decided server-side. The component never receives a field it is meant to hide. */
+  tier: "partnership" | "public" | "none"
+  reason: string
+  unlock: string | null
+}
+
 type ProfilePayload = {
-  partnership: { id: string; status: string; nda_confirmed_at: string | null; msa_confirmed_at?: string | null }
+  access: AccessPayload
+  partnership: {
+    id: string
+    status: string
+    nda_confirmed_at: string | null
+    msa_confirmed_at?: string | null
+    invitation_sent_at?: string | null
+  } | null
   partner: {
     id: string
     full_name: string | null
@@ -114,7 +128,7 @@ type ProfilePayload = {
     avatar_url: string | null
     company_logo_url?: string | null
     meeting_url: string | null
-    rate_info: PartnerRateInfoPayload
+    rate_info: PartnerRateInfoPayload | null
     business_criteria?: unknown
     tags: string[]
   }
@@ -136,6 +150,9 @@ export default function AgencyPartnerProfilePage() {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // A refusal that says what it is and what would unlock it, never a blank wall.
+  const [errorReason, setErrorReason] = useState<string | null>(null)
+  const [errorUnlock, setErrorUnlock] = useState<string | null>(null)
   const [profile, setProfile] = useState<ProfilePayload | null>(null)
 
   const [notesState, setNotesState] = useState<PartnershipNotesShape>({})
@@ -156,14 +173,22 @@ export default function AgencyPartnerProfilePage() {
     }
     setLoading(true)
     setError(null)
+    setErrorReason(null)
+    setErrorUnlock(null)
     try {
       const [prRes, nRes] = await Promise.all([
         fetch(`/api/agency/pool/${encodeURIComponent(partnerId)}`, { credentials: "same-origin" }),
         fetch(`/api/agency/pool/${encodeURIComponent(partnerId)}/notes`, { credentials: "same-origin" }),
       ])
       if (!prRes.ok) {
-        const j = await prRes.json().catch(() => ({}))
-        setError((j as { error?: string }).error || "Could not load vendor profile")
+        const j = (await prRes.json().catch(() => ({}))) as {
+          error?: string
+          reason?: string
+          unlock?: string
+        }
+        setError(j.error || "Could not load vendor profile")
+        setErrorReason(j.reason || null)
+        setErrorUnlock(j.unlock || null)
         setProfile(null)
         setLoading(false)
         return
@@ -319,8 +344,14 @@ export default function AgencyPartnerProfilePage() {
             <ArrowLeft className="w-4 h-4" />
             Back to Vendor Pool
           </Link>
-          <GlassCard className="p-8 border-red-500/20">
-            <p className="text-red-300">{error || "Vendor not found"}</p>
+          <GlassCard className="p-8 border-border">
+            <h1 className="font-display font-bold text-lg text-foreground mb-2">
+              {error || "Vendor not found"}
+            </h1>
+            {errorReason && <p className="text-foreground-muted text-sm mb-3">{errorReason}</p>}
+            {errorUnlock && (
+              <p className="font-mono text-2xs uppercase tracking-wider text-accent">{errorUnlock}</p>
+            )}
           </GlassCard>
         </div>
       </AgencyLayout>
@@ -334,8 +365,10 @@ export default function AgencyPartnerProfilePage() {
   const subTitle = displayCompany && displayPerson ? displayPerson : p.email || ""
   const web = websiteHref(p.website)
   const meet = websiteHref(p.meeting_url)
-  const ndaOk = !!profile.partnership.nda_confirmed_at
-  const msaOk = !!profile.partnership.msa_confirmed_at
+  const access = profile.access
+  const hasPartnershipTier = access.tier === "partnership"
+  const ndaOk = !!profile.partnership?.nda_confirmed_at
+  const msaOk = !!profile.partnership?.msa_confirmed_at
   const ri = p.rate_info
 
   const businessCriteria = withBusinessCriteriaDefaults(p.business_criteria)
@@ -387,24 +420,31 @@ export default function AgencyPartnerProfilePage() {
                     {p.agency_type}
                   </span>
                 )}
-                <span
-                  className={cn(
-                    "font-mono text-2xs px-2 py-0.5 rounded-full uppercase tracking-wider",
-                    ndaOk ? "bg-success/15 text-success border border-success/30" : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                  )}
-                >
-                  <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
-                  <HelpTerm term="nda" theme="dark">{ndaOk ? "NDA signed" : "NDA pending"}</HelpTerm>
-                </span>
-                <span
-                  className={cn(
-                    "font-mono text-2xs px-2 py-0.5 rounded-full uppercase tracking-wider",
-                    msaOk ? "bg-sky-500/15 text-sky-400 border border-sky-500/30" : "bg-white/10 text-foreground-muted border border-border"
-                  )}
-                >
-                  <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
-                  <HelpTerm term="msa" theme="dark">{msaOk ? "MSA signed" : "MSA pending"}</HelpTerm>
-                </span>
+                {/* Documents are a partnership-tier fact. Below that tier the server sends no
+                    confirmation timestamps, and "NDA pending" on a vendor you have no
+                    partnership with would state a document relationship that does not exist. */}
+                {hasPartnershipTier && (
+                  <>
+                    <span
+                      className={cn(
+                        "font-mono text-2xs px-2 py-0.5 rounded-full uppercase tracking-wider",
+                        ndaOk ? "bg-success/15 text-success border border-success/30" : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                      )}
+                    >
+                      <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
+                      <HelpTerm term="nda" theme="dark">{ndaOk ? "NDA signed" : "NDA pending"}</HelpTerm>
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-2xs px-2 py-0.5 rounded-full uppercase tracking-wider",
+                        msaOk ? "bg-sky-500/15 text-sky-400 border border-sky-500/30" : "bg-white/10 text-foreground-muted border border-border"
+                      )}
+                    >
+                      <Shield className="w-3 h-3 inline mr-1 align-text-bottom" />
+                      <HelpTerm term="msa" theme="dark">{msaOk ? "MSA signed" : "MSA pending"}</HelpTerm>
+                    </span>
+                  </>
+                )}
                 {vouchCount >= 3 && (
                   <span className="flex items-center gap-0.5 font-mono text-2xs px-2 py-0.5 rounded-full border border-yellow-500/40 bg-yellow-500/15 text-yellow-300 uppercase tracking-wider shrink-0">
                     <Zap className="w-3 h-3" /><Zap className="w-3 h-3" /><Zap className="w-3 h-3" />
@@ -603,6 +643,7 @@ export default function AgencyPartnerProfilePage() {
             </GlassCard>
           )}
 
+          {ri && (
           <GlassCard className="p-6">
             <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-4">
               Rate information
@@ -626,7 +667,9 @@ export default function AgencyPartnerProfilePage() {
               </div>
             </dl>
           </GlassCard>
+          )}
 
+          {hasPartnershipTier && (
           <GlassCard className="p-6 lg:col-span-1">
             <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted mb-4">
               Engagement history
@@ -655,12 +698,18 @@ export default function AgencyPartnerProfilePage() {
               </div>
             )}
           </GlassCard>
+          )}
         </div>
 
-        {/* Performance History */}
-        <VendorPerformanceHistory partnerId={partnerId} partnershipId={profile.partnership.id} partnerName={headerTitle} />
+        {/* Performance History and the agency's private notes are both partnership-tier.
+            The server already withholds their inputs; these guards keep the page from
+            rendering empty shells of sections the caller has not unlocked. */}
+        {hasPartnershipTier && profile.partnership && (
+          <VendorPerformanceHistory partnerId={partnerId} partnershipId={profile.partnership.id} partnerName={headerTitle} />
+        )}
 
         {/* Agency notes */}
+        {hasPartnershipTier && (
         <GlassCard className="p-6 md:p-8 border-amber-500/20">
           <h2 className="font-display font-bold text-lg text-foreground mb-1">Agency notes</h2>
           <p className="text-xs text-foreground-muted mb-6">
@@ -792,6 +841,20 @@ export default function AgencyPartnerProfilePage() {
             </div>
           </div>
         </GlassCard>
+        )}
+
+        {/* Below the partnership tier, say what is closed and what opens it. */}
+        {!hasPartnershipTier && (
+          <GlassCard className="p-6 md:p-8 border-border">
+            <h2 className="font-display font-bold text-lg text-foreground mb-1">
+              {access.tier === "public" ? "Public profile" : "Limited view"}
+            </h2>
+            <p className="text-sm text-foreground-muted mb-3">{access.reason}</p>
+            {access.unlock && (
+              <p className="font-mono text-2xs uppercase tracking-wider text-accent">{access.unlock}</p>
+            )}
+          </GlassCard>
+        )}
 
         <Dialog open={blacklistDialogOpen} onOpenChange={setBlacklistDialogOpen}>
           <DialogContent className="bg-card border-border text-foreground">

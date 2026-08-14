@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { isActivePartnership } from "@/lib/partnership-state"
+import { canActAs } from "@/lib/acting-role"
 import {
   isMissingRateInfoColumnError,
   resolveRateInfoForPartnership,
@@ -72,7 +73,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
     }
 
     const { data: me, error: meErr } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
-    if (meErr || (me?.role !== "agency" && me?.active_role !== "agency")) {
+    if (meErr || !canActAs(me, "agency")) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
@@ -81,7 +82,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
     // this route a third, private definition of "active" that disagreed with the pool list.
     const { data: partnership, error: pErr } = await supabase
       .from("partnerships")
-      .select("id, status, nda_confirmed_at, msa_confirmed_at")
+      .select("id, status, nda_confirmed_at, msa_confirmed_at, contact_name, company_name, partner_email, invitation_sent_at")
       .eq("agency_id", user.id)
       .eq("partner_id", partnerId)
       .maybeSingle()
@@ -90,24 +91,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       console.error("[api/agency/pool/partner] partnership load", pErr)
       return NextResponse.json({ error: "Failed to verify partnership" }, { status: 500, headers: noStore })
     }
-    if (!partnership || !isActivePartnership(partnership)) {
-      return NextResponse.json({ error: "No active partnership with this partner" }, { status: 404, headers: noStore })
-    }
+    // An ACTIVE partnership is what unlocks the partnership tier. A pending, suspended or
+    // terminated row is a relationship the vendor has not (or no longer has) agreed to, so it
+    // unlocks nothing beyond the public tier - but it is still the calling agency's own row,
+    // so it is returned either way and it is what the refusal copy explains.
+    const hasActivePartnership = isActivePartnership(partnership)
+    const partnershipId = (partnership?.id as string | undefined) ?? null
 
-    const partnershipId = partnership.id as string
+    const PUBLIC_COLUMNS =
+      "id, full_name, company_name, display_name, bio, location, website, agency_type, avatar_url, company_logo_url, business_criteria, is_discoverable"
+    const PARTNERSHIP_COLUMNS = "email, meeting_url, rate_info"
 
     let prof = await supabase
       .from("profiles")
-      .select(
-        "id, full_name, company_name, display_name, email, bio, location, website, agency_type, avatar_url, company_logo_url, meeting_url, rate_info, business_criteria"
-      )
+      .select(`${PUBLIC_COLUMNS}, ${PARTNERSHIP_COLUMNS}`)
       .eq("id", partnerId)
       .maybeSingle()
 
     if (prof.error && isMissingRateInfoColumnError(prof.error)) {
       prof = await supabase
         .from("profiles")
-        .select("id, full_name, company_name, display_name, email, bio, location, website, agency_type, avatar_url, company_logo_url, meeting_url, business_criteria")
+        .select(`${PUBLIC_COLUMNS}, email, meeting_url`)
         .eq("id", partnerId)
         .maybeSingle()
     }
@@ -132,20 +136,68 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       meeting_url: string | null
       rate_info?: unknown
       business_criteria?: unknown
+      is_discoverable: boolean | null
     }
 
-    const { bio_display, rate_info } = resolveRateInfoForPartnership(
-      { bio: row.bio, rate_info: row.rate_info },
-      partnershipId
-    )
+    // The refusal that is still correct: a vendor who has not made themselves discoverable
+    // and has no relationship with this agency at all. It is the only cell in the matrix
+    // where Postgres would refuse too. Everything else gets a tier and a reason.
+    if (!hasActivePartnership && !row.is_discoverable && !partnership) {
+      return NextResponse.json(
+        {
+          error: "This vendor's profile is private",
+          reason:
+            "They have not listed themselves in the marketplace, and you have no partnership with them.",
+          unlock: "Invite them to your vendor network. Once they accept, their full profile opens to you.",
+        },
+        { status: 403, headers: noStore }
+      )
+    }
 
-    const { data: respRows, error: respErr } = await supabase
-      .from("partner_rfp_responses")
-      .select("id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
-      .eq("agency_id", user.id)
-      .eq("partner_id", partnerId)
-      .eq("status", "awarded")
-      .order("updated_at", { ascending: false })
+    const tier: "partnership" | "public" | "none" = hasActivePartnership
+      ? "partnership"
+      : row.is_discoverable
+        ? "public"
+        : "none"
+
+    const access =
+      tier === "partnership"
+        ? { tier, reason: "You have an active partnership with this vendor.", unlock: null as string | null }
+        : tier === "public"
+          ? {
+              tier,
+              reason: partnership
+                ? `This vendor's public marketplace profile. Your partnership is ${partnership.status}, so contact details, rates, documents and delivery history stay closed.`
+                : "This vendor's public marketplace profile. You have no partnership with them, so contact details, rates, documents and delivery history stay closed.",
+              unlock: partnership
+                ? "They open when the vendor accepts your invitation."
+                : "Invite them to your vendor network. They open when the vendor accepts.",
+            }
+          : {
+              tier,
+              reason: `This vendor has not listed themselves in the marketplace, and your partnership is ${partnership?.status ?? "not active"}, so only your own record of them is shown.`,
+              unlock: "Their profile opens when they accept your invitation.",
+            }
+
+    // Rate info can be embedded in the bio, so the bio is always parsed - but the parsed rate
+    // card is only returned at the partnership tier. A partnership-scoped rate is meaningless
+    // without a partnership, and the legacy (unscoped) fallback is exactly the cross-agency
+    // leak resolveRateInfoForPartnership exists to prevent.
+    const parsedProfile = resolveRateInfoForPartnership({ bio: row.bio, rate_info: row.rate_info }, partnershipId ?? "")
+    const bio_display = parsedProfile.bio_display
+    const rate_info = hasActivePartnership ? parsedProfile.rate_info : null
+
+    // Delivery history is a partnership-tier field, so below that tier it is not fetched at
+    // all rather than fetched and discarded.
+    const { data: respRows, error: respErr } = hasActivePartnership
+      ? await supabase
+          .from("partner_rfp_responses")
+          .select("id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
+          .eq("agency_id", user.id)
+          .eq("partner_id", partnerId)
+          .eq("status", "awarded")
+          .order("updated_at", { ascending: false })
+      : { data: [] as unknown[], error: null }
 
     if (respErr) {
       console.error("[api/agency/pool/partner] engagement responses", respErr)
@@ -206,31 +258,60 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       }
     })
 
+    // Tiering happens HERE, server-side. A field the caller is not entitled to is never put
+    // on the wire for a component to hide - row level security hands this route the whole
+    // profile row (see docs/invitation-diagnosis.md 0.9), so this is the only place the
+    // decision can be enforced.
+    const isPublicOnly = tier !== "partnership"
+    const showsProfile = tier !== "none"
+
     return NextResponse.json(
       {
-        partnership: {
-          id: partnershipId,
-          status: partnership.status as string,
-          nda_confirmed_at: (partnership.nda_confirmed_at as string | null) ?? null,
-          msa_confirmed_at: (partnership.msa_confirmed_at as string | null) ?? null,
-        },
+        access,
+        // The agency's own partnership row. Never another agency's - this query is keyed to
+        // agency_id = the caller. NDA and MSA confirmations are documents, so they are held
+        // back until the partnership is active.
+        partnership: partnership
+          ? {
+              id: partnershipId,
+              status: partnership.status as string,
+              nda_confirmed_at: hasActivePartnership ? ((partnership.nda_confirmed_at as string | null) ?? null) : null,
+              msa_confirmed_at: hasActivePartnership ? ((partnership.msa_confirmed_at as string | null) ?? null) : null,
+              invitation_sent_at: (partnership.invitation_sent_at as string | null) ?? null,
+            }
+          : null,
         partner: {
           id: row.id,
-          full_name: row.full_name,
-          company_name: row.company_name,
-          display_name: row.display_name,
-          email: row.email,
-          bio: bio_display,
-          location: row.location,
-          website: row.website,
-          agency_type: row.agency_type,
-          avatar_url: row.avatar_url,
-          company_logo_url: row.company_logo_url ?? null,
-          meeting_url: row.meeting_url,
-          rate_info,
-          business_criteria: row.business_criteria ?? null,
+          // Public tier: name, location, disciplines, bio, designations. Website is public
+          // here because /api/marketplace/discoverable already returns it to any
+          // authenticated caller for the same discoverable profile.
+          // At the "none" tier nothing from the vendor's profile is sent, but the agency's
+          // own record of the contact is theirs already - it is what they typed into the pool
+          // or imported - so the page has a name to show instead of a blank wall.
+          full_name: showsProfile ? row.full_name : ((partnership?.contact_name as string | null) ?? null),
+          company_name: showsProfile ? row.company_name : ((partnership?.company_name as string | null) ?? null),
+          display_name: showsProfile ? row.display_name : null,
+          bio: showsProfile ? bio_display : "",
+          location: showsProfile ? row.location : null,
+          website: showsProfile ? row.website : null,
+          agency_type: showsProfile ? row.agency_type : null,
+          avatar_url: showsProfile ? row.avatar_url : null,
+          company_logo_url: showsProfile ? (row.company_logo_url ?? null) : null,
+          business_criteria: showsProfile ? (row.business_criteria ?? null) : null,
           tags: [] as string[],
+          // Partnership tier: contact information and rates. Masked exactly the way
+          // /api/marketplace/discoverable masks email - nulled on the server, not omitted,
+          // so the shape of the response never itself signals what is being withheld.
+          email: hasActivePartnership
+            ? row.email
+            : // Not the vendor's profile email - the address this agency itself recorded when
+              // they added or invited the contact. Already shown to them in the pool list.
+              ((partnership?.partner_email as string | null) ?? null),
+          meeting_url: isPublicOnly ? null : row.meeting_url,
+          rate_info,
         },
+        // Delivery history with THIS agency only - the query is .eq("agency_id", user.id),
+        // so another agency's awards can never appear here. Empty below the partnership tier.
         engagement_history,
       },
       { headers: revalidateHeaders }
