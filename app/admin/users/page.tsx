@@ -30,6 +30,7 @@ export default function AdminUsersPage() {
   const [isOwner, setIsOwner] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const checkOwnerAndFetchUsers = async () => {
@@ -81,60 +82,50 @@ export default function AdminUsersPage() {
     )
   }, [users, searchQuery])
 
-  const togglePaidStatus = async (userId: string, currentStatus: boolean) => {
+  /**
+   * Every flag change goes through the server route. These used to be browser-side writes to
+   * profiles, which row level security silently reduced to zero rows for every account but
+   * this admin's own while still reporting success - see the route's own comment. Local state
+   * is now updated ONLY from what the server says it actually wrote, never optimistically,
+   * because an optimistic flip is precisely how the original bug stayed invisible.
+   */
+  const setFlags = async (userId: string, flags: Partial<Pick<User, 'is_paid' | 'demo_access'>>) => {
     setUpdating(userId)
-    const supabase = createClient()
-    
-    const { error } = await supabase
-      .from('profiles')
-      .update({ is_paid: !currentStatus })
-      .eq('id', userId)
-
-    if (!error) {
-      setUsers(users.map(u => 
-        u.id === userId ? { ...u, is_paid: !currentStatus } : u
-      ))
-    }
-    setUpdating(null)
-  }
-
-  const toggleDemoAccess = async (userId: string, currentStatus: boolean) => {
-    setUpdating(userId)
-    const supabase = createClient()
-    
-    const { error } = await supabase
-      .from('profiles')
-      .update({ demo_access: !currentStatus })
-      .eq('id', userId)
-
-    if (!error) {
-      setUsers(users.map(u => 
-        u.id === userId ? { ...u, demo_access: !currentStatus } : u
-      ))
-    }
-    setUpdating(null)
-  }
-
-  const grantAgencyAccess = async (userId: string, currentIsPaid: boolean) => {
-    setUpdating(userId)
+    setError(null)
     try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_paid: true })
-        .eq('id', userId)
-      if (error) {
-        console.error('[admin] grant-access error:', error.message)
-      } else {
-        setUsers(users.map(u =>
-          u.id === userId ? { ...u, is_paid: true } : u
-        ))
+      const res = await fetch(`/api/admin/users/${userId}/flags`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(flags),
+      })
+      const payload = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        setError(payload?.error || `Update failed (${res.status}).`)
+        return
       }
-    } catch (e) {
-      console.error('[admin] grant-access error:', e)
+
+      // Trust the returned row, not the value we asked for.
+      setUsers(prev =>
+        prev.map(u =>
+          u.id === userId
+            ? { ...u, is_paid: Boolean(payload.user?.is_paid), demo_access: Boolean(payload.user?.demo_access) }
+            : u
+        )
+      )
+    } catch {
+      setError('Update failed. Check your connection and try again.')
+    } finally {
+      setUpdating(null)
     }
-    setUpdating(null)
   }
+
+  const togglePaidStatus = (userId: string, currentStatus: boolean) => setFlags(userId, { is_paid: !currentStatus })
+
+  const toggleDemoAccess = (userId: string, currentStatus: boolean) => setFlags(userId, { demo_access: !currentStatus })
+
+  const grantAgencyAccess = (userId: string) => setFlags(userId, { is_paid: true })
   // Admin status is managed directly in database by owner only
   // No UI toggle - this prevents accidental admin escalation
 
@@ -245,6 +236,24 @@ export default function AdminUsersPage() {
           </div>
         </div>
 
+        {/* A failed flag write must be impossible to mistake for a successful one. */}
+        {error && (
+          <div
+            role="alert"
+            className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3"
+          >
+            <X className="mt-0.5 h-4 w-4 shrink-0 text-red-300" />
+            <div className="flex-1 text-sm text-red-100">{error}</div>
+            <button
+              type="button"
+              onClick={() => setError(null)}
+              className="font-mono text-2xs uppercase tracking-wider text-red-200 transition-colors hover:text-white"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {/* Search */}
         <div className="mb-6">
           <div className="relative max-w-md">
@@ -353,7 +362,7 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3 text-center">
                     {user.role === 'partner' && (
                       <button
-                        onClick={() => grantAgencyAccess(user.id, user.is_paid)}
+                        onClick={() => grantAgencyAccess(user.id)}
                         disabled={updating === user.id || user.is_paid}
                         className={cn(
                           "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
