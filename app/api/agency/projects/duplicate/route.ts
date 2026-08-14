@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { carryProjectClientFields } from "@/lib/clients-server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { checkUsageLimit, usageLimitResponse } from "@/lib/usage-tracking"
 
@@ -72,11 +73,8 @@ export async function POST(request: NextRequest) {
         agency_id: user.id,
         name: newName,
         status: "draft",
-        client_name: sourceProject.client_name,
-        // ITEM 1. A duplicate of a project that belongs to a client profile belongs to the same
-        // client. Carrying only the name string would silently downgrade the copy to a legacy
-        // typed-name project and hide it from every client-scoped surface.
-        client_id: (sourceProject as Record<string, unknown>).client_id ?? null,
+        // Both fields together or neither, so a duplicate can never be born incoherent.
+        ...carryProjectClientFields(sourceProject as Record<string, unknown>),
         description: sourceProject.description,
         budget_range: sourceProject.budget_range,
         start_date: null,

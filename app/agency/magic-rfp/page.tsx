@@ -1069,6 +1069,7 @@ function MagicRfpContent() {
                     Typing a name stays first-class. */}
                 <div className="p-4 rounded-lg border border-border bg-white/5 space-y-3">
                   <ClientSelector
+                    projectId={selectedProject?.id ?? null}
                     value={clientSelection}
                     onChange={(next) => {
                       if (clientSelection.clientId && !next.clientId) {

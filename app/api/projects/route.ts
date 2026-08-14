@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import { reconcileProjectClientFields } from '@/lib/clients-server'
 import { createClient } from '@/lib/supabase/server'
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
@@ -506,18 +507,25 @@ export async function POST(request: NextRequest) {
       agency_id: user.id,
       name: safeName,
       status: 'draft',
-      client_name: clientName || null,
       description: description || null,
       budget_range: budgetRange || null,
       start_date: startDate || null,
       end_date: endDate || null,
     }
-    // A2: the entity link, ADDED to the string rather than replacing it. client_name is still
-    // written exactly as before, so a project created from a profile and one created by typing a
-    // name are indistinguishable to every existing reader.
-    const clientIdRaw = (body as Record<string, unknown>).client_id
-    const clientId = typeof clientIdRaw === 'string' && clientIdRaw.trim() ? clientIdRaw.trim() : null
-    if (clientId) insertPayload.client_id = clientId
+    // Both client fields go through the one reconciler, so a project cannot be CREATED
+    // incoherent either. A selected profile sets client_id and takes client_name from that
+    // profile's own name; a typed name sets client_name with client_id null.
+    const reconciledClient = await reconcileProjectClientFields(supabase, user.id, {
+      hasClientId: 'client_id' in (body as Record<string, unknown>),
+      clientId: (body as Record<string, unknown>).client_id as string | null,
+      hasClientName: true,
+      clientName: clientName || null,
+    })
+    if (!reconciledClient.ok) {
+      return NextResponse.json({ error: reconciledClient.error }, { status: reconciledClient.status })
+    }
+    Object.assign(insertPayload, reconciledClient.fields)
+    const clientId = (reconciledClient.fields.client_id as string | null) ?? null
 
     let { data: project, error: insertError } = await supabase
       .from('projects')

@@ -92,11 +92,15 @@ function ProjectDetailContent() {
     setSaving(true)
     setSaveError(null)
     try {
-      const { createClient } = await import("@/lib/supabase/client")
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("projects")
-        .update({
+      // Was a direct browser-client update writing client_name while leaving client_id
+      // untouched - so renaming the client here silently detached the name from the linked
+      // profile. It now goes through PATCH /api/projects/[id], which reconciles both fields in
+      // one place. This writer was missed by the previous run's audit.
+      const res = await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
           name: form.name,
           client_name: form.client_name,
           status: form.status,
@@ -104,12 +108,12 @@ function ProjectDetailContent() {
           budget_range: form.budget_range,
           start_date: form.start_date || null,
           end_date: form.end_date || null,
-        })
-        .eq("id", id)
-        .select("*")
-        .single()
-      if (error || !data) {
-        setSaveError(error?.message || "Save failed")
+        }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      const data = (payload as { project?: unknown }).project
+      if (!res.ok || !data) {
+        setSaveError((payload as { error?: string }).error || "Save failed")
         return
       }
       const normalized = {

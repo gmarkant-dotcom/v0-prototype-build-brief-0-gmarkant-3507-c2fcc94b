@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { NewClientDialog } from "@/components/new-client-dialog"
 import { cn } from "@/lib/utils"
@@ -36,6 +37,7 @@ export function ClientSelector({
   label = "Client",
   placeholder = "Client name",
   id,
+  projectId,
 }: {
   value: ClientSelection
   onChange: (next: ClientSelection) => void
@@ -45,11 +47,25 @@ export function ClientSelector({
   label?: string
   placeholder?: string
   id?: string
+  /** The master project this flow is building against, when there is one. Supplying it makes
+   *  this control INHERIT that project's client read-only instead of offering a choice - see
+   *  the inherited branch below. Omitted by "+ New project", which has no project yet. */
+  projectId?: string | null
 }) {
   const [options, setOptions] = useState<ClientOption[]>([])
   const [available, setAvailable] = useState(false)
   const [applying, setApplying] = useState(false)
   const [applied, setApplied] = useState<string | null>(null)
+  /**
+   * THE RULING: the client belongs to the master project. A project has exactly one client and
+   * everything beneath it inherits that client, so a different profile must never be layered
+   * onto a project that already has one from inside an RFP.
+   *
+   * `inherited` is that project's existing client, when it has one. Null means the project has
+   * no client yet, which is the only case where this control still offers a choice.
+   */
+  const [inherited, setInherited] = useState<{ name: string; fromProfile: boolean } | null>(null)
+  const [inheritedLoaded, setInheritedLoaded] = useState(false)
 
   const loadOptions = useCallback(async () => {
     try {
@@ -66,6 +82,43 @@ export function ClientSelector({
   useEffect(() => {
     void loadOptions()
   }, [loadOptions])
+
+  // The project's own client is not on the selected-project context - MasterProject carries a
+  // display string coerced to "Client TBD" when empty and no client_id at all - so it is read
+  // here from the project row itself.
+  useEffect(() => {
+    let cancelled = false
+    if (!projectId) {
+      setInherited(null)
+      setInheritedLoaded(true)
+      return
+    }
+    setInheritedLoaded(false)
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+          credentials: "same-origin",
+          cache: "no-store",
+        })
+        const data = await res.json().catch(() => ({}))
+        if (cancelled) return
+        const project = (data?.project || {}) as Record<string, unknown>
+        const existingId = typeof project.client_id === "string" && project.client_id ? project.client_id : null
+        const existingName =
+          typeof project.client_name === "string" && project.client_name.trim() ? project.client_name.trim() : null
+        setInherited(existingId || existingName ? { name: existingName || "This project's client", fromProfile: Boolean(existingId) } : null)
+      } catch {
+        // A failed read must not silently unlock the selector on a project that has a client.
+        // Treated as "unknown", which keeps the control hidden rather than offering an override.
+        if (!cancelled) setInherited({ name: "This project's client", fromProfile: false })
+      } finally {
+        if (!cancelled) setInheritedLoaded(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
 
   const applyProfile = async (clientId: string) => {
     if (!clientId) {
@@ -89,6 +142,53 @@ export function ClientSelector({
     }
   }
 
+  // Nothing renders until the project's client is known. Showing the selector first and then
+  // swapping it for read-only context would offer an override for a beat, which is exactly the
+  // window in which the incoherent write happened.
+  if (projectId && !inheritedLoaded) {
+    return (
+      <div className="space-y-2">
+        <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted block">{label}</label>
+        <p className="font-mono text-2xs text-foreground-muted">Loading this project&apos;s client...</p>
+      </div>
+    )
+  }
+
+  // INHERITED. The project already has a client, so this RFP has one too, and there is no
+  // control here to change it. Changing a project's client is a deliberate act performed on the
+  // project itself, never a side effect of building an RFP.
+  if (inherited) {
+    return (
+      <div className="space-y-2">
+        <label className="font-mono text-2xs uppercase tracking-wider text-foreground-muted block">{label}</label>
+        <div className="rounded-md border border-border bg-white/5 px-3 py-2">
+          <span className="text-sm text-foreground">{inherited.name}</span>
+          {inherited.fromProfile && (
+            <span className="ml-2 font-mono text-2xs uppercase tracking-wider text-accent">Client profile</span>
+          )}
+        </div>
+        <p className="font-mono text-2xs text-foreground-muted">
+          {projectId ? (
+            <>
+              This client comes from the project. Change it on the{" "}
+              <Link
+                href={`/agency/projects/${encodeURIComponent(projectId)}`}
+                className="underline underline-offset-4 hover:text-foreground"
+              >
+                project itself
+              </Link>
+              .
+            </>
+          ) : (
+            "This client comes from the project and is changed on the project itself."
+          )}
+        </p>
+      </div>
+    )
+  }
+
+  // NO CLIENT YET. Today's behavior exactly - this is the path that lets a profile be adopted
+  // onto an unassigned project.
   return (
     <div className="space-y-2">
       <label htmlFor={id} className="font-mono text-2xs uppercase tracking-wider text-foreground-muted block">

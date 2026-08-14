@@ -626,6 +626,9 @@ function AgencyRFPContent() {
     // this the project keeps client_id null and every client-scoped surface downstream -
     // onboarding's document group above all - has nothing to match on. Soft failure: naming a
     // client on an RFP must never block the broadcast.
+    // Only reachable when the project had NO client - the selector renders read-only otherwise.
+    // Writes the entity; the API reconciles client_name from the profile's own name so the two
+    // fields cannot disagree.
     void persistProjectClientLink(selectedProject?.id, profile.id).then((r) => {
       if (!r.ok) console.error("[agency/rfp] could not link project to client profile", r.error)
     })
@@ -1842,6 +1845,7 @@ function AgencyRFPContent() {
                 </p>
               </div>
               <ClientSelector
+                projectId={selectedProject?.id ?? null}
                 value={clientSelection}
                 onChange={(next) => {
                   // Going back to a typed name drops the entity link on the project too, so the

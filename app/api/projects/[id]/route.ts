@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { reconcileProjectClientFields } from '@/lib/clients-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,38 +66,25 @@ export async function PATCH(
     }
 
     const body = await req.json()
-    const allowed = ['name', 'client_name', 'status', 'description', 'budget_range', 'start_date', 'end_date']
+    // client_name is deliberately OUT of the allow-list now. Both client fields go through the
+    // one reconciler so this route cannot leave them disagreeing - see lib/clients-server.ts.
+    const allowed = ['name', 'status', 'description', 'budget_range', 'start_date', 'end_date']
     const updates: Record<string, unknown> = {}
     for (const key of allowed) {
       if (key in body) updates[key] = body[key] ?? null
     }
 
-    // ITEM 1. client_id is handled separately from the allow-list because it is the only field
-    // here that points at another row, and a client belonging to a different agency must never
-    // be attachable. Ownership is verified before the value is accepted. Passing null is a
-    // legitimate clear (the user went back to a typed name).
-    if ('client_id' in body) {
-      const raw = body.client_id
-      const clientId = typeof raw === 'string' && raw.trim() ? raw.trim() : null
-      if (clientId) {
-        const { data: owned, error: ownedErr } = await supabase
-          .from('clients')
-          .select('id')
-          .eq('id', clientId)
-          .eq('agency_id', user.id)
-          .maybeSingle()
-        if (ownedErr) {
-          console.error('[api/projects/[id]] client ownership check failed', {
-            message: ownedErr.message,
-            code: ownedErr.code,
-          })
-          return NextResponse.json({ error: 'Could not verify that client profile' }, { status: 500 })
-        }
-        if (!owned) {
-          return NextResponse.json({ error: 'Unknown client profile' }, { status: 400 })
-        }
+    if ('client_id' in body || 'client_name' in body) {
+      const reconciled = await reconcileProjectClientFields(supabase, user.id, {
+        hasClientId: 'client_id' in body,
+        clientId: (body as Record<string, unknown>).client_id as string | null,
+        hasClientName: 'client_name' in body,
+        clientName: (body as Record<string, unknown>).client_name as string | null,
+      })
+      if (!reconciled.ok) {
+        return NextResponse.json({ error: reconciled.error }, { status: reconciled.status })
       }
-      updates.client_id = clientId
+      Object.assign(updates, reconciled.fields)
     }
 
     if (Object.keys(updates).length === 0) {
