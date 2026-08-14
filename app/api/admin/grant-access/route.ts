@@ -1,6 +1,34 @@
 import { createClient } from "@supabase/supabase-js"
 import * as Sentry from "@sentry/nextjs"
 import { verifyGrantAccessToken } from "@/lib/grant-access-token"
+import { requireAdminRole } from "@/lib/api-auth"
+
+/**
+ * Why this route is shaped the way it is.
+ *
+ * It is the "Grant Access" button inside the new-signup notification email sent to
+ * hello@withligament.com by app/api/admin/notify-new-user. That makes it human-invoked, but
+ * invoked by clicking a link in an inbox rather than from a page inside the app.
+ *
+ * The defect fixed here is NOT a secret in the query string. The query string carries a
+ * user-scoped HMAC-SHA256 signature with a 24 hour expiry, compared with timingSafeEqual
+ * (lib/grant-access-token.ts); GRANT_ACCESS_SECRET itself never leaves the server. The real
+ * defect was that GET performed the write. Anything that follows a link without a human
+ * deciding to - a mail scanner, a corporate security gateway, a link preview unfurler, a
+ * browser prefetcher - silently granted paid access simply by touching the URL.
+ *
+ * So the two verbs are split:
+ *   GET  verifies the token and renders a confirmation form. It mutates nothing, which
+ *        makes it safe for anything that follows links automatically.
+ *   POST performs the grant, and additionally requires an admin session. There is no
+ *        query-string path that still writes.
+ *
+ * Check order is deliberate: the token is verified before the session, so a caller without
+ * a valid token always gets the same generic "invalid or expired" 403 and cannot use this
+ * route to probe for the existence of an admin surface. The more descriptive sign-in
+ * message is only reachable by someone already holding a valid, unexpired, correctly
+ * signed token.
+ */
 
 function escapeHtml(value: string): string {
   return value
@@ -21,51 +49,109 @@ function htmlResponse(html: string, status = 200) {
   })
 }
 
-function invalidLinkResponse() {
+function page(title: string, heading: string, bodyHtml = "", status = 200) {
   return htmlResponse(
     `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Invalid Link</title>
+    <title>${escapeHtml(title)}</title>
   </head>
   <body style="font-family: Arial, sans-serif; padding: 40px; color: #111827;">
-    <h1 style="font-size: 24px; margin-bottom: 12px;">This link is invalid or has expired.</h1>
+    <h1 style="font-size: 24px; margin-bottom: 12px;">${escapeHtml(heading)}</h1>
+    ${bodyHtml}
   </body>
 </html>`,
-    403
+    status
   )
 }
 
+/** Single generic failure for every bad, expired, tampered or missing token. */
+function invalidLinkResponse() {
+  return page("Invalid Link", "This link is invalid or has expired.", "", 403)
+}
+
+function readParams(url: string) {
+  const { searchParams } = new URL(url)
+  return {
+    userId: searchParams.get("user_id")?.trim() || "",
+    token: searchParams.get("token")?.trim() || "",
+  }
+}
+
+function tokenIsValid(userId: string, token: string): boolean {
+  if (!userId || !token) return false
+  try {
+    return verifyGrantAccessToken(userId, token)
+  } catch {
+    return false
+  }
+}
+
+/** Renders the confirmation form. Performs no write of any kind. */
 export async function GET(req: Request) {
   try {
-    const { searchParams } = new URL(req.url)
-    const userId = searchParams.get("user_id")?.trim() || ""
-    const token = searchParams.get("token")?.trim() || ""
+    const { userId, token } = readParams(req.url)
+    if (!tokenIsValid(userId, token)) return invalidLinkResponse()
 
-    if (!userId || !token) {
-      return invalidLinkResponse()
+    const form = `
+    <p style="font-size: 16px; margin: 0 0 24px;">
+      Granting access sets this account to paid. You must be signed in to Ligament as an
+      admin for this to take effect.
+    </p>
+    <form method="POST" action="/api/admin/grant-access">
+      <input type="hidden" name="user_id" value="${escapeHtml(userId)}" />
+      <input type="hidden" name="token" value="${escapeHtml(token)}" />
+      <button type="submit" style="font-size: 16px; padding: 12px 20px; border: 0; border-radius: 8px; background: #0C3535; color: #ffffff; cursor: pointer;">
+        Grant access
+      </button>
+    </form>`
+
+    return page("Confirm access grant", "Confirm access grant", form)
+  } catch (error) {
+    Sentry.captureException(error)
+    return invalidLinkResponse()
+  }
+}
+
+/** Performs the grant. Requires a valid token AND an admin session. */
+export async function POST(req: Request) {
+  try {
+    // The form posts url-encoded; accept a JSON body too so the route stays scriptable.
+    let userId = ""
+    let token = ""
+    const contentType = req.headers.get("content-type") || ""
+    if (contentType.includes("application/json")) {
+      const body = await req.json().catch(() => ({}))
+      userId = String(body?.user_id || "").trim()
+      token = String(body?.token || "").trim()
+    } else {
+      const form = await req.formData().catch(() => null)
+      userId = String(form?.get("user_id") || "").trim()
+      token = String(form?.get("token") || "").trim()
     }
 
-    let isValid = false
-    try {
-      isValid = verifyGrantAccessToken(userId, token)
-    } catch {
-      isValid = false
-    }
+    // Token before session, so a caller without a valid token learns nothing.
+    if (!tokenIsValid(userId, token)) return invalidLinkResponse()
 
-    if (!isValid) {
-      return invalidLinkResponse()
+    const auth = await requireAdminRole()
+    if (!auth.authorized) {
+      return page(
+        "Sign in required",
+        "Sign in as an admin to continue.",
+        `<p style="font-size: 16px; margin: 0;">Sign in to Ligament in this browser, then open the link from the notification email again. The link stays valid for 24 hours from the time it was sent.</p>`,
+        auth.response.status
+      )
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!supabaseUrl || !serviceRoleKey) return invalidLinkResponse()
 
-    if (!supabaseUrl || !serviceRoleKey) {
-      return invalidLinkResponse()
-    }
-
+    // Service role is still required after the gate: the target is an arbitrary signup that
+    // the admin has no partnership or ownership relationship with, so no profiles policy
+    // grants a write to that row through the session client.
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
     const { data: profile, error: profileError } = await supabase
@@ -74,9 +160,7 @@ export async function GET(req: Request) {
       .eq("id", userId)
       .maybeSingle()
 
-    if (profileError || !profile) {
-      return invalidLinkResponse()
-    }
+    if (profileError || !profile) return invalidLinkResponse()
 
     const { error: updateError } = await supabase
       .from("profiles")
@@ -84,23 +168,12 @@ export async function GET(req: Request) {
       .eq("id", userId)
 
     if (updateError) {
+      console.error("[admin/grant-access] update failed", updateError.message)
       return invalidLinkResponse()
     }
 
     const safeEmail = escapeHtml(String(profile.email || "Unknown email"))
-
-    return htmlResponse(`<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Access Granted</title>
-  </head>
-  <body style="font-family: Arial, sans-serif; padding: 40px; color: #111827;">
-    <h1 style="font-size: 24px; margin-bottom: 12px;">Access granted.</h1>
-    <p style="font-size: 16px; margin: 0;">${safeEmail}</p>
-  </body>
-</html>`)
+    return page("Access Granted", "Access granted.", `<p style="font-size: 16px; margin: 0;">${safeEmail}</p>`)
   } catch (error) {
     Sentry.captureException(error)
     return invalidLinkResponse()

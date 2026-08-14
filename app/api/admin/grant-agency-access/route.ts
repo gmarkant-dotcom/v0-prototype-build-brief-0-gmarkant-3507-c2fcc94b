@@ -1,24 +1,11 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase/server"
+import { requireAdminRole } from "@/lib/api-auth"
 
 export async function POST(req: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("id", user.id)
-      .single()
-
-    if (profile?.email !== "greg@withligament.com") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
+    // Admin gate before the body is read, so an unauthorized caller never reaches parsing.
+    const auth = await requireAdminRole()
+    if (!auth.authorized) return auth.response
 
     const body = await req.json().catch(() => ({}))
     const { userId, grant } = body
@@ -27,13 +14,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "userId and grant required" }, { status: 400 })
     }
 
-    const { error } = await supabase
+    // No service role here, deliberately. This write goes through the admin's own session
+    // client, so it is governed by the same profiles policies as the admin panel's other
+    // toggles - which is what makes profiles.is_admin the single thing that has to be true.
+    const { error } = await auth.supabase
       .from("profiles")
       .update({ secondary_role: grant ? "agency" : null })
       .eq("id", userId)
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      // Log the driver message, do not return it - it can echo column names and constraint
+      // details back to the caller.
+      console.error("[admin/grant-agency-access] update failed", error.message)
+      return NextResponse.json({ error: "Failed to update access" }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, secondary_role: grant ? "agency" : null })

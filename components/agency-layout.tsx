@@ -248,7 +248,7 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarLoadError, setAvatarLoadError] = useState(false)
   const [isDemo, setIsDemo] = useState(false)
-  const [isOwner, setIsOwner] = useState(false) // Only greg@withligament.com can see admin
+  const [isOwner, setIsOwner] = useState(false) // profiles.is_admin - controls admin nav link visibility only
   const { selectedProject, setSelectedProject, projects, isLoadingProjects } = useSelectedProject()
   const uniqueProjects = useMemo(
     () => Array.from(new Map(projects.map((project) => [project.id, project])).values()),
@@ -296,18 +296,16 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        // SECURITY: Only show admin link if user is the owner
-        // This is a hard-coded check that cannot be bypassed
-        const OWNER_EMAIL = 'greg@withligament.com'
-        setIsOwner(user.email === OWNER_EMAIL)
-        
         try {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("full_name, company_name, company_logo_url")
+            .select("full_name, company_name, company_logo_url, is_admin")
             .eq("id", user.id)
             .single()
           if (profile) {
+            // Nav visibility only. profiles.is_admin, matching requireAdminRole on the API
+            // side, so the link and the route it points at agree on who is an admin.
+            setIsOwner(Boolean(profile.is_admin))
             setUserName(profile.company_name || profile.full_name || "Lead Agency")
             setAvatarUrl(profile.company_logo_url || null)
             setAvatarLoadError(false)

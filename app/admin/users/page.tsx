@@ -10,6 +10,8 @@ import { LigamentLogo } from "@/components/ligament-logo"
 import { cn } from "@/lib/utils"
 import { Search, Check, X, Shield, CreditCard, ArrowLeft, Users } from "lucide-react"
 
+// Mirrors ADMIN_USER_COLUMNS in app/api/admin/users/route.ts. is_admin and secondary_role
+// were declared here but read by nothing in this file, so the route no longer sends them.
 type User = {
   id: string
   email: string
@@ -17,14 +19,9 @@ type User = {
   company_name: string | null
   role: string | null
   is_paid: boolean
-  is_admin: boolean
   demo_access: boolean
-  secondary_role: string | null
   created_at: string
 }
-
-// SECURITY: Only this email can access the admin panel
-const OWNER_EMAIL = 'greg@withligament.com'
 
 export default function AdminUsersPage() {
   const router = useRouter()
@@ -44,15 +41,21 @@ export default function AdminUsersPage() {
         return
       }
 
-      // SECURITY: Only the owner email can access admin panel
-      // This is a hard-coded check that cannot be bypassed via database
-      if (user.email !== OWNER_EMAIL) {
+      // profiles.is_admin is the single source of truth, matching requireAdminRole on the
+      // API side. This is a UI convenience gate only - the real boundary is the route.
+      // It also has to agree with the route, because the toggles below write to profiles
+      // through the browser client and depend on the same flag at the RLS layer.
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", user.id)
+        .maybeSingle()
+
+      if (!profile?.is_admin) {
         router.push("/agency")
         return
       }
 
-      // Owner email is verified - grant access
-      // The is_admin database flag is optional (for future multi-admin support)
       setIsOwner(true)
 
       // Fetch all users via server-side route (bypasses RLS to return all profiles)
