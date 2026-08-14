@@ -116,7 +116,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
         .maybeSingle()
     }
 
+    // The one refusal that is still correct, and the one cell of the matrix where Postgres
+    // refuses too. It lands HERE rather than after the tier decision because that is where the
+    // database actually enforces it: with no partnership row and is_discoverable false, none of
+    // the five profiles policies matches, so the select comes back empty and the route never
+    // gets to read is_discoverable at all. Never a blank wall - it says what it is and what
+    // would open it.
     if (prof.error || !prof.data) {
+      if (!hasActivePartnership) {
+        return NextResponse.json(
+          {
+            error: "This vendor's profile is private",
+            reason: partnership
+              ? `They have not listed themselves in the marketplace, and your partnership is ${partnership.status}.`
+              : "They have not listed themselves in the marketplace, and you have no partnership with them.",
+            unlock: partnership
+              ? "Their profile opens when they accept your invitation."
+              : "Invite them to your vendor network. Once they accept, their full profile opens to you.",
+          },
+          { status: 403, headers: noStore }
+        )
+      }
       console.error("[api/agency/pool/partner] profile load", prof.error)
       return NextResponse.json({ error: "Vendor profile not found" }, { status: 404, headers: noStore })
     }
@@ -137,21 +157,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       rate_info?: unknown
       business_criteria?: unknown
       is_discoverable: boolean | null
-    }
-
-    // The refusal that is still correct: a vendor who has not made themselves discoverable
-    // and has no relationship with this agency at all. It is the only cell in the matrix
-    // where Postgres would refuse too. Everything else gets a tier and a reason.
-    if (!hasActivePartnership && !row.is_discoverable && !partnership) {
-      return NextResponse.json(
-        {
-          error: "This vendor's profile is private",
-          reason:
-            "They have not listed themselves in the marketplace, and you have no partnership with them.",
-          unlock: "Invite them to your vendor network. Once they accept, their full profile opens to you.",
-        },
-        { status: 403, headers: noStore }
-      )
     }
 
     const tier: "partnership" | "public" | "none" = hasActivePartnership
