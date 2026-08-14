@@ -872,41 +872,6 @@ function PartnerPoolPageInner() {
     setIsInviting(false)
   }
   
-  // Confirm a partner who has accepted
-  const handleConfirmPartner = async (invitationId: string) => {
-    if (!checkFeatureAccess()) return
-    
-    if (isDemo) {
-      // Demo mode: update local state
-      setInvitations(prev => prev.map(inv => 
-        inv.id === invitationId 
-          ? { ...inv, status: 'confirmed' as const, confirmedAt: new Date().toISOString().split('T')[0] }
-          : inv
-      ))
-      return
-    }
-    
-    // Production: update database
-    try {
-      const supabase = createClient()
-      
-      const { error } = await supabase
-        .from('agency_partner_invitations')
-        .update({ 
-          status: 'confirmed',
-          confirmed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', invitationId)
-      
-      if (!error) {
-        await loadPartnerships()
-      }
-    } catch (error) {
-      console.error('Error confirming partner:', error)
-    }
-  }
-  
   // Active partnerships count
   const activePartnerships = isDemo
     ? invitations.filter(inv => inv.status === 'accepted' || inv.status === 'confirmed').length
