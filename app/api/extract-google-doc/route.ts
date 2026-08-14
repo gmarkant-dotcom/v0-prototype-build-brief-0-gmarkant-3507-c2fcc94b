@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireAuth } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -15,6 +16,15 @@ const NOT_ACCESSIBLE_ERROR =
 
 export async function POST(req: NextRequest) {
   try {
+    // This route had no authorization of any kind. Its only two callers
+    // (app/agency/page.tsx, app/agency/brief/page.tsx) are both authenticated agency
+    // screens, so it was never meant to be public - it was an unauthenticated fetch-and-
+    // return endpoint that any caller could use as a free proxy for reading Google Docs.
+    // The target URL is rebuilt server-side from an extracted document id, so it is not an
+    // open redirect or SSRF vector; the exposure was unmetered anonymous use.
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+
     const { url } = await req.json()
     if (!url?.trim()) {
       return NextResponse.json({ error: "URL required" }, { status: 400 })

@@ -1,4 +1,5 @@
 import { get } from '@vercel/blob'
+import { requireAuth } from "@/lib/api-auth"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSafeContentTypeForFilename, isSafeToRenderInline } from '@/lib/upload-validation'
@@ -31,12 +32,9 @@ export async function GET(
   try {
     const route = '/api/documents/[id]'
     const { id } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: null })
 
     // Get document record - RLS will enforce access control

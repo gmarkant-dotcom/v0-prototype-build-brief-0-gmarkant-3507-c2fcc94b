@@ -7,6 +7,7 @@
 // decision is made on whether to build the read-side UI or drop the feature - do not
 // delete without re-checking the write side first.
 import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/api-auth"
 import { NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -19,12 +20,9 @@ const noStoreHeaders = {
 export async function GET(request: Request) {
   try {
     const route = "/api/notifications"
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
     console.log("[api] start", { route, method: "GET", userId: user.id, role: null })
 
     const { searchParams } = new URL(request.url)
@@ -75,12 +73,9 @@ export async function GET(request: Request) {
 // PATCH /api/notifications - Mark notifications as read
 export async function PATCH(request: Request) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const body = await request.json()
     const { notificationIds, markAllRead } = body

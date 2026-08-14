@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireAuth } from "@/lib/api-auth"
 import { createClient } from "@/lib/supabase/server"
 
 type PatchBody = {
@@ -9,14 +10,9 @@ type PatchBody = {
 
 export async function PATCH(req: Request) {
   try {
-    const supabase = await createClient()
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const body = (await req.json()) as PatchBody
     const avatar_url = body.avatar_url

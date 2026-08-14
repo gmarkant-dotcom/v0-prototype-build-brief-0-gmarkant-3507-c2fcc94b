@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from "@/lib/api-auth"
 import { createClient } from '@/lib/supabase/server'
 import {
   notifyProjectAssignment,
@@ -21,12 +22,9 @@ export async function GET(
   try {
     const route = '/api/projects/[id]/assignments'
     const { id: projectId } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: 'agency' })
 
     const { data: project } = await supabase
@@ -75,12 +73,9 @@ export async function POST(
 ) {
   try {
     const { id: projectId } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const { data: project } = await supabase
       .from('projects')
@@ -203,12 +198,9 @@ export async function PATCH(
 ) {
   try {
     const { id: projectId } = await params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const { assignmentId, status } = await request.json()
 

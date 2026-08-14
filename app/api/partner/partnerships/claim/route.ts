@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { requireAuth } from "@/lib/api-auth"
 import { createClient as createAnonClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 
@@ -52,13 +53,9 @@ async function claimPendingPartnershipInvites(userId: string): Promise<
 }
 
 export async function POST() {
-  const supabase = await createAnonClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth.response
+  const { user, supabase } = auth
   const userId = user.id
   console.log("[claim] auth userId:", userId)
 

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { requireAuth } from "@/lib/api-auth"
 import { createClient } from "@/lib/supabase/server"
 import { getDownloadUrl } from "@vercel/blob"
 
@@ -6,11 +7,9 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const auth = await requireAuth()
+    if (!auth.authorized) return auth.response
+    const { user, supabase } = auth
 
     const { data: profile } = await supabase
       .from("profiles")
