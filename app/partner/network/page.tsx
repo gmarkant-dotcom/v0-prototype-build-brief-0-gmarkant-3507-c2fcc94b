@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { isActivePartnership, partnershipPoolColumn } from "@/lib/partnership-state"
 import { isDemoMode } from "@/lib/demo-data"
-import { cn } from "@/lib/utils"
+import { cn, formatDateTime } from "@/lib/utils"
 import {
   Building2, Search, Send, CheckCircle, Clock, MapPin, Globe, Users, X, Zap,
   Mail, Check, Calendar, MessageSquare,
@@ -65,6 +65,12 @@ interface Agency {
   has_partnership?: boolean
   business_criteria?: unknown
   vouch_count?: number
+  // Partnership-tier fields. The server nulls these below the partnership tier, so their
+  // absence here is the server's decision, never the component's.
+  display_name?: string | null
+  meeting_url?: string | null
+  payment_terms?: string | null
+  payment_terms_custom?: string | null
 }
 
 interface AccessRequest {
@@ -80,6 +86,37 @@ interface SharedProject {
   updated_at?: string
   assignmentStatus?: string
   clientName?: string
+}
+
+/** Shapes returned by /api/partner/network/[agencyId]. The tier is decided there, not here. */
+interface AgencyAccess {
+  tier: "partnership" | "public"
+  reason: string
+  unlock: string | null
+}
+
+interface AgencyAccessRefusal {
+  error: string
+  reason?: string
+  unlock?: string
+}
+
+interface AgencyPartnershipState {
+  id: string | null
+  status: string
+  nda_confirmed_at: string | null
+  msa_confirmed_at: string | null
+  accepted_at: string | null
+  invitation_sent_at: string | null
+}
+
+interface AgencyEngagement {
+  id: string
+  status: string
+  scope_item_name: string
+  project_name: string
+  awarded_amount: number | null
+  currency: string
 }
 
 type Tab = "my-agencies" | "invitations" | "discover"
@@ -290,6 +327,13 @@ export default function AgencyNetworkPage() {
   const [showAgencyProfileModal, setShowAgencyProfileModal] = useState(false)
   const [agencyProfileProjects, setAgencyProfileProjects] = useState<SharedProject[]>([])
   const [isLoadingAgencyProfile, setIsLoadingAgencyProfile] = useState(false)
+  // Everything below comes from /api/partner/network/[agencyId], which decides the tier
+  // server-side. The component never receives a field it is not entitled to, so it has no
+  // masking of its own to do - it only decides what to render.
+  const [agencyAccess, setAgencyAccess] = useState<AgencyAccess | null>(null)
+  const [agencyPartnership, setAgencyPartnership] = useState<AgencyPartnershipState | null>(null)
+  const [agencyEngagements, setAgencyEngagements] = useState<AgencyEngagement[]>([])
+  const [agencyProfileError, setAgencyProfileError] = useState<AgencyAccessRefusal | null>(null)
 
   const toggleDesignationFilter = (key: DesignationKey) => {
     setSelectedDesignationFilters((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
@@ -481,36 +525,55 @@ export default function AgencyNetworkPage() {
     setSelectedAgency(agency)
     setShowAgencyProfileModal(true)
     setIsLoadingAgencyProfile(true)
+    setAgencyAccess(null)
+    setAgencyPartnership(null)
+    setAgencyEngagements([])
+    setAgencyProfileError(null)
+    setAgencyProfileProjects([])
 
     if (isDemo) {
       setAgencyProfileProjects([{ id: "demo-project-1", title: "NWSL Creator Content Series", status: "active", updated_at: "2026-03-01" }])
+      setAgencyAccess({ tier: "partnership", reason: "You have an active partnership with this agency.", unlock: null })
       setIsLoadingAgencyProfile(false)
       return
     }
 
     try {
-      const response = await fetch("/api/projects")
+      const response = await fetch(`/api/partner/network/${agency.id}`, { cache: "no-store" })
+      const payload = await response.json().catch(() => ({}))
+
       if (!response.ok) {
-        setAgencyProfileProjects([])
+        // 403 is a real answer, not a failure: the agency's profile is private and there is
+        // no active partnership. The server sends the reason and what would open it.
+        setAgencyProfileError({
+          error: payload?.error || "This agency's profile is not available",
+          reason: payload?.reason,
+          unlock: payload?.unlock,
+        })
         setIsLoadingAgencyProfile(false)
         return
       }
-      const payload = await response.json()
-      const rows = payload.projects || []
-      const shared = rows
-        .filter((p: any) => p?.agency?.id === agency.id)
-        .map((p: any) => ({
+
+      setAgencyAccess(payload.access ?? null)
+      setAgencyPartnership(payload.partnership ?? null)
+      setAgencyEngagements(payload.engagement_history ?? [])
+      setAgencyProfileProjects(
+        (payload.shared_projects || []).map((p: { id: string; name: string; status: string | null; updated_at: string | null }) => ({
           id: p.id,
-          title: p.title || p.name || "Untitled Project",
-          status: p.status,
-          updated_at: p.updated_at || p.created_at,
-          assignmentStatus: p.assignment?.status,
-          clientName: p.client_name || "Client TBD",
+          title: p.name,
+          status: p.status ?? undefined,
+          updated_at: p.updated_at ?? undefined,
         }))
-      setAgencyProfileProjects(shared)
+      )
+      // The server payload replaces the caller's stub rather than merging under it. A stub
+      // built from a partnership row carries an email that the tier may not permit, and
+      // merging would put it back on screen after the server had withheld it.
+      if (payload.agency) {
+        setSelectedAgency({ ...payload.agency, has_partnership: Boolean(payload.partnership) })
+      }
     } catch (error) {
-      console.error("Error loading agency profile projects:", error)
-      setAgencyProfileProjects([])
+      console.error("Error loading agency profile:", error)
+      setAgencyProfileError({ error: "Could not load this agency's profile" })
     }
     setIsLoadingAgencyProfile(false)
   }
@@ -1144,6 +1207,16 @@ export default function AgencyNetworkPage() {
                 </button>
               </div>
 
+              {/* The one cell where Postgres refuses too: no active partnership and the agency
+                  has not listed itself. Rendered as an explanation with what would open it,
+                  not as a red error box. */}
+              {agencyProfileError ? (
+                <div className="rounded-lg border border-vendor-border bg-vendor-background p-4">
+                  <p className="text-sm text-vendor-foreground font-medium">{agencyProfileError.error}</p>
+                  {agencyProfileError.reason && <p className="text-sm text-vendor-muted-strong mt-1">{agencyProfileError.reason}</p>}
+                  {agencyProfileError.unlock && <p className="text-sm text-vendor-muted-strong mt-2">{agencyProfileError.unlock}</p>}
+                </div>
+              ) : (
               <div className="space-y-4">
                 {selectedAgency.bio && <p className="text-sm text-vendor-foreground">{selectedAgency.bio}</p>}
 
@@ -1193,6 +1266,48 @@ export default function AgencyNetworkPage() {
                   )
                 })()}
 
+                {/* Compliance state of THIS relationship. Partnership tier only - the server
+                    sends nulls below it, so there is nothing to hide here. */}
+                {agencyPartnership && agencyAccess?.tier === "partnership" && (
+                  <div className="rounded-lg border border-vendor-border p-4">
+                    <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-3">Partnership Status</div>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <div className="text-vendor-muted text-xs">Status</div>
+                        <div className="text-vendor-foreground font-medium capitalize">{agencyPartnership.status}</div>
+                      </div>
+                      {agencyPartnership.accepted_at && (
+                        <div>
+                          <div className="text-vendor-muted text-xs">Partnered since</div>
+                          <div className="text-vendor-foreground font-medium">{formatDateTime(agencyPartnership.accepted_at)}</div>
+                        </div>
+                      )}
+                      <div>
+                        <div className="text-vendor-muted text-xs">NDA</div>
+                        <div className="text-vendor-foreground font-medium">
+                          {agencyPartnership.nda_confirmed_at ? `Confirmed ${formatDateTime(agencyPartnership.nda_confirmed_at)}` : "Not confirmed"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-vendor-muted text-xs">MSA</div>
+                        <div className="text-vendor-foreground font-medium">
+                          {agencyPartnership.msa_confirmed_at ? `Confirmed ${formatDateTime(agencyPartnership.msa_confirmed_at)}` : "Not confirmed"}
+                        </div>
+                      </div>
+                      {selectedAgency.payment_terms && (
+                        <div>
+                          <div className="text-vendor-muted text-xs">Payment terms</div>
+                          <div className="text-vendor-foreground font-medium">
+                            {selectedAgency.payment_terms === "custom" && selectedAgency.payment_terms_custom
+                              ? selectedAgency.payment_terms_custom
+                              : selectedAgency.payment_terms.replace(/_/g, " ").toUpperCase()}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {agencyProfileProjects.length > 0 && !isLoadingAgencyProfile && (
                   <div>
                     <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Shared Projects</div>
@@ -1200,7 +1315,24 @@ export default function AgencyNetworkPage() {
                       {agencyProfileProjects.map((p) => (
                         <div key={p.id} className="rounded-lg border border-vendor-border p-3 text-sm">
                           <div className="text-vendor-foreground font-medium">{p.title}</div>
-                          <div className="text-vendor-muted text-xs mt-0.5">{p.clientName}</div>
+                          {p.status && <div className="text-vendor-muted text-xs mt-0.5 capitalize">{p.status}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {agencyEngagements.length > 0 && !isLoadingAgencyProfile && (
+                  <div>
+                    <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Work Awarded To You</div>
+                    <div className="space-y-2">
+                      {agencyEngagements.map((e) => (
+                        <div key={e.id} className="rounded-lg border border-vendor-border p-3 text-sm">
+                          <div className="text-vendor-foreground font-medium">{e.scope_item_name}</div>
+                          <div className="text-vendor-muted text-xs mt-0.5">
+                            {e.project_name}
+                            {e.awarded_amount != null && ` · ${e.currency} ${e.awarded_amount.toLocaleString()}`}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1226,8 +1358,29 @@ export default function AgencyNetworkPage() {
                       Request collaboration access to view contact info →
                     </button>
                   )}
+                  {selectedAgency.meeting_url && (
+                    <a
+                      href={selectedAgency.meeting_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline mt-1 block"
+                    >
+                      Book a meeting →
+                    </a>
+                  )}
                 </div>
+
+                {/* Below the partnership tier, name what is closed and what opens it. An
+                    explanation, not an error box. */}
+                {agencyAccess && agencyAccess.tier !== "partnership" && (
+                  <div className="rounded-lg border border-vendor-border bg-vendor-background p-4">
+                    <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mb-2">Limited View</div>
+                    <p className="text-sm text-vendor-foreground">{agencyAccess.reason}</p>
+                    {agencyAccess.unlock && <p className="text-sm text-vendor-muted-strong mt-1">{agencyAccess.unlock}</p>}
+                  </div>
+                )}
               </div>
+              )}
             </div>
           </div>
         )}

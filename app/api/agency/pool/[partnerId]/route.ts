@@ -6,7 +6,7 @@ import {
   isMissingRateInfoColumnError,
   resolveRateInfoForPartnership,
 } from "@/lib/partner-rate-info-read"
-import { parseDoubleJson } from "@/lib/active-engagement-parse"
+import { buildEngagementHistory, unwrapInbox } from "@/lib/engagement-history"
 
 export const dynamic = "force-dynamic"
 
@@ -19,43 +19,6 @@ const noStore = {
 const revalidateHeaders = {
   "Cache-Control": "private, max-age=0, stale-while-revalidate=30",
 } as const
-
-type BudgetJson = { amount?: number; currency?: string }
-
-function parseAwardedBudget(raw: unknown): { amount: number; currency: string } | null {
-  const o = parseDoubleJson<BudgetJson>(raw)
-  if (!o || o.amount == null || !Number.isFinite(Number(o.amount))) return null
-  const currency =
-    typeof o.currency === "string" && o.currency.trim() ? o.currency.trim().toUpperCase() : "USD"
-  return { amount: Number(o.amount), currency }
-}
-
-function unwrapInbox(raw: unknown): {
-  scope_item_name: string | null
-  project_id: string | null
-  master_rfp_json: unknown
-} | null {
-  if (!raw) return null
-  const row = Array.isArray(raw) ? raw[0] : raw
-  if (!row || typeof row !== "object") return null
-  const o = row as { scope_item_name?: string | null; project_id?: string | null; master_rfp_json?: unknown }
-  return {
-    scope_item_name: o.scope_item_name != null ? String(o.scope_item_name) : null,
-    project_id: o.project_id != null ? String(o.project_id) : null,
-    master_rfp_json: o.master_rfp_json ?? null,
-  }
-}
-
-function projectNameFromInbox(
-  inbox: NonNullable<ReturnType<typeof unwrapInbox>>,
-  projectRow: { name?: string | null; title?: string | null } | undefined
-): string {
-  const fromProj = (projectRow?.name || projectRow?.title || "").trim()
-  if (fromProj) return fromProj
-  const j = inbox.master_rfp_json as Record<string, unknown> | null
-  const n = j?.projectName
-  return typeof n === "string" && n.trim() ? n.trim() : "Project"
-}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ partnerId: string }> }) {
   try {
@@ -215,53 +178,29 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       if (inbox?.project_id) projectIds.add(inbox.project_id)
     }
 
-    const projectMeta = new Map<string, { name: string | null; title: string | null }>()
+    // `projects` has `name` and no `title`. Selecting `title` returned 42703 for the whole
+    // query, and the old fallback could not fire because it required "name" to appear in an
+    // error message that reads "column projects.title does not exist" - so projectMeta was
+    // always empty and every engagement silently fell back to the RFP payload's projectName.
+    const projectMeta = new Map<string, { name: string | null }>()
     if (projectIds.size > 0) {
-      let projs =
-        (await supabase
-          .from("projects")
-          .select("id, name, title")
-          .eq("agency_id", user.id)
-          .in("id", [...projectIds])) as {
-          data: unknown[] | null
-          error: { message?: string } | null
-        }
-
-      if (projs.error && /name/i.test(projs.error.message || "") && /column/i.test(projs.error.message || "")) {
-        projs = (await supabase
-          .from("projects")
-          .select("id, title")
-          .eq("agency_id", user.id)
-          .in("id", [...projectIds])) as typeof projs
-      }
+      const projs = await supabase
+        .from("projects")
+        .select("id, name")
+        .eq("agency_id", user.id)
+        .in("id", [...projectIds])
 
       if (projs.error) {
         console.error("[api/agency/pool/partner] projects batch", projs.error)
       } else {
         for (const p of projs.data || []) {
-          const row = p as { id: string; name?: string | null; title?: string | null }
-          projectMeta.set(String(row.id), {
-            name: row.name ?? null,
-            title: row.title ?? null,
-          })
+          const row = p as { id: string; name?: string | null }
+          projectMeta.set(String(row.id), { name: row.name ?? null })
         }
       }
     }
 
-    const engagement_history = (respRows || []).map((r) => {
-      const inbox = unwrapInbox((r as { partner_rfp_inbox?: unknown }).partner_rfp_inbox)
-      const pid = inbox?.project_id ?? null
-      const meta = pid ? projectMeta.get(pid) : undefined
-      const parsed = parseAwardedBudget((r as { budget_proposal?: unknown }).budget_proposal)
-      return {
-        id: String((r as { id: string }).id),
-        status: String((r as { status?: string }).status || "awarded"),
-        scope_item_name: inbox?.scope_item_name?.trim() || "Scope",
-        project_name: inbox ? projectNameFromInbox(inbox, meta) : "Project",
-        awarded_amount: parsed?.amount ?? null,
-        currency: parsed?.currency ?? "USD",
-      }
-    })
+    const engagement_history = buildEngagementHistory(respRows as unknown[] | null, projectMeta)
 
     // Tiering happens HERE, server-side. A field the caller is not entitled to is never put
     // on the wire for a component to hide - row level security hands this route the whole
