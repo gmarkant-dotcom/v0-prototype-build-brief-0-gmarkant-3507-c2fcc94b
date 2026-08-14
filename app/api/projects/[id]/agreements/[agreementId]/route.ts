@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { actingRole } from '@/lib/acting-role'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 
 /** Partner marks NDA or SOW as signed (or lead agency updates status). */
@@ -51,7 +52,7 @@ export async function PATCH(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, full_name, company_name, email')
+      .select('role, active_role, full_name, company_name, email')
       .eq('id', user.id)
       .single()
 
@@ -61,8 +62,12 @@ export async function PATCH(
       .eq('id', projectId)
       .single()
 
-    const isPartner = profile?.role === 'partner' && partnership?.partner_id === user.id
-    const isAgency = profile?.role === 'agency' && projectRow?.agency_id === user.id
+    // Acting role, not signup role - see lib/acting-role.ts. Branching on role denied a
+    // dual-role vendor (role='agency', active_role='partner') the right to sign their own
+    // assignment agreement, because isPartner could never be true for them.
+    const acting = actingRole(profile)
+    const isPartner = acting === 'partner' && partnership?.partner_id === user.id
+    const isAgency = acting === 'agency' && projectRow?.agency_id === user.id
 
     if (!isPartner && !isAgency) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -95,12 +100,17 @@ export async function PATCH(
       if (counterpartUserId) {
         const { data: counterpartProfile } = await supabase
           .from('profiles')
-          .select('email, role, company_name, full_name')
+          .select('email, company_name, full_name')
           .eq('id', counterpartUserId)
           .maybeSingle()
         const recipientEmail = counterpartProfile?.email?.trim()
         if (recipientEmail) {
-          const recipientIsAgency = counterpartProfile?.role === 'agency'
+          // Which side the counterpart is on is already decided by which side WE are on -
+          // counterpartUserId was picked from projectRow.agency_id or partnership.partner_id
+          // directly above. Reading the counterpart's profiles.role to re-derive it was the
+          // same signup-role confusion, and it cannot be resolved by active_role because a
+          // recipient's current portal is not a fact this request can know.
+          const recipientIsAgency = isPartner
           const viewPath = recipientIsAgency
             ? `/agency/dashboard`
             : `/partner/projects`

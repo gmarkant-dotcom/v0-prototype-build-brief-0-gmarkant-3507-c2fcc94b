@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { canActAs } from '@/lib/acting-role'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { createNotification } from '@/lib/notifications'
 
@@ -18,11 +19,11 @@ export async function POST(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, company_name, full_name')
+      .select('role, active_role, company_name, full_name')
       .eq('id', user.id)
       .single()
 
-    if (profile?.role !== 'agency') {
+    if (!canActAs(profile, 'agency')) {
       return NextResponse.json({ error: 'Only lead agencies can deploy onboarding' }, { status: 403 })
     }
 
@@ -88,7 +89,7 @@ export async function POST(
     }
 
     const agencyName =
-      profile.company_name || profile.full_name || 'Your lead agency'
+      profile?.company_name || profile?.full_name || 'Your lead agency'
 
     const { data: deployment, error: depErr } = await supabase
       .from('onboarding_deployments')

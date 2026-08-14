@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { canActAs } from '@/lib/acting-role'
 import { reconcileProjectClientFields } from '@/lib/clients-server'
 
 export const dynamic = 'force-dynamic'
@@ -20,11 +21,11 @@ export async function GET(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, active_role')
       .eq('id', user.id)
       .single()
 
-    if (profile?.role !== 'agency') {
+    if (!canActAs(profile, 'agency')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -57,11 +58,11 @@ export async function PATCH(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, active_role')
       .eq('id', user.id)
       .single()
 
-    if (profile?.role !== 'agency') {
+    if (!canActAs(profile, 'agency')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

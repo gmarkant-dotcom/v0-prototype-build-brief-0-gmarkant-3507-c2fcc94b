@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { canActAs } from "@/lib/acting-role"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, is_paid, is_admin, payment_terms, payment_terms_custom")
+      .select("role, active_role, is_paid, is_admin, payment_terms, payment_terms_custom")
       .eq("id", user.id)
       .single()
 
@@ -75,7 +76,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403, headers: noStore })
     }
 
-    if (profile?.role !== "agency") {
+    // Portal gate only. The subscription clause above deliberately still reads `role`,
+    // because entitlement is an account fact and is a separate ruling from which portal the
+    // caller is in - see lib/acting-role.ts.
+    if (!canActAs(profile, "agency")) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 

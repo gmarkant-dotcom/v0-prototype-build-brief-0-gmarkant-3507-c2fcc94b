@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
+import { actingRole, canActAs } from '@/lib/acting-role'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,10 +26,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user's role
+    // Get the role the user is ACTING AS. active_role is the portal they are in right now;
+    // role is the signup-time account fact. Branching on role served every dual-role vendor
+    // the agency half of this handler - see docs/invitation-diagnosis.md 0.6 and
+    // lib/acting-role.ts for the fallback rule.
     const { data: profile, error: profileErr } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, active_role')
       .eq('id', user.id)
       .single()
     if (profileErr) {
@@ -40,11 +44,22 @@ export async function GET(request: NextRequest) {
       })
       return NextResponse.json({ error: 'Failed to load profile' }, { status: 500, headers: noStoreHeaders })
     }
-    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null })
+    const acting = actingRole(profile)
+    console.log('[api] start', {
+      route,
+      method: 'GET',
+      userId: user.id,
+      role: profile?.role ?? null,
+      activeRole: profile?.active_role ?? null,
+      acting,
+    })
 
     let partnerships
 
-    if (profile?.role === 'agency') {
+    // Anything that is not the agency portal falls to the vendor branch, including a caller
+    // whose role columns resolve to nothing at all: that branch only ever returns rows keyed
+    // to the caller's own id or email, so it is the safe default.
+    if (acting === 'agency') {
       // Agency sees rows where they are agency_id (not partner_id). 'removed' rows are
       // hidden entirely - the agency explicitly dismissed them from the pool, but the row
       // is kept (not deleted) for any associated rfp_magic_tokens/bid history.
@@ -269,6 +284,7 @@ export async function GET(request: NextRequest) {
       method: 'GET',
       userId: user.id,
       role: profile?.role ?? null,
+      acting,
       rowCount: Array.isArray(partnerships) ? partnerships.length : 0,
     })
     return NextResponse.json({ partnerships }, { headers: revalidateHeaders })
@@ -294,10 +310,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Verify user is an agency
+    // Verify user can act as an agency. Same widening as requireAgencyRole() - a dual-role
+    // account keeps role='agency' or role='partner' forever, only active_role moves.
     const { data: profile, error: postProfileErr } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, active_role')
       .eq('id', user.id)
       .single()
     if (postProfileErr) {
@@ -309,9 +326,9 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json({ error: 'Failed to load profile' }, { status: 500 })
     }
-    console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
+    console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, activeRole: profile?.active_role ?? null })
 
-    if (profile?.role !== 'agency') {
+    if (!canActAs(profile, 'agency')) {
       return NextResponse.json({ error: 'Only agencies can invite vendors' }, { status: 403 })
     }
 

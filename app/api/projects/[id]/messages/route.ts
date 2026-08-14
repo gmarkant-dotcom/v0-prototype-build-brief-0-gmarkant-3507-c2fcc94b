@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
+import { actingRole } from '@/lib/acting-role'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,18 +26,20 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Acting role, not signup role - see lib/acting-role.ts.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, active_role')
       .eq('id', user.id)
       .single()
 
-    if (!profile?.role) {
+    const acting = actingRole(profile)
+    if (!acting) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
-    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile.role })
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, acting })
 
-    if (profile.role === 'agency') {
+    if (acting === 'agency') {
       const { data: project } = await supabase
         .from('projects')
         .select('id')
@@ -57,7 +60,7 @@ export async function GET(
           return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
         }
       }
-    } else if (profile.role === 'partner') {
+    } else if (acting === 'partner') {
       const { data: assignment } = await supabase
         .from('project_assignments')
         .select('id, partnerships!inner(partner_id)')
@@ -103,7 +106,7 @@ export async function GET(
 
     if (error) throw error
 
-    console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile.role, rowCount: messages?.length || 0 })
+    console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, acting, rowCount: messages?.length || 0 })
     return NextResponse.json({ messages }, { headers: noStoreHeaders })
   } catch (error) {
     console.error('[api] failure', {
@@ -140,10 +143,11 @@ export async function POST(
     // Verify access to project (RLS will handle this, but extra check)
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, full_name, company_name, email')
+      .select('role, active_role, full_name, company_name, email')
       .eq('id', user.id)
       .single()
-    console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
+    const acting = actingRole(profile)
+    console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, acting })
 
     let counterpartUserId: string | null = null
     let projectMeta: { title: string | null; agency_id: string | null } | null = null
@@ -154,7 +158,7 @@ export async function POST(
       .maybeSingle()
     projectMeta = projectForEmail
 
-    if (profile?.role === 'agency') {
+    if (acting === 'agency') {
       // Agency must own the project
       const { data: project } = await supabase
         .from('projects')
@@ -187,7 +191,7 @@ export async function POST(
           .maybeSingle()
         counterpartUserId = (anyAssign?.partnerships as { partner_id?: string } | null)?.partner_id || null
       }
-    } else if (profile?.role === 'partner') {
+    } else if (acting === 'partner') {
       const { data: assignment } = await supabase
         .from('project_assignments')
         .select('id, partnership:partnerships!inner(partner_id)')
@@ -248,7 +252,7 @@ export async function POST(
             profile?.company_name?.trim() || profile?.full_name?.trim() || profile?.email?.trim() || 'A teammate'
           const projectName = projectMeta?.title?.trim() || 'Project'
           const viewPath =
-            profile?.role === 'agency'
+            acting === 'agency'
               ? `/partner/projects`
               : `/agency/dashboard`
           const viewUrl = `${siteBaseUrl()}${viewPath}`

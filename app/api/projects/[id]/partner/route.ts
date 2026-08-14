@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { canActAs } from '@/lib/acting-role'
 
 /** Partner-only: single project + assignment + agency + agreements + deployments */
 export const dynamic = 'force-dynamic'
@@ -24,14 +25,14 @@ export async function GET(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, active_role')
       .eq('id', user.id)
       .single()
 
-    if (profile?.role !== 'partner') {
+    if (!canActAs(profile, 'partner')) {
       return NextResponse.json({ error: 'Vendor access only' }, { status: 403 })
     }
-    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile.role })
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, activeRole: profile?.active_role ?? null })
 
     const { data: partnerships } = await supabase
       .from('partnerships')
@@ -110,7 +111,7 @@ export async function GET(
 
     if (!depErr && depData) deployments = depData
 
-    console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile.role, recordId: project.id })
+    console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, recordId: project.id })
     return NextResponse.json({
       assignment: {
         id: assignment.id,

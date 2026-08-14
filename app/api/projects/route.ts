@@ -3,6 +3,7 @@ import { reconcileProjectClientFields } from '@/lib/clients-server'
 import { createClient } from '@/lib/supabase/server'
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
+import { actingRole, canActAs } from '@/lib/acting-role'
 
 export const dynamic = 'force-dynamic'
 
@@ -99,12 +100,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Acting role, not signup role - see lib/acting-role.ts. A dual-role vendor carrying
+    // role='agency' was being served the agency project list in the vendor portal.
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, active_role')
       .eq('id', user.id)
       .single()
-    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null })
+    const acting = actingRole(profile)
+    console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, acting })
 
     let projects
     let partnerStatusAlertTotal: number | undefined
@@ -118,7 +122,7 @@ export async function GET(request: NextRequest) {
         }
       | undefined
 
-    if (profile?.role === 'agency') {
+    if (acting === 'agency') {
       // Try rich query first (with relationships), then fallback to plain projects query.
       const rich = await supabase
         .from('projects')
@@ -355,7 +359,7 @@ export async function GET(request: NextRequest) {
         total_client_budget: anyClientBudget ? clientBudgetSum : null,
         total_partner_spend_usd,
       }
-    } else if (profile?.role === 'partner') {
+    } else if (acting === 'partner') {
       const { data: userPartnerships, error: pErr } = await supabase
         .from('partnerships')
         .select('id')
@@ -365,7 +369,7 @@ export async function GET(request: NextRequest) {
 
       const partnershipIds = (userPartnerships || []).map((r) => r.id)
       if (partnershipIds.length === 0) {
-        console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, rowCount: 0 })
+        console.log('[api] success', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, acting, rowCount: 0 })
         return NextResponse.json({ projects: [] }, { headers: noStoreHeaders })
       }
 
@@ -463,12 +467,12 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, is_paid, is_admin')
+      .select('role, active_role, is_paid, is_admin')
       .eq('id', user.id)
       .single()
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
 
-    if (profile?.role !== 'agency') {
+    if (!canActAs(profile, 'agency')) {
       return NextResponse.json({ error: 'Only agencies can create projects' }, { status: 403 })
     }
 
