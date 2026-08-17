@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "verify-rls": "node scripts/verify-rls.mjs"
+    "verify-rls": "node scripts/verify-rls.mjs",
+    "identity-columns": "node scripts/check-identity-columns.mjs",
+    "identity-columns:guard": "node scripts/check-identity-columns.mjs --guard",
+    "policy-audit": "node scripts/audit-policy-snapshot.mjs",
+    "policy-audit:guard": "node scripts/audit-policy-snapshot.mjs --guard"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",
