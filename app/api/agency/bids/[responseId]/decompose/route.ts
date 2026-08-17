@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
+import { agencyEntitlementId } from "@/lib/entitlements"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -130,7 +131,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       }
     }
 
-    const usageCheck = await checkUsageLimit(user.id, supabase, "ai_analyses")
+    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const ctx = await loadBidAnalysisContext(supabase, responseId, user.id)
@@ -179,7 +180,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "Failed to save cost breakdown" }, { status: 500 })
     }
 
-    await incrementAiAnalysis(user.id, supabase)
+    await incrementAiAnalysis(agencyEntitlementId(user.id), supabase)
     return NextResponse.json({
       line_items: saved.line_items,
       narrative_summary: saved.narrative_summary,

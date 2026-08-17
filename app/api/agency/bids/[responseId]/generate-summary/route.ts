@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
+import { agencyEntitlementId } from "@/lib/entitlements"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,7 +19,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
-    const usageCheck = await checkUsageLimit(user.id, supabase, "ai_analyses")
+    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const result = await generateAndSaveBidSummary(supabase, responseId, user.id)
@@ -29,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error }, { status })
     }
 
-    await incrementAiAnalysis(user.id, supabase)
+    await incrementAiAnalysis(agencyEntitlementId(user.id), supabase)
     return NextResponse.json(result)
   } catch (error) {
     console.error("[api] failure", {

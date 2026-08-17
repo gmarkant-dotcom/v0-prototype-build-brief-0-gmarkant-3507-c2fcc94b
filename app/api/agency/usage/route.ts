@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { checkUsageLimits } from "@/lib/usage-tracking"
+import { agencyEntitlementId } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -11,7 +12,7 @@ export async function GET() {
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
-    const usage = await checkUsageLimits(user.id, supabase)
+    const usage = await checkUsageLimits(agencyEntitlementId(user.id), supabase)
     return NextResponse.json(usage)
   } catch (error) {
     console.error("[api] failure", {

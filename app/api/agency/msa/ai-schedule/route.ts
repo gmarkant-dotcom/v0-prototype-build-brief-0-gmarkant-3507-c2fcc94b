@@ -4,6 +4,7 @@ import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { canActAs } from "@/lib/acting-role"
+import { hasAgencyEntitlement } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
@@ -66,19 +67,18 @@ export async function POST(req: Request) {
       .eq("id", user.id)
       .single()
 
-    const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === "true"
-    const allowed =
-      isDemo ||
-      profile?.is_admin ||
-      (profile?.role === "agency" && (profile?.is_paid || profile?.is_admin))
-
-    if (!allowed) {
+    // Subscription gate. It no longer carries a `role === 'agency'` conjunct: entitlement
+    // is a billing fact about the paying entity, not a fact about the signup role column,
+    // and folding the two together would deny a paying dual-role account its own agency
+    // tools the moment migration 078's role correction lands.
+    // 079: entitlement moves onto the organization. Read the org's entitlement here rather
+    // than this member's profile flag, and key it with agencyEntitlementId(user.id).
+    if (!hasAgencyEntitlement(profile)) {
       return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403, headers: noStore })
     }
 
-    // Portal gate only. The subscription clause above deliberately still reads `role`,
-    // because entitlement is an account fact and is a separate ruling from which portal the
-    // caller is in - see lib/acting-role.ts.
+    // Portal gate. Separate question from the entitlement gate above - see
+    // lib/acting-role.ts and lib/entitlements.ts.
     if (!canActAs(profile, "agency")) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }

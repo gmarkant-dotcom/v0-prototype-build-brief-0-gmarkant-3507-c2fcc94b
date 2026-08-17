@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import mammoth from "mammoth"
 import { createClient } from "@/lib/supabase/server"
 import { extractPdfTextFromBuffer } from "@/lib/extract-pdf-text"
+import { canUseAgencyAi } from "@/lib/entitlements"
 
 export const runtime = "nodejs"
 
@@ -20,20 +21,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Agency-side surface: every caller of this route is under app/agency/ (the brief
+    // upload steps in app/agency/page.tsx, app/agency/brief/page.tsx and
+    // app/agency/magic-rfp/page.tsx). No vendor page extracts document text.
+    // 079: entitlement moves onto the organization. Read the org's entitlement here rather
+    // than this member's profile flag, and key it with agencyEntitlementId(user.id).
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_paid, is_admin, role")
+      .select("role, active_role, is_paid, is_admin")
       .eq("id", user.id)
       .single()
 
-    const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === "true"
-    const allowed =
-      isDemo ||
-      profile?.role === "partner" ||
-      profile?.is_admin ||
-      profile?.is_paid
-
-    if (!allowed) {
+    if (!canUseAgencyAi(profile)) {
       return NextResponse.json({ error: "Upgrade to extract document text" }, { status: 403 })
     }
 

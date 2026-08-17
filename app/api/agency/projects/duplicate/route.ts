@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { carryProjectClientFields } from "@/lib/clients-server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { checkUsageLimit, usageLimitResponse } from "@/lib/usage-tracking"
+import { agencyEntitlementId, hasAgencyEntitlement } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -28,17 +29,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "project_id is required" }, { status: 400 })
     }
 
+    // 079: entitlement moves onto the organization. Read the org's entitlement here rather
+    // than this member's profile flag.
     const { data: profile } = await supabase
       .from("profiles")
-      .select("is_paid, is_admin")
+      .select("role, active_role, is_paid, is_admin")
       .eq("id", user.id)
       .maybeSingle()
-    const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === "true"
-    if (!isDemo && !profile?.is_paid && !profile?.is_admin) {
+    if (!hasAgencyEntitlement(profile)) {
       return NextResponse.json({ error: "Active subscription required" }, { status: 403 })
     }
 
-    const usageCheck = await checkUsageLimit(user.id, supabase, "projects")
+    // 079: agencyEntitlementId() starts resolving auth.uid() to organizations.id, so a
+    // colleague's duplicate counts against the organization's quota.
+    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "projects")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const { data: sourceProject, error: sourceErr } = await supabase

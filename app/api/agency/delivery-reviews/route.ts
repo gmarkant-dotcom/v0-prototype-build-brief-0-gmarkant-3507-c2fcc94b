@@ -4,6 +4,7 @@ import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { loadBidDeltaComparison } from "@/lib/delivery-review"
 import { checkUsageLimit, incrementAiAnalysis } from "@/lib/usage-tracking"
+import { agencyEntitlementId } from "@/lib/entitlements"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -276,7 +277,7 @@ export async function POST(req: Request) {
     // effect of it, not the thing the caller is asking for) - it just skips generating the
     // summary, same as any other best-effort failure of this block already does.
     const usageCheck = status === "complete" && comparison.hasEvaluation
-      ? await checkUsageLimit(userId, supabase, "ai_analyses")
+      ? await checkUsageLimit(agencyEntitlementId(userId), supabase, "ai_analyses")
       : null
     if (status === "complete" && comparison.hasEvaluation && usageCheck?.allowed) {
       const { data: evalRow } = await supabase
@@ -307,7 +308,7 @@ export async function POST(req: Request) {
       })
       if (result.success) {
         aiDeltaSummary = result.text.trim()
-        await incrementAiAnalysis(userId, supabase)
+        await incrementAiAnalysis(agencyEntitlementId(userId), supabase)
       }
     }
 

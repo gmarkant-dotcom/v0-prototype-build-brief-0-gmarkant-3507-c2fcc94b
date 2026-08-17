@@ -22,6 +22,7 @@ import { encrypt, decrypt } from "@/lib/token-encryption"
 import { scoreAndFilterContacts, type ScoredVendorContact } from "@/lib/vendor-signal-scoring"
 import { getEmailDomain } from "@/lib/email-domains"
 import { incrementAiAnalysis } from "@/lib/usage-tracking"
+import { agencyEntitlementId } from "@/lib/entitlements"
 import { evaluateImportGuard } from "@/lib/server/partner-import-guard"
 
 type EmailProvider = "google" | "microsoft"
@@ -348,7 +349,7 @@ export async function GET(request: NextRequest) {
     if (finalErr) {
       console.error("[api] failure", { route, method: "GET", message: finalErr.message })
     } else {
-      await incrementAiAnalysis(auth.userId, service)
+      await incrementAiAnalysis(agencyEntitlementId(auth.userId), service)
     }
 
     console.log("[api] success", {

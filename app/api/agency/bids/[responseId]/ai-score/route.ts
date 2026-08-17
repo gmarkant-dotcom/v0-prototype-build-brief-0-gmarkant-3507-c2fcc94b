@@ -6,6 +6,7 @@ import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
+import { agencyEntitlementId } from "@/lib/entitlements"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -152,7 +153,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
-    const usageCheck = await checkUsageLimit(user.id, supabase, "ai_analyses")
+    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const { data: response, error: responseErr } = await supabase
@@ -364,7 +365,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       supabase.from("partner_rfp_responses").update({ composite_score: composite }).eq("id", responseId),
     ])
 
-    await incrementAiAnalysis(user.id, supabase)
+    await incrementAiAnalysis(agencyEntitlementId(user.id), supabase)
     return NextResponse.json({ scores: allScores || [], composite_score: composite })
   } catch (error) {
     console.error("[api] failure", {

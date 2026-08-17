@@ -3,6 +3,22 @@ import { createClient } from "@/lib/supabase/server"
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
+/**
+ * 079: every `agencyId` parameter in this file is an organization id, not a user id.
+ *
+ * The quota model already matches the ruling that billing is per organization and not per
+ * seat - `usage_tracking` is keyed on `agency_id`, one row per agency per month, and
+ * nothing here counts seats. What has to change at 079 is only what gets passed in: the
+ * column becomes `org_id`, and every caller already routes its argument through
+ * `agencyEntitlementId()` in lib/entitlements.ts, which is where the user-to-organization
+ * resolution lands. Call sites are listed in docs/m1-prework-report.md, Item 2.
+ *
+ * Do not reintroduce a raw `user.id` argument at a call site. A colleague passing their own
+ * id would silently open a second usage_tracking row and get a second full quota, which is
+ * exactly what "adding a colleague costs nothing, a member consumes the organization's
+ * quota" rules out.
+ */
+
 export type PlanTier = "starter" | "professional" | "enterprise"
 
 export type PlanLimits = {

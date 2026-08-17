@@ -1,6 +1,7 @@
 import { streamText, convertToModelMessages, UIMessage } from 'ai'
 import { anthropic } from '@ai-sdk/anthropic'
 import { createClient } from '@/lib/supabase/server'
+import { canUseAgencyAi } from '@/lib/entitlements'
 
 export const maxDuration = 60
 
@@ -168,21 +169,15 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 })
   }
 
+  // 079: entitlement moves onto the organization. Read the org's entitlement here rather
+  // than this member's profile flag, and key it with agencyEntitlementId(user.id).
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, is_paid, is_admin')
+    .select('role, active_role, is_paid, is_admin')
     .eq('id', user.id)
     .single()
 
-  const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === 'true'
-  const allowed =
-    isDemo ||
-    profile?.is_admin ||
-    profile?.role === 'partner' ||
-      profile?.is_admin ||
-      (profile?.role === 'agency' && profile?.is_paid !== false)
-
-  if (!allowed) {
+  if (!canUseAgencyAi(profile)) {
     return new Response(JSON.stringify({ error: 'Subscription required for AI features' }), { status: 403 })
   }
 

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
 import { actingRole, canActAs } from '@/lib/acting-role'
+import { agencyEntitlementId, hasAgencyEntitlement } from '@/lib/entitlements'
 
 export const dynamic = 'force-dynamic'
 
@@ -476,12 +477,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only agencies can create projects' }, { status: 403 })
     }
 
-    const isDemo = process.env.NEXT_PUBLIC_IS_DEMO === 'true'
-    if (!isDemo && !profile?.is_paid && !profile?.is_admin) {
+    // 079: entitlement moves onto the organization. Read the org's entitlement here rather
+    // than this member's profile flag.
+    if (!hasAgencyEntitlement(profile)) {
       return NextResponse.json({ error: 'Active subscription required' }, { status: 403 })
     }
 
-    const usageCheck = await checkUsageLimit(user.id, supabase, 'projects')
+    // 079: agencyEntitlementId() starts resolving auth.uid() to organizations.id, so a
+    // colleague's project counts against the organization's quota rather than opening a
+    // fresh usage_tracking row of their own.
+    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, 'projects')
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const body = await request.json()

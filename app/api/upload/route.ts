@@ -2,6 +2,7 @@ import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { validateUploadFile } from '@/lib/upload-validation'
+import { canUploadFiles } from '@/lib/entitlements'
 
 // Folders routed to the public Supabase 'avatars' bucket (images only, public by design)
 const SUPABASE_AVATAR_FOLDERS = new Set(['avatars', 'logos', 'agency-logos', 'partner-logos'])
@@ -46,21 +47,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // 079: entitlement moves onto the organization. Read the org's entitlement here rather
+    // than this member's profile flag, and key it with agencyEntitlementId(user.id).
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_paid, is_admin, role')
+      .select('role, active_role, is_paid, is_admin')
       .eq('id', user.id)
       .single()
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
 
-    const isDemoMode = process.env.NEXT_PUBLIC_IS_DEMO === 'true'
-    const canUpload =
-      isDemoMode ||
-      profile?.role === 'partner' ||
-      profile?.role === 'agency' ||
-      profile?.is_admin ||
-      profile?.is_paid
-    if (!canUpload) {
+    // The vendor side uploads free. The agency side needs an entitlement, which the
+    // previous expression never actually required - it allowed role === 'agency'
+    // outright, so this 403 was unreachable for every authenticated caller.
+    if (!canUploadFiles(profile)) {
       return NextResponse.json({ error: 'Upgrade to upload files' }, { status: 403 })
     }
 

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, hashResponseIds } from "@/lib/bid-analysis-context"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
+import { agencyEntitlementId } from "@/lib/entitlements"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -104,7 +105,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const usageCheck = await checkUsageLimit(user.id, supabase, "ai_analyses")
+    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     // Scope description is shared across all selected bids (compare is only offered for
@@ -156,7 +157,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to save comparison" }, { status: 500 })
     }
 
-    await incrementAiAnalysis(user.id, supabase)
+    await incrementAiAnalysis(agencyEntitlementId(user.id), supabase)
     return NextResponse.json({
       narrative: saved.narrative,
       response_ids: saved.response_ids,

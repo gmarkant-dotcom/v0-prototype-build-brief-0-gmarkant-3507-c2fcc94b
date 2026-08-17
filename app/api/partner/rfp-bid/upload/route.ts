@@ -27,6 +27,13 @@ export async function POST(request: NextRequest) {
       .single()
     console.log("[api] start", { route, method: "POST", userId: user.id, role: profile?.role ?? null })
 
+    // Left as-is deliberately. This is a vendor-only route and the vendor side uploads
+    // free, so the `|| profile?.is_paid` clause below never decides anything the "Vendors
+    // only" check underneath does not already decide - a paid agency clears this line and
+    // is turned away by the next one. Rewriting it through lib/entitlements.ts would change
+    // behaviour for a role='partner' / active_role='agency' account with no billing reason
+    // to. 079: the vendor's own company becomes an organization; if vendor-side billing
+    // ever exists, its entitlement is read here.
     const isDemoMode = process.env.NEXT_PUBLIC_IS_DEMO === "true"
     const isPartner = profile?.role === "partner" || profile?.active_role === "partner"
     const canUpload = isDemoMode || isPartner || profile?.is_admin || profile?.is_paid
