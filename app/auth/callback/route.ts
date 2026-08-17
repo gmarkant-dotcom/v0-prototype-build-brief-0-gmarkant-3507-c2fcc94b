@@ -26,9 +26,12 @@ async function syncUserProfile(supabase: any, user: any) {
       company_linkedin_url: metadata.company_linkedin_url || null,
       role: role,
       active_role: role,
-      is_paid: true,
       is_admin: false,
-      demo_access: true,
+      // is_paid and demo_access are deliberately absent. Both columns default to
+      // FALSE, matching migration 078: a new account lands unpaid and without demo
+      // access, and stays that way until an admin grants it. This insert exists only
+      // because the on_auth_user_created trigger does not always fire - it must create
+      // the profile row, never grant access.
     })
   } else {
     const updatePayload: Record<string, unknown> = {}
@@ -48,9 +51,10 @@ async function syncUserProfile(supabase: any, user: any) {
       updatePayload.role = role
     }
     if (metadata.company_linkedin_url) updatePayload.company_linkedin_url = metadata.company_linkedin_url
-    // Self-heal: restore access if it was ever lost, without touching is_admin
-    if (!existingProfile.is_paid) updatePayload.is_paid = true
-    if (!existingProfile.demo_access) updatePayload.demo_access = true
+    // No access flags are written here. This branch previously re-granted is_paid and
+    // demo_access whenever they were falsy, which meant an admin restricting a user was
+    // silently undone the next time that user hit this callback. Access is granted
+    // deliberately, from the admin panel or the grant-access route, and nowhere else.
     if (Object.keys(updatePayload).length > 0) {
       await supabase.from('profiles').update(updatePayload).eq('id', user.id)
     }
