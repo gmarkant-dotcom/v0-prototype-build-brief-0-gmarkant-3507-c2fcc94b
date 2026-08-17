@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Resend } from "resend"
 import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
 import { can, capabilityDeniedMessage } from "@/lib/capabilities"
+import { recordMilestones } from "@/lib/milestone-events"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
@@ -446,6 +447,31 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Milestone: rfp.broadcast. One row per recipient, not one per broadcast - vendor
+    // visibility is per partnership, so a single row with no partnership_id would be
+    // invisible to every vendor it was actually sent to. Emitted after the inbox rows are
+    // safely in, and fire-and-forget: a missing breadcrumb must never fail a broadcast that
+    // has already sent mail. 079: user.id is the acting company here.
+    await recordMilestones(
+      supabase,
+      rows.map((row) => ({
+        eventType: "rfp.broadcast" as const,
+        orgId: user.id,
+        actorId: user.id,
+        vendorOrgId: (row.partner_id as string | null) ?? null,
+        partnershipId: (row.partnership_id as string | null) ?? null,
+        subjectType: "project" as const,
+        subjectId: (row.project_id as string | null) ?? null,
+        payload: {
+          scope_item_name: (row.scope_item_name as string | null) ?? null,
+          recipient_email: (row.recipient_email as string | null) ?? null,
+          response_deadline: (row.response_deadline as string | null) ?? null,
+          nda_gate_enforced: row.nda_gate_enforced === true,
+          recipient_count: rows.length,
+        },
+      }))
+    )
 
     // TODO: Add scheduled Vercel cron job to mark expired unclaimed invite rows
     // (invite_token_expires_at < now() and claimed_at is null) with status = 'expired'

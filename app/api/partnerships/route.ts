@@ -5,6 +5,7 @@ import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/li
 import { hasLigamentAccount } from '@/lib/server/account-existence'
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
+import { recordMilestone } from '@/lib/milestone-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -519,9 +520,29 @@ export async function POST(request: NextRequest) {
           console.error('Error sending partnership re-invitation email:', emailErr)
         }
 
+        // Milestone: vendor.invite. This branch revives a TERMINATED partnership, which is a
+        // fresh invitation to a relationship that had ended rather than a resend of a live
+        // one, so it carries vendor.invite and not vendor.invite_resend. The dedicated
+        // resend route (app/api/agency/pool/resend-invitation/route.ts) is the
+        // vendor.invite_resend site and is not emitting yet. 079: user.id is the company.
+        await recordMilestone(supabase, {
+          eventType: 'vendor.invite',
+          orgId: user.id,
+          actorId: user.id,
+          vendorOrgId: existingPartnerId ?? null,
+          partnershipId: reactivated.id as string,
+          subjectType: 'partnership',
+          subjectId: reactivated.id as string,
+          payload: {
+            partner_email: normalizedPartnerEmail,
+            reactivated_from: 'terminated',
+            invitee_has_account: inviteeHasAccount,
+          },
+        })
+
         return NextResponse.json({
-          partnership: reactivated, 
-          message: 'Partnership invitation re-sent successfully' 
+          partnership: reactivated,
+          message: 'Partnership invitation re-sent successfully'
         })
       }
       
@@ -603,6 +624,24 @@ export async function POST(request: NextRequest) {
       console.error('Error sending partnership invitation email:', emailErr)
       // Don't fail the whole request if email fails
     }
+
+    // Milestone: vendor.invite. Emitted after the row and the mail, so a breadcrumb never
+    // outlives a failed invitation. Vendor-visible by whitelist: the vendor is told an
+    // invitation exists either way, so naming the person who sent it adds no disclosure.
+    // 079: user.id is the acting company here.
+    await recordMilestone(supabase, {
+      eventType: 'vendor.invite',
+      orgId: user.id,
+      actorId: user.id,
+      vendorOrgId: partner?.id ?? null,
+      partnershipId: partnership.id as string,
+      subjectType: 'partnership',
+      subjectId: partnership.id as string,
+      payload: {
+        partner_email: normalizedPartnerEmail,
+        invitee_has_account: inviteeHasAccount,
+      },
+    })
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: partnership.id })
     return NextResponse.json({ 
@@ -791,6 +830,29 @@ export async function PATCH(request: NextRequest) {
           }),
         })
       }
+
+      // Milestone: msa.confirm. This is the one milestone in the product that already had an
+      // actor column - partnerships.msa_confirmed_by, migration 051 - and the map says to
+      // treat it as the precedent it is rather than replace it. The column stays; the event
+      // is emitted beside it so the two agree.
+      //
+      // NOT on the vendor-visible whitelist. docs/capabilities.md section 5 marks msa.confirm
+      // not vendor-visible while docs/milestone-attribution-map.md section 2 marks the same
+      // milestone with a (V). The two disagree, so this follows the whitelist rule and fails
+      // closed. Adding 'msa.confirm' to vendor_visible_event_types() in migration 080 is a
+      // one-line change and a decision for Greg.
+      //
+      // 079: partnership.agency_id is the acting company, partnership.partner_id the vendor.
+      await recordMilestone(supabase, {
+        eventType: 'msa.confirm',
+        orgId: user.id,
+        actorId: user.id,
+        vendorOrgId: (partnership.partner_id as string | null) ?? null,
+        partnershipId: partnershipId as string,
+        subjectType: 'partnership',
+        subjectId: partnershipId as string,
+        payload: { msa_confirmed_at: now },
+      })
 
       return NextResponse.json({ partnership: updated })
     }

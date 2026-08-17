@@ -5,6 +5,7 @@ import { notifyProjectAwarded } from "@/lib/notifications"
 import { resolvePartnershipForAward } from "@/lib/award-partnership-resolution"
 import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
 import { can, capabilityDeniedMessage } from "@/lib/capabilities"
+import { recordMilestone } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
 
@@ -455,7 +456,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           existing.inbox_item_id
             ? supabase
                 .from("partner_rfp_inbox")
-                .select("scope_item_name")
+                // partnership_id is selected for the bid.feedback milestone below: it is what
+                // makes the event reachable by the vendor whose bid was reviewed.
+                .select("scope_item_name, partnership_id")
                 .eq("id", existing.inbox_item_id)
                 .eq("agency_id", user.id)
                 .maybeSingle()
@@ -511,6 +514,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           })
         }
       }
+
+      // Milestone: bid.feedback. The single clearest case for attribution in the product -
+      // the vendor is reading a human judgement that today is signed by nobody. Vendor
+      // visible by whitelist, and the actor is NAMED to them; the actor's email address is
+      // not in this row and must never be joined into a vendor-facing render.
+      // 079: user.id is the acting company.
+      await recordMilestone(supabase, {
+        eventType: "bid.feedback",
+        orgId: user.id,
+        actorId: user.id,
+        vendorOrgId: (existing.partner_id as string | null) ?? null,
+        partnershipId: (inboxRow?.partnership_id as string | null) ?? null,
+        subjectType: "bid",
+        subjectId: id,
+        payload: { scope_item_name: scopeName || null, status: nextStatus },
+      })
     }
 
     if (awardContext) {
@@ -658,6 +677,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           })
         }
       }
+
+      // Milestone: bid.award. Emitted last, after the assignment row, the project status
+      // bump, the mail and the in-app notification, so the breadcrumb cannot claim an award
+      // that did not happen. Vendor visible by whitelist - the vendor already knows they were
+      // awarded; what this adds is which person at the agency decided it.
+      // 079: user.id is the acting company.
+      await recordMilestone(supabase, {
+        eventType: "bid.award",
+        orgId: user.id,
+        actorId: user.id,
+        vendorOrgId: (existing.partner_id as string | null) ?? null,
+        partnershipId: awardContext.partnershipId,
+        subjectType: "bid",
+        subjectId: id,
+        payload: {
+          project_id: awardContext.projectId,
+          project_name: projectName,
+          scope_item_name: scopeItemName,
+        },
+      })
     }
 
     if (isDeclining) {
@@ -668,7 +707,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         existing.inbox_item_id
           ? supabase
               .from("partner_rfp_inbox")
-              .select("scope_item_name, master_rfp_json")
+              // partnership_id is selected for the bid.decline milestone below.
+              .select("scope_item_name, master_rfp_json, partnership_id")
               .eq("id", existing.inbox_item_id)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
@@ -730,6 +770,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           })
         }
       }
+
+      // Milestone: bid.decline. Vendor visible by whitelist. The decline reason is
+      // deliberately NOT in the payload: it is already composed into agency_feedback and
+      // mailed, and duplicating it here would put the same sentence under two different
+      // read rules. 079: user.id is the acting company.
+      await recordMilestone(supabase, {
+        eventType: "bid.decline",
+        orgId: user.id,
+        actorId: user.id,
+        vendorOrgId: (existing.partner_id as string | null) ?? null,
+        partnershipId: (inbox?.partnership_id as string | null) ?? null,
+        subjectType: "bid",
+        subjectId: id,
+        payload: {
+          scope_item_name: rawScopeItemName || null,
+          had_reason: Boolean(declineReason && String(declineReason).trim()),
+        },
+      })
     }
 
     console.log("[api] success", {
