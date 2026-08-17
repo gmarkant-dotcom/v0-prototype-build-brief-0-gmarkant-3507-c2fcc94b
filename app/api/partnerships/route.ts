@@ -4,6 +4,7 @@ import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/no
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
 import { actingRole, canActAs } from '@/lib/acting-role'
+import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 
 export const dynamic = 'force-dynamic'
 
@@ -314,7 +315,7 @@ export async function POST(request: NextRequest) {
     // account keeps role='agency' or role='partner' forever, only active_role moves.
     const { data: profile, error: postProfileErr } = await supabase
       .from('profiles')
-      .select('role, active_role')
+      .select('role, active_role, is_admin')
       .eq('id', user.id)
       .single()
     if (postProfileErr) {
@@ -330,6 +331,15 @@ export async function POST(request: NextRequest) {
 
     if (!canActAs(profile, 'agency')) {
       return NextResponse.json({ error: 'Only agencies can invite vendors' }, { status: 403 })
+    }
+
+    // Capability gate. canActAs() above answers WHICH SIDE; this answers MAY THEY. Sending a
+    // partnership invitation is irreversible - the email cannot be unsent - so it defaults to
+    // admin in docs/capabilities.md. This route covers both the first invitation and the
+    // re-invitation of a terminated partnership below, which rewrites invitation_sent_at and
+    // destroys the original send time. Resolves true for everyone today.
+    if (!can(profile, 'vendor.invite')) {
+      return NextResponse.json({ error: capabilityDeniedMessage('vendor.invite') }, { status: 403 })
     }
 
     const payload = (await request.json().catch(() => ({}))) as {

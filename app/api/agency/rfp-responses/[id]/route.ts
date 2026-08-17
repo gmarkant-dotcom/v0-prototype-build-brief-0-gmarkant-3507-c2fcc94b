@@ -4,6 +4,7 @@ import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/li
 import { notifyProjectAwarded } from "@/lib/notifications"
 import { resolvePartnershipForAward } from "@/lib/award-partnership-resolution"
 import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
+import { can, capabilityDeniedMessage } from "@/lib/capabilities"
 
 export const dynamic = "force-dynamic"
 
@@ -28,7 +29,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("role, active_role, company_name, full_name, email")
+      .select("role, active_role, company_name, full_name, email, is_admin")
       .eq("id", user.id)
       .single()
     if (profileErr) {
@@ -82,6 +83,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: "Awarded bids cannot transition to another status" }, { status: 400 })
     }
 
+    /**
+     * Capability gates. Three transitions on this one route, three separate capabilities,
+     * checked here because this is the last point before any write and the first point where
+     * the intended transition is known.
+     *
+     * All three are irreversible in the sense docs/capabilities.md uses: each sends mail the
+     * vendor has already read by the time anyone reconsiders. The route's only other gate is
+     * `.eq("agency_id", user.id)`, which is ownership - and 079 turns ownership into
+     * membership, at which point every colleague passes it identically and this is the only
+     * thing left that can distinguish an admin from a member. All three resolve true for
+     * everyone today.
+     */
+    const isAwarding = existing.status !== "awarded" && nextStatus === "awarded"
+    const isDeclining = existing.status !== "declined" && nextStatus === "declined"
+    if (isAwarding && !can(profile, "bid.award")) {
+      return NextResponse.json({ error: capabilityDeniedMessage("bid.award") }, { status: 403 })
+    }
+    if (isDeclining && !can(profile, "bid.decline")) {
+      return NextResponse.json({ error: capabilityDeniedMessage("bid.decline") }, { status: 403 })
+    }
+    // Gated on the same condition that sends the feedback email, so the gate and the
+    // irreversible act cannot drift apart: feedback that is not new does not send mail and is
+    // not a capability event.
+    if (shouldSendAgencyFeedbackEmail && !can(profile, "bid.feedback")) {
+      return NextResponse.json({ error: capabilityDeniedMessage("bid.feedback") }, { status: 403 })
+    }
+
     const agencyFeedback = typeof body.agency_feedback === "string" ? body.agency_feedback.trim() : existing.agency_feedback || null
     const declineReason = typeof body.decline_reason === "string" ? body.decline_reason.trim() : ""
     const composedFeedback =
@@ -106,7 +134,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (existing.status !== "meeting_requested" && nextStatus === "meeting_requested") {
       patch.meeting_requested_at = patch.updated_at
     }
-    if (existing.status !== "declined" && nextStatus === "declined") {
+    if (isDeclining) {
       patch.declined_at = patch.updated_at
     }
 
@@ -137,7 +165,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // the response already had, and gains the id of a newly-linked G1-synthesized row.
     let resolvedInboxItemId: string | null = (existing.inbox_item_id as string | null) ?? null
 
-    if (existing.status !== "awarded" && nextStatus === "awarded") {
+    if (isAwarding) {
       type InboxForAward = {
         id: string | null
         project_id: string | null
@@ -632,7 +660,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
 
-    if (existing.status !== "declined" && nextStatus === "declined") {
+    if (isDeclining) {
       // Same broad fix as above - guest bids (inbox_item_id null) must skip this query
       // entirely rather than send `.eq("id", null)`, which errors on a uuid column.
       const [partnerRes, inboxRes] = await Promise.all([

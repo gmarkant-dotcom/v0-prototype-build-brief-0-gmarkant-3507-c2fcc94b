@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { Resend } from "resend"
 import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
+import { can, capabilityDeniedMessage } from "@/lib/capabilities"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
@@ -77,12 +78,21 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role, company_name, full_name")
+      .select("role, active_role, company_name, full_name, is_admin")
       .eq("id", user.id)
       .single()
 
     if (profile?.role !== "agency" && profile?.active_role !== "agency") {
       return NextResponse.json({ error: "Only lead agencies can broadcast RFPs" }, { status: 403 })
+    }
+
+    // Capability gate. The question above is WHICH SIDE; this one is MAY THEY. Broadcasting
+    // is irreversible - the mail leaves the building and cannot be unsent - so it defaults to
+    // admin in docs/capabilities.md. 079: every member of the organization will satisfy the
+    // `agency_id = auth.uid()` ownership predicate that is the only other gate on this route,
+    // which is the day this check starts doing work. It resolves true for everyone today.
+    if (!can(profile, "rfp.broadcast")) {
+      return NextResponse.json({ error: capabilityDeniedMessage("rfp.broadcast") }, { status: 403 })
     }
 
     const body = await request.json()
