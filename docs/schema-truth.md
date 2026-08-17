@@ -4,7 +4,7 @@
 must do about the difference.**
 
 Companion to `docs/schema-baseline-2026-08-13.sql`. Read both before authoring migration
-078 or anything after it.
+079 or anything after it.
 
 ---
 
@@ -16,8 +16,10 @@ has never used, but with a recognisable ancestor on disk. **15 exist in producti
 nowhere in this repository at all, under any name.** Five tables carry live policies with
 no `CREATE TABLE` anywhere in the repo. Two tables that the repo believes it created do
 not exist live. The migration sequence is split across two directories with two naming
-conventions and a gap of four numbers between them. **078 is the next unused migration
-number and is reserved for the Organizations M1 migration.**
+conventions and a gap of four numbers between them. **078 is the signup role trigger fix,
+authored and not yet applied; 079 is reserved for the Organizations M1 migration** (see
+section 2 - an earlier revision of this document reserved 078 for M1 and was superseded on
+2026-08-17).
 
 ---
 
@@ -44,15 +46,29 @@ and recreates every access rule in the system. It is a reference artifact. It li
 
 ---
 
-## 2. Migration numbering: 078 is reserved
+## 2. Migration numbering: 078 is the signup role trigger, 079 is Organizations M1
 
-**078 is the next unused migration number.** The Organizations M1 migration should claim
-it. Nothing was authored into 078 or 079 in this run, deliberately: numbering a file now
-would collide with that migration when Greg schedules it.
+**Superseded reservation, corrected 2026-08-17.** An earlier revision of this section
+reserved **078** for the Organizations M1 migration and that is no longer true. The M1
+pre-work run claimed 078 for the signup role trigger fix:
+
+| Number | File | Status |
+|---|---|---|
+| **078** | `supabase/migrations/078_signup_role_trigger.sql` | **AUTHORED, NOT APPLIED.** Rewrites `handle_new_user()` to record the role chosen at signup and to `SET search_path = public, pg_temp`. |
+| **079** | not yet authored | **RESERVED for Organizations M1.** |
+
+Anything that still says "078 is reserved for Organizations M1" - including
+`docs/schema-truth-and-m1-prep-report.md` and `docs/organizations-m1-discovery.md`, both
+dated before this change - is reading the old reservation. This table wins.
+
+`docs/proposed-migration-role-trigger.sql` was the deliberately unnumbered draft of 078.
+It has been deleted now that the numbered file exists, so there is one copy of that SQL
+and not two. Its content lives on in `supabase/migrations/078_signup_role_trigger.sql`
+and its history is in git.
 
 Current state of the sequence:
 
-- `supabase/migrations/` holds **036 files, numbered 040 to 077**.
+- `supabase/migrations/` holds **037 files, numbered 040 to 078**.
 - Gaps inside that range: **048** and **073**.
   - **048** is claimed applied in `LIGAMENT_CONTEXT.md` (it added `profiles.company_logo_url`)
     and has no file. The column exists live. The change was applied in the SQL Editor and
@@ -94,7 +110,8 @@ extension at all and is nonetheless **partly live** (see section 6).
    the policy it meant to replace is still live alongside the new one. This is the specific
    failure mode that produced the three overlapping `payment_milestones` partner SELECT
    policies now in production.
-3. **Number new work from 078 upward** in `supabase/migrations/`, underscore convention.
+3. **Number new work from 079 upward** in `supabase/migrations/`, underscore convention
+   (078 is taken - see section 2).
    Do not backfill 039, 048 or 073. Renumbering history is a bigger decision than any one
    migration; see section 7 for the recommendation.
 4. **Do not run the baseline SQL.** It is a reference artifact.
@@ -366,7 +383,8 @@ Instead, **draw a line**:
    `docs/schema-snapshot-*.md` is the only authoritative record.
 2. Keep every existing file exactly as it is, including `029-msa-payments.SKIP`.
 3. Treat the dated snapshot plus this document as the baseline. Everything from **078**
-   onward is a real, ordered, replayable migration applied on top of that baseline.
+   onward is a real, ordered, replayable migration applied on top of that baseline. 078
+   itself is authored but not yet applied.
 4. Re-take and re-commit the snapshot after every policy-touching migration.
 
 If a from-scratch rebuild is ever genuinely needed, the honest path is `pg_dump --schema-only`
