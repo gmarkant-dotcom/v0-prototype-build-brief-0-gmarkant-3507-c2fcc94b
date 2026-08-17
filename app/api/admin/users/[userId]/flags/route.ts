@@ -108,9 +108,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ userId
       }
     }
 
+    // updated_at is stamped on every flag change, and it is the ONLY column written
+    // alongside the allow-listed booleans. Without it a read-only census cannot tell a
+    // deliberate grant from an automatic one: profiles.updated_at equals created_at on
+    // every account whose flags nobody has touched, so a differing value is evidence that
+    // somebody decided something. Twelve of the sixteen live profiles read
+    // updated_at = created_at today, which is exactly the signal this preserves.
     const { data: updated, error } = await service
       .from("profiles")
-      .update(updates)
+      .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", targetId)
       .select("id, is_paid, demo_access, is_admin")
 
