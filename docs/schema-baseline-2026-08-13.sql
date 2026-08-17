@@ -360,7 +360,7 @@ CREATE POLICY "Users manage their own email connections"
 -- ---------------------------------------------------------------------
 -- invitation_requests
 -- ---------------------------------------------------------------------
--- on disk: YES, same name, at scripts/009-comprehensive-auth-setup.sql:114
+-- on disk: YES, same name, at scripts/009-comprehensive-auth-setup.SKIP:146
 CREATE POLICY "Partners can create requests"
   ON public.invitation_requests
   AS PERMISSIVE
@@ -369,7 +369,7 @@ CREATE POLICY "Partners can create requests"
   WITH CHECK ((partner_id = auth.uid()));
 
 -- on disk: NO policy of this name. Nearest ancestor:
---          scripts/009-comprehensive-auth-setup.sql:120 as "Agencies can
+--          scripts/009-comprehensive-auth-setup.SKIP:152 as "Agencies can
 --          view requests sent to their email"
 CREATE POLICY "Agencies can view requests to their email"
   ON public.invitation_requests
@@ -381,7 +381,7 @@ CREATE POLICY "Agencies can view requests to their email"
     WHERE (profiles.id = auth.uid()))));
 
 -- on disk: NO policy of this name. Nearest ancestor:
---          scripts/009-comprehensive-auth-setup.sql:108 as "Partners can
+--          scripts/009-comprehensive-auth-setup.SKIP:140 as "Partners can
 --          view their own requests"
 CREATE POLICY "Partners can view own requests"
   ON public.invitation_requests
@@ -391,7 +391,7 @@ CREATE POLICY "Partners can view own requests"
   USING ((partner_id = auth.uid()));
 
 -- on disk: NO policy of this name. Nearest ancestor:
---          scripts/009-comprehensive-auth-setup.sql:130 as "Agencies can
+--          scripts/009-comprehensive-auth-setup.SKIP:162 as "Agencies can
 --          update requests sent to them"
 CREATE POLICY "Agencies can update requests to their email"
   ON public.invitation_requests
@@ -1022,7 +1022,7 @@ CREATE POLICY "Users can view profiles of partnership members"
     FROM partnerships
     WHERE ((partnerships.agency_id = auth.uid()) AND (partnerships.partner_id = profiles.id))))));
 
--- on disk: YES, same name, at scripts/009-comprehensive-auth-setup.sql:147
+-- on disk: YES, same name, at scripts/009-comprehensive-auth-setup.SKIP:179
 CREATE POLICY "Users can update own profile"
   ON public.profiles
   AS PERMISSIVE

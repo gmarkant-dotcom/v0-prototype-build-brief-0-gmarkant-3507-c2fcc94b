@@ -217,10 +217,10 @@ Every live policy, in table order, against its on-disk equivalent. Generated fro
 | `delivery_reviews` | Agencies manage own delivery reviews | ALL | `supabase/migrations/066_delivery_review_schema.sql:64` |
 | `delivery_reviews` | Partners view own complete delivery reviews | SELECT | `supabase/migrations/066_delivery_review_schema.sql:71` |
 | `email_connections` | Users manage their own email connections | ALL | `supabase/migrations/062_email_connections.sql:35` |
-| `invitation_requests` | Partners can create requests | INSERT | `scripts/009-comprehensive-auth-setup.sql:114` |
-| `invitation_requests` | Agencies can view requests to their email | SELECT | renamed - `scripts/009-comprehensive-auth-setup.sql:120` as "Agencies can view requests sent to their email" |
-| `invitation_requests` | Partners can view own requests | SELECT | renamed - `scripts/009-comprehensive-auth-setup.sql:108` as "Partners can view their own requests" |
-| `invitation_requests` | Agencies can update requests to their email | UPDATE | renamed - `scripts/009-comprehensive-auth-setup.sql:130` as "Agencies can update requests sent to them" |
+| `invitation_requests` | Partners can create requests | INSERT | `scripts/009-comprehensive-auth-setup.SKIP:146` |
+| `invitation_requests` | Agencies can view requests to their email | SELECT | renamed - `scripts/009-comprehensive-auth-setup.SKIP:152` as "Agencies can view requests sent to their email" |
+| `invitation_requests` | Partners can view own requests | SELECT | renamed - `scripts/009-comprehensive-auth-setup.SKIP:140` as "Partners can view their own requests" |
+| `invitation_requests` | Agencies can update requests to their email | UPDATE | renamed - `scripts/009-comprehensive-auth-setup.SKIP:162` as "Agencies can update requests sent to them" |
 | `msa_agreements` | Agency can manage their MSAs | ALL | renamed - scripts/029-msa- payments.SKIP:33 as "Agencies manage own MSA agreements" (file is marked .SKIP, i.e. never to be run) |
 | `msa_agreements` | Partners can view their MSAs | SELECT | **NONE - exists only in production** |
 | `notifications` | Scoped insert notifications | INSERT | `scripts/026-security-fixes.sql:45` |
@@ -277,7 +277,7 @@ Every live policy, in table order, against its on-disk equivalent. Generated fro
 | `profiles` | Authenticated users can read discoverable profiles | SELECT | `scripts/016-marketplace-discoverability.sql:8` |
 | `profiles` | Partners read lead agency profiles for their partnerships | SELECT | `scripts/030-partner-payments-rls.sql:20` |
 | `profiles` | Users can view profiles of partnership members | SELECT | **NONE - exists only in production** |
-| `profiles` | Users can update own profile | UPDATE | `scripts/009-comprehensive-auth-setup.sql:147` |
+| `profiles` | Users can update own profile | UPDATE | `scripts/009-comprehensive-auth-setup.SKIP:179` |
 | `project_assignments` | assignments_agency_all | ALL | renamed - scripts/010-closed- ecosystem-schema.sql:208 as "Agencies can manage assignments for their projects" |
 | `project_assignments` | assignments_partner_select | SELECT | renamed - scripts/010-closed- ecosystem-schema.sql:214 as "Partners can view their assignments" |
 | `project_assignments` | assignments_partner_update | UPDATE | renamed - scripts/010-closed- ecosystem-schema.sql:220 as "Partners can update their assignments (submit bids)" |

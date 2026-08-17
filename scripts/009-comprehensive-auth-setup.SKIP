@@ -1,3 +1,35 @@
+-- =====================================================================
+-- .SKIP - DO NOT RUN THIS FILE. Renamed from 009-comprehensive-auth-setup.sql
+-- on 2026-08-17, following the scripts/029-msa-payments.SKIP convention.
+--
+-- WHY: line 60 below is a full CREATE OR REPLACE FUNCTION
+-- public.handle_new_user(). Running it silently reverts migration 078,
+-- which is applied and verified in production. Specifically it would:
+--   * reinstate 'greg@withligament.com' as a literal in the function body
+--     (line 64) deciding is_admin, is_paid and demo_access, plus a
+--     standalone UPDATE granting all three to that address (lines 55-57);
+--   * write is_paid, is_admin and demo_access at signup, which 078 removed
+--     so new accounts land unpaid and are granted from the admin panel;
+--   * declare SECURITY DEFINER with no SET search_path, undoing 078's pin;
+--   * insert into profiles.email_verified, a column that DOES NOT EXIST on
+--     the live table - and worse, this file ADDs it first (line 42), so it
+--     would not fail loudly. It would create a dead column and start
+--     writing to it, along with a second trigger to keep it in sync.
+--
+-- Migration 079 extends the same function again. Anything that overwrites
+-- it after 079 also destroys the organization and owner-membership insert,
+-- which locks every subsequent signup out of its own data.
+--
+-- The RLS policies further down ARE partly live, under renamed forms, and
+-- are recorded in docs/schema-truth.md section 4a. Read them here; do not
+-- run them. Two of the policies this file creates - "Admins can view all
+-- profiles" and "Admins can update all profiles" - are NOT live, which is
+-- why the admin panel writes through a service-role route instead.
+--
+-- Nothing in the codebase references this file. Grepped repo-wide before
+-- renaming: the only hits were in dated documents under docs/.
+-- =====================================================================
+
 -- Comprehensive Auth Setup for Ligament
 -- This script sets up the complete auth infrastructure for Lead Agency and Partner users
 
