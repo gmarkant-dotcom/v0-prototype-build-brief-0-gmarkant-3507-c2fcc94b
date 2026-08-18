@@ -9,7 +9,7 @@ import {
   type OrgEmbed,
 } from "@/lib/org-contact"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
-import { createNotification } from "@/lib/notifications"
+import { createOrgNotification } from "@/lib/notifications"
 import { normalizeMeetingUrlForHref } from "@/lib/utils"
 export const dynamic = "force-dynamic"
 
@@ -395,9 +395,13 @@ export async function POST(
       })
     }
 
-    await createNotification({
+    // Was createNotification({ userId: partnership.vendor_org_id }) - an ORGANIZATION id
+    // in a USER id column. Now fans out over the vendor organization's members. See the
+    // ruling at the top of lib/notifications.ts.
+    await createOrgNotification({
       supabase,
-      userId: partnership.vendor_org_id,
+      orgId: partnership.vendor_org_id,
+      site: "POST /api/projects/[id]/onboarding-packages",
       type: "onboarding_deployed",
       title: "Onboarding documents ready",
       message: `${agencyName} sent onboarding materials for "${projectTitle}".`,

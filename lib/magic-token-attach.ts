@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { createNotification } from "@/lib/notifications"
+import { createOrgNotification } from "@/lib/notifications"
 import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
 
 /** Fields this module actually reads off a rfp_magic_tokens row - callers pass whatever
@@ -396,9 +396,12 @@ export async function attachMagicTokenToPartnerInbox(
   // only the request whose own row survived the collapse announces the invitation.
   if (created && !existingResponse && winner.id === insertedId) {
     try {
-      await createNotification({
+      // Was createNotification({ userId: partnerId }) where partnerId is a vendor
+      // ORGANIZATION id. Fans out over its members now - see lib/notifications.ts.
+      await createOrgNotification({
         supabase,
-        userId: partnerId,
+        orgId: partnerId,
+        site: "magic-token-attach",
         type: "project_assignment",
         title: "New RFP in your inbox",
         message: `${agencyCompanyName} sent you an RFP${tokenRow.scope_item_name ? ` for ${tokenRow.scope_item_name}` : ""}.`,

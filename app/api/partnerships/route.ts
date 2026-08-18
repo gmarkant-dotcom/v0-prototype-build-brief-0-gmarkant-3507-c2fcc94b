@@ -637,9 +637,20 @@ export async function POST(request: NextRequest) {
     
     const agencyName = agencyProfile?.company_name || agencyProfile?.full_name || 'A lead agency'
 
-    // If partner exists, send in-app notification
-    if (partner) {
-      await notifyPartnershipInvitation(supabase, partner.id, agencyName, partnership.id)
+    // If partner exists, send in-app notification.
+    //
+    // Passes partnership.vendor_org_id rather than partner.id. Same value - the insert
+    // above writes vendor_org_id = partner.id - but notifyPartnershipInvitation now takes
+    // an ORGANIZATION id and fans out over its members, so the argument should name the
+    // column it comes from.
+    //
+    // SEPARATE 079 BUG, NOT FIXED HERE AND REPORTED INSTEAD: `partner` is a profiles row
+    // looked up by the request's partnerId, and the insert stores that PROFILES id in
+    // vendor_org_id. After 079 that column is an organization id, so this write path puts a
+    // user id where an organization id belongs. That is the invite/claim write path, not
+    // the notification, and it is listed in docs/079-embed-closure-report.md.
+    if (partner && partnership.vendor_org_id) {
+      await notifyPartnershipInvitation(supabase, partnership.vendor_org_id, agencyName, partnership.id)
     }
     
     // Send email invitation to partner (whether they have account or not)

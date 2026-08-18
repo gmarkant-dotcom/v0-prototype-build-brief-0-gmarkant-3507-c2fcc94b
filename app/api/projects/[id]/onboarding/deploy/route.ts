@@ -9,7 +9,7 @@ import {
 } from '@/lib/org-contact'
 import { canActAs } from '@/lib/acting-role'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
-import { createNotification } from '@/lib/notifications'
+import { createOrgNotification } from '@/lib/notifications'
 
 export async function POST(
   request: NextRequest,
@@ -157,17 +157,15 @@ export async function POST(
     const projectTitle = project.title || 'Project'
     const onboardingUrl = `${base}/partner/onboarding?project=${projectId}`
 
-    // 079-AMBIGUOUS. partnerId is partnerships.vendor_org_id, which is an ORGANIZATION id
-    // after 079, and notifications.user_id is a USER id. This writes a notification nobody
-    // can read. It is NOT introduced here and NOT limited to this route - the same shape
-    // appears at app/api/partnerships/route.ts:937 and :986, lib/magic-token-attach.ts and
-    // lib/award-partnership-resolution.ts. "Who on a team receives an in-app notification"
-    // is the same product ruling resolveOrgNotificationRecipients() answers for email, and
-    // it is left for Greg rather than guessed at one site. Listed in
-    // docs/079-embed-closure-report.md.
-    await createNotification({
+    // 079-AMBIGUOUS, RESOLVED. partnerId is partnerships.vendor_org_id, an ORGANIZATION id
+    // after 079, and notifications.user_id is a USER id. Greg has ruled: every member of
+    // the organization, one rule at all sixteen call sites, matching what
+    // resolveOrgNotificationRecipients() already does for email. See the ruling at the top
+    // of lib/notifications.ts.
+    await createOrgNotification({
       supabase,
-      userId: partnerId,
+      orgId: partnerId,
+      site: 'POST /api/projects/[id]/onboarding/deploy',
       type: 'onboarding_deployed',
       title: 'Onboarding materials sent',
       message: `${agencyName} shared onboarding materials for "${projectTitle}".`,
