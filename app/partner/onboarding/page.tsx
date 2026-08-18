@@ -179,7 +179,10 @@ type ApiOnboardingPackage = {
   custom_message: string | null
   created_at: string
   project: { name?: string | null; title?: string | null; client_name?: string | null } | null
-  agency: { company_name: string | null; full_name: string | null } | null
+  // Renamed from `agency` by Greg's 079 ruling. The producer,
+  // app/api/partner/onboarding-packages/route.ts, was also repointed off `profiles` onto
+  // `organizations` in the same commit - see the 15th site there.
+  lead_org: { name: string | null; contact_name: string | null } | null
   documents: ApiPkgDoc[]
 }
 
@@ -471,7 +474,7 @@ export default function PartnerOnboardingPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="space-y-3">
                   {apiPackages.map((p) => {
-                    const agencyName = p.agency?.company_name || p.agency?.full_name || "Lead agency"
+                    const agencyName = p.lead_org?.name || p.lead_org?.contact_name || "Lead agency"
                     const projectName = apiProjectName(p.project)
                     const clientName = apiClientName(p.project)
                     const isSel = selectedApi?.id === p.id
@@ -541,7 +544,7 @@ export default function PartnerOnboardingPage() {
                     ) : null}
                     <p className="text-sm text-vendor-muted-strong mt-1">
                       From{" "}
-                      {selectedApi.agency?.company_name || selectedApi.agency?.full_name || "your lead agency"}
+                      {selectedApi.lead_org?.name || selectedApi.lead_org?.contact_name || "your lead agency"}
                     </p>
                     {selectedApi.custom_message && (
                       <div className="mt-4 rounded-lg bg-vendor-foreground/5 p-4 text-sm text-vendor-foreground whitespace-pre-wrap">

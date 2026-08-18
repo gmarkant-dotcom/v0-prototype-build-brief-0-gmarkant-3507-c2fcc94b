@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
   ORG_CONTACT_SELECT,
-  legacyPartnerShape,
+  orgWireShape,
   logOrgContactGap,
   resolveOrgContact,
   unwrapOne,
@@ -96,7 +96,7 @@ export async function GET(
       }
       return {
         ...record,
-        partnership: { ...restPship, partner: legacyPartnerShape(embed as OrgEmbed, rowEmail) },
+        partnership: { ...restPship, vendor_org: orgWireShape(embed as OrgEmbed, rowEmail) },
       }
     })
 

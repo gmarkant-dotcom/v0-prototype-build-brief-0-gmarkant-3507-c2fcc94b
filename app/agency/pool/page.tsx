@@ -452,11 +452,14 @@ function PartnerPoolPageInner() {
       const data = await response.json().catch(() => ({}))
       let loaded: Partnership[] = (data.partnerships || []).map((p: Record<string, unknown>) => ({
         id: p.id as string,
-        partnerId: (p.partner as { id?: string } | undefined)?.id || (p.vendor_org_id as string | undefined) || undefined,
+        // Wire key renamed from `partner` to `vendor_org` by Greg's 079 ruling. The three
+        // field names moved with it: name is organizations.name, contact_email and
+        // contact_name belong to the organization's primary contact.
+        partnerId: (p.vendor_org as { id?: string } | undefined)?.id || (p.vendor_org_id as string | undefined) || undefined,
         partnerEmail:
-          (p.partner as { email?: string } | undefined)?.email || (p.partner_email as string),
-        partnerName: (p.partner as { full_name?: string } | undefined)?.full_name,
-        partnerCompany: (p.partner as { company_name?: string } | undefined)?.company_name,
+          (p.vendor_org as { contact_email?: string } | undefined)?.contact_email || (p.partner_email as string),
+        partnerName: (p.vendor_org as { contact_name?: string } | undefined)?.contact_name,
+        partnerCompany: (p.vendor_org as { name?: string } | undefined)?.name,
         status: p.status as Partnership["status"],
         partnershipCreatedAt: p.created_at as string,
         acceptedAt: p.accepted_at as string | undefined,

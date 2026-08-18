@@ -25,11 +25,13 @@ type MsaAgreement = {
 type PartnershipRow = {
   id: string
   status: string
-  partner?: {
-    id?: string
-    company_name?: string | null
-    full_name?: string | null
-    email?: string | null
+  // Declared to document the payload, read nowhere in this file - only `id` and `status`
+  // are used. Renamed with the wire key anyway so the declaration cannot go stale.
+  vendor_org?: {
+    id?: string | null
+    name?: string | null
+    contact_name?: string | null
+    contact_email?: string | null
   } | null
 }
 

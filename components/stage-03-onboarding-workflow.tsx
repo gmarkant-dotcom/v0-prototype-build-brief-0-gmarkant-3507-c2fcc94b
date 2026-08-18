@@ -31,11 +31,13 @@ type OnboardingPartnerRow = {
   partnershipId: string
   status: string
   source: "assignment" | "awarded_bid"
-  partner: {
-    id: string
-    email: string | null
-    full_name: string | null
-    company_name: string | null
+  // Renamed from `partner` by Greg's 079 ruling: an organization, not a partner, and
+  // contact_* belongs to its primary contact.
+  vendor_org: {
+    id: string | null
+    name: string | null
+    contact_name: string | null
+    contact_email: string | null
   } | null
   scopeLabel: string | null
 }
@@ -584,9 +586,9 @@ export function Stage03OnboardingWorkflow() {
                 <SelectContent>
                   {onboardingPartners.map((a) => {
                     const name =
-                      a.partner?.company_name?.trim() ||
-                      a.partner?.full_name?.trim() ||
-                      a.partner?.email?.trim() ||
+                      a.vendor_org?.name?.trim() ||
+                      a.vendor_org?.contact_name?.trim() ||
+                      a.vendor_org?.contact_email?.trim() ||
                       "Vendor"
                     const scope = a.scopeLabel ? ` · ${a.scopeLabel}` : ""
                     const src = a.source === "awarded_bid" ? "awarded bid" : a.status
@@ -922,9 +924,9 @@ export function Stage03OnboardingWorkflow() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="font-display font-bold text-base text-foreground">
-                    {(selectedPartnerRow.partner?.company_name || "").trim() ||
-                      (selectedPartnerRow.partner?.full_name || "").trim() ||
-                      (selectedPartnerRow.partner?.email || "").trim() ||
+                    {(selectedPartnerRow.vendor_org?.name || "").trim() ||
+                      (selectedPartnerRow.vendor_org?.contact_name || "").trim() ||
+                      (selectedPartnerRow.vendor_org?.contact_email || "").trim() ||
                       "Vendor"}
                   </div>
                   <div className="font-mono text-2xs text-foreground-muted mt-1">Partnership</div>

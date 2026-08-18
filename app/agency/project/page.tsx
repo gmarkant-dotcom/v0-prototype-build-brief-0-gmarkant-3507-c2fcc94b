@@ -35,7 +35,7 @@ type PartnerRow = {
   awardedResponseId?: string | null
   partnershipId: string
   awardedAt: string | null
-  partner: { companyName: string | null; fullName: string | null; email: string | null }
+  vendorOrg: { name: string | null; contactName: string | null; contactEmail: string | null }
   scopeItemName: string | null
   budgetProposal: string
   current_status: string | null
@@ -91,7 +91,7 @@ const STATUS_LABEL: Record<string, string> = {
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
 function partnerDisplayName(p: PartnerRow): string {
-  return p.partner.companyName || p.partner.fullName || p.partner.email || "Vendor"
+  return p.vendorOrg.name || p.vendorOrg.contactName || p.vendorOrg.contactEmail || "Vendor"
 }
 function isAgencyOverride(notes: string | null | undefined): boolean {
   return typeof notes === "string" && notes.startsWith("[Agency override]")

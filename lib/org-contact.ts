@@ -155,54 +155,69 @@ export function orgGreetingName(contact: OrgContact, fallbackLabel = 'there'): s
 }
 
 /**
- * The legacy wire shape.
+ * THE WIRE SHAPE.
  *
- * DELIBERATE: the JSON these routes emit keeps the key `partner` and the field names
- * `id`, `email`, `full_name`, `company_name`. Renaming them would mean editing every
- * consumer in eight frontend files, and a consumer missed there renders `undefined`
- * rather than failing, which is the exact failure this whole exercise exists to prevent.
- * The QUERY changes shape; the PAYLOAD does not. What each field now means:
+ * RULED BY GREG 2026-08-17, overruling the previous run, which kept the old keys and
+ * emitted `partner: { id, email, full_name, company_name }` from an organizations embed.
+ * The reason for the overrule is worth keeping: a payload key that no longer comes from a
+ * partner or from a company_name column is a name that lies, and this codebase has spent
+ * a week paying for names that lied. The QUERY and the PAYLOAD now agree.
  *
- *   id            organizations.id     (was profiles.id; identical for every backfilled
- *                                       organization, and the org id is what consumers
- *                                       actually use, since they match it against
- *                                       vendor_org_id and link to /agency/pool/<id>)
- *   company_name  organizations.name   (was profiles.company_name)
- *   email         the primary contact's email, or the row's own pre-claim address
- *   full_name     the primary contact's name
+ * The wire keys are `vendor_org` and `lead_org`, matching the foreign keys
+ * vendor_org_id and lead_org_id that reach them. Every field names its own source:
  *
- * Listed in docs/079-embed-closure-report.md for Greg to overrule if he wants the wire
- * keys renamed too.
+ *   id                  organizations.id
+ *   name                organizations.name
+ *   contact_user_id     organizations.primary_contact_user_id
+ *   contact_email       the primary contact's profiles.email, or - when there is no
+ *                       readable contact - the row's own pre-claim address
+ *                       (partnerships.partner_email, partner_rfp_inbox.recipient_email)
+ *   contact_name        the primary contact's profiles.full_name
+ *
+ * WHY contact_* AND NOT email/full_name. These are the designated person's fields, not
+ * the company's. Calling them `email` and `full_name` on an object keyed `vendor_org`
+ * would reintroduce the same lie one level down: it would read as the company's address.
+ *
+ * THE RICH TRIO IS PREFIXED FOR THE SAME REASON, and it is the one place this shape
+ * admits a real loss of fidelity. capabilities, company_logo_url and created_at live on
+ * profiles and 079 creates no organization-level column for any of them, so they continue
+ * to describe the CONTACT rather than the COMPANY. contact_capabilities is that person's
+ * capability list; contact_logo_url is the logo on their profile; contact_created_at is
+ * when they signed up, not when the company was created (organizations.created_at exists
+ * and is a different date for every organization made after 079). The names say so at
+ * every read site rather than in a comment nobody opens.
  */
-export type LegacyPartnerShape = {
+export type OrgWireShape = {
   id: string | null
-  email: string | null
-  full_name: string | null
-  company_name: string | null
-  capabilities?: unknown
-  company_logo_url?: string | null
-  created_at?: string | null
+  name: string | null
+  contact_user_id: string | null
+  contact_email: string | null
+  contact_name: string | null
+  contact_capabilities?: unknown
+  contact_logo_url?: string | null
+  contact_created_at?: string | null
 }
 
-export function legacyPartnerShape(
+export function orgWireShape(
   embed: OrgEmbed,
   rowEmail?: string | null,
   options?: { rich?: boolean }
-): LegacyPartnerShape | null {
+): OrgWireShape | null {
   const org = unwrapOne(embed)
   if (!org) return null
   const contact = unwrapOne(org.primary_contact)
   const resolved = resolveOrgContact(embed, rowEmail)
-  const base: LegacyPartnerShape = {
+  const base: OrgWireShape = {
     id: resolved.orgId,
-    email: resolved.contactEmail,
-    full_name: resolved.contactFullName,
-    company_name: resolved.orgName,
+    name: resolved.orgName,
+    contact_user_id: resolved.contactUserId,
+    contact_email: resolved.contactEmail,
+    contact_name: resolved.contactFullName,
   }
   if (options?.rich) {
-    base.capabilities = contact?.capabilities ?? null
-    base.company_logo_url = clean(contact?.company_logo_url)
-    base.created_at = clean(contact?.created_at)
+    base.contact_capabilities = contact?.capabilities ?? null
+    base.contact_logo_url = clean(contact?.company_logo_url)
+    base.contact_created_at = clean(contact?.created_at)
   }
   return base
 }

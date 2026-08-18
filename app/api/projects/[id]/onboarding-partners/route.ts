@@ -2,11 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
   ORG_CONTACT_SELECT,
-  legacyPartnerShape,
+  orgWireShape,
   logOrgContactGap,
   resolveOrgContact,
   unwrapOne,
-  type LegacyPartnerShape,
+  type OrgWireShape,
   type OrgEmbed,
 } from "@/lib/org-contact"
 
@@ -80,7 +80,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       // organization's designated primary contact (or, for email, the partnership's own
       // pre-claim address). Every field is nullable, and the consumer already falls
       // through company_name -> full_name -> email -> the partnership id.
-      partner: LegacyPartnerShape | null
+      vendor_org: OrgWireShape | null
       scopeLabel: string | null
     }
 
@@ -103,7 +103,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         partnershipId: pid,
         status: a.status as string,
         source: "assignment",
-        partner: legacyPartnerShape(inner?.vendor_org as OrgEmbed, rowEmail),
+        vendor_org: orgWireShape(inner?.vendor_org as OrgEmbed, rowEmail),
         scopeLabel: null,
       })
     }
@@ -148,7 +148,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         // 079's own table comment warns about. Left alone it silently blanks the vendor on
         // every awarded-bid row that has no assignment, which is the same surface and the
         // same PartnerOut shape as the embed above, so it is fixed with it.
-        let partner: PartnerOut["partner"] = null
+        let vendorOrg: PartnerOut["vendor_org"] = null
         if (partnerId) {
           const { data: org } = await supabase
             .from("organizations")
@@ -161,7 +161,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
             partnershipId,
             vendorOrgId: partnerId,
           })
-          partner = legacyPartnerShape(org as OrgEmbed, null)
+          vendorOrg = orgWireShape(org as OrgEmbed, null)
         }
 
         byPartnership.set(partnershipId, {
@@ -169,7 +169,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
           partnershipId,
           status: "awarded",
           source: "awarded_bid",
-          partner,
+          vendor_org: vendorOrg,
           scopeLabel: inbox.scope_item_name ?? null,
         })
       }
@@ -177,14 +177,14 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     const partners = [...byPartnership.values()].sort((x, y) => {
       const nx =
-        x.partner?.company_name?.trim() ||
-        x.partner?.full_name?.trim() ||
-        x.partner?.email?.trim() ||
+        x.vendor_org?.name?.trim() ||
+        x.vendor_org?.contact_name?.trim() ||
+        x.vendor_org?.contact_email?.trim() ||
         x.partnershipId
       const ny =
-        y.partner?.company_name?.trim() ||
-        y.partner?.full_name?.trim() ||
-        y.partner?.email?.trim() ||
+        y.vendor_org?.name?.trim() ||
+        y.vendor_org?.contact_name?.trim() ||
+        y.vendor_org?.contact_email?.trim() ||
         y.partnershipId
       return nx.localeCompare(ny)
     })

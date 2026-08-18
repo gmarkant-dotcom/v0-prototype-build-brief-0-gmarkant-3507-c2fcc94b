@@ -35,13 +35,17 @@ interface Partnership {
   invitation_message: string | null
   created_at: string
   accepted_at: string | null
-  agency?: {
-    id: string
-    company_name: string
-    full_name: string
-    email: string
-    company_logo_url?: string | null
-    capabilities?: unknown
+  // Renamed from `agency` by Greg's 079 ruling. This is the LEAD ORGANIZATION on the
+  // other side of the partnership; the `Agency` interface below is a different shape from
+  // a different route (/api/partner/network) and is deliberately NOT renamed.
+  // contact_* fields belong to the organization's primary contact, not the company.
+  lead_org?: {
+    id: string | null
+    name: string | null
+    contact_name: string | null
+    contact_email: string | null
+    contact_logo_url?: string | null
+    contact_capabilities?: unknown
   }
 }
 
@@ -132,11 +136,11 @@ const demoPartnerships: Partnership[] = [
     invitation_message: "We'd love to have you join our network for upcoming sports content projects. Your reel is impressive!",
     created_at: new Date().toISOString(),
     accepted_at: null,
-    agency: {
+    lead_org: {
       id: "demo-agency-1",
-      company_name: "Electric Animal",
-      full_name: "Electric Animal Agency",
-      email: "contact@electricanimal.com",
+      name: "Electric Animal",
+      contact_name: "Electric Animal Agency",
+      contact_email: "contact@electricanimal.com",
     },
   },
   {
@@ -147,12 +151,12 @@ const demoPartnerships: Partnership[] = [
     invitation_message: "Welcome to our preferred vendor network.",
     created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
     accepted_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    agency: {
+    lead_org: {
       id: "demo-agency-2",
-      company_name: "Momentum Worldwide",
-      full_name: "Momentum Agency",
-      email: "contact@momentum.com",
-      capabilities: ["Experiential", "Brand Activation"],
+      name: "Momentum Worldwide",
+      contact_name: "Momentum Agency",
+      contact_email: "contact@momentum.com",
+      contact_capabilities: ["Experiential", "Brand Activation"],
     },
   },
 ]
@@ -580,15 +584,18 @@ export default function AgencyNetworkPage() {
 
   /** Feeds an active partnership's (minimal) agency data into the same profile modal Discover uses. */
   const openAgencyProfileFromPartnership = (partnership: Partnership) => {
-    const a = partnership.agency
-    if (!a) return
+    const a = partnership.lead_org
+    if (!a?.id) return
+    // Mapping back onto the `Agency` shape the modal takes. That shape is a profiles row
+    // from /api/partner/network and keeps its own field names; only the partnership side
+    // was renamed.
     void openAgencyProfile({
       id: a.id,
-      company_name: a.company_name,
-      full_name: a.full_name,
-      email: a.email,
-      company_logo_url: a.company_logo_url ?? undefined,
-      capabilities: a.capabilities,
+      company_name: a.name ?? "",
+      full_name: a.contact_name ?? "",
+      email: a.contact_email ?? undefined,
+      company_logo_url: a.contact_logo_url ?? undefined,
+      capabilities: a.contact_capabilities,
       collaborated: true,
     })
   }
@@ -606,14 +613,14 @@ export default function AgencyNetworkPage() {
   const searchedActivePartnerships = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return activePartnerships.filter((p) =>
-      matchesSearch(p.agency?.company_name || p.agency?.full_name || "", p.agency?.email, q)
+      matchesSearch(p.lead_org?.name || p.lead_org?.contact_name || "", p.lead_org?.contact_email ?? undefined, q)
     )
   }, [activePartnerships, searchQuery])
 
   const searchedPendingPartnerships = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return pendingPartnerships.filter((p) =>
-      matchesSearch(p.agency?.company_name || p.agency?.full_name || "", p.agency?.email, q)
+      matchesSearch(p.lead_org?.name || p.lead_org?.contact_name || "", p.lead_org?.contact_email ?? undefined, q)
     )
   }, [pendingPartnerships, searchQuery])
 
@@ -730,13 +737,13 @@ export default function AgencyNetworkPage() {
           ) : (
             <div className="space-y-4">
               {searchedActivePartnerships.map((partnership) => {
-                const caps = extractCapabilityValues(partnership.agency?.capabilities)
+                const caps = extractCapabilityValues(partnership.lead_org?.contact_capabilities)
                 return (
                   <div key={partnership.id} className="bg-vendor-surface border border-vendor-border shadow-sm rounded-xl p-5 flex items-start gap-4">
                     <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
-                      {partnership.agency?.company_logo_url ? (
+                      {partnership.lead_org?.contact_logo_url ? (
                         <img
-                          src={partnership.agency.company_logo_url}
+                          src={partnership.lead_org.contact_logo_url}
                           alt=""
                           className="w-full h-full object-cover"
                         />
@@ -747,11 +754,11 @@ export default function AgencyNetworkPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
                         <h3 className="font-display text-vendor-foreground text-lg font-bold">
-                          {partnership.agency?.company_name || partnership.agency?.full_name || "Lead Agency"}
+                          {partnership.lead_org?.name || partnership.lead_org?.contact_name || "Lead Agency"}
                         </h3>
                         {getStatusBadge(partnership.status, "light")}
                       </div>
-                      {partnership.agency?.email && <p className="text-vendor-foreground text-sm mb-2">{partnership.agency.email}</p>}
+                      {partnership.lead_org?.contact_email && <p className="text-vendor-foreground text-sm mb-2">{partnership.lead_org.contact_email}</p>}
                       {caps.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mb-2">
                           {caps.slice(0, 6).map((c) => (
@@ -818,11 +825,11 @@ export default function AgencyNetworkPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">{getStatusBadge(partnership.status, "dark")}</div>
                         <h3 className="font-display font-bold text-2xl text-foreground">
-                          {partnership.agency?.company_name || partnership.agency?.full_name || "Unknown Agency"}
+                          {partnership.lead_org?.name || partnership.lead_org?.contact_name || "Unknown Agency"}
                         </h3>
                         <p className="text-base text-foreground-secondary flex items-center gap-2 mt-2">
                           <Mail className="w-4 h-4 text-accent" />
-                          <span className="font-medium">{partnership.agency?.email || "Email not available"}</span>
+                          <span className="font-medium">{partnership.lead_org?.contact_email || "Email not available"}</span>
                         </p>
                       </div>
                     </div>
@@ -830,7 +837,7 @@ export default function AgencyNetworkPage() {
                     <div className="bg-surface rounded-lg p-4 border border-border">
                       <p className="text-foreground-secondary text-sm leading-relaxed">
                         <strong className="text-accent">
-                          {partnership.agency?.company_name || partnership.agency?.full_name || "This agency"}
+                          {partnership.lead_org?.name || partnership.lead_org?.contact_name || "This agency"}
                         </strong>{" "}
                         has invited you to join their vendor network on Ligament. By accepting, you&apos;ll be able to
                         receive project briefs and collaborate with them directly.

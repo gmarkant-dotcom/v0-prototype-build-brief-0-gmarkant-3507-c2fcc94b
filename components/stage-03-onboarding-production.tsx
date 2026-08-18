@@ -23,7 +23,8 @@ type AssignmentRow = {
   id: string
   status: string
   partnership: {
-    partner: { id: string; full_name: string | null; company_name: string | null } | null
+    // Renamed from `partner` by Greg's 079 ruling: an organization, not a partner.
+    vendor_org: { id: string | null; name: string | null; contact_name: string | null } | null
   } | null
 }
 
@@ -183,8 +184,8 @@ export function Stage03OnboardingProduction() {
               <SelectContent>
                 {assignments.map((a) => {
                   const name =
-                    a.partnership?.partner?.company_name ||
-                    a.partnership?.partner?.full_name ||
+                    a.partnership?.vendor_org?.name ||
+                    a.partnership?.vendor_org?.contact_name ||
                     "Vendor"
                   return (
                     <SelectItem key={a.id} value={a.id}>

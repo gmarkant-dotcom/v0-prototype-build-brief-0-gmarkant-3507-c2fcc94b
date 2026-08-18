@@ -81,10 +81,14 @@ export function LeadAgencyFilterProvider({ children }: { children: ReactNode }) 
       
       const loadedConnections: LeadAgencyConnection[] = (data.partnerships || []).map((p: any) => ({
         id: p.id,
-        agencyId: p.agency?.id || p.lead_org_id,
-        agencyName: p.agency?.company_name || p.agency?.full_name || 'Unknown Agency',
-        agencyEmail: p.agency?.email,
-        agencyLocation: p.agency?.location || '',
+        // Wire key renamed from `agency` to `lead_org` by Greg's 079 ruling.
+        agencyId: p.lead_org?.id || p.lead_org_id,
+        agencyName: p.lead_org?.name || p.lead_org?.contact_name || 'Unknown Agency',
+        agencyEmail: p.lead_org?.contact_email,
+        // `location` is a profiles column with NO organizations equivalent, so this has
+        // been '' since the embeds were rewritten to read organizations - the rename does
+        // not cause it and does not fix it. Listed in docs/079-embed-closure-report.md.
+        agencyLocation: '',
         status: p.status,
         // invitation_sent_at, never the legacy invited_at - only the former means an
         // invitation email was confirmed sent. See lib/partnership-state.ts.

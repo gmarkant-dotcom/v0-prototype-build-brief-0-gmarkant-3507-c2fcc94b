@@ -157,9 +157,12 @@ export async function GET(request: NextRequest) {
 
     const { data: assignments, error: asgErr } = await supabase
       // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
-      // This route already normalizes into its own PartnerRow.partner
-      // { companyName, fullName, email } wire shape, so the frontend at
-      // app/agency/project/page.tsx does not move; only the extraction below changes.
+      // This route normalizes into its own camelCase wire shape rather than using
+      // orgWireShape(). That shape is renamed with the rest by Greg's ruling:
+      // partner { companyName, fullName, email } becomes vendorOrg { name, contactName,
+      // contactEmail }, because the value is an organization and the last two fields are
+      // the primary contact's, not the company's. One consumer, at
+      // app/agency/project/page.tsx.
       .from("project_assignments")
       .select(
         `
@@ -388,10 +391,10 @@ export async function GET(request: NextRequest) {
       awardedResponseId: string | null
       partnershipId: string
       awardedAt: string | null
-      partner: {
-        companyName: string | null
-        fullName: string | null
-        email: string | null
+      vendorOrg: {
+        name: string | null
+        contactName: string | null
+        contactEmail: string | null
       }
       scopeItemName: string | null
       proposalText: string
@@ -468,10 +471,10 @@ export async function GET(request: NextRequest) {
         assignmentId: a.id as string,
         partnershipId,
         awardedAt: (a.awarded_at as string | null) ?? null,
-        partner: {
-          companyName: vendorContact.orgName,
-          fullName: vendorContact.contactFullName,
-          email: vendorContact.contactEmail,
+        vendorOrg: {
+          name: vendorContact.orgName,
+          contactName: vendorContact.contactFullName,
+          contactEmail: vendorContact.contactEmail,
         },
         kickoffUrl: pkg?.kickoff_url ?? null,
         kickoffType: pkg?.kickoff_type ?? null,

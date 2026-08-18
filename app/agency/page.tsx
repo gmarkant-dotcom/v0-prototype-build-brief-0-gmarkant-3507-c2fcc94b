@@ -93,11 +93,14 @@ type PartnershipApiRow = {
   invitation_sent_at: string | null
   accepted_at: string | null
   nda_confirmed_at?: string | null
-  partner: {
-    id: string
-    email: string
-    full_name: string | null
-    company_name: string | null
+  // Renamed from `partner` by Greg's 079 ruling: the embed resolves an ORGANIZATION,
+  // and contact_email/contact_name are the organization's primary contact, not the
+  // company's own fields. See lib/org-contact.ts.
+  vendor_org: {
+    id: string | null
+    name: string | null
+    contact_email: string | null
+    contact_name: string | null
   } | null
 }
 
@@ -177,9 +180,9 @@ function AgencyRFPContent() {
         const rows = (data.partnerships || []) as PartnershipApiRow[]
 
         const active = rows
-          // `p.partner?.id` is a rendering requirement (this card needs a profile to link
-          // to), never part of the state test - that is isActivePartnership() alone.
-          .filter((p) => isActivePartnership(p) && p.partner?.id)
+          // `p.vendor_org?.id` is a rendering requirement (this card needs an organization
+          // to link to), never part of the state test - that is isActivePartnership() alone.
+          .filter((p) => isActivePartnership(p) && p.vendor_org?.id)
           .sort((a, b) => {
             const ta = a.accepted_at ? new Date(a.accepted_at).getTime() : 0
             const tb = b.accepted_at ? new Date(b.accepted_at).getTime() : 0
@@ -187,14 +190,14 @@ function AgencyRFPContent() {
           })
 
         const mapped: Partner[] = active.map((p) => {
-          const pr = p.partner!
-          const label = pr.full_name?.trim() || pr.company_name?.trim() || pr.email || "Vendor"
-          const sub = pr.company_name?.trim() || pr.email || "Vendor"
+          const pr = p.vendor_org!
+          const label = pr.contact_name?.trim() || pr.name?.trim() || pr.contact_email || "Vendor"
+          const sub = pr.name?.trim() || pr.contact_email || "Vendor"
           return {
-            id: pr.id,
+            id: pr.id!,
             partnershipId: p.id,
             name: label,
-            email: pr.email,
+            email: pr.contact_email ?? "",
             type: "agency",
             discipline: sub,
             bookmarked: true,
@@ -211,7 +214,7 @@ function AgencyRFPContent() {
           .filter((p) => partnershipPoolColumn(p) !== "network")
           .map((p) => ({
             id: p.id,
-            email: (p.partner_email || p.partner?.email || "").trim(),
+            email: (p.partner_email || p.vendor_org?.contact_email || "").trim(),
           }))
           .filter((x) => x.email.length > 0)
 

@@ -3,7 +3,7 @@ import { reconcileProjectClientFields } from '@/lib/clients-server'
 import { createClient } from '@/lib/supabase/server'
 import {
   ORG_CONTACT_SELECT,
-  legacyPartnerShape,
+  orgWireShape,
   logOrgContactGap,
   resolveOrgContact,
   unwrapOne,
@@ -85,7 +85,7 @@ function normalizeAssignmentPartners(project: Record<string, unknown>): Record<s
         vendorOrgId: pship.vendor_org_id,
       })
     }
-    return { ...row, partnership: { ...restPship, partner: legacyPartnerShape(embed as OrgEmbed, null) } }
+    return { ...row, partnership: { ...restPship, vendor_org: orgWireShape(embed as OrgEmbed, null) } }
   })
   return { ...project, project_assignments: assignments }
 }
@@ -459,11 +459,14 @@ export async function GET(request: NextRequest) {
               leadOrgId: proj.org_id,
             })
           }
-          const agency = leadContact.orgMissing
+          // Wire key `lead_org`, renamed from `agency` by Greg's ruling. The fields name
+          // their own sources: name is organizations.name, contact_name is the primary
+          // contact's profiles.full_name.
+          const leadOrg = leadContact.orgMissing
             ? null
             : {
-                company_name: leadContact.orgName,
-                full_name: leadContact.contactFullName,
+                name: leadContact.orgName,
+                contact_name: leadContact.contactFullName,
               }
           const titleRaw = (proj.title ?? proj.name ?? '') as string
           const title = String(titleRaw).trim() || 'Untitled project'
@@ -473,10 +476,10 @@ export async function GET(request: NextRequest) {
             name: title,
             client_name: (proj.client_name as string | null) ?? null,
             status: proj.status as string,
-            agency: agency
+            lead_org: leadOrg
               ? {
-                  company_name: agency.company_name ?? null,
-                  full_name: agency.full_name ?? null,
+                  name: leadOrg.name ?? null,
+                  contact_name: leadOrg.contact_name ?? null,
                 }
               : null,
             assignment: {

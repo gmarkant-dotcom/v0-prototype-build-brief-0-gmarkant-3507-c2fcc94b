@@ -62,7 +62,8 @@ type PartnershipApiRow = {
   id: string
   lead_org_id: string
   status?: string | null
-  agency?: { company_name?: string | null; full_name?: string | null } | null
+  // Renamed from `agency` by Greg's 079 ruling: the value is an organization.
+  lead_org?: { name?: string | null; contact_name?: string | null } | null
 }
 
 type RateInfoPayload = {
@@ -178,8 +179,8 @@ const demoMilestones: MilestoneRow[] = [
 ]
 
 const demoActivePartnerships: PartnershipApiRow[] = [
-  { id: "demo-p1", lead_org_id: "demo-agency-1", status: "active", agency: { company_name: "Tandem Social" } },
-  { id: "demo-p2", lead_org_id: "demo-agency-2", status: "active", agency: { company_name: "North Star Media" } },
+  { id: "demo-p1", lead_org_id: "demo-agency-1", status: "active", lead_org: { name: "Tandem Social" } },
+  { id: "demo-p2", lead_org_id: "demo-agency-2", status: "active", lead_org: { name: "North Star Media" } },
 ]
 
 const demoRatesSeeded: Record<string, RateInfoPayload> = {
@@ -224,8 +225,8 @@ function statusBadgeClass(status: string, overdue: boolean) {
 }
 
 function agencyLabel(p: PartnershipApiRow) {
-  const a = p.agency
-  const name = (a?.company_name || "").trim() || (a?.full_name || "").trim()
+  const a = p.lead_org
+  const name = (a?.name || "").trim() || (a?.contact_name || "").trim()
   return name || "Lead agency"
 }
 

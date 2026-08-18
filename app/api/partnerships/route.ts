@@ -8,7 +8,7 @@ import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
 import {
   ORG_CONTACT_SELECT_RICH,
-  legacyPartnerShape,
+  orgWireShape,
   logOrgContactGap,
   resolveOrgContact,
   type OrgEmbed,
@@ -78,7 +78,10 @@ export async function GET(request: NextRequest) {
         // organizations.name and the contact comes from the designated primary contact.
         // capabilities, company_logo_url and created_at have no organization-level column
         // and continue to come from that contact's own profile row. lib/org-contact.ts owns
-        // the fragment and the null rule; the JSON key stays `partner` so no consumer moves.
+        // the fragment, the null rule and the wire shape. The wire key is `vendor_org`,
+        // renamed from `partner` by Greg's ruling: the value is an organization, not a
+        // partner, so the old key was a name that lied. Consumers listed in
+        // docs/079-embed-closure-report.md, Item 3.
         .from('partnerships')
         .select(`
           *,
@@ -103,7 +106,7 @@ export async function GET(request: NextRequest) {
               vendorOrgId: record.vendor_org_id,
             })
           }
-          return { ...rest, partner: legacyPartnerShape(embed as OrgEmbed, rowEmail, { rich: true }) }
+          return { ...rest, vendor_org: orgWireShape(embed as OrgEmbed, rowEmail, { rich: true }) }
         })
       } else {
         if (rich.error) {
@@ -276,7 +279,7 @@ export async function GET(request: NextRequest) {
       // after 079, blanking the lead agency's name across the whole vendor portal. It is
       // fixed here rather than left, because it feeds the sibling wire key of the embed
       // rewritten above and sits in the same handler. Reported separately.
-      let agencyProfiles: Record<string, NonNullable<ReturnType<typeof legacyPartnerShape>>> = {}
+      let leadOrgs: Record<string, NonNullable<ReturnType<typeof orgWireShape>>> = {}
       if (agencyIds.length > 0) {
         const { data: agencies, error: agenciesErr } = await supabase
           .from('organizations')
@@ -300,13 +303,13 @@ export async function GET(request: NextRequest) {
           logOrgContactGap('GET /api/partnerships (vendor, lead agency)', contact, {
             leadOrgId: orgId,
           })
-          const shaped = legacyPartnerShape(org as OrgEmbed, null, { rich: true })
-          if (shaped) agencyProfiles[orgId] = shaped
+          const shaped = orgWireShape(org as OrgEmbed, null, { rich: true })
+          if (shaped) leadOrgs[orgId] = shaped
         }
 
         // An organization id that came back with no row at all is invisible to the loop
         // above, so it is counted here rather than silently dropped.
-        const missing = agencyIds.filter((id) => !agencyProfiles[id as string])
+        const missing = agencyIds.filter((id) => !leadOrgs[id as string])
         if (missing.length > 0) {
           console.warn('[api] GET /partnerships lead agency organizations not readable', {
             route,
@@ -322,7 +325,7 @@ export async function GET(request: NextRequest) {
         const { partnership_notes: _omitNotes, ...rest } = p as Record<string, unknown>
         return {
           ...rest,
-          agency: agencyProfiles[p.lead_org_id as string] || null,
+          lead_org: leadOrgs[p.lead_org_id as string] || null,
         }
       })
     }

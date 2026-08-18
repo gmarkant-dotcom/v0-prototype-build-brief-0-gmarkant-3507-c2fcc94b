@@ -115,8 +115,8 @@ export function MarketplaceContent({ compact = false, excludePartnerIds }: Marke
         if (partnershipsResult.ok) {
           const partnershipsPayload = await partnershipsResult.json().catch(() => ({}))
           const nextConnectedIds = new Set<string>(
-            ((partnershipsPayload?.partnerships || []) as Array<{ vendor_org_id?: string; partner?: { id?: string } }>)
-              .map((p) => p.vendor_org_id || p.partner?.id)
+            ((partnershipsPayload?.partnerships || []) as Array<{ vendor_org_id?: string; vendor_org?: { id?: string | null } }>)
+              .map((p) => p.vendor_org_id || p.vendor_org?.id)
               .filter((id): id is string => Boolean(id))
           )
           setConnectedIds(nextConnectedIds)

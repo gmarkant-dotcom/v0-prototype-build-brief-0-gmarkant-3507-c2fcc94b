@@ -3,7 +3,7 @@ import { requireAuth } from "@/lib/api-auth"
 import { createClient } from '@/lib/supabase/server'
 import {
   ORG_CONTACT_SELECT,
-  legacyPartnerShape,
+  orgWireShape,
   logOrgContactGap,
   orgGreetingName,
   resolveOrgContact,
@@ -82,7 +82,7 @@ export async function GET(
       }
       return {
         ...record,
-        partnership: { ...restPship, partner: legacyPartnerShape(embed as OrgEmbed, rowEmail) },
+        partnership: { ...restPship, vendor_org: orgWireShape(embed as OrgEmbed, rowEmail) },
       }
     })
 
@@ -228,7 +228,7 @@ export async function POST(
       partnership: assignmentPship
         ? (() => {
             const { vendor_org: _embed, ...restPship } = assignmentPship
-            return { ...restPship, partner: legacyPartnerShape(assignmentEmbed, assignmentRowEmail) }
+            return { ...restPship, vendor_org: orgWireShape(assignmentEmbed, assignmentRowEmail) }
           })()
         : assignmentPship,
     }

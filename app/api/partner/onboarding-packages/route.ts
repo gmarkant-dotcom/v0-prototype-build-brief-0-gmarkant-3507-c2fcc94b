@@ -1,5 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import {
+  ORG_CONTACT_SELECT,
+  logOrgContactGap,
+  orgWireShape,
+  resolveOrgContact,
+  type OrgEmbed,
+  type OrgWireShape,
+} from "@/lib/org-contact"
 
 export const dynamic = "force-dynamic"
 
@@ -43,7 +51,7 @@ export async function GET(_request: NextRequest) {
     ]
     const agencyIds = [...new Set((packages || []).map((p) => p.org_id as string))]
     const projectMap: Record<string, { name: string | null; client_name: string | null }> = {}
-    const agencyMap: Record<string, { company_name: string | null; full_name: string | null }> = {}
+    const leadOrgMap: Record<string, OrgWireShape> = {}
 
     if (projectIds.length > 0) {
       const { data: projects, error: projectsError } = await supabase
@@ -67,12 +75,45 @@ export async function GET(_request: NextRequest) {
         reason: "no valid project_id on packages",
       })
     }
+    // 079-EMBED (15th site, and NEITHER GUARD SEES IT). This is the third instance of the
+    // same break in non-embed form - "JOIN profiles ON profiles.id = an org id", the trap
+    // 079's own table comment names. agencyIds are onboarding_packages.org_id values, which
+    // are ORGANIZATION ids after 079. Looking them up in `profiles` works for every
+    // backfilled organization and returns nothing for every one created after 079, blanking
+    // the lead agency's name on the vendor onboarding page.
+    //
+    // The identity guard does not see it because the column name is already the post-079
+    // one, and the embed guard does not see it because there is no `table!hint(` embed here
+    // at all - it is a separate .from("profiles").in("id", <org ids>) call. Four more sites
+    // of this exact shape are listed in docs/079-embed-closure-report.md and are NOT fixed
+    // here, because they emit scalar keys that Greg's rename ruling does not cover.
     if (agencyIds.length > 0) {
-      const { data: agencies } = await supabase
-        .from("profiles")
-        .select("id, company_name, full_name")
+      const { data: leadOrgRows, error: leadOrgErr } = await supabase
+        .from("organizations")
+        .select(ORG_CONTACT_SELECT)
         .in("id", agencyIds)
-      for (const a of agencies || []) agencyMap[a.id] = { company_name: a.company_name, full_name: a.full_name }
+      if (leadOrgErr) {
+        console.error("[partner/onboarding-packages] lead organizations lookup failed", {
+          agencyIdCount: agencyIds.length,
+          message: leadOrgErr.message,
+          code: leadOrgErr.code,
+        })
+      }
+      for (const org of leadOrgRows || []) {
+        const orgId = (org as { id?: string }).id
+        if (!orgId) continue
+        const contact = resolveOrgContact(org as OrgEmbed, null)
+        logOrgContactGap("GET /api/partner/onboarding-packages", contact, { leadOrgId: orgId })
+        const shaped = orgWireShape(org as OrgEmbed, null)
+        if (shaped) leadOrgMap[orgId] = shaped
+      }
+      const missing = agencyIds.filter((id) => !leadOrgMap[id])
+      if (missing.length > 0) {
+        console.warn("[partner/onboarding-packages] lead organizations not readable", {
+          missingCount: missing.length,
+          reason: "row level security on organizations, or the row does not exist",
+        })
+      }
     }
 
     const pkgIds = (packages || []).map((p) => p.id)
@@ -97,7 +138,7 @@ export async function GET(_request: NextRequest) {
     const enriched = (packages || []).map((p) => ({
       ...p,
       project: projectMap[p.project_id as string] || null,
-      agency: agencyMap[p.org_id as string] || null,
+      lead_org: leadOrgMap[p.org_id as string] || null,
       documents: docsByPackage[p.id] || [],
     }))
 
