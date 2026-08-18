@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { isActivePartnership } from "@/lib/partnership-state"
@@ -40,6 +41,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: me, error: meErr } = await supabase
       .from("profiles")
       .select("role, active_role")
@@ -60,7 +64,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
     const { data: partnership, error: pErr } = await supabase
       .from("partnerships")
       .select("id, status, nda_confirmed_at, msa_confirmed_at, accepted_at, invitation_sent_at, created_at")
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
       .eq("lead_org_id", agencyId)
       .maybeSingle()
 
@@ -165,7 +169,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
       ? await supabase
           .from("partner_rfp_responses")
           .select("id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
-          .eq("vendor_org_id", user.id)
+          .in("vendor_org_id", callerOrgIds)
           .eq("lead_org_id", agencyId)
           .eq("status", "awarded")
           .order("updated_at", { ascending: false })

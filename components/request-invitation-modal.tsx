@@ -1,5 +1,6 @@
 "use client"
 
+import { resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -36,11 +37,24 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
         return
       }
 
+      // 079: invitation_requests.vendor_org_id is an ORGANIZATION id, and after 079 it is a
+      // foreign key to organizations(id). Writing user.id here is correct only while every
+      // organization id equals its founding user's, and raises 23503 for every account the
+      // PHASE 12 trigger created. Resolve the caller's own organization, and surface a
+      // failure in the modal rather than letting the insert fail with a 23503 the user
+      // reads as "already sent".
+      const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+      if (!writeOrgId) {
+        setError("Your account is not linked to an organization yet. Contact support.")
+        setLoading(false)
+        return
+      }
+
       // Insert invitation request
       const { error: insertError } = await supabase
         .from('invitation_requests')
         .insert({
-          vendor_org_id: user.id,
+          vendor_org_id: writeOrgId,
           agency_email: agencyEmail.toLowerCase().trim(),
           agency_name: agencyName.trim(),
           message: message.trim() || null,

@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { requirePartnerRole } from "@/lib/api-auth"
@@ -12,6 +13,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const auth = await requirePartnerRole()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -44,7 +48,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (inboxError) return NextResponse.json({ error: "Failed to load RFP" }, { status: 500 })
     if (!inbox) return NextResponse.json({ error: "RFP not found" }, { status: 404 })
 
-    const ownsByPartnerId = inbox.vendor_org_id === user.id
+    const ownsByPartnerId = callerOrgIds.includes(inbox.vendor_org_id as string)
     const ownsByEmail = isSameEmail(inbox.recipient_email, profile?.email || user.email)
     if (!ownsByPartnerId && !ownsByEmail) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })

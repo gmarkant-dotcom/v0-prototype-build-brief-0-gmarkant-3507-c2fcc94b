@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { get } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -32,6 +33,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Vendor only" }, { status: 403 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: docRow, error: docErr } = await supabase
       .from("onboarding_package_documents")
       .select("id, label, url, package_id")
@@ -56,7 +60,7 @@ export async function GET(request: NextRequest) {
       .eq("id", pkg.partnership_id as string)
       .single()
 
-    if (!ship || ship.vendor_org_id !== user.id) {
+    if (!ship || !callerOrgIds.includes(ship.vendor_org_id as string)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 

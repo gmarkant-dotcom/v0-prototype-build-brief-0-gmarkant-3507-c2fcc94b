@@ -1,5 +1,6 @@
 "use client"
 
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
@@ -229,11 +230,16 @@ export default function AgencyPartnerProfilePage() {
         const count = await fetchVouchCount(supabase, partnerId)
         if (!cancelled) setVouchCount(count)
 
+        // 079: partner_vouches.lead_org_id is an ORGANIZATION id. The vendor_org_id half
+        // below is `partnerId`, a profiles id from the route param, and is Tier B - see
+        // docs/079-hardening-inventory.md. Only the caller half is resolved here.
+        const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
         // Check own vouch status
         const { data: ownVouch } = await supabase
           .from("partner_vouches")
           .select("id")
-          .eq("lead_org_id", user.id)
+          .in("lead_org_id", callerOrgIds)
           .eq("vendor_org_id", partnerId)
           .maybeSingle()
         if (!cancelled) setHasVouched(!!ownVouch)
@@ -250,13 +256,21 @@ export default function AgencyPartnerProfilePage() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
+      // 079: the caller half of both statements resolves through membership. The
+      // vendor_org_id half stays `partnerId`, a profiles id, and is Tier B.
+      const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+      const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+      if (!writeOrgId) {
+        console.error("[agency/pool] vouch aborted, caller belongs to no organization", { userId: user.id })
+        return
+      }
       if (hasVouched) {
         await supabase.from("partner_vouches").delete()
-          .eq("lead_org_id", user.id).eq("vendor_org_id", partnerId)
+          .in("lead_org_id", callerOrgIds).eq("vendor_org_id", partnerId)
         setHasVouched(false)
         setVouchCount(c => Math.max(0, c - 1))
       } else {
-        await supabase.from("partner_vouches").insert({ lead_org_id: user.id, vendor_org_id: partnerId })
+        await supabase.from("partner_vouches").insert({ lead_org_id: writeOrgId, vendor_org_id: partnerId })
         setHasVouched(true)
         setVouchCount(c => c + 1)
       }

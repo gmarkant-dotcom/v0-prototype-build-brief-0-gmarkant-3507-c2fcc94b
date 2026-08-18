@@ -1,5 +1,6 @@
 "use client"
 
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { useState, useRef, useEffect } from "react"
 import { PartnerChrome } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
@@ -187,6 +188,9 @@ export default function PartnerProfilePage() {
         router.push("/auth/login?redirect=%2Fpartner%2Fprofile")
         return
       }
+
+      // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+      const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
       const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).maybeSingle()
       const isPartner = profile?.role === "partner" || profile?.active_role === "partner"
       if (!isPartner) {
@@ -263,7 +267,7 @@ export default function PartnerProfilePage() {
       const { data: activePartnerships } = await supabase
         .from("partnerships")
         .select("id, lead_org_id")
-        .eq("vendor_org_id", user.id)
+        .in("vendor_org_id", callerOrgIds)
         .eq("status", "active")
 
       const partnershipRows = Array.isArray(activePartnerships) ? activePartnerships : []

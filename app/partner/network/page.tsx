@@ -1,5 +1,6 @@
 "use client"
 
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
@@ -447,10 +448,12 @@ export default function AgencyNetworkPage() {
 
   const loadMyRequests = async (supabase: ReturnType<typeof createClient>, userId: string) => {
     try {
+      // 079: partner_access_requests.vendor_org_id is an ORGANIZATION id, not this user's id.
+      const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
       const { data, error } = await supabase
         .from("partner_access_requests")
         .select("id, lead_org_id, status")
-        .eq("vendor_org_id", userId)
+        .in("vendor_org_id", callerOrgIds)
       if (!error) setMyRequests(data || [])
     } catch (error) {
       console.error("Error loading requests:", error)
@@ -505,8 +508,17 @@ export default function AgencyNetworkPage() {
       const userId = cachedUserId
       if (!userId) return
       const supabase = createClient()
+      // 079: the vendor half is the CALLER and resolves to their own organization. The
+      // lead_org_id half is selectedAgency.id, a profiles id from
+      // /api/marketplace/discoverable, and is deliberately NOT fixed here: see Tier B in
+      // docs/079-hardening-inventory.md. It needs that route to return an organization id.
+      const writeOrgId = await resolveCallerWriteOrgId(userId, supabase)
+      if (!writeOrgId) {
+        console.error("[partner/network] access request aborted, caller belongs to no organization", { userId })
+        return
+      }
       const { error } = await supabase.from("partner_access_requests").insert({
-        vendor_org_id: userId,
+        vendor_org_id: writeOrgId,
         lead_org_id: selectedAgency.id,
         request_message: requestMessage || null,
         status: "pending",

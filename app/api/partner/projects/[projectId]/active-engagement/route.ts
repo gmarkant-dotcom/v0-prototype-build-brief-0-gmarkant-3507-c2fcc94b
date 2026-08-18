@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -75,6 +76,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     console.log("[api] partner active-engagement after auth", { route: ROUTE, userId: user.id, projectId })
 
     const { data: profile, error: profileErr } = await supabase
@@ -89,7 +93,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     const { data: partnerships, error: pErr } = await supabase
       .from("partnerships")
       .select("id")
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
 
     if (pErr) {
       console.error("[api] partner active-engagement partnerships lookup failed", {
@@ -195,7 +199,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
         partner_rfp_inbox(project_id, scope_item_name, partnership_id)
       `
       )
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
       .eq("status", "awarded")
       .eq("lead_org_id", agencyId)
 

@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -28,10 +29,13 @@ export async function GET() {
       return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStoreHeaders })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { count: agencyRelationships, error: pErr } = await supabase
       .from("partnerships")
       .select("*", { count: "exact", head: true })
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
       .eq("status", "active")
 
     if (pErr) {
@@ -42,7 +46,7 @@ export async function GET() {
     const { count: bidsSubmitted, error: bErr } = await supabase
       .from("partner_rfp_responses")
       .select("*", { count: "exact", head: true })
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
       .neq("status", "draft")
 
     if (bErr) {
@@ -50,7 +54,7 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to load summary" }, { status: 500, headers: noStoreHeaders })
     }
 
-    const { data: pships, error: idsErr } = await supabase.from("partnerships").select("id").eq("vendor_org_id", user.id)
+    const { data: pships, error: idsErr } = await supabase.from("partnerships").select("id").in("vendor_org_id", callerOrgIds)
 
     if (idsErr) {
       console.error("[partner/summary] partnership ids", idsErr)

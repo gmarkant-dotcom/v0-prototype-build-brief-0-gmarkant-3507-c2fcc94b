@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { put } from '@vercel/blob'
 import { requireAuth } from "@/lib/api-auth"
 import { type NextRequest, NextResponse } from 'next/server'
@@ -9,6 +10,9 @@ export async function POST(request: NextRequest) {
     const auth = await requireAuth()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const formData = await request.formData()
     const file = formData.get('file') as File
@@ -38,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is the agency owner or an assigned partner
-    const isAgency = project.org_id === user.id
+    const isAgency = callerOrgIds.includes(project.org_id as string)
 
     if (assignmentId) {
       if (isAgency) {
@@ -57,7 +61,7 @@ export async function POST(request: NextRequest) {
           .select('id, partnerships!inner(vendor_org_id)')
           .eq('id', assignmentId)
           .eq('project_id', projectId)
-          .eq('partnerships.vendor_org_id', user.id)
+          .in('partnerships.vendor_org_id', callerOrgIds)
           .maybeSingle()
         if (!pa) {
           return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -71,7 +75,7 @@ export async function POST(request: NextRequest) {
         .from('project_assignments')
         .select('id, partnership_id, partnerships!inner(vendor_org_id)')
         .eq('project_id', projectId)
-        .eq('partnerships.vendor_org_id', user.id)
+        .in('partnerships.vendor_org_id', callerOrgIds)
         .single()
 
       if (!assignment) {

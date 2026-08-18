@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -124,7 +125,11 @@ async function assertPartnerOwnsPartnership(
     .eq("id", partnershipId)
     .maybeSingle()
   if (error || !data) return false
-  if (data.vendor_org_id !== userId) return false
+  // 079: partnerships.vendor_org_id is an ORGANIZATION id. This is an authorization check,
+  // so it resolves the caller's own memberships and nothing else. An empty set returns
+  // false, which is the direction an ownership assertion should fail.
+  const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
+  if (!callerOrgIds.includes(data.vendor_org_id as string)) return false
   if (String(data.status || "").toLowerCase() !== "active") return false
   return true
 }

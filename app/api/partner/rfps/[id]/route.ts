@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { requirePartnerRole } from "@/lib/api-auth"
@@ -10,6 +11,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const auth = await requirePartnerRole()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const { data: profile } = await supabase.from("profiles").select("email").eq("id", user.id).maybeSingle()
 
@@ -35,7 +39,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         nda_gate_enforced: (inbox.nda_gate_enforced as boolean | null) ?? false,
         nda_confirmed_at: (inbox.nda_confirmed_at as string | null) ?? null,
       },
-      user.id,
+      callerOrgIds,
       profile?.email
     )
 
@@ -65,7 +69,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         .from("partner_rfp_inbox")
         .update({ viewed_at: new Date().toISOString() })
         .eq("id", id)
-        .eq("vendor_org_id", user.id)
+        .in("vendor_org_id", callerOrgIds)
         .is("viewed_at", null)
         .select("*")
         .maybeSingle()
@@ -109,7 +113,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .from("partner_rfp_responses")
       .select("*")
       .eq("inbox_item_id", id)
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
       .maybeSingle()
 
     if (respQ.error) {

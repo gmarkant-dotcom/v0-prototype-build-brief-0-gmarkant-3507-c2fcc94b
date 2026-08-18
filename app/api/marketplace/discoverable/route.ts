@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { isActivePartnership } from "@/lib/partnership-state"
@@ -17,6 +18,9 @@ export async function GET(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
     console.log("[api/marketplace/discoverable] start", { roleFilter: role, userId: user.id })
 
     // Dual-role accounts keep their original `role` forever - a partner-primary user granted
@@ -50,16 +54,27 @@ export async function GET(req: NextRequest) {
 
     // Check partnerships — bidirectional: viewer may be agency or partner. Only fetch
     // vendor_org_id/lead_org_id/status, never expose full list to either party.
-    const { data: allPartnerships } = await supabase
-      .from("partnerships")
-      .select("lead_org_id, vendor_org_id, status")
-      .or(`lead_org_id.eq.${user.id},vendor_org_id.eq.${user.id}`)
+    // 079: both columns are ORGANIZATION ids. The PostgREST `.in.()` list form cannot be
+    // built from an empty array - `lead_org_id.in.()` is a syntax error, not an empty
+    // match - so the empty case skips the query entirely and leaves both sets empty. That
+    // is the same result an empty match would have given, reached without the 400.
+    const partnershipRows =
+      callerOrgIds.length === 0
+        ? []
+        : (
+            await supabase
+              .from("partnerships")
+              .select("lead_org_id, vendor_org_id, status")
+              .or(
+                `lead_org_id.in.(${callerOrgIds.join(",")}),vendor_org_id.in.(${callerOrgIds.join(",")})`
+              )
+          ).data ?? []
 
     // "My Network" (any partnership status) vs email-unmask eligibility (active only).
     const partnerIdsWithPartnership = new Set<string>()
     const activePartnerIds = new Set<string>()
-    for (const p of allPartnerships ?? []) {
-      const otherId = (p.lead_org_id === user.id ? p.vendor_org_id : p.lead_org_id) as string | null
+    for (const p of partnershipRows) {
+      const otherId = (callerOrgIds.includes(p.lead_org_id as string) ? p.vendor_org_id : p.lead_org_id) as string | null
       if (!otherId) continue
       partnerIdsWithPartnership.add(otherId)
       if (isActivePartnership(p)) activePartnerIds.add(otherId)

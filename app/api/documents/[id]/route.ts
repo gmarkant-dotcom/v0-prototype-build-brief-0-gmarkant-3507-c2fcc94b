@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { get } from '@vercel/blob'
 import { requireAuth } from "@/lib/api-auth"
 import { type NextRequest, NextResponse } from 'next/server'
@@ -9,9 +10,16 @@ export const dynamic = 'force-dynamic'
 type PartnershipRef = { vendor_org_id?: string | null }
 type AssignmentRef = { partnerships?: PartnershipRef | PartnershipRef[] | null }
 
+/**
+ * 079: THE SECOND PARAMETER CHANGED FROM A USER ID TO THE CALLER'S ORGANIZATION IDS.
+ * partnerships.vendor_org_id is an ORGANIZATION id, so comparing it to a user id is
+ * correct only while the two coincide. Takes the resolved set rather than doing its own
+ * lookup because this function is synchronous and pure and the caller has already
+ * resolved once. An empty array returns false, which is the safe direction.
+ */
 function partnerHasAssignmentOnDocument(
   document: { project_assignments?: AssignmentRef | AssignmentRef[] | null },
-  userId: string
+  callerOrgIds: string[]
 ): boolean {
   const raw = document.project_assignments
   const assignments: AssignmentRef[] = Array.isArray(raw) ? raw : raw ? [raw] : []
@@ -19,7 +27,7 @@ function partnerHasAssignmentOnDocument(
     const ps = pa.partnerships
     const nests: PartnershipRef[] = Array.isArray(ps) ? ps : ps ? [ps] : []
     for (const p of nests) {
-      if (p.vendor_org_id === userId) return true
+      if (p.vendor_org_id && callerOrgIds.includes(p.vendor_org_id as string)) return true
     }
   }
   return false
@@ -35,6 +43,9 @@ export async function GET(
     const auth = await requireAuth()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: null })
 
     // Get document record - RLS will enforce access control
@@ -56,8 +67,8 @@ export async function GET(
     }
 
     // Additional access check beyond RLS (project_assignments may be one row or an array from PostgREST)
-    const isAgency = document.projects.org_id === user.id
-    const isAssignedPartner = partnerHasAssignmentOnDocument(document as { project_assignments?: AssignmentRef | AssignmentRef[] | null }, user.id)
+    const isAgency = callerOrgIds.includes(document.projects.org_id as string)
+    const isAssignedPartner = partnerHasAssignmentOnDocument(document as { project_assignments?: AssignmentRef | AssignmentRef[] | null }, callerOrgIds)
 
     if (!isAgency && !isAssignedPartner) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })

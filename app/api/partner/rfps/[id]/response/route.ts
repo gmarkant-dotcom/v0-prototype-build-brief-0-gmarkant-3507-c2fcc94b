@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
@@ -124,6 +125,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role, active_role, company_name, full_name, email")
@@ -152,7 +161,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         nda_gate_enforced: (inbox.nda_gate_enforced as boolean | null) ?? false,
         nda_confirmed_at: (inbox.nda_confirmed_at as string | null) ?? null,
       },
-      user.id,
+      callerOrgIds,
       profile?.email
     )
     if (!access.allowed) {
@@ -267,7 +276,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const insertRow = {
       inbox_item_id: inboxId,
-      vendor_org_id: user.id,
+      vendor_org_id: writeOrgId,
       lead_org_id: inbox.lead_org_id,
       ...row,
     }
@@ -276,7 +285,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .from("partner_rfp_responses")
       .select("id")
       .eq("inbox_item_id", inboxId)
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
       .maybeSingle()
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -331,7 +340,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const nextVersion = Number(latestVersion?.version_number || 0) + 1
       const versionInsertPayload = {
         response_id: saved.id,
-        vendor_org_id: user.id,
+        vendor_org_id: writeOrgId,
         lead_org_id: inbox.lead_org_id,
         version_number: nextVersion,
       }

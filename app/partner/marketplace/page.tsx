@@ -1,5 +1,6 @@
 "use client"
 
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { useEffect, useMemo, useState } from "react"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
@@ -79,11 +80,15 @@ export default function PartnerMarketplacePage() {
           setLoading(false)
           return
         }
+
+        // 079: partner_access_requests.vendor_org_id is an ORGANIZATION id. Scope the read by
+        // membership rather than by the caller's user id.
+        const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
         setCachedUserId(user.id)
 
         const [discoverableRes, myReqRes] = await Promise.all([
           fetch("/api/marketplace/discoverable?role=agency", { cache: "no-store" }),
-          supabase.from("partner_access_requests").select("lead_org_id, status").eq("vendor_org_id", user.id),
+          supabase.from("partner_access_requests").select("lead_org_id, status").in("vendor_org_id", callerOrgIds),
         ])
 
         const discoverablePayload = await discoverableRes.json().catch(() => ({}))
@@ -124,8 +129,18 @@ export default function PartnerMarketplacePage() {
       const status = requestStatus(agencyId)
       if (status) return
       const supabase = createClient()
+      // 079: the vendor half of this insert is the CALLER, so it resolves to the caller's own
+      // organization. The lead_org_id half is `agencyId`, which is a profiles id from
+      // /api/marketplace/discoverable and is NOT fixed here - see the Tier B section of
+      // docs/079-hardening-inventory.md. Fixing it needs that route to return an
+      // organization id, which is an API contract change and a separate decision.
+      const writeOrgId = await resolveCallerWriteOrgId(userId, supabase)
+      if (!writeOrgId) {
+        console.error("[partner/marketplace] access request aborted, caller belongs to no organization", { userId })
+        return
+      }
       const { error } = await supabase.from("partner_access_requests").insert({
-        vendor_org_id: userId,
+        vendor_org_id: writeOrgId,
         lead_org_id: agencyId,
         status: "pending",
       })

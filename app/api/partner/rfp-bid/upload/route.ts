@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { put } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -19,6 +20,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
         nda_gate_enforced: (inboxRow.nda_gate_enforced as boolean | null) ?? false,
         nda_confirmed_at: (inboxRow.nda_confirmed_at as string | null) ?? null,
       },
-      user.id,
+      callerOrgIds,
       profile?.email
     )
     if (!access.allowed) {

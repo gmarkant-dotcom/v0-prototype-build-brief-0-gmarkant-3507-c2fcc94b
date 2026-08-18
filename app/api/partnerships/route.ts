@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
-import { resolveCallerWriteOrgId } from '@/lib/entitlements'
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
@@ -35,6 +35,9 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     // Get the role the user is ACTING AS. active_role is the portal they are in right now;
     // role is the signup-time account fact. Branching on role served every dual-role vendor
@@ -88,7 +91,7 @@ export async function GET(request: NextRequest) {
           *,
           vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT_RICH})
         `)
-        .eq('lead_org_id', user.id)
+        .in('lead_org_id', callerOrgIds)
         .neq('status', 'removed')
         .order('created_at', { ascending: false })
 
@@ -122,7 +125,7 @@ export async function GET(request: NextRequest) {
         const simple = await supabase
           .from('partnerships')
           .select('*')
-          .eq('lead_org_id', user.id)
+          .in('lead_org_id', callerOrgIds)
           .neq('status', 'removed')
           .order('created_at', { ascending: false })
         if (simple.error) throw simple.error
@@ -142,7 +145,7 @@ export async function GET(request: NextRequest) {
         const { data: tokenRows } = await supabase
           .from('rfp_magic_tokens')
           .select('vendor_email, vendor_name, pool_status, domain_match_profile_id, created_at')
-          .eq('org_id', user.id)
+          .in('org_id', callerOrgIds)
           .in('vendor_email', ghostEmails)
           .order('created_at', { ascending: false })
 
@@ -223,7 +226,7 @@ export async function GET(request: NextRequest) {
       const { data: byId, error: byIdError } = await supabase
         .from('partnerships')
         .select('*')
-        .eq('vendor_org_id', user.id)
+        .in('vendor_org_id', callerOrgIds)
         .order('created_at', { ascending: false })
 
       if (byIdError) throw byIdError
@@ -396,6 +399,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403, headers: noStoreHeaders })
+    }
+
     // Verify user can act as an agency. Same widening as requireAgencyRole() - a dual-role
     // account keeps role='agency' or role='partner' forever, only active_role moves.
     const { data: profile, error: postProfileErr } = await supabase
@@ -517,7 +528,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabase
       .from('partnerships')
       .select('id, status, vendor_org_id')
-      .eq('lead_org_id', user.id)
+      .in('lead_org_id', callerOrgIds)
     
     if (partner) {
       existingQuery = existingQuery.eq('vendor_org_id', partner.id)
@@ -644,7 +655,7 @@ export async function POST(request: NextRequest) {
       status: string
       invitation_message?: string
     } = {
-      lead_org_id: user.id,
+      lead_org_id: writeOrgId,
       partner_email: normalizedPartnerEmail,
       status: 'pending',
       invitation_message: message || undefined,
@@ -767,6 +778,9 @@ export async function PATCH(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
     console.log('[api] start', { route, method: 'PATCH', userId: user.id, role: null })
 
     const { partnershipId, status, action } = await request.json()
@@ -799,8 +813,8 @@ export async function PATCH(request: NextRequest) {
 
     // Partners can only accept (pending -> active)
     // Agencies can suspend/terminate
-    const isAgency = partnership.lead_org_id === user.id
-    const isPartner = partnership.vendor_org_id === user.id
+    const isAgency = callerOrgIds.includes(partnership.lead_org_id as string)
+    const isPartner = callerOrgIds.includes(partnership.vendor_org_id as string)
     
     if (!isAgency && !isPartner) {
       return NextResponse.json({ error: 'Access denied - you are not part of this partnership' }, { status: 403 })
@@ -819,7 +833,7 @@ export async function PATCH(request: NextRequest) {
           updated_at: now,
         })
         .eq('id', partnershipId)
-        .eq('lead_org_id', user.id)
+        .in('lead_org_id', callerOrgIds)
         .select()
         .single()
       if (error) throw error
@@ -890,7 +904,7 @@ export async function PATCH(request: NextRequest) {
           updated_at: now,
         })
         .eq('id', partnershipId)
-        .eq('lead_org_id', user.id)
+        .in('lead_org_id', callerOrgIds)
         .select()
         .single()
       if (error) throw error
@@ -1103,6 +1117,9 @@ export async function DELETE(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
     console.log('[api] start', { route, method: 'DELETE', userId: user.id, role: null })
 
     const { searchParams } = new URL(request.url)
@@ -1133,7 +1150,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Partnership not found' }, { status: 404 })
     }
 
-    if (partnership.lead_org_id !== user.id) {
+    if (!callerOrgIds.includes(partnership.lead_org_id as string)) {
       return NextResponse.json({ error: 'Only the agency can delete this partnership' }, { status: 403 })
     }
 

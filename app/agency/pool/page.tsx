@@ -1,5 +1,6 @@
 "use client"
 
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { useState, useEffect, useMemo, Suspense } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -671,7 +672,7 @@ function PartnerPoolPageInner() {
           *,
           vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         `)
-        .eq('lead_org_id', user.id)
+        .in('lead_org_id', await resolveCallerOrgIds(user.id, supabase))
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
       

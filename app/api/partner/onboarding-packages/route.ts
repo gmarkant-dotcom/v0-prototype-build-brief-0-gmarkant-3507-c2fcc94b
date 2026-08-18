@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -25,7 +26,10 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: "Vendor only" }, { status: 403 })
     }
 
-    const { data: partnerships } = await supabase.from("partnerships").select("id").eq("vendor_org_id", user.id)
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
+    const { data: partnerships } = await supabase.from("partnerships").select("id").in("vendor_org_id", callerOrgIds)
     const pids = (partnerships || []).map((p) => p.id)
     if (pids.length === 0) {
       return NextResponse.json({ packages: [] })

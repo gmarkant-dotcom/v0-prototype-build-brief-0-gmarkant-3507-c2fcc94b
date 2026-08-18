@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -26,6 +27,14 @@ async function claimByToken(
   | { ok: false; status: number; error: string }
 > {
   const supabase = await createClient()
+
+  // 079: partner_rfp_inbox.vendor_org_id is an ORGANIZATION id. The claim below WRITES it,
+  // and after 079 that column is a foreign key to organizations(id), so writing a user id
+  // raises 23503 for every account the PHASE 12 trigger created. Both the ownership test
+  // and the write resolve through membership, and the write refuses rather than guessing.
+  const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
+  const writeOrgId = await resolveCallerWriteOrgId(userId, supabase)
+
   const { data: inbox, error } = await supabase
     .from("partner_rfp_inbox")
     .select(
@@ -46,7 +55,7 @@ async function claimByToken(
   }
 
   if (inbox.claimed_at) {
-    if (inbox.vendor_org_id === userId) {
+    if (callerOrgIds.includes(inbox.vendor_org_id as string)) {
       await switchActiveRoleToPartner(supabase, userId)
       return { ok: true, inboxItemId: inbox.id, ndaGateEnforced: inbox.nda_gate_enforced === true }
     }
@@ -57,11 +66,16 @@ async function claimByToken(
     return { ok: false, status: 403, error: "Invite email does not match your account email" }
   }
 
+  if (!writeOrgId) {
+    console.error("[partner/rfps/claim] caller belongs to no organization, refusing to claim", { userId })
+    return { ok: false, status: 403, error: "Your account is not linked to an organization yet" }
+  }
+
   const now = new Date().toISOString()
   const { error: updateError } = await supabase
     .from("partner_rfp_inbox")
     .update({
-      vendor_org_id: userId,
+      vendor_org_id: writeOrgId,
       claimed_at: now,
       updated_at: now,
     })
