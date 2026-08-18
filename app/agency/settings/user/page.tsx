@@ -23,6 +23,12 @@ export default function AgencyUserProfilePage() {
   const [initialFullName, setInitialFullName] = useState("")
   const [initialDisplayName, setInitialDisplayName] = useState("")
   const [personalLinkedin, setPersonalLinkedin] = useState("")
+  // 086. A per-user job title. Identity, never authority - it gates nothing and must not
+  // start. titleAvailable is false until migration 086 adds profiles.title, and the field
+  // is hidden rather than shown as a control that silently discards what is typed into it.
+  const [title, setTitle] = useState("")
+  const [initialTitle, setInitialTitle] = useState("")
+  const [titleAvailable, setTitleAvailable] = useState(true)
   const [initialPersonalLinkedin, setInitialPersonalLinkedin] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -56,6 +62,18 @@ export default function AgencyUserProfilePage() {
       setInitialFullName(profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setInitialDisplayName((profile as any)?.display_name || profile?.full_name || (user.user_metadata?.full_name as string) || "")
       setPersonalLinkedin((profile as any)?.personal_linkedin_url || "")
+      // 086 GUARD, AND WHY IT IS A SEPARATE QUERY. `title` cannot be added to the select
+      // above: PostgREST fails the WHOLE statement with 42703 for one unknown column, so
+      // naming it there would blank this entire page until the migration is applied. Asked
+      // for on its own instead, where a 42703 costs only the title.
+      const titleRead = await supabase.from("profiles").select("title").eq("id", user.id).maybeSingle()
+      if (titleRead.error?.code === "42703") {
+        setTitleAvailable(false)
+      } else {
+        const loadedTitle = ((titleRead.data as { title?: string | null } | null)?.title || "").trim()
+        setTitle(loadedTitle)
+        setInitialTitle(loadedTitle)
+      }
       setInitialPersonalLinkedin((profile as any)?.personal_linkedin_url || "")
       const storedPrefs = localStorage.getItem(`notification-prefs-${user.id}`)
       const dbPrefs = (profile as any)?.notification_preferences
@@ -149,6 +167,7 @@ export default function AgencyUserProfilePage() {
           full_name: fullName.trim(),
           display_name: displayName.trim(),
           personal_linkedin_url: personalLinkedin.trim() || null,
+          ...(titleAvailable ? { title: title.trim() || null } : {}),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -162,6 +181,15 @@ export default function AgencyUserProfilePage() {
       setDisplayName(nextDisplayName)
       setInitialFullName(nextFullName)
       setInitialDisplayName(nextDisplayName)
+      // The route reports titleUnavailable when it had to retry without the column rather
+      // than reporting a success that discarded the value. Told, not hidden.
+      if (payload?.titleUnavailable === true) {
+        setTitleAvailable(false)
+      } else if (titleAvailable) {
+        const nextTitle = String(nextProfile?.title ?? title).trim()
+        setTitle(nextTitle)
+        setInitialTitle(nextTitle)
+      }
       if (typeof window !== "undefined" && (window as any).__ligamentRefreshAvatar) {
         ;(window as any).__ligamentRefreshAvatar()
       }
@@ -177,7 +205,8 @@ export default function AgencyUserProfilePage() {
   const hasSettingsChanges =
     fullName.trim() !== initialFullName.trim() ||
     displayName.trim() !== initialDisplayName.trim() ||
-    personalLinkedin.trim() !== initialPersonalLinkedin.trim()
+    personalLinkedin.trim() !== initialPersonalLinkedin.trim() ||
+    (titleAvailable && title.trim() !== initialTitle.trim())
 
   if (loading) {
     return (
@@ -209,6 +238,18 @@ export default function AgencyUserProfilePage() {
               className="bg-white/5 border-border text-foreground"
             />
           </div>
+          {titleAvailable && (
+            <div>
+              <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Job Title <span className="text-foreground-muted">(optional)</span></label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Senior Producer"
+                className="bg-white/5 border-border text-foreground"
+              />
+              <p className="mt-1 text-xs text-foreground-muted">Shown next to your name on your team roster. It does not change what you can do.</p>
+            </div>
+          )}
           <div>
             <label className="font-mono text-2xs uppercase text-foreground-muted block mb-2">Email</label>
             <Input value={email} readOnly className="bg-white/10 border-border/50 text-foreground/60 cursor-not-allowed" />

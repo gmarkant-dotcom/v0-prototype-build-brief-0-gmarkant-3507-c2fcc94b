@@ -8,7 +8,7 @@ import { HolographicBlobs } from "./holographic-blobs"
 import { LigamentLogo } from "./ligament-logo"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
-import { Settings, LogOut, User, ChevronDown, FolderOpen, Check, Shield, Zap, Mail, Plus } from "lucide-react"
+import { Settings, LogOut, User, Users, ChevronDown, FolderOpen, Check, Shield, Zap, Mail, Plus } from "lucide-react"
 import { SelectedProjectProvider, useSelectedProject, type MasterProject } from "@/contexts/selected-project-context"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { AgencySubscriptionGate } from "@/components/agency-subscription-gate"
@@ -718,6 +718,17 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
                 >
                   <User className="w-4 h-4 text-foreground-muted" />
                   <span className="text-sm text-foreground">Company Profile & Capabilities</span>
+                </Link>
+                {/* M1. Read only: who is in this organization. No invite or remove action,
+                    because both need rulings that have not been made - see
+                    docs/m1-invitation-flow-design.md. */}
+                <Link
+                  href="/agency/settings/team"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                >
+                  <Users className="w-4 h-4 text-foreground-muted" />
+                  <span className="text-sm text-foreground">Team</span>
                 </Link>
                 {isOwner && (
                   <Link
