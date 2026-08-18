@@ -183,6 +183,19 @@ const ALLOWED = [
       "and is documented at the call site as byte-for-byte today's behaviour.",
   },
   {
+    file: "app/agency/settings/team/page.tsx",
+    lines: [152, 158],
+    why:
+      "The team roster. Both flagged reads are .in(\"id\", userIds) against profiles where " +
+      "userIds comes from org_members.user_id one statement earlier - real user ids, by " +
+      "definition, since that column is a foreign key to profiles(id). The NEARBY heuristic " +
+      "fires only because the acting organization id is in scope in the same window, which is " +
+      "the roster's org_members filter and not the profiles filter. The roster deliberately " +
+      "does NOT read the company through profiles: the organization name and its primary " +
+      "contact come from a separate organizations select on the line above. BOTH LINES ARE " +
+      "SCOPED so that any future profiles read added to this file is a real finding.",
+  },
+  {
     file: "app/api/partnerships/route.ts",
     lines: [186],
     why:
