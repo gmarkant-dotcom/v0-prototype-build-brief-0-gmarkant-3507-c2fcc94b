@@ -3,8 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, hashResponseIds } from "@/lib/bid-analysis-context"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
-import { agencyEntitlementId } from "@/lib/entitlements"
-
+import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -30,6 +29,14 @@ export async function POST(req: Request) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role, active_role")
@@ -53,7 +60,7 @@ export async function POST(req: Request) {
     const { data: owned, error: ownedErr } = await supabase
       .from("partner_rfp_responses")
       .select("id")
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .in("id", responseIds)
     if (ownedErr) {
       console.error("[api] failure", { route, method: "POST", message: ownedErr.message })
@@ -69,7 +76,7 @@ export async function POST(req: Request) {
       const { data: cached } = await supabase
         .from("bid_comparisons")
         .select("narrative, response_ids, generated_at")
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .eq("response_ids_hash", hash)
         .maybeSingle()
       if (cached) {
@@ -88,7 +95,7 @@ export async function POST(req: Request) {
     const { data: decompositions, error: decompErr } = await supabase
       .from("bid_decompositions")
       .select("response_id, line_items")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .in("response_id", responseIds)
     if (decompErr) {
       console.error("[api] failure", { route, method: "POST", message: decompErr.message })
@@ -140,7 +147,7 @@ export async function POST(req: Request) {
       .from("bid_comparisons")
       .upsert(
         {
-          org_id: user.id,
+          org_id: writeOrgId,
           response_ids_hash: hash,
           response_ids: responseIds,
           scope_description: scopeLabel,

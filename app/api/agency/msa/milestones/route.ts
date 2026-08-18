@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -49,11 +50,16 @@ export async function GET() {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
-    // Auth user id must match projects.org_id under RLS (same JWT as createClient).
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
+    // 079: projects.org_id is an ORGANIZATION id, not the auth user id. RLS resolves the
+    // same way (projects' policy is org_id IN current_user_org_ids()), so this filter and
+    // the policy now agree instead of coinciding.
     const { data: projectRows, error: projErr } = await supabase
       .from("projects")
       .select("*")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .order("created_at", { ascending: false })
 
     // Temporary debug: raw PostgREST outcome for projects (dev or MSA_DEBUG_PROJECTS=1).
@@ -127,7 +133,7 @@ export async function GET() {
       const { data: respRows, error: respErr } = await supabase
         .from("partner_rfp_responses")
         .select("id, partner_display_name, inbox_item_id, budget_proposal")
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .eq("status", "awarded")
 
       if (respErr) {
@@ -155,7 +161,7 @@ export async function GET() {
         const { data: inboxRows, error: inboxErr } = await supabase
           .from("partner_rfp_inbox")
           .select("id, project_id, partnership_id, scope_item_name, estimated_budget")
-          .eq("lead_org_id", user.id)
+          .in("lead_org_id", callerOrgIds)
           .in("id", inboxIds)
 
         if (inboxErr) {
@@ -221,7 +227,7 @@ export async function GET() {
       const { data: partnershipRows } = await supabase
         .from("partnerships")
         .select("id, vendor_org_id")
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .in("id", milestonePartnershipIds)
 
       const partnerIds = [
@@ -268,7 +274,7 @@ export async function GET() {
       const { data: responseRows } = await supabase
         .from("partner_rfp_responses")
         .select("id, partner_display_name")
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .in("id", milestoneResponseIds)
       for (const row of responseRows || []) {
         partnerNameByResponse.set(
@@ -293,7 +299,7 @@ export async function GET() {
       const { data: cfRows, error: cfErr } = await supabase
         .from("client_cash_flow")
         .select("id, project_id, label, amount, currency, expected_date, status, received_at, created_at")
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .in("project_id", agencyProjectIds)
         .order("expected_date", { ascending: true })
         .order("created_at", { ascending: true })
@@ -405,6 +411,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = await req.json().catch(() => ({}))
     const project_id = (body.project_id as string | undefined)?.trim()
     const title = (body.title as string | undefined)?.trim()
@@ -444,7 +453,7 @@ export async function POST(req: Request) {
         .from("partner_rfp_responses")
         .select("id, inbox_item_id")
         .eq("id", response_id)
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .eq("status", "awarded")
         .maybeSingle()
       if (rErr || !resp) {
@@ -465,7 +474,7 @@ export async function POST(req: Request) {
         .from("partnerships")
         .select("id")
         .eq("id", partnership_id)
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .maybeSingle()
       if (!ship) {
         return NextResponse.json({ error: "Invalid partnership" }, { status: 400, headers: noStore })
@@ -512,6 +521,9 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = await req.json().catch(() => ({}))
     const id = (body.id as string | undefined)?.trim()
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400, headers: noStore })
@@ -519,7 +531,7 @@ export async function PATCH(req: Request) {
     const { data: agencyProjectRows, error: apErr } = await supabase
       .from("projects")
       .select("id")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
     if (apErr) {
       console.error("[api/agency/msa/milestones] PATCH agency projects", apErr)
       return NextResponse.json({ error: "Failed to verify projects" }, { status: 500, headers: noStore })
@@ -596,6 +608,9 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = await req.json().catch(() => ({}))
     const idsRaw = Array.isArray(body.ids) ? body.ids : []
     const ids = idsRaw
@@ -608,7 +623,7 @@ export async function DELETE(req: Request) {
     const { data: agencyProjects, error: apErr } = await supabase
       .from("projects")
       .select("id")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
     if (apErr) {
       console.error("[api/agency/msa/milestones] DELETE agency projects", apErr)
       return NextResponse.json({ error: "Failed to verify projects" }, { status: 500, headers: noStore })

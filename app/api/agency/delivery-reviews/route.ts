@@ -4,8 +4,7 @@ import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { loadBidDeltaComparison } from "@/lib/delivery-review"
 import { checkUsageLimit, incrementAiAnalysis } from "@/lib/usage-tracking"
-import { agencyEntitlementId } from "@/lib/entitlements"
-
+import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 45
@@ -42,6 +41,9 @@ export async function GET(req: NextRequest) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const { supabase, userId } = auth
 
+  // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+  const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
+
   const projectId = req.nextUrl.searchParams.get("project_id")?.trim() || ""
   const partnershipId = req.nextUrl.searchParams.get("partnership_id")?.trim() || ""
   if (!projectId) {
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
       .from("delivery_reviews")
       .select("id, partnership_id, status, composite_score")
       .eq("project_id", projectId)
-      .eq("org_id", userId)
+      .in("org_id", callerOrgIds)
     if (listErr) {
       console.error("[api] failure", { route, method: "GET", message: listErr.message })
       return NextResponse.json({ error: "Failed to load delivery reviews" }, { status: 500 })
@@ -71,7 +73,7 @@ export async function GET(req: NextRequest) {
     )
     .eq("project_id", projectId)
     .eq("partnership_id", partnershipId)
-    .eq("org_id", userId)
+    .in("org_id", callerOrgIds)
     .maybeSingle()
   if (reviewErr) {
     console.error("[api] failure", { route, method: "GET", message: reviewErr.message })
@@ -135,6 +137,14 @@ export async function POST(req: Request) {
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
     const { supabase, userId } = auth
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(userId, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const body = await req.json().catch(() => ({}))
     const projectId = typeof body?.project_id === "string" ? body.project_id : ""
     const partnershipId = typeof body?.partnership_id === "string" ? body.partnership_id : ""
@@ -150,8 +160,8 @@ export async function POST(req: Request) {
     // Never trust client payload for ownership - verify project and partnership both
     // belong to this agency before writing anything keyed to them.
     const [{ data: project }, { data: partnership }] = await Promise.all([
-      supabase.from("projects").select("id").eq("id", projectId).eq("org_id", userId).maybeSingle(),
-      supabase.from("partnerships").select("id").eq("id", partnershipId).eq("lead_org_id", userId).maybeSingle(),
+      supabase.from("projects").select("id").eq("id", projectId).in("org_id", callerOrgIds).maybeSingle(),
+      supabase.from("partnerships").select("id").eq("id", partnershipId).in("lead_org_id", callerOrgIds).maybeSingle(),
     ])
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 })
     if (!partnership) return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
@@ -169,7 +179,7 @@ export async function POST(req: Request) {
         .from("partner_rfp_responses")
         .select("id")
         .eq("id", requestedResponseId)
-        .eq("lead_org_id", userId)
+        .in("lead_org_id", callerOrgIds)
         .maybeSingle()
       responseId = responseRow ? (responseRow.id as string) : null
     }
@@ -177,7 +187,7 @@ export async function POST(req: Request) {
     const reviewPatch: Record<string, unknown> = {
       project_id: projectId,
       partnership_id: partnershipId,
-      org_id: userId,
+      org_id: writeOrgId,
       assignment_id: assignment?.id ?? null,
       status,
       on_time: pickEnum(summaryInput.on_time, ON_TIME_VALUES),
@@ -216,7 +226,7 @@ export async function POST(req: Request) {
 
       const [{ data: existingScores }, { data: criteriaRows }] = await Promise.all([
         supabase.from("delivery_review_scores").select("criterion_id, weight").eq("review_id", review.id).in("criterion_id", criterionIds),
-        supabase.from("bid_scoring_criteria").select("id, default_weight").eq("org_id", userId).in("id", criterionIds),
+        supabase.from("bid_scoring_criteria").select("id, default_weight").in("org_id", callerOrgIds).in("id", criterionIds),
       ])
       const existingWeightByCriterion = new Map((existingScores || []).map((s) => [s.criterion_id as string, s.weight as number]))
       const defaultWeightByCriterion = new Map((criteriaRows || []).map((c) => [c.id as string, c.default_weight as number]))
@@ -284,7 +294,7 @@ export async function POST(req: Request) {
         .from("bid_evaluations")
         .select("composite_score")
         .eq("response_id", review.response_id)
-        .eq("org_id", userId)
+        .in("org_id", callerOrgIds)
         .maybeSingle()
       const bidComposite = evalRow?.composite_score as number | null
 

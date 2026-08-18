@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canActAs } from '@/lib/acting-role'
@@ -23,6 +24,9 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, active_role')
@@ -37,7 +41,7 @@ export async function GET(
     const { data: partnerships } = await supabase
       .from('partnerships')
       .select('id')
-      .eq('vendor_org_id', user.id)
+      .in('vendor_org_id', callerOrgIds)
 
     const partnershipIds = (partnerships || []).map((p) => p.id)
     if (partnershipIds.length === 0) {
@@ -94,7 +98,7 @@ export async function GET(
     // `/api/projects/<id>/partner` finds none - no fetch, no SWR key, no link. The
     // recommendation in docs/079-embed-closure-report.md is to DELETE the route rather
     // than repair it, which is a decision to take with eyes open rather than as a
-    // side-effect of a release. Note also `.eq('vendor_org_id', user.id)` above: the same
+    // side-effect of a release. Note also `.in('vendor_org_id', callerOrgIds)` above: the same
     // coincidence in the opposite direction, an organization column compared to a user id.
     const { data: agency } = await supabase
       .from('profiles')

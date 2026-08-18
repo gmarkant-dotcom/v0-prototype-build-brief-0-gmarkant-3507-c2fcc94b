@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -117,6 +118,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const row = await assertActiveAgencyPartnership(supabase, user.id, partnerId)
     if (!row) {
       return NextResponse.json({ error: "No active partnership" }, { status: 404, headers: noStore })
@@ -170,7 +174,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
       .from("partnerships")
       .update({ partnership_notes: next, updated_at: new Date().toISOString() })
       .eq("id", row.id)
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
 
     if (upErr) {
       console.error("[api/agency/pool/notes] update", upErr)

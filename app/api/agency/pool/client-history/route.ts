@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { normalizeClientNameForMatch, isMissingClientsTable } from "@/lib/clients"
@@ -25,12 +26,15 @@ export async function GET() {
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     // client_id does not exist until migration 077, and naming it in this select would 42703 the
     // whole route. Fetched separately and guarded, exactly as the Phase 2 read surfaces do.
     const { data: projectRows, error: projectsErr } = await supabase
       .from("projects")
       .select("id, client_name")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
     if (projectsErr) {
       console.error("[agency/pool/client-history] projects", projectsErr.message)
       return NextResponse.json({ options: [], byPartnership: {} })
@@ -44,7 +48,7 @@ export async function GET() {
     const { data: entityRows, error: entityErr } = await supabase
       .from("projects")
       .select("id, client_id")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .in("id", projectIds)
     if (!entityErr) {
       for (const row of entityRows || []) {
@@ -59,7 +63,7 @@ export async function GET() {
       const { data: clientRows, error: clientsErr } = await supabase
         .from("clients")
         .select("id, name")
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
       if (clientsErr && !isMissingClientsTable(clientsErr)) {
         console.warn("[agency/pool/client-history] clients unavailable", clientsErr.message)
       }

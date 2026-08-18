@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -35,12 +36,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: project } = await supabase
       .from("projects")
       .select("id, org_id")
       .eq("id", projectId)
       .maybeSingle()
-    if (!project || project.org_id !== user.id) {
+    if (!project || !callerOrgIds.includes(project.org_id as string)) {
       return NextResponse.json({ error: "Not found" }, { status: 404, headers: noStoreHeaders })
     }
 
@@ -117,7 +121,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         partner_rfp_inbox(project_id, partnership_id, scope_item_name)
       `
       )
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .eq("status", "awarded")
 
     if (bidErr) {
@@ -133,7 +137,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
           const { data: rel } = await supabase
             .from("partnerships")
             .select("id")
-            .eq("lead_org_id", user.id)
+            .in("lead_org_id", callerOrgIds)
             .eq("vendor_org_id", partnerId)
             .eq("status", "active")
             .maybeSingle()

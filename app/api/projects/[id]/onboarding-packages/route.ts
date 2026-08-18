@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -32,6 +33,9 @@ export async function GET(
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: project, error: projectErr } = await supabase
       .from("projects")
       .select("org_id")
@@ -47,7 +51,7 @@ export async function GET(
       })
       return NextResponse.json({ error: "Failed to load project" }, { status: 500 })
     }
-    if (!project || project.org_id !== user.id) {
+    if (!project || !callerOrgIds.includes(project.org_id as string)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
@@ -124,6 +128,14 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("role, active_role, company_name, full_name, meeting_url")
@@ -144,7 +156,7 @@ export async function POST(
 
     const project = projectById
 
-    if (!project || project.org_id !== user.id) {
+    if (!project || !callerOrgIds.includes(project.org_id as string)) {
       return NextResponse.json({ error: "Project not found", projectId: projectParam }, { status: 404 })
     }
     const projectId = project.id as string
@@ -178,7 +190,7 @@ export async function POST(
       .eq("id", partnershipId)
       .single()
 
-    if (!partnership || partnership.lead_org_id !== user.id) {
+    if (!partnership || !callerOrgIds.includes(partnership.lead_org_id as string)) {
       return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
     }
     if (partnership.status !== "active" || !partnership.vendor_org_id) {
@@ -213,7 +225,7 @@ export async function POST(
           partner_rfp_inbox(project_id, partnership_id)
         `
         )
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .eq("status", "awarded")
 
       if (awardErr) {
@@ -241,7 +253,7 @@ export async function POST(
           const { data: rel } = await supabase
             .from("partnerships")
             .select("id")
-            .eq("lead_org_id", user.id)
+            .in("lead_org_id", callerOrgIds)
             .eq("vendor_org_id", partnerId)
             .eq("status", "active")
             .maybeSingle()
@@ -308,7 +320,7 @@ export async function POST(
       .from("onboarding_packages")
       .insert({
         project_id: projectId,
-        org_id: user.id,
+        org_id: writeOrgId,
         partnership_id: partnershipId,
         kickoff_type: kt,
         kickoff_url: finalKickoffUrl,

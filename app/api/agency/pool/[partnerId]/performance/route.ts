@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
@@ -42,12 +43,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
     const auth = await requireAgency()
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
     const { supabase, userId } = auth
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
     const forceRegenerate = req.nextUrl.searchParams.get("force") === "1"
 
     const { data: partnership, error: partnershipErr } = await supabase
       .from("partnerships")
       .select("id, reliability_summary, reliability_summary_generated_at")
-      .eq("lead_org_id", userId)
+      .in("lead_org_id", callerOrgIds)
       .eq("vendor_org_id", partnerId)
       // The same single predicate as isActivePartnership() in lib/partnership-state.ts,
       // expressed in SQL because this gate can be pushed into the query.
@@ -70,7 +74,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
     const { data: reviewRows, error: reviewsErr } = await supabase
       .from("delivery_reviews")
       .select("id, project_id, status, composite_score, on_time, on_budget, overall_satisfaction, would_work_again, response_id, updated_at")
-      .eq("org_id", userId)
+      .in("org_id", callerOrgIds)
       .eq("partnership_id", partnership.id)
       .eq("status", "complete")
       .order("updated_at", { ascending: false })
@@ -83,7 +87,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
     const projectIds = [...new Set(reviews.map((r) => r.project_id))]
     const projectNameById = new Map<string, string>()
     if (projectIds.length > 0) {
-      const { data: projRows } = await supabase.from("projects").select("id, name").eq("org_id", userId).in("id", projectIds)
+      const { data: projRows } = await supabase.from("projects").select("id, name").in("org_id", callerOrgIds).in("id", projectIds)
       for (const p of projRows || []) projectNameById.set(p.id as string, (p.name as string) || "Project")
     }
 
@@ -93,7 +97,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
       const { data: evalRows } = await supabase
         .from("bid_evaluations")
         .select("response_id, composite_score")
-        .eq("org_id", userId)
+        .in("org_id", callerOrgIds)
         .in("response_id", responseIds)
       for (const e of evalRows || []) {
         const score = e.composite_score as number | null

@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
@@ -16,6 +17,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = await request.json().catch(() => ({}))
     const inboxItemId = typeof body.inboxItemId === "string" ? body.inboxItemId.trim() : ""
     if (!inboxItemId) {
@@ -28,7 +32,7 @@ export async function POST(request: Request) {
         "id, lead_org_id, vendor_org_id, recipient_email, scope_item_name, agency_company_name, invite_token_expires_at, nda_gate_enforced, claimed_at"
       )
       .eq("id", inboxItemId)
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .maybeSingle<{
         id: string
         lead_org_id: string
@@ -75,7 +79,7 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", inbox.id)
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
 
     if (updateError) {
       return NextResponse.json({ error: "Failed to refresh invite token" }, { status: 500 })

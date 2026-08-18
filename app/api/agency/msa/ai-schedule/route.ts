@@ -4,8 +4,7 @@ import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { canActAs } from "@/lib/acting-role"
-import { hasAgencyEntitlement } from "@/lib/entitlements"
-
+import { hasAgencyEntitlement, resolveCallerOrgIds } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
@@ -61,6 +60,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role, active_role, is_paid, is_admin, payment_terms, payment_terms_custom")
@@ -99,7 +101,7 @@ export async function POST(req: Request) {
       .from("projects")
       .select("id, name, client_name, budget_range")
       .eq("id", project_id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
     if (pErr || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
@@ -125,7 +127,7 @@ export async function POST(req: Request) {
       `
       )
       .eq("id", response_id)
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .eq("status", "awarded")
       .maybeSingle()
 
@@ -158,7 +160,7 @@ export async function POST(req: Request) {
     // now returns rows, so the prompt will start seeing existing milestones and stop
     // proposing duplicates. That is what the variable name always claimed. Scoping is
     // unaffected: response_id was already validated against
-    // `.eq("lead_org_id", user.id)` on partner_rfp_responses twenty lines above, so this
+    // `.in("lead_org_id", callerOrgIds)` on partner_rfp_responses twenty lines above, so this
     // reads only milestones belonging to a response the caller owns.
     //
     // Renaming the predicate to org_id or lead_org_id instead would have invented a column

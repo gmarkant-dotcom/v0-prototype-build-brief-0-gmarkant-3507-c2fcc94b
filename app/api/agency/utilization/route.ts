@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { parseDoubleJson } from "@/lib/active-engagement-parse"
@@ -72,6 +73,9 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("role, active_role")
@@ -95,7 +99,7 @@ export async function GET() {
         )
       `
       )
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .eq("status", "awarded")
 
     if (respErr) {
@@ -123,7 +127,7 @@ export async function GET() {
       const { data: projects, error: projErr } = await supabase
         .from("projects")
         .select("id, name, client_name, budget_range, start_date, end_date")
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .in("id", [...projectIds])
 
       if (projErr) {

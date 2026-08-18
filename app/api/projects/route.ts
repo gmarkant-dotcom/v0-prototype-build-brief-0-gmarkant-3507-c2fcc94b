@@ -12,8 +12,7 @@ import {
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
 import { actingRole, canActAs } from '@/lib/acting-role'
-import { agencyEntitlementId, hasAgencyEntitlement } from '@/lib/entitlements'
-
+import { agencyEntitlementId, hasAgencyEntitlement, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 export const dynamic = 'force-dynamic'
 
 type BudgetJson = { amount?: number; currency?: string }
@@ -136,6 +135,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     // Acting role, not signup role - see lib/acting-role.ts. A dual-role vendor carrying
     // role='agency' was being served the agency project list in the vendor portal.
     const { data: profile } = await supabase
@@ -180,7 +182,7 @@ export async function GET(request: NextRequest) {
             )
           )
         `)
-        .eq('org_id', user.id)
+        .in('org_id', callerOrgIds)
         .order('created_at', { ascending: false })
 
       if (!rich.error) {
@@ -193,7 +195,7 @@ export async function GET(request: NextRequest) {
         const simple = await supabase
           .from('projects')
           .select('*')
-          .eq('org_id', user.id)
+          .in('org_id', callerOrgIds)
           .order('created_at', { ascending: false })
 
         if (simple.error) {
@@ -221,12 +223,12 @@ export async function GET(request: NextRequest) {
           supabase
             .from('partner_rfp_inbox')
             .select('project_id')
-            .eq('lead_org_id', user.id)
+            .in('lead_org_id', callerOrgIds)
             .in('project_id', agencyProjectIds),
           supabase
             .from('partner_rfp_responses')
             .select('status, partner_rfp_inbox(project_id)')
-            .eq('lead_org_id', user.id)
+            .in('lead_org_id', callerOrgIds)
             .neq('status', 'draft'),
         ])
 
@@ -337,12 +339,12 @@ export async function GET(request: NextRequest) {
         supabase
           .from('partner_rfp_responses')
           .select('partner_rfp_inbox(project_id)')
-          .eq('lead_org_id', user.id)
+          .in('lead_org_id', callerOrgIds)
           .eq('status', 'awarded'),
         supabase
           .from('partner_rfp_responses')
           .select('budget_proposal')
-          .eq('lead_org_id', user.id)
+          .in('lead_org_id', callerOrgIds)
           .eq('status', 'awarded'),
       ])
 
@@ -366,7 +368,7 @@ export async function GET(request: NextRequest) {
           const { data: projRows, error: peErr } = await supabase
             .from('projects')
             .select('id, end_date')
-            .eq('org_id', user.id)
+            .in('org_id', callerOrgIds)
             .in('id', uniqueForDates)
 
           const endDateByProject = new Map<string, string | null>()
@@ -405,7 +407,7 @@ export async function GET(request: NextRequest) {
       const { data: userPartnerships, error: pErr } = await supabase
         .from('partnerships')
         .select('id')
-        .eq('vendor_org_id', user.id)
+        .in('vendor_org_id', callerOrgIds)
 
       if (pErr) throw pErr
 
@@ -526,6 +528,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403, headers: noStoreHeaders })
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, active_role, is_paid, is_admin')
@@ -560,7 +570,7 @@ export async function POST(request: NextRequest) {
     const { data: existingNamedProjects, error: existingNamedProjectsError } = await supabase
       .from("projects")
       .select("id")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .ilike("name", safeName)
 
     if (existingNamedProjectsError) {
@@ -573,7 +583,7 @@ export async function POST(request: NextRequest) {
     }
 
     const insertPayload: Record<string, unknown> = {
-      org_id: user.id,
+      org_id: writeOrgId,
       name: safeName,
       status: 'draft',
       description: description || null,

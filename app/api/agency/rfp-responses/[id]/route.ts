@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
@@ -28,6 +29,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("role, active_role, company_name, full_name, email, is_admin")
@@ -50,7 +54,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .from("partner_rfp_responses")
       .select("id, vendor_org_id, lead_org_id, inbox_item_id, status, agency_feedback")
       .eq("id", id)
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .maybeSingle()
     if (existingErr) {
       console.error("[api] PATCH partner_rfp_responses load failed", {
@@ -91,7 +95,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
      *
      * All three are irreversible in the sense docs/capabilities.md uses: each sends mail the
      * vendor has already read by the time anyone reconsiders. The route's only other gate is
-     * `.eq("lead_org_id", user.id)`, which is ownership - and 079 turns ownership into
+     * `.in("lead_org_id", callerOrgIds)`, which is ownership - and 079 turns ownership into
      * membership, at which point every colleague passes it identically and this is the only
      * thing left that can distinguish an admin from a member. All three resolve true for
      * everyone today.
@@ -182,7 +186,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           .from("partner_rfp_inbox")
           .select("id, project_id, vendor_org_id, partnership_id, scope_item_name, master_rfp_json")
           .eq("id", resolvedInboxItemId)
-          .eq("lead_org_id", user.id)
+          .in("lead_org_id", callerOrgIds)
           .maybeSingle()
         if (inboxFetchErr) {
           console.error("[api] bid award: failed to load partner_rfp_inbox (join key: partner_rfp_responses.inbox_item_id)", {
@@ -225,7 +229,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           const { data: synthesized, error: synthErr } = await supabase
             .from("partner_rfp_inbox")
             .select("id, project_id, vendor_org_id, partnership_id, scope_item_name, master_rfp_json")
-            .eq("lead_org_id", user.id)
+            .in("lead_org_id", callerOrgIds)
             .contains("master_rfp_json", { _magic_token: tokenRow.token })
             .maybeSingle()
           if (synthErr) {
@@ -244,7 +248,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               .from("partner_rfp_responses")
               .update({ inbox_item_id: synthesized.id })
               .eq("id", id)
-              .eq("lead_org_id", user.id)
+              .in("lead_org_id", callerOrgIds)
             if (linkErr) {
               // Non-fatal - the award can still proceed against synthesized data this once,
               // it just won't self-heal into the normal path until a future attempt succeeds.
@@ -353,7 +357,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                 .from("partner_rfp_responses")
                 .update({ vendor_org_id: matchedProfile.id })
                 .eq("id", id)
-                .eq("lead_org_id", user.id)
+                .in("lead_org_id", callerOrgIds)
                 .is("vendor_org_id", null)
               if (backfillErr) {
                 console.error("[api] bid award: response vendor_org_id backfill failed (non-fatal)", {
@@ -407,7 +411,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .from("partner_rfp_responses")
       .update(patch)
       .eq("id", id)
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .select("*")
       .single()
     if (updateErr) {
@@ -425,7 +429,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         .from("partner_rfp_inbox")
         .update({ status: mapResponseStatusToInboxStatus(nextStatus), updated_at: new Date().toISOString() })
         .eq("id", resolvedInboxItemId)
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
       if (inboxStatusErr) {
         console.error("[api] PATCH partner_rfp_inbox status sync failed", {
           route,
@@ -457,7 +461,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                 // makes the event reachable by the vendor whose bid was reviewed.
                 .select("scope_item_name, partnership_id")
                 .eq("id", existing.inbox_item_id)
-                .eq("lead_org_id", user.id)
+                .in("lead_org_id", callerOrgIds)
                 .maybeSingle()
             : Promise.resolve({ data: null, error: null }),
         ])
@@ -586,7 +590,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         .from("projects")
         .select("status")
         .eq("id", awardContext.projectId)
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .maybeSingle()
       if (projLoadErr) {
         console.error("[api] bid award: load project status failed (assignment recorded)", {
@@ -600,7 +604,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           .from("projects")
           .update({ status: "active", updated_at: now })
           .eq("id", awardContext.projectId)
-          .eq("org_id", user.id)
+          .in("org_id", callerOrgIds)
         if (projUpdErr) {
           console.error("[api] bid award: project status bump failed (assignment recorded)", {
             route,

@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { parseBudgetProposal, parseTimelineProposal } from "@/lib/rfp-response-fields"
@@ -18,6 +19,9 @@ export async function GET(request: Request) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const { data: profile, error: profileErr } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
     if (profileErr) {
@@ -43,11 +47,11 @@ export async function GET(request: Request) {
     let magicResponseIdsForProject: string[] = []
     if (projectIdParam) {
       const [{ data: scopedInboxes, error: inboxErr }, { data: scopedMagicTokens, error: magicErr }] = await Promise.all([
-        supabase.from("partner_rfp_inbox").select("id").eq("lead_org_id", user.id).eq("project_id", projectIdParam),
+        supabase.from("partner_rfp_inbox").select("id").in("lead_org_id", callerOrgIds).eq("project_id", projectIdParam),
         supabase
           .from("rfp_magic_tokens")
           .select("response_id")
-          .eq("org_id", user.id)
+          .in("org_id", callerOrgIds)
           .eq("project_id", projectIdParam)
           .not("response_id", "is", null),
       ])
@@ -83,7 +87,7 @@ export async function GET(request: Request) {
       .select(
         "id, inbox_item_id, vendor_org_id, partner_display_name, status, budget_proposal, proposal_text, timeline_proposal, payment_terms, terms_disclosure, attachments, business_criteria_responses, agency_feedback, feedback_updated_at, submitted_at, created_at, updated_at, ai_summary_short, ai_summary_detailed, ai_summary_generated_at, composite_score"
       )
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .order("updated_at", { ascending: false })
       .limit(500)
     if (inboxIdsForProject) {
@@ -115,7 +119,7 @@ export async function GET(request: Request) {
       const { data: phase2Rows, error: phase2Err } = await supabase
         .from("partner_rfp_responses")
         .select("id, budget_lines, proposal_sections")
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .in("id", list.map((r) => r.id as string))
       if (phase2Err) {
         console.warn("[agency/rfp-responses] structured bid columns unavailable, rendering without them", {
@@ -202,7 +206,7 @@ export async function GET(request: Request) {
       .select(
         "id, project_id, partnership_id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, vendor_org_id, recipient_email, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at"
       )
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .order("created_at", { ascending: false })
     if (projectIdParam) inboxQuery = inboxQuery.eq("project_id", projectIdParam)
     const { data: allInboxes, error: allInboxErr } = await inboxQuery

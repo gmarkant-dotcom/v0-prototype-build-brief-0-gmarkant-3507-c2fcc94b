@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
@@ -76,11 +77,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ respons
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const { supabase, userId } = auth
 
+  // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+  const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
+
   const { data: evaluation, error: evalErr } = await supabase
     .from("bid_evaluations")
     .select("id, status, composite_score, ai_recommendation, ranked_recommendation, ranked_recommendation_group, template_id")
     .eq("response_id", responseId)
-    .eq("org_id", userId)
+    .in("org_id", callerOrgIds)
     .maybeSingle()
   if (evalErr) {
     console.error("[api] failure", { route, method: "GET", message: evalErr.message })
@@ -125,6 +129,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
     const { supabase, userId } = auth
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(userId, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const body = await req.json().catch(() => ({}))
     const status = typeof body?.status === "string" && ALLOWED_STATUS.has(body.status) ? body.status : "draft"
     const scoresInput: ScoreInput[] = Array.isArray(body?.scores) ? body.scores : []
@@ -133,7 +145,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
       .from("partner_rfp_responses")
       .select("id")
       .eq("id", responseId)
-      .eq("lead_org_id", userId)
+      .in("lead_org_id", callerOrgIds)
       .maybeSingle()
     if (responseErr) {
       console.error("[api] failure", { route, method: "PUT", message: responseErr.message })
@@ -144,7 +156,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
     const { data: evaluation, error: evalUpsertErr } = await supabase
       .from("bid_evaluations")
       .upsert(
-        { response_id: responseId, org_id: userId, status, updated_at: new Date().toISOString() },
+        { response_id: responseId, org_id: writeOrgId, status, updated_at: new Date().toISOString() },
         { onConflict: "response_id" }
       )
       .select("id")

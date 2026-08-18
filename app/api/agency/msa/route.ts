@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -39,10 +40,13 @@ export async function GET() {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: rows, error } = await supabase
       .from("msa_agreements")
       .select("id, partnership_id, status, document_url, signed_at, created_at")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -62,7 +66,7 @@ export async function GET() {
       const { data: ships, error: shipErr } = await supabase
         .from("partnerships")
         .select("id, vendor_org_id")
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .in("id", partnershipIds)
       if (shipErr) {
         console.error("[api/agency/msa] partnerships batch for MSA failed", {
@@ -147,6 +151,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403, headers: noStore })
+    }
+
     const body = await req.json().catch(() => ({}))
     const partnership_id = (body.partnership_id as string | undefined)?.trim()
     if (!partnership_id) {
@@ -157,7 +169,7 @@ export async function POST(req: Request) {
       .from("partnerships")
       .select("id")
       .eq("id", partnership_id)
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .maybeSingle()
     if (shipErr || !ship) {
       return NextResponse.json({ error: "Partnership not found" }, { status: 404, headers: noStore })
@@ -166,7 +178,7 @@ export async function POST(req: Request) {
     const { data: row, error } = await supabase
       .from("msa_agreements")
       .insert({
-        org_id: user.id,
+        org_id: writeOrgId,
         partnership_id,
         status: "pending",
       })
@@ -197,6 +209,9 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = await req.json().catch(() => ({}))
     const id = (body.id as string | undefined)?.trim()
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400, headers: noStore })
@@ -205,7 +220,7 @@ export async function PATCH(req: Request) {
       .from("msa_agreements")
       .select("id")
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
     if (exErr || !existing) {
       return NextResponse.json({ error: "Agreement not found" }, { status: 404, headers: noStore })
@@ -234,7 +249,7 @@ export async function PATCH(req: Request) {
       .from("msa_agreements")
       .update(updates)
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .select("id, partnership_id, status, document_url, signed_at, created_at, updated_at")
       .single()
 

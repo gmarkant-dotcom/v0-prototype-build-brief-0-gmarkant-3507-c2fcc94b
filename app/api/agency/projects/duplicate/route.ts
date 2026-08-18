@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { carryProjectClientFields } from "@/lib/clients-server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { checkUsageLimit, usageLimitResponse } from "@/lib/usage-tracking"
-import { agencyEntitlementId, hasAgencyEntitlement } from "@/lib/entitlements"
-
+import { agencyEntitlementId, hasAgencyEntitlement, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 
 /**
@@ -21,6 +20,14 @@ export async function POST(request: NextRequest) {
     const auth = await requireAgencyRole()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
 
     const body = await request.json().catch(() => ({}))
     const projectId = typeof body?.project_id === "string" ? body.project_id : ""
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest) {
       .from("projects")
       .select("id, name, client_name, client_id, description, budget_range")
       .eq("id", projectId)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
     if (sourceErr) {
       console.error("[api] failure", { route, method: "POST", message: sourceErr.message })
@@ -64,7 +71,7 @@ export async function POST(request: NextRequest) {
     const { data: nameCollision } = await supabase
       .from("projects")
       .select("id")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .ilike("name", newName)
       .maybeSingle()
     if (nameCollision) {
@@ -74,7 +81,7 @@ export async function POST(request: NextRequest) {
     const { data: newProject, error: insertErr } = await supabase
       .from("projects")
       .insert({
-        org_id: user.id,
+        org_id: writeOrgId,
         name: newName,
         status: "draft",
         // Both fields together or neither, so a duplicate can never be born incoherent.

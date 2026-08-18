@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -32,11 +33,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: project } = await supabase
       .from("projects")
       .select("id, title, org_id")
       .eq("id", projectId)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
@@ -132,11 +136,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: project } = await supabase
       .from("projects")
       .select("id, title, org_id")
       .eq("id", projectId)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
@@ -251,11 +258,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
     if (profile?.role !== "agency" && profile?.active_role !== "agency") return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
 
     const { data: project } = await supabase
-      .from("projects").select("id, org_id").eq("id", projectId).eq("org_id", user.id).maybeSingle()
+      .from("projects").select("id, org_id").eq("id", projectId).in("org_id", callerOrgIds).maybeSingle()
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
 
     const body = (await req.json().catch(() => ({}))) as {

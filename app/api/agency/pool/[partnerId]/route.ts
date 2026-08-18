@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { isActivePartnership } from "@/lib/partnership-state"
@@ -40,13 +41,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     // The row is fetched at ANY status and the state test is applied in one place, by the
     // shared predicate - see lib/partnership-state.ts. Filtering status in the query made
     // this route a third, private definition of "active" that disagreed with the pool list.
     const { data: partnership, error: pErr } = await supabase
       .from("partnerships")
       .select("id, status, nda_confirmed_at, msa_confirmed_at, contact_name, company_name, partner_email, invitation_sent_at")
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .eq("vendor_org_id", partnerId)
       .maybeSingle()
 
@@ -161,7 +165,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       ? await supabase
           .from("partner_rfp_responses")
           .select("id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
-          .eq("lead_org_id", user.id)
+          .in("lead_org_id", callerOrgIds)
           .eq("vendor_org_id", partnerId)
           .eq("status", "awarded")
           .order("updated_at", { ascending: false })
@@ -187,7 +191,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       const projs = await supabase
         .from("projects")
         .select("id, name")
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .in("id", [...projectIds])
 
       if (projs.error) {
@@ -254,7 +258,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
           meeting_url: isPublicOnly ? null : row.meeting_url,
           rate_info,
         },
-        // Delivery history with THIS agency only - the query is .eq("lead_org_id", user.id),
+        // Delivery history with THIS agency only - the query is .in("lead_org_id", callerOrgIds),
         // so another agency's awards can never appear here. Empty below the partnership tier.
         engagement_history,
       },

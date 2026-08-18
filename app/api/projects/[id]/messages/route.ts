@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
@@ -26,6 +27,9 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     // Acting role, not signup role - see lib/acting-role.ts.
     const { data: profile } = await supabase
       .from('profiles')
@@ -44,7 +48,7 @@ export async function GET(
         .from('projects')
         .select('id')
         .eq('id', projectId)
-        .eq('org_id', user.id)
+        .in('org_id', callerOrgIds)
         .single()
       if (!project) {
         return NextResponse.json({ error: 'Project not found' }, { status: 404 })
@@ -65,7 +69,7 @@ export async function GET(
         .from('project_assignments')
         .select('id, partnerships!inner(vendor_org_id)')
         .eq('project_id', projectId)
-        .eq('partnerships.vendor_org_id', user.id)
+        .in('partnerships.vendor_org_id', callerOrgIds)
         .single()
       if (!assignment) {
         return NextResponse.json({ error: 'Not assigned to this project' }, { status: 403 })
@@ -76,7 +80,7 @@ export async function GET(
           .select('id, partnerships!inner(vendor_org_id)')
           .eq('id', assignmentId)
           .eq('project_id', projectId)
-          .eq('partnerships.vendor_org_id', user.id)
+          .in('partnerships.vendor_org_id', callerOrgIds)
           .maybeSingle()
         if (!scopedJoin) {
           return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
@@ -140,6 +144,9 @@ export async function POST(
       return NextResponse.json({ error: 'Message content required' }, { status: 400 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     // Verify access to project (RLS will handle this, but extra check)
     const { data: profile } = await supabase
       .from('profiles')
@@ -164,7 +171,7 @@ export async function POST(
         .from('projects')
         .select('id')
         .eq('id', projectId)
-        .eq('org_id', user.id)
+        .in('org_id', callerOrgIds)
         .single()
 
       if (!project) {
@@ -196,7 +203,7 @@ export async function POST(
         .from('project_assignments')
         .select('id, partnership:partnerships!inner(vendor_org_id)')
         .eq('project_id', projectId)
-        .eq('partnerships.vendor_org_id', user.id)
+        .in('partnerships.vendor_org_id', callerOrgIds)
         .single()
 
       if (!assignment) {
@@ -208,7 +215,7 @@ export async function POST(
           .select('id, partnerships!inner(vendor_org_id)')
           .eq('id', assignmentId)
           .eq('project_id', projectId)
-          .eq('partnerships.vendor_org_id', user.id)
+          .in('partnerships.vendor_org_id', callerOrgIds)
           .maybeSingle()
         if (!scopedJoin) {
           return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })

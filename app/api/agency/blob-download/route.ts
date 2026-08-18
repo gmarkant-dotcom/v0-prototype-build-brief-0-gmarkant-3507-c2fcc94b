@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { get } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -62,6 +63,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     if (parsedRfp) {
       const { data: inbox, error: inboxErr } = await supabase
         .from("partner_rfp_inbox")
@@ -69,14 +73,14 @@ export async function GET(request: NextRequest) {
         .eq("id", parsedRfp.inboxId)
         .maybeSingle()
 
-      if (inboxErr || !inbox || inbox.lead_org_id !== user.id) {
+      if (inboxErr || !inbox || !callerOrgIds.includes(inbox.lead_org_id as string)) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
 
       const { data: responseRow } = await supabase
         .from("partner_rfp_responses")
         .select("id")
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .eq("inbox_item_id", parsedRfp.inboxId)
         .eq("vendor_org_id", parsedRfp.partnerId)
         .maybeSingle()
@@ -93,7 +97,7 @@ export async function GET(request: NextRequest) {
         .eq("id", parsedProject.projectId)
         .maybeSingle()
 
-      if (projectErr || !project || project.org_id !== user.id) {
+      if (projectErr || !project || !callerOrgIds.includes(project.org_id as string)) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
     }
@@ -105,7 +109,7 @@ export async function GET(request: NextRequest) {
         .eq("token", parsedGuestUpload.token)
         .maybeSingle()
 
-      if (tokenErr || !tokenRow || tokenRow.org_id !== user.id) {
+      if (tokenErr || !tokenRow || !callerOrgIds.includes(tokenRow.org_id as string)) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
     }

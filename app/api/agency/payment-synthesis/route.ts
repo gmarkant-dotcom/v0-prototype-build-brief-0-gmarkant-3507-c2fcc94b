@@ -3,8 +3,7 @@ import * as Sentry from "@sentry/nextjs"
 import { streamText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 import { canActAs } from "@/lib/acting-role"
-import { hasAgencyEntitlement } from "@/lib/entitlements"
-
+import { hasAgencyEntitlement, resolveCallerOrgIds } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
@@ -52,6 +51,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role, active_role, is_paid, is_admin")
@@ -87,7 +89,7 @@ export async function POST(req: Request) {
         .from("projects")
         .select("id, org_id, name, client_name, budget_range")
         .eq("id", project_id)
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .maybeSingle()
       if (pErr || !project) {
         return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
@@ -96,7 +98,7 @@ export async function POST(req: Request) {
       const { data: cashFlowRows, error: cfErr } = await supabase
         .from("client_cash_flow")
         .select("id, label, amount, currency, expected_date, status, received_at")
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .eq("project_id", project_id)
         .order("expected_date", { ascending: true })
         .order("created_at", { ascending: true })
@@ -128,7 +130,7 @@ export async function POST(req: Request) {
       const { data: awardedResponses, error: rErr } = await supabase
         .from("partner_rfp_responses")
         .select("id, inbox_item_id, partner_display_name, budget_proposal, payment_terms")
-        .eq("lead_org_id", user.id)
+        .in("lead_org_id", callerOrgIds)
         .eq("status", "awarded")
       if (rErr) {
         console.error("[api/agency/payment-synthesis] awarded responses query failed", rErr)
@@ -141,7 +143,7 @@ export async function POST(req: Request) {
         const { data: inboxRows, error: iErr } = await supabase
           .from("partner_rfp_inbox")
           .select("id, project_id, partnership_id")
-          .eq("lead_org_id", user.id)
+          .in("lead_org_id", callerOrgIds)
           .eq("project_id", project_id)
           .in("id", inboxIds)
         if (iErr) {
@@ -184,7 +186,7 @@ export async function POST(req: Request) {
         const { data: pRows } = await supabase
           .from("partnerships")
           .select("id, vendor_org_id")
-          .eq("lead_org_id", user.id)
+          .in("lead_org_id", callerOrgIds)
           .in("id", partnershipIds)
         const partnerIds = [...new Set((pRows || []).map((p) => p.vendor_org_id as string | null).filter(Boolean))]
         const profileById = new Map<
@@ -214,7 +216,7 @@ export async function POST(req: Request) {
         const { data: responseRows } = await supabase
           .from("partner_rfp_responses")
           .select("id, partner_display_name, payment_terms")
-          .eq("lead_org_id", user.id)
+          .in("lead_org_id", callerOrgIds)
           .in("id", responseIds)
         for (const row of responseRows || []) {
           responseToPartner.set(

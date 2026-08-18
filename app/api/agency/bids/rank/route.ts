@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
@@ -18,6 +19,9 @@ export async function POST(req: Request) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -45,7 +49,7 @@ export async function POST(req: Request) {
     const { data: owned, error: ownedErr } = await supabase
       .from("partner_rfp_responses")
       .select("id, partner_display_name, composite_score")
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .in("id", responseIds)
     if (ownedErr) {
       console.error("[api] failure", { route, method: "POST", message: ownedErr.message })
@@ -114,7 +118,7 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("response_id", topRankedId)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
     if (saveErr) {
       console.error("[api] failure", { route, method: "POST", message: saveErr.message })
       return NextResponse.json({ error: "Failed to save ranking" }, { status: 500 })

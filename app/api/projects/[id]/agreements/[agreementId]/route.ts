@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { actingRole } from '@/lib/acting-role'
@@ -66,8 +67,13 @@ export async function PATCH(
     // dual-role vendor (role='agency', active_role='partner') the right to sign their own
     // assignment agreement, because isPartner could never be true for them.
     const acting = actingRole(profile)
-    const isPartner = acting === 'partner' && partnership?.vendor_org_id === user.id
-    const isAgency = acting === 'agency' && projectRow?.org_id === user.id
+    // 079: both columns are ORGANIZATION ids. Comparing either to user.id is correct only
+    // while every organization id happens to equal its founding user's id. Resolve
+    // membership instead. An empty set makes both false, which is the direction an
+    // authorization check should fail.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    const isPartner = acting === 'partner' && callerOrgIds.includes(partnership?.vendor_org_id as string)
+    const isAgency = acting === 'agency' && callerOrgIds.includes(projectRow?.org_id as string)
 
     if (!isPartner && !isAgency) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

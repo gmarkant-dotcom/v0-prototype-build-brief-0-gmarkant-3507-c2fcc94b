@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import {
@@ -22,6 +23,14 @@ export async function POST(
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
     }
 
     const { data: profile } = await supabase
@@ -59,7 +68,7 @@ export async function POST(
       .eq('id', projectId)
       .single()
 
-    if (!project || project.org_id !== user.id) {
+    if (!project || !callerOrgIds.includes(project.org_id as string)) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
@@ -119,7 +128,7 @@ export async function POST(
       .insert({
         project_id: projectId,
         assignment_id: assignmentId,
-        org_id: user.id,
+        org_id: writeOrgId,
         document_ids: documentIds,
         custom_message: customMessage || null,
       })

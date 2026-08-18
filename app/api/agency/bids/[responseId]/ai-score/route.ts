@@ -6,8 +6,7 @@ import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
-import { agencyEntitlementId } from "@/lib/entitlements"
-
+import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -144,6 +143,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role, active_role")
@@ -160,7 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       .from("partner_rfp_responses")
       .select("id, vendor_org_id")
       .eq("id", responseId)
-      .eq("lead_org_id", user.id)
+      .in("lead_org_id", callerOrgIds)
       .maybeSingle()
     if (responseErr) {
       console.error("[api] failure", { route, method: "POST", message: responseErr.message })
@@ -171,7 +178,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     const { data: criteria, error: criteriaErr } = await supabase
       .from("bid_scoring_criteria")
       .select("id, name, description, default_weight")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
     if (criteriaErr) {
@@ -201,7 +208,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     const { data: evaluation, error: evalUpsertErr } = await supabase
       .from("bid_evaluations")
       .upsert(
-        { response_id: responseId, org_id: user.id, status: "in_progress", updated_at: new Date().toISOString() },
+        { response_id: responseId, org_id: writeOrgId, status: "in_progress", updated_at: new Date().toISOString() },
         { onConflict: "response_id", ignoreDuplicates: false }
       )
       .select("id, status")
@@ -227,7 +234,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       .from("bid_decompositions")
       .select("narrative_summary, line_items")
       .eq("response_id", responseId)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
 
     const trackRecord = await loadVendorTrackRecord(supabase, user.id, (response.vendor_org_id as string) || null, responseId)

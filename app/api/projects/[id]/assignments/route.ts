@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from "@/lib/api-auth"
 import { createClient } from '@/lib/supabase/server'
@@ -34,6 +35,9 @@ export async function GET(
     const auth = await requireAuth()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: 'agency' })
 
     const { data: project } = await supabase
@@ -42,7 +46,7 @@ export async function GET(
       .eq('id', projectId)
       .single()
 
-    if (!project || project.org_id !== user.id) {
+    if (!project || !callerOrgIds.includes(project.org_id as string)) {
       return NextResponse.json({ error: 'Project not found or access denied' }, { status: 404 })
     }
 
@@ -110,13 +114,16 @@ export async function POST(
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: project } = await supabase
       .from('projects')
       .select('org_id, status, title')
       .eq('id', projectId)
       .single()
 
-    if (!project || project.org_id !== user.id) {
+    if (!project || !callerOrgIds.includes(project.org_id as string)) {
       return NextResponse.json({ error: 'Project not found or access denied' }, { status: 404 })
     }
 
@@ -130,7 +137,7 @@ export async function POST(
       .from('partnerships')
       .select('id, lead_org_id, vendor_org_id, status')
       .eq('id', partnershipId)
-      .eq('lead_org_id', user.id)
+      .in('lead_org_id', callerOrgIds)
       .single()
 
     if (!partnership) {
@@ -274,6 +281,9 @@ export async function PATCH(
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { assignmentId, status } = await request.json()
 
     if (!assignmentId || !status) {
@@ -295,8 +305,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
     }
 
-    const isAgency = assignment.project.org_id === user.id
-    const isPartner = assignment.partnership.vendor_org_id === user.id
+    const isAgency = callerOrgIds.includes(assignment.project.org_id as string)
+    const isPartner = callerOrgIds.includes(assignment.partnership.vendor_org_id as string)
 
     if (!isAgency && !isPartner) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -403,7 +413,7 @@ export async function PATCH(
             .from('projects')
             .update({ status: 'in_progress', updated_at: updates.updated_at as string })
             .eq('id', projectId)
-            .eq('org_id', user.id)
+            .in('org_id', callerOrgIds)
           if (projUpdErr) {
             console.error('[api] PATCH assignment awarded: project status bump failed', {
               projectId,

@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -67,6 +68,14 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
     }
 
     const { data: profile } = await supabase
@@ -185,7 +194,7 @@ export async function POST(request: NextRequest) {
           .select(
             `id, nda_confirmed_at, partner_email, vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})`
           )
-          .eq("lead_org_id", user.id)
+          .in("lead_org_id", callerOrgIds)
           .eq("vendor_org_id", partnerId)
           .eq("status", "active")
           .maybeSingle()
@@ -210,7 +219,7 @@ export async function POST(request: NextRequest) {
         seenRecipientKeys.add(partnerScopeKey)
 
         const row = {
-          lead_org_id: user.id,
+          lead_org_id: writeOrgId,
           vendor_org_id: partnerId,
           recipient_email: null,
           partnership_id: partnership.id,
@@ -312,7 +321,7 @@ export async function POST(request: NextRequest) {
             // email address, not the pool vendor's contact.
             .from("partnerships")
             .select("id, nda_confirmed_at, partner_email")
-            .eq("lead_org_id", user.id)
+            .in("lead_org_id", callerOrgIds)
             .eq("vendor_org_id", existingProfile!.id)
             .in("status", ["active", "pending"])
             .order("created_at", { ascending: false })
@@ -329,7 +338,7 @@ export async function POST(request: NextRequest) {
         const claimedAt = isExistingUser ? new Date().toISOString() : null
 
         rows.push({
-          lead_org_id: user.id,
+          lead_org_id: writeOrgId,
           vendor_org_id: isExistingUser ? existingProfile!.id : null,
           recipient_email: email,
           partnership_id: partnershipForManual?.id || null,

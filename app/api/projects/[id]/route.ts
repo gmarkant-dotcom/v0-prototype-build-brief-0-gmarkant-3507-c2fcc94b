@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { canActAs } from '@/lib/acting-role'
@@ -19,6 +20,9 @@ export async function GET(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role, active_role')
@@ -33,7 +37,7 @@ export async function GET(
       .from('projects')
       .select('*')
       .eq('id', id)
-      .eq('org_id', user.id)
+      .in('org_id', callerOrgIds)
       .single()
 
     if (error || !project) {
@@ -55,6 +59,9 @@ export async function PATCH(
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -96,7 +103,7 @@ export async function PATCH(
       .from('projects')
       .update(updates)
       .eq('id', id)
-      .eq('org_id', user.id)
+      .in('org_id', callerOrgIds)
       .select('*')
       .single()
 
