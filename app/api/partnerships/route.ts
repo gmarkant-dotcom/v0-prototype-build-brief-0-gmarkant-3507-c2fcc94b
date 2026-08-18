@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
-import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
+import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { actingRole, canActAs } from '@/lib/acting-role'
@@ -875,12 +875,23 @@ export async function PATCH(request: NextRequest) {
         .find(Boolean)
       let partnerEmail = partnerEmailFromInbox || null
       if (!partnerEmail && partnership.vendor_org_id) {
-        const { data: partnerProfile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', partnership.vendor_org_id)
-          .maybeSingle()
-        partnerEmail = (partnerProfile?.email || '').trim().toLowerCase() || null
+        // PHASE 5: was `.from('profiles').eq('id', partnership.vendor_org_id)` - an
+        // ORGANIZATION id against the profiles table, resolving only while the two ids
+        // coincide. It returned nothing for any vendor created after 079 and the
+        // confirmation email was skipped in silence. resolveOrgNotificationRecipients() is
+        // the helper that already answers "who do we email for this organization".
+        const recipients = await resolveOrgNotificationRecipients(
+          orgIdFromColumn(partnership.vendor_org_id),
+          supabase
+        )
+        partnerEmail = (recipients[0]?.email || '').trim().toLowerCase() || null
+        if (!partnerEmail) {
+          console.error('[api] PATCH /partnerships: no notification recipient for the vendor organization', {
+            route,
+            partnershipId,
+            vendorOrgId: partnership.vendor_org_id,
+          })
+        }
       }
 
       if (partnerEmail) {
@@ -929,12 +940,23 @@ export async function PATCH(request: NextRequest) {
 
       let partnerEmail: string | null = null
       if (partnership.vendor_org_id) {
-        const { data: partnerProfile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', partnership.vendor_org_id)
-          .maybeSingle()
-        partnerEmail = (partnerProfile?.email || '').trim().toLowerCase() || null
+        // PHASE 5: was `.from('profiles').eq('id', partnership.vendor_org_id)` - an
+        // ORGANIZATION id against the profiles table, resolving only while the two ids
+        // coincide. It returned nothing for any vendor created after 079 and the
+        // confirmation email was skipped in silence. resolveOrgNotificationRecipients() is
+        // the helper that already answers "who do we email for this organization".
+        const recipients = await resolveOrgNotificationRecipients(
+          orgIdFromColumn(partnership.vendor_org_id),
+          supabase
+        )
+        partnerEmail = (recipients[0]?.email || '').trim().toLowerCase() || null
+        if (!partnerEmail) {
+          console.error('[api] PATCH /partnerships: no notification recipient for the vendor organization', {
+            route,
+            partnershipId,
+            vendorOrgId: partnership.vendor_org_id,
+          })
+        }
       }
 
       if (partnerEmail) {
@@ -1022,11 +1044,22 @@ export async function PATCH(request: NextRequest) {
         // Notify agency that partner accepted
         await notifyPartnershipAccepted(supabase, partnership.lead_org_id, partnerName, partnershipId)
 
-        const { data: agencyProfile } = await supabase
-          .from('profiles')
-          .select('email, company_name, full_name')
-          .eq('id', partnership.lead_org_id)
-          .single()
+        // PHASE 5: the ACCEPT half of the decline path's defect. This looked the lead
+        // agency up in `profiles` by an ORGANIZATION id, ignored the error, and skipped the
+        // email when it resolved to nothing - so a vendor accepting an invitation from any
+        // agency created after 079 told that agency nothing at all.
+        const agencyProfile = (await resolveOrgNotificationRecipients(
+          orgIdFromColumn(partnership.lead_org_id),
+          supabase
+        ))[0] ?? null
+        if (!agencyProfile?.email) {
+          console.error('[api] PATCH /partnerships: no notification recipient for the lead organization', {
+            route,
+            partnershipId,
+            leadOrgId: partnership.lead_org_id,
+            action: 'accept',
+          })
+        }
 
         if (agencyProfile?.email) {
           await sendTransactionalEmail({
@@ -1073,11 +1106,25 @@ export async function PATCH(request: NextRequest) {
 
         // Send email to agency notifying them of the decline
         try {
-          const { data: agencyProfile } = await supabase
-            .from('profiles')
-            .select('email, company_name, full_name')
-            .eq('id', partnership.lead_org_id)
-            .single()
+          // PHASE 5c: THE DECLINE PATH. A vendor CAN clear an unwanted invitation - the row
+          // moves to 'terminated' and leaves their Invitations tab - but the agency was never
+          // told, because this looked them up in `profiles` by an ORGANIZATION id and simply
+          // skipped the send when it found nothing. The vendor's decline landed nowhere the
+          // agency could see it. That is the half of "a vendor cannot clear an invitation"
+          // that was actually broken, and it is the half that gets worse the moment Phase 2
+          // starts creating invitations nobody chose to send.
+          const agencyProfile = (await resolveOrgNotificationRecipients(
+            orgIdFromColumn(partnership.lead_org_id),
+            supabase
+          ))[0] ?? null
+          if (!agencyProfile?.email) {
+            console.error('[api] PATCH /partnerships: no notification recipient for the lead organization', {
+              route,
+              partnershipId,
+              leadOrgId: partnership.lead_org_id,
+              action: 'decline',
+            })
+          }
 
           if (agencyProfile?.email) {
             await sendTransactionalEmail({
