@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import {
+  ORG_CONTACT_SELECT,
+  logOrgContactGap,
+  orgDisplayName,
+  resolveOrgContact,
+  type OrgEmbed,
+} from "@/lib/org-contact"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
@@ -64,35 +71,30 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
     const nameByPartnershipId = new Map<string, string>()
     if (partnershipIds.length > 0) {
       const { data: pships } = await supabase
-        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-        // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-        // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-        // resolves to nothing, and the new one resolves to `organizations`, which carries only
-        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-        // is exactly what this embed selects.
-        //
-        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-        // vendor company's email address under an organization model", which is the
-        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-        // cannot see this: the constraint name embeds the old column name with no word boundary
-        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-        // the rename complete with all thirteen of these still broken.
-        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+        // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+        // This site only ever wanted a display name, so it takes the company name and
+        // never the contact's - the person's name was only ever the pre-079 fallback for
+        // a company_name that had not been filled in.
         .from("partnerships")
         .select(
           `
           id,
-          partner:profiles!partnerships_partner_id_fkey(company_name, full_name)
+          vendor_org_id,
+          partner_email,
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         `
         )
         .in("id", partnershipIds)
       for (const row of pships || []) {
-        const pr = row.partner as { company_name?: string | null; full_name?: string | null } | null
-        const inner = Array.isArray(pr) ? pr[0] : pr
-        const partnerName =
-          inner?.company_name?.trim() || inner?.full_name?.trim() || "Vendor"
-        nameByPartnershipId.set(row.id as string, partnerName)
+        const contact = resolveOrgContact(row.vendor_org as OrgEmbed, (row.partner_email as string | null) ?? null)
+        if (row.vendor_org_id) {
+          logOrgContactGap("GET /api/agency/projects/[projectId]/status-updates", contact, {
+            projectId,
+            partnershipId: row.id,
+            vendorOrgId: row.vendor_org_id,
+          })
+        }
+        nameByPartnershipId.set(row.id as string, orgDisplayName(contact, "Vendor"))
       }
     }
 

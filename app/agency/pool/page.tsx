@@ -15,6 +15,13 @@ import { cn, formatDateTime } from "@/lib/utils"
 import { isDemoMode, demoPartners, partnerTypes, type Partner, type PartnerNote, type ProjectRating, type PartnerAvailability } from "@/lib/demo-data"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { createClient } from "@/lib/supabase/client"
+import {
+  ORG_CONTACT_SELECT,
+  logOrgContactGap,
+  orgDisplayName,
+  resolveOrgContact,
+  type OrgEmbed,
+} from "@/lib/org-contact"
 import { Star, Shield, Building2, User, Users, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass, Upload } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
@@ -640,25 +647,25 @@ function PartnerPoolPageInner() {
       if (!user) return
       
       const { data, error } = await supabase
-        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-        // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-        // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-        // resolves to nothing, and the new one resolves to `organizations`, which carries only
-        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-        // is exactly what this embed selects.
+        // 079-EMBED: this one was BROKEN DIFFERENTLY from the other twelve and is fixed to
+        // the same shape. It read `profiles!vendor_org_id` - a COLUMN-name disambiguator
+        // where the other twelve carry a CONSTRAINT name, and still targeting `profiles`.
+        // The half-rename made it look repaired: the column name is the new one, so the
+        // guard sees nothing and a reader sees a modern-looking selector. It was as broken
+        // as the rest, because after 079 vendor_org_id's foreign key reaches
+        // `organizations` and not `profiles`, whichever way the hint is spelled.
         //
-        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-        // vendor company's email address under an organization model", which is the
-        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-        // cannot see this: the constraint name embeds the old column name with no word boundary
-        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-        // the rename complete with all thirteen of these still broken.
-        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+        // THIS SITE HAS THE ONE ROW LEVEL SECURITY PROBLEM IN THE SET. A
+        // partner_access_request is a vendor asking to JOIN this agency's pool, so no
+        // partnership exists yet, so the caller is not a counterparty of that vendor
+        // organization. See the security matrix in docs/079-embed-closure-report.md: this
+        // embed returns null unless the vendor is discoverable, and that was already true
+        // before 079. It is not made worse here and it is not fixed here either - fixing
+        // it means loosening a policy, which is Greg's decision.
         .from('partner_access_requests')
         .select(`
           *,
-          partner:profiles!vendor_org_id(full_name, company_name, email)
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         `)
         .eq('lead_org_id', user.id)
         .eq('status', 'pending')
@@ -671,16 +678,28 @@ function PartnerPoolPageInner() {
           code: error.code,
         })
       } else if (data) {
-        const loaded: AccessRequest[] = data.map((req: any) => ({
-          id: req.id,
-          partnerId: req.vendor_org_id,
-          partnerName: req.partner?.full_name || req.partner?.company_name,
-          partnerEmail: req.partner?.email,
-          partnerCompany: req.partner?.company_name,
-          status: req.status,
-          requestMessage: req.request_message,
-          createdAt: req.created_at,
-        }))
+        const loaded: AccessRequest[] = data.map((req: any) => {
+          const contact = resolveOrgContact(req.vendor_org as OrgEmbed, null)
+          if (req.vendor_org_id) {
+            logOrgContactGap('agency/pool loadAccessRequests', contact, {
+              requestId: req.id,
+              vendorOrgId: req.vendor_org_id,
+            })
+          }
+          return {
+            id: req.id,
+            partnerId: req.vendor_org_id,
+            // The company name leads now. It used to be the person's, with the company as
+            // the fallback; under the organization model the company is the fact this row
+            // is about, and orgDisplayName() guarantees it is never blank.
+            partnerName: orgDisplayName(contact, 'Unnamed vendor'),
+            partnerEmail: contact.contactEmail ?? undefined,
+            partnerCompany: contact.orgName ?? undefined,
+            status: req.status,
+            requestMessage: req.request_message,
+            createdAt: req.created_at,
+          }
+        })
         setAccessRequests(loaded)
       }
     } catch (error) {

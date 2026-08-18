@@ -242,7 +242,17 @@ the audit, not the compiler, is what generalises.
 
 ## The thirteen broken embeds
 
-**This is the most serious finding of the run and it is not fixed.**
+**CLOSED. See `docs/079-embed-closure-report.md`.** The thirteen are rewritten to the ruled
+two-hop form, `organizations.primary_contact_user_id` is in 079 and backfilled, and
+`scripts/check-embed-targets.mjs` now catches this class - proved against the pre-fix tree,
+where it finds exactly these thirteen at exactly the lines listed below.
+
+**One thing that section found and this one did not: they will still render blank.** 079 gives
+`organizations` a single SELECT policy scoped to the caller's OWN organizations, and all
+thirteen read a COUNTERPARTY organization. That is a policy decision for Greg and it is the
+release blocker. The rest of this section is the original diagnosis, kept as written.
+
+**This was the most serious finding of the run and it was not fixed at the time.**
 
 Thirteen PostgREST embeds traverse a foreign key that 079 repoints:
 
@@ -540,8 +550,11 @@ see the thirteen broken embeds.
 ## Where this leaves the release
 
 1. Runbook step 0: the storage policy check. It can return something that changes the plan.
-2. Runbook step 3: decide the thirteen embeds. **They break the product** and they are the
-   reason this branch is not merge-ready even once 079 is applied.
+2. Runbook step 3: **the thirteen embeds are now written** - see
+   `docs/079-embed-closure-report.md`. What replaces this step is the `organizations` SELECT
+   policy decision in that document's Item 1.4. Until it is ruled, all thirteen surfaces render
+   a fallback instead of a vendor name, and the branch is not merge-ready even once 079 is
+   applied.
 3. Everything else is sequenced in `docs/079-release-runbook.md`.
 
 The branch is not pushed and not merged.

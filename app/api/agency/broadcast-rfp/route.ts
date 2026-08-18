@@ -1,5 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import {
+  ORG_CONTACT_SELECT,
+  logOrgContactGap,
+  orgDisplayName,
+  resolveOrgContact,
+  type OrgEmbed,
+} from "@/lib/org-contact"
 import { Resend } from "resend"
 import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
 import { can, capabilityDeniedMessage } from "@/lib/capabilities"
@@ -27,18 +34,9 @@ type PartnershipRow = {
   id: string
   nda_confirmed_at?: string | null
   partner_email?: string | null
-  partner?:
-    | {
-        email?: string | null
-        full_name?: string | null
-        company_name?: string | null
-      }
-    | Array<{
-        email?: string | null
-        full_name?: string | null
-        company_name?: string | null
-      }>
-    | null
+  // 079-EMBED. Was `partner`, a profiles row reached through partnerships_partner_id_fkey.
+  // Now the vendor's organization plus its designated primary contact.
+  vendor_org?: OrgEmbed
 }
 
 function normalizeManualRecipients(
@@ -58,12 +56,6 @@ function normalizeManualRecipients(
       }
     })
     .filter((entry): entry is { email: string; name: string; requireNda: boolean } => Boolean(entry))
-}
-
-function normalizePartnerProfile(raw: PartnershipRow["partner"]) {
-  if (!raw) return null
-  if (Array.isArray(raw)) return raw[0] || null
-  return raw
 }
 
 export async function POST(request: NextRequest) {
@@ -184,24 +176,14 @@ export async function POST(request: NextRequest) {
         if (typeof partnerId !== "string" || !partnerId.length) continue
 
         const { data: partnership, error: pErr } = await supabase
-          // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-          // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-          // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-          // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-          // resolves to nothing, and the new one resolves to `organizations`, which carries only
-          // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-          // is exactly what this embed selects.
-          //
-          // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-          // vendor company's email address under an organization model", which is the
-          // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-          // cannot see this: the constraint name embeds the old column name with no word boundary
-          // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-          // the rename complete with all thirteen of these still broken.
-          // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+          // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+          // This is the site where the fallback matters most: it decides who receives the
+          // RFP. partner_email is already selected and is already the pre-claim address,
+          // so resolveOrgContact() folds the two into one rule instead of the two-branch
+          // expression that was here.
           .from("partnerships")
           .select(
-            "id, nda_confirmed_at, partner_email, partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)"
+            `id, nda_confirmed_at, partner_email, vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})`
           )
           .eq("lead_org_id", user.id)
           .eq("vendor_org_id", partnerId)
@@ -248,19 +230,17 @@ export async function POST(request: NextRequest) {
         }
         rows.push(row)
 
-        const normalizedPartner = normalizePartnerProfile((partnership as PartnershipRow).partner)
-        const partnerEmail = (
-          normalizedPartner?.email ||
-          (partnership as PartnershipRow).partner_email ||
-          ""
+        const vendorContact = resolveOrgContact(
+          (partnership as PartnershipRow).vendor_org,
+          (partnership as PartnershipRow).partner_email ?? null
         )
-          .trim()
-          .toLowerCase()
-        const partnerName =
-          normalizedPartner?.company_name ||
-          normalizedPartner?.full_name ||
-          partnerEmail ||
-          "Vendor"
+        logOrgContactGap("POST /api/agency/broadcast-rfp (pool vendor)", vendorContact, {
+          projectId,
+          partnershipId: partnership.id,
+          vendorOrgId: partnerId,
+        })
+        const partnerEmail = (vendorContact.contactEmail || "").trim().toLowerCase()
+        const partnerName = orgDisplayName(vendorContact, "Vendor")
         if (!partnerEmail.trim()) {
           console.warn("[broadcast-rfp] active partner has no email; skipping notification", {
             partnerId,
@@ -323,25 +303,15 @@ export async function POST(request: NextRequest) {
         let partnershipForManual: PartnershipRow | null = null
         if (isExistingUser) {
           const { data: existingPartnership } = await supabase
-            // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-            // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-            // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-            // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-            // resolves to nothing, and the new one resolves to `organizations`, which carries only
-            // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-            // is exactly what this embed selects.
-            //
-            // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-            // vendor company's email address under an organization model", which is the
-            // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-            // cannot see this: the constraint name embeds the old column name with no word boundary
-            // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-            // the rename complete with all thirteen of these still broken.
-            // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+            // 079-EMBED: the embed is REMOVED here rather than rewritten. This lookup
+            // consumes exactly two fields - `id` for partnership_id and
+            // `nda_confirmed_at` for the NDA gate, both read within twenty lines below -
+            // and never touched the partner profile it was selecting. Rewriting it to the
+            // two-hop organizations form would have added a join, an RLS surface and a
+            // null case for data nobody reads. The recipient here is the manually typed
+            // email address, not the pool vendor's contact.
             .from("partnerships")
-            .select(
-              "id, nda_confirmed_at, partner_email, partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)"
-            )
+            .select("id, nda_confirmed_at, partner_email")
             .eq("lead_org_id", user.id)
             .eq("vendor_org_id", existingProfile!.id)
             .in("status", ["active", "pending"])

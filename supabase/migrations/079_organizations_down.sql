@@ -77,6 +77,31 @@
 --    organizations.is_vendor are destroyed. Re-running 079 re-derives them
 --    from profiles.role, so any hand-correction is lost.
 --
+-- 4b. THE DESIGNATED PRIMARY CONTACT. organizations.primary_contact_user_id
+--    is destroyed with the table. There is no column to reverse and no
+--    separate DROP to write: DOWN PHASE 8 already drops organizations
+--    CASCADE, and the foreign key to profiles(id) goes with it. That is the
+--    whole mirror of the up-migration change, and it is recorded here rather
+--    than as a no-op statement so nobody looks for one and concludes it was
+--    forgotten.
+--
+--    What it costs: re-running 079 backfills every contact to the FOUNDING
+--    USER again, so any organization that had since designated somebody else
+--    silently reverts to its founder. Same class as limits 3 and 4. Capture
+--    it before rolling back if it matters:
+--
+--      SELECT id, name, primary_contact_user_id
+--      FROM public.organizations
+--      WHERE primary_contact_user_id IS DISTINCT FROM id
+--      ORDER BY name;
+--
+--    Any row returned is a deliberate designation this rollback discards.
+--
+--    THE APPLICATION SIDE REVERTS WITH THE CODE, NOT WITH THIS FILE.
+--    Thirteen PostgREST embeds read that column through lib/org-contact.ts.
+--    Rolling the database back without reverting the code first (limit 9
+--    below) leaves them querying organizations, which no longer exists.
+--
 -- 5. FOREIGN KEY CONSTRAINT NAMES AND ON DELETE ACTIONS. 079 reads the
 --    existing constraint names from pg_constraint and does not record them.
 --    This file therefore recreates the FKs pointing back at profiles(id)
@@ -1019,7 +1044,8 @@ COMMIT;
 --
 --   SELECT table_name FROM information_schema.tables
 --   WHERE table_schema='public' AND table_name IN ('organizations','org_members');
---   -- expect zero rows
+--   -- expect zero rows. primary_contact_user_id goes with the table; there
+--   -- is no separate column check to run.
 --
 -- 5. handle_new_user is the 078 body: no organizations, no org_members, and
 --    still no email literal and no is_paid.

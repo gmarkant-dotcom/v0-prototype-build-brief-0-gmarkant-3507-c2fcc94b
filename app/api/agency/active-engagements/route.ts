@@ -1,5 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import {
+  ORG_CONTACT_SELECT,
+  logOrgContactGap,
+  resolveOrgContact,
+  type OrgEmbed,
+} from "@/lib/org-contact"
 
 export const dynamic = "force-dynamic"
 
@@ -150,21 +156,10 @@ export async function GET(request: NextRequest) {
     for (const [id, meta] of projectMetaById) titleByProjectId.set(id, meta.title)
 
     const { data: assignments, error: asgErr } = await supabase
-      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-      // resolves to nothing, and the new one resolves to `organizations`, which carries only
-      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-      // is exactly what this embed selects.
-      //
-      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-      // vendor company's email address under an organization model", which is the
-      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-      // cannot see this: the constraint name embeds the old column name with no word boundary
-      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-      // the rename complete with all thirteen of these still broken.
-      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+      // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+      // This route already normalizes into its own PartnerRow.partner
+      // { companyName, fullName, email } wire shape, so the frontend at
+      // app/agency/project/page.tsx does not move; only the extraction below changes.
       .from("project_assignments")
       .select(
         `
@@ -176,12 +171,8 @@ export async function GET(request: NextRequest) {
         partnership:partnerships!inner(
           id,
           vendor_org_id,
-          partner:profiles!partnerships_partner_id_fkey(
-            id,
-            email,
-            full_name,
-            company_name
-          )
+          partner_email,
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         )
       `
       )
@@ -448,16 +439,22 @@ export async function GET(request: NextRequest) {
           | {
               id: string
               vendor_org_id: string
-              partner:
-                | { email: string | null; full_name: string | null; company_name: string | null }
-                | { email: string | null; full_name: string | null; company_name: string | null }[]
-                | null
+              partner_email: string | null
+              vendor_org: OrgEmbed
             }
           | null
       )
-      const partnerEmbed = unwrapRelation(pship?.partner ?? null)
       const partnerId = pship?.vendor_org_id
       if (!partnerId) continue
+      // 079-EMBED. Company name from organizations.name, person from the designated
+      // primary contact, address falling back to the partnership's own pre-claim
+      // partner_email. Both nulls are logged rather than rendered blank.
+      const vendorContact = resolveOrgContact(pship?.vendor_org, pship?.partner_email ?? null)
+      logOrgContactGap("GET /api/agency/active-engagements", vendorContact, {
+        projectId: projId,
+        partnershipId,
+        vendorOrgId: partnerId,
+      })
 
       const responses = responsesForAssignment(awardedResponses, projId, partnershipId, partnerId)
 
@@ -472,9 +469,9 @@ export async function GET(request: NextRequest) {
         partnershipId,
         awardedAt: (a.awarded_at as string | null) ?? null,
         partner: {
-          companyName: partnerEmbed?.company_name ?? null,
-          fullName: partnerEmbed?.full_name ?? null,
-          email: partnerEmbed?.email ?? null,
+          companyName: vendorContact.orgName,
+          fullName: vendorContact.contactFullName,
+          email: vendorContact.contactEmail,
         },
         kickoffUrl: pkg?.kickoff_url ?? null,
         kickoffType: pkg?.kickoff_type ?? null,

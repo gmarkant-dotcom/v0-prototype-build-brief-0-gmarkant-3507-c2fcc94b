@@ -1,5 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import {
+  ORG_CONTACT_SELECT,
+  legacyPartnerShape,
+  logOrgContactGap,
+  resolveOrgContact,
+  unwrapOne,
+  type LegacyPartnerShape,
+  type OrgEmbed,
+} from "@/lib/org-contact"
 
 export const dynamic = "force-dynamic"
 
@@ -36,21 +45,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     }
 
     const { data: assignmentRows, error: asgErr } = await supabase
-      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-      // resolves to nothing, and the new one resolves to `organizations`, which carries only
-      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-      // is exactly what this embed selects.
-      //
-      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-      // vendor company's email address under an organization model", which is the
-      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-      // cannot see this: the constraint name embeds the old column name with no word boundary
-      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-      // the rename complete with all thirteen of these still broken.
-      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+      // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+      // The PartnerOut.partner shape below is the wire contract that
+      // components/stage-03-onboarding-workflow.tsx reads, and it is unchanged.
       .from("project_assignments")
       .select(
         `
@@ -59,9 +56,9 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         partnership_id,
         partnership:partnerships(
           id,
-          partner:profiles!partnerships_partner_id_fkey(
-            id, email, full_name, company_name
-          )
+          vendor_org_id,
+          partner_email,
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         )
       `
       )
@@ -78,12 +75,12 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       partnershipId: string
       status: string
       source: "assignment" | "awarded_bid"
-      partner: {
-        id: string
-        email: string | null
-        full_name: string | null
-        company_name: string | null
-      } | null
+      // 079-EMBED. Unchanged wire shape, new sources: `id` is now organizations.id,
+      // `company_name` is organizations.name, and `email` / `full_name` come from the
+      // organization's designated primary contact (or, for email, the partnership's own
+      // pre-claim address). Every field is nullable, and the consumer already falls
+      // through company_name -> full_name -> email -> the partnership id.
+      partner: LegacyPartnerShape | null
       scopeLabel: string | null
     }
 
@@ -91,20 +88,22 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     for (const a of assignmentRows || []) {
       const pid = a.partnership_id as string
-      const rawPship = a.partnership as unknown
-      const innerPship = Array.isArray(rawPship) ? rawPship[0] : rawPship
-      const inner = innerPship as {
-        id?: string
-        partner: { id: string; email: string | null; full_name: string | null; company_name: string | null } | null
-      } | null
-      const partnerEmbed = inner?.partner
-      const partner = Array.isArray(partnerEmbed) ? partnerEmbed[0] : partnerEmbed
+      const inner = unwrapOne(a.partnership as Record<string, unknown> | Record<string, unknown>[] | null)
+      const rowEmail = (inner?.partner_email as string | null) ?? null
+      const contact = resolveOrgContact(inner?.vendor_org as OrgEmbed, rowEmail)
+      if (inner?.vendor_org_id) {
+        logOrgContactGap("GET /api/projects/[id]/onboarding-partners (assignment)", contact, {
+          projectId,
+          partnershipId: pid,
+          vendorOrgId: inner.vendor_org_id,
+        })
+      }
       byPartnership.set(pid, {
         assignmentId: a.id as string,
         partnershipId: pid,
         status: a.status as string,
         source: "assignment",
-        partner: partner ?? null,
+        partner: legacyPartnerShape(inner?.vendor_org as OrgEmbed, rowEmail),
         scopeLabel: null,
       })
     }
@@ -143,14 +142,26 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         if (!partnershipId) continue
         if (byPartnership.has(partnershipId)) continue
 
+        // 079-EMBED (in class, not one of the thirteen). partnerId is
+        // partner_rfp_responses.vendor_org_id, an ORGANIZATION id after 079, and this read
+        // looked it up in `profiles` - the "JOIN profiles ON profiles.id = an org id" trap
+        // 079's own table comment warns about. Left alone it silently blanks the vendor on
+        // every awarded-bid row that has no assignment, which is the same surface and the
+        // same PartnerOut shape as the embed above, so it is fixed with it.
         let partner: PartnerOut["partner"] = null
         if (partnerId) {
-          const { data: prof } = await supabase
-            .from("profiles")
-            .select("id, email, full_name, company_name")
+          const { data: org } = await supabase
+            .from("organizations")
+            .select(ORG_CONTACT_SELECT)
             .eq("id", partnerId)
             .maybeSingle()
-          if (prof) partner = prof
+          const awardedContact = resolveOrgContact(org as OrgEmbed, null)
+          logOrgContactGap("GET /api/projects/[id]/onboarding-partners (awarded bid)", awardedContact, {
+            projectId,
+            partnershipId,
+            vendorOrgId: partnerId,
+          })
+          partner = legacyPartnerShape(org as OrgEmbed, null)
         }
 
         byPartnership.set(partnershipId, {

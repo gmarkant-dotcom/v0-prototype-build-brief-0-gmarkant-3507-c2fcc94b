@@ -2,6 +2,15 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from "@/lib/api-auth"
 import { createClient } from '@/lib/supabase/server'
 import {
+  ORG_CONTACT_SELECT,
+  legacyPartnerShape,
+  logOrgContactGap,
+  orgGreetingName,
+  resolveOrgContact,
+  unwrapOne,
+  type OrgEmbed,
+} from '@/lib/org-contact'
+import {
   notifyProjectAssignment,
   notifyProjectResponse,
   notifyProjectAwarded,
@@ -38,29 +47,18 @@ export async function GET(
     }
 
     const { data: assignments, error } = await supabase
-      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-      // resolves to nothing, and the new one resolves to `organizations`, which carries only
-      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-      // is exactly what this embed selects.
-      //
-      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-      // vendor company's email address under an organization model", which is the
-      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-      // cannot see this: the constraint name embeds the old column name with no word boundary
-      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-      // the rename complete with all thirteen of these still broken.
-      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+      // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+      // The response key stays `partner` so components/stage-03-onboarding-production.tsx
+      // does not move; only the query shape changes. lib/org-contact.ts owns the fragment
+      // and the null rule.
       .from('project_assignments')
       .select(`
         *,
         partnership:partnerships(
           id,
-          partner:profiles!partnerships_partner_id_fkey(
-            id, email, full_name, company_name
-          )
+          vendor_org_id,
+          partner_email,
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         )
       `)
       .eq('project_id', projectId)
@@ -68,8 +66,28 @@ export async function GET(
 
     if (error) throw error
 
-    console.log('[api] success', { route, method: 'GET', userId: user.id, role: 'agency', rowCount: assignments?.length ?? 0 })
-    return NextResponse.json({ assignments }, { headers: noStoreHeaders })
+    const shapedAssignments = (assignments || []).map((row) => {
+      const record = row as Record<string, unknown>
+      const pship = unwrapOne(record.partnership as Record<string, unknown> | Record<string, unknown>[] | null)
+      if (!pship) return record
+      const { vendor_org: embed, ...restPship } = pship
+      const rowEmail = (pship.partner_email as string | null) ?? null
+      const contact = resolveOrgContact(embed as OrgEmbed, rowEmail)
+      if (pship.vendor_org_id) {
+        logOrgContactGap('GET /api/projects/[id]/assignments', contact, {
+          projectId,
+          assignmentId: record.id,
+          vendorOrgId: pship.vendor_org_id,
+        })
+      }
+      return {
+        ...record,
+        partnership: { ...restPship, partner: legacyPartnerShape(embed as OrgEmbed, rowEmail) },
+      }
+    })
+
+    console.log('[api] success', { route, method: 'GET', userId: user.id, role: 'agency', rowCount: shapedAssignments.length })
+    return NextResponse.json({ assignments: shapedAssignments }, { headers: noStoreHeaders })
   } catch (error) {
     console.error('[api] failure', {
       route: '/api/projects/[id]/assignments',
@@ -144,29 +162,17 @@ export async function POST(
     }
 
     const { data: assignment, error } = await supabase
-      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-      // resolves to nothing, and the new one resolves to `organizations`, which carries only
-      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-      // is exactly what this embed selects.
-      //
-      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-      // vendor company's email address under an organization model", which is the
-      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-      // cannot see this: the constraint name embeds the old column name with no word boundary
-      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-      // the rename complete with all thirteen of these still broken.
-      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+      // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+      // Returned to the caller with the same `partner` key, and read below to address the
+      // invitation email.
       .from('project_assignments')
       .insert(insertPayload)
       .select(`
         *,
         partnership:partnerships(
-          partner:profiles!partnerships_partner_id_fkey(
-            id, email, full_name, company_name
-          )
+          vendor_org_id,
+          partner_email,
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         )
       `)
       .single()
@@ -198,7 +204,43 @@ export async function POST(
       projectId
     )
 
-    const partnerEmail = assignment.partnership?.partner?.email
+    // 079-EMBED. The vendor's address is the designated primary contact's, falling back
+    // to the partnership's own pre-claim partner_email. If neither exists the send is
+    // SKIPPED AND LOGGED rather than attempted against an empty address: the assignment is
+    // already created, so a silent no-email is the failure to make visible.
+    const assignmentPship = unwrapOne(
+      (assignment as Record<string, unknown>).partnership as
+        | Record<string, unknown>
+        | Record<string, unknown>[]
+        | null
+    )
+    const assignmentEmbed = assignmentPship?.vendor_org as OrgEmbed
+    const assignmentRowEmail = (assignmentPship?.partner_email as string | null) ?? null
+    const vendorContact = resolveOrgContact(assignmentEmbed, assignmentRowEmail)
+    logOrgContactGap('POST /api/projects/[id]/assignments', vendorContact, {
+      projectId,
+      assignmentId: assignment.id,
+      vendorOrgId: partnership.vendor_org_id,
+    })
+
+    const shapedAssignment = {
+      ...(assignment as Record<string, unknown>),
+      partnership: assignmentPship
+        ? (() => {
+            const { vendor_org: _embed, ...restPship } = assignmentPship
+            return { ...restPship, partner: legacyPartnerShape(assignmentEmbed, assignmentRowEmail) }
+          })()
+        : assignmentPship,
+    }
+
+    const partnerEmail = vendorContact.contactEmail
+    if (!partnerEmail) {
+      console.warn('[api] POST /api/projects/[id]/assignments no address for the vendor, invitation email skipped', {
+        projectId,
+        assignmentId: assignment.id,
+        vendorOrgId: partnership.vendor_org_id,
+      })
+    }
     if (partnerEmail) {
       const base = siteBaseUrl()
       await sendTransactionalEmail({
@@ -206,7 +248,7 @@ export async function POST(
         subject: `New RFP from ${agencyName}: ${projectName}`,
         html: buildBrandedEmailHtml({
           title: "New RFP in your inbox",
-          recipientName: partnerEmail,
+          recipientName: orgGreetingName(vendorContact, partnerEmail),
           body: `${agencyName} has sent you an RFP for ${projectName} on Ligament.\n\nReview the scope, timeline, and budget details, then submit your bid directly through the platform.`,
           ctaText: "View RFP",
           ctaUrl: `${base}/partner/rfps`,
@@ -214,7 +256,7 @@ export async function POST(
       })
     }
 
-    return NextResponse.json({ assignment })
+    return NextResponse.json({ assignment: shapedAssignment })
   } catch (error) {
     console.error('Error creating assignment:', error)
     return NextResponse.json({ error: 'Failed to create assignment' }, { status: 500 })

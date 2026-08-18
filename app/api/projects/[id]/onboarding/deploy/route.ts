@@ -1,5 +1,12 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import {
+  ORG_CONTACT_SELECT,
+  logOrgContactGap,
+  resolveOrgContact,
+  unwrapOne,
+  type OrgEmbed,
+} from '@/lib/org-contact'
 import { canActAs } from '@/lib/acting-role'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { createNotification } from '@/lib/notifications'
@@ -57,28 +64,15 @@ export async function POST(
     }
 
     const { data: assignment } = await supabase
-      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-      // resolves to nothing, and the new one resolves to `organizations`, which carries only
-      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-      // is exactly what this embed selects.
-      //
-      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-      // vendor company's email address under an organization model", which is the
-      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-      // cannot see this: the constraint name embeds the old column name with no word boundary
-      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-      // the rename complete with all thirteen of these still broken.
-      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+      // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
       .from('project_assignments')
       .select(`
         id,
         project_id,
         partnership:partnerships(
           vendor_org_id,
-          partner:profiles!partnerships_partner_id_fkey(id, email, full_name, company_name)
+          partner_email,
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         )
       `)
       .eq('id', assignmentId)
@@ -89,16 +83,30 @@ export async function POST(
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
     }
 
-    const partnership = assignment.partnership as unknown as
-      | { vendor_org_id: string | null; partner: { id: string; email: string | null; full_name: string | null; company_name: string | null } | null }
-      | null
+    const partnership = unwrapOne(
+      assignment.partnership as Record<string, unknown> | Record<string, unknown>[] | null
+    )
+    // 079-EMBED. This route DEPENDS on having an address: it deploys onboarding by
+    // emailing the vendor, so a null contact is a 400 rather than a fallback. That is the
+    // one place the shared fallback rule stops at "log and refuse" instead of "log and
+    // degrade", because there is nothing useful to deploy without a recipient. The rule is
+    // still the same rule: primary contact first, the partnership's own pre-claim
+    // partner_email second, refuse third.
+    const vendorContact = resolveOrgContact(
+      partnership?.vendor_org as OrgEmbed,
+      (partnership?.partner_email as string | null) ?? null
+    )
+    logOrgContactGap('POST /api/projects/[id]/onboarding/deploy', vendorContact, {
+      projectId,
+      assignmentId,
+      vendorOrgId: partnership?.vendor_org_id,
+    })
 
-    const partner = partnership?.partner
-    const partnerId = partnership?.vendor_org_id || partner?.id
+    const partnerId = (partnership?.vendor_org_id as string | null) || vendorContact.orgId
 
-    if (!partnerId || !partner?.email) {
+    if (!partnerId || !vendorContact.contactEmail) {
       return NextResponse.json(
-        { error: 'Vendor must have an account with an email before deploying onboarding' },
+        { error: 'Vendor must have a contact with an email address before deploying onboarding' },
         { status: 400 }
       )
     }
@@ -149,6 +157,14 @@ export async function POST(
     const projectTitle = project.title || 'Project'
     const onboardingUrl = `${base}/partner/onboarding?project=${projectId}`
 
+    // 079-AMBIGUOUS. partnerId is partnerships.vendor_org_id, which is an ORGANIZATION id
+    // after 079, and notifications.user_id is a USER id. This writes a notification nobody
+    // can read. It is NOT introduced here and NOT limited to this route - the same shape
+    // appears at app/api/partnerships/route.ts:937 and :986, lib/magic-token-attach.ts and
+    // lib/award-partnership-resolution.ts. "Who on a team receives an in-app notification"
+    // is the same product ruling resolveOrgNotificationRecipients() answers for email, and
+    // it is left for Greg rather than guessed at one site. Listed in
+    // docs/079-embed-closure-report.md.
     await createNotification({
       supabase,
       userId: partnerId,
@@ -163,10 +179,13 @@ export async function POST(
     if (customMessage && String(customMessage).trim()) {
       deployBody += `\n\nMessage from ${agencyName}:\n${String(customMessage).trim()}`
     }
+    // 079-EMBED. The company name leads, then the contact's name, then the address.
+    // orgGreetingName() puts the person first; here the package is addressed to the
+    // company, which is the pre-079 ordering at this site and is preserved deliberately.
     const partnerRecipientName =
-      partner.company_name?.trim() || partner.full_name?.trim() || partner.email?.trim() || "there"
+      vendorContact.orgName ?? vendorContact.contactFullName ?? vendorContact.contactEmail ?? "there"
     await sendTransactionalEmail({
-      to: partner.email,
+      to: vendorContact.contactEmail,
       subject: `Your onboarding package is ready - ${projectTitle}`,
       html: buildBrandedEmailHtml({
         title: "Onboarding package ready",

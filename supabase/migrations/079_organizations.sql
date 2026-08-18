@@ -83,8 +83,10 @@
 -- ---------------------------------------------------------------------
 -- WHAT THIS FILE DOES
 -- ---------------------------------------------------------------------
---   1. Creates public.organizations and public.org_members.
---   2. Backfills one organization per profile, id = the profile id, and one
+--   1. Creates public.organizations and public.org_members. organizations
+--      carries primary_contact_user_id - see the section below.
+--   2. Backfills one organization per profile, id = the profile id, primary
+--      contact = the founding user, and one
 --      owner membership row per profile. Zero UPDATEs to any referencing
 --      row: every existing agency_id and partner_id value is already a
 --      valid organization id under this model.
@@ -102,6 +104,45 @@
 -- ships with the feature); touch profiles.role, profiles.active_role or
 -- lib/acting-role.ts, which survive M1 unchanged as the view toggle; touch
 -- is_paid, is_admin or demo_access in any direction; touch migration 078.
+--
+-- ---------------------------------------------------------------------
+-- organizations.primary_contact_user_id: WHAT IT IS FOR
+-- ---------------------------------------------------------------------
+-- THIRTEEN POSTGREST EMBEDS DEPEND ON THIS COLUMN. Without it this migration
+-- renames correctly and blanks every vendor name in the product.
+--
+-- Each of those thirteen asks for a COMPANY name and a PERSON's email and
+-- name in one hop, through a foreign key this file repoints at
+-- organizations:
+--
+--   partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)
+--
+-- Under the organization model company_name resolves cleanly to
+-- organizations.name. "The vendor's email" does not resolve at all, because a
+-- company can have several members. That is the actual issue, and it is a
+-- product question, not a substitution.
+--
+-- THE RULING: organizations gains a nullable primary_contact_user_id, a
+-- foreign key to profiles, backfilled to the founding user, and the embeds
+-- become two hops:
+--
+--   vendor_org:organizations!vendor_org_id(
+--     name,
+--     primary_contact:profiles!primary_contact_user_id(email, full_name)
+--   )
+--
+-- Chosen deliberately over denormalizing contact_email and contact_name onto
+-- organizations, which would be one hop fewer and two more things that go
+-- stale. One source per fact, and the contact is a designated person rather
+-- than whoever signed up first.
+--
+-- THIS IS THE FIRST FIELD OF THE COMPANY PRIMARY CONTACT ARRIVING EARLY. The
+-- ruled contact record for phase two is larger than one pointer. This column
+-- is the part the embeds cannot ship without, brought forward on its own so
+-- the rename does not have to wait for the rest of that design.
+--
+-- The application side is lib/org-contact.ts, which owns the select fragment
+-- and the single fallback rule for a null organization or a null contact.
 --
 -- ---------------------------------------------------------------------
 -- THE ORG-ID-EQUALS-USER-ID COINCIDENCE, AND ITS EXPIRY
@@ -150,6 +191,28 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS public.organizations (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name            text NOT NULL,
+  -- The company's designated primary contact. THE THIRTEEN EMBEDS DEPEND ON
+  -- THIS COLUMN. See the note in this file's header.
+  --
+  -- NULLABLE, deliberately. An organization with no designated contact is a
+  -- real and recoverable state; an organization that cannot be created
+  -- because nobody has been designated yet is not. The PHASE 12 trigger
+  -- would otherwise have to write the profile row and the organization row
+  -- in a fixed order for a value it already knows, and any organization
+  -- created by a future admin flow before its first member joins would be
+  -- rejected outright.
+  --
+  -- ON DELETE SET NULL, chosen over the two alternatives:
+  --   CASCADE would delete the COMPANY when one person's account is deleted,
+  --     and with it every project, partnership and bid that references it.
+  --     A contact is a pointer at a person, not the company's existence.
+  --   RESTRICT would make deleting any user who happens to be a contact fail
+  --     at the database, with no product surface that explains why.
+  -- SET NULL keeps the company and blanks the contact. The consequence is
+  -- stated rather than hidden: DELETING A USER SILENTLY BLANKS THE CONTACT
+  -- ACROSS ALL THIRTEEN SURFACES, presenting exactly as the never-set case.
+  -- lib/org-contact.ts handles both through one code path for that reason.
+  primary_contact_user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
   -- Capability flags. An organization can be a lead agency, a vendor, or
   -- both. These are DESCRIPTIVE, not authorization: no policy in this file
   -- reads them, precisely so a wrong flag cannot lock anybody out of their
@@ -167,6 +230,14 @@ COMMENT ON TABLE public.organizations IS
   'sixteen accounts that existed on 2026-08-17 and must never be relied upon: '
   'every organization created after 079 gets gen_random_uuid(). Do not join '
   'profiles on an org id.';
+
+COMMENT ON COLUMN public.organizations.primary_contact_user_id IS
+  'The one person whose email and name represent this company to a counterparty. '
+  'Nullable: null means nobody is designated, or the designated user was deleted '
+  '(ON DELETE SET NULL). Thirteen PostgREST embeds read it as '
+  'primary_contact:profiles!primary_contact_user_id(email, full_name) - see '
+  'lib/org-contact.ts. It is the first field of the company primary contact ruled '
+  'for phase two, arriving early because the embeds cannot wait for it.';
 
 COMMENT ON COLUMN public.organizations.is_lead_agency IS
   'Descriptive capability flag, derived at backfill from profiles.role. Read by '
@@ -245,7 +316,8 @@ ALTER TABLE public.org_members   ENABLE ROW LEVEL SECURITY;
 -- maintain, and it no longer disagrees with Rule A anyway.
 -- =====================================================================
 
-INSERT INTO public.organizations (id, name, is_lead_agency, is_vendor, created_at)
+INSERT INTO public.organizations (id, name, primary_contact_user_id,
+                                  is_lead_agency, is_vendor, created_at)
 SELECT
   p.id,
   -- 078 writes COALESCE(raw_user_meta_data->>'company_name', ''), so a new
@@ -258,6 +330,16 @@ SELECT
     NULLIF(split_part(COALESCE(p.email, ''), '@', 1), ''),
     'Untitled organization'
   ),
+  -- PRIMARY CONTACT BACKFILL: the founding user, and NO LOOKUP IS NEEDED.
+  -- Under Option C the organization id IS that user's id - the SELECT list
+  -- above already writes p.id as the primary key - so the founder is p.id by
+  -- construction, in the same statement that creates the organization. There
+  -- is no join, no correlated subquery and no second UPDATE pass. This is the
+  -- one place the org-id-equals-user-id coincidence is legitimately used, and
+  -- it is used at backfill time only: nothing at run time may rely on it, and
+  -- the PHASE 12 trigger writes gen_random_uuid() with an explicit NEW.id
+  -- contact instead.
+  p.id,
   -- RULE A. Mirrors migration 078's chosen_role expression exactly: anything
   -- that is not exactly 'partner' is a lead agency. Guarantees precisely one
   -- of the two flags is true, so organizations_has_a_capability cannot fire.
@@ -296,6 +378,20 @@ ON CONFLICT (org_id, user_id) DO NOTHING;
 --   SELECT count(*) FROM public.organizations
 --   WHERE NOT (is_lead_agency OR is_vendor);
 --   -- expect 0
+--
+--   SELECT count(*) FROM public.organizations
+--   WHERE primary_contact_user_id IS NULL;
+--   -- expect 0. Every backfilled organization is designated to its founding
+--   -- user. A non-zero count here means the thirteen embeds in
+--   -- lib/org-contact.ts will render the fallback instead of a contact for
+--   -- that many vendors on day one.
+--
+--   SELECT count(*) FROM public.organizations o
+--   WHERE o.primary_contact_user_id IS DISTINCT FROM o.id;
+--   -- expect 0 for the backfill specifically, since org id = founder id.
+--   -- This assertion is TRUE OF THE BACKFILL ONLY and must NOT be turned
+--   -- into a constraint: every organization created from PHASE 12 onward has
+--   -- an id that belongs to no user.
 --
 --   SELECT is_lead_agency, is_vendor, count(*)
 --   FROM public.organizations GROUP BY 1,2 ORDER BY 1,2;
@@ -1696,8 +1792,16 @@ BEGIN
     -- Capability flags by the same rule as the PHASE 2 backfill: anything
     -- that is not exactly 'partner' is a lead agency. Exactly one flag is
     -- true, so organizations_has_a_capability cannot fire.
-    INSERT INTO public.organizations (name, is_lead_agency, is_vendor)
-    VALUES (org_name, chosen_role = 'agency', chosen_role = 'partner')
+    -- primary_contact_user_id is set EXPLICITLY to NEW.id, not left to the
+    -- backfill's id coincidence: this organization's id is gen_random_uuid()
+    -- and belongs to no user. Without this line every account created after
+    -- 079 gets an organization with no contact, and all thirteen embeds fall
+    -- back for it from its first day. The profile INSERT above has already
+    -- committed the profiles row inside this same statement, so the foreign
+    -- key to profiles(id) is satisfiable here.
+    INSERT INTO public.organizations (name, primary_contact_user_id,
+                                      is_lead_agency, is_vendor)
+    VALUES (org_name, NEW.id, chosen_role = 'agency', chosen_role = 'partner')
     RETURNING id INTO new_org_id;
 
     INSERT INTO public.org_members (org_id, user_id, role)
@@ -1722,6 +1826,12 @@ COMMIT;
 --   SELECT (SELECT count(*) FROM public.profiles)      AS profiles,
 --          (SELECT count(*) FROM public.organizations) AS orgs,
 --          (SELECT count(*) FROM public.org_members)   AS members;
+--
+-- 1b. Every organization has a primary contact.
+--   SELECT count(*) FROM public.organizations
+--   WHERE primary_contact_user_id IS NULL;
+--   -- expect 0. Any other number is that many vendors whose contact renders
+--   -- as the lib/org-contact.ts fallback across all thirteen surfaces.
 --
 -- 2. No old column name survives anywhere.
 --   SELECT table_name, column_name FROM information_schema.columns

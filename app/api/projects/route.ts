@@ -1,6 +1,14 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { reconcileProjectClientFields } from '@/lib/clients-server'
 import { createClient } from '@/lib/supabase/server'
+import {
+  ORG_CONTACT_SELECT,
+  legacyPartnerShape,
+  logOrgContactGap,
+  resolveOrgContact,
+  unwrapOne,
+  type OrgEmbed,
+} from '@/lib/org-contact'
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
 import { actingRole, canActAs } from '@/lib/acting-role'
@@ -54,6 +62,33 @@ const noStoreHeaders = {
 } as const
 
 const PARTNER_ALERT_EXCLUDED_STATUSES = new Set(['on_track', 'complete'])
+
+/**
+ * 079-EMBED. Fold the two-hop organizations embed back onto the `partner` key the wire
+ * shape has always used, so no consumer of GET /api/projects moves. Both nulls are
+ * possible and both are logged: a null organization (missing foreign key, or row level
+ * security) and a null primary contact. See lib/org-contact.ts.
+ */
+function normalizeAssignmentPartners(project: Record<string, unknown>): Record<string, unknown> {
+  const raw = project.project_assignments
+  if (!raw) return project
+  const rows = Array.isArray(raw) ? raw : [raw]
+  const assignments = rows.map((a) => {
+    const row = (a || {}) as Record<string, unknown>
+    const pship = unwrapOne(row.partnership as Record<string, unknown> | Record<string, unknown>[] | null)
+    if (!pship) return row
+    const { vendor_org: embed, ...restPship } = pship
+    const contact = resolveOrgContact(embed as OrgEmbed, null)
+    if (pship.vendor_org_id) {
+      logOrgContactGap('GET /api/projects (agency)', contact, {
+        projectId: project.id,
+        vendorOrgId: pship.vendor_org_id,
+      })
+    }
+    return { ...row, partnership: { ...restPship, partner: legacyPartnerShape(embed as OrgEmbed, null) } }
+  })
+  return { ...project, project_assignments: assignments }
+}
 
 function unwrapAssignmentRows(raw: unknown): { status?: string }[] {
   if (!raw) return []
@@ -126,21 +161,13 @@ export async function GET(request: NextRequest) {
     if (acting === 'agency') {
       // Try rich query first (with relationships), then fallback to plain projects query.
       const rich = await supabase
-        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-        // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-        // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-        // resolves to nothing, and the new one resolves to `organizations`, which carries only
-        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-        // is exactly what this embed selects.
-        //
-        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-        // vendor company's email address under an organization model", which is the
-        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-        // cannot see this: the constraint name embeds the old column name with no word boundary
-        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-        // the rename complete with all thirteen of these still broken.
-        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+        // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+        // Four embed levels deep (projects -> project_assignments -> partnerships ->
+        // organizations -> profiles); four-level nesting was proved against the live
+        // database read-only on 2026-08-17 before this was written. Nothing in the
+        // application reads this partner today - only `status` is used, both here and by
+        // every consumer of the response - but the payload key is normalized back to
+        // `partner` below anyway, so a future reader finds the shape it expects.
         .from('projects')
         .select(`
           *,
@@ -148,9 +175,8 @@ export async function GET(request: NextRequest) {
             id,
             status,
             partnership:partnerships(
-              partner:profiles!partnerships_partner_id_fkey(
-                id, company_name, full_name
-              )
+              vendor_org_id,
+              vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
             )
           )
         `)
@@ -158,7 +184,7 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
 
       if (!rich.error) {
-        projects = rich.data
+        projects = (rich.data || []).map((row) => normalizeAssignmentPartners(row as Record<string, unknown>))
       } else {
         console.error(
           '[api/projects] agency GET rich query failed (falling back to simple projects select)',
@@ -390,21 +416,12 @@ export async function GET(request: NextRequest) {
       }
 
       const { data, error } = await supabase
-        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-        // After 079, projects.org_id references organizations(id) rather than profiles(id), and
-        // the constraint is rebuilt as projects_org_id_org_fkey. So the old constraint name
-        // resolves to nothing, and the new one resolves to `organizations`, which carries only
-        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-        // is exactly what this embed selects.
-        //
-        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-        // lead agency organization's email address under an organization model", which is the
-        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-        // cannot see this: the constraint name embeds the old column name with no word boundary
-        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-        // the rename complete with all thirteen of these still broken.
-        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+        // 079-EMBED: the agency-side one, rewritten from
+        // `agency:profiles!projects_agency_id_fkey(...)`. Same treatment against org_id:
+        // projects.org_id points at organizations after 079, so the lead agency's company
+        // name is organizations.name and the person is its designated primary contact.
+        // The `agency` payload key and its `company_name` / `full_name` fields are
+        // unchanged, so app/partner/projects/page.tsx does not move.
         .from('project_assignments')
         .select(`
           id,
@@ -412,9 +429,7 @@ export async function GET(request: NextRequest) {
           created_at,
           project:projects(
             *,
-            agency:profiles!projects_agency_id_fkey(
-              id, company_name, full_name
-            )
+            lead_org:organizations!org_id(${ORG_CONTACT_SELECT})
           )
         `)
         .in('partnership_id', partnershipIds)
@@ -433,11 +448,23 @@ export async function GET(request: NextRequest) {
           const pr = row.project
           const proj = (Array.isArray(pr) ? pr[0] : pr) as Record<string, unknown> | null | undefined
           if (!proj || typeof proj !== 'object') return null
-          const ag = proj.agency
-          const agency = (Array.isArray(ag) ? ag[0] : ag) as
-            | { company_name?: string | null; full_name?: string | null }
-            | null
-            | undefined
+          // 079-EMBED. The lead agency's identity now arrives as an organization plus its
+          // primary contact. Both can be null - a missing foreign key, a deleted contact
+          // (ON DELETE SET NULL), or row level security - and both are logged rather than
+          // allowed to render blank downstream.
+          const leadContact = resolveOrgContact(proj.lead_org as OrgEmbed, null)
+          if (proj.org_id) {
+            logOrgContactGap('GET /api/projects (vendor)', leadContact, {
+              projectId: proj.id,
+              leadOrgId: proj.org_id,
+            })
+          }
+          const agency = leadContact.orgMissing
+            ? null
+            : {
+                company_name: leadContact.orgName,
+                full_name: leadContact.contactFullName,
+              }
           const titleRaw = (proj.title ?? proj.name ?? '') as string
           const title = String(titleRaw).trim() || 'Untitled project'
           return {

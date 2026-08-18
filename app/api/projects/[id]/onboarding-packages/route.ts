@@ -1,5 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import {
+  ORG_CONTACT_SELECT,
+  legacyPartnerShape,
+  logOrgContactGap,
+  resolveOrgContact,
+  unwrapOne,
+  type OrgEmbed,
+} from "@/lib/org-contact"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { createNotification } from "@/lib/notifications"
 import { normalizeMeetingUrlForHref } from "@/lib/utils"
@@ -44,28 +52,17 @@ export async function GET(
     }
 
     const { data: packages, error } = await supabase
-      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-      // resolves to nothing, and the new one resolves to `organizations`, which carries only
-      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-      // is exactly what this embed selects.
-      //
-      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-      // vendor company's email address under an organization model", which is the
-      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-      // cannot see this: the constraint name embeds the old column name with no word boundary
-      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-      // the rename complete with all thirteen of these still broken.
-      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+      // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+      // The `partner` key on the response is preserved by the normalization below.
       .from("onboarding_packages")
       .select(
         `
         *,
         partnership:partnerships(
           id,
-          partner:profiles!partnerships_partner_id_fkey(id, email, full_name, company_name)
+          vendor_org_id,
+          partner_email,
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
         )
       `
       )
@@ -83,7 +80,27 @@ export async function GET(
       return NextResponse.json({ packages: [], error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ packages: packages || [] })
+    const shapedPackages = (packages || []).map((row) => {
+      const record = row as Record<string, unknown>
+      const pship = unwrapOne(record.partnership as Record<string, unknown> | Record<string, unknown>[] | null)
+      if (!pship) return record
+      const { vendor_org: embed, ...restPship } = pship
+      const rowEmail = (pship.partner_email as string | null) ?? null
+      const contact = resolveOrgContact(embed as OrgEmbed, rowEmail)
+      if (pship.vendor_org_id) {
+        logOrgContactGap('GET /api/projects/[id]/onboarding-packages', contact, {
+          projectId,
+          packageId: record.id,
+          vendorOrgId: pship.vendor_org_id,
+        })
+      }
+      return {
+        ...record,
+        partnership: { ...restPship, partner: legacyPartnerShape(embed as OrgEmbed, rowEmail) },
+      }
+    })
+
+    return NextResponse.json({ packages: shapedPackages })
   } catch (e) {
     console.error("[onboarding-packages] GET", e)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

@@ -6,6 +6,13 @@ import { hasLigamentAccount } from '@/lib/server/account-existence'
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
+import {
+  ORG_CONTACT_SELECT_RICH,
+  legacyPartnerShape,
+  logOrgContactGap,
+  resolveOrgContact,
+  type OrgEmbed,
+} from '@/lib/org-contact'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,34 +73,38 @@ export async function GET(request: NextRequest) {
       // hidden entirely - the agency explicitly dismissed them from the pool, but the row
       // is kept (not deleted) for any associated rfp_magic_tokens/bid history.
       const rich = await supabase
-        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
-        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
-        // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
-        // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
-        // resolves to nothing, and the new one resolves to `organizations`, which carries only
-        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
-        // is exactly what this embed selects.
-        //
-        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
-        // vendor company's email address under an organization model", which is the
-        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
-        // cannot see this: the constraint name embeds the old column name with no word boundary
-        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
-        // the rename complete with all thirteen of these still broken.
-        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
+        // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
+        // vendor_org_id points at organizations after 079, so the company name comes from
+        // organizations.name and the contact comes from the designated primary contact.
+        // capabilities, company_logo_url and created_at have no organization-level column
+        // and continue to come from that contact's own profile row. lib/org-contact.ts owns
+        // the fragment and the null rule; the JSON key stays `partner` so no consumer moves.
         .from('partnerships')
         .select(`
           *,
-          partner:profiles!partnerships_partner_id_fkey(
-            id, email, full_name, company_name, capabilities, company_logo_url, created_at
-          )
+          vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT_RICH})
         `)
         .eq('lead_org_id', user.id)
         .neq('status', 'removed')
         .order('created_at', { ascending: false })
 
       if (!rich.error && rich.data) {
-        partnerships = rich.data
+        // Normalize the two-hop embed back onto the wire key every consumer already reads.
+        // A row whose organization or contact came back null is logged rather than left to
+        // render blank - see lib/org-contact.ts for why both nulls are possible.
+        partnerships = rich.data.map((row) => {
+          const record = row as Record<string, unknown>
+          const { vendor_org: embed, ...rest } = record
+          const rowEmail = (record.partner_email as string | null) ?? null
+          const contact = resolveOrgContact(embed as OrgEmbed, rowEmail)
+          if (record.vendor_org_id) {
+            logOrgContactGap('GET /api/partnerships (agency)', contact, {
+              partnershipId: record.id,
+              vendorOrgId: record.vendor_org_id,
+            })
+          }
+          return { ...rest, partner: legacyPartnerShape(embed as OrgEmbed, rowEmail, { rich: true }) }
+        })
       } else {
         if (rich.error) {
           console.error('[api] GET /partnerships agency branch embed failed, falling back to plain select', {
@@ -258,18 +269,22 @@ export async function GET(request: NextRequest) {
       // Manually fetch agency profiles for each partnership
       const agencyIds = [...new Set(allPartnerships.map(p => p.lead_org_id).filter(Boolean))]
       
-      let agencyProfiles: Record<
-        string,
-        { id: string; email: string; full_name: string; company_name: string; company_logo_url: string | null; capabilities: unknown }
-      > = {}
+      // 079-EMBED (14th site, NOT one of the thirteen). This is the same break in
+      // non-embed form: it looked lead_org_id up in `profiles`, which is the
+      // "JOIN profiles ON profiles.id = an org id" trap 079's table comment names. It
+      // works for every backfilled organization and returns nothing for every one created
+      // after 079, blanking the lead agency's name across the whole vendor portal. It is
+      // fixed here rather than left, because it feeds the sibling wire key of the embed
+      // rewritten above and sits in the same handler. Reported separately.
+      let agencyProfiles: Record<string, NonNullable<ReturnType<typeof legacyPartnerShape>>> = {}
       if (agencyIds.length > 0) {
         const { data: agencies, error: agenciesErr } = await supabase
-          .from('profiles')
-          .select('id, email, full_name, company_name, company_logo_url, capabilities')
+          .from('organizations')
+          .select(ORG_CONTACT_SELECT_RICH)
           .in('id', agencyIds)
 
         if (agenciesErr) {
-          console.error('[api] GET /partnerships agency profiles batch load failed', {
+          console.error('[api] GET /partnerships lead agency organizations batch load failed', {
             route,
             userId: user.id,
             agencyIdCount: agencyIds.length,
@@ -278,11 +293,27 @@ export async function GET(request: NextRequest) {
           })
         }
 
-        if (agencies) {
-          agencyProfiles = agencies.reduce((acc, agency) => {
-            acc[agency.id] = agency
-            return acc
-          }, {} as typeof agencyProfiles)
+        for (const org of agencies || []) {
+          const orgId = (org as { id?: string }).id
+          if (!orgId) continue
+          const contact = resolveOrgContact(org as OrgEmbed, null)
+          logOrgContactGap('GET /api/partnerships (vendor, lead agency)', contact, {
+            leadOrgId: orgId,
+          })
+          const shaped = legacyPartnerShape(org as OrgEmbed, null, { rich: true })
+          if (shaped) agencyProfiles[orgId] = shaped
+        }
+
+        // An organization id that came back with no row at all is invisible to the loop
+        // above, so it is counted here rather than silently dropped.
+        const missing = agencyIds.filter((id) => !agencyProfiles[id as string])
+        if (missing.length > 0) {
+          console.warn('[api] GET /partnerships lead agency organizations not readable', {
+            route,
+            userId: user.id,
+            missingCount: missing.length,
+            reason: 'row level security on organizations, or the row does not exist',
+          })
         }
       }
       
