@@ -241,9 +241,17 @@ That is an API contract change, which is why it is not mechanical. Note the
 **B-9 and B-10: `app/agency/pool/[partnerId]/page.tsx:255` and `:259`.** The
 `[partnerId]` route parameter is a profile id everywhere in this page, and it is
 written into `partner_vouches.vendor_org_id`. Recommendation: the same
-`resolveOrgIdForUser` from B-1. The `lead_org_id` half of the vouch insert is the
-caller and would be Tier A on its own; it is held back only because a half-fixed
-insert is harder to review than an unfixed one.
+`resolveOrgIdForUser` from B-1.
+
+> **CORRECTION, added after Phase 3.** This paragraph originally said the
+> `lead_org_id` half of the vouch insert was held back "because a half-fixed insert
+> is harder to review than an unfixed one". That is not what happened. The caller
+> half of this insert, and of the two access-request inserts in
+> `/partner/network` and `/partner/marketplace`, WAS fixed in Phase 3, because the
+> caller half is unambiguously Tier A and leaving a known-broken write in place to
+> keep a diff tidy is the wrong trade. Those three sites are now half fixed, and
+> the remaining half is marked in code at each one. The report records this the
+> same way.
 
 ---
 
