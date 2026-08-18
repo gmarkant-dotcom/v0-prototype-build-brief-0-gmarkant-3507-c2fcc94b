@@ -90,13 +90,16 @@
 --      owner membership row per profile. Zero UPDATEs to any referencing
 --      row: every existing agency_id and partner_id value is already a
 --      valid organization id under this model.
---   3. Creates four no-parameter SECURITY DEFINER helpers that resolve the
+--   3. Creates five no-parameter SECURITY DEFINER helpers that resolve the
 --      CALLER's identity. Nobody can ask about anybody else.
 --   4. Renames 30 columns across 23 tables.
 --   5. Repoints every foreign key from profiles/auth.users to organizations.
 --   6. Adds NOT NULL and the indexes organization-scoped RLS needs.
 --   7. Drops 83 live policies by their snapshot name and creates 81 in
---      their place, plus 5 on the two new tables.
+--      their place, plus 6 on the two new tables. Two of the six are the
+--      organizations SELECT pair: the caller's OWN organizations, and the
+--      COUNTERPARTY organizations the thirteen embeds in lib/org-contact.ts
+--      read. Without the second one all thirteen render blank.
 --   8. Extends handle_new_user so a new signup gets an organization and an
 --      owner membership row alongside its profile.
 --
@@ -399,7 +402,7 @@ ON CONFLICT (org_id, user_id) DO NOTHING;
 
 
 -- =====================================================================
--- PHASE 3: the membership helpers, 1 and 2 of 4
+-- PHASE 3: the membership helpers, 1 and 2 of 5
 --
 -- Every one is SECURITY DEFINER, STABLE, search_path-pinned, and takes NO
 -- PARAMETERS: each reads auth.uid() internally, so no caller can ask a
@@ -414,10 +417,10 @@ ON CONFLICT (org_id, user_id) DO NOTHING;
 -- owner, for whom RLS is not enforced, so it reads org_members once without
 -- re-entering policy evaluation.
 --
--- The same rule is why helpers 3 and 4 exist rather than a plain JOIN
--- against org_members inside the profiles and notifications policies: that
--- join would be filtered by org_members' own self-row-only policy and would
--- silently return nothing for every colleague.
+-- The same rule is why helpers 3, 4 and 5 exist rather than a plain JOIN
+-- against org_members inside the profiles, organizations and notifications
+-- policies: that join would be filtered by org_members' own self-row-only
+-- policy and would silently return nothing for every colleague.
 --
 -- BECAUSE EXECUTE IS REVOKED FROM PUBLIC, every policy that calls one of
 -- these must be granted TO authenticated and not TO public - otherwise an
@@ -462,12 +465,12 @@ REVOKE EXECUTE ON FUNCTION public.current_user_admin_org_ids() FROM PUBLIC;
 GRANT  EXECUTE ON FUNCTION public.current_user_org_ids()       TO authenticated;
 GRANT  EXECUTE ON FUNCTION public.current_user_admin_org_ids() TO authenticated;
 
--- HELPERS 3 AND 4 ARE CREATED IN PHASE 6, NOT HERE. Their bodies reference
--- partnerships.lead_org_id and partnerships.vendor_org_id, and a SQL-bodied
--- function is parsed at CREATE time, so they cannot exist until after the
--- rename in PHASE 5. Nothing between here and PHASE 6 calls them.
+-- HELPERS 3, 4 AND 5 ARE CREATED IN PHASE 6, NOT HERE. Their bodies
+-- reference partnerships.lead_org_id and partnerships.vendor_org_id, and a
+-- SQL-bodied function is parsed at CREATE time, so they cannot exist until
+-- after the rename in PHASE 5. Nothing between here and PHASE 6 calls them.
 
--- VERIFY after PHASE 3 (2 rows here; the same query returns 4 after PHASE 6):
+-- VERIFY after PHASE 3 (2 rows here; the same query returns 5 after PHASE 6):
 --   SELECT p.proname, p.prosecdef, p.provolatile, p.proconfig, p.proacl
 --   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 --   WHERE n.nspname='public' AND p.proname LIKE 'current\_user\_%'
@@ -678,15 +681,45 @@ COMMENT ON COLUMN public.partnerships.vendor_org_id IS
 
 
 -- =====================================================================
--- PHASE 6: the two helpers that could not be written before the rename
+-- PHASE 6: the three helpers that could not be written before the rename
 --
 -- Their bodies reference partnerships.lead_org_id and
 -- partnerships.vendor_org_id, and a SQL-bodied function is parsed at CREATE
--- time, so neither could be created before PHASE 5. Nothing between PHASE 3
--- and here calls either of them; the first caller is PHASE 10.
+-- time, so none could be created before PHASE 5. Nothing between PHASE 3
+-- and here calls any of them; the first caller is PHASE 10.
+--
+-- WHY THERE ARE THREE AND NOT TWO. The counterparty set used to live as a
+-- CTE inside current_user_visible_profile_ids(). PHASE 11 now needs the same
+-- set to decide which organizations a caller may read, and two copies of a
+-- visibility rule are two rules that drift. It is lifted into a function of
+-- its own, with the same hardening as every other helper here, and
+-- current_user_visible_profile_ids() calls it instead of redefining it. The
+-- consequence is the one that matters: ORGANIZATION VISIBILITY AND PROFILE
+-- VISIBILITY ARE NOW THE SAME PREDICATE BY CONSTRUCTION, not by two
+-- definitions that happen to agree today.
 -- =====================================================================
 
-CREATE OR REPLACE FUNCTION public.current_user_visible_profile_ids()
+-- 3. The organizations on the other side of a partnership involving one of
+--    the caller's organizations, in either direction, AT ANY STATUS.
+--
+-- WHAT COUNTS AS A COUNTERPARTY, AND WHY ONLY THIS. A partnerships row is
+-- the only artifact in this schema that records a two-sided commercial
+-- relationship between two companies: the lead agency creates it and the
+-- vendor claims it. Every other org-to-org link here is UNILATERAL - a
+-- partner_access_request is one company asking, an invitation_request is one
+-- company asking, a partner_rfp_inbox row is one company sending. Admitting
+-- any of those would let one side manufacture visibility of the other by
+-- writing a single row it already controls. Partnerships only.
+--
+-- ANY STATUS, deliberately, including 'pending' and 'removed'. This mirrors
+-- current_user_visible_profile_ids() exactly, which is the whole point of
+-- the extraction. A pending partnership is an agency that has invited a
+-- vendor and is waiting: the vendor's company name has to render on the card
+-- that is waiting. A removed one is a relationship that existed, and its
+-- historical projects, bids and invoices still name the company.
+-- current_user_active_counterparty_user_ids() below is the STRICTER,
+-- active-only set, and it is what the contact-information tier uses.
+CREATE OR REPLACE FUNCTION public.current_user_counterparty_org_ids()
 RETURNS SETOF uuid
 LANGUAGE sql
 STABLE
@@ -695,21 +728,36 @@ SET search_path = public, pg_temp
 AS $$
   WITH my_orgs AS (
     SELECT m.org_id FROM public.org_members m WHERE m.user_id = auth.uid()
-  ),
-  counterparty_orgs AS (
-    SELECT p.vendor_org_id AS org_id
-      FROM public.partnerships p
-     WHERE p.lead_org_id IN (SELECT org_id FROM my_orgs)
-       AND p.vendor_org_id IS NOT NULL
-    UNION
-    SELECT p.lead_org_id AS org_id
-      FROM public.partnerships p
-     WHERE p.vendor_org_id IN (SELECT org_id FROM my_orgs)
   )
+  SELECT p.vendor_org_id AS org_id
+    FROM public.partnerships p
+   WHERE p.lead_org_id IN (SELECT org_id FROM my_orgs)
+     AND p.vendor_org_id IS NOT NULL
+  UNION
+  SELECT p.lead_org_id AS org_id
+    FROM public.partnerships p
+   WHERE p.vendor_org_id IN (SELECT org_id FROM my_orgs);
+$$;
+
+-- 4. Every profile the caller may see: their own colleagues, plus everybody
+--    at every counterparty organization.
+--
+-- The counterparty half is NOT redefined here. It calls helper 3. A nested
+-- SECURITY DEFINER call is fine: the outer body runs as the function owner,
+-- who owns helper 3 and therefore has EXECUTE on it despite the REVOKE FROM
+-- PUBLIC below, and auth.uid() still reads the real caller's JWT claim
+-- because SECURITY DEFINER changes the role, not the session GUC.
+CREATE OR REPLACE FUNCTION public.current_user_visible_profile_ids()
+RETURNS SETOF uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
   SELECT m.user_id
   FROM public.org_members m
-  WHERE m.org_id IN (SELECT org_id FROM my_orgs)
-     OR m.org_id IN (SELECT org_id FROM counterparty_orgs);
+  WHERE m.org_id IN (SELECT public.current_user_org_ids())
+     OR m.org_id IN (SELECT public.current_user_counterparty_org_ids());
 $$;
 
 CREATE OR REPLACE FUNCTION public.current_user_active_counterparty_user_ids()
@@ -739,8 +787,10 @@ AS $$
   WHERE m.org_id IN (SELECT org_id FROM active_counterparties);
 $$;
 
+REVOKE EXECUTE ON FUNCTION public.current_user_counterparty_org_ids()         FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.current_user_visible_profile_ids()          FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.current_user_active_counterparty_user_ids() FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.current_user_counterparty_org_ids()         TO authenticated;
 GRANT  EXECUTE ON FUNCTION public.current_user_visible_profile_ids()          TO authenticated;
 GRANT  EXECUTE ON FUNCTION public.current_user_active_counterparty_user_ids() TO authenticated;
 
@@ -1683,6 +1733,51 @@ CREATE POLICY "Members read their organizations"
   ON public.organizations AS PERMISSIVE FOR SELECT TO authenticated
   USING (id IN (SELECT public.current_user_org_ids()));
 
+-- THE COUNTERPARTY READ. Without it every one of the thirteen embeds in
+-- lib/org-contact.ts returns null: all thirteen read the organization on the
+-- OTHER side of a relationship - a lead agency reading its vendor, a vendor
+-- reading its lead agency - and not one of them reads an organization the
+-- caller belongs to. A to-one embed whose target row is filtered by RLS
+-- comes back as null at HTTP 200, not as an error, so the product renders a
+-- blank company name and nothing throws.
+--
+-- WHY IT REUSES current_user_counterparty_org_ids() RATHER THAN SPELLING THE
+-- SET OUT AGAIN. That function is the same one behind the profiles policy
+-- above. Organization visibility and profile visibility are therefore one
+-- predicate, not two that agree today and diverge at the next edit. If this
+-- rule ever needs to change, it changes in one place and both tiers move
+-- together - which is the only way the outer hop and the nested hop can be
+-- kept from disagreeing.
+--
+-- WHAT IT EXPOSES. The whole organizations row, because RLS is row-level:
+-- id, name, primary_contact_user_id, is_lead_agency, is_vendor, created_at,
+-- updated_at. There is nothing else on the table. primary_contact_user_id is
+-- an id, not contact details: reading the person behind it still has to pass
+-- the profiles policies separately, and it does, because that person is a
+-- member of a counterparty organization and current_user_visible_profile_ids()
+-- returns exactly the members of my_orgs plus the members of this same
+-- counterparty set.
+--
+-- WHAT IT DOES NOT WIDEN. The predicate takes no argument. A caller cannot
+-- ask about an organization id it supplies; the set is derived entirely from
+-- auth.uid() inside a SECURITY DEFINER body. The only way to add an
+-- organization to it is to be on one side of a partnerships row with it.
+--
+-- THE ONE RESIDUAL, STATED RATHER THAN BURIED. "Agencies can create
+-- partnerships" above constrains lead_org_id and says nothing about
+-- vendor_org_id, so a lead agency can insert a partnership naming any
+-- vendor_org_id it can guess and thereby add that organization to its own
+-- counterparty set. That hole is NOT introduced here - it is live today, and
+-- it yields strictly MORE on profiles ("Users can view profiles of
+-- partnership members", same trick, whole profile row) than it yields here
+-- (a company name and two booleans). Closing it means constraining
+-- vendor_org_id on insert, which would break the flow where an agency adds a
+-- known vendor from its pool. That is Greg's call and it is written up in
+-- docs/079-embed-closure-report.md, not decided here.
+CREATE POLICY "Members read counterparty organizations"
+  ON public.organizations AS PERMISSIVE FOR SELECT TO authenticated
+  USING (id IN (SELECT public.current_user_counterparty_org_ids()));
+
 CREATE POLICY "Org admins update their organization"
   ON public.organizations AS PERMISSIVE FOR UPDATE TO authenticated
   USING      (id IN (SELECT public.current_user_admin_org_ids()))
@@ -1862,9 +1957,11 @@ COMMIT;
 --    down before applying, from the fresh snapshot.
 --   SELECT tablename, count(*) FROM pg_policies WHERE schemaname='public'
 --   GROUP BY tablename ORDER BY tablename;
---   -- total must be 104 - 83 + 81 + 5 = 107
+--   -- total must be 104 - 83 + 81 + 6 = 108
 --   -- profiles must be 4, down from 6 (three SELECT policies folded to one)
---   -- organizations must be 2, org_members must be 3
+--   -- organizations must be 3, org_members must be 3
+--   -- organizations is 3 and not 2 because of the counterparty SELECT policy
+--   -- added in PHASE 11. Two SELECT (own, counterparty) and one UPDATE.
 --
 -- 6. Every table still has RLS on, and none is locked out.
 --   SELECT c.relname, c.relrowsecurity, count(p.polname) AS policies
@@ -1878,7 +1975,7 @@ COMMIT;
 --   SELECT p.proname, p.prosecdef, p.provolatile, p.proconfig, p.proacl
 --   FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
 --   WHERE n.nspname='public' AND p.proname LIKE 'current_user_%' ORDER BY 1;
---   -- 4 rows; prosecdef=t; provolatile='s';
+--   -- 5 rows; prosecdef=t; provolatile='s';
 --   -- proconfig={"search_path=public, pg_temp"};
 --   -- proacl contains authenticated=X/ and does NOT contain a bare =X/
 --
@@ -1891,6 +1988,32 @@ COMMIT;
 --   -- must equal the count that same user saw BEFORE the migration. Write
 --   -- it down first. Any decrease is a lockout, any increase is a leak, and
 --   -- both are stop-and-roll-back.
+--
+-- 8b. THE COUNTERPARTY READ, as that same real logged-in test user. This is
+--     the check that decides whether the thirteen embeds render at all.
+--   SELECT id, name FROM public.organizations ORDER BY name;
+--   -- must return the caller's OWN organizations plus every organization on
+--   -- the other side of a partnership with one of them, AND NOTHING ELSE.
+--   -- Compare against the expected set:
+--   SELECT count(*) FROM public.organizations;                       -- visible
+--   SELECT count(*) FROM public.current_user_org_ids();              -- own
+--   SELECT count(*) FROM public.current_user_counterparty_org_ids(); -- other side
+--   -- visible must equal the size of the UNION of the two, which for a
+--   -- backfilled lead agency with N distinct claimed vendors is 1 + N.
+--   -- If visible equals the row count of the whole table, the policy is
+--   -- wrong and it is a leak. Stop and roll back.
+--
+-- 8c. The nested hop resolves for the same caller. An outer hop that
+--     resolves while the inner one nulls just moves the blank one level
+--     down, so check the two-hop shape the product actually issues:
+--   SELECT o.id, o.name, o.primary_contact_user_id,
+--          (SELECT pr.email FROM public.profiles pr
+--            WHERE pr.id = o.primary_contact_user_id) AS contact_email
+--   FROM public.organizations o ORDER BY o.name;
+--   -- contact_email must be non-null wherever primary_contact_user_id is
+--   -- non-null. A null there with a non-null id means the profiles policy
+--   -- did not follow the organizations policy, which is the failure the
+--   -- shared helper exists to prevent.
 --
 -- 9. The trigger is still attached. CREATE OR REPLACE FUNCTION does not
 --    touch triggers, but confirm rather than assume.

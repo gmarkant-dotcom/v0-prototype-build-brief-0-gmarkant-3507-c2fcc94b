@@ -315,12 +315,13 @@ DROP POLICY IF EXISTS "Agencies manage agreements for their project assignments"
 DROP POLICY IF EXISTS "Partners read and update own assignment agreements"      ON public.assignment_agreements;
 DROP POLICY IF EXISTS "Partners update agreement signature fields"              ON public.assignment_agreements;
 
--- The five on the new tables. Dropped explicitly rather than relying on
+-- The six on the new tables. Dropped explicitly rather than relying on
 -- DROP TABLE CASCADE, so the count in the verification block is honest.
 DROP POLICY IF EXISTS "Members read their own membership row"                   ON public.org_members;
 DROP POLICY IF EXISTS "Org admins add members"                                  ON public.org_members;
 DROP POLICY IF EXISTS "Org admins remove members"                               ON public.org_members;
 DROP POLICY IF EXISTS "Members read their organizations"                        ON public.organizations;
+DROP POLICY IF EXISTS "Members read counterparty organizations"                 ON public.organizations;
 DROP POLICY IF EXISTS "Org admins update their organization"                    ON public.organizations;
 
 
@@ -533,14 +534,25 @@ $restore_fk$;
 
 
 -- =====================================================================
--- DOWN PHASE 8: drop the four helpers and the two new tables
+-- DOWN PHASE 8: drop the five helpers and the two new tables
 --
 -- CASCADE on the tables destroys the membership data. Re-read limits 1, 2,
 -- 3 and 4 before running this.
+--
+-- ORDER MATTERS HERE, unlike everywhere else in this file.
+-- current_user_visible_profile_ids() CALLS
+-- current_user_counterparty_org_ids(), so the caller is dropped first.
+-- Postgres does not track that dependency for a SQL-bodied function - the
+-- body is not parsed into a dependency graph the way a view is - so
+-- dropping the callee first would succeed silently and leave the caller
+-- broken at its next invocation rather than at DROP time. Both are gone by
+-- the end of this block either way; the order is for anyone who runs this
+-- file one statement at a time.
 -- =====================================================================
 
 DROP FUNCTION IF EXISTS public.current_user_active_counterparty_user_ids();
 DROP FUNCTION IF EXISTS public.current_user_visible_profile_ids();
+DROP FUNCTION IF EXISTS public.current_user_counterparty_org_ids();
 DROP FUNCTION IF EXISTS public.current_user_admin_org_ids();
 DROP FUNCTION IF EXISTS public.current_user_org_ids();
 

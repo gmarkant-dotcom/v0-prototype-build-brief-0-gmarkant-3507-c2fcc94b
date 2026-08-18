@@ -19,14 +19,29 @@
  * per fact, and the contact is a designated person rather than whoever signed up first.
  *
  * THE FAILURE MODE THIS FILE GUARDS. A PostgREST to-one embed that resolves to no row
- * returns null. It does NOT error. That is true when the foreign key is null, and it is
- * true when row level security filters the target row away. Proved read-only against the
- * live database on 2026-08-17: a partnerships row with a null vendor side returned
- * "partner": null with HTTP 200. So every consumer here must treat null as a first-class
- * case, or a vendor name silently renders blank.
+ * returns null. It does NOT error. So every consumer here must treat null as a
+ * first-class case, or a vendor name silently renders blank.
+ *
+ * TWO CAUSES, AND ONLY ONE OF THEM HAS BEEN OBSERVED. The null-foreign-key cause was
+ * executed read-only against the live database on 2026-08-17: a partnerships row with a
+ * null vendor side returned "partner": null with HTTP 200. The row-level-security cause -
+ * a NON-null foreign key whose target row the caller may not read - has NOT been
+ * executed. Issuing it needs a query as a real authenticated user, and every credential
+ * that would allow that (SUPABASE_JWT_SECRET, POSTGRES_URL, POSTGRES_URL_NON_POOLING,
+ * POSTGRES_PASSWORD) is present-but-empty in this environment. The exact reproducible
+ * case is specified in docs/079-embed-closure-report.md, Item 2, for whoever has a real
+ * session. Until it is run, treat "RLS nulls rather than errors" as the assumption this
+ * file is built on rather than as a measured fact - the code is correct either way,
+ * because it handles null, but the RELEASE RISK differs: null means silent blanks,
+ * error means a visible 400.
  *
  * There are TWO independent nulls and they mean different things:
- *   vendor_org === null        the organization row is missing or unreadable
+ *   vendor_org === null        the organization row is missing or unreadable. After 079
+ *                              PHASE 11 "unreadable" means the target is neither one of
+ *                              the caller's own organizations nor a counterparty of one,
+ *                              where counterparty is defined once, in
+ *                              current_user_counterparty_org_ids(), and shared with the
+ *                              profiles policy so the two hops cannot disagree.
  *   primary_contact === null   the organization has no designated contact, OR the
  *                              designated user was deleted (the column is ON DELETE SET
  *                              NULL), OR the caller cannot read that profile
