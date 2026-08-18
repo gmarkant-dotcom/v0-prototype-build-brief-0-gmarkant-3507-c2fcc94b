@@ -274,32 +274,39 @@ export async function agencyEntitlementId(userId: string, client: OrgLookupClien
  * whole pass exists to close - a value that is accidentally correct for the sixteen
  * accounts that exist and silently wrong for the seventeenth.
  *
- * The ranking (owner, then admin, then member, then first) is copied from
- * agencyEntitlementId() on purpose. It is deterministic rather than correct: "which of my
- * organizations does this write belong to" is a real product question that the membership
- * interface will have to answer explicitly. Today it cannot arise - 079 PHASE 2 backfills
- * exactly one organization per profile and the PHASE 12 trigger creates exactly one per
- * signup, so every caller has exactly one and the ranking never has two rows to sort.
+ * ---------------------------------------------------------------------------
+ * THE RANKING IS GONE. THIS NOW DELEGATES TO lib/acting-org.ts.
+ *
+ * It used to sort the caller's memberships owner, then admin, then member, and take the
+ * first, and the paragraph that used to sit here called that "deterministic rather than
+ * correct". It was correct only because the sort never had two rows to work with. The day
+ * colleague invitations ship it becomes a silent misattribution: a person who owns company
+ * A and is a member of company B writes every record to A, with no error anywhere.
+ *
+ * resolveActingOrgId() replaces it with the ACTING ORGANIZATION - membership resolved
+ * server-side from the user id on every call, a stored preference used only to select
+ * WITHIN that membership set and discarded if it is not in it, and a refusal rather than a
+ * pick when the answer is genuinely ambiguous. See lib/acting-org.ts for why it takes no
+ * requested-organization parameter at all.
+ *
+ * BEHAVIOUR IS UNCHANGED FOR EVERY ACCOUNT THAT EXISTS. Each of them has exactly one
+ * membership - 079 PHASE 2 inserts one per profile, the PHASE 12 trigger inserts one per
+ * signup, and nothing in this repository writes org_members at all - and a one-element
+ * list sorts to itself, so the old ranking and the new resolver return the same id. The
+ * query count is unchanged too: the stored preference is read only when there is more than
+ * one membership to choose between.
+ *
+ * WHAT EACH CALLER DOES WITH NULL is unchanged and was already correct: every one of them
+ * treats it as "fail the request". That was audited before this change rather than assumed
+ * - see docs/m1-foundation-report.md, Phase 2.
  */
 export async function resolveCallerWriteOrgId(
   userId: string,
   client: OrgLookupClient
 ): Promise<OrgId | null> {
-  if (!userId) return null
-  const { data, error } = await client.from("org_members").select("org_id, role").eq("user_id", userId)
-  if (error) {
-    console.error("[entitlements] resolveCallerWriteOrgId failed", {
-      userId,
-      code: error.code,
-      message: error.message,
-    })
-    return null
-  }
-  const rows = (data ?? []) as Array<{ org_id?: string | null; role?: string | null }>
-  if (rows.length === 0) return null
-  const rank = (r?: string | null) => (r === "owner" ? 0 : r === "admin" ? 1 : 2)
-  const best = [...rows].sort((a, b) => rank(a.role) - rank(b.role))[0]
-  return (best?.org_id as OrgId | undefined) ?? null
+  const { resolveActingOrgId } = await import("@/lib/acting-org")
+  const resolution = await resolveActingOrgId(userId, client)
+  return resolution.orgId
 }
 
 /**
