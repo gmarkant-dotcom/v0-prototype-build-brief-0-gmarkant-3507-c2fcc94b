@@ -19,19 +19,26 @@
  * See docs/m1-foundation-report.md, Phase 3, and docs/m1-phase0-discovery.md 0a.
  *
  * ---------------------------------------------------------------------------
- * TWO MIGRATIONS THIS PAGE OUTLIVES.
+ * 086 IS APPLIED. Both of the pieces this page waited on are live: profiles.title and the
+ * org_members SELECT policy "Members read their organization roster".
  *
- * 086 adds profiles.title and the org_members roster SELECT policy. Neither is applied yet
- * and this page renders correctly without them:
+ * TWO BANNERS THAT USED TO STAND HERE ARE GONE, and this note is what is left of them.
  *
- *   NO title COLUMN     the profiles select is retried without it on PostgREST 42703
- *                       (undefined_column) and every title renders as "-".
- *   NO ROSTER POLICY    org_members returns the caller's own row only, because the 079
- *                       policy is USING (user_id = auth.uid()). The page would then show a
- *                       roster of one and look correct while being wrong, which is exactly
- *                       the failure mode this codebase keeps hitting. So it does not stay
- *                       quiet about it: when the roster comes back with a single row it
- *                       says so, in the interface, and names the migration.
+ *   THE ROSTER-OF-ONE BANNER said a roster of one might mean the policy was missing rather
+ *   than that the person is alone. That ambiguity was real for about an hour. It is not
+ *   any more: the policy is live, so one row means one member. The banner was also
+ *   unconditional on the row count, so once 086 landed it asserted something false to
+ *   every solo member, which today is all sixteen accounts, and it named an internal
+ *   migration number in copy no customer can act on.
+ *
+ *   THE MISSING-TITLE BANNER described a state that can no longer recur, because a column
+ *   does not un-add itself.
+ *
+ * THE 42703 RETRY BELOW IS DELIBERATELY KEPT. It is not the banner and it is not dead
+ * code: a PostgREST select naming a column that is absent fails the WHOLE query rather
+ * than omitting the column, so the guard is what stands between a rolled-back 086 and a
+ * roster page that renders nothing at all. It costs one extra round trip in a case that
+ * should never happen, and it now logs instead of rendering.
  */
 
 import { useEffect, useState } from "react"
@@ -83,7 +90,6 @@ export default function AgencyTeamRosterPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [orgName, setOrgName] = useState<string | null>(null)
   const [members, setMembers] = useState<RosterMember[]>([])
-  const [titleColumnMissing, setTitleColumnMissing] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -140,10 +146,12 @@ export default function AgencyTeamRosterPage() {
       }>
       const userIds = rows.map((r) => r.user_id).filter(Boolean)
 
-      // 086 GUARD. `title` does not exist until 086 is applied, and a PostgREST select
-      // naming a missing column fails the WHOLE query with 42703 rather than omitting it.
-      // Retried without it so the roster still renders, which is the same shape of guard
-      // migration 074's response_deadline already uses in this codebase.
+      // 086 GUARD, KEPT AFTER 086 WAS APPLIED. profiles.title exists now, so this branch
+      // should never be taken. It stays because a PostgREST select naming a missing column
+      // fails the WHOLE query with 42703 rather than omitting that column, so without it a
+      // rolled-back 086 takes the entire roster down rather than one column of it. Same
+      // shape of guard migration 074's response_deadline already uses in this codebase.
+      // It logs rather than telling the user about a migration they cannot act on.
       let profileRows: Array<Record<string, unknown>> = []
       if (userIds.length > 0) {
         const withTitle = await supabase
@@ -151,7 +159,7 @@ export default function AgencyTeamRosterPage() {
           .select("id, full_name, display_name, email, title")
           .in("id", userIds)
         if (withTitle.error?.code === "42703") {
-          if (!cancelled) setTitleColumnMissing(true)
+          console.error("[agency/settings/team] profiles.title missing, retrying without it")
           const withoutTitle = await supabase
             .from("profiles")
             .select("id, full_name, display_name, email")
@@ -248,25 +256,6 @@ export default function AgencyTeamRosterPage() {
         {errorMessage && (
           <div className="bg-red-500/10 border border-red-500/40 rounded-xl p-4 text-sm text-red-200">
             {errorMessage}
-          </div>
-        )}
-
-        {!errorMessage && members.length === 1 && (
-          // NOT A COSMETIC NOTE. Until migration 086 adds the roster policy, org_members
-          // returns the caller's own row and nothing else, at HTTP 200, with no error. A
-          // roster of one is therefore ambiguous: it is either the truth or a filtered
-          // result. Saying so is cheaper than somebody concluding their colleague was never
-          // added.
-          <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-4 text-sm text-amber-100">
-            You are the only person shown. That is expected if you are the only member. If you
-            expected colleagues here, migration 086 (the org_members roster read policy) has
-            not been applied yet, and until it is, this page can only show your own row.
-          </div>
-        )}
-
-        {titleColumnMissing && (
-          <div className="bg-white/5 border border-border/40 rounded-xl p-4 text-sm text-foreground-muted">
-            Job titles are not available yet. Migration 086 adds the field.
           </div>
         )}
 

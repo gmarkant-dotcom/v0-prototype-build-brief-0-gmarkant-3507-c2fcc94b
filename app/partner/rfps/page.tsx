@@ -495,6 +495,17 @@ function PartnerRFPsContent() {
   const totalRfps = allRows.length
   const totalGroups = groups.length
 
+  // The group noun, singular and plural, spelled out per group type rather than built by
+  // appending "s". Appending produced "2 agencys" and would have produced "2 statuss" the
+  // moment somebody grouped by status - the same bug twice in one template, which is why
+  // this is a table and not a fix to one branch of a ternary.
+  const GROUP_NOUN: Record<GroupBy, { one: string; many: string }> = {
+    agency: { one: "agency", many: "agencies" },
+    client: { one: "client", many: "clients" },
+    status: { one: "status", many: "statuses" },
+  }
+  const groupNoun = totalGroups === 1 ? GROUP_NOUN[groupBy].one : GROUP_NOUN[groupBy].many
+
   return (
     <PartnerLayout>
       <div className="space-y-6">
@@ -505,7 +516,7 @@ function PartnerRFPsContent() {
             {activeTab === "open"
               ? isLoading
                 ? "Loading…"
-                : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupBy === "agency" ? "agency" : groupBy === "client" ? "client" : "status"}${totalGroups !== 1 ? "s" : ""}`
+                : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupNoun}`
               : activeTab === "my-bids"
                 ? "Bids you've submitted that are still awaiting an outcome"
                 : "Every bid you've submitted, including awarded and declined"
