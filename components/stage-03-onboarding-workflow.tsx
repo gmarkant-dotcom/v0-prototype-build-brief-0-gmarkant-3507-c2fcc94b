@@ -422,11 +422,56 @@ export function Stage03OnboardingWorkflow() {
 
     const docs: { documentRole: "agency_doc" | "project_doc" | "template"; libraryDocumentId: string | null; label: string; url: string }[] = []
 
+    /**
+     * THREE SILENT DROPS, NOW VISIBLE.
+     *
+     * Each of the three `continue` statements below used to discard an attachment without
+     * telling the user or the server. That is the shape behind the three sends on
+     * 2026-08-18 that produced a package with zero documents, a success message, and a real
+     * email to the vendor saying the documents were ready.
+     *
+     * WHAT QUALIFIES AS VALID IS UNCHANGED. The predicate deciding whether a document
+     * enters `docs` is byte-for-byte the same. What changes is that a discard is now named
+     * and reported instead of vanishing.
+     *
+     * One distinction is made, and it is deliberate rather than cosmetic. A project row
+     * with NEITHER a label NOR a url is an untouched placeholder from "Add item": the user
+     * never filled it in, the route treats it the same way, and blocking on it would make
+     * an empty row impossible to ignore. It is logged and skipped. A row with exactly ONE
+     * of the two is a real attachment that was lost, and it stops the send.
+     */
+    const lost: string[] = []
+    const placeholders: string[] = []
+
     for (const id of selectedLibIds) {
       const row = library.find((l) => l.id === id)
-      if (!row) continue
+      if (!row) {
+        // DROP A. The id is selected but no longer in `library`. `library` is reloaded
+        // whenever selectedProject changes; `selectedLibIds` is not cleared until after a
+        // successful send, so a selection made under one project survives into the next,
+        // where this lookup misses. The checkbox renders unchecked, so nothing on screen
+        // contradicts the belief that a document is attached.
+        lost.push("a library document that is not in this project's library")
+        console.warn("[onboarding] library selection dropped: id not present in loaded library", {
+          libraryDocumentId: id,
+          projectId: selectedProject?.id ?? null,
+          libraryCount: library.length,
+        })
+        continue
+      }
       const u = libraryUrl(row)
-      if (!u) continue
+      if (!u) {
+        // DROP B. The row exists but yields no address: libraryUrl() returns external_url
+        // only when source_type === "url" and external_url is set, otherwise blob_url, so
+        // this fires on a library row carrying neither a stored file nor an external link.
+        lost.push(`"${row.label}" (no file or link on record)`)
+        console.warn("[onboarding] library selection dropped: row has no url", {
+          libraryDocumentId: row.id,
+          label: row.label,
+          sourceType: row.source_type,
+        })
+        continue
+      }
       const role: "agency_doc" | "template" = row.section === "agency" ? "agency_doc" : "template"
       docs.push({
         documentRole: role,
@@ -438,7 +483,36 @@ export function Stage03OnboardingWorkflow() {
 
     for (const p of projectItems) {
       const raw = p.source === "file" ? (p.storedUrl || "").trim() : p.urlInput.trim()
-      if (!p.label.trim() || !raw) continue
+      const hasLabel = Boolean(p.label.trim())
+      if (!hasLabel || !raw) {
+        // DROP C. `raw` is storedUrl when the row is in file mode and urlInput when it is in
+        // url mode. It is empty while an upload is still in flight (uploadForAttach sets
+        // storedUrl only on success), after an upload failure, and on a row where the user
+        // typed one field and not the other. Note the Send button's guard is
+        // `disabled={sending || !partnershipId}` and does NOT include uploadingAttach, so
+        // the in-flight case is reachable by clicking Send during an upload.
+        if (!hasLabel && !raw) {
+          placeholders.push(p.localId)
+          console.warn("[onboarding] project attachment skipped: empty placeholder row", {
+            localId: p.localId,
+          })
+          continue
+        }
+        lost.push(
+          hasLabel
+            ? `"${p.label.trim()}" (no file or link yet${p.source === "file" ? ", the upload may still be running" : ""})`
+            : "an unnamed project document"
+        )
+        console.warn("[onboarding] project attachment dropped: incomplete row", {
+          localId: p.localId,
+          hasLabel,
+          source: p.source,
+          hasStoredUrl: Boolean(p.storedUrl),
+          hasUrlInput: Boolean(p.urlInput.trim()),
+          uploadInFlight: uploadingAttach === p.localId,
+        })
+        continue
+      }
       const url = normalizeMeetingUrlForHref(raw) || raw
       docs.push({
         documentRole: "project_doc",
@@ -446,6 +520,18 @@ export function Stage03OnboardingWorkflow() {
         label: p.label.trim(),
         url,
       })
+    }
+
+    if (placeholders.length > 0) {
+      console.info("[onboarding] empty attachment rows ignored", { count: placeholders.length })
+    }
+
+    if (lost.length > 0) {
+      setError(
+        `These attachments are not ready to send: ${lost.join(", ")}. ` +
+          "Wait for any upload to finish, re-attach anything missing, or remove the row, then send again."
+      )
+      return
     }
 
     const projectCount = docs.filter((d) => d.documentRole === "project_doc").length

@@ -283,10 +283,14 @@ export async function POST(
     const rawDocs: DocPayload[] = Array.isArray(documents) ? documents : []
     /** Drop empty slots; require label+url only for rows the client actually filled in. */
     const docs: DocPayload[] = []
+    let droppedBlankSlots = 0
     for (const d of rawDocs) {
       const label = (d.label || "").trim()
       const rawUrl = (d.url || "").trim()
-      if (!label && !rawUrl) continue
+      if (!label && !rawUrl) {
+        droppedBlankSlots++
+        continue
+      }
       if (!label || !rawUrl) {
         return NextResponse.json({ error: "Each document needs label and url" }, { status: 400 })
       }
@@ -299,6 +303,36 @@ export async function POST(
         label,
         url,
       })
+    }
+
+    // THE 2026-08-18 SIGNATURE. A request that CARRIED documents and ends up with none.
+    //
+    // Three sends on 2026-08-18 produced a package row with zero documents, a success
+    // message, and a real email telling the vendor their documents were ready. The insert
+    // below is gated on `docs.length > 0`, so an empty `docs` skips it entirely and
+    // execution falls straight through to the email. Nothing anywhere reported a problem.
+    //
+    // The root cause of those three sends is NOT established - see
+    // docs/079-onboarding-docs-regression.md, TASK 5, and the reading of the three client
+    // drops in docs/079-hardening-report.md. This guard is correct regardless of which one
+    // it turns out to be, because it converts an undiagnosable silent failure into a
+    // reproducible 400 with the counts attached.
+    //
+    // Deliberately NOT triggered by `documents: []`. An empty array is a legitimate
+    // no-documents package and always has been. Only a request that carried entries and
+    // kept none of them is refused, which is a state no correct client produces.
+    if (rawDocs.length > 0 && docs.length === 0) {
+      console.error(`${logPrefix} every document in the request was discarded`, {
+        projectId,
+        partnershipId,
+        userId: user.id,
+        rawDocCount: rawDocs.length,
+        droppedBlankSlots,
+      })
+      return NextResponse.json(
+        { error: "The attached documents could not be read. Re-attach them and send again." },
+        { status: 400 }
+      )
     }
 
     const projectDocCount = docs.filter((d) => d.documentRole === "project_doc").length
