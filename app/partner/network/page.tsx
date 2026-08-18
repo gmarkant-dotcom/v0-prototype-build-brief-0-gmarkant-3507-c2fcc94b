@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { isActivePartnership, partnershipPoolColumn } from "@/lib/partnership-state"
+import { wasCuedByBroadcast } from "@/lib/broadcast-cue-shape"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn, formatDateTime } from "@/lib/utils"
 import {
@@ -36,6 +37,10 @@ interface Partnership {
   invitation_message: string | null
   created_at: string
   accepted_at: string | null
+  // PHASE 2. Carries `cued_by_broadcast` when this invitation exists because the agency
+  // broadcast an RFP to this vendor rather than because anybody chose to invite them.
+  // GET /api/partnerships already selects '*', so no route change was needed to read it.
+  partnership_notes?: unknown
   // Renamed from `agency` by Greg's 079 ruling. This is the LEAD ORGANIZATION on the
   // other side of the partnership; the `Agency` interface below is a different shape from
   // a different route (/api/partner/network) and is deliberately NOT renamed.
@@ -846,15 +851,41 @@ export default function AgencyNetworkPage() {
                       </div>
                     </div>
 
-                    <div className="bg-surface rounded-lg p-4 border border-border">
-                      <p className="text-foreground-secondary text-sm leading-relaxed">
-                        <strong className="text-accent">
-                          {partnership.lead_org?.name || partnership.lead_org?.contact_name || "This agency"}
-                        </strong>{" "}
-                        has invited you to join their vendor network on Ligament. By accepting, you&apos;ll be able to
-                        receive project briefs and collaborate with them directly.
-                      </p>
-                    </div>
+                    {/* PHASE 2f. A vendor has to be able to tell a deliberate invitation from an
+                        automatic one, or the deliberate ones stop meaning anything. The two
+                        differ in what the agency actually did, so they say different things:
+                        one is a choice about this vendor, the other is a side effect of
+                        sending them an RFP. The automatic copy also states plainly that
+                        declining costs the vendor nothing, because under Greg's ruling it
+                        does not - the RFP stays open either way. */}
+                    {wasCuedByBroadcast(partnership.partnership_notes) ? (
+                      <div className="bg-surface rounded-lg p-4 border border-border">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Send className="w-4 h-4 text-accent" />
+                          <span className="font-mono text-xs text-accent uppercase tracking-wider font-semibold">
+                            Opened by an RFP
+                          </span>
+                        </div>
+                        <p className="text-foreground-secondary text-sm leading-relaxed">
+                          <strong className="text-accent">
+                            {partnership.lead_org?.name || partnership.lead_org?.contact_name || "This agency"}
+                          </strong>{" "}
+                          sent you an RFP, which opens an invitation to partner. You can bid on that RFP either
+                          way, and declining this does not withdraw you from it. Partnering is what keeps
+                          feedback, messages, onboarding and delivery with them in one place.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-surface rounded-lg p-4 border border-border">
+                        <p className="text-foreground-secondary text-sm leading-relaxed">
+                          <strong className="text-accent">
+                            {partnership.lead_org?.name || partnership.lead_org?.contact_name || "This agency"}
+                          </strong>{" "}
+                          has invited you to join their vendor network on Ligament. By accepting, you&apos;ll be able to
+                          receive project briefs and collaborate with them directly.
+                        </p>
+                      </div>
+                    )}
 
                     {partnership.invitation_message && (
                       <div className="p-4 rounded-lg bg-surface border-l-4 border-accent">

@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn, resolveOrgIdForUser } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn, resolveOrgIdForUser, type OrgId } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -11,6 +11,7 @@ import {
 import { Resend } from "resend"
 import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
 import { can, capabilityDeniedMessage } from "@/lib/capabilities"
+import { cuePartnershipInvitations, type CueTarget } from "@/lib/broadcast-partnership-cue"
 import { recordMilestones } from "@/lib/milestone-events"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
@@ -149,6 +150,12 @@ export async function POST(request: NextRequest) {
     const baseUrl = siteBaseUrl()
 
     const rows: Record<string, unknown>[] = []
+
+    // PHASE 2: broadcasting cues an invitation to partner. Collected here and acted on once,
+    // after the inbox rows are safely in - a cue must never be the reason a broadcast fails,
+    // and a cue for a broadcast that did not happen would be a lie. Behind
+    // BROADCAST_CUES_PARTNERSHIP, default OFF: see lib/feature-flags.ts.
+    const cueTargets: CueTarget[] = []
     const seenRecipientKeys = new Set<string>()
     const manualRecipientNotifications: {
       recipientEmail: string
@@ -258,6 +265,13 @@ export async function POST(request: NextRequest) {
         } else {
           seenRecipientKeys.add(`email:${scopeItemId}:${partnerEmail.trim().toLowerCase()}`)
         }
+        // Case (i) by construction - this branch already required an ACTIVE partnership - so
+        // the cue helper will skip it. Collected anyway rather than special-cased, so that
+        // "does this recipient already have a relationship" is decided in exactly one place.
+        if (partnerEmail.trim()) {
+          cueTargets.push({ vendorOrgId: partnerId as OrgId, email: partnerEmail })
+        }
+
         const requiresNdaForExistingPartner = ndaRequired && ndaLink.length > 0 && !partnership?.nda_confirmed_at
         if (partnerEmail.trim()) {
           existingPartnerNotifications.push({
@@ -380,6 +394,11 @@ export async function POST(request: NextRequest) {
           status: "new",
         })
 
+        // Cases (ii) and (iii). existingProfileOrgId is null exactly when this address
+        // belongs to nobody, or to somebody with no organization - both of which produce a
+        // GHOST row that grants the vendor nothing until they sign up and it is claimed.
+        cueTargets.push({ vendorOrgId: existingProfileOrgId, email })
+
         const recipientName = nr?.name?.trim?.() || email
         const signUpInviteUrl = new URL("/auth/sign-up", baseUrl)
         signUpInviteUrl.searchParams.set("invite", inviteToken)
@@ -474,6 +493,36 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       )
+    }
+
+    // PHASE 2: cue a partnership invitation per recipient who does not already have one.
+    //
+    // AFTER the inbox rows are in, so a cue never records an invitation to bid on an RFP
+    // that failed to land. BEFORE the mail goes out, so the relationship the vendor is being
+    // told about exists by the time they can click through to it.
+    //
+    // Awaited but never allowed to fail the broadcast: the helper returns rather than throws
+    // on every path, and the broadcast is already irreversible by this point - the rows are
+    // written and the mail is about to leave. A missing cue is a courtesy not extended; a
+    // failed broadcast is a job not done.
+    //
+    // Inert until BROADCAST_CUES_PARTNERSHIP=true. The helper's first line checks the flag,
+    // so with it unset this is one function call that returns a zero record and writes
+    // nothing. See lib/feature-flags.ts for what flipping it causes, and to whom.
+    const cueOutcome = await cuePartnershipInvitations(supabase, {
+      leadOrgId: writeOrgId,
+      targets: cueTargets,
+      projectId,
+      scopeItemName: (rows[0]?.scope_item_name as string | null) ?? null,
+    })
+    if (cueOutcome.created > 0 || cueOutcome.failed > 0) {
+      console.log("[broadcast-rfp] partnership cue", {
+        projectId,
+        created: cueOutcome.created,
+        skippedExisting: cueOutcome.skippedExisting,
+        skippedRace: cueOutcome.skippedRace,
+        failed: cueOutcome.failed,
+      })
     }
 
     // Milestone: rfp.broadcast. One row per recipient, not one per broadcast - vendor
