@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { agencyEntitlementId, resolveCallerOrgIds } from "@/lib/entitlements"
 import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
 
 export const dynamic = "force-dynamic"
@@ -54,13 +55,28 @@ export async function GET() {
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
     const service = getServiceSupabase()
     if (service && vendorEmail) {
-      await claimAwardedGhostPartnershipsByEmail(service, { partnerId: user.id, vendorEmail })
+      // 079: the ghost row is claimed BY THE ORGANISATION, so pass its id.
+      await claimAwardedGhostPartnershipsByEmail(service, {
+        partnerId: await agencyEntitlementId(user.id, service),
+        vendorEmail,
+      })
+    }
+
+    // 079: `.eq("vendor_org_id", user.id)` compares an ORGANISATION column to a USER id.
+    // Every organization 079 backfilled has an id equal to its founding user's, so this
+    // would keep working for all sixteen live accounts and return NOTHING for the first
+    // vendor organization created afterwards - a vendor whose whole portal is silently
+    // empty, with no error. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    if (callerOrgIds.length === 0) {
+      console.error("[api] caller belongs to no organization", { userId: user.id })
+      return NextResponse.json({ error: "No organization found for this account" }, { status: 403, headers: noStoreHeaders })
     }
 
     const { data: userPartnerships, error: pErr } = await supabase
       .from("partnerships")
       .select("id, lead_org_id")
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
 
     if (pErr) throw pErr
 
@@ -94,7 +110,7 @@ export async function GET() {
     const { data: respRows, error: rErr } = await supabase
       .from("partner_rfp_responses")
       .select("id, inbox_item_id, budget_proposal")
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
       .eq("status", "awarded")
 
     if (rErr) throw rErr

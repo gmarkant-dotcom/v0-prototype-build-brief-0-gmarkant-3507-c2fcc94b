@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient as createAnonClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { agencyEntitlementId, resolveCallerOrgIds } from "@/lib/entitlements"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
@@ -76,6 +77,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing Supabase service configuration" }, { status: 500 })
     }
 
+    // 079: THE SERVICE CLIENT BYPASSES RLS COMPLETELY, so the policy rewrite in 079
+    // protects nothing on this route - the checks in this file ARE the permission. Before
+    // 079 they were correct by accident: `org_id = <session uid>` was simultaneously the
+    // ownership check and, coincidentally, the membership check, because one user was one
+    // company. Scope by MEMBERSHIP instead. An empty set matches nothing, which fails
+    // closed, so it is returned as a 403 rather than as an empty result set.
+    const callerOrgIds = await resolveCallerOrgIds(auth.userId, service)
+    if (callerOrgIds.length === 0) {
+      console.error("[api] failure", { route, code: 403, message: "caller belongs to no organization" })
+      return NextResponse.json({ error: "No organization found for this account" }, { status: 403 })
+    }
+
     const body = await request.json().catch(() => ({}))
     const vendorEmail = String(body.vendor_email || "").trim().toLowerCase()
     const vendorName = String(body.vendor_name || "").trim() || null
@@ -135,7 +148,7 @@ export async function POST(request: NextRequest) {
       .from("projects")
       .select("id, name, client_name, budget_range")
       .eq("id", projectId)
-      .eq("org_id", auth.userId)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
     if (projectErr) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: projectErr.message })
@@ -160,7 +173,7 @@ export async function POST(request: NextRequest) {
     const { data: existingToken, error: existingErr } = await service
       .from("rfp_magic_tokens")
       .select("token, expires_at, response_id")
-      .eq("org_id", auth.userId)
+      .in("org_id", callerOrgIds)
       .eq("project_id", projectId)
       .eq("vendor_email", vendorEmail)
       .maybeSingle()
@@ -185,8 +198,13 @@ export async function POST(request: NextRequest) {
     // reused - resending is exactly how an agency extends a vendor's window to respond.
     const expires_at = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
 
+    // 079: a write is attributed to ONE organization, not to the caller's whole membership
+    // set. agencyEntitlementId() picks the organization the caller owns, then administers,
+    // then the first by membership - deterministic rather than arbitrary.
+    const writeOrgId = await agencyEntitlementId(auth.userId, service)
+
     const tokenUpsertPayload = {
-      org_id: auth.userId,
+      org_id: writeOrgId,
       project_id: projectId,
       vendor_email: vendorEmail,
       vendor_name: vendorName,
@@ -341,6 +359,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing Supabase service configuration" }, { status: 500 })
     }
 
+    // 079: THE SERVICE CLIENT BYPASSES RLS COMPLETELY, so the policy rewrite in 079
+    // protects nothing on this route - the checks in this file ARE the permission. Before
+    // 079 they were correct by accident: `org_id = <session uid>` was simultaneously the
+    // ownership check and, coincidentally, the membership check, because one user was one
+    // company. Scope by MEMBERSHIP instead. An empty set matches nothing, which fails
+    // closed, so it is returned as a 403 rather than as an empty result set.
+    const callerOrgIds = await resolveCallerOrgIds(auth.userId, service)
+    if (callerOrgIds.length === 0) {
+      console.error("[api] failure", { route, code: 403, message: "caller belongs to no organization" })
+      return NextResponse.json({ error: "No organization found for this account" }, { status: 403 })
+    }
+
     const url = new URL(request.url)
     const checkEmail = (url.searchParams.get("check_email") || "").trim().toLowerCase()
     const projectId = (url.searchParams.get("project_id") || "").trim()
@@ -352,7 +382,7 @@ export async function GET(request: NextRequest) {
           ? service
               .from("rfp_magic_tokens")
               .select("id, expires_at")
-              .eq("org_id", auth.userId)
+              .in("org_id", callerOrgIds)
               .eq("project_id", projectId)
               .eq("vendor_email", checkEmail)
               .maybeSingle()
@@ -374,7 +404,7 @@ export async function GET(request: NextRequest) {
       const { data: invites, error: invitesErr } = await service
         .from("rfp_magic_tokens")
         .select("*")
-        .eq("org_id", auth.userId)
+        .in("org_id", callerOrgIds)
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
       if (invitesErr) {

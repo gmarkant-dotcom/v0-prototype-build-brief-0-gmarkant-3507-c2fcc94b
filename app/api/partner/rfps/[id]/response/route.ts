@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit, formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
-import { buildAgencyBidNotificationEmail, sendTransactionalEmail } from "@/lib/email"
+import { buildAgencyBidNotificationEmail, resolveOrgNotificationRecipients, sendTransactionalEmail } from "@/lib/email"
 import { withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { normalizeBudgetLines } from "@/lib/budget-categories"
 import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
@@ -368,10 +368,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // Agency notification (email + in-app) on every submitted transition - initial
       // submission previously sent nothing at all here (only revisions did); both now
       // notify the same way the guest/magic-link path does, via the shared email builder.
-      const [{ data: agencyProfile }, { data: inboxDetail }] = await Promise.all([
-        supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.lead_org_id).maybeSingle(),
+      // 079: inbox.lead_org_id is an ORGANISATION id, resolved to that organization's
+      // notification recipients. This send is guarded by `if (agencyProfile?.email)`, so
+      // the pre-079 lookup would have failed silently for a new organization.
+      const [agencyRecipients, { data: inboxDetail }] = await Promise.all([
+        resolveOrgNotificationRecipients(inbox.lead_org_id, supabase),
         supabase.from("partner_rfp_inbox").select("scope_item_name, master_rfp_json").eq("id", inboxId).maybeSingle(),
       ])
+      if (agencyRecipients.length === 0) {
+        console.error("[api] bid submit: no notification recipients for the lead agency", {
+          inboxId,
+          leadOrgId: inbox.lead_org_id,
+        })
+      }
+      const agencyProfile = agencyRecipients[0] ?? null
       const projectName =
         (inboxDetail?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || "Project"
       const scopeItemName = inboxDetail?.scope_item_name || "Scope item"

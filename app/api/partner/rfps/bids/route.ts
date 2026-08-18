@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import {
   attachMagicTokenToPartnerInbox,
   MAGIC_TOKEN_ATTACH_COLUMNS,
@@ -110,11 +111,24 @@ export async function GET() {
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
     await backfillGuestResponseLinkage(vendorEmail, user.id)
 
-    // RLS: "Partners select own RFP responses" - USING (vendor_org_id = auth.uid())
+    // 079: `.eq("vendor_org_id", user.id)` compares an ORGANISATION column to a USER id.
+    // Every organization 079 backfilled has an id equal to its founding user's, so this
+    // would keep working for all sixteen live accounts and return NOTHING for the first
+    // vendor organization created afterwards - a vendor whose whole portal is silently
+    // empty, with no error. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    if (callerOrgIds.length === 0) {
+      console.error("[api] caller belongs to no organization", { userId: user.id })
+      return NextResponse.json({ error: "No organization found for this account" }, { status: 403, headers: noStoreHeaders })
+    }
+
+    // RLS after 079: "Partners select own RFP responses" resolves membership through
+    // current_user_org_ids() rather than comparing to auth.uid(). The filter below is the
+    // application half of the same question and must be asked the same way.
     const { data: responses, error } = await supabase
       .from("partner_rfp_responses")
       .select("id, inbox_item_id, lead_org_id, status, budget_proposal, submitted_at, updated_at, created_at")
-      .eq("vendor_org_id", user.id)
+      .in("vendor_org_id", callerOrgIds)
       .order("submitted_at", { ascending: false, nullsFirst: false })
 
     if (error) {

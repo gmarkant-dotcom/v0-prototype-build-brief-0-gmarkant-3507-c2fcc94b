@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { createNotification } from "@/lib/notifications"
 import { normalizeMeetingUrlForHref } from "@/lib/utils"
 export const dynamic = "force-dynamic"
@@ -326,21 +326,20 @@ export async function POST(
       }
     }
 
-    const { data: partnerProfile, error: partnerProfileErr } = await supabase
-      .from("profiles")
-      .select("email, full_name, company_name")
-      .eq("id", partnership.vendor_org_id)
-      .single()
-    if (partnerProfileErr) {
-      console.error(`${logPrefix} partner profile select failed (email may be skipped)`, {
+    // 079: the recipient is an ORGANISATION, not a profile row. See
+    // resolveOrgNotificationRecipients() in lib/email.ts for why the old
+    // `profiles WHERE id = <company id>` lookup silently stops working for every
+    // organization created after 079.
+    const partnerRecipients = await resolveOrgNotificationRecipients(partnership.vendor_org_id, supabase)
+    if (partnerRecipients.length === 0) {
+      console.error(`${logPrefix} no notification recipients for the vendor organization`, {
         projectId,
         packageId: pkg.id,
         partnershipId,
-        partnerId: partnership.vendor_org_id,
-        message: partnerProfileErr.message,
-        code: partnerProfileErr.code,
+        vendorOrgId: partnership.vendor_org_id,
       })
     }
+    const partnerProfile = partnerRecipients[0] ?? null
 
     const partnerEmail = partnerProfile?.email
     const agencyName = profile.company_name || profile.full_name || "Your lead agency"

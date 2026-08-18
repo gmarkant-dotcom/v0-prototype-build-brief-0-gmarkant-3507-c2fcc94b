@@ -46,7 +46,10 @@ type EnrichedContact = ScoredVendorContact<RawEmailContact> & {
  *  shows scored contacts without these fields. */
 async function enrichWithLigamentData(
   contacts: ScoredVendorContact<RawEmailContact>[],
-  agencyId: string,
+  // 079: the ORGANISATION whose pool the partnership reads are scoped to.
+  agencyOrgId: string,
+  // 079: the person making the request, for the self-account guard only.
+  callerUserId: string,
   agencyOwnDomains: string[],
   service: SupabaseClient
 ): Promise<EnrichedContact[]> {
@@ -69,7 +72,7 @@ async function enrichWithLigamentData(
   const { data: partnershipsByEmail } = await service
     .from("partnerships")
     .select("vendor_org_id, partner_email")
-    .eq("lead_org_id", agencyId)
+    .eq("lead_org_id", agencyOrgId)
     .in("partner_email", contactEmails)
   for (const row of partnershipsByEmail || []) {
     if (row.vendor_org_id) partnerIdSet.add(row.vendor_org_id as string)
@@ -80,7 +83,7 @@ async function enrichWithLigamentData(
     const { data: partnershipsByPartnerId } = await service
       .from("partnerships")
       .select("vendor_org_id, partner_email")
-      .eq("lead_org_id", agencyId)
+      .eq("lead_org_id", agencyOrgId)
       .in("vendor_org_id", profileIds)
     for (const row of partnershipsByPartnerId || []) {
       if (row.vendor_org_id) partnerIdSet.add(row.vendor_org_id as string)
@@ -92,7 +95,7 @@ async function enrichWithLigamentData(
     const profileId = profileByEmail.get(contact.email) || null
     const alreadyInPool = (profileId != null && partnerIdSet.has(profileId)) || partnerEmailSet.has(contact.email)
     const guard = evaluateImportGuard({
-      agencyId,
+      callerUserId,
       agencyOwnDomains,
       matchedProfileId: profileId,
       contactEmail: contact.email,
@@ -331,7 +334,12 @@ export async function GET(request: NextRequest) {
     }
 
     const scoredContacts = scoreAndFilterContacts(contactsFromAccumulator(accumulator))
-    const finalContacts = await enrichWithLigamentData(scoredContacts, auth.userId, auth.excludedDomains, service)
+    // 079: enrichWithLigamentData scopes its partnership reads on lead_org_id, so it needs
+    // the caller's ORGANISATION, not their user id. The service client bypasses RLS, so this
+    // argument is the whole scoping. Passing auth.userId after 079 matches nothing and the
+    // scan quietly reports every contact as unknown to Ligament.
+    const agencyOrgId = await agencyEntitlementId(auth.userId, service)
+    const finalContacts = await enrichWithLigamentData(scoredContacts, agencyOrgId, auth.userId, auth.excludedDomains, service)
     const { error: finalErr } = await service
       .from("email_connections")
       .update({

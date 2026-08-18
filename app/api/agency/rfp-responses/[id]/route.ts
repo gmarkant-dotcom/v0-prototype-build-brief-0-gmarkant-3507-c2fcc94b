@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { notifyProjectAwarded } from "@/lib/notifications"
 import { resolvePartnershipForAward } from "@/lib/award-partnership-resolution"
 import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
@@ -314,11 +314,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         let vendorDisplayName = "Vendor"
         let vendorContactName: string | null = null
         if (partnerIdForResolution) {
-          const { data: partnerProfile } = await supabase
-            .from("profiles")
-            .select("email, full_name, company_name")
-            .eq("id", partnerIdForResolution)
-            .maybeSingle()
+          // 079: a vendor ORGANISATION id, not a profile id. See lib/email.ts.
+          const partnerProfile =
+            (await resolveOrgNotificationRecipients(partnerIdForResolution, supabase))[0] ?? null
           vendorEmail = (partnerProfile?.email as string | null) || null
           vendorDisplayName =
             partnerProfile?.company_name?.trim() ||
@@ -446,13 +444,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // Same broad fix as the inbox-status-sync block above: `.eq("id", null)` on a uuid
       // column errors rather than returning no rows, so guest bids (inbox_item_id null) must
       // skip this query entirely rather than attempt it.
-      const [{ data: partner, error: partnerErr }, { data: inboxRow, error: inboxErr }] =
+      // 079: existing.vendor_org_id is an organization id. resolveOrgNotificationRecipients()
+      // never rejects, so partnerErr is retained as null for the shape of the destructure and
+      // an empty result is logged inside the resolver rather than skipped silently here.
+      const [partnerRecipients, { data: inboxRow, error: inboxErr }] =
         await Promise.all([
-          supabase
-            .from("profiles")
-            .select("email, full_name, company_name")
-            .eq("id", existing.vendor_org_id)
-            .maybeSingle(),
+          resolveOrgNotificationRecipients(existing.vendor_org_id, supabase),
           existing.inbox_item_id
             ? supabase
                 .from("partner_rfp_inbox")
@@ -465,13 +462,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             : Promise.resolve({ data: null, error: null }),
         ])
 
-      if (partnerErr) {
-        console.error("[api] feedback email: partner profile select failed", {
+      const partner = partnerRecipients[0] ?? null
+      if (partnerRecipients.length === 0) {
+        console.error("[api] feedback email: no notification recipients for the vendor organization", {
           route,
           responseId: id,
-          partnerId: existing.vendor_org_id,
-          message: partnerErr.message,
-          code: partnerErr.code,
+          vendorOrgId: existing.vendor_org_id,
         })
       }
       if (inboxErr) {
@@ -615,18 +611,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
       }
 
-      const { data: partner, error: partnerProfileErr } = await supabase
-        .from("profiles")
-        .select("email, full_name, company_name")
-        .eq("id", existing.vendor_org_id)
-        .maybeSingle()
-      if (partnerProfileErr) {
-        console.error("[api] bid award: partner profile select failed (email send may be skipped)", {
+      // 079: organization recipients, not a profile row of the same id.
+      const awardRecipients = await resolveOrgNotificationRecipients(existing.vendor_org_id, supabase)
+      const partner = awardRecipients[0] ?? null
+      if (awardRecipients.length === 0) {
+        console.error("[api] bid award: no notification recipients for the vendor organization", {
           route,
           responseId: id,
-          partnerId: existing.vendor_org_id,
-          message: partnerProfileErr.message,
-          code: partnerProfileErr.code,
+          vendorOrgId: existing.vendor_org_id,
         })
       }
 
@@ -702,8 +694,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (isDeclining) {
       // Same broad fix as above - guest bids (inbox_item_id null) must skip this query
       // entirely rather than send `.eq("id", null)`, which errors on a uuid column.
-      const [partnerRes, inboxRes] = await Promise.all([
-        supabase.from("profiles").select("email, full_name, company_name").eq("id", existing.vendor_org_id).maybeSingle(),
+      // 079: organization recipients, not a profile row of the same id.
+      const [declineRecipients, inboxRes] = await Promise.all([
+        resolveOrgNotificationRecipients(existing.vendor_org_id, supabase),
         existing.inbox_item_id
           ? supabase
               .from("partner_rfp_inbox")
@@ -713,15 +706,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
       ])
-      const partner = partnerRes.data
+      const partner = declineRecipients[0] ?? null
       const inbox = inboxRes.data
-      if (partnerRes.error) {
-        console.error("[api] decline email: partner profile select failed", {
+      if (declineRecipients.length === 0) {
+        console.error("[api] decline email: no notification recipients for the vendor organization", {
           route,
           responseId: id,
-          partnerId: existing.vendor_org_id,
-          message: partnerRes.error.message,
-          code: partnerRes.error.code,
+          vendorOrgId: existing.vendor_org_id,
         })
       }
       if (inboxRes.error) {

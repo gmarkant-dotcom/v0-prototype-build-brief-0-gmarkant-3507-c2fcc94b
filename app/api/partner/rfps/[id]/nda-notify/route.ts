@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { requirePartnerRole } from "@/lib/api-auth"
 
 function isSameEmail(a: string | null | undefined, b: string | null | undefined) {
@@ -64,14 +64,20 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       }
     }
 
-    const [{ data: agencyProfile }, { data: projectRow }] = await Promise.all([
-      supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.lead_org_id).maybeSingle(),
+    // 079: an ORGANISATION id. This is the one of the eleven that already failed loudly
+    // (it 500s below rather than skipping), and it keeps doing so.
+    const [agencyRecipients, { data: projectRow }] = await Promise.all([
+      resolveOrgNotificationRecipients(inbox.lead_org_id, supabase),
       inbox.project_id
         ? supabase.from("projects").select("id, title").eq("id", inbox.project_id).maybeSingle()
         : Promise.resolve({ data: null }),
     ])
+    const agencyProfile = agencyRecipients[0] ?? null
 
     if (!agencyProfile?.email) {
+      console.error("[api] nda-notify: no notification recipients for the lead agency", {
+        leadOrgId: inbox.lead_org_id,
+      })
       return NextResponse.json({ error: "Agency email not found" }, { status: 500 })
     }
 

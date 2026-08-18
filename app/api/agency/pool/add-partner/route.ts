@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { importPartnerRows } from "@/lib/server/partner-pool-import"
+import { agencyEntitlementId } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -25,7 +26,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}))
-  const results = await importPartnerRows(service, auth.user.id, [body], "manual", undefined, {
+  // 079: the pool belongs to the ORGANISATION, so resolve the caller's membership before
+  // writing into it. The user id is still passed alongside, for the self-account and
+  // same-domain guards, which are questions about a person.
+  const agencyOrgId = await agencyEntitlementId(auth.user.id, service)
+  const results = await importPartnerRows(service, agencyOrgId, auth.user.id, [body], "manual", undefined, {
     agencyAuthEmail: auth.user.email,
   })
   const result = results[0]

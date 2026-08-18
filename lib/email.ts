@@ -256,3 +256,141 @@ export function buildAgencyBidNotificationEmail(opts: {
     }),
   }
 }
+
+/**
+ * A Supabase client, narrowed to the two queries the recipient resolver makes. Loose for
+ * the same reason as lib/entitlements.ts: naming the real builder type reaches TS2589, and
+ * this repository has no generated `Database` types for a strict signature to check
+ * against.
+ */
+export type RecipientLookupClient = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  from: (table: string) => any
+}
+
+export type OrgRecipient = {
+  email: string
+  full_name: string | null
+  company_name: string | null
+}
+
+/**
+ * Who receives a notification addressed to an ORGANIZATION.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS FUNCTION EXISTS, AND WHY IT IS THE MOST DANGEROUS THING 079 TOUCHES
+ *
+ * Before 079, every agency-facing and vendor-facing notification resolved its recipient as
+ * `profiles.email WHERE id = <a company id>`, because a company id WAS a user id. Under
+ * the organization model that lookup is wrong, and the way it is wrong is the worst
+ * available: it keeps working for every organization 079 backfilled, because their id
+ * equals the founding user's id, and returns NOTHING for every organization created
+ * afterwards. It fails late, for new customers only, and it does not throw.
+ *
+ * Ten of the eleven call sites used `.maybeSingle()` behind an `if (recipientEmail)` guard,
+ * so the send was simply skipped with no log line. Agency notifications stopping quietly is
+ * the worst outcome this rename could produce. Every one of them now routes through here.
+ *
+ * ---------------------------------------------------------------------------
+ * THE RULING THIS ENCODES: EVERY MEMBER, WITH AN OPT-OUT
+ *
+ * docs/079-rename-plan.md section 7 put three options: the owner only, every member, or a
+ * per-member preference. This implements "every member, with profiles.notification_preferences
+ * as the opt-out", which the plan recommends, for the reason it gives: it is the only option
+ * under which a colleague can act on an RFP that arrived while the founder was away, and it
+ * is the only one that does not silently make the product worse for the second person who
+ * joins. The storage for the opt-out already exists - notification_preferences has been jsonb
+ * on profiles since scripts/017.
+ *
+ * The opt-out is read as `notification_preferences.email === false`. Anything else, including
+ * an absent key and an absent row, is opted IN. A null preference is not an opt-out: the
+ * failure direction for a notification system is to send one too many, never to go quiet.
+ *
+ * ---------------------------------------------------------------------------
+ * THE FALLBACK, AND WHY IT IS NOT A BUG
+ *
+ * When org_members yields nothing - a lookup failure, or an org id that is really a
+ * pre-079 user id passed by a caller not yet converted - this falls back to
+ * `profiles WHERE id = orgId`, which is exactly the pre-079 behaviour and is CORRECT for
+ * all sixteen backfilled organizations, whose id equals their founder's user id. It logs
+ * when it does so. The fallback is what keeps the eleven sites working through the release
+ * window rather than going silent in it; it is not a substitute for membership and it will
+ * return nothing for an organization created after 079, which is exactly when the log line
+ * matters.
+ *
+ * Returns [] when there is genuinely nobody to write to. Callers must log that rather than
+ * skipping quietly - `if (recipients.length === 0)` is the guard that used to be
+ * `if (recipientEmail)` and used to say nothing.
+ */
+export async function resolveOrgNotificationRecipients(
+  orgId: string | null | undefined,
+  client: RecipientLookupClient
+): Promise<OrgRecipient[]> {
+  if (!orgId) return []
+
+  const { data: members, error: memberErr } = await client
+    .from("org_members")
+    .select("user_id")
+    .eq("org_id", orgId)
+
+  if (memberErr) {
+    console.error("[email] resolveOrgNotificationRecipients: org_members lookup failed", {
+      orgId,
+      code: memberErr.code,
+      message: memberErr.message,
+    })
+  }
+
+  const userIds = ((members ?? []) as Array<{ user_id?: string | null }>)
+    .map((m) => m.user_id)
+    .filter((id): id is string => Boolean(id))
+
+  const lookupIds = userIds.length > 0 ? userIds : [orgId]
+  if (userIds.length === 0) {
+    console.warn(
+      "[email] resolveOrgNotificationRecipients: no org_members rows, falling back to the " +
+        "pre-079 profiles lookup. Correct for a backfilled organization, silent for one " +
+        "created after 079.",
+      { orgId }
+    )
+  }
+
+  const { data: profiles, error: profileErr } = await client
+    .from("profiles")
+    .select("id, email, full_name, company_name, notification_preferences")
+    .in("id", lookupIds)
+
+  if (profileErr) {
+    console.error("[email] resolveOrgNotificationRecipients: profiles lookup failed", {
+      orgId,
+      code: profileErr.code,
+      message: profileErr.message,
+    })
+    return []
+  }
+
+  type Row = {
+    email?: string | null
+    full_name?: string | null
+    company_name?: string | null
+    notification_preferences?: { email?: unknown } | null
+  }
+
+  const recipients: OrgRecipient[] = []
+  for (const row of (profiles ?? []) as Row[]) {
+    const email = row.email?.trim()
+    if (!email) continue
+    // Opted out only on an explicit false. Absent, null and malformed all mean opted in.
+    if (row.notification_preferences?.email === false) continue
+    recipients.push({
+      email,
+      full_name: row.full_name ?? null,
+      company_name: row.company_name ?? null,
+    })
+  }
+
+  if (recipients.length === 0) {
+    console.warn("[email] resolveOrgNotificationRecipients resolved nobody", { orgId, lookupIds })
+  }
+  return recipients
+}

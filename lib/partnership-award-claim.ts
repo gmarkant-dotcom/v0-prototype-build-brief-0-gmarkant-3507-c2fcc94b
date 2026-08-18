@@ -17,6 +17,13 @@ import type { SupabaseClient } from "@supabase/supabase-js"
  */
 export async function claimAwardedGhostPartnershipsByEmail(
   supabase: SupabaseClient,
+  /**
+   * 079: partnerId is now a vendor ORGANISATION id, not a user id. It is written into
+   * partnerships.vendor_org_id, which after 079 REFERENCES organizations(id). Passing a
+   * user id would raise a foreign key violation for any organization created after 079 -
+   * loudly, which is the one mercy here - and would silently succeed for the sixteen
+   * backfilled ones whose id happens to equal their founder's.
+   */
   params: { partnerId: string; vendorEmail: string }
 ): Promise<void> {
   const { partnerId, vendorEmail } = params

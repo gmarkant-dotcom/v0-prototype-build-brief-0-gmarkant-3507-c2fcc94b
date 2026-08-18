@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { agencyEntitlementId } from "@/lib/entitlements"
 import {
   attachMagicTokenToPartnerInbox,
   MAGIC_TOKEN_ATTACH_COLUMNS,
@@ -128,10 +129,23 @@ export async function GET() {
     // project_assignments would otherwise need to already know about a not-yet-linked row).
     const service = getServiceSupabase()
     if (service) {
-      await claimAwardedGhostPartnershipsByEmail(service, { partnerId: user.id, vendorEmail })
+      // 079: the ghost row is claimed BY THE ORGANISATION, so pass its id.
+      await claimAwardedGhostPartnershipsByEmail(service, {
+        partnerId: await agencyEntitlementId(user.id, service),
+        vendorEmail,
+      })
     }
 
-    // RLS applies: partner sees rows where vendor_org_id = auth.uid() OR recipient_email matches profile email
+    // RLS DOES apply here - this is the anon client, not the service client. The comment
+    // this replaces claimed RLS applied on a query that was in fact on the service client,
+    // which docs/079-rename-plan.md section 6 route 16 flagged as a lie the next reader
+    // would trust. It is now true and worth keeping true.
+    //
+    // 079: the policy resolves the vendor side through current_user_org_ids() rather than
+    // comparing vendor_org_id to auth.uid(), and the recipient_email disjunct is unchanged -
+    // it matches a PERSON by email and is deliberately allow-listed out of the policy audit.
+    // No application-side org filter is needed because there is no application-side filter
+    // here at all: the select is unqualified and RLS is the whole scoping.
     const { data, error } = await supabase
       .from("partner_rfp_inbox")
       .select("*")

@@ -155,12 +155,25 @@ function normalizeRow(raw: unknown): { row: PartnerImportRow | null; email: stri
  * rows), falling back to per-row writes within a chunk if the batch write itself fails, so a
  * single bad row's error can be attributed instead of failing the whole chunk.
  *
- * agencyId must come from the caller's authenticated session - never accept it from the
- * request payload.
+ * Both ids must come from the caller's authenticated session - never accept either from the
+ * request payload. 079 split what used to be one argument; see the parameter docs.
  */
 export async function importPartnerRows(
   service: SupabaseClient,
-  agencyId: string,
+  /**
+   * 079: the ORGANISATION whose pool these rows join. This is the argument whose MEANING
+   * the rename changes, and changing it here is what makes both calling routes correct at
+   * once (app/api/agency/pool/add-partner and .../import-spreadsheet). It scopes every
+   * partnership read and write below on lead_org_id, on a SERVICE-ROLE client that bypasses
+   * RLS entirely - so this value is the whole permission, not a filter on top of one.
+   */
+  agencyOrgId: string,
+  /**
+   * 079: the person making the request. Used only where a PERSON is the right answer - the
+   * self-account guard, and the profiles lookup behind the same-domain guard. Before 079
+   * one argument served both and the split was invisible.
+   */
+  callerUserId: string,
   rawRows: unknown[],
   source: PartnerImportSource,
   maxRows = 2000,
@@ -190,12 +203,12 @@ export async function importPartnerRows(
 
   if (validRows.length === 0) return results
 
-  const agencyOwnDomains = await resolveAgencyOwnDomains(service, agencyId, options?.agencyAuthEmail)
+  const agencyOwnDomains = await resolveAgencyOwnDomains(service, callerUserId, options?.agencyAuthEmail)
 
   const { data: existingPoolRows, error: poolErr } = await service
     .from("partnerships")
     .select("id, vendor_org_id, partner_email, status, contact_name, company_name, phone, website, partnership_notes")
-    .eq("lead_org_id", agencyId)
+    .eq("lead_org_id", agencyOrgId)
   if (poolErr) {
     for (const r of validRows) results.push({ email: r.email, outcome: "error", reason: "Failed to check existing pool" })
     return results
@@ -230,7 +243,7 @@ export async function importPartnerRows(
     if (results.some((r) => r.email === row.email)) continue // profile-lookup error already recorded
 
     const matchedProfileId = profileByEmail.get(row.email) || null
-    const guard = evaluateImportGuard({ agencyId, agencyOwnDomains, matchedProfileId, contactEmail: row.email })
+    const guard = evaluateImportGuard({ callerUserId, agencyOwnDomains, matchedProfileId, contactEmail: row.email })
 
     if (guard === "self_account") {
       results.push({ email: row.email, outcome: "self", reason: "This is your own account" })
@@ -281,7 +294,7 @@ export async function importPartnerRows(
 
     const notes = mergeNotes(null, row, source, matchedProfileId, flag)
     toInsert.push({
-      lead_org_id: agencyId,
+      lead_org_id: agencyOrgId,
       vendor_org_id: null,
       partner_email: row.email,
       status: "pending",

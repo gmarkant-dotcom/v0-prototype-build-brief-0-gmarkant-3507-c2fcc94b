@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import {
   PARTNER_BUDGET_STATUSES,
   PARTNER_WORKFLOW_STATUSES,
@@ -215,11 +215,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
         .eq("id", projectId)
         .maybeSingle()
       if (project?.org_id) {
-        const { data: agencyProfile } = await supabase
-          .from("profiles")
-          .select("email, company_name, full_name")
-          .eq("id", project.org_id)
-          .maybeSingle()
+        // 079: project.org_id is a lead agency ORGANISATION id. The old
+        // `profiles WHERE id = <company id>` lookup returns nothing for any organization
+        // created after 079, and this send is guarded by `if (recipientEmail)` - so it
+        // would have gone quiet with no log line. See lib/email.ts.
+        const agencyRecipients = await resolveOrgNotificationRecipients(project.org_id, supabase)
+        if (agencyRecipients.length === 0) {
+          console.error("[api] status-update: no notification recipients for the lead agency", {
+            projectId,
+            orgId: project.org_id,
+          })
+        }
+        const agencyProfile = agencyRecipients[0] ?? null
         const recipientEmail = agencyProfile?.email?.trim()
         if (recipientEmail) {
           const projectName = project.title?.trim() || "Project"

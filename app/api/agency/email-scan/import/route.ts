@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
+import { agencyEntitlementId } from "@/lib/entitlements"
 import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
 
 export const dynamic = "force-dynamic"
@@ -48,7 +49,11 @@ type ImportOutcome = "added" | "skipped" | "self"
  */
 async function importContact(
   service: SupabaseClient,
-  agencyId: string,
+  // 079: the ORGANISATION whose pool this contact joins.
+  agencyOrgId: string,
+  // 079: the person making the request. Only the self-account guard uses it. Splitting
+  // these two was forced by the rename: before it, one value answered both questions.
+  callerUserId: string,
   agencyOwnDomains: string[],
   email: string,
   name: string | null
@@ -56,7 +61,7 @@ async function importContact(
   const { data: matchedProfile } = await service.from("profiles").select("id").ilike("email", email).maybeSingle()
   const matchedProfileId = (matchedProfile?.id as string | undefined) || null
 
-  const guard = evaluateImportGuard({ agencyId, agencyOwnDomains, matchedProfileId, contactEmail: email })
+  const guard = evaluateImportGuard({ callerUserId, agencyOwnDomains, matchedProfileId, contactEmail: email })
   if (guard === "self_account") return "self"
   const poolFlag = guard === "same_domain_flag" ? "domain_match_flagged" : matchedProfileId ? "already_on_ligament" : null
 
@@ -64,7 +69,7 @@ async function importContact(
     ? await service
         .from("partnerships")
         .select("id, vendor_org_id, status, partnership_notes")
-        .eq("lead_org_id", agencyId)
+        .eq("lead_org_id", agencyOrgId)
         .eq("vendor_org_id", matchedProfileId)
         .limit(1)
         .maybeSingle()
@@ -77,7 +82,7 @@ async function importContact(
     const byEmail = await service
       .from("partnerships")
       .select("id, vendor_org_id, status, partnership_notes")
-      .eq("lead_org_id", agencyId)
+      .eq("lead_org_id", agencyOrgId)
       .ilike("partner_email", email)
       .limit(1)
       .maybeSingle()
@@ -106,7 +111,7 @@ async function importContact(
   }
 
   const { error } = await service.from("partnerships").insert({
-    lead_org_id: agencyId,
+    lead_org_id: agencyOrgId,
     vendor_org_id: null,
     partner_email: email,
     profile_status: "unclaimed",
@@ -149,6 +154,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No valid contacts provided" }, { status: 400 })
   }
 
+    // 079: THE SERVICE CLIENT BYPASSES RLS, so what is passed here IS the permission.
+    // Pass the caller's ORGANISATION, not the caller's user id. Before 079 the two were the
+    // same value; after it, passing the user id scopes every query below to a company that
+    // does not exist and the route returns nothing. Resolving it once here is what makes
+    // "one function, not two routes" true - the helpers below already take an agency id and
+    // only its MEANING changes.
+    //
+    // CONSEQUENCE, STATED RATHER THAN DISCOVERED: a colleague's mailbox scan now writes
+    // into the SHARED pool, because the pool belongs to the organization. That is almost
+    // certainly wanted. It should be a decision, not a surprise. See
+    // docs/079-rename-plan.md section 6, routes 6 and 7.
+    const agencyOrgId = await agencyEntitlementId(auth.userId, service)
+
   const agencyOwnDomains = await resolveAgencyOwnDomains(service, auth.userId, auth.userEmail)
 
   let added = 0
@@ -158,7 +176,7 @@ export async function POST(request: NextRequest) {
 
   for (const email of emails) {
     try {
-      const result = await importContact(service, auth.userId, agencyOwnDomains, email, nameByEmail.get(email) ?? null)
+      const result = await importContact(service, agencyOrgId, auth.userId, agencyOwnDomains, email, nameByEmail.get(email) ?? null)
       if (result === "added") added += 1
       else if (result === "self") self += 1
       else skipped += 1

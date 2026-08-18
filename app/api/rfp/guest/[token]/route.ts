@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient as createServiceClient, SupabaseClient } from "@supabase/supabase-js"
 import { serializeBudget, formatBudgetForDisplay } from "@/lib/rfp-response-fields"
-import {
-  buildVendorConfirmationEmail,
-  buildAgencyBidNotificationEmail,
-  buildAgencyPoolNotificationEmail,
-  sendTransactionalEmail,
-} from "@/lib/email"
+import { buildAgencyBidNotificationEmail, buildAgencyPoolNotificationEmail, buildVendorConfirmationEmail, resolveOrgNotificationRecipients, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
 import { normalizeBudgetLines } from "@/lib/budget-categories"
 import { isBiddingClosed, BIDDING_CLOSED_API_MESSAGE } from "@/lib/bid-close"
@@ -533,21 +528,30 @@ export async function POST(req: Request) {
       // Guest revisions previously sent no agency notification at all (email or in-app) -
       // the mirror-image gap of the portal path, which only notified on revision, not on
       // first submission. Both paths now notify on every submitted transition.
-      const [{ data: editProject }, { data: editAgencyProfile }] = await Promise.all([
+      // 079: tokenRow.org_id is a lead agency ORGANISATION id (rfp_magic_tokens is a
+      // one-company table). The guest path is the largest surface in the rename and this
+      // send is guarded by `if (editAgencyProfile?.email)` - silent on failure. See
+      // resolveOrgNotificationRecipients() in lib/email.ts.
+      //
+      // display_name is deliberately dropped: the resolver returns full_name and
+      // company_name, which is what the recipient line below falls back through anyway.
+      const [{ data: editProject }, editAgencyRecipients] = await Promise.all([
         supabase.from("projects").select("name").eq("id", tokenRow.project_id).maybeSingle(),
-        supabase
-          .from("profiles")
-          .select("email, company_name, display_name, full_name")
-          .eq("id", tokenRow.org_id)
-          .maybeSingle(),
+        resolveOrgNotificationRecipients(tokenRow.org_id as string, supabase),
       ])
+      if (editAgencyRecipients.length === 0) {
+        console.error("[api] guest bid revision: no notification recipients for the lead agency", {
+          route,
+          orgId: tokenRow.org_id,
+        })
+      }
+      const editAgencyProfile = editAgencyRecipients[0] ?? null
       const editVendorName = (tokenRow.vendor_name || "").trim() || vendorEmail
       const editScopeItemName = (tokenRow.scope_item_name as string | null) || "Scope item"
       if (editAgencyProfile?.email) {
         try {
           const editAgencyRecipient =
             editAgencyProfile.company_name?.trim() ||
-            editAgencyProfile.display_name?.trim() ||
             editAgencyProfile.full_name?.trim() ||
             "there"
           const editNotification = buildAgencyBidNotificationEmail({
@@ -697,11 +701,15 @@ export async function POST(req: Request) {
       .select("name")
       .eq("id", tokenRow.project_id)
       .maybeSingle()
-    const { data: agencyProfile } = await supabase
-      .from("profiles")
-      .select("email, company_name, display_name, full_name")
-      .eq("id", tokenRow.org_id)
-      .maybeSingle()
+    // 079: as above. Organization recipients, not a profile row of the same id.
+    const agencyRecipients = await resolveOrgNotificationRecipients(tokenRow.org_id as string, supabase)
+    if (agencyRecipients.length === 0) {
+      console.error("[api] guest bid submit: no notification recipients for the lead agency", {
+        route,
+        orgId: tokenRow.org_id,
+      })
+    }
+    const agencyProfile = agencyRecipients[0] ?? null
 
     const projectName = project?.name || "Project"
     const budgetSummary = formatBudgetForDisplay(budget_proposal)
@@ -724,7 +732,7 @@ export async function POST(req: Request) {
     }
 
     const agencyRecipient =
-      agencyProfile?.company_name?.trim() || agencyProfile?.display_name?.trim() || agencyProfile?.full_name?.trim() || "there"
+      agencyProfile?.company_name?.trim() || agencyProfile?.full_name?.trim() || "there"
     const submissionVendorName = (tokenRow.vendor_name || "").trim() || vendorEmail
     const submissionScopeItemName = (tokenRow.scope_item_name as string | null) || "Scope item"
 

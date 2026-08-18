@@ -44,13 +44,20 @@ export type ImportGuardOutcome = "self_account" | "same_domain_flag" | "ok"
  * - ok: no self-partnership signal, proceed with normal Discovered-only linking.
  */
 export function evaluateImportGuard(params: {
-  agencyId: string
+  /**
+   * 079: the CALLER'S USER ID, and deliberately not their organization id. This is
+   * compared against a profiles.id below to answer "is this contact me", which is a
+   * question about a person. Before 079 the two values were identical and either would
+   * have worked; passing the organization id now would break the self-check for every
+   * organization created after 079, whose id belongs to no user.
+   */
+  callerUserId: string
   agencyOwnDomains: string[]
   matchedProfileId: string | null
   contactEmail: string
 }): ImportGuardOutcome {
-  const { agencyId, agencyOwnDomains, matchedProfileId, contactEmail } = params
-  if (matchedProfileId && matchedProfileId === agencyId) return "self_account"
+  const { callerUserId, agencyOwnDomains, matchedProfileId, contactEmail } = params
+  if (matchedProfileId && matchedProfileId === callerUserId) return "self_account"
 
   const domain = emailDomain(contactEmail)
   if (domain && !isPublicEmailDomain(domain) && agencyOwnDomains.includes(domain)) {
@@ -67,13 +74,24 @@ export function evaluateImportGuard(params: {
  */
 export async function resolveAgencyOwnDomains(
   client: SupabaseClient,
-  agencyId: string,
+  /**
+   * 079: the CALLER'S USER ID. This reads a profiles row, so it needs a person, not an
+   * organization. It is one of the four "resolve a profile by a company id" sites
+   * docs/079-rename-plan.md section 7 lists as breaking under the org model; splitting the
+   * argument is the fix, because the caller now has both values and can pass the right one.
+   *
+   * WHAT IS STILL WRONG, AND IS NOT A RENAME PROBLEM: the domains derived here are ONE
+   * member's, not the organization's. Two colleagues on different email domains will
+   * produce different same-domain guards. Fixing that means an organization-level domain
+   * list, which is a schema change 079 does not make.
+   */
+  callerUserId: string,
   agencyAuthEmail?: string | null
 ): Promise<string[]> {
   const { data: profile } = await client
     .from("profiles")
     .select("email, company_website")
-    .eq("id", agencyId)
+    .eq("id", callerUserId)
     .maybeSingle()
 
   const authEmailDomain = emailDomain(agencyAuthEmail || (profile?.email as string | null) || "")

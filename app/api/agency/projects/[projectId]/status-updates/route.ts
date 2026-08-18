@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
+import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 
 export const dynamic = "force-dynamic"
 
@@ -189,14 +189,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
 
         const partnerId = partnership?.vendor_org_id
         if (partnerId) {
-          const [{ data: partnerProfile }, { data: agencyProfile }] = await Promise.all([
-            supabase.from("profiles").select("email, full_name, company_name").eq("id", partnerId).maybeSingle(),
+          // 079: partnerId is a vendor ORGANISATION id. Resolve it to that organization's
+          // notification recipients rather than to a profile row of the same id.
+          const [partnerRecipients, { data: agencyProfile }] = await Promise.all([
+            resolveOrgNotificationRecipients(partnerId, supabase),
             supabase
               .from("profiles")
               .select("full_name, company_name")
               .eq("id", project.org_id)
               .maybeSingle(),
           ])
+          if (partnerRecipients.length === 0) {
+            console.error("[api] status-update resolve: no recipients for the vendor organization", {
+              projectId,
+              vendorOrgId: partnerId,
+            })
+          }
+          const partnerProfile = partnerRecipients[0] ?? null
           const recipientEmail = partnerProfile?.email?.trim()
           if (recipientEmail) {
             const agencyName =
