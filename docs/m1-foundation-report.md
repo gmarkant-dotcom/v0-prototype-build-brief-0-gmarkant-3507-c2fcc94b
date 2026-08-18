@@ -245,11 +245,12 @@ exist to change: it used to be an arbitrary pick and is now a refusal.
 
 | Behaviour | Count | Examples |
 |---|---|---|
-| Return **403** "Your account is not linked to an organization yet" | 26 | `broadcast-rfp`, `projects`, `msa`, all `bids/*`, `scoring/*`, `pool/add-partner`, `partnerships` POST |
+| Return **403** "Your account is not linked to an organization yet" | 23 | `broadcast-rfp`, `projects`, `msa`, all `bids/*`, `scoring/*`, `pool/add-partner`, `partnerships` POST |
 | Return **403** with a route-specific message | 1 | `partner/rfps/claim` |
 | Return **500** with a user-visible message, deliberately | 1 | `partnerships` GET auto-claim - it only runs when there IS an unclaimed invitation, so failing there costs availability only in the case already broken |
 | Client component aborts the write | 4 | `agency/pool/[partnerId]`, `partner/marketplace`, `partner/network` (log and return), `request-invitation-modal` (shows the user an error) |
 | Best-effort linkage skipped, logged at error, request continues | 5 | `partner/rfps`, `partner/rfps/bids`, `partner/projects`, `pool/resend-invitation`, `auth/callback` |
+| | **34** | |
 
 **None guesses. None falls back to the user id.** `resolveOrgIdForUser()` and
 `resolveOrgIdsForUsers()` keep the ranking on purpose - they answer a question about somebody
