@@ -20,7 +20,7 @@ async function assertProjectOwned(
     .from("projects")
     .select("id")
     .eq("id", projectId)
-    .eq("agency_id", agencyId)
+    .eq("org_id", agencyId)
     .maybeSingle()
   if (error || !data) return false
   return true
@@ -42,8 +42,8 @@ export async function GET(req: Request) {
 
     let query = supabase
       .from("client_cash_flow")
-      .select("id, project_id, agency_id, label, amount, currency, expected_date, status, received_at, created_at")
-      .eq("agency_id", user.id)
+      .select("id, project_id, org_id, label, amount, currency, expected_date, status, received_at, created_at")
+      .eq("org_id", user.id)
       .order("expected_date", { ascending: true })
       .order("created_at", { ascending: true })
 
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
       .from("client_cash_flow")
       .insert({
         project_id,
-        agency_id: user.id,
+        org_id: user.id,
         label,
         amount,
         currency,
@@ -115,7 +115,7 @@ export async function POST(req: Request) {
         status,
         received_at,
       })
-      .select("id, project_id, agency_id, label, amount, currency, expected_date, status, received_at, created_at")
+      .select("id, project_id, org_id, label, amount, currency, expected_date, status, received_at, created_at")
       .single()
 
     if (error) {
@@ -148,7 +148,7 @@ export async function PATCH(req: Request) {
       .from("client_cash_flow")
       .select("id")
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
     if (exErr || !existing) {
       return NextResponse.json({ error: "Entry not found" }, { status: 404, headers: noStore })
@@ -178,8 +178,8 @@ export async function PATCH(req: Request) {
       .from("client_cash_flow")
       .update(updates)
       .eq("id", id)
-      .eq("agency_id", user.id)
-      .select("id, project_id, agency_id, label, amount, currency, expected_date, status, received_at, created_at")
+      .eq("org_id", user.id)
+      .select("id, project_id, org_id, label, amount, currency, expected_date, status, received_at, created_at")
       .single()
     if (error) {
       console.error("[api/agency/client-cash-flow] PATCH", error)

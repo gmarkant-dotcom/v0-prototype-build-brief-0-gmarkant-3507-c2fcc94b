@@ -38,8 +38,8 @@ async function claimPendingPartnershipInvites(userId: string): Promise<
   const now = new Date().toISOString()
   const { data, error } = await serviceSupabase
     .from("partnerships")
-    .update({ partner_id: userId, updated_at: now })
-    .is("partner_id", null)
+    .update({ vendor_org_id: userId, updated_at: now })
+    .is("vendor_org_id", null)
     .in("status", ["pending", "active"])
     .ilike("partner_email", email)
     .select("id")

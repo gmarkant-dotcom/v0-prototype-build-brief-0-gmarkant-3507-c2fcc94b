@@ -6,7 +6,7 @@ import { getSafeContentTypeForFilename, isSafeToRenderInline } from '@/lib/uploa
 
 export const dynamic = 'force-dynamic'
 
-type PartnershipRef = { partner_id?: string | null }
+type PartnershipRef = { vendor_org_id?: string | null }
 type AssignmentRef = { partnerships?: PartnershipRef | PartnershipRef[] | null }
 
 function partnerHasAssignmentOnDocument(
@@ -19,7 +19,7 @@ function partnerHasAssignmentOnDocument(
     const ps = pa.partnerships
     const nests: PartnershipRef[] = Array.isArray(ps) ? ps : ps ? [ps] : []
     for (const p of nests) {
-      if (p.partner_id === userId) return true
+      if (p.vendor_org_id === userId) return true
     }
   }
   return false
@@ -42,10 +42,10 @@ export async function GET(
       .from('project_documents')
       .select(`
         *,
-        projects!inner(agency_id),
+        projects!inner(org_id),
         project_assignments(
           partnership_id,
-          partnerships(partner_id)
+          partnerships(vendor_org_id)
         )
       `)
       .eq('id', id)
@@ -56,7 +56,7 @@ export async function GET(
     }
 
     // Additional access check beyond RLS (project_assignments may be one row or an array from PostgREST)
-    const isAgency = document.projects.agency_id === user.id
+    const isAgency = document.projects.org_id === user.id
     const isAssignedPartner = partnerHasAssignmentOnDocument(document as { project_assignments?: AssignmentRef | AssignmentRef[] | null }, user.id)
 
     if (!isAgency && !isAssignedPartner) {

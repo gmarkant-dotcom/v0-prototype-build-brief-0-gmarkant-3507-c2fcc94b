@@ -71,7 +71,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ respons
       .from("bid_decompositions")
       .select("line_items, narrative_summary, generated_at")
       .eq("response_id", responseId)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
 
     if (!existing) return NextResponse.json({ exists: false }, { status: 404 })
@@ -119,7 +119,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
         .from("bid_decompositions")
         .select("line_items, narrative_summary, generated_at")
         .eq("response_id", responseId)
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
         .maybeSingle()
       if (existing) {
         return NextResponse.json({
@@ -131,7 +131,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       }
     }
 
-    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "ai_analyses")
+    const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const ctx = await loadBidAnalysisContext(supabase, responseId, user.id)
@@ -165,7 +165,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       .upsert(
         {
           response_id: responseId,
-          agency_id: user.id,
+          org_id: user.id,
           line_items: lineItems,
           narrative_summary: narrativeSummary,
           generated_at: new Date().toISOString(),
@@ -180,7 +180,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "Failed to save cost breakdown" }, { status: 500 })
     }
 
-    await incrementAiAnalysis(agencyEntitlementId(user.id), supabase)
+    await incrementAiAnalysis(await agencyEntitlementId(user.id, supabase), supabase)
     return NextResponse.json({
       line_items: saved.line_items,
       narrative_summary: saved.narrative_summary,

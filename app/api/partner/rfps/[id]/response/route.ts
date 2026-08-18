@@ -137,7 +137,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: inbox, error: inboxErr } = await supabase
       .from("partner_rfp_inbox")
-      .select("id, agency_id, partner_id, recipient_email, nda_gate_enforced, nda_confirmed_at, require_terms_disclosure")
+      .select("id, lead_org_id, vendor_org_id, recipient_email, nda_gate_enforced, nda_confirmed_at, require_terms_disclosure")
       .eq("id", inboxId)
       .maybeSingle()
 
@@ -147,7 +147,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const access = partnerCanAccessPartnerRfpInbox(
       {
-        partner_id: (inbox.partner_id as string | null) ?? null,
+        vendor_org_id: (inbox.vendor_org_id as string | null) ?? null,
         recipient_email: (inbox.recipient_email as string | null) ?? null,
         nda_gate_enforced: (inbox.nda_gate_enforced as boolean | null) ?? false,
         nda_confirmed_at: (inbox.nda_confirmed_at as string | null) ?? null,
@@ -267,8 +267,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const insertRow = {
       inbox_item_id: inboxId,
-      partner_id: user.id,
-      agency_id: inbox.agency_id,
+      vendor_org_id: user.id,
+      lead_org_id: inbox.lead_org_id,
       ...row,
     }
 
@@ -276,7 +276,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .from("partner_rfp_responses")
       .select("id")
       .eq("inbox_item_id", inboxId)
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
       .maybeSingle()
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -331,8 +331,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const nextVersion = Number(latestVersion?.version_number || 0) + 1
       const versionInsertPayload = {
         response_id: saved.id,
-        partner_id: user.id,
-        agency_id: inbox.agency_id,
+        vendor_org_id: user.id,
+        lead_org_id: inbox.lead_org_id,
         version_number: nextVersion,
       }
       const { error: versionErr } = await supabase.from("partner_rfp_response_versions").insert({
@@ -357,7 +357,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
 
       // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-      void generateAndSaveBidSummary(supabase, saved.id, inbox.agency_id).catch((err) => {
+      void generateAndSaveBidSummary(supabase, saved.id, inbox.lead_org_id).catch((err) => {
         console.error("[api] fire-and-forget summary generation failed", {
           route,
           responseId: saved.id,
@@ -369,7 +369,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // submission previously sent nothing at all here (only revisions did); both now
       // notify the same way the guest/magic-link path does, via the shared email builder.
       const [{ data: agencyProfile }, { data: inboxDetail }] = await Promise.all([
-        supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.agency_id).maybeSingle(),
+        supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.lead_org_id).maybeSingle(),
         supabase.from("partner_rfp_inbox").select("scope_item_name, master_rfp_json").eq("id", inboxId).maybeSingle(),
       ])
       const projectName =
@@ -402,11 +402,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       } else {
         console.error("[api] bid submission: agency has no email on file, notification skipped", {
           route,
-          agencyId: inbox.agency_id,
+          agencyId: inbox.lead_org_id,
         })
       }
       try {
-        await notifyBidSubmitted(supabase, inbox.agency_id, partner_display_name, scopeItemName, saved.id, wasUpdate)
+        await notifyBidSubmitted(supabase, inbox.lead_org_id, partner_display_name, scopeItemName, saved.id, wasUpdate)
       } catch (notifyErr) {
         console.error("[api] bid submission: in-app notification failed", {
           route,

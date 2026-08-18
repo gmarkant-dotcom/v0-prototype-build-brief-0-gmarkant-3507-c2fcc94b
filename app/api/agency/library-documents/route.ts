@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     const { data: row, error } = await supabase
       .from("agency_library_documents")
       .insert({
-        agency_id: user.id,
+        org_id: user.id,
         section,
         kind,
         label: label.trim(),

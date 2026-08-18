@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Verify user has access to this project
     const { data: project } = await supabase
       .from('projects')
-      .select('id, agency_id')
+      .select('id, org_id')
       .eq('id', projectId)
       .single()
 
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is the agency owner or an assigned partner
-    const isAgency = project.agency_id === user.id
+    const isAgency = project.org_id === user.id
 
     if (assignmentId) {
       if (isAgency) {
@@ -54,10 +54,10 @@ export async function POST(request: NextRequest) {
       } else {
         const { data: pa } = await supabase
           .from('project_assignments')
-          .select('id, partnerships!inner(partner_id)')
+          .select('id, partnerships!inner(vendor_org_id)')
           .eq('id', assignmentId)
           .eq('project_id', projectId)
-          .eq('partnerships.partner_id', user.id)
+          .eq('partnerships.vendor_org_id', user.id)
           .maybeSingle()
         if (!pa) {
           return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -69,9 +69,9 @@ export async function POST(request: NextRequest) {
       // Check if user is an assigned partner
       const { data: assignment } = await supabase
         .from('project_assignments')
-        .select('id, partnership_id, partnerships!inner(partner_id)')
+        .select('id, partnership_id, partnerships!inner(vendor_org_id)')
         .eq('project_id', projectId)
-        .eq('partnerships.partner_id', user.id)
+        .eq('partnerships.vendor_org_id', user.id)
         .single()
 
       if (!assignment) {

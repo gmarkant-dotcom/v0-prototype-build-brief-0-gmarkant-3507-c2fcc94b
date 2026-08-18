@@ -67,8 +67,8 @@ export async function GET() {
 
     const { data: partnershipRows, error: pErr } = await supabase
       .from("partnerships")
-      .select("id, agency_id, status")
-      .eq("partner_id", user.id)
+      .select("id, lead_org_id, status")
+      .eq("vendor_org_id", user.id)
       .eq("status", "active")
       .order("created_at", { ascending: false })
 
@@ -82,7 +82,7 @@ export async function GET() {
 
     const active = partnershipRows || []
     const partnershipIds = active.map((p) => p.id as string)
-    const agencyIds = [...new Set(active.map((p) => p.agency_id as string).filter(Boolean))]
+    const agencyIds = [...new Set(active.map((p) => p.lead_org_id as string).filter(Boolean))]
 
     let agencyNameById: Record<string, string> = {}
     if (agencyIds.length > 0) {
@@ -226,11 +226,11 @@ export async function GET() {
 
     const partnerships = active.map((row) => {
       const pid = row.id as string
-      const aid = row.agency_id as string
+      const aid = row.lead_org_id as string
       const list = milestonesByPartnership.get(pid) || []
       return {
         partnership_id: pid,
-        agency_id: aid,
+        lead_org_id: aid,
         agency_name: agencyNameById[aid] || "Agency",
         milestones: list,
       }

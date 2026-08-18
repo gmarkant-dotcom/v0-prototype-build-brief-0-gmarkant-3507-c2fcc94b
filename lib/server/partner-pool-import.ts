@@ -63,7 +63,7 @@ type PartnershipNotesShape = {
 
 type ExistingPoolRow = {
   id: string
-  partner_id: string | null
+  vendor_org_id: string | null
   partner_email: string | null
   status: string | null
   contact_name: string | null
@@ -194,8 +194,8 @@ export async function importPartnerRows(
 
   const { data: existingPoolRows, error: poolErr } = await service
     .from("partnerships")
-    .select("id, partner_id, partner_email, status, contact_name, company_name, phone, website, partnership_notes")
-    .eq("agency_id", agencyId)
+    .select("id, vendor_org_id, partner_email, status, contact_name, company_name, phone, website, partnership_notes")
+    .eq("lead_org_id", agencyId)
   if (poolErr) {
     for (const r of validRows) results.push({ email: r.email, outcome: "error", reason: "Failed to check existing pool" })
     return results
@@ -205,7 +205,7 @@ export async function importPartnerRows(
   for (const row of (existingPoolRows || []) as ExistingPoolRow[]) {
     const e = String(row.partner_email || "").toLowerCase()
     if (e) existingByEmail.set(e, row)
-    if (row.partner_id) existingByPartnerId.set(row.partner_id, row)
+    if (row.vendor_org_id) existingByPartnerId.set(row.vendor_org_id, row)
   }
 
   const allEmails = validRows.map((r) => r.email)
@@ -251,7 +251,7 @@ export async function importPartnerRows(
       }
 
       // Existing Discovered/pending ghost row - enrich and link, but status/profile_status
-      // (and partner_id) never change here. Activation only happens via invite -> accept.
+      // (and vendor_org_id) never change here. Activation only happens via invite -> accept.
       if (dryRun) {
         results.push({ email: row.email, outcome: "added", flag })
         continue
@@ -281,8 +281,8 @@ export async function importPartnerRows(
 
     const notes = mergeNotes(null, row, source, matchedProfileId, flag)
     toInsert.push({
-      agency_id: agencyId,
-      partner_id: null,
+      lead_org_id: agencyId,
+      vendor_org_id: null,
       partner_email: row.email,
       status: "pending",
       profile_status: "unclaimed",

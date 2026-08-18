@@ -27,7 +27,7 @@ type PartnerProject = {
   end_date: string | null
   status: string | null
   partnership_id: string
-  agency_id: string | null
+  lead_org_id: string | null
   agency_name: string
   assignment_id: string
   response_id: string | null
@@ -721,7 +721,7 @@ export default function PartnerProjectsPage() {
     const map = new Map<string, { groupId: string|null; projects: PartnerProject[] }>()
     for (const p of filtered) {
       const key = groupBy==="client" ? ((p.client_name||"").trim()||"No Client") : p.agency_name
-      const id  = groupBy==="client" ? null : p.agency_id
+      const id  = groupBy==="client" ? null : p.lead_org_id
       if (!map.has(key)) map.set(key, { groupId: id, projects: [] })
       map.get(key)!.projects.push(p)
     }

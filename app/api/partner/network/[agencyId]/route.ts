@@ -50,18 +50,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
     }
 
     // Fetched at ANY status, with the state test applied once by the shared predicate - see
-    // lib/partnership-state.ts. Keyed to partner_id = the caller, so this can only ever be the
+    // lib/partnership-state.ts. Keyed to vendor_org_id = the caller, so this can only ever be the
     // vendor's own side of the relationship.
     //
-    // An unclaimed row (partner_id IS NULL, matched only by partner_email) deliberately does
+    // An unclaimed row (vendor_org_id IS NULL, matched only by partner_email) deliberately does
     // not count. Row level security agrees: "Partners read lead agency profiles for their
-    // partnerships" requires p.partner_id = auth.uid(), so an unclaimed row grants no read
+    // partnerships" requires p.vendor_org_id = auth.uid(), so an unclaimed row grants no read
     // either. GET /api/partnerships auto-claims those on the vendor's next load.
     const { data: partnership, error: pErr } = await supabase
       .from("partnerships")
       .select("id, status, nda_confirmed_at, msa_confirmed_at, accepted_at, invitation_sent_at, created_at")
-      .eq("partner_id", user.id)
-      .eq("agency_id", agencyId)
+      .eq("vendor_org_id", user.id)
+      .eq("lead_org_id", agencyId)
       .maybeSingle()
 
     if (pErr) {
@@ -158,15 +158,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
               : "Request collaboration access. They open once the partnership is active.",
           }
 
-    // Shared work, half one: awarded bids. Keyed to partner_id = the caller AND
-    // agency_id = this agency, so no other vendor's bid and no other agency's award can
+    // Shared work, half one: awarded bids. Keyed to vendor_org_id = the caller AND
+    // lead_org_id = this agency, so no other vendor's bid and no other agency's award can
     // appear. Not fetched at all below the partnership tier.
     const { data: respRows, error: respErr } = hasActivePartnership
       ? await supabase
           .from("partner_rfp_responses")
           .select("id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
-          .eq("partner_id", user.id)
-          .eq("agency_id", agencyId)
+          .eq("vendor_org_id", user.id)
+          .eq("lead_org_id", agencyId)
           .eq("status", "awarded")
           .order("updated_at", { ascending: false })
       : { data: [] as unknown[], error: null }
@@ -184,7 +184,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
 
     // Shared work, half two: projects of this agency the vendor is actually assigned to. The
     // projects_partner_select_assigned policy already restricts this to assignments the caller
-    // holds; .eq("agency_id", agencyId) narrows it to this one agency. The agency's other
+    // holds; .eq("lead_org_id", agencyId) narrows it to this one agency. The agency's other
     // projects are unreachable both ways.
     const shared_projects: { id: string; name: string; status: string | null; updated_at: string | null }[] = []
     const projectMeta = new Map<string, { name: string | null }>()
@@ -192,7 +192,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
       const projs = await supabase
         .from("projects")
         .select("id, name, status, updated_at")
-        .eq("agency_id", agencyId)
+        .eq("org_id", agencyId)
         .order("updated_at", { ascending: false })
 
       if (projs.error) {
@@ -223,7 +223,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
       {
         access,
         // The vendor's own partnership row, and only theirs - the query is keyed to
-        // partner_id = the caller. This is the compliance state of THIS relationship. NDA and
+        // vendor_org_id = the caller. This is the compliance state of THIS relationship. NDA and
         // MSA confirmations are documents, so they are held back until the partnership is
         // active, matching the agency-to-vendor route exactly.
         partnership: partnership

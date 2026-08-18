@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     const { data: owned, error: ownedErr } = await supabase
       .from("partner_rfp_responses")
       .select("id")
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .in("id", responseIds)
     if (ownedErr) {
       console.error("[api] failure", { route, method: "POST", message: ownedErr.message })
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
       const { data: cached } = await supabase
         .from("bid_comparisons")
         .select("narrative, response_ids, generated_at")
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
         .eq("response_ids_hash", hash)
         .maybeSingle()
       if (cached) {
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     const { data: decompositions, error: decompErr } = await supabase
       .from("bid_decompositions")
       .select("response_id, line_items")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .in("response_id", responseIds)
     if (decompErr) {
       console.error("[api] failure", { route, method: "POST", message: decompErr.message })
@@ -105,7 +105,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "ai_analyses")
+    const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     // Scope description is shared across all selected bids (compare is only offered for
@@ -140,14 +140,14 @@ export async function POST(req: Request) {
       .from("bid_comparisons")
       .upsert(
         {
-          agency_id: user.id,
+          org_id: user.id,
           response_ids_hash: hash,
           response_ids: responseIds,
           scope_description: scopeLabel,
           narrative: result.text.trim(),
           generated_at: generatedAt,
         },
-        { onConflict: "agency_id,response_ids_hash" }
+        { onConflict: "org_id,response_ids_hash" }
       )
       .select("narrative, response_ids, generated_at")
       .single()
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to save comparison" }, { status: 500 })
     }
 
-    await incrementAiAnalysis(agencyEntitlementId(user.id), supabase)
+    await incrementAiAnalysis(await agencyEntitlementId(user.id, supabase), supabase)
     return NextResponse.json({
       narrative: saved.narrative,
       response_ids: saved.response_ids,

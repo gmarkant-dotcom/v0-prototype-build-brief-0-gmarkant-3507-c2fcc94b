@@ -30,7 +30,7 @@ export async function GET() {
     const { data: projectRows, error: projectsErr } = await supabase
       .from("projects")
       .select("id, client_name")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
     if (projectsErr) {
       console.error("[agency/pool/client-history] projects", projectsErr.message)
       return NextResponse.json({ options: [], byPartnership: {} })
@@ -44,7 +44,7 @@ export async function GET() {
     const { data: entityRows, error: entityErr } = await supabase
       .from("projects")
       .select("id, client_id")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .in("id", projectIds)
     if (!entityErr) {
       for (const row of entityRows || []) {
@@ -59,7 +59,7 @@ export async function GET() {
       const { data: clientRows, error: clientsErr } = await supabase
         .from("clients")
         .select("id, name")
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
       if (clientsErr && !isMissingClientsTable(clientsErr)) {
         console.warn("[agency/pool/client-history] clients unavailable", clientsErr.message)
       }

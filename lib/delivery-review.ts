@@ -36,7 +36,7 @@ export async function loadBidDeltaComparison(
     .from("bid_evaluations")
     .select("id")
     .eq("response_id", responseId)
-    .eq("agency_id", agencyId)
+    .eq("org_id", agencyId)
     .maybeSingle()
   if (!evaluation) return { hasEvaluation: false, rows: [], unavailableReason: null }
 

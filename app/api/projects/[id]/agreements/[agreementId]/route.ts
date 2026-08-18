@@ -39,7 +39,7 @@ export async function PATCH(
       .select(`
         id,
         project_id,
-        partnership:partnerships(partner_id)
+        partnership:partnerships(vendor_org_id)
       `)
       .eq('id', agreement.assignment_id)
       .single()
@@ -48,7 +48,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
-    const partnership = pa.partnership as unknown as { partner_id: string | null } | null
+    const partnership = pa.partnership as unknown as { vendor_org_id: string | null } | null
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -58,7 +58,7 @@ export async function PATCH(
 
     const { data: projectRow } = await supabase
       .from('projects')
-      .select('agency_id, title')
+      .select('org_id, title')
       .eq('id', projectId)
       .single()
 
@@ -66,8 +66,8 @@ export async function PATCH(
     // dual-role vendor (role='agency', active_role='partner') the right to sign their own
     // assignment agreement, because isPartner could never be true for them.
     const acting = actingRole(profile)
-    const isPartner = acting === 'partner' && partnership?.partner_id === user.id
-    const isAgency = acting === 'agency' && projectRow?.agency_id === user.id
+    const isPartner = acting === 'partner' && partnership?.vendor_org_id === user.id
+    const isAgency = acting === 'agency' && projectRow?.org_id === user.id
 
     if (!isPartner && !isAgency) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -92,7 +92,7 @@ export async function PATCH(
 
     if (upErr) throw upErr
 
-    const counterpartUserId = isPartner ? projectRow?.agency_id || null : partnership?.partner_id || null
+    const counterpartUserId = isPartner ? projectRow?.org_id || null : partnership?.vendor_org_id || null
     const partyName =
       profile?.company_name?.trim() || profile?.full_name?.trim() || profile?.email?.trim() || 'A teammate'
     const projectName = projectRow?.title?.trim() || 'Project'
@@ -106,7 +106,7 @@ export async function PATCH(
         const recipientEmail = counterpartProfile?.email?.trim()
         if (recipientEmail) {
           // Which side the counterpart is on is already decided by which side WE are on -
-          // counterpartUserId was picked from projectRow.agency_id or partnership.partner_id
+          // counterpartUserId was picked from projectRow.org_id or partnership.vendor_org_id
           // directly above. Reading the counterpart's profiles.role to re-derive it was the
           // same signup-role confusion, and it cannot be resolved by active_role because a
           // recipient's current portal is not a fact this request can know.

@@ -47,8 +47,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
     const { data: partnership, error: partnershipErr } = await supabase
       .from("partnerships")
       .select("id, reliability_summary, reliability_summary_generated_at")
-      .eq("agency_id", userId)
-      .eq("partner_id", partnerId)
+      .eq("lead_org_id", userId)
+      .eq("vendor_org_id", partnerId)
       // The same single predicate as isActivePartnership() in lib/partnership-state.ts,
       // expressed in SQL because this gate can be pushed into the query.
       .eq("status", "active")
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
     const { data: reviewRows, error: reviewsErr } = await supabase
       .from("delivery_reviews")
       .select("id, project_id, status, composite_score, on_time, on_budget, overall_satisfaction, would_work_again, response_id, updated_at")
-      .eq("agency_id", userId)
+      .eq("org_id", userId)
       .eq("partnership_id", partnership.id)
       .eq("status", "complete")
       .order("updated_at", { ascending: false })
@@ -83,7 +83,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
     const projectIds = [...new Set(reviews.map((r) => r.project_id))]
     const projectNameById = new Map<string, string>()
     if (projectIds.length > 0) {
-      const { data: projRows } = await supabase.from("projects").select("id, name").eq("agency_id", userId).in("id", projectIds)
+      const { data: projRows } = await supabase.from("projects").select("id, name").eq("org_id", userId).in("id", projectIds)
       for (const p of projRows || []) projectNameById.set(p.id as string, (p.name as string) || "Project")
     }
 
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
       const { data: evalRows } = await supabase
         .from("bid_evaluations")
         .select("response_id, composite_score")
-        .eq("agency_id", userId)
+        .eq("org_id", userId)
         .in("response_id", responseIds)
       for (const e of evalRows || []) {
         const score = e.composite_score as number | null

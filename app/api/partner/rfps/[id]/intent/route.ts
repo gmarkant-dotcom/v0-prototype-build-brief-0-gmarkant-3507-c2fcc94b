@@ -23,7 +23,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: inbox, error: inboxError } = await supabase
       .from("partner_rfp_inbox")
-      .select("id, partner_id, recipient_email, status, nda_gate_enforced, nda_confirmed_at")
+      .select("id, vendor_org_id, recipient_email, status, nda_gate_enforced, nda_confirmed_at")
       .eq("id", id)
       .maybeSingle()
 
@@ -37,7 +37,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const access = partnerCanAccessPartnerRfpInbox(
       {
-        partner_id: (inbox.partner_id as string | null) ?? null,
+        vendor_org_id: (inbox.vendor_org_id as string | null) ?? null,
         recipient_email: (inbox.recipient_email as string | null) ?? null,
         nda_gate_enforced: (inbox.nda_gate_enforced as boolean | null) ?? false,
         nda_confirmed_at: (inbox.nda_confirmed_at as string | null) ?? null,
@@ -58,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .from("partner_rfp_responses")
       .select("status")
       .eq("inbox_item_id", id)
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
       .maybeSingle()
     if (existingResponse?.status) {
       effectiveStatus = String(existingResponse.status)

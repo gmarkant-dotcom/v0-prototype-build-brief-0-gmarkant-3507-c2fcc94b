@@ -445,7 +445,7 @@ function PartnerPoolPageInner() {
       const data = await response.json().catch(() => ({}))
       let loaded: Partnership[] = (data.partnerships || []).map((p: Record<string, unknown>) => ({
         id: p.id as string,
-        partnerId: (p.partner as { id?: string } | undefined)?.id || (p.partner_id as string | undefined) || undefined,
+        partnerId: (p.partner as { id?: string } | undefined)?.id || (p.vendor_org_id as string | undefined) || undefined,
         partnerEmail:
           (p.partner as { email?: string } | undefined)?.email || (p.partner_email as string),
         partnerName: (p.partner as { full_name?: string } | undefined)?.full_name,
@@ -640,12 +640,27 @@ function PartnerPoolPageInner() {
       if (!user) return
       
       const { data, error } = await supabase
+        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+        // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+        // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+        // resolves to nothing, and the new one resolves to `organizations`, which carries only
+        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+        // is exactly what this embed selects.
+        //
+        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+        // vendor company's email address under an organization model", which is the
+        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+        // cannot see this: the constraint name embeds the old column name with no word boundary
+        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+        // the rename complete with all thirteen of these still broken.
+        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
         .from('partner_access_requests')
         .select(`
           *,
-          partner:profiles!partner_id(full_name, company_name, email)
+          partner:profiles!vendor_org_id(full_name, company_name, email)
         `)
-        .eq('agency_id', user.id)
+        .eq('lead_org_id', user.id)
         .eq('status', 'pending')
         .order('created_at', { ascending: false })
       
@@ -658,7 +673,7 @@ function PartnerPoolPageInner() {
       } else if (data) {
         const loaded: AccessRequest[] = data.map((req: any) => ({
           id: req.id,
-          partnerId: req.partner_id,
+          partnerId: req.vendor_org_id,
           partnerName: req.partner?.full_name || req.partner?.company_name,
           partnerEmail: req.partner?.email,
           partnerCompany: req.partner?.company_name,

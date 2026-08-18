@@ -126,6 +126,21 @@ export async function GET(request: NextRequest) {
     if (acting === 'agency') {
       // Try rich query first (with relationships), then fallback to plain projects query.
       const rich = await supabase
+        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+        // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+        // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+        // resolves to nothing, and the new one resolves to `organizations`, which carries only
+        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+        // is exactly what this embed selects.
+        //
+        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+        // vendor company's email address under an organization model", which is the
+        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+        // cannot see this: the constraint name embeds the old column name with no word boundary
+        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+        // the rename complete with all thirteen of these still broken.
+        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
         .from('projects')
         .select(`
           *,
@@ -139,7 +154,7 @@ export async function GET(request: NextRequest) {
             )
           )
         `)
-        .eq('agency_id', user.id)
+        .eq('org_id', user.id)
         .order('created_at', { ascending: false })
 
       if (!rich.error) {
@@ -152,7 +167,7 @@ export async function GET(request: NextRequest) {
         const simple = await supabase
           .from('projects')
           .select('*')
-          .eq('agency_id', user.id)
+          .eq('org_id', user.id)
           .order('created_at', { ascending: false })
 
         if (simple.error) {
@@ -180,12 +195,12 @@ export async function GET(request: NextRequest) {
           supabase
             .from('partner_rfp_inbox')
             .select('project_id')
-            .eq('agency_id', user.id)
+            .eq('lead_org_id', user.id)
             .in('project_id', agencyProjectIds),
           supabase
             .from('partner_rfp_responses')
             .select('status, partner_rfp_inbox(project_id)')
-            .eq('agency_id', user.id)
+            .eq('lead_org_id', user.id)
             .neq('status', 'draft'),
         ])
 
@@ -296,12 +311,12 @@ export async function GET(request: NextRequest) {
         supabase
           .from('partner_rfp_responses')
           .select('partner_rfp_inbox(project_id)')
-          .eq('agency_id', user.id)
+          .eq('lead_org_id', user.id)
           .eq('status', 'awarded'),
         supabase
           .from('partner_rfp_responses')
           .select('budget_proposal')
-          .eq('agency_id', user.id)
+          .eq('lead_org_id', user.id)
           .eq('status', 'awarded'),
       ])
 
@@ -325,7 +340,7 @@ export async function GET(request: NextRequest) {
           const { data: projRows, error: peErr } = await supabase
             .from('projects')
             .select('id, end_date')
-            .eq('agency_id', user.id)
+            .eq('org_id', user.id)
             .in('id', uniqueForDates)
 
           const endDateByProject = new Map<string, string | null>()
@@ -364,7 +379,7 @@ export async function GET(request: NextRequest) {
       const { data: userPartnerships, error: pErr } = await supabase
         .from('partnerships')
         .select('id')
-        .eq('partner_id', user.id)
+        .eq('vendor_org_id', user.id)
 
       if (pErr) throw pErr
 
@@ -375,6 +390,21 @@ export async function GET(request: NextRequest) {
       }
 
       const { data, error } = await supabase
+        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+        // After 079, projects.org_id references organizations(id) rather than profiles(id), and
+        // the constraint is rebuilt as projects_org_id_org_fkey. So the old constraint name
+        // resolves to nothing, and the new one resolves to `organizations`, which carries only
+        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+        // is exactly what this embed selects.
+        //
+        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+        // lead agency organization's email address under an organization model", which is the
+        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+        // cannot see this: the constraint name embeds the old column name with no word boundary
+        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+        // the rename complete with all thirteen of these still broken.
+        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
         .from('project_assignments')
         .select(`
           id,
@@ -486,7 +516,7 @@ export async function POST(request: NextRequest) {
     // 079: agencyEntitlementId() starts resolving auth.uid() to organizations.id, so a
     // colleague's project counts against the organization's quota rather than opening a
     // fresh usage_tracking row of their own.
-    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, 'projects')
+    const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, 'projects')
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const body = await request.json()
@@ -500,7 +530,7 @@ export async function POST(request: NextRequest) {
     const { data: existingNamedProjects, error: existingNamedProjectsError } = await supabase
       .from("projects")
       .select("id")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .ilike("name", safeName)
 
     if (existingNamedProjectsError) {
@@ -513,7 +543,7 @@ export async function POST(request: NextRequest) {
     }
 
     const insertPayload: Record<string, unknown> = {
-      agency_id: user.id,
+      org_id: user.id,
       name: safeName,
       status: 'draft',
       description: description || null,

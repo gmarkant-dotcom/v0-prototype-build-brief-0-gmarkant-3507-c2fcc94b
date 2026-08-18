@@ -123,7 +123,7 @@ export async function GET() {
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
     await sweepOutstandingMagicTokens(vendorEmail, user.id)
     // H3 retroactive fix: an award made before this account existed/was linked (H2's pure-
-    // guest branch) leaves its partnerships row partner_id-null forever otherwise - nothing
+    // guest branch) leaves its partnerships row vendor_org_id-null forever otherwise - nothing
     // else claims it automatically. Service-role, same reasoning as the sweep above (RLS on
     // project_assignments would otherwise need to already know about a not-yet-linked row).
     const service = getServiceSupabase()
@@ -131,7 +131,7 @@ export async function GET() {
       await claimAwardedGhostPartnershipsByEmail(service, { partnerId: user.id, vendorEmail })
     }
 
-    // RLS applies: partner sees rows where partner_id = auth.uid() OR recipient_email matches profile email
+    // RLS applies: partner sees rows where vendor_org_id = auth.uid() OR recipient_email matches profile email
     const { data, error } = await supabase
       .from("partner_rfp_inbox")
       .select("*")
@@ -146,7 +146,7 @@ export async function GET() {
     }
 
     const rows = data || []
-    const agencyIds = Array.from(new Set(rows.map((r) => r.agency_id).filter(Boolean)))
+    const agencyIds = Array.from(new Set(rows.map((r) => r.lead_org_id).filter(Boolean)))
     let agencyMeetingUrlById: Record<string, string | null> = {}
     if (agencyIds.length > 0) {
       const { data: agencies } = await supabase.from("profiles").select("id, meeting_url").in("id", agencyIds)
@@ -200,7 +200,7 @@ export async function GET() {
         effective_status: effectiveStatus,
         agency_feedback: resp?.agency_feedback || null,
         feedback_updated_at: resp?.feedback_updated_at || null,
-        agency_meeting_url: agencyMeetingUrlById[row.agency_id as string] || null,
+        agency_meeting_url: agencyMeetingUrlById[row.lead_org_id as string] || null,
         client_name: clientNameByProjectId[(row.project_id as string | null) ?? ""] ?? null,
       }
     })

@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       const { error: unsetErr } = await supabase
         .from("bid_scoring_templates")
         .update({ is_default: false })
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
         .eq("is_default", true)
       if (unsetErr) {
         console.error("[api] failure", { route, method: "POST", message: unsetErr.message, code: "unset_default" })
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         .from("bid_scoring_templates")
         .update(patch)
         .eq("id", id)
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
         .select("id, name, description, criteria_weights, is_default, created_at")
         .maybeSingle()
       if (updateErr) {
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
     const { data: created, error: insertErr } = await supabase
       .from("bid_scoring_templates")
       .insert({
-        agency_id: user.id,
+        org_id: user.id,
         name,
         description,
         criteria_weights: criteriaWeights,

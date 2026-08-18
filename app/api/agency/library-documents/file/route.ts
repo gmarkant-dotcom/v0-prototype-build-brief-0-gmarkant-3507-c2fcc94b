@@ -18,9 +18,9 @@ export async function GET(request: NextRequest) {
 
     const { data: row, error } = await supabase
       .from("agency_library_documents")
-      .select("id, agency_id, label, blob_url, source_type, external_url")
+      .select("id, org_id, label, blob_url, source_type, external_url")
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .single()
 
     if (error || !row) return NextResponse.json({ error: "Not found" }, { status: 404 })

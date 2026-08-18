@@ -80,7 +80,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ respons
     .from("bid_evaluations")
     .select("id, status, composite_score, ai_recommendation, ranked_recommendation, ranked_recommendation_group, template_id")
     .eq("response_id", responseId)
-    .eq("agency_id", userId)
+    .eq("org_id", userId)
     .maybeSingle()
   if (evalErr) {
     console.error("[api] failure", { route, method: "GET", message: evalErr.message })
@@ -133,7 +133,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
       .from("partner_rfp_responses")
       .select("id")
       .eq("id", responseId)
-      .eq("agency_id", userId)
+      .eq("lead_org_id", userId)
       .maybeSingle()
     if (responseErr) {
       console.error("[api] failure", { route, method: "PUT", message: responseErr.message })
@@ -144,7 +144,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
     const { data: evaluation, error: evalUpsertErr } = await supabase
       .from("bid_evaluations")
       .upsert(
-        { response_id: responseId, agency_id: userId, status, updated_at: new Date().toISOString() },
+        { response_id: responseId, org_id: userId, status, updated_at: new Date().toISOString() },
         { onConflict: "response_id" }
       )
       .select("id")

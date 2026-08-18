@@ -30,7 +30,7 @@ async function requireAgency() {
 type ImportOutcome = "added" | "skipped" | "self"
 
 /**
- * Adds one contact to the agency's pool as a Discovered row - check by partner_id then
+ * Adds one contact to the agency's pool as a Discovered row - check by vendor_org_id then
  * partner_email before inserting, enrich an existing-but-unclaimed row instead of
  * duplicating it.
  *
@@ -63,21 +63,21 @@ async function importContact(
   const byId = matchedProfileId
     ? await service
         .from("partnerships")
-        .select("id, partner_id, status, partnership_notes")
-        .eq("agency_id", agencyId)
-        .eq("partner_id", matchedProfileId)
+        .select("id, vendor_org_id, status, partnership_notes")
+        .eq("lead_org_id", agencyId)
+        .eq("vendor_org_id", matchedProfileId)
         .limit(1)
         .maybeSingle()
     : { data: null }
   let existing = byId.data as
-    | { id: string; partner_id: string | null; status: string | null; partnership_notes: Record<string, unknown> | null }
+    | { id: string; vendor_org_id: string | null; status: string | null; partnership_notes: Record<string, unknown> | null }
     | null
 
   if (!existing) {
     const byEmail = await service
       .from("partnerships")
-      .select("id, partner_id, status, partnership_notes")
-      .eq("agency_id", agencyId)
+      .select("id, vendor_org_id, status, partnership_notes")
+      .eq("lead_org_id", agencyId)
       .ilike("partner_email", email)
       .limit(1)
       .maybeSingle()
@@ -94,7 +94,7 @@ async function importContact(
   if (existing) {
     if (existing.status === "active") return "skipped"
     // Existing Discovered/pending ghost row - link the matched profile id (if any) and
-    // flag, but never touch status/profile_status/partner_id here.
+    // flag, but never touch status/profile_status/vendor_org_id here.
     if (matchedProfileId || poolFlag) {
       const { error } = await service
         .from("partnerships")
@@ -106,8 +106,8 @@ async function importContact(
   }
 
   const { error } = await service.from("partnerships").insert({
-    agency_id: agencyId,
-    partner_id: null,
+    lead_org_id: agencyId,
+    vendor_org_id: null,
     partner_email: email,
     profile_status: "unclaimed",
     status: "pending",

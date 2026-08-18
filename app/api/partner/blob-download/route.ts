@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const { data: partnerships } = await supabase
       .from("partnerships")
       .select("id")
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
     const partnershipIds = (partnerships || []).map((p) => p.id)
     if (partnershipIds.length === 0) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })

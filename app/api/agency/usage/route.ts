@@ -12,7 +12,7 @@ export async function GET() {
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
-    const usage = await checkUsageLimits(agencyEntitlementId(user.id), supabase)
+    const usage = await checkUsageLimits(await agencyEntitlementId(user.id, supabase), supabase)
     return NextResponse.json(usage)
   } catch (error) {
     console.error("[api] failure", {

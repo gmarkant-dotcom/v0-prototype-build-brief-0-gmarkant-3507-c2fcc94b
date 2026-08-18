@@ -17,7 +17,7 @@ export type BidRow = {
   response_id: string | null
   response_exists: boolean
   inbox_item_id: string
-  partner_id?: string | null
+  vendor_org_id?: string | null
   vendor_email?: string | null
   partner_display_name: string
   project_name: string | null

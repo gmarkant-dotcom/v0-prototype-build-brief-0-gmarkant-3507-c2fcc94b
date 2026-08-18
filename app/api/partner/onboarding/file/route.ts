@@ -52,11 +52,11 @@ export async function GET(request: NextRequest) {
 
     const { data: ship } = await supabase
       .from("partnerships")
-      .select("partner_id")
+      .select("vendor_org_id")
       .eq("id", pkg.partnership_id as string)
       .single()
 
-    if (!ship || ship.partner_id !== user.id) {
+    if (!ship || ship.vendor_org_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 

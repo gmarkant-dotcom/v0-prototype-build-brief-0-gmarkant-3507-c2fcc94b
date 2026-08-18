@@ -28,7 +28,7 @@ export async function PATCH(
       .from("agency_library_documents")
       .update(patch)
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .select()
       .single()
 
@@ -52,7 +52,7 @@ export async function DELETE(
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
-    const { error } = await supabase.from("agency_library_documents").delete().eq("id", id).eq("agency_id", user.id)
+    const { error } = await supabase.from("agency_library_documents").delete().eq("id", id).eq("org_id", user.id)
 
     if (error) {
       return NextResponse.json({ error: "Delete failed" }, { status: 500 })

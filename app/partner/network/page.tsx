@@ -29,8 +29,8 @@ import {
 
 interface Partnership {
   id: string
-  agency_id: string
-  partner_id: string | null
+  lead_org_id: string
+  vendor_org_id: string | null
   status: "pending" | "active" | "suspended" | "terminated"
   invitation_message: string | null
   created_at: string
@@ -75,7 +75,7 @@ interface Agency {
 
 interface AccessRequest {
   id: string
-  agency_id: string
+  lead_org_id: string
   status: "pending" | "approved" | "declined"
 }
 
@@ -126,8 +126,8 @@ type Tab = "my-agencies" | "invitations" | "discover"
 const demoPartnerships: Partnership[] = [
   {
     id: "demo-1",
-    agency_id: "demo-agency-1",
-    partner_id: "demo-partner-1",
+    lead_org_id: "demo-agency-1",
+    vendor_org_id: "demo-partner-1",
     status: "pending",
     invitation_message: "We'd love to have you join our network for upcoming sports content projects. Your reel is impressive!",
     created_at: new Date().toISOString(),
@@ -141,8 +141,8 @@ const demoPartnerships: Partnership[] = [
   },
   {
     id: "demo-2",
-    agency_id: "demo-agency-2",
-    partner_id: "demo-partner-1",
+    lead_org_id: "demo-agency-2",
+    vendor_org_id: "demo-partner-1",
     status: "active",
     invitation_message: "Welcome to our preferred vendor network.",
     created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -445,8 +445,8 @@ export default function AgencyNetworkPage() {
     try {
       const { data, error } = await supabase
         .from("partner_access_requests")
-        .select("id, agency_id, status")
-        .eq("partner_id", userId)
+        .select("id, lead_org_id, status")
+        .eq("vendor_org_id", userId)
       if (!error) setMyRequests(data || [])
     } catch (error) {
       console.error("Error loading requests:", error)
@@ -457,7 +457,7 @@ export default function AgencyNetworkPage() {
     const load = async () => {
       if (isDemo) {
         setAgencies(demoAgencies)
-        setMyRequests([{ id: "demo-req-1", agency_id: "demo-agency-2", status: "approved" }])
+        setMyRequests([{ id: "demo-req-1", lead_org_id: "demo-agency-2", status: "approved" }])
         setIsLoadingAgencies(false)
         return
       }
@@ -490,7 +490,7 @@ export default function AgencyNetworkPage() {
   const handleRequestAccess = async () => {
     if (!selectedAgency) return
     if (isDemo) {
-      setMyRequests((prev) => [...prev, { id: `demo-req-${Date.now()}`, agency_id: selectedAgency.id, status: "pending" }])
+      setMyRequests((prev) => [...prev, { id: `demo-req-${Date.now()}`, lead_org_id: selectedAgency.id, status: "pending" }])
       setShowRequestModal(false)
       setSelectedAgency(null)
       setRequestMessage("")
@@ -502,8 +502,8 @@ export default function AgencyNetworkPage() {
       if (!userId) return
       const supabase = createClient()
       const { error } = await supabase.from("partner_access_requests").insert({
-        partner_id: userId,
-        agency_id: selectedAgency.id,
+        vendor_org_id: userId,
+        lead_org_id: selectedAgency.id,
         request_message: requestMessage || null,
         status: "pending",
       })
@@ -519,7 +519,7 @@ export default function AgencyNetworkPage() {
     setRequestingAgency(null)
   }
 
-  const getRequestStatus = (agencyId: string) => myRequests.find((req) => req.agency_id === agencyId)
+  const getRequestStatus = (agencyId: string) => myRequests.find((req) => req.lead_org_id === agencyId)
 
   const openAgencyProfile = async (agency: Agency) => {
     setSelectedAgency(agency)
@@ -636,7 +636,7 @@ export default function AgencyNetworkPage() {
   const filteredAgencies = useMemo(() => {
     return agencies.filter((agency) => {
       if (viewMode === "network") {
-        const request = myRequests.find((req) => req.agency_id === agency.id)
+        const request = myRequests.find((req) => req.lead_org_id === agency.id)
         const inNetwork = agency.collaborated === true || request?.status === "approved"
         if (!inNetwork) return false
       }

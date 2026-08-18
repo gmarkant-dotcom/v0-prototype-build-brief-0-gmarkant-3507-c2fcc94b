@@ -199,6 +199,15 @@ BEGIN;
 --
 -- 079: vouched_partner_id becomes vendor_org_id, and the parameter becomes
 --      an organization id rather than a profile id.
+--
+--      THIS IS A REQUIRED POST-079 STEP, NOT A NOTE. Both functions below must
+--      be re-run with the renamed columns immediately after 079 applies, in the
+--      same maintenance window. partner_vouch_counts() in particular declares
+--      RETURNS TABLE (vouched_partner_id uuid, ...) and lib/vouch-counts.ts on
+--      the post-079 branch reads `vendor_org_id` off that result. Skip the
+--      recreate and every key is undefined and every vouch count reads 0 -
+--      exactly the silent zero this migration's STOP GATE exists to prevent,
+--      arriving by a different door. See docs/079-release-runbook.md.
 CREATE OR REPLACE FUNCTION public.partner_vouch_count(p_partner_id uuid)
 RETURNS bigint
 LANGUAGE sql

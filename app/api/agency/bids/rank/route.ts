@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     const { data: owned, error: ownedErr } = await supabase
       .from("partner_rfp_responses")
       .select("id, partner_display_name, composite_score")
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .in("id", responseIds)
     if (ownedErr) {
       console.error("[api] failure", { route, method: "POST", message: ownedErr.message })
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("response_id", topRankedId)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
     if (saveErr) {
       console.error("[api] failure", { route, method: "POST", message: saveErr.message })
       return NextResponse.json({ error: "Failed to save ranking" }, { status: 500 })

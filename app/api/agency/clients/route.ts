@@ -31,7 +31,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("clients")
       .select("id, name, notes, default_business_criteria, default_evaluation_criteria, created_at, updated_at")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .order("name", { ascending: true })
 
     if (error) {
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       const { data: existingRows, error: dupErr } = await supabase
         .from("clients")
         .select("id, name")
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
       if (dupErr && isMissingClientsTable(dupErr)) {
         return NextResponse.json(
           { error: "Client profiles are not set up yet. Apply migration 077 first.", available: false },
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const insertRow: Record<string, unknown> = { agency_id: user.id, name }
+    const insertRow: Record<string, unknown> = { org_id: user.id, name }
     if (typeof body.notes === "string") insertRow.notes = body.notes.trim() || null
     if (body.default_business_criteria != null) {
       insertRow.default_business_criteria = normalizeBusinessCriteriaRequired(body.default_business_criteria)

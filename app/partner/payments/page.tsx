@@ -44,7 +44,7 @@ type PartnerEngagement = {
   project_name: string
   client_name: string | null
   partnership_id: string
-  agency_id: string | null
+  lead_org_id: string | null
   assignment_id: string
   response_id: string | null
   scope_item_name: string | null
@@ -60,7 +60,7 @@ type GroupedProject = {
 
 type PartnershipApiRow = {
   id: string
-  agency_id: string
+  lead_org_id: string
   status?: string | null
   agency?: { company_name?: string | null; full_name?: string | null } | null
 }
@@ -92,7 +92,7 @@ const demoEngagements: PartnerEngagement[] = [
     client_name: "NWSL",
     assignment_id: "demo-asg-1",
     partnership_id: "demo-p1",
-    agency_id: "demo-agency-1",
+    lead_org_id: "demo-agency-1",
     awarded_at: "2026-01-01T12:00:00Z",
     response_id: DEMO_RESPONSE_ID,
     scope_item_name: "Creator content",
@@ -103,7 +103,7 @@ const demoEngagements: PartnerEngagement[] = [
     client_name: "NWSL",
     assignment_id: "demo-asg-1",
     partnership_id: "demo-p1",
-    agency_id: "demo-agency-1",
+    lead_org_id: "demo-agency-1",
     awarded_at: "2026-01-01T12:00:00Z",
     response_id: DEMO_RESPONSE_ID_2,
     scope_item_name: "Paid media",
@@ -178,8 +178,8 @@ const demoMilestones: MilestoneRow[] = [
 ]
 
 const demoActivePartnerships: PartnershipApiRow[] = [
-  { id: "demo-p1", agency_id: "demo-agency-1", status: "active", agency: { company_name: "Tandem Social" } },
-  { id: "demo-p2", agency_id: "demo-agency-2", status: "active", agency: { company_name: "North Star Media" } },
+  { id: "demo-p1", lead_org_id: "demo-agency-1", status: "active", agency: { company_name: "Tandem Social" } },
+  { id: "demo-p2", lead_org_id: "demo-agency-2", status: "active", agency: { company_name: "North Star Media" } },
 ]
 
 const demoRatesSeeded: Record<string, RateInfoPayload> = {
@@ -369,7 +369,7 @@ function PartnerPaymentsPageLegacy() {
             client_name: p.client_name != null ? String(p.client_name) : null,
             assignment_id: String(p.assignment_id || ""),
             partnership_id: String(p.partnership_id || ""),
-            agency_id: p.agency_id != null ? String(p.agency_id) : null,
+            lead_org_id: p.lead_org_id != null ? String(p.lead_org_id) : null,
             awarded_at: p.awarded_at != null ? String(p.awarded_at) : null,
             response_id: p.response_id != null ? String(p.response_id) : null,
             scope_item_name: scope,

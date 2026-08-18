@@ -45,8 +45,8 @@ export async function GET() {
       return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStoreHeaders })
     }
 
-    // H3 retroactive fix: this route's whole result is gated on partnerships.partner_id below
-    // - an awarded-but-still-partner_id-null ghost partnership (H2's pure-guest branch,
+    // H3 retroactive fix: this route's whole result is gated on partnerships.vendor_org_id below
+    // - an awarded-but-still-vendor_org_id-null ghost partnership (H2's pure-guest branch,
     // before this vendor had/linked an account) would return an empty project list forever
     // without this, even though the engagement is real. Same claim the RFP list's sweep
     // performs, run here too so this page works standalone without depending on the vendor
@@ -59,8 +59,8 @@ export async function GET() {
 
     const { data: userPartnerships, error: pErr } = await supabase
       .from("partnerships")
-      .select("id, agency_id")
-      .eq("partner_id", user.id)
+      .select("id, lead_org_id")
+      .eq("vendor_org_id", user.id)
 
     if (pErr) throw pErr
 
@@ -72,7 +72,7 @@ export async function GET() {
     const partnershipIdSet = new Set(partnershipIds)
     const agencyByPartnership = new Map<string, string | null>()
     for (const s of userPartnerships || []) {
-      agencyByPartnership.set(s.id as string, s.agency_id != null ? String(s.agency_id) : null)
+      agencyByPartnership.set(s.id as string, s.lead_org_id != null ? String(s.lead_org_id) : null)
     }
 
     // Fetch agency profiles for display names
@@ -94,7 +94,7 @@ export async function GET() {
     const { data: respRows, error: rErr } = await supabase
       .from("partner_rfp_responses")
       .select("id, inbox_item_id, budget_proposal")
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
       .eq("status", "awarded")
 
     if (rErr) throw rErr
@@ -172,7 +172,7 @@ export async function GET() {
       end_date: string | null
       status: string | null
       partnership_id: string
-      agency_id: string | null
+      lead_org_id: string | null
       agency_name: string
       assignment_id: string
       response_id: string | null
@@ -207,7 +207,7 @@ export async function GET() {
         end_date: (proj?.end_date as string | null) ?? null,
         status: (proj?.status as string | null) ?? null,
         partnership_id,
-        agency_id: agencyId,
+        lead_org_id: agencyId,
         agency_name: agencyId ? (agencyNameById.get(agencyId) ?? "Lead Agency") : "Lead Agency",
         assignment_id: asg?.assignment_id ?? "",
         response_id: r.id as string,
@@ -236,7 +236,7 @@ export async function GET() {
         end_date: (proj?.end_date as string | null) ?? null,
         status: (proj?.status as string | null) ?? null,
         partnership_id,
-        agency_id: agencyId,
+        lead_org_id: agencyId,
         agency_name: agencyId ? (agencyNameById.get(agencyId) ?? "Lead Agency") : "Lead Agency",
         assignment_id: a.id as string,
         response_id: null,

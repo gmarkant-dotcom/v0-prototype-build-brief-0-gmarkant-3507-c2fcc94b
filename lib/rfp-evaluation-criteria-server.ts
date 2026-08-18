@@ -60,7 +60,7 @@ export async function resolveRfpRubricForResponse(
     .from("partner_rfp_responses")
     .select("inbox_item_id")
     .eq("id", responseId)
-    .eq("agency_id", agencyId)
+    .eq("lead_org_id", agencyId)
     .maybeSingle()
   if (!response) return []
 
@@ -69,7 +69,7 @@ export async function resolveRfpRubricForResponse(
       .from("partner_rfp_inbox")
       .select("master_rfp_json")
       .eq("id", response.inbox_item_id)
-      .eq("agency_id", agencyId)
+      .eq("lead_org_id", agencyId)
       .maybeSingle()
     return readRfpEvaluationCriteriaFromMasterRfpJson(inbox?.master_rfp_json)
   }
@@ -78,7 +78,7 @@ export async function resolveRfpRubricForResponse(
     .from("rfp_magic_tokens")
     .select("evaluation_criteria")
     .eq("response_id", responseId)
-    .eq("agency_id", agencyId)
+    .eq("org_id", agencyId)
     .maybeSingle()
   if (tokenErr) {
     if (tokenErr.code !== "42703") {

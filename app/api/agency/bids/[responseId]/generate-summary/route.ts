@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
-    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "ai_analyses")
+    const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const result = await generateAndSaveBidSummary(supabase, responseId, user.id)
@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error }, { status })
     }
 
-    await incrementAiAnalysis(agencyEntitlementId(user.id), supabase)
+    await incrementAiAnalysis(await agencyEntitlementId(user.id, supabase), supabase)
     return NextResponse.json(result)
   } catch (error) {
     console.error("[api] failure", {

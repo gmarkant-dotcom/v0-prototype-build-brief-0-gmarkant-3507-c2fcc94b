@@ -206,7 +206,7 @@ function BidCard({
               {Math.round(row.composite_score)}
             </HelpTerm>
           )}
-          {!row.partner_id && row.response_exists && (
+          {!row.vendor_org_id && row.response_exists && (
             <span className="font-mono text-2xs px-2 py-0.5 rounded-full border border-teal-400/40 bg-teal-500/10 text-teal-300 uppercase tracking-wider shrink-0">
               Guest Submission
             </span>
@@ -579,11 +579,11 @@ export default function AgencyBidsPage() {
         // valid client group to show real users.
         continue
       }
-      // Group by partner_id when present, not partner_display_name: a guest/magic-link bid
+      // Group by vendor_org_id when present, not partner_display_name: a guest/magic-link bid
       // from a known partner carries whatever name the agency typed into the invite, which
       // can differ from that partner's other bids and would otherwise split them into a
-      // separate group. partner_id is the stable identity; display_name is cosmetic only.
-      const key = groupBy === "client" ? r.client_name!.trim() : r.partner_id || r.partner_display_name || "Unknown Vendor"
+      // separate group. vendor_org_id is the stable identity; display_name is cosmetic only.
+      const key = groupBy === "client" ? r.client_name!.trim() : r.vendor_org_id || r.partner_display_name || "Unknown Vendor"
       const label = groupBy === "client" ? r.client_name!.trim() : r.partner_display_name || "Unknown Vendor"
       const existing = map.get(key)
       if (existing) {

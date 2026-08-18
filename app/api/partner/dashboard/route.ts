@@ -56,15 +56,15 @@ export async function GET() {
       supabase
         .from("partner_rfp_inbox")
         .select(
-          "id, agency_id, project_id, scope_item_name, status, response_deadline, nda_gate_enforced, nda_confirmed_at, created_at"
+          "id, lead_org_id, project_id, scope_item_name, status, response_deadline, nda_gate_enforced, nda_confirmed_at, created_at"
         ),
       supabase
         .from("partner_rfp_responses")
         .select("id, inbox_item_id, status, submitted_at, shortlisted_at, meeting_requested_at, declined_at")
-        .eq("partner_id", partnerId),
+        .eq("vendor_org_id", partnerId),
       // F3: no reliability_summary/reliability_summary_generated_at here - see the note above
       // the reliability computation below, this route must never carry that column at all.
-      supabase.from("partnerships").select("id, agency_id, status").eq("partner_id", partnerId),
+      supabase.from("partnerships").select("id, lead_org_id, status").eq("vendor_org_id", partnerId),
     ])
 
     for (const [label, res] of [
@@ -92,8 +92,8 @@ export async function GET() {
     }
 
     const agencyIds = new Set<string>()
-    for (const row of inboxRows) if (row.agency_id) agencyIds.add(row.agency_id as string)
-    for (const row of partnerships) if (row.agency_id) agencyIds.add(row.agency_id as string)
+    for (const row of inboxRows) if (row.lead_org_id) agencyIds.add(row.lead_org_id as string)
+    for (const row of partnerships) if (row.lead_org_id) agencyIds.add(row.lead_org_id as string)
 
     const partnershipIds = partnerships.map((p) => p.id as string)
 
@@ -188,7 +188,7 @@ export async function GET() {
       needsResponse.push({
         id: row.id as string,
         scopeItemName: (row.scope_item_name as string | null) || "Scope",
-        agencyName: agencyNameById.get(row.agency_id as string) || "Lead agency",
+        agencyName: agencyNameById.get(row.lead_org_id as string) || "Lead agency",
         clientName: clientNameByProjectId.get((row.project_id as string | null) ?? "") ?? null,
         deadline,
         daysLeft,
@@ -215,7 +215,7 @@ export async function GET() {
         console.error("[api] failure", { route, method: "GET", table: "onboarding_packages", message: pkgErr.message })
       } else if (packages && packages.length > 0) {
         const pkgProjectIds = [...new Set(packages.map((p) => p.project_id as string).filter(Boolean))]
-        const partnershipAgencyById = new Map(partnerships.map((p) => [p.id as string, p.agency_id as string | null]))
+        const partnershipAgencyById = new Map(partnerships.map((p) => [p.id as string, p.lead_org_id as string | null]))
         let pkgProjectNameById = new Map<string, string>()
         if (pkgProjectIds.length > 0) {
           const { data: pkgProjects } = await supabase.from("projects").select("id, name").in("id", pkgProjectIds)
@@ -305,7 +305,7 @@ export async function GET() {
 
     for (const row of inboxRows) {
       if (!row.created_at) continue
-      const agencyName = agencyNameById.get(row.agency_id as string) || "A lead agency"
+      const agencyName = agencyNameById.get(row.lead_org_id as string) || "A lead agency"
       activity.push({
         id: `rfp:${row.id}`,
         text: `${agencyName} sent an RFP for ${(row.scope_item_name as string | null) || "a scope item"}`,

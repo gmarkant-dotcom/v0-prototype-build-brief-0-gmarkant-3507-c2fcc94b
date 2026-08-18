@@ -19,7 +19,7 @@ function safeDispositionFilename(name: string): string {
 /**
  * Stream a private Vercel Blob for agency review of partner RFP attachments.
  * Query: ?url=<encodeURIComponent(blobUrl)>
- * Auth: agency user must own the related partner_rfp_inbox row (agency_id = auth.uid()).
+ * Auth: agency user must own the related partner_rfp_inbox row (lead_org_id = auth.uid()).
  */
 export async function GET(request: NextRequest) {
   try {
@@ -65,20 +65,20 @@ export async function GET(request: NextRequest) {
     if (parsedRfp) {
       const { data: inbox, error: inboxErr } = await supabase
         .from("partner_rfp_inbox")
-        .select("id, agency_id")
+        .select("id, lead_org_id")
         .eq("id", parsedRfp.inboxId)
         .maybeSingle()
 
-      if (inboxErr || !inbox || inbox.agency_id !== user.id) {
+      if (inboxErr || !inbox || inbox.lead_org_id !== user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
 
       const { data: responseRow } = await supabase
         .from("partner_rfp_responses")
         .select("id")
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
         .eq("inbox_item_id", parsedRfp.inboxId)
-        .eq("partner_id", parsedRfp.partnerId)
+        .eq("vendor_org_id", parsedRfp.partnerId)
         .maybeSingle()
 
       if (!responseRow) {
@@ -89,11 +89,11 @@ export async function GET(request: NextRequest) {
     if (parsedProject) {
       const { data: project, error: projectErr } = await supabase
         .from("projects")
-        .select("id, agency_id")
+        .select("id, org_id")
         .eq("id", parsedProject.projectId)
         .maybeSingle()
 
-      if (projectErr || !project || project.agency_id !== user.id) {
+      if (projectErr || !project || project.org_id !== user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
     }
@@ -101,11 +101,11 @@ export async function GET(request: NextRequest) {
     if (parsedGuestUpload) {
       const { data: tokenRow, error: tokenErr } = await supabase
         .from("rfp_magic_tokens")
-        .select("agency_id")
+        .select("org_id")
         .eq("token", parsedGuestUpload.token)
         .maybeSingle()
 
-      if (tokenErr || !tokenRow || tokenRow.agency_id !== user.id) {
+      if (tokenErr || !tokenRow || tokenRow.org_id !== user.id) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
     }

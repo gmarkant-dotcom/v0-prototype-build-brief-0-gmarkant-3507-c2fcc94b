@@ -17,7 +17,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       .from("bid_scoring_criteria")
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .select("id")
       .maybeSingle()
     if (updateErr) {

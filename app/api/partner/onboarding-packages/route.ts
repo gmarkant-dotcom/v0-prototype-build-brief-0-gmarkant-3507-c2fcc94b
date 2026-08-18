@@ -17,7 +17,7 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: "Vendor only" }, { status: 403 })
     }
 
-    const { data: partnerships } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)
+    const { data: partnerships } = await supabase.from("partnerships").select("id").eq("vendor_org_id", user.id)
     const pids = (partnerships || []).map((p) => p.id)
     if (pids.length === 0) {
       return NextResponse.json({ packages: [] })
@@ -41,7 +41,7 @@ export async function GET(_request: NextRequest) {
           .filter((id): id is string => Boolean(id))
       ),
     ]
-    const agencyIds = [...new Set((packages || []).map((p) => p.agency_id as string))]
+    const agencyIds = [...new Set((packages || []).map((p) => p.org_id as string))]
     const projectMap: Record<string, { name: string | null; client_name: string | null }> = {}
     const agencyMap: Record<string, { company_name: string | null; full_name: string | null }> = {}
 
@@ -97,7 +97,7 @@ export async function GET(_request: NextRequest) {
     const enriched = (packages || []).map((p) => ({
       ...p,
       project: projectMap[p.project_id as string] || null,
-      agency: agencyMap[p.agency_id as string] || null,
+      agency: agencyMap[p.org_id as string] || null,
       documents: docsByPackage[p.id] || [],
     }))
 

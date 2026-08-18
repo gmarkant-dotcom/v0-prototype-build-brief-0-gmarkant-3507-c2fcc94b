@@ -49,47 +49,47 @@ async function classifyGuestVendorForPool(
   if (matchedProfileId) {
     const byId = await supabase
       .from("partnerships")
-      .select("id, partner_id")
-      .eq("agency_id", agencyId)
-      .eq("partner_id", matchedProfileId)
+      .select("id, vendor_org_id")
+      .eq("lead_org_id", agencyId)
+      .eq("vendor_org_id", matchedProfileId)
       .limit(1)
       .maybeSingle()
     if (byId.error) throw byId.error
 
-    let existingPartnership = byId.data as { id: string; partner_id: string | null } | null
+    let existingPartnership = byId.data as { id: string; vendor_org_id: string | null } | null
 
     // A partnership between this agency and this email may already exist with no
-    // partner_id yet - e.g. a manual invite-by-email sent before the vendor had an
-    // account, or an older unclaimed magic-link ghost row. The partner_id-only lookup
-    // above misses it, and inserting a new row for the same (agency_id, partner_email)
+    // vendor_org_id yet - e.g. a manual invite-by-email sent before the vendor had an
+    // account, or an older unclaimed magic-link ghost row. The vendor_org_id-only lookup
+    // above misses it, and inserting a new row for the same (lead_org_id, partner_email)
     // would collide with it. Check by email too before deciding to insert.
     if (!existingPartnership) {
       const byEmail = await supabase
         .from("partnerships")
-        .select("id, partner_id")
-        .eq("agency_id", agencyId)
+        .select("id, vendor_org_id")
+        .eq("lead_org_id", agencyId)
         .ilike("partner_email", vendorEmail)
         .limit(1)
         .maybeSingle()
       if (byEmail.error) throw byEmail.error
-      existingPartnership = byEmail.data as { id: string; partner_id: string | null } | null
+      existingPartnership = byEmail.data as { id: string; vendor_org_id: string | null } | null
     }
 
     if (!existingPartnership) {
       const { error: insertErr } = await supabase.from("partnerships").insert({
-        agency_id: agencyId,
-        partner_id: matchedProfileId,
+        lead_org_id: agencyId,
+        vendor_org_id: matchedProfileId,
         partner_email: vendorEmail,
         status: "active",
         profile_status: "active",
       })
       if (insertErr) throw insertErr
-    } else if (!existingPartnership.partner_id) {
+    } else if (!existingPartnership.vendor_org_id) {
       // Found by email, unclaimed - claim it onto this profile instead of inserting a
-      // duplicate row for the same (agency_id, partner_email).
+      // duplicate row for the same (lead_org_id, partner_email).
       const { error: claimErr } = await supabase
         .from("partnerships")
-        .update({ partner_id: matchedProfileId, profile_status: "active", updated_at: new Date().toISOString() })
+        .update({ vendor_org_id: matchedProfileId, profile_status: "active", updated_at: new Date().toISOString() })
         .eq("id", existingPartnership.id)
       if (claimErr) throw claimErr
     }
@@ -128,15 +128,15 @@ async function classifyGuestVendorForPool(
   const { data: existingGhost, error: ghostLookupErr } = await supabase
     .from("partnerships")
     .select("id")
-    .eq("agency_id", agencyId)
+    .eq("lead_org_id", agencyId)
     .ilike("partner_email", vendorEmail)
     .limit(1)
     .maybeSingle()
   if (ghostLookupErr) throw ghostLookupErr
   if (!existingGhost) {
     const { error: insertErr } = await supabase.from("partnerships").insert({
-      agency_id: agencyId,
-      partner_id: null,
+      lead_org_id: agencyId,
+      vendor_org_id: null,
       partner_email: vendorEmail,
       profile_status: "unclaimed",
       status: "pending",
@@ -219,7 +219,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       const { data: agencyProfile } = await supabase
         .from("profiles")
         .select("company_name, display_name")
-        .eq("id", tokenRow.agency_id)
+        .eq("id", tokenRow.org_id)
         .maybeSingle()
       return NextResponse.json(
         {
@@ -243,7 +243,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
         // company_logo_url is the agency's company logo (shown to vendors). avatar_url is the
         // signed-in user's personal photo, a different field, and not what belongs on this page.
         .select("company_name, display_name, company_logo_url")
-        .eq("id", tokenRow.agency_id)
+        .eq("id", tokenRow.org_id)
         .maybeSingle(),
     ])
     if (projectErr || agencyErr) {
@@ -480,7 +480,7 @@ export async function POST(req: Request) {
     const budget_proposal = serializeBudget(amount, currency, currencyCustom || undefined)
     // /agency/bids groups bids by this exact string (see app/agency/bids/page.tsx groupBy
     // "partner"). For a known vendor, use their real profile name so the bid lands in the
-    // same group as every other bid tied to partner_id - not a separate group keyed off
+    // same group as every other bid tied to vendor_org_id - not a separate group keyed off
     // whatever name/email the agency typed into the magic-link invite.
     const partner_display_name = is_existing_partner
       ? matchedProfile?.company_name?.trim() || matchedProfile?.full_name?.trim() || matchedProfile?.display_name?.trim() || vendorEmail
@@ -522,7 +522,7 @@ export async function POST(req: Request) {
       }
 
       // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-      void generateAndSaveBidSummary(supabase, tokenRow.response_id as string, tokenRow.agency_id as string).catch((err) => {
+      void generateAndSaveBidSummary(supabase, tokenRow.response_id as string, tokenRow.org_id as string).catch((err) => {
         console.error("[api] fire-and-forget summary generation failed", {
           route,
           responseId: tokenRow.response_id,
@@ -538,7 +538,7 @@ export async function POST(req: Request) {
         supabase
           .from("profiles")
           .select("email, company_name, display_name, full_name")
-          .eq("id", tokenRow.agency_id)
+          .eq("id", tokenRow.org_id)
           .maybeSingle(),
       ])
       const editVendorName = (tokenRow.vendor_name || "").trim() || vendorEmail
@@ -570,13 +570,13 @@ export async function POST(req: Request) {
       } else {
         console.error("[api] guest bid revision: agency has no email on file, notification skipped", {
           route,
-          agencyId: tokenRow.agency_id,
+          agencyId: tokenRow.org_id,
         })
       }
       try {
         await notifyBidSubmitted(
           supabase,
-          tokenRow.agency_id as string,
+          tokenRow.org_id as string,
           editVendorName,
           editScopeItemName,
           tokenRow.response_id as string,
@@ -594,8 +594,8 @@ export async function POST(req: Request) {
     }
 
     const insertRow = {
-      agency_id: tokenRow.agency_id,
-      partner_id: is_existing_partner ? matchedProfile!.id : null,
+      lead_org_id: tokenRow.org_id,
+      vendor_org_id: is_existing_partner ? matchedProfile!.id : null,
       inbox_item_id: null,
       proposal_text,
       budget_proposal,
@@ -629,7 +629,7 @@ export async function POST(req: Request) {
     }
 
     // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-    void generateAndSaveBidSummary(supabase, saved.id as string, tokenRow.agency_id as string).catch((err) => {
+    void generateAndSaveBidSummary(supabase, saved.id as string, tokenRow.org_id as string).catch((err) => {
       console.error("[api] fire-and-forget summary generation failed", {
         route,
         responseId: saved.id,
@@ -645,7 +645,7 @@ export async function POST(req: Request) {
     let poolClassification: PoolClassification | null = null
     try {
       poolClassification = await classifyGuestVendorForPool(supabase, {
-        agencyId: tokenRow.agency_id,
+        agencyId: tokenRow.org_id,
         vendorEmail,
         matchedProfileId: is_existing_partner ? matchedProfile!.id : null,
       })
@@ -673,7 +673,7 @@ export async function POST(req: Request) {
         route,
         token,
         vendorEmail,
-        agencyId: tokenRow.agency_id,
+        agencyId: tokenRow.org_id,
         matchedProfileId: is_existing_partner ? matchedProfile?.id : null,
         code: supabaseErr?.code,
         message: classifyErr instanceof Error ? classifyErr.message : String(classifyErr),
@@ -700,7 +700,7 @@ export async function POST(req: Request) {
     const { data: agencyProfile } = await supabase
       .from("profiles")
       .select("email, company_name, display_name, full_name")
-      .eq("id", tokenRow.agency_id)
+      .eq("id", tokenRow.org_id)
       .maybeSingle()
 
     const projectName = project?.name || "Project"
@@ -750,12 +750,12 @@ export async function POST(req: Request) {
     } else {
       console.error("[api] guest bid submission: agency has no email on file, notification skipped", {
         route,
-        agencyId: tokenRow.agency_id,
+        agencyId: tokenRow.org_id,
       })
     }
 
     try {
-      await notifyBidSubmitted(supabase, tokenRow.agency_id as string, submissionVendorName, submissionScopeItemName, saved.id as string, false)
+      await notifyBidSubmitted(supabase, tokenRow.org_id as string, submissionVendorName, submissionScopeItemName, saved.id as string, false)
     } catch (notifyErr) {
       console.error("[api] guest bid submission: in-app notification failed", {
         route,

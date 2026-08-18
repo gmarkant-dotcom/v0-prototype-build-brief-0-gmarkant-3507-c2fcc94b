@@ -27,9 +27,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
 
     const { data: project } = await supabase
       .from("projects")
-      .select("id, title, agency_id")
+      .select("id, title, org_id")
       .eq("id", projectId)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
@@ -64,6 +64,21 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
     const nameByPartnershipId = new Map<string, string>()
     if (partnershipIds.length > 0) {
       const { data: pships } = await supabase
+        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+        // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+        // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+        // resolves to nothing, and the new one resolves to `organizations`, which carries only
+        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+        // is exactly what this embed selects.
+        //
+        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+        // vendor company's email address under an organization model", which is the
+        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+        // cannot see this: the constraint name embeds the old column name with no word boundary
+        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+        // the rename complete with all thirteen of these still broken.
+        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
         .from("partnerships")
         .select(
           `
@@ -117,9 +132,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
 
     const { data: project } = await supabase
       .from("projects")
-      .select("id, title, agency_id")
+      .select("id, title, org_id")
       .eq("id", projectId)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
@@ -168,18 +183,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
       try {
         const { data: partnership } = await supabase
           .from("partnerships")
-          .select("partner_id")
+          .select("vendor_org_id")
           .eq("id", updated.partnership_id)
           .maybeSingle()
 
-        const partnerId = partnership?.partner_id
+        const partnerId = partnership?.vendor_org_id
         if (partnerId) {
           const [{ data: partnerProfile }, { data: agencyProfile }] = await Promise.all([
             supabase.from("profiles").select("email, full_name, company_name").eq("id", partnerId).maybeSingle(),
             supabase
               .from("profiles")
               .select("full_name, company_name")
-              .eq("id", project.agency_id)
+              .eq("id", project.org_id)
               .maybeSingle(),
           ])
           const recipientEmail = partnerProfile?.email?.trim()
@@ -229,7 +244,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     if (profile?.role !== "agency" && profile?.active_role !== "agency") return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
 
     const { data: project } = await supabase
-      .from("projects").select("id, agency_id").eq("id", projectId).eq("agency_id", user.id).maybeSingle()
+      .from("projects").select("id, org_id").eq("id", projectId).eq("org_id", user.id).maybeSingle()
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStoreHeaders })
 
     const body = (await req.json().catch(() => ({}))) as {

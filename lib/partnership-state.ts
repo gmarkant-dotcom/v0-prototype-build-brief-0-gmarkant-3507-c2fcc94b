@@ -2,12 +2,12 @@
  * The one definition of what state a partnership is in.
  *
  * Three definitions used to coexist, and they disagreed on the same row:
- *  - the pool's Active column filtered on `partner_id` being populated
+ *  - the pool's Active column filtered on `vendor_org_id` being populated
  *  - the vendor detail route required `status = 'active'`
  *  - the Active card's date read the legacy `invited_at` while the Invited column's
  *    membership read `invitation_sent_at`
  *
- * `status` is the relationship fact and the only source of truth for it. `partner_id` is an
+ * `status` is the relationship fact and the only source of truth for it. `vendor_org_id` is an
  * account fact: it says the contact has claimed a Ligament login, nothing more. The two were
  * being conflated, and because the claim runs automatically on the vendor's next page load
  * (app/api/partner/partnerships/claim/route.ts), any invited vendor who merely signed in was
@@ -51,7 +51,7 @@ function invitationSentAt(row: PartnershipStateInput): string | null {
 }
 
 /**
- * The relationship is live. This is the ONLY test for "active" - never `partner_id`, and
+ * The relationship is live. This is the ONLY test for "active" - never `vendor_org_id`, and
  * never the presence of a partnership row at all.
  */
 export function isActivePartnership(row: PartnershipStateInput | null | undefined): boolean {

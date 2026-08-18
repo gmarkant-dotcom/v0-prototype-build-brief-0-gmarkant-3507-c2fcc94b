@@ -41,7 +41,7 @@ export async function loadBidAnalysisContext(
       "id, inbox_item_id, proposal_text, budget_proposal, timeline_proposal, payment_terms, business_criteria_responses, partner_display_name"
     )
     .eq("id", responseId)
-    .eq("agency_id", agencyId)
+    .eq("lead_org_id", agencyId)
     .maybeSingle()
   if (!response) return null
 
@@ -53,7 +53,7 @@ export async function loadBidAnalysisContext(
     .from("partner_rfp_responses")
     .select("proposal_sections, budget_lines")
     .eq("id", responseId)
-    .eq("agency_id", agencyId)
+    .eq("lead_org_id", agencyId)
     .maybeSingle()
   if (structuredErr) {
     console.warn("[bid-analysis-context] structured bid columns unavailable, prompting without them", {
@@ -72,7 +72,7 @@ export async function loadBidAnalysisContext(
       .from("partner_rfp_inbox")
       .select("scope_item_name, scope_item_description")
       .eq("id", response.inbox_item_id)
-      .eq("agency_id", agencyId)
+      .eq("lead_org_id", agencyId)
       .maybeSingle()
     scopeItemName = (inbox?.scope_item_name as string | null) ?? null
     scopeItemDescription = (inbox?.scope_item_description as string | null) ?? null
@@ -81,7 +81,7 @@ export async function loadBidAnalysisContext(
       .from("rfp_magic_tokens")
       .select("scope_item_name, scope_item_description")
       .eq("response_id", responseId)
-      .eq("agency_id", agencyId)
+      .eq("org_id", agencyId)
       .maybeSingle()
     scopeItemName = (magicToken?.scope_item_name as string | null) ?? null
     scopeItemDescription = (magicToken?.scope_item_description as string | null) ?? null
@@ -156,7 +156,7 @@ export async function resolveResponseScope(
     .from("partner_rfp_responses")
     .select("inbox_item_id")
     .eq("id", responseId)
-    .eq("agency_id", agencyId)
+    .eq("lead_org_id", agencyId)
     .maybeSingle()
   if (!response) return null
 
@@ -165,7 +165,7 @@ export async function resolveResponseScope(
       .from("partner_rfp_inbox")
       .select("project_id, scope_item_name, scope_item_description")
       .eq("id", response.inbox_item_id)
-      .eq("agency_id", agencyId)
+      .eq("lead_org_id", agencyId)
       .maybeSingle()
     return {
       projectId: (inbox?.project_id as string | null) ?? null,
@@ -178,7 +178,7 @@ export async function resolveResponseScope(
     .from("rfp_magic_tokens")
     .select("project_id, scope_item_name, scope_item_description")
     .eq("response_id", responseId)
-    .eq("agency_id", agencyId)
+    .eq("org_id", agencyId)
     .maybeSingle()
   return {
     projectId: (magicToken?.project_id as string | null) ?? null,

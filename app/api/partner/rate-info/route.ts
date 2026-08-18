@@ -120,11 +120,11 @@ async function assertPartnerOwnsPartnership(
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("partnerships")
-    .select("id, partner_id, status")
+    .select("id, vendor_org_id, status")
     .eq("id", partnershipId)
     .maybeSingle()
   if (error || !data) return false
-  if (data.partner_id !== userId) return false
+  if (data.vendor_org_id !== userId) return false
   if (String(data.status || "").toLowerCase() !== "active") return false
   return true
 }

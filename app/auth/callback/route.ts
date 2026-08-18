@@ -88,8 +88,8 @@ async function claimPartnershipInvitations(supabase: SupabaseClient, user: User)
 
   await supabase
     .from("partnerships")
-    .update({ partner_id: user.id, profile_status: "active", updated_at: new Date().toISOString() })
-    .is("partner_id", null)
+    .update({ vendor_org_id: user.id, profile_status: "active", updated_at: new Date().toISOString() })
+    .is("vendor_org_id", null)
     .in("status", ["pending", "active"])
     .ilike("partner_email", email)
 }

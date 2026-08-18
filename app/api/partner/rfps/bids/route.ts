@@ -16,8 +16,8 @@ function getServiceSupabase() {
   return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
-/** H3: this route's own filter (partner_rfp_responses.partner_id = auth.uid()) never sees a
- *  response whose partner_id is still null - independent of GET /api/partner/rfps's own
+/** H3: this route's own filter (partner_rfp_responses.vendor_org_id = auth.uid()) never sees a
+ *  response whose vendor_org_id is still null - independent of GET /api/partner/rfps's own
  *  sweep, since the two routes are fetched in parallel from app/partner/rfps/page.tsx with no
  *  ordering between them. Backfilling here too makes this route self-sufficient rather than
  *  racing the other one. */
@@ -110,11 +110,11 @@ export async function GET() {
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
     await backfillGuestResponseLinkage(vendorEmail, user.id)
 
-    // RLS: "Partners select own RFP responses" - USING (partner_id = auth.uid())
+    // RLS: "Partners select own RFP responses" - USING (vendor_org_id = auth.uid())
     const { data: responses, error } = await supabase
       .from("partner_rfp_responses")
-      .select("id, inbox_item_id, agency_id, status, budget_proposal, submitted_at, updated_at, created_at")
-      .eq("partner_id", user.id)
+      .select("id, inbox_item_id, lead_org_id, status, budget_proposal, submitted_at, updated_at, created_at")
+      .eq("vendor_org_id", user.id)
       .order("submitted_at", { ascending: false, nullsFirst: false })
 
     if (error) {
@@ -146,7 +146,7 @@ export async function GET() {
       clientNameByProjectId = Object.fromEntries((projectRows || []).map((p) => [p.id as string, (p.client_name as string | null) ?? null]))
     }
 
-    const agencyIds = [...new Set(rows.map((r) => r.agency_id as string).filter(Boolean))]
+    const agencyIds = [...new Set(rows.map((r) => r.lead_org_id as string).filter(Boolean))]
     let agencyById: Record<string, { company_name: string | null; full_name: string | null }> = {}
     if (agencyIds.length > 0) {
       const { data: agencyRows } = await supabase.from("profiles").select("id, company_name, full_name").in("id", agencyIds)
@@ -160,7 +160,7 @@ export async function GET() {
 
     const bids = rows.map((r) => {
       const scope = r.inbox_item_id ? scopeByInboxId[r.inbox_item_id as string] : undefined
-      const agency = agencyById[r.agency_id as string]
+      const agency = agencyById[r.lead_org_id as string]
       return {
         id: r.id as string,
         inbox_item_id: (r.inbox_item_id as string | null) ?? null,

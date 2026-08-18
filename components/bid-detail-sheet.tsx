@@ -148,7 +148,7 @@ function BidDetailSheetInner({
   const showCoiRow = businessCriteriaRequired.insurance.coi_on_file || businessCriteriaResponses.insurance.coi_on_file
   const showBusinessCriteriaSection =
     designationKeysToShow.length > 0 || insuranceKeysToShow.length > 0 || showCoiRow
-  const isGuest = !row.partner_id && row.response_exists
+  const isGuest = !row.vendor_org_id && row.response_exists
   const identity = isGuest ? row.vendor_email || row.partner_display_name : row.partner_display_name
   const projectId = row.inbox?.project_id
   const canMutate = Boolean(row.response_id)
@@ -897,7 +897,7 @@ function BidDetailSheetInner({
               </TabsContent>
 
               <TabsContent value="evaluate" className="flex-1 overflow-y-auto px-6 py-4">
-                {canMutate && <BidEvaluationTab ref={evaluationTabRef} responseId={row.id} partnerId={row.partner_id ?? null} />}
+                {canMutate && <BidEvaluationTab ref={evaluationTabRef} responseId={row.id} partnerId={row.vendor_org_id ?? null} />}
               </TabsContent>
             </Tabs>
           )}

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 
 type InboxClaimRow = {
   id: string
-  partner_id: string | null
+  vendor_org_id: string | null
   recipient_email: string | null
   invite_token: string | null
   invite_token_expires_at: string | null
@@ -29,7 +29,7 @@ async function claimByToken(
   const { data: inbox, error } = await supabase
     .from("partner_rfp_inbox")
     .select(
-      "id, partner_id, recipient_email, invite_token, invite_token_expires_at, claimed_at, nda_gate_enforced"
+      "id, vendor_org_id, recipient_email, invite_token, invite_token_expires_at, claimed_at, nda_gate_enforced"
     )
     .eq("invite_token", token)
     .maybeSingle<InboxClaimRow>()
@@ -46,7 +46,7 @@ async function claimByToken(
   }
 
   if (inbox.claimed_at) {
-    if (inbox.partner_id === userId) {
+    if (inbox.vendor_org_id === userId) {
       await switchActiveRoleToPartner(supabase, userId)
       return { ok: true, inboxItemId: inbox.id, ndaGateEnforced: inbox.nda_gate_enforced === true }
     }
@@ -61,7 +61,7 @@ async function claimByToken(
   const { error: updateError } = await supabase
     .from("partner_rfp_inbox")
     .update({
-      partner_id: userId,
+      vendor_org_id: userId,
       claimed_at: now,
       updated_at: now,
     })

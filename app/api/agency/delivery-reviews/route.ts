@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       .from("delivery_reviews")
       .select("id, partnership_id, status, composite_score")
       .eq("project_id", projectId)
-      .eq("agency_id", userId)
+      .eq("org_id", userId)
     if (listErr) {
       console.error("[api] failure", { route, method: "GET", message: listErr.message })
       return NextResponse.json({ error: "Failed to load delivery reviews" }, { status: 500 })
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     )
     .eq("project_id", projectId)
     .eq("partnership_id", partnershipId)
-    .eq("agency_id", userId)
+    .eq("org_id", userId)
     .maybeSingle()
   if (reviewErr) {
     console.error("[api] failure", { route, method: "GET", message: reviewErr.message })
@@ -150,8 +150,8 @@ export async function POST(req: Request) {
     // Never trust client payload for ownership - verify project and partnership both
     // belong to this agency before writing anything keyed to them.
     const [{ data: project }, { data: partnership }] = await Promise.all([
-      supabase.from("projects").select("id").eq("id", projectId).eq("agency_id", userId).maybeSingle(),
-      supabase.from("partnerships").select("id").eq("id", partnershipId).eq("agency_id", userId).maybeSingle(),
+      supabase.from("projects").select("id").eq("id", projectId).eq("org_id", userId).maybeSingle(),
+      supabase.from("partnerships").select("id").eq("id", partnershipId).eq("lead_org_id", userId).maybeSingle(),
     ])
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 })
     if (!partnership) return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
@@ -169,7 +169,7 @@ export async function POST(req: Request) {
         .from("partner_rfp_responses")
         .select("id")
         .eq("id", requestedResponseId)
-        .eq("agency_id", userId)
+        .eq("lead_org_id", userId)
         .maybeSingle()
       responseId = responseRow ? (responseRow.id as string) : null
     }
@@ -177,7 +177,7 @@ export async function POST(req: Request) {
     const reviewPatch: Record<string, unknown> = {
       project_id: projectId,
       partnership_id: partnershipId,
-      agency_id: userId,
+      org_id: userId,
       assignment_id: assignment?.id ?? null,
       status,
       on_time: pickEnum(summaryInput.on_time, ON_TIME_VALUES),
@@ -216,7 +216,7 @@ export async function POST(req: Request) {
 
       const [{ data: existingScores }, { data: criteriaRows }] = await Promise.all([
         supabase.from("delivery_review_scores").select("criterion_id, weight").eq("review_id", review.id).in("criterion_id", criterionIds),
-        supabase.from("bid_scoring_criteria").select("id, default_weight").eq("agency_id", userId).in("id", criterionIds),
+        supabase.from("bid_scoring_criteria").select("id, default_weight").eq("org_id", userId).in("id", criterionIds),
       ])
       const existingWeightByCriterion = new Map((existingScores || []).map((s) => [s.criterion_id as string, s.weight as number]))
       const defaultWeightByCriterion = new Map((criteriaRows || []).map((c) => [c.id as string, c.default_weight as number]))
@@ -277,14 +277,14 @@ export async function POST(req: Request) {
     // effect of it, not the thing the caller is asking for) - it just skips generating the
     // summary, same as any other best-effort failure of this block already does.
     const usageCheck = status === "complete" && comparison.hasEvaluation
-      ? await checkUsageLimit(agencyEntitlementId(userId), supabase, "ai_analyses")
+      ? await checkUsageLimit(await agencyEntitlementId(userId, supabase), supabase, "ai_analyses")
       : null
     if (status === "complete" && comparison.hasEvaluation && usageCheck?.allowed) {
       const { data: evalRow } = await supabase
         .from("bid_evaluations")
         .select("composite_score")
         .eq("response_id", review.response_id)
-        .eq("agency_id", userId)
+        .eq("org_id", userId)
         .maybeSingle()
       const bidComposite = evalRow?.composite_score as number | null
 
@@ -308,7 +308,7 @@ export async function POST(req: Request) {
       })
       if (result.success) {
         aiDeltaSummary = result.text.trim()
-        await incrementAiAnalysis(agencyEntitlementId(userId), supabase)
+        await incrementAiAnalysis(await agencyEntitlementId(userId, supabase), supabase)
       }
     }
 

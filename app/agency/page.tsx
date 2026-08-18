@@ -88,7 +88,7 @@ type NewRecipient = {
 type PartnershipApiRow = {
   id: string
   status: string
-  partner_id: string | null
+  vendor_org_id: string | null
   partner_email: string | null
   invitation_sent_at: string | null
   accepted_at: string | null

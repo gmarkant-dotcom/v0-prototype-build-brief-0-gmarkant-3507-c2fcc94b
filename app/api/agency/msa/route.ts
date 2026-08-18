@@ -42,7 +42,7 @@ export async function GET() {
     const { data: rows, error } = await supabase
       .from("msa_agreements")
       .select("id, partnership_id, status, document_url, signed_at, created_at")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -57,12 +57,12 @@ export async function GET() {
 
     const list = rows || []
     const partnershipIds = [...new Set(list.map((r) => r.partnership_id as string))]
-    const shipById = new Map<string, { partner_id: string | null }>()
+    const shipById = new Map<string, { vendor_org_id: string | null }>()
     if (partnershipIds.length > 0) {
       const { data: ships, error: shipErr } = await supabase
         .from("partnerships")
-        .select("id, partner_id")
-        .eq("agency_id", user.id)
+        .select("id, vendor_org_id")
+        .eq("lead_org_id", user.id)
         .in("id", partnershipIds)
       if (shipErr) {
         console.error("[api/agency/msa] partnerships batch for MSA failed", {
@@ -74,14 +74,14 @@ export async function GET() {
         return NextResponse.json({ error: "Failed to load partnerships" }, { status: 500, headers: noStore })
       }
       for (const s of ships || []) {
-        shipById.set(s.id as string, { partner_id: (s.partner_id as string | null) ?? null })
+        shipById.set(s.id as string, { vendor_org_id: (s.vendor_org_id as string | null) ?? null })
       }
     }
 
     const partnerIds = [
       ...new Set(
         [...shipById.values()]
-          .map((x) => x.partner_id)
+          .map((x) => x.vendor_org_id)
           .filter((id): id is string => typeof id === "string" && id.length > 0)
       ),
     ]
@@ -116,7 +116,7 @@ export async function GET() {
     const agreements = list.map((r) => {
       const ship = shipById.get(r.partnership_id as string)
       const prof =
-        ship?.partner_id != null && ship.partner_id !== "" ? profById.get(ship.partner_id) : undefined
+        ship?.vendor_org_id != null && ship.vendor_org_id !== "" ? profById.get(ship.vendor_org_id) : undefined
       return {
         id: r.id as string,
         partnership_id: r.partnership_id as string,
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
       .from("partnerships")
       .select("id")
       .eq("id", partnership_id)
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .maybeSingle()
     if (shipErr || !ship) {
       return NextResponse.json({ error: "Partnership not found" }, { status: 404, headers: noStore })
@@ -166,7 +166,7 @@ export async function POST(req: Request) {
     const { data: row, error } = await supabase
       .from("msa_agreements")
       .insert({
-        agency_id: user.id,
+        org_id: user.id,
         partnership_id,
         status: "pending",
       })
@@ -205,7 +205,7 @@ export async function PATCH(req: Request) {
       .from("msa_agreements")
       .select("id")
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
     if (exErr || !existing) {
       return NextResponse.json({ error: "Agreement not found" }, { status: 404, headers: noStore })
@@ -234,7 +234,7 @@ export async function PATCH(req: Request) {
       .from("msa_agreements")
       .update(updates)
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .select("id, partnership_id, status, document_url, signed_at, created_at, updated_at")
       .single()
 

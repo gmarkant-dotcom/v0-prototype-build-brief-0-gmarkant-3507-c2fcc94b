@@ -39,7 +39,7 @@ type EnrichedContact = ScoredVendorContact<RawEmailContact> & {
  *  and this agency's partnerships (already_in_pool), plus the shared self-partnership
  *  guard (is_self_account, is_same_domain_flag - see lib/server/partner-import-guard.ts)
  *  so the review panel can badge/disable rows before import even considers them. Mirrors
- *  the partner_id-then-partner_email lookup pattern in classifyGuestVendorForPool
+ *  the vendor_org_id-then-partner_email lookup pattern in classifyGuestVendorForPool
  *  (app/api/rfp/guest/[token]/route.ts). Only called on the final "complete" write, not
  *  every checkpoint - it costs 2 extra round-trips and isn't needed until a human is
  *  actually reviewing finished results; a scan that times out before completing simply
@@ -68,22 +68,22 @@ async function enrichWithLigamentData(
   // safely parameterized by the client, unlike a hand-built PostgREST filter string.
   const { data: partnershipsByEmail } = await service
     .from("partnerships")
-    .select("partner_id, partner_email")
-    .eq("agency_id", agencyId)
+    .select("vendor_org_id, partner_email")
+    .eq("lead_org_id", agencyId)
     .in("partner_email", contactEmails)
   for (const row of partnershipsByEmail || []) {
-    if (row.partner_id) partnerIdSet.add(row.partner_id as string)
+    if (row.vendor_org_id) partnerIdSet.add(row.vendor_org_id as string)
     if (row.partner_email) partnerEmailSet.add(String(row.partner_email).toLowerCase())
   }
 
   if (profileIds.length > 0) {
     const { data: partnershipsByPartnerId } = await service
       .from("partnerships")
-      .select("partner_id, partner_email")
-      .eq("agency_id", agencyId)
-      .in("partner_id", profileIds)
+      .select("vendor_org_id, partner_email")
+      .eq("lead_org_id", agencyId)
+      .in("vendor_org_id", profileIds)
     for (const row of partnershipsByPartnerId || []) {
-      if (row.partner_id) partnerIdSet.add(row.partner_id as string)
+      if (row.vendor_org_id) partnerIdSet.add(row.vendor_org_id as string)
       if (row.partner_email) partnerEmailSet.add(String(row.partner_email).toLowerCase())
     }
   }
@@ -349,7 +349,7 @@ export async function GET(request: NextRequest) {
     if (finalErr) {
       console.error("[api] failure", { route, method: "GET", message: finalErr.message })
     } else {
-      await incrementAiAnalysis(agencyEntitlementId(auth.userId), service)
+      await incrementAiAnalysis(await agencyEntitlementId(auth.userId, service), service)
     }
 
     console.log("[api] success", {

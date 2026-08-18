@@ -46,8 +46,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
     const { data: partnership, error: pErr } = await supabase
       .from("partnerships")
       .select("id, status, nda_confirmed_at, msa_confirmed_at, contact_name, company_name, partner_email, invitation_sent_at")
-      .eq("agency_id", user.id)
-      .eq("partner_id", partnerId)
+      .eq("lead_org_id", user.id)
+      .eq("vendor_org_id", partnerId)
       .maybeSingle()
 
     if (pErr) {
@@ -161,8 +161,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       ? await supabase
           .from("partner_rfp_responses")
           .select("id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
-          .eq("agency_id", user.id)
-          .eq("partner_id", partnerId)
+          .eq("lead_org_id", user.id)
+          .eq("vendor_org_id", partnerId)
           .eq("status", "awarded")
           .order("updated_at", { ascending: false })
       : { data: [] as unknown[], error: null }
@@ -187,7 +187,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       const projs = await supabase
         .from("projects")
         .select("id, name")
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
         .in("id", [...projectIds])
 
       if (projs.error) {
@@ -213,7 +213,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       {
         access,
         // The agency's own partnership row. Never another agency's - this query is keyed to
-        // agency_id = the caller. NDA and MSA confirmations are documents, so they are held
+        // lead_org_id = the caller. NDA and MSA confirmations are documents, so they are held
         // back until the partnership is active.
         partnership: partnership
           ? {
@@ -254,7 +254,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
           meeting_url: isPublicOnly ? null : row.meeting_url,
           rate_info,
         },
-        // Delivery history with THIS agency only - the query is .eq("agency_id", user.id),
+        // Delivery history with THIS agency only - the query is .eq("lead_org_id", user.id),
         // so another agency's awards can never appear here. Empty below the partnership tier.
         engagement_history,
       },

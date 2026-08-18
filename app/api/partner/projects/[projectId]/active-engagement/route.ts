@@ -21,7 +21,7 @@ type AwardedResponseRow = {
   budget_proposal: string
   timeline_proposal: string
   inbox_item_id: string
-  partner_id: string
+  vendor_org_id: string
   updated_at: string
   partner_rfp_inbox: InboxSnippet | InboxSnippet[] | null
 }
@@ -54,7 +54,7 @@ function responsesForAssignment(
   partnerId: string
 ): AwardedResponseRow[] {
   const candidates = rows.filter((r) => {
-    if (r.partner_id !== partnerId) return false
+    if (r.vendor_org_id !== partnerId) return false
     const inbox = inboxRow(r.partner_rfp_inbox)
     if (!inbox || inbox.project_id !== projectId) return false
     if (inbox.partnership_id && inbox.partnership_id !== partnershipId) return false
@@ -89,7 +89,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     const { data: partnerships, error: pErr } = await supabase
       .from("partnerships")
       .select("id")
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
 
     if (pErr) {
       console.error("[api] partner active-engagement partnerships lookup failed", {
@@ -116,7 +116,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
         partnership_id,
         status,
         awarded_at,
-        partnership:partnerships!inner(id, partner_id)
+        partnership:partnerships!inner(id, vendor_org_id)
       `
       )
       .eq("project_id", projectId)
@@ -143,7 +143,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
 
     const { data: project, error: projectErr } = await supabase
       .from("projects")
-      .select("id, name, agency_id")
+      .select("id, name, org_id")
       .eq("id", projectId)
       .maybeSingle()
 
@@ -166,7 +166,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     }
 
     const projectName = ((project as { name?: string | null }).name || "").trim() || "Untitled project"
-    const agencyId = (project as { agency_id: string }).agency_id
+    const agencyId = (project as { org_id: string }).org_id
 
     const { data: leadAgency, error: agencyErr } = await supabase
       .from("profiles")
@@ -190,14 +190,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
         budget_proposal,
         timeline_proposal,
         inbox_item_id,
-        partner_id,
+        vendor_org_id,
         updated_at,
         partner_rfp_inbox(project_id, scope_item_name, partnership_id)
       `
       )
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
       .eq("status", "awarded")
-      .eq("agency_id", agencyId)
+      .eq("lead_org_id", agencyId)
 
     if (respErr) {
       console.error("[api] partner active-engagement responses", { message: respErr.message, code: respErr.code })

@@ -21,7 +21,7 @@ type AwardedResponseRow = {
   budget_proposal: string
   timeline_proposal: string
   inbox_item_id: string
-  partner_id: string
+  vendor_org_id: string
   updated_at: string
   partner_rfp_inbox: InboxSnippet | InboxSnippet[] | null
 }
@@ -59,7 +59,7 @@ function responsesForAssignment(
   partnerId: string
 ): AwardedResponseRow[] {
   const candidates = rows.filter((r) => {
-    if (r.partner_id !== partnerId) return false
+    if (r.vendor_org_id !== partnerId) return false
     const inbox = inboxRow(r.partner_rfp_inbox)
     if (!inbox || inbox.project_id !== projectId) return false
     if (inbox.partnership_id && inbox.partnership_id !== partnershipId) return false
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
     const { data: projectRows, error: projErr } = await supabase
       .from("projects")
       .select("id, name, client_name, budget_range, start_date, end_date, status")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
 
     if (projErr) {
       console.error("[api] active-engagements projects", { message: projErr.message, code: projErr.code })
@@ -150,6 +150,21 @@ export async function GET(request: NextRequest) {
     for (const [id, meta] of projectMetaById) titleByProjectId.set(id, meta.title)
 
     const { data: assignments, error: asgErr } = await supabase
+      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+      // resolves to nothing, and the new one resolves to `organizations`, which carries only
+      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+      // is exactly what this embed selects.
+      //
+      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+      // vendor company's email address under an organization model", which is the
+      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+      // cannot see this: the constraint name embeds the old column name with no word boundary
+      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+      // the rename complete with all thirteen of these still broken.
+      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
       .from("project_assignments")
       .select(
         `
@@ -160,7 +175,7 @@ export async function GET(request: NextRequest) {
         awarded_at,
         partnership:partnerships!inner(
           id,
-          partner_id,
+          vendor_org_id,
           partner:profiles!partnerships_partner_id_fkey(
             id,
             email,
@@ -303,11 +318,11 @@ export async function GET(request: NextRequest) {
             const raw = a.partnership as unknown
             const pship = unwrapRelation(
               raw as
-                | { partner_id?: string }
-                | { partner_id?: string }[]
+                | { vendor_org_id?: string }
+                | { vendor_org_id?: string }[]
                 | null
             )
-            return pship?.partner_id
+            return pship?.vendor_org_id
           })
           .filter(Boolean),
       ),
@@ -324,14 +339,14 @@ export async function GET(request: NextRequest) {
           budget_proposal,
           timeline_proposal,
           inbox_item_id,
-          partner_id,
+          vendor_org_id,
           updated_at,
           partner_rfp_inbox(project_id, scope_item_name, partnership_id)
         `
         )
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
         .eq("status", "awarded")
-        .in("partner_id", partnerIds)
+        .in("vendor_org_id", partnerIds)
 
       if (respErr) {
         console.error("[api] active-engagements responses", { message: respErr.message, code: respErr.code })
@@ -432,7 +447,7 @@ export async function GET(request: NextRequest) {
         a.partnership as unknown as
           | {
               id: string
-              partner_id: string
+              vendor_org_id: string
               partner:
                 | { email: string | null; full_name: string | null; company_name: string | null }
                 | { email: string | null; full_name: string | null; company_name: string | null }[]
@@ -441,7 +456,7 @@ export async function GET(request: NextRequest) {
           | null
       )
       const partnerEmbed = unwrapRelation(pship?.partner ?? null)
-      const partnerId = pship?.partner_id
+      const partnerId = pship?.vendor_org_id
       if (!partnerId) continue
 
       const responses = responsesForAssignment(awardedResponses, projId, partnershipId, partnerId)

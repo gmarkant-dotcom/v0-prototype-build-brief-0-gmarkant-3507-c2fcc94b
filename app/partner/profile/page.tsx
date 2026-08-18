@@ -262,13 +262,13 @@ export default function PartnerProfilePage() {
 
       const { data: activePartnerships } = await supabase
         .from("partnerships")
-        .select("id, agency_id")
-        .eq("partner_id", user.id)
+        .select("id, lead_org_id")
+        .eq("vendor_org_id", user.id)
         .eq("status", "active")
 
       const partnershipRows = Array.isArray(activePartnerships) ? activePartnerships : []
       const agencyIds = Array.from(
-        new Set(partnershipRows.map((row) => String(row.agency_id || "")).filter(Boolean))
+        new Set(partnershipRows.map((row) => String(row.lead_org_id || "")).filter(Boolean))
       )
 
       let agencyNameById: Record<string, string> = {}
@@ -288,7 +288,7 @@ export default function PartnerProfilePage() {
 
       const partnershipOptions = partnershipRows.map((row) => ({
         partnership_id: String(row.id),
-        agency_name: agencyNameById[String(row.agency_id || "")] || "Lead Agency",
+        agency_name: agencyNameById[String(row.lead_org_id || "")] || "Lead Agency",
       }))
       setActivePartnershipOptions(partnershipOptions)
       setSelectedPartnershipId((prev) => prev || partnershipOptions[0]?.partnership_id || "")

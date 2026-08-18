@@ -37,11 +37,11 @@ export async function PATCH(
 
     const { data: ship } = await supabase
       .from("partnerships")
-      .select("partner_id")
+      .select("vendor_org_id")
       .eq("id", existing.partnership_id)
       .single()
 
-    if (!ship || ship.partner_id !== user.id) {
+    if (!ship || ship.vendor_org_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 

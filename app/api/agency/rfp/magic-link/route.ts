@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
       .from("projects")
       .select("id, name, client_name, budget_range")
       .eq("id", projectId)
-      .eq("agency_id", auth.userId)
+      .eq("org_id", auth.userId)
       .maybeSingle()
     if (projectErr) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: projectErr.message })
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
     const { data: existingToken, error: existingErr } = await service
       .from("rfp_magic_tokens")
       .select("token, expires_at, response_id")
-      .eq("agency_id", auth.userId)
+      .eq("org_id", auth.userId)
       .eq("project_id", projectId)
       .eq("vendor_email", vendorEmail)
       .maybeSingle()
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
     const expires_at = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
 
     const tokenUpsertPayload = {
-      agency_id: auth.userId,
+      org_id: auth.userId,
       project_id: projectId,
       vendor_email: vendorEmail,
       vendor_name: vendorName,
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
     let payloadAttempt: Record<string, unknown> = tokenUpsertPayload
     let { data: tokenRow, error: upsertErr } = await service
       .from("rfp_magic_tokens")
-      .upsert(payloadAttempt, { onConflict: "agency_id,project_id,vendor_email" })
+      .upsert(payloadAttempt, { onConflict: "org_id,project_id,vendor_email" })
       .select()
       .single()
     for (const column of OPTIONAL_TOKEN_COLUMNS) {
@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
       payloadAttempt = rest
       ;({ data: tokenRow, error: upsertErr } = await service
         .from("rfp_magic_tokens")
-        .upsert(payloadAttempt, { onConflict: "agency_id,project_id,vendor_email" })
+        .upsert(payloadAttempt, { onConflict: "org_id,project_id,vendor_email" })
         .select()
         .single())
     }
@@ -352,7 +352,7 @@ export async function GET(request: NextRequest) {
           ? service
               .from("rfp_magic_tokens")
               .select("id, expires_at")
-              .eq("agency_id", auth.userId)
+              .eq("org_id", auth.userId)
               .eq("project_id", projectId)
               .eq("vendor_email", checkEmail)
               .maybeSingle()
@@ -374,7 +374,7 @@ export async function GET(request: NextRequest) {
       const { data: invites, error: invitesErr } = await service
         .from("rfp_magic_tokens")
         .select("*")
-        .eq("agency_id", auth.userId)
+        .eq("org_id", auth.userId)
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
       if (invitesErr) {

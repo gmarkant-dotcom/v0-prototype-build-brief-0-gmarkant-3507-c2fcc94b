@@ -26,7 +26,7 @@ export async function GET(
 
     const { data: project, error: projectErr } = await supabase
       .from("projects")
-      .select("agency_id")
+      .select("org_id")
       .eq("id", projectId)
       .single()
     if (projectErr) {
@@ -39,11 +39,26 @@ export async function GET(
       })
       return NextResponse.json({ error: "Failed to load project" }, { status: 500 })
     }
-    if (!project || project.agency_id !== user.id) {
+    if (!project || project.org_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
     const { data: packages, error } = await supabase
+      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+      // resolves to nothing, and the new one resolves to `organizations`, which carries only
+      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+      // is exactly what this embed selects.
+      //
+      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+      // vendor company's email address under an organization model", which is the
+      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+      // cannot see this: the constraint name embeds the old column name with no word boundary
+      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+      // the rename complete with all thirteen of these still broken.
+      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
       .from("onboarding_packages")
       .select(
         `
@@ -106,13 +121,13 @@ export async function POST(
       error: projectByIdErr,
     } = await supabase
       .from("projects")
-      .select("id, name, agency_id")
+      .select("id, name, org_id")
       .eq("id", projectParam)
       .maybeSingle()
 
     const project = projectById
 
-    if (!project || project.agency_id !== user.id) {
+    if (!project || project.org_id !== user.id) {
       return NextResponse.json({ error: "Project not found", projectId: projectParam }, { status: 404 })
     }
     const projectId = project.id as string
@@ -142,14 +157,14 @@ export async function POST(
 
     const { data: partnership, error: partnershipErr } = await supabase
       .from("partnerships")
-      .select("id, agency_id, partner_id, status")
+      .select("id, lead_org_id, vendor_org_id, status")
       .eq("id", partnershipId)
       .single()
 
-    if (!partnership || partnership.agency_id !== user.id) {
+    if (!partnership || partnership.lead_org_id !== user.id) {
       return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
     }
-    if (partnership.status !== "active" || !partnership.partner_id) {
+    if (partnership.status !== "active" || !partnership.vendor_org_id) {
       return NextResponse.json({ error: "Partnership must be active with a linked partner" }, { status: 400 })
     }
 
@@ -177,11 +192,11 @@ export async function POST(
         .select(
           `
           id,
-          partner_id,
+          vendor_org_id,
           partner_rfp_inbox(project_id, partnership_id)
         `
         )
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
         .eq("status", "awarded")
 
       if (awardErr) {
@@ -204,13 +219,13 @@ export async function POST(
         const inbox = unwrapInbox(row.partner_rfp_inbox as Parameters<typeof unwrapInbox>[0])
         if (!inbox || inbox.project_id !== projectId) continue
         let rowPship = inbox.partnership_id as string | null
-        const partnerId = row.partner_id as string | null
+        const partnerId = row.vendor_org_id as string | null
         if (!rowPship && partnerId) {
           const { data: rel } = await supabase
             .from("partnerships")
             .select("id")
-            .eq("agency_id", user.id)
-            .eq("partner_id", partnerId)
+            .eq("lead_org_id", user.id)
+            .eq("vendor_org_id", partnerId)
             .eq("status", "active")
             .maybeSingle()
           rowPship = rel?.id ?? null
@@ -276,7 +291,7 @@ export async function POST(
       .from("onboarding_packages")
       .insert({
         project_id: projectId,
-        agency_id: user.id,
+        org_id: user.id,
         partnership_id: partnershipId,
         kickoff_type: kt,
         kickoff_url: finalKickoffUrl,
@@ -314,14 +329,14 @@ export async function POST(
     const { data: partnerProfile, error: partnerProfileErr } = await supabase
       .from("profiles")
       .select("email, full_name, company_name")
-      .eq("id", partnership.partner_id)
+      .eq("id", partnership.vendor_org_id)
       .single()
     if (partnerProfileErr) {
       console.error(`${logPrefix} partner profile select failed (email may be skipped)`, {
         projectId,
         packageId: pkg.id,
         partnershipId,
-        partnerId: partnership.partner_id,
+        partnerId: partnership.vendor_org_id,
         message: partnerProfileErr.message,
         code: partnerProfileErr.code,
       })
@@ -366,7 +381,7 @@ export async function POST(
 
     await createNotification({
       supabase,
-      userId: partnership.partner_id,
+      userId: partnership.vendor_org_id,
       type: "onboarding_deployed",
       title: "Onboarding documents ready",
       message: `${agencyName} sent onboarding materials for "${projectTitle}".`,

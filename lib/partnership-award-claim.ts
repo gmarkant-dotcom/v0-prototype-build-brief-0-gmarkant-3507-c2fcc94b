@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 /**
  * H3 retroactive fix: claims and activates any partnerships row matching this vendor's email
- * that is still partner_id-null AND already has a real project_assignments row against it -
+ * that is still vendor_org_id-null AND already has a real project_assignments row against it -
  * i.e. it was actually awarded (via H2's branch-d pure-guest create, before the vendor had an
  * account, or before this fix existed), not just a passive pool contact.
  *
@@ -13,7 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
  * existing Agency Network flow, unchanged. This only activates the ones that already
  * represent a real, awarded relationship, which is the actual gap being fixed here: an
  * awarded engagement invisible on Delivery & Projects because its partnerships row was
- * created with partner_id null.
+ * created with vendor_org_id null.
  */
 export async function claimAwardedGhostPartnershipsByEmail(
   supabase: SupabaseClient,
@@ -27,7 +27,7 @@ export async function claimAwardedGhostPartnershipsByEmail(
     const { data: ghostRows, error: ghostErr } = await supabase
       .from("partnerships")
       .select("id")
-      .is("partner_id", null)
+      .is("vendor_org_id", null)
       .ilike("partner_email", normalizedEmail)
     if (ghostErr || !ghostRows || ghostRows.length === 0) return
 
@@ -43,9 +43,9 @@ export async function claimAwardedGhostPartnershipsByEmail(
     for (const partnershipId of toClaimIds) {
       const { error: claimErr } = await supabase
         .from("partnerships")
-        .update({ partner_id: partnerId, status: "active", profile_status: "active", updated_at: now })
+        .update({ vendor_org_id: partnerId, status: "active", profile_status: "active", updated_at: now })
         .eq("id", partnershipId)
-        .is("partner_id", null)
+        .is("vendor_org_id", null)
       if (claimErr) {
         console.error("[partnership-award-claim] claim failed", {
           partnerId,

@@ -21,7 +21,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       .from("clients")
       .select("id, name, notes, default_business_criteria, default_evaluation_criteria, created_at, updated_at")
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
 
     if (error) {
@@ -82,7 +82,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .from("clients")
       .update(patch)
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .select("id, name, notes, default_business_criteria, default_evaluation_criteria, created_at, updated_at")
       .single()
 

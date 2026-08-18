@@ -21,8 +21,8 @@ export async function markPartnershipInvited(
     const { data } = await supabase
       .from("partnerships")
       .select("id")
-      .eq("agency_id", agencyId)
-      .eq("partner_id", partnerId)
+      .eq("lead_org_id", agencyId)
+      .eq("vendor_org_id", partnerId)
       .limit(1)
       .maybeSingle()
     existingId = (data as { id: string } | null)?.id ?? null
@@ -31,7 +31,7 @@ export async function markPartnershipInvited(
     const { data } = await supabase
       .from("partnerships")
       .select("id")
-      .eq("agency_id", agencyId)
+      .eq("lead_org_id", agencyId)
       .ilike("partner_email", email)
       .limit(1)
       .maybeSingle()
@@ -47,8 +47,8 @@ export async function markPartnershipInvited(
   }
 
   await supabase.from("partnerships").insert({
-    agency_id: agencyId,
-    partner_id: partnerId || null,
+    lead_org_id: agencyId,
+    vendor_org_id: partnerId || null,
     partner_email: email,
     profile_status: partnerId ? "active" : "unclaimed",
     status: "pending",

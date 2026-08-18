@@ -26,13 +26,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const { data: inbox, error: inboxError } = await supabase
       .from("partner_rfp_inbox")
       .select(
-        "id, agency_id, partner_id, recipient_email, project_id, scope_item_name, nda_gate_enforced, agency_nda_notified_at, master_rfp_json"
+        "id, lead_org_id, vendor_org_id, recipient_email, project_id, scope_item_name, nda_gate_enforced, agency_nda_notified_at, master_rfp_json"
       )
       .eq("id", id)
       .maybeSingle<{
         id: string
-        agency_id: string
-        partner_id: string | null
+        lead_org_id: string
+        vendor_org_id: string | null
         recipient_email: string | null
         project_id: string | null
         scope_item_name: string | null
@@ -44,7 +44,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (inboxError) return NextResponse.json({ error: "Failed to load RFP" }, { status: 500 })
     if (!inbox) return NextResponse.json({ error: "RFP not found" }, { status: 404 })
 
-    const ownsByPartnerId = inbox.partner_id === user.id
+    const ownsByPartnerId = inbox.vendor_org_id === user.id
     const ownsByEmail = isSameEmail(inbox.recipient_email, profile?.email || user.email)
     if (!ownsByPartnerId && !ownsByEmail) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
@@ -65,7 +65,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     }
 
     const [{ data: agencyProfile }, { data: projectRow }] = await Promise.all([
-      supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.agency_id).maybeSingle(),
+      supabase.from("profiles").select("email, company_name, full_name").eq("id", inbox.lead_org_id).maybeSingle(),
       inbox.project_id
         ? supabase.from("projects").select("id, title").eq("id", inbox.project_id).maybeSingle()
         : Promise.resolve({ data: null }),

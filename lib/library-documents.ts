@@ -119,7 +119,7 @@ export async function fetchScopedLibraryDocuments(
       .from("projects")
       .select("id, client_id")
       .eq("id", scope.projectId)
-      .eq("agency_id", agencyId)
+      .eq("org_id", agencyId)
       .maybeSingle()
     if (projectErr) {
       return { documents: [], clientId: null, clientName: null, clientNamesById: {}, error: projectErr.message }
@@ -133,12 +133,12 @@ export async function fetchScopedLibraryDocuments(
       .from("clients")
       .select("id, name")
       .eq("id", clientId)
-      .eq("agency_id", agencyId)
+      .eq("org_id", agencyId)
       .maybeSingle()
     clientName = (client?.name as string | undefined) ?? null
   }
 
-  let query = supabase.from("agency_library_documents").select(LIBRARY_DOCUMENT_COLUMNS).eq("agency_id", agencyId)
+  let query = supabase.from("agency_library_documents").select(LIBRARY_DOCUMENT_COLUMNS).eq("org_id", agencyId)
 
   if (scope.mode === "client") {
     // Exactly this client. Never agency-wide rows, never another client's.
@@ -178,7 +178,7 @@ export async function fetchScopedLibraryDocuments(
     const { data: clientRows } = await supabase
       .from("clients")
       .select("id, name")
-      .eq("agency_id", agencyId)
+      .eq("org_id", agencyId)
       .in("id", unresolved)
     for (const row of clientRows || []) clientNamesById[row.id as string] = row.name as string
   }

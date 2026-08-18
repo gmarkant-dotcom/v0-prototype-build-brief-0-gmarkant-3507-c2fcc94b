@@ -48,21 +48,36 @@ export async function POST(
 
     const { data: project } = await supabase
       .from('projects')
-      .select('id, title, agency_id')
+      .select('id, title, org_id')
       .eq('id', projectId)
       .single()
 
-    if (!project || project.agency_id !== user.id) {
+    if (!project || project.org_id !== user.id) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
     const { data: assignment } = await supabase
+      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+      // resolves to nothing, and the new one resolves to `organizations`, which carries only
+      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+      // is exactly what this embed selects.
+      //
+      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+      // vendor company's email address under an organization model", which is the
+      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+      // cannot see this: the constraint name embeds the old column name with no word boundary
+      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+      // the rename complete with all thirteen of these still broken.
+      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
       .from('project_assignments')
       .select(`
         id,
         project_id,
         partnership:partnerships(
-          partner_id,
+          vendor_org_id,
           partner:profiles!partnerships_partner_id_fkey(id, email, full_name, company_name)
         )
       `)
@@ -75,11 +90,11 @@ export async function POST(
     }
 
     const partnership = assignment.partnership as unknown as
-      | { partner_id: string | null; partner: { id: string; email: string | null; full_name: string | null; company_name: string | null } | null }
+      | { vendor_org_id: string | null; partner: { id: string; email: string | null; full_name: string | null; company_name: string | null } | null }
       | null
 
     const partner = partnership?.partner
-    const partnerId = partnership?.partner_id || partner?.id
+    const partnerId = partnership?.vendor_org_id || partner?.id
 
     if (!partnerId || !partner?.email) {
       return NextResponse.json(
@@ -96,7 +111,7 @@ export async function POST(
       .insert({
         project_id: projectId,
         assignment_id: assignmentId,
-        agency_id: user.id,
+        org_id: user.id,
         document_ids: documentIds,
         custom_message: customMessage || null,
       })

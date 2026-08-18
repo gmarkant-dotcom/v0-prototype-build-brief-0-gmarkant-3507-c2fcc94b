@@ -48,8 +48,8 @@ async function assertActiveAgencyPartnership(
   const { data, error } = await supabase
     .from("partnerships")
     .select("id, partnership_notes")
-    .eq("agency_id", agencyId)
-    .eq("partner_id", partnerId)
+    .eq("lead_org_id", agencyId)
+    .eq("vendor_org_id", partnerId)
     // The same single predicate as isActivePartnership() in lib/partnership-state.ts,
     // expressed in SQL because this gate can be pushed into the query.
     .eq("status", "active")
@@ -170,7 +170,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
       .from("partnerships")
       .update({ partnership_notes: next, updated_at: new Date().toISOString() })
       .eq("id", row.id)
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
 
     if (upErr) {
       console.error("[api/agency/pool/notes] update", upErr)

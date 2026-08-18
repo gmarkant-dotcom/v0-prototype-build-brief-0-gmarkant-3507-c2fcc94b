@@ -37,7 +37,7 @@ export async function GET(
     const { data: partnerships } = await supabase
       .from('partnerships')
       .select('id')
-      .eq('partner_id', user.id)
+      .eq('vendor_org_id', user.id)
 
     const partnershipIds = (partnerships || []).map((p) => p.id)
     if (partnershipIds.length === 0) {
@@ -61,7 +61,7 @@ export async function GET(
           start_date,
           end_date,
           created_at,
-          agency_id
+          org_id
         )
       `)
       .eq('project_id', projectId)
@@ -76,7 +76,7 @@ export async function GET(
     const project = (assignment.project as unknown) as {
       id: string
       title: string
-      agency_id: string
+      org_id: string
       client_name: string | null
       description: string | null
       budget_range: string | null
@@ -89,7 +89,7 @@ export async function GET(
     const { data: agency } = await supabase
       .from('profiles')
       .select('id, email, full_name, company_name')
-      .eq('id', project.agency_id)
+      .eq('id', project.org_id)
       .single()
 
     let agreements: unknown[] = []

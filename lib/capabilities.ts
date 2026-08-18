@@ -40,10 +40,13 @@
  * they resolve through `profiles.is_admin`, which is precisely what gates the admin surfaces
  * today. Nobody gains anything and nobody loses anything.
  *
- * The point of adopting it before it bites is that the day `agency_id` becomes an
- * organization key, RLS stops being able to tell an admin from a member - every member of
- * the organization satisfies the row predicate identically - and the route is the only place
- * left that can. The check has to exist BEFORE that migration runs, not after.
+ * The point of adopting it before it bit was that the day the company identity columns
+ * became organization keys, RLS would stop being able to tell an admin from a member -
+ * every member of the organization satisfies the row predicate identically - and the route
+ * would be the only place left that can. THAT DAY IS THIS BRANCH. 079 renames the columns
+ * and rewrites the policies to resolve membership, so from here on the capability check in
+ * the route is the only thing separating an admin from a member. It was in place first,
+ * which was the point.
  *
  * ---------------------------------------------------------------------------
  * WHAT MIGRATION 079 CHANGES HERE
@@ -224,14 +227,24 @@ export type CapabilityProfile =
 /**
  * What is this caller's role inside their own company?
  *
- * 079: reads org_members.role for the caller's organization. Today there are no
- * organizations and no members - every live user is the sole member and de facto owner of
- * their own company, which is why every agency-scoped policy and every route in the product
- * currently keys on `agency_id = auth.uid()`. So this returns "owner", and every capability
- * below resolves exactly as it does now.
+ * THE 079 SEAM, AND WHY IT IS DELIBERATELY STILL OPEN.
  *
- * This function is the whole seam. When 079 lands, changing it is meant to be most of the
- * work, and until it changes nobody's permissions move.
+ * 079 creates org_members with a role column carrying exactly the three values below, so
+ * the data this function wants now exists. It still returns "owner" for every caller, and
+ * that is correct rather than unfinished, for one reason: 079 backfills exactly ONE member
+ * per organization, the founder, with role 'owner'. Every live caller IS the owner of their
+ * organization. A lookup would cost a round trip on every capability check to return the
+ * value already hard-coded here.
+ *
+ * WHAT MUST CHANGE, AND WHEN. The moment anything can add a SECOND member to an
+ * organization - that is org_invitations and the membership interface, phase two, not this
+ * branch - this function must start reading org_members.role, or every colleague added is
+ * silently an owner. Use loadOrgRole() below, which does the lookup and is written and
+ * unused precisely so that change is a one-line edit here rather than new plumbing then.
+ *
+ * This is a guarded gap, not an oversight: nothing in this repository creates an
+ * org_members row except the 079 backfill and the handle_new_user trigger it extends, and
+ * both create exactly one owner.
  */
 export function orgRoleFor(profile: CapabilityProfile): OrgRole | null {
   if (!profile) return null

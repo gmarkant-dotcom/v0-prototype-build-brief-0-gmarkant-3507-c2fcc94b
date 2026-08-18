@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Capability gate. The question above is WHICH SIDE; this one is MAY THEY. Broadcasting
     // is irreversible - the mail leaves the building and cannot be unsent - so it defaults to
     // admin in docs/capabilities.md. 079: every member of the organization will satisfy the
-    // `agency_id = auth.uid()` ownership predicate that is the only other gate on this route,
+    // `lead_org_id = auth.uid()` ownership predicate that is the only other gate on this route,
     // which is the day this check starts doing work. It resolves true for everyone today.
     if (!can(profile, "rfp.broadcast")) {
       return NextResponse.json({ error: capabilityDeniedMessage("rfp.broadcast") }, { status: 403 })
@@ -184,12 +184,27 @@ export async function POST(request: NextRequest) {
         if (typeof partnerId !== "string" || !partnerId.length) continue
 
         const { data: partnership, error: pErr } = await supabase
+          // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+          // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+          // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+          // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+          // resolves to nothing, and the new one resolves to `organizations`, which carries only
+          // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+          // is exactly what this embed selects.
+          //
+          // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+          // vendor company's email address under an organization model", which is the
+          // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+          // cannot see this: the constraint name embeds the old column name with no word boundary
+          // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+          // the rename complete with all thirteen of these still broken.
+          // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
           .from("partnerships")
           .select(
             "id, nda_confirmed_at, partner_email, partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)"
           )
-          .eq("agency_id", user.id)
-          .eq("partner_id", partnerId)
+          .eq("lead_org_id", user.id)
+          .eq("vendor_org_id", partnerId)
           .eq("status", "active")
           .maybeSingle()
 
@@ -213,8 +228,8 @@ export async function POST(request: NextRequest) {
         seenRecipientKeys.add(partnerScopeKey)
 
         const row = {
-          agency_id: user.id,
-          partner_id: partnerId,
+          lead_org_id: user.id,
+          vendor_org_id: partnerId,
           recipient_email: null,
           partnership_id: partnership.id,
           project_id: projectId,
@@ -308,12 +323,27 @@ export async function POST(request: NextRequest) {
         let partnershipForManual: PartnershipRow | null = null
         if (isExistingUser) {
           const { data: existingPartnership } = await supabase
+            // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+            // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+            // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+            // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+            // resolves to nothing, and the new one resolves to `organizations`, which carries only
+            // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+            // is exactly what this embed selects.
+            //
+            // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+            // vendor company's email address under an organization model", which is the
+            // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+            // cannot see this: the constraint name embeds the old column name with no word boundary
+            // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+            // the rename complete with all thirteen of these still broken.
+            // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
             .from("partnerships")
             .select(
               "id, nda_confirmed_at, partner_email, partner:profiles!partnerships_partner_id_fkey(email, full_name, company_name)"
             )
-            .eq("agency_id", user.id)
-            .eq("partner_id", existingProfile!.id)
+            .eq("lead_org_id", user.id)
+            .eq("vendor_org_id", existingProfile!.id)
             .in("status", ["active", "pending"])
             .order("created_at", { ascending: false })
             .limit(1)
@@ -329,8 +359,8 @@ export async function POST(request: NextRequest) {
         const claimedAt = isExistingUser ? new Date().toISOString() : null
 
         rows.push({
-          agency_id: user.id,
-          partner_id: isExistingUser ? existingProfile!.id : null,
+          lead_org_id: user.id,
+          vendor_org_id: isExistingUser ? existingProfile!.id : null,
           recipient_email: email,
           partnership_id: partnershipForManual?.id || null,
           project_id: projectId,
@@ -459,7 +489,7 @@ export async function POST(request: NextRequest) {
         eventType: "rfp.broadcast" as const,
         orgId: user.id,
         actorId: user.id,
-        vendorOrgId: (row.partner_id as string | null) ?? null,
+        vendorOrgId: (row.vendor_org_id as string | null) ?? null,
         partnershipId: (row.partnership_id as string | null) ?? null,
         subjectType: "project" as const,
         subjectId: (row.project_id as string | null) ?? null,

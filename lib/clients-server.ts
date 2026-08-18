@@ -71,7 +71,7 @@ export async function reconcileProjectClientFields(
       .from("clients")
       .select("id, name")
       .eq("id", clientId)
-      .eq("agency_id", agencyId)
+      .eq("org_id", agencyId)
       .maybeSingle()
 
     if (error) {

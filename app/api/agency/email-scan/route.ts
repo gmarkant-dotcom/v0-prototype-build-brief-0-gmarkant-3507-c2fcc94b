@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     // Gated here (the "start scan" endpoint) rather than in /run - blocking before a scan
     // ever starts avoids burning a Gmail/Graph API round trip on a scan whose completion
     // would just be rejected anyway.
-    const usageCheck = await checkUsageLimit(agencyEntitlementId(auth.userId), service, "ai_analyses")
+    const usageCheck = await checkUsageLimit(await agencyEntitlementId(auth.userId, service), service, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const provider: EmailProvider = requestedProvider

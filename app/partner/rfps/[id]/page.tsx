@@ -119,7 +119,7 @@ type InboxRow = {
   /** P2-4. Undefined before migration 076, which reads as false: bidding stays open. */
   close_bidding_at_deadline?: boolean | null
   id: string
-  agency_id: string
+  lead_org_id: string
   scope_item_id: string
   scope_item_name: string
   scope_item_description: string | null
@@ -483,7 +483,7 @@ function MasterRfpSections({ json }: { json: Record<string, unknown> | null }) {
 
 const demoInbox: InboxRow = {
   id: "1",
-  agency_id: "demo",
+  lead_org_id: "demo",
   scope_item_id: "s1",
   scope_item_name: "Video production",
   scope_item_description: "Full production for social and broadcast cutdowns.",
@@ -694,7 +694,7 @@ export default function PartnerRfpDetailPage() {
             const blockedInbox = (data?.inbox || {}) as Partial<InboxRow>
             setInbox({
               id,
-              agency_id: "",
+              lead_org_id: "",
               scope_item_id: "",
               scope_item_name: blockedInbox.scope_item_name || "Confidential RFP",
               scope_item_description: null,

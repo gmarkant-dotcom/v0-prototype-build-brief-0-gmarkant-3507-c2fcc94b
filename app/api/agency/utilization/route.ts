@@ -95,7 +95,7 @@ export async function GET() {
         )
       `
       )
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .eq("status", "awarded")
 
     if (respErr) {
@@ -123,7 +123,7 @@ export async function GET() {
       const { data: projects, error: projErr } = await supabase
         .from("projects")
         .select("id, name, client_name, budget_range, start_date, end_date")
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
         .in("id", [...projectIds])
 
       if (projErr) {

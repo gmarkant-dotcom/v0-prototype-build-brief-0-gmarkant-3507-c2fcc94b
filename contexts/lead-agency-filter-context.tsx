@@ -81,7 +81,7 @@ export function LeadAgencyFilterProvider({ children }: { children: ReactNode }) 
       
       const loadedConnections: LeadAgencyConnection[] = (data.partnerships || []).map((p: any) => ({
         id: p.id,
-        agencyId: p.agency?.id || p.agency_id,
+        agencyId: p.agency?.id || p.lead_org_id,
         agencyName: p.agency?.company_name || p.agency?.full_name || 'Unknown Agency',
         agencyEmail: p.agency?.email,
         agencyLocation: p.agency?.location || '',

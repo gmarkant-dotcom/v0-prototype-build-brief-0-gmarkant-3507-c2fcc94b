@@ -25,14 +25,14 @@ export async function POST(request: Request) {
     const { data: inbox, error: inboxError } = await supabase
       .from("partner_rfp_inbox")
       .select(
-        "id, agency_id, partner_id, recipient_email, scope_item_name, agency_company_name, invite_token_expires_at, nda_gate_enforced, claimed_at"
+        "id, lead_org_id, vendor_org_id, recipient_email, scope_item_name, agency_company_name, invite_token_expires_at, nda_gate_enforced, claimed_at"
       )
       .eq("id", inboxItemId)
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .maybeSingle<{
         id: string
-        agency_id: string
-        partner_id: string | null
+        lead_org_id: string
+        vendor_org_id: string | null
         recipient_email: string | null
         scope_item_name: string
         agency_company_name: string | null
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", inbox.id)
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
 
     if (updateError) {
       return NextResponse.json({ error: "Failed to refresh invite token" }, { status: 500 })
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
     const existingInviteUrl = new URL("/partner/rfps", baseUrl)
     existingInviteUrl.searchParams.set("invite", token)
 
-    const isExistingUser = Boolean(inbox.partner_id)
+    const isExistingUser = Boolean(inbox.vendor_org_id)
     const ndaRequired = inbox.nda_gate_enforced === true
     if (ndaRequired) {
       signUpInviteUrl.searchParams.set("nda", "required")

@@ -28,14 +28,29 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     const { data: project } = await supabase
       .from("projects")
-      .select("id, agency_id")
+      .select("id, org_id")
       .eq("id", projectId)
       .maybeSingle()
-    if (!project || project.agency_id !== user.id) {
+    if (!project || project.org_id !== user.id) {
       return NextResponse.json({ error: "Not found" }, { status: 404, headers: noStoreHeaders })
     }
 
     const { data: assignmentRows, error: asgErr } = await supabase
+      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+      // resolves to nothing, and the new one resolves to `organizations`, which carries only
+      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+      // is exactly what this embed selects.
+      //
+      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+      // vendor company's email address under an organization model", which is the
+      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+      // cannot see this: the constraint name embeds the old column name with no word boundary
+      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+      // the rename complete with all thirteen of these still broken.
+      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
       .from("project_assignments")
       .select(
         `
@@ -99,11 +114,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       .select(
         `
         id,
-        partner_id,
+        vendor_org_id,
         partner_rfp_inbox(project_id, partnership_id, scope_item_name)
       `
       )
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .eq("status", "awarded")
 
     if (bidErr) {
@@ -114,13 +129,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
         if (!inbox || inbox.project_id !== projectId) continue
 
         let partnershipId = inbox.partnership_id as string | null
-        const partnerId = r.partner_id as string | null
+        const partnerId = r.vendor_org_id as string | null
         if (!partnershipId && partnerId) {
           const { data: rel } = await supabase
             .from("partnerships")
             .select("id")
-            .eq("agency_id", user.id)
-            .eq("partner_id", partnerId)
+            .eq("lead_org_id", user.id)
+            .eq("vendor_org_id", partnerId)
             .eq("status", "active")
             .maybeSingle()
           partnershipId = rel?.id ?? null

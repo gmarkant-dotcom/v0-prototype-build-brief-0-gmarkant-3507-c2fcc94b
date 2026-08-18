@@ -7,7 +7,7 @@ type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
  * 079: every `agencyId` parameter in this file is an organization id, not a user id.
  *
  * The quota model already matches the ruling that billing is per organization and not per
- * seat - `usage_tracking` is keyed on `agency_id`, one row per agency per month, and
+ * seat - `usage_tracking` is keyed on `org_id`, one row per agency per month, and
  * nothing here counts seats. What has to change at 079 is only what gets passed in: the
  * column becomes `org_id`, and every caller already routes its argument through
  * `agencyEntitlementId()` in lib/entitlements.ts, which is where the user-to-organization
@@ -44,7 +44,7 @@ function currentMonthStart(): string {
 
 type UsageRow = {
   id: string
-  agency_id: string
+  org_id: string
   month_start: string
   ai_analyses_count: number
   plan_tier: string
@@ -64,8 +64,8 @@ export async function getOrCreateMonthlyUsage(
 
   const { data: existing } = await supabase
     .from("usage_tracking")
-    .select("id, agency_id, month_start, ai_analyses_count, plan_tier, analyses_limit")
-    .eq("agency_id", agencyId)
+    .select("id, org_id, month_start, ai_analyses_count, plan_tier, analyses_limit")
+    .eq("org_id", agencyId)
     .eq("month_start", monthStart)
     .maybeSingle()
   if (existing) return existing as UsageRow
@@ -77,7 +77,7 @@ export async function getOrCreateMonthlyUsage(
   const { data: priorRow } = await supabase
     .from("usage_tracking")
     .select("plan_tier")
-    .eq("agency_id", agencyId)
+    .eq("org_id", agencyId)
     .lt("month_start", monthStart)
     .order("month_start", { ascending: false })
     .limit(1)
@@ -88,15 +88,15 @@ export async function getOrCreateMonthlyUsage(
     .from("usage_tracking")
     .upsert(
       {
-        agency_id: agencyId,
+        org_id: agencyId,
         month_start: monthStart,
         ai_analyses_count: 0,
         plan_tier: tier,
         analyses_limit: analysesLimitColumnValue(tier),
       },
-      { onConflict: "agency_id,month_start" }
+      { onConflict: "org_id,month_start" }
     )
-    .select("id, agency_id, month_start, ai_analyses_count, plan_tier, analyses_limit")
+    .select("id, org_id, month_start, ai_analyses_count, plan_tier, analyses_limit")
     .single()
   if (error || !created) {
     throw new Error(error?.message || "Failed to create monthly usage row")
@@ -150,7 +150,7 @@ export async function getActiveProjectsCount(
   const { count } = await supabase
     .from("projects")
     .select("id", { count: "exact", head: true })
-    .eq("agency_id", agencyId)
+    .eq("org_id", agencyId)
     .not("status", "in", "(completed,archived)")
 
   const usage = await getOrCreateMonthlyUsage(agencyId, supabase)

@@ -42,14 +42,14 @@ export async function POST(request: NextRequest) {
 
     // 079: agencyEntitlementId() starts resolving auth.uid() to organizations.id, so a
     // colleague's duplicate counts against the organization's quota.
-    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "projects")
+    const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "projects")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const { data: sourceProject, error: sourceErr } = await supabase
       .from("projects")
       .select("id, name, client_name, client_id, description, budget_range")
       .eq("id", projectId)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
     if (sourceErr) {
       console.error("[api] failure", { route, method: "POST", message: sourceErr.message })
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     const { data: nameCollision } = await supabase
       .from("projects")
       .select("id")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .ilike("name", newName)
       .maybeSingle()
     if (nameCollision) {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     const { data: newProject, error: insertErr } = await supabase
       .from("projects")
       .insert({
-        agency_id: user.id,
+        org_id: user.id,
         name: newName,
         status: "draft",
         // Both fields together or neither, so a duplicate can never be born incoherent.

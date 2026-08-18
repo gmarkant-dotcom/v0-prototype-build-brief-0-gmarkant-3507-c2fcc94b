@@ -99,7 +99,7 @@ export async function POST(req: Request) {
       .from("projects")
       .select("id, name, client_name, budget_range")
       .eq("id", project_id)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
     if (pErr || !project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
       .select(
         `
         id,
-        partner_id,
+        vendor_org_id,
         proposal_text,
         budget_proposal,
         timeline_proposal,
@@ -125,7 +125,7 @@ export async function POST(req: Request) {
       `
       )
       .eq("id", response_id)
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .eq("status", "awarded")
       .maybeSingle()
 
@@ -142,16 +142,36 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Response does not match partnership" }, { status: 400, headers: noStore })
     }
 
+    // 079 FOUND A LIVE BUG HERE, and this is the fix rather than a rename.
+    //
+    // This query used to filter payment_milestones on the pre-079 lead-agency identity
+    // column. payment_milestones has no such column. The live probe behind migration 079
+    // measured that column on exactly 21 tables
+    // (docs/079-authoring-report.md, "Renames: 30 columns across 23 tables") and
+    // payment_milestones is not one of them - it is scoped transitively, through project_id
+    // and partnership_id, which is what all four of its RLS policies read. The predicate
+    // therefore returned 42703, the error was destructured away (`{ data: existingMilestones }`
+    // never looked at `error`), and existingMilestones has always been null. The AI schedule
+    // prompt has never seen the milestones that already exist.
+    //
+    // BEHAVIOUR CHANGE, STATED RATHER THAN SLIPPED IN: with the dead predicate removed this
+    // now returns rows, so the prompt will start seeing existing milestones and stop
+    // proposing duplicates. That is what the variable name always claimed. Scoping is
+    // unaffected: response_id was already validated against
+    // `.eq("lead_org_id", user.id)` on partner_rfp_responses twenty lines above, so this
+    // reads only milestones belonging to a response the caller owns.
+    //
+    // Renaming the predicate to org_id or lead_org_id instead would have invented a column
+    // and kept the bug. See docs/079-rename-execution-report.md, judgment calls.
     const { data: existingMilestones } = await supabase
       .from("payment_milestones")
       .select("title, amount, currency, due_date, status, notes")
-      .eq("agency_id", user.id)
       .eq("response_id", response_id)
 
     const { data: partnerProfile } = await supabase
       .from("profiles")
       .select("company_name, display_name, full_name, bio, website")
-      .eq("id", resp.partner_id as string)
+      .eq("id", resp.vendor_org_id as string)
       .maybeSingle()
 
     const projectName = ((project.name || "") as string).trim() || "Project"

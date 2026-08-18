@@ -72,7 +72,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStoreHeaders })
     }
 
-    const { data: partnerships } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)
+    const { data: partnerships } = await supabase.from("partnerships").select("id").eq("vendor_org_id", user.id)
     const partnershipIds = (partnerships || []).map((p) => p.id as string)
     if (partnershipIds.length === 0) {
       return NextResponse.json({ latest: null, updates: [] }, { headers: noStoreHeaders })
@@ -123,7 +123,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     }
 
     const bodyRaw = await req.json().catch(() => null)
-    const { data: partnerships } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)
+    const { data: partnerships } = await supabase.from("partnerships").select("id").eq("vendor_org_id", user.id)
     const partnershipIds = (partnerships || []).map((p) => p.id as string)
     if (partnershipIds.length === 0) {
       return NextResponse.json({ error: "No partnership" }, { status: 403, headers: noStoreHeaders })
@@ -211,14 +211,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     try {
       const { data: project } = await supabase
         .from("projects")
-        .select("agency_id, title")
+        .select("org_id, title")
         .eq("id", projectId)
         .maybeSingle()
-      if (project?.agency_id) {
+      if (project?.org_id) {
         const { data: agencyProfile } = await supabase
           .from("profiles")
           .select("email, company_name, full_name")
-          .eq("id", project.agency_id)
+          .eq("id", project.org_id)
           .maybeSingle()
         const recipientEmail = agencyProfile?.email?.trim()
         if (recipientEmail) {

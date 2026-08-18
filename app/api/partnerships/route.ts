@@ -62,10 +62,25 @@ export async function GET(request: NextRequest) {
     // whose role columns resolve to nothing at all: that branch only ever returns rows keyed
     // to the caller's own id or email, so it is the safe default.
     if (acting === 'agency') {
-      // Agency sees rows where they are agency_id (not partner_id). 'removed' rows are
+      // Agency sees rows where they are lead_org_id (not vendor_org_id). 'removed' rows are
       // hidden entirely - the agency explicitly dismissed them from the pool, but the row
       // is kept (not deleted) for any associated rfp_magic_tokens/bid history.
       const rich = await supabase
+        // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+        // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+        // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+        // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+        // resolves to nothing, and the new one resolves to `organizations`, which carries only
+        // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+        // is exactly what this embed selects.
+        //
+        // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+        // vendor company's email address under an organization model", which is the
+        // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+        // cannot see this: the constraint name embeds the old column name with no word boundary
+        // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+        // the rename complete with all thirteen of these still broken.
+        // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
         .from('partnerships')
         .select(`
           *,
@@ -73,7 +88,7 @@ export async function GET(request: NextRequest) {
             id, email, full_name, company_name, capabilities, company_logo_url, created_at
           )
         `)
-        .eq('agency_id', user.id)
+        .eq('lead_org_id', user.id)
         .neq('status', 'removed')
         .order('created_at', { ascending: false })
 
@@ -92,27 +107,27 @@ export async function GET(request: NextRequest) {
         const simple = await supabase
           .from('partnerships')
           .select('*')
-          .eq('agency_id', user.id)
+          .eq('lead_org_id', user.id)
           .neq('status', 'removed')
           .order('created_at', { ascending: false })
         if (simple.error) throw simple.error
         partnerships = simple.data
       }
 
-      // Ghost/unclaimed rows (partner_id IS NULL - the Invited/Discovered sections on
+      // Ghost/unclaimed rows (vendor_org_id IS NULL - the Invited/Discovered sections on
       // /agency/pool) carry no rfp_magic_tokens link of their own, so pool_status and
       // domain-match info (the "Domain Match - Review" badge) are cross-referenced by email
       // from the latest matching token, mirroring the classification write path in
       // app/api/rfp/guest/[token]/route.ts.
       const ghostRows = ((partnerships || []) as Record<string, unknown>[]).filter(
-        (p) => !p.partner_id && p.partner_email
+        (p) => !p.vendor_org_id && p.partner_email
       )
       if (ghostRows.length > 0) {
         const ghostEmails = [...new Set(ghostRows.map((r) => String(r.partner_email || '').toLowerCase()))]
         const { data: tokenRows } = await supabase
           .from('rfp_magic_tokens')
           .select('vendor_email, vendor_name, pool_status, domain_match_profile_id, created_at')
-          .eq('agency_id', user.id)
+          .eq('org_id', user.id)
           .in('vendor_email', ghostEmails)
           .order('created_at', { ascending: false })
 
@@ -172,7 +187,7 @@ export async function GET(request: NextRequest) {
         }
       }
     } else {
-      // Partner sees agencies that invited them (by partner_id OR by email)
+      // Partner sees agencies that invited them (by vendor_org_id OR by email)
       // First get the partner's email from their profile
       const { data: partnerProfile, error: partnerProfileErr } = await supabase
         .from('profiles')
@@ -189,11 +204,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to load vendor profile' }, { status: 500, headers: noStoreHeaders })
       }
 
-      // Get partnerships by partner_id
+      // Get partnerships by vendor_org_id
       const { data: byId, error: byIdError } = await supabase
         .from('partnerships')
         .select('*')
-        .eq('partner_id', user.id)
+        .eq('vendor_org_id', user.id)
         .order('created_at', { ascending: false })
 
       if (byIdError) throw byIdError
@@ -205,7 +220,7 @@ export async function GET(request: NextRequest) {
           .from('partnerships')
           .select('*')
           .ilike('partner_email', partnerProfile.email.trim())
-          .is('partner_id', null) // Only get unclaimed email invitations
+          .is('vendor_org_id', null) // Only get unclaimed email invitations
           .order('created_at', { ascending: false })
 
         if (byEmailError) {
@@ -219,11 +234,11 @@ export async function GET(request: NextRequest) {
         } else if (byEmail && byEmail.length > 0) {
           byEmailData = byEmail
 
-          // Auto-claim these invitations by setting partner_id
+          // Auto-claim these invitations by setting vendor_org_id
           for (const invitation of byEmail) {
             const { error: claimErr } = await supabase
               .from('partnerships')
-              .update({ partner_id: user.id })
+              .update({ vendor_org_id: user.id })
               .eq('id', invitation.id)
             if (claimErr) {
               console.error('[api] GET /partnerships auto-claim invitation update failed', {
@@ -241,7 +256,7 @@ export async function GET(request: NextRequest) {
       const allPartnerships = [...(byId || []), ...byEmailData]
       
       // Manually fetch agency profiles for each partnership
-      const agencyIds = [...new Set(allPartnerships.map(p => p.agency_id).filter(Boolean))]
+      const agencyIds = [...new Set(allPartnerships.map(p => p.lead_org_id).filter(Boolean))]
       
       let agencyProfiles: Record<
         string,
@@ -276,7 +291,7 @@ export async function GET(request: NextRequest) {
         const { partnership_notes: _omitNotes, ...rest } = p as Record<string, unknown>
         return {
           ...rest,
-          agency: agencyProfiles[p.agency_id as string] || null,
+          agency: agencyProfiles[p.lead_org_id as string] || null,
         }
       })
     }
@@ -429,14 +444,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Partner email required' }, { status: 400 })
     }
 
-    // Check if partnership already exists (by partner_id or partner_email)
+    // Check if partnership already exists (by vendor_org_id or partner_email)
     let existingQuery = supabase
       .from('partnerships')
-      .select('id, status, partner_id')
-      .eq('agency_id', user.id)
+      .select('id, status, vendor_org_id')
+      .eq('lead_org_id', user.id)
     
     if (partner) {
-      existingQuery = existingQuery.eq('partner_id', partner.id)
+      existingQuery = existingQuery.eq('vendor_org_id', partner.id)
     } else {
       existingQuery = existingQuery.ilike('partner_email', normalizedPartnerEmail)
     }
@@ -480,8 +495,8 @@ export async function POST(request: NextRequest) {
         
         const agencyName = agencyProfile?.company_name || agencyProfile?.full_name || 'A lead agency'
         
-        // Check if partner has an account (existing.partner_id is set from previous invitation)
-        const existingPartnerId = existing.partner_id
+        // Check if partner has an account (existing.vendor_org_id is set from previous invitation)
+        const existingPartnerId = existing.vendor_org_id
         
         // Notify the partner of re-invitation if they have an account
         if (existingPartnerId) {
@@ -552,23 +567,23 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Create partnership - with partner_id if they exist, or just email if they don't
+    // Create partnership - with vendor_org_id if they exist, or just email if they don't
     const insertData: {
-      agency_id: string
-      partner_id?: string
+      lead_org_id: string
+      vendor_org_id?: string
       partner_email: string
       status: string
       invitation_message?: string
     } = {
-      agency_id: user.id,
+      lead_org_id: user.id,
       partner_email: normalizedPartnerEmail,
       status: 'pending',
       invitation_message: message || undefined,
     }
     
-    // If partner exists, also set partner_id
+    // If partner exists, also set vendor_org_id
     if (partner) {
-      insertData.partner_id = partner.id
+      insertData.vendor_org_id = partner.id
     }
 
     const { data: partnership, error } = await supabase
@@ -683,7 +698,7 @@ export async function PATCH(request: NextRequest) {
     // Get partnership to verify ownership
     const { data: partnership, error: partnershipFetchErr } = await supabase
       .from('partnerships')
-      .select('agency_id, partner_id, status')
+      .select('lead_org_id, vendor_org_id, status')
       .eq('id', partnershipId)
       .maybeSingle()
 
@@ -704,8 +719,8 @@ export async function PATCH(request: NextRequest) {
 
     // Partners can only accept (pending -> active)
     // Agencies can suspend/terminate
-    const isAgency = partnership.agency_id === user.id
-    const isPartner = partnership.partner_id === user.id
+    const isAgency = partnership.lead_org_id === user.id
+    const isPartner = partnership.vendor_org_id === user.id
     
     if (!isAgency && !isPartner) {
       return NextResponse.json({ error: 'Access denied - you are not part of this partnership' }, { status: 403 })
@@ -724,7 +739,7 @@ export async function PATCH(request: NextRequest) {
           updated_at: now,
         })
         .eq('id', partnershipId)
-        .eq('agency_id', user.id)
+        .eq('lead_org_id', user.id)
         .select()
         .single()
       if (error) throw error
@@ -747,11 +762,11 @@ export async function PATCH(request: NextRequest) {
         .map((row) => (row.recipient_email || '').trim().toLowerCase())
         .find(Boolean)
       let partnerEmail = partnerEmailFromInbox || null
-      if (!partnerEmail && partnership.partner_id) {
+      if (!partnerEmail && partnership.vendor_org_id) {
         const { data: partnerProfile } = await supabase
           .from('profiles')
           .select('email')
-          .eq('id', partnership.partner_id)
+          .eq('id', partnership.vendor_org_id)
           .maybeSingle()
         partnerEmail = (partnerProfile?.email || '').trim().toLowerCase() || null
       }
@@ -795,17 +810,17 @@ export async function PATCH(request: NextRequest) {
           updated_at: now,
         })
         .eq('id', partnershipId)
-        .eq('agency_id', user.id)
+        .eq('lead_org_id', user.id)
         .select()
         .single()
       if (error) throw error
 
       let partnerEmail: string | null = null
-      if (partnership.partner_id) {
+      if (partnership.vendor_org_id) {
         const { data: partnerProfile } = await supabase
           .from('profiles')
           .select('email')
-          .eq('id', partnership.partner_id)
+          .eq('id', partnership.vendor_org_id)
           .maybeSingle()
         partnerEmail = (partnerProfile?.email || '').trim().toLowerCase() || null
       }
@@ -842,12 +857,12 @@ export async function PATCH(request: NextRequest) {
       // closed. Adding 'msa.confirm' to vendor_visible_event_types() in migration 080 is a
       // one-line change and a decision for Greg.
       //
-      // 079: partnership.agency_id is the acting company, partnership.partner_id the vendor.
+      // 079: partnership.lead_org_id is the acting company, partnership.vendor_org_id the vendor.
       await recordMilestone(supabase, {
         eventType: 'msa.confirm',
         orgId: user.id,
         actorId: user.id,
-        vendorOrgId: (partnership.partner_id as string | null) ?? null,
+        vendorOrgId: (partnership.vendor_org_id as string | null) ?? null,
         partnershipId: partnershipId as string,
         subjectType: 'partnership',
         subjectId: partnershipId as string,
@@ -888,12 +903,12 @@ export async function PATCH(request: NextRequest) {
         const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'A vendor'
         
         // Notify agency that partner accepted
-        await notifyPartnershipAccepted(supabase, partnership.agency_id, partnerName, partnershipId)
+        await notifyPartnershipAccepted(supabase, partnership.lead_org_id, partnerName, partnershipId)
 
         const { data: agencyProfile } = await supabase
           .from('profiles')
           .select('email, company_name, full_name')
-          .eq('id', partnership.agency_id)
+          .eq('id', partnership.lead_org_id)
           .single()
 
         if (agencyProfile?.email) {
@@ -937,14 +952,14 @@ export async function PATCH(request: NextRequest) {
         
         // Notify agency that partner declined
         const { notifyPartnershipDeclined } = await import('@/lib/notifications')
-        await notifyPartnershipDeclined(supabase, partnership.agency_id, partnerName, partnershipId)
+        await notifyPartnershipDeclined(supabase, partnership.lead_org_id, partnerName, partnershipId)
 
         // Send email to agency notifying them of the decline
         try {
           const { data: agencyProfile } = await supabase
             .from('profiles')
             .select('email, company_name, full_name')
-            .eq('id', partnership.agency_id)
+            .eq('id', partnership.lead_org_id)
             .single()
 
           if (agencyProfile?.email) {
@@ -1020,7 +1035,7 @@ export async function DELETE(request: NextRequest) {
     // Verify user is an agency and owns this partnership
     const { data: partnership, error: fetchError } = await supabase
       .from('partnerships')
-      .select('agency_id, partner_id')
+      .select('lead_org_id, vendor_org_id')
       .eq('id', partnershipId)
       .single()
 
@@ -1038,7 +1053,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Partnership not found' }, { status: 404 })
     }
 
-    if (partnership.agency_id !== user.id) {
+    if (partnership.lead_org_id !== user.id) {
       return NextResponse.json({ error: 'Only the agency can delete this partnership' }, { status: 403 })
     }
 

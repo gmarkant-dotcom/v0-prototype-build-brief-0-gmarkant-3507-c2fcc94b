@@ -48,9 +48,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: existing, error: existingErr } = await supabase
       .from("partner_rfp_responses")
-      .select("id, partner_id, agency_id, inbox_item_id, status, agency_feedback")
+      .select("id, vendor_org_id, lead_org_id, inbox_item_id, status, agency_feedback")
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .maybeSingle()
     if (existingErr) {
       console.error("[api] PATCH partner_rfp_responses load failed", {
@@ -91,7 +91,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
      *
      * All three are irreversible in the sense docs/capabilities.md uses: each sends mail the
      * vendor has already read by the time anyone reconsiders. The route's only other gate is
-     * `.eq("agency_id", user.id)`, which is ownership - and 079 turns ownership into
+     * `.eq("lead_org_id", user.id)`, which is ownership - and 079 turns ownership into
      * membership, at which point every colleague passes it identically and this is the only
      * thing left that can distinguish an admin from a member. All three resolve true for
      * everyone today.
@@ -170,7 +170,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       type InboxForAward = {
         id: string | null
         project_id: string | null
-        partner_id: string | null
+        vendor_org_id: string | null
         partnership_id: string | null
         scope_item_name: string | null
         master_rfp_json: unknown
@@ -180,9 +180,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (resolvedInboxItemId) {
         const { data, error: inboxFetchErr } = await supabase
           .from("partner_rfp_inbox")
-          .select("id, project_id, partner_id, partnership_id, scope_item_name, master_rfp_json")
+          .select("id, project_id, vendor_org_id, partnership_id, scope_item_name, master_rfp_json")
           .eq("id", resolvedInboxItemId)
-          .eq("agency_id", user.id)
+          .eq("lead_org_id", user.id)
           .maybeSingle()
         if (inboxFetchErr) {
           console.error("[api] bid award: failed to load partner_rfp_inbox (join key: partner_rfp_responses.inbox_item_id)", {
@@ -224,8 +224,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         if (tokenRow?.token) {
           const { data: synthesized, error: synthErr } = await supabase
             .from("partner_rfp_inbox")
-            .select("id, project_id, partner_id, partnership_id, scope_item_name, master_rfp_json")
-            .eq("agency_id", user.id)
+            .select("id, project_id, vendor_org_id, partnership_id, scope_item_name, master_rfp_json")
+            .eq("lead_org_id", user.id)
             .contains("master_rfp_json", { _magic_token: tokenRow.token })
             .maybeSingle()
           if (synthErr) {
@@ -244,7 +244,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               .from("partner_rfp_responses")
               .update({ inbox_item_id: synthesized.id })
               .eq("id", id)
-              .eq("agency_id", user.id)
+              .eq("lead_org_id", user.id)
             if (linkErr) {
               // Non-fatal - the award can still proceed against synthesized data this once,
               // it just won't self-heal into the normal path until a future attempt succeeds.
@@ -276,7 +276,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           inboxRow = {
             id: null,
             project_id: projectIdFromToken,
-            partner_id: (existing.partner_id as string | null) ?? null,
+            vendor_org_id: (existing.vendor_org_id as string | null) ?? null,
             partnership_id: null,
             scope_item_name: (tokenRow?.scope_item_name as string | null) ?? null,
             master_rfp_json: null,
@@ -303,7 +303,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       // a. Partnership already linked to this broadcast/inbox row - today's behavior, unchanged.
       let partnershipId = inboxRow.partnership_id as string | null
-      let partnerIdForResolution = (inboxRow.partner_id as string | null) || existing.partner_id
+      let partnerIdForResolution = (inboxRow.vendor_org_id as string | null) || existing.vendor_org_id
 
       if (!partnershipId) {
         // H2: award is mutual consent - resolve (claim or create) the partnership rather
@@ -336,10 +336,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           vendorContactName = (tokenForVendor?.vendor_name as string | null) || null
           vendorDisplayName = vendorContactName || vendorEmail || "Vendor"
 
-          // H3: partner_id was captured once at guest-submission time from an email->profile
+          // H3: vendor_org_id was captured once at guest-submission time from an email->profile
           // match at that moment (app/api/rfp/guest/[token]/route.ts) and is never re-checked
           // later - so a vendor who creates/links an account AFTER submitting still resolves
-          // as a "pure guest" here otherwise, producing a partner_id-null partnership that
+          // as a "pure guest" here otherwise, producing a vendor_org_id-null partnership that
           // never surfaces on My Bids or Delivery & Projects even after they have an account.
           // Re-check by email now, and backfill the response row so this is fixed going
           // forward too, not just for this one award.
@@ -353,12 +353,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               partnerIdForResolution = matchedProfile.id as string
               const { error: backfillErr } = await supabase
                 .from("partner_rfp_responses")
-                .update({ partner_id: matchedProfile.id })
+                .update({ vendor_org_id: matchedProfile.id })
                 .eq("id", id)
-                .eq("agency_id", user.id)
-                .is("partner_id", null)
+                .eq("lead_org_id", user.id)
+                .is("vendor_org_id", null)
               if (backfillErr) {
-                console.error("[api] bid award: response partner_id backfill failed (non-fatal)", {
+                console.error("[api] bid award: response vendor_org_id backfill failed (non-fatal)", {
                   route,
                   responseId: id,
                   message: backfillErr.message,
@@ -409,7 +409,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .from("partner_rfp_responses")
       .update(patch)
       .eq("id", id)
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .select("*")
       .single()
     if (updateErr) {
@@ -427,7 +427,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         .from("partner_rfp_inbox")
         .update({ status: mapResponseStatusToInboxStatus(nextStatus), updated_at: new Date().toISOString() })
         .eq("id", resolvedInboxItemId)
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
       if (inboxStatusErr) {
         console.error("[api] PATCH partner_rfp_inbox status sync failed", {
           route,
@@ -451,7 +451,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           supabase
             .from("profiles")
             .select("email, full_name, company_name")
-            .eq("id", existing.partner_id)
+            .eq("id", existing.vendor_org_id)
             .maybeSingle(),
           existing.inbox_item_id
             ? supabase
@@ -460,7 +460,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                 // makes the event reachable by the vendor whose bid was reviewed.
                 .select("scope_item_name, partnership_id")
                 .eq("id", existing.inbox_item_id)
-                .eq("agency_id", user.id)
+                .eq("lead_org_id", user.id)
                 .maybeSingle()
             : Promise.resolve({ data: null, error: null }),
         ])
@@ -469,7 +469,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         console.error("[api] feedback email: partner profile select failed", {
           route,
           responseId: id,
-          partnerId: existing.partner_id,
+          partnerId: existing.vendor_org_id,
           message: partnerErr.message,
           code: partnerErr.code,
         })
@@ -524,7 +524,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         eventType: "bid.feedback",
         orgId: user.id,
         actorId: user.id,
-        vendorOrgId: (existing.partner_id as string | null) ?? null,
+        vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
         partnershipId: (inboxRow?.partnership_id as string | null) ?? null,
         subjectType: "bid",
         subjectId: id,
@@ -590,7 +590,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         .from("projects")
         .select("status")
         .eq("id", awardContext.projectId)
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
         .maybeSingle()
       if (projLoadErr) {
         console.error("[api] bid award: load project status failed (assignment recorded)", {
@@ -604,7 +604,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           .from("projects")
           .update({ status: "active", updated_at: now })
           .eq("id", awardContext.projectId)
-          .eq("agency_id", user.id)
+          .eq("org_id", user.id)
         if (projUpdErr) {
           console.error("[api] bid award: project status bump failed (assignment recorded)", {
             route,
@@ -618,13 +618,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const { data: partner, error: partnerProfileErr } = await supabase
         .from("profiles")
         .select("email, full_name, company_name")
-        .eq("id", existing.partner_id)
+        .eq("id", existing.vendor_org_id)
         .maybeSingle()
       if (partnerProfileErr) {
         console.error("[api] bid award: partner profile select failed (email send may be skipped)", {
           route,
           responseId: id,
-          partnerId: existing.partner_id,
+          partnerId: existing.vendor_org_id,
           message: partnerProfileErr.message,
           code: partnerProfileErr.code,
         })
@@ -666,9 +666,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
       }
 
-      if (existing.partner_id) {
+      if (existing.vendor_org_id) {
         try {
-          await notifyProjectAwarded(supabase, existing.partner_id, projectName, leadAgencyName, awardContext.projectId)
+          await notifyProjectAwarded(supabase, existing.vendor_org_id, projectName, leadAgencyName, awardContext.projectId)
         } catch (notifyErr) {
           console.error("[api] bid award: in-app notification failed (award already recorded)", {
             route,
@@ -687,7 +687,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         eventType: "bid.award",
         orgId: user.id,
         actorId: user.id,
-        vendorOrgId: (existing.partner_id as string | null) ?? null,
+        vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
         partnershipId: awardContext.partnershipId,
         subjectType: "bid",
         subjectId: id,
@@ -703,7 +703,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // Same broad fix as above - guest bids (inbox_item_id null) must skip this query
       // entirely rather than send `.eq("id", null)`, which errors on a uuid column.
       const [partnerRes, inboxRes] = await Promise.all([
-        supabase.from("profiles").select("email, full_name, company_name").eq("id", existing.partner_id).maybeSingle(),
+        supabase.from("profiles").select("email, full_name, company_name").eq("id", existing.vendor_org_id).maybeSingle(),
         existing.inbox_item_id
           ? supabase
               .from("partner_rfp_inbox")
@@ -719,7 +719,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         console.error("[api] decline email: partner profile select failed", {
           route,
           responseId: id,
-          partnerId: existing.partner_id,
+          partnerId: existing.vendor_org_id,
           message: partnerRes.error.message,
           code: partnerRes.error.code,
         })
@@ -779,7 +779,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         eventType: "bid.decline",
         orgId: user.id,
         actorId: user.id,
-        vendorOrgId: (existing.partner_id as string | null) ?? null,
+        vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
         partnershipId: (inbox?.partnership_id as string | null) ?? null,
         subjectType: "bid",
         subjectId: id,

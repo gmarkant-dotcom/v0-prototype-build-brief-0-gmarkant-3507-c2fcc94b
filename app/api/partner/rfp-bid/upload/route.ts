@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
     const { data: inboxRow, error: inboxLookupErr } = await supabase
       .from("partner_rfp_inbox")
-      .select("id, partner_id, recipient_email, nda_gate_enforced, nda_confirmed_at")
+      .select("id, vendor_org_id, recipient_email, nda_gate_enforced, nda_confirmed_at")
       .eq("id", inboxId)
       .maybeSingle()
 
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     const access = partnerCanAccessPartnerRfpInbox(
       {
-        partner_id: (inboxRow.partner_id as string | null) ?? null,
+        vendor_org_id: (inboxRow.vendor_org_id as string | null) ?? null,
         recipient_email: (inboxRow.recipient_email as string | null) ?? null,
         nda_gate_enforced: (inboxRow.nda_gate_enforced as boolean | null) ?? false,
         nda_confirmed_at: (inboxRow.nda_confirmed_at as string | null) ?? null,

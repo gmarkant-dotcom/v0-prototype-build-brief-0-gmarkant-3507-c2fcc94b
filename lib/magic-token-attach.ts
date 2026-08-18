@@ -7,7 +7,7 @@ import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
  *  subset that matters here. */
 export type MagicTokenForAttach = {
   token: string
-  agency_id: string
+  org_id: string
   project_id: string | null
   vendor_email: string
   scope_item_id: string | null
@@ -21,12 +21,12 @@ export type MagicTokenForAttach = {
    *  what /partner/rfps renders as "Received", so defaulting it to now() dated every
    *  retroactively attached RFP to the day the sweep happened to run rather than the day the
    *  agency sent it. Survives a resend: the magic-link route upserts on
-   *  (agency_id, project_id, vendor_email) without touching created_at. */
+   *  (org_id, project_id, vendor_email) without touching created_at. */
   created_at?: string | null
   /** H3: when this token already has a submitted bid, that response gets backfilled with
    *  this attach's inbox row/partner id below - without this, "My Bids" and Delivery &
    *  Projects never pick up a guest-origin response even after its RFP is visible in the
-   *  portal, since they key off partner_rfp_responses.partner_id / inbox_item_id directly,
+   *  portal, since they key off partner_rfp_responses.vendor_org_id / inbox_item_id directly,
    *  not off partner_rfp_inbox at all. */
   response_id?: string | null
 }
@@ -36,9 +36,9 @@ export type MagicTokenForAttach = {
  *  is a race (the RFP list and the bids list are fetched in parallel), and the row is only
  *  created once. The _NO_DEADLINE variant is the pre-migration-074 fallback (42703). */
 export const MAGIC_TOKEN_ATTACH_COLUMNS =
-  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, created_at, response_id"
+  "token, org_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, response_deadline, expires_at, created_at, response_id"
 export const MAGIC_TOKEN_ATTACH_COLUMNS_NO_DEADLINE =
-  "token, agency_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, created_at, response_id"
+  "token, org_id, project_id, vendor_email, scope_item_id, scope_item_name, scope_item_description, business_criteria_required, require_terms_disclosure, expires_at, created_at, response_id"
 
 export type AttachResult =
   | { attached: true; inboxId: string; created: boolean }
@@ -61,13 +61,13 @@ function inboxScopeItemId(tokenRow: MagicTokenForAttach): string {
   return (tokenRow.scope_item_id || "").trim() || `magic:${tokenRow.token}`
 }
 
-type ExistingResponse = { id: string; partner_id: string | null; inbox_item_id: string | null; status: string | null }
+type ExistingResponse = { id: string; vendor_org_id: string | null; inbox_item_id: string | null; status: string | null }
 
 /** Linkage worth preserving when two rows for the same invitation are collapsed into one.
  *  invite_token is deliberately absent: it is UNIQUE, only the manual-invite broadcast flow
  *  ever sets it, and a magic-attach row never has one, so moving it could only ever collide. */
 const MERGEABLE_LINKAGE = [
-  "partner_id",
+  "vendor_org_id",
   "partnership_id",
   "viewed_at",
   "partner_intent",
@@ -102,7 +102,7 @@ async function findInvitationRows(
   const byToken = await supabase
     .from("partner_rfp_inbox")
     .select(INBOX_CANDIDATE_COLUMNS)
-    .eq("agency_id", tokenRow.agency_id)
+    .eq("lead_org_id", tokenRow.org_id)
     .contains("master_rfp_json", { _magic_token: tokenRow.token })
   if (byToken.error) return { rows: [], error: byToken.error.message }
 
@@ -113,7 +113,7 @@ async function findInvitationRows(
     const byScope = await supabase
       .from("partner_rfp_inbox")
       .select(INBOX_CANDIDATE_COLUMNS)
-      .eq("agency_id", tokenRow.agency_id)
+      .eq("lead_org_id", tokenRow.org_id)
       .eq("scope_item_id", scopeItemId)
     if (byScope.error) return { rows: [], error: byScope.error.message }
     for (const row of (byScope.data || []) as unknown as InboxCandidate[]) byId.set(row.id, row)
@@ -245,7 +245,7 @@ export async function attachMagicTokenToPartnerInbox(
   if (tokenRow.response_id) {
     const { data: responseRow } = await supabase
       .from("partner_rfp_responses")
-      .select("id, partner_id, inbox_item_id, status")
+      .select("id, vendor_org_id, inbox_item_id, status")
       .eq("id", tokenRow.response_id)
       .maybeSingle()
     existingResponse = (responseRow as ExistingResponse | null) ?? null
@@ -254,7 +254,7 @@ export async function attachMagicTokenToPartnerInbox(
   const backfillResponseLinkage = async (inboxId: string) => {
     if (!existingResponse) return
     const patch: Record<string, unknown> = {}
-    if (!existingResponse.partner_id) patch.partner_id = partnerId
+    if (!existingResponse.vendor_org_id) patch.vendor_org_id = partnerId
     // Repointed rather than only filled: after a collapse, a response may still be pointing
     // at a row that no longer exists.
     if (existingResponse.inbox_item_id !== inboxId) patch.inbox_item_id = inboxId
@@ -283,7 +283,7 @@ export async function attachMagicTokenToPartnerInbox(
     supabase
       .from("profiles")
       .select("company_name, full_name, display_name")
-      .eq("id", tokenRow.agency_id)
+      .eq("id", tokenRow.org_id)
       .maybeSingle(),
     tokenRow.project_id
       ? supabase.from("projects").select("name, client_name, budget_range").eq("id", tokenRow.project_id).maybeSingle()
@@ -312,8 +312,8 @@ export async function attachMagicTokenToPartnerInbox(
     }
 
     const insertRow: Record<string, unknown> = {
-      agency_id: tokenRow.agency_id,
-      partner_id: partnerId,
+      lead_org_id: tokenRow.org_id,
+      vendor_org_id: partnerId,
       recipient_email: tokenRow.vendor_email,
       project_id: tokenRow.project_id,
       // Both NOT NULL on partner_rfp_inbox - see inboxScopeItemId above for scope_item_id, and
@@ -378,7 +378,7 @@ export async function attachMagicTokenToPartnerInbox(
   if (derivedStatus && winner.status !== derivedStatus) heal.status = derivedStatus
   // Filled, never reassigned: an invitation row already owned by a different account is not
   // this vendor's to claim, and silently repointing it would be a misattribution.
-  if (winner.partner_id == null) heal.partner_id = partnerId
+  if (winner.vendor_org_id == null) heal.vendor_org_id = partnerId
   if (Object.keys(heal).length > 0) {
     const { error: healErr } = await supabase.from("partner_rfp_inbox").update(heal).eq("id", winner.id)
     if (healErr) {

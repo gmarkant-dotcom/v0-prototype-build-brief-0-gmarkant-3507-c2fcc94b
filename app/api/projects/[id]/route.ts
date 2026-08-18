@@ -33,7 +33,7 @@ export async function GET(
       .from('projects')
       .select('*')
       .eq('id', id)
-      .eq('agency_id', user.id)
+      .eq('org_id', user.id)
       .single()
 
     if (error || !project) {
@@ -96,7 +96,7 @@ export async function PATCH(
       .from('projects')
       .update(updates)
       .eq('id', id)
-      .eq('agency_id', user.id)
+      .eq('org_id', user.id)
       .select('*')
       .single()
 

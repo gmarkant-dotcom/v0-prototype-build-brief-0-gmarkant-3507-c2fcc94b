@@ -78,27 +78,27 @@ export async function GET() {
       supabase
         .from("projects")
         .select("id, name, client_name, status, budget_range, created_at")
-        .eq("agency_id", agencyId),
-      supabase.from("partnerships").select("id, status, partner_id, partner_email, created_at").eq("agency_id", agencyId),
+        .eq("org_id", agencyId),
+      supabase.from("partnerships").select("id, status, vendor_org_id, partner_email, created_at").eq("lead_org_id", agencyId),
       supabase
         .from("partner_rfp_inbox")
-        .select("id, project_id, scope_item_id, scope_item_name, response_deadline, partner_id, recipient_email, viewed_at, created_at")
-        .eq("agency_id", agencyId),
+        .select("id, project_id, scope_item_id, scope_item_name, response_deadline, vendor_org_id, recipient_email, viewed_at, created_at")
+        .eq("lead_org_id", agencyId),
       supabase
         .from("partner_rfp_responses")
-        .select("id, inbox_item_id, partner_id, partner_display_name, status, submitted_at, created_at, updated_at, budget_proposal")
-        .eq("agency_id", agencyId)
+        .select("id, inbox_item_id, vendor_org_id, partner_display_name, status, submitted_at, created_at, updated_at, budget_proposal")
+        .eq("lead_org_id", agencyId)
         .order("created_at", { ascending: false })
         .limit(500),
       supabase
         .from("delivery_reviews")
         .select("id, project_id, partnership_id, assignment_id, status, updated_at")
-        .eq("agency_id", agencyId),
+        .eq("org_id", agencyId),
       // Existence-only check for the Getting Started checklist's "Broadcast an RFP" step -
       // the only one of the four checks not already covered by a table this route fetches
       // anyway (partner_rfp_inbox is, but a magic-link RFP with no portal recipient never
       // creates an inbox row, so that alone would under-count).
-      supabase.from("rfp_magic_tokens").select("id").eq("agency_id", agencyId).limit(1),
+      supabase.from("rfp_magic_tokens").select("id").eq("org_id", agencyId).limit(1),
     ])
 
     for (const [label, res] of [
@@ -163,12 +163,12 @@ export async function GET() {
     const statusUpdates = statusUpdatesRes.data || []
     const onboardingAcks = onboardingRes.data || []
 
-    // Partner display names - resolved once for every partner_id referenced anywhere
+    // Partner display names - resolved once for every vendor_org_id referenced anywhere
     // below (partnerships, inbox rows, assignments) so activity/attention rows can show a
     // real name instead of an email or raw id.
     const partnerIds = new Set<string>()
-    for (const row of partnerships) if (row.partner_id) partnerIds.add(row.partner_id as string)
-    for (const row of inboxRows) if (row.partner_id) partnerIds.add(row.partner_id as string)
+    for (const row of partnerships) if (row.vendor_org_id) partnerIds.add(row.vendor_org_id as string)
+    for (const row of inboxRows) if (row.vendor_org_id) partnerIds.add(row.vendor_org_id as string)
     const { data: partnerProfiles } = partnerIds.size
       ? await supabase.from("profiles").select("id, company_name, full_name, email").in("id", Array.from(partnerIds))
       : { data: [] as { id: string; company_name: string | null; full_name: string | null; email: string | null }[] }
@@ -182,7 +182,7 @@ export async function GET() {
       if (!partnershipId) return "A vendor"
       const partnership = partnershipById.get(partnershipId)
       if (!partnership) return "A vendor"
-      const byId = partnership.partner_id ? partnerNameById.get(partnership.partner_id as string) : null
+      const byId = partnership.vendor_org_id ? partnerNameById.get(partnership.vendor_org_id as string) : null
       return byId || (partnership.partner_email as string | null) || "A vendor"
     }
 
@@ -216,7 +216,7 @@ export async function GET() {
       const scopeItemId = row.scope_item_id as string | null
       if (!projectId || !scopeItemId) continue
       const key = `${projectId}:${scopeItemId}`
-      const hasRecipient = Boolean(row.partner_id || row.recipient_email)
+      const hasRecipient = Boolean(row.vendor_org_id || row.recipient_email)
       const hasResponded = (responsesByInboxId.get(row.id as string) || []).length > 0
       const existing = rfpGroups.get(key)
       const deadline = (row.response_deadline as string | null) || null
@@ -358,7 +358,7 @@ export async function GET() {
     // a ghost row from a spreadsheet import still means the step is done). Step 3 checks
     // both RFP delivery mechanisms since a magic-link-only broadcast never touches
     // partner_rfp_inbox. Step 4 covers both delivery mechanisms too - partner_rfp_responses
-    // carries agency_id directly regardless of whether the bid came through the portal or
+    // carries lead_org_id directly regardless of whether the bid came through the portal or
     // a guest link.
     const checklist = {
       importPartners: partnerships.length > 0,
@@ -393,7 +393,7 @@ export async function GET() {
     }
     for (const row of inboxRows) {
       if (!row.viewed_at) continue
-      const partnerName = row.partner_id ? partnerNameById.get(row.partner_id as string) : null
+      const partnerName = row.vendor_org_id ? partnerNameById.get(row.vendor_org_id as string) : null
       const scopeName = (row.scope_item_name as string | null) || "a scope item"
       activity.push({
         id: `viewed:${row.id}`,

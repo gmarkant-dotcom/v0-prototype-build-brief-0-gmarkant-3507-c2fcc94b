@@ -44,7 +44,7 @@ export async function GET(
         .from('projects')
         .select('id')
         .eq('id', projectId)
-        .eq('agency_id', user.id)
+        .eq('org_id', user.id)
         .single()
       if (!project) {
         return NextResponse.json({ error: 'Project not found' }, { status: 404 })
@@ -63,9 +63,9 @@ export async function GET(
     } else if (acting === 'partner') {
       const { data: assignment } = await supabase
         .from('project_assignments')
-        .select('id, partnerships!inner(partner_id)')
+        .select('id, partnerships!inner(vendor_org_id)')
         .eq('project_id', projectId)
-        .eq('partnerships.partner_id', user.id)
+        .eq('partnerships.vendor_org_id', user.id)
         .single()
       if (!assignment) {
         return NextResponse.json({ error: 'Not assigned to this project' }, { status: 403 })
@@ -73,10 +73,10 @@ export async function GET(
       if (assignmentId) {
         const { data: scopedJoin } = await supabase
           .from('project_assignments')
-          .select('id, partnerships!inner(partner_id)')
+          .select('id, partnerships!inner(vendor_org_id)')
           .eq('id', assignmentId)
           .eq('project_id', projectId)
-          .eq('partnerships.partner_id', user.id)
+          .eq('partnerships.vendor_org_id', user.id)
           .maybeSingle()
         if (!scopedJoin) {
           return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
@@ -150,10 +150,10 @@ export async function POST(
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, acting })
 
     let counterpartUserId: string | null = null
-    let projectMeta: { title: string | null; agency_id: string | null } | null = null
+    let projectMeta: { title: string | null; org_id: string | null } | null = null
     const { data: projectForEmail } = await supabase
       .from('projects')
-      .select('title, agency_id')
+      .select('title, org_id')
       .eq('id', projectId)
       .maybeSingle()
     projectMeta = projectForEmail
@@ -164,7 +164,7 @@ export async function POST(
         .from('projects')
         .select('id')
         .eq('id', projectId)
-        .eq('agency_id', user.id)
+        .eq('org_id', user.id)
         .single()
 
       if (!project) {
@@ -173,30 +173,30 @@ export async function POST(
       if (assignmentId) {
         const { data: assignOnProject } = await supabase
           .from('project_assignments')
-          .select('id, partnerships!inner(partner_id)')
+          .select('id, partnerships!inner(vendor_org_id)')
           .eq('id', assignmentId)
           .eq('project_id', projectId)
           .maybeSingle()
         if (!assignOnProject) {
           return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
         }
-        counterpartUserId = (assignOnProject.partnerships as { partner_id?: string } | null)?.partner_id || null
+        counterpartUserId = (assignOnProject.partnerships as { vendor_org_id?: string } | null)?.vendor_org_id || null
       } else {
         const { data: anyAssign } = await supabase
           .from('project_assignments')
-          .select('id, partnerships!inner(partner_id)')
+          .select('id, partnerships!inner(vendor_org_id)')
           .eq('project_id', projectId)
           .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle()
-        counterpartUserId = (anyAssign?.partnerships as { partner_id?: string } | null)?.partner_id || null
+        counterpartUserId = (anyAssign?.partnerships as { vendor_org_id?: string } | null)?.vendor_org_id || null
       }
     } else if (acting === 'partner') {
       const { data: assignment } = await supabase
         .from('project_assignments')
-        .select('id, partnership:partnerships!inner(partner_id)')
+        .select('id, partnership:partnerships!inner(vendor_org_id)')
         .eq('project_id', projectId)
-        .eq('partnerships.partner_id', user.id)
+        .eq('partnerships.vendor_org_id', user.id)
         .single()
 
       if (!assignment) {
@@ -205,16 +205,16 @@ export async function POST(
       if (assignmentId) {
         const { data: scopedJoin } = await supabase
           .from('project_assignments')
-          .select('id, partnerships!inner(partner_id)')
+          .select('id, partnerships!inner(vendor_org_id)')
           .eq('id', assignmentId)
           .eq('project_id', projectId)
-          .eq('partnerships.partner_id', user.id)
+          .eq('partnerships.vendor_org_id', user.id)
           .maybeSingle()
         if (!scopedJoin) {
           return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
         }
       }
-      counterpartUserId = projectMeta?.agency_id || null
+      counterpartUserId = projectMeta?.org_id || null
     } else {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

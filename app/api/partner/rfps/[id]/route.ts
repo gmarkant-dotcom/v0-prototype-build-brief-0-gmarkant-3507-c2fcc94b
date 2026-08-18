@@ -30,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     const access = partnerCanAccessPartnerRfpInbox(
       {
-        partner_id: (inbox.partner_id as string | null) ?? null,
+        vendor_org_id: (inbox.vendor_org_id as string | null) ?? null,
         recipient_email: (inbox.recipient_email as string | null) ?? null,
         nda_gate_enforced: (inbox.nda_gate_enforced as boolean | null) ?? false,
         nda_confirmed_at: (inbox.nda_confirmed_at as string | null) ?? null,
@@ -65,7 +65,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         .from("partner_rfp_inbox")
         .update({ viewed_at: new Date().toISOString() })
         .eq("id", id)
-        .eq("partner_id", user.id)
+        .eq("vendor_org_id", user.id)
         .is("viewed_at", null)
         .select("*")
         .maybeSingle()
@@ -81,11 +81,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 
     let agencyMeetingUrl: string | null = null
-    if (inboxWithViewed.agency_id) {
+    if (inboxWithViewed.lead_org_id) {
       const { data: agencyProfile, error: agencyErr } = await supabase
         .from("profiles")
         .select("meeting_url")
-        .eq("id", inboxWithViewed.agency_id)
+        .eq("id", inboxWithViewed.lead_org_id)
         .maybeSingle()
       if (!agencyErr) {
         agencyMeetingUrl = (agencyProfile?.meeting_url as string | null) || null
@@ -109,7 +109,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       .from("partner_rfp_responses")
       .select("*")
       .eq("inbox_item_id", id)
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
       .maybeSingle()
 
     if (respQ.error) {

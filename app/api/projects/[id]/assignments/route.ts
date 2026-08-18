@@ -29,15 +29,30 @@ export async function GET(
 
     const { data: project } = await supabase
       .from('projects')
-      .select('agency_id')
+      .select('org_id')
       .eq('id', projectId)
       .single()
 
-    if (!project || project.agency_id !== user.id) {
+    if (!project || project.org_id !== user.id) {
       return NextResponse.json({ error: 'Project not found or access denied' }, { status: 404 })
     }
 
     const { data: assignments, error } = await supabase
+      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+      // resolves to nothing, and the new one resolves to `organizations`, which carries only
+      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+      // is exactly what this embed selects.
+      //
+      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+      // vendor company's email address under an organization model", which is the
+      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+      // cannot see this: the constraint name embeds the old column name with no word boundary
+      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+      // the rename complete with all thirteen of these still broken.
+      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
       .from('project_assignments')
       .select(`
         *,
@@ -79,11 +94,11 @@ export async function POST(
 
     const { data: project } = await supabase
       .from('projects')
-      .select('agency_id, status, title')
+      .select('org_id, status, title')
       .eq('id', projectId)
       .single()
 
-    if (!project || project.agency_id !== user.id) {
+    if (!project || project.org_id !== user.id) {
       return NextResponse.json({ error: 'Project not found or access denied' }, { status: 404 })
     }
 
@@ -95,16 +110,16 @@ export async function POST(
 
     const { data: partnership } = await supabase
       .from('partnerships')
-      .select('id, agency_id, partner_id, status')
+      .select('id, lead_org_id, vendor_org_id, status')
       .eq('id', partnershipId)
-      .eq('agency_id', user.id)
+      .eq('lead_org_id', user.id)
       .single()
 
     if (!partnership) {
       return NextResponse.json({ error: 'Partnership not found' }, { status: 404 })
     }
 
-    if (partnership.status !== 'active' || !partnership.partner_id) {
+    if (partnership.status !== 'active' || !partnership.vendor_org_id) {
       return NextResponse.json({ error: 'Partnership must be active with a connected partner account' }, { status: 400 })
     }
 
@@ -129,6 +144,21 @@ export async function POST(
     }
 
     const { data: assignment, error } = await supabase
+      // 079-EMBED-BREAK. The `profiles!<fkey>` embed inside the select below traverses a
+      // foreign key that 079 REPOINTS, and this is not a rename problem - it is a shape problem.
+      // After 079, partnerships.vendor_org_id references organizations(id) rather than profiles(id), and
+      // the constraint is rebuilt as partnerships_vendor_org_id_org_fkey. So the old constraint name
+      // resolves to nothing, and the new one resolves to `organizations`, which carries only
+      // id / name / is_lead_agency / is_vendor - no email, no full_name, no company_name, which
+      // is exactly what this embed selects.
+      //
+      // LEFT UNCHANGED AND UNRESOLVED ON PURPOSE. Rewriting it means answering "what is a
+      // vendor company's email address under an organization model", which is the
+      // resolveOrgNotificationRecipients() product ruling, not a substitution. The grep guard
+      // cannot see this: the constraint name embeds the old column name with no word boundary
+      // in front of it, so scripts/check-identity-columns.mjs never matched it and will report
+      // the rename complete with all thirteen of these still broken.
+      // See docs/079-rename-execution-report.md, "The thirteen broken embeds".
       .from('project_assignments')
       .insert(insertPayload)
       .select(`
@@ -161,7 +191,7 @@ export async function POST(
 
     await notifyProjectAssignment(
       supabase,
-      partnership.partner_id,
+      partnership.vendor_org_id,
       projectName,
       agencyName,
       assignment.id,
@@ -212,8 +242,8 @@ export async function PATCH(
       .from('project_assignments')
       .select(`
         *,
-        partnership:partnerships(agency_id, partner_id),
-        project:projects(id, agency_id, title, status)
+        partnership:partnerships(lead_org_id, vendor_org_id),
+        project:projects(id, org_id, title, status)
       `)
       .eq('id', assignmentId)
       .eq('project_id', projectId)
@@ -223,8 +253,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
     }
 
-    const isAgency = assignment.project.agency_id === user.id
-    const isPartner = assignment.partnership.partner_id === user.id
+    const isAgency = assignment.project.org_id === user.id
+    const isPartner = assignment.partnership.vendor_org_id === user.id
 
     if (!isAgency && !isPartner) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
@@ -258,7 +288,7 @@ export async function PATCH(
 
       await notifyProjectResponse(
         supabase,
-        assignment.partnership.agency_id,
+        assignment.partnership.lead_org_id,
         partnerName,
         projectTitle,
         status === 'accepted',
@@ -268,7 +298,7 @@ export async function PATCH(
       const { data: agencyUser } = await supabase
         .from('profiles')
         .select('email, company_name, full_name')
-        .eq('id', assignment.partnership.agency_id)
+        .eq('id', assignment.partnership.lead_org_id)
         .single()
 
       if (agencyUser?.email) {
@@ -331,7 +361,7 @@ export async function PATCH(
             .from('projects')
             .update({ status: 'in_progress', updated_at: updates.updated_at as string })
             .eq('id', projectId)
-            .eq('agency_id', user.id)
+            .eq('org_id', user.id)
           if (projUpdErr) {
             console.error('[api] PATCH assignment awarded: project status bump failed', {
               projectId,
@@ -342,7 +372,7 @@ export async function PATCH(
         }
       }
 
-      if (status === 'awarded' && assignment.partnership.partner_id) {
+      if (status === 'awarded' && assignment.partnership.vendor_org_id) {
         const { data: agencyProfile } = await supabase
           .from('profiles')
           .select('company_name, full_name')
@@ -354,7 +384,7 @@ export async function PATCH(
 
         await notifyProjectAwarded(
           supabase,
-          assignment.partnership.partner_id,
+          assignment.partnership.vendor_org_id,
           projectTitle,
           agencyName,
           projectId
@@ -363,7 +393,7 @@ export async function PATCH(
         const { data: partnerRow } = await supabase
           .from('profiles')
           .select('email, full_name, company_name')
-          .eq('id', assignment.partnership.partner_id)
+          .eq('id', assignment.partnership.vendor_org_id)
           .single()
 
         if (partnerRow?.email) {

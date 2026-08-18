@@ -82,7 +82,7 @@ export async function generateAndSaveBidSummary(
     .from("partner_rfp_responses")
     .update(patch)
     .eq("id", responseId)
-    .eq("agency_id", agencyId)
+    .eq("lead_org_id", agencyId)
     .select("ai_summary_short, ai_summary_detailed, ai_summary_generated_at")
     .single()
   if (updateErr) {

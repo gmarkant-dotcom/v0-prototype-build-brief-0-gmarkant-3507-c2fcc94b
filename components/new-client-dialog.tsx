@@ -32,7 +32,7 @@ export type CreatedClient = { id: string; name: string }
  *
  * Duplicate names WARN and link, they never block. Two genuinely different clients can share a
  * name, and an agency mid-rename should not be stopped by a uniqueness rule; migration 077's
- * index on (agency_id, lower(name)) is deliberately not UNIQUE for the same reason.
+ * index on (org_id, lower(name)) is deliberately not UNIQUE for the same reason.
  */
 export function NewClientDialog({
   trigger,

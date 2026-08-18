@@ -40,7 +40,7 @@ export function RequestInvitationModal({ isOpen, onClose, partnerName }: Request
       const { error: insertError } = await supabase
         .from('invitation_requests')
         .insert({
-          partner_id: user.id,
+          vendor_org_id: user.id,
           agency_email: agencyEmail.toLowerCase().trim(),
           agency_name: agencyName.trim(),
           message: message.trim() || null,

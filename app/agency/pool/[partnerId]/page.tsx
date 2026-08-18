@@ -233,8 +233,8 @@ export default function AgencyPartnerProfilePage() {
         const { data: ownVouch } = await supabase
           .from("partner_vouches")
           .select("id")
-          .eq("voucher_agency_id", user.id)
-          .eq("vouched_partner_id", partnerId)
+          .eq("lead_org_id", user.id)
+          .eq("vendor_org_id", partnerId)
           .maybeSingle()
         if (!cancelled) setHasVouched(!!ownVouch)
       } catch {}
@@ -252,11 +252,11 @@ export default function AgencyPartnerProfilePage() {
       if (!user) return
       if (hasVouched) {
         await supabase.from("partner_vouches").delete()
-          .eq("voucher_agency_id", user.id).eq("vouched_partner_id", partnerId)
+          .eq("lead_org_id", user.id).eq("vendor_org_id", partnerId)
         setHasVouched(false)
         setVouchCount(c => Math.max(0, c - 1))
       } else {
-        await supabase.from("partner_vouches").insert({ voucher_agency_id: user.id, vouched_partner_id: partnerId })
+        await supabase.from("partner_vouches").insert({ lead_org_id: user.id, vendor_org_id: partnerId })
         setHasVouched(true)
         setVouchCount(c => c + 1)
       }

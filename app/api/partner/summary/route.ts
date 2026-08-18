@@ -31,7 +31,7 @@ export async function GET() {
     const { count: agencyRelationships, error: pErr } = await supabase
       .from("partnerships")
       .select("*", { count: "exact", head: true })
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
       .eq("status", "active")
 
     if (pErr) {
@@ -42,7 +42,7 @@ export async function GET() {
     const { count: bidsSubmitted, error: bErr } = await supabase
       .from("partner_rfp_responses")
       .select("*", { count: "exact", head: true })
-      .eq("partner_id", user.id)
+      .eq("vendor_org_id", user.id)
       .neq("status", "draft")
 
     if (bErr) {
@@ -50,7 +50,7 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to load summary" }, { status: 500, headers: noStoreHeaders })
     }
 
-    const { data: pships, error: idsErr } = await supabase.from("partnerships").select("id").eq("partner_id", user.id)
+    const { data: pships, error: idsErr } = await supabase.from("partnerships").select("id").eq("vendor_org_id", user.id)
 
     if (idsErr) {
       console.error("[partner/summary] partnership ids", idsErr)

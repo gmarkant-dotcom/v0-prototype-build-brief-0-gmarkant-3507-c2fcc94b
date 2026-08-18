@@ -49,17 +49,17 @@ export async function GET(req: NextRequest) {
     })
 
     // Check partnerships — bidirectional: viewer may be agency or partner. Only fetch
-    // partner_id/agency_id/status, never expose full list to either party.
+    // vendor_org_id/lead_org_id/status, never expose full list to either party.
     const { data: allPartnerships } = await supabase
       .from("partnerships")
-      .select("agency_id, partner_id, status")
-      .or(`agency_id.eq.${user.id},partner_id.eq.${user.id}`)
+      .select("lead_org_id, vendor_org_id, status")
+      .or(`lead_org_id.eq.${user.id},vendor_org_id.eq.${user.id}`)
 
     // "My Network" (any partnership status) vs email-unmask eligibility (active only).
     const partnerIdsWithPartnership = new Set<string>()
     const activePartnerIds = new Set<string>()
     for (const p of allPartnerships ?? []) {
-      const otherId = (p.agency_id === user.id ? p.partner_id : p.agency_id) as string | null
+      const otherId = (p.lead_org_id === user.id ? p.vendor_org_id : p.lead_org_id) as string | null
       if (!otherId) continue
       partnerIdsWithPartnership.add(otherId)
       if (isActivePartnership(p)) activePartnerIds.add(otherId)

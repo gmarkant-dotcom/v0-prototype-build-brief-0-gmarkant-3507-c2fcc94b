@@ -16,7 +16,7 @@
  * without granting row access:
  *
  *   partner_vouch_count(p_partner_id uuid)      -> bigint
- *   partner_vouch_counts(p_partner_ids uuid[])  -> (vouched_partner_id, vouch_count)
+ *   partner_vouch_counts(p_partner_ids uuid[])  -> (vendor_org_id, vouch_count)
  *
  * 082 phase 2 then drops the `USING (true)` policy. The STOP GATE in that file
  * exists because dropping the policy does not make a counting query FAIL - it
@@ -58,8 +58,8 @@
  *
  * 079 SEAM
  * ---------------------------------------------------------------------------
- * `partner_vouches.vouched_partner_id` becomes `vendor_org_id` and
- * `voucher_agency_id` becomes `lead_org_id`. The fallback query below names
+ * `partner_vouches.vendor_org_id` and `lead_org_id` are the post-079 names of the two
+ * pre-079 vouched-partner / voucher-agency columns. The fallback query below names
  * the old column and is marked "079:" at the site. The RPC parameter names do
  * not change; what changes is that the id passed becomes an organization id
  * rather than a profile id.
@@ -115,11 +115,12 @@ export async function fetchVouchCount(supabase: VouchCapableClient, partnerId: s
   // 082-FALLBACK: the RPC does not exist yet, so 082 phase 1 has not been applied
   // and the `USING (true)` policy is still in place. Delete this block once phase 2
   // is applied and verified.
-  // 079: vouched_partner_id becomes vendor_org_id.
+  // 079: this names partner_vouches.vendor_org_id - the pre-079 vouched-partner column -
+  // and the id passed is an organization id rather than a profile id.
   const { count, error: tableError } = (await supabase
     .from("partner_vouches")
     .select("*", { count: "exact", head: true })
-    .eq("vouched_partner_id", partnerId)) as { count: number | null; error: PostgrestErrorish }
+    .eq("vendor_org_id", partnerId)) as { count: number | null; error: PostgrestErrorish }
   if (tableError) {
     console.error("[vouch-counts] partner_vouches count fallback failed", {
       code: tableError.code,
@@ -144,8 +145,13 @@ export async function fetchVouchCounts(
   const { data, error } = await supabase.rpc("partner_vouch_counts", { p_partner_ids: partnerIds })
 
   if (!error) {
-    for (const row of (data as Array<{ vouched_partner_id?: string; vouch_count?: number | string }> | null) ?? []) {
-      const pid = row?.vouched_partner_id
+    // 079-DEPENDENCY: this reads `vendor_org_id` off the RPC result, which means the
+    // 082 function must have been RECREATED after 079. As authored, partner_vouch_counts()
+    // declares its returned column under the PRE-079 vouched-partner name, not this one.
+    // Re-running 082 phase 1 after 079 is a required step of the release runbook.
+    // If it is skipped, every key here is undefined and every count reads 0, silently.
+    for (const row of (data as Array<{ vendor_org_id?: string; vouch_count?: number | string }> | null) ?? []) {
+      const pid = row?.vendor_org_id
       if (!pid) continue
       const n = Number(row.vouch_count)
       counts.set(pid, Number.isFinite(n) ? n : 0)
@@ -159,12 +165,13 @@ export async function fetchVouchCounts(
   }
 
   // 082-FALLBACK: see fetchVouchCount above. Delete once 082 phase 2 is applied.
-  // 079: vouched_partner_id becomes vendor_org_id.
+  // 079: this names partner_vouches.vendor_org_id - the pre-079 vouched-partner column -
+  // and the id passed is an organization id rather than a profile id.
   const { data: rows, error: tableError } = (await supabase
     .from("partner_vouches")
-    .select("vouched_partner_id")
-    .in("vouched_partner_id", partnerIds)) as {
-    data: Array<{ vouched_partner_id?: string }> | null
+    .select("vendor_org_id")
+    .in("vendor_org_id", partnerIds)) as {
+    data: Array<{ vendor_org_id?: string }> | null
     error: PostgrestErrorish
   }
   if (tableError) {
@@ -175,7 +182,7 @@ export async function fetchVouchCounts(
     return counts
   }
   for (const row of rows ?? []) {
-    const pid = row?.vouched_partner_id
+    const pid = row?.vendor_org_id
     if (!pid) continue
     counts.set(pid, (counts.get(pid) ?? 0) + 1)
   }

@@ -16,7 +16,7 @@ export async function GET() {
   const { count, error: countErr } = await supabase
     .from("bid_scoring_criteria")
     .select("id", { count: "exact", head: true })
-    .eq("agency_id", userId)
+    .eq("org_id", userId)
   if (countErr) {
     console.error("[api] failure", { route, method: "GET", message: countErr.message })
     return NextResponse.json({ error: "Failed to load criteria" }, { status: 500 })
@@ -27,7 +27,7 @@ export async function GET() {
       .from("bid_scoring_criteria")
       .insert(
         DEFAULT_SCORING_CRITERIA.map((c, i) => ({
-          agency_id: userId,
+          org_id: userId,
           name: c.name,
           description: c.description,
           category: c.category,
@@ -42,7 +42,7 @@ export async function GET() {
     }
 
     const { error: templateSeedErr } = await supabase.from("bid_scoring_templates").insert({
-      agency_id: userId,
+      org_id: userId,
       name: DEFAULT_TEMPLATE_NAME,
       description: DEFAULT_TEMPLATE_DESCRIPTION,
       criteria_weights: (seeded || []).map((c) => ({ criterion_id: c.id, weight: c.default_weight })),
@@ -58,13 +58,13 @@ export async function GET() {
     supabase
       .from("bid_scoring_criteria")
       .select("id, name, description, category, default_weight, sort_order, is_active")
-      .eq("agency_id", userId)
+      .eq("org_id", userId)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase
       .from("bid_scoring_templates")
       .select("id, name, description, criteria_weights, is_default, created_at")
-      .eq("agency_id", userId)
+      .eq("org_id", userId)
       .order("created_at", { ascending: true }),
   ])
   if (criteriaErr) {
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
       .from("bid_scoring_criteria")
       .update(patch)
       .eq("id", id)
-      .eq("agency_id", userId)
+      .eq("org_id", userId)
       .select("id, name, description, category, default_weight, sort_order, is_active")
       .maybeSingle()
     if (updateErr) {
@@ -128,12 +128,12 @@ export async function POST(req: Request) {
   const { count: existingCount } = await supabase
     .from("bid_scoring_criteria")
     .select("id", { count: "exact", head: true })
-    .eq("agency_id", userId)
+    .eq("org_id", userId)
 
   const { data: created, error: insertErr } = await supabase
     .from("bid_scoring_criteria")
     .insert({
-      agency_id: userId,
+      org_id: userId,
       name,
       description,
       category,

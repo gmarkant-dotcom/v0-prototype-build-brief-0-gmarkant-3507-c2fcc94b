@@ -32,8 +32,8 @@ async function loadVendorTrackRecord(
   const { data: partnerships } = await supabase
     .from("partnerships")
     .select("id")
-    .eq("agency_id", agencyId)
-    .eq("partner_id", partnerId)
+    .eq("lead_org_id", agencyId)
+    .eq("vendor_org_id", partnerId)
   const partnershipIds = (partnerships || []).map((p) => p.id as string)
 
   let assignmentCount = 0
@@ -56,9 +56,9 @@ async function loadVendorTrackRecord(
 
   const { data: pastEvals } = await supabase
     .from("bid_evaluations")
-    .select("composite_score, response_id, partner_rfp_responses!inner(partner_id, agency_id)")
-    .eq("partner_rfp_responses.agency_id", agencyId)
-    .eq("partner_rfp_responses.partner_id", partnerId)
+    .select("composite_score, response_id, partner_rfp_responses!inner(vendor_org_id, lead_org_id)")
+    .eq("partner_rfp_responses.lead_org_id", agencyId)
+    .eq("partner_rfp_responses.vendor_org_id", partnerId)
     .neq("response_id", currentResponseId)
     .not("composite_score", "is", null)
 
@@ -153,14 +153,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "Agency only" }, { status: 403 })
     }
 
-    const usageCheck = await checkUsageLimit(agencyEntitlementId(user.id), supabase, "ai_analyses")
+    const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const { data: response, error: responseErr } = await supabase
       .from("partner_rfp_responses")
-      .select("id, partner_id")
+      .select("id, vendor_org_id")
       .eq("id", responseId)
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .maybeSingle()
     if (responseErr) {
       console.error("[api] failure", { route, method: "POST", message: responseErr.message })
@@ -171,7 +171,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     const { data: criteria, error: criteriaErr } = await supabase
       .from("bid_scoring_criteria")
       .select("id, name, description, default_weight")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
     if (criteriaErr) {
@@ -201,7 +201,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     const { data: evaluation, error: evalUpsertErr } = await supabase
       .from("bid_evaluations")
       .upsert(
-        { response_id: responseId, agency_id: user.id, status: "in_progress", updated_at: new Date().toISOString() },
+        { response_id: responseId, org_id: user.id, status: "in_progress", updated_at: new Date().toISOString() },
         { onConflict: "response_id", ignoreDuplicates: false }
       )
       .select("id, status")
@@ -227,10 +227,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       .from("bid_decompositions")
       .select("narrative_summary, line_items")
       .eq("response_id", responseId)
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .maybeSingle()
 
-    const trackRecord = await loadVendorTrackRecord(supabase, user.id, (response.partner_id as string) || null, responseId)
+    const trackRecord = await loadVendorTrackRecord(supabase, user.id, (response.vendor_org_id as string) || null, responseId)
 
     const criteriaList = activeCriteria
       .map((c, i) => `${i + 1}. ${c.name}: ${c.description || "No description provided."}`)
@@ -365,7 +365,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       supabase.from("partner_rfp_responses").update({ composite_score: composite }).eq("id", responseId),
     ])
 
-    await incrementAiAnalysis(agencyEntitlementId(user.id), supabase)
+    await incrementAiAnalysis(await agencyEntitlementId(user.id, supabase), supabase)
     return NextResponse.json({ scores: allScores || [], composite_score: composite })
   } catch (error) {
     console.error("[api] failure", {

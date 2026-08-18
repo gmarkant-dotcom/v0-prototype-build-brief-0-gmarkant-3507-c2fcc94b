@@ -31,7 +31,7 @@ async function assertProjectOwned(
     .from("projects")
     .select("id")
     .eq("id", projectId)
-    .eq("agency_id", agencyId)
+    .eq("org_id", agencyId)
     .maybeSingle()
   if (error || !data) return false
   return true
@@ -49,11 +49,11 @@ export async function GET() {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
-    // Auth user id must match projects.agency_id under RLS (same JWT as createClient).
+    // Auth user id must match projects.org_id under RLS (same JWT as createClient).
     const { data: projectRows, error: projErr } = await supabase
       .from("projects")
       .select("*")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
       .order("created_at", { ascending: false })
 
     // Temporary debug: raw PostgREST outcome for projects (dev or MSA_DEBUG_PROJECTS=1).
@@ -65,7 +65,7 @@ export async function GET() {
           : null,
         data: projectRows,
         dataRowCount: projectRows?.length ?? 0,
-        sampleRowsAgencyId: (projectRows || []).slice(0, 3).map((p) => (p as { agency_id?: string }).agency_id),
+        sampleRowsAgencyId: (projectRows || []).slice(0, 3).map((p) => (p as { org_id?: string }).org_id),
       })
     }
 
@@ -127,7 +127,7 @@ export async function GET() {
       const { data: respRows, error: respErr } = await supabase
         .from("partner_rfp_responses")
         .select("id, partner_display_name, inbox_item_id, budget_proposal")
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
         .eq("status", "awarded")
 
       if (respErr) {
@@ -155,7 +155,7 @@ export async function GET() {
         const { data: inboxRows, error: inboxErr } = await supabase
           .from("partner_rfp_inbox")
           .select("id, project_id, partnership_id, scope_item_name, estimated_budget")
-          .eq("agency_id", user.id)
+          .eq("lead_org_id", user.id)
           .in("id", inboxIds)
 
         if (inboxErr) {
@@ -220,14 +220,14 @@ export async function GET() {
     if (milestonePartnershipIds.length > 0) {
       const { data: partnershipRows } = await supabase
         .from("partnerships")
-        .select("id, partner_id")
-        .eq("agency_id", user.id)
+        .select("id, vendor_org_id")
+        .eq("lead_org_id", user.id)
         .in("id", milestonePartnershipIds)
 
       const partnerIds = [
         ...new Set(
           (partnershipRows || [])
-            .map((r) => (r.partner_id != null ? String(r.partner_id) : null))
+            .map((r) => (r.vendor_org_id != null ? String(r.vendor_org_id) : null))
             .filter((v: unknown): v is string => Boolean(v))
         ),
       ]
@@ -251,7 +251,7 @@ export async function GET() {
       }
 
       for (const row of partnershipRows || []) {
-        const partnerId = row.partner_id != null ? String(row.partner_id) : null
+        const partnerId = row.vendor_org_id != null ? String(row.vendor_org_id) : null
         const profile = partnerId ? profileById.get(partnerId) : null
         const label =
           (profile?.company_name || "").trim() ||
@@ -268,7 +268,7 @@ export async function GET() {
       const { data: responseRows } = await supabase
         .from("partner_rfp_responses")
         .select("id, partner_display_name")
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
         .in("id", milestoneResponseIds)
       for (const row of responseRows || []) {
         partnerNameByResponse.set(
@@ -293,7 +293,7 @@ export async function GET() {
       const { data: cfRows, error: cfErr } = await supabase
         .from("client_cash_flow")
         .select("id, project_id, label, amount, currency, expected_date, status, received_at, created_at")
-        .eq("agency_id", user.id)
+        .eq("org_id", user.id)
         .in("project_id", agencyProjectIds)
         .order("expected_date", { ascending: true })
         .order("created_at", { ascending: true })
@@ -444,7 +444,7 @@ export async function POST(req: Request) {
         .from("partner_rfp_responses")
         .select("id, inbox_item_id")
         .eq("id", response_id)
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
         .eq("status", "awarded")
         .maybeSingle()
       if (rErr || !resp) {
@@ -465,7 +465,7 @@ export async function POST(req: Request) {
         .from("partnerships")
         .select("id")
         .eq("id", partnership_id)
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
         .maybeSingle()
       if (!ship) {
         return NextResponse.json({ error: "Invalid partnership" }, { status: 400, headers: noStore })
@@ -519,7 +519,7 @@ export async function PATCH(req: Request) {
     const { data: agencyProjectRows, error: apErr } = await supabase
       .from("projects")
       .select("id")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
     if (apErr) {
       console.error("[api/agency/msa/milestones] PATCH agency projects", apErr)
       return NextResponse.json({ error: "Failed to verify projects" }, { status: 500, headers: noStore })
@@ -608,7 +608,7 @@ export async function DELETE(req: Request) {
     const { data: agencyProjects, error: apErr } = await supabase
       .from("projects")
       .select("id")
-      .eq("agency_id", user.id)
+      .eq("org_id", user.id)
     if (apErr) {
       console.error("[api/agency/msa/milestones] DELETE agency projects", apErr)
       return NextResponse.json({ error: "Failed to verify projects" }, { status: 500, headers: noStore })

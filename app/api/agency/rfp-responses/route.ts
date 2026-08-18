@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     }
     console.log("[api] start", { route, method: "GET", userId: user.id, role: profile.role, projectId: projectIdParam || null })
 
-    // RLS: policy "Agencies select RFP responses they own" — USING (agency_id = auth.uid())
+    // RLS: policy "Agencies select RFP responses they own" — USING (lead_org_id = auth.uid())
     // Optional project-scoped filtering is applied via partner_rfp_inbox.project_id, unioned with
     // guest (magic-link) responses scoped via rfp_magic_tokens.project_id — guest rows have no
     // inbox_item_id, so they'd otherwise be silently excluded by the inbox-scoped filter below.
@@ -43,11 +43,11 @@ export async function GET(request: Request) {
     let magicResponseIdsForProject: string[] = []
     if (projectIdParam) {
       const [{ data: scopedInboxes, error: inboxErr }, { data: scopedMagicTokens, error: magicErr }] = await Promise.all([
-        supabase.from("partner_rfp_inbox").select("id").eq("agency_id", user.id).eq("project_id", projectIdParam),
+        supabase.from("partner_rfp_inbox").select("id").eq("lead_org_id", user.id).eq("project_id", projectIdParam),
         supabase
           .from("rfp_magic_tokens")
           .select("response_id")
-          .eq("agency_id", user.id)
+          .eq("org_id", user.id)
           .eq("project_id", projectIdParam)
           .not("response_id", "is", null),
       ])
@@ -81,9 +81,9 @@ export async function GET(request: Request) {
     let responsesQuery = supabase
       .from("partner_rfp_responses")
       .select(
-        "id, inbox_item_id, partner_id, partner_display_name, status, budget_proposal, proposal_text, timeline_proposal, payment_terms, terms_disclosure, attachments, business_criteria_responses, agency_feedback, feedback_updated_at, submitted_at, created_at, updated_at, ai_summary_short, ai_summary_detailed, ai_summary_generated_at, composite_score"
+        "id, inbox_item_id, vendor_org_id, partner_display_name, status, budget_proposal, proposal_text, timeline_proposal, payment_terms, terms_disclosure, attachments, business_criteria_responses, agency_feedback, feedback_updated_at, submitted_at, created_at, updated_at, ai_summary_short, ai_summary_detailed, ai_summary_generated_at, composite_score"
       )
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .order("updated_at", { ascending: false })
       .limit(500)
     if (inboxIdsForProject) {
@@ -115,7 +115,7 @@ export async function GET(request: Request) {
       const { data: phase2Rows, error: phase2Err } = await supabase
         .from("partner_rfp_responses")
         .select("id, budget_lines, proposal_sections")
-        .eq("agency_id", user.id)
+        .eq("lead_org_id", user.id)
         .in("id", list.map((r) => r.id as string))
       if (phase2Err) {
         console.warn("[agency/rfp-responses] structured bid columns unavailable, rendering without them", {
@@ -200,9 +200,9 @@ export async function GET(request: Request) {
     let inboxQuery = supabase
       .from("partner_rfp_inbox")
       .select(
-        "id, project_id, partnership_id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, partner_id, recipient_email, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at"
+        "id, project_id, partnership_id, scope_item_name, scope_item_description, created_at, updated_at, response_deadline, partner_intent, intent_set_at, master_rfp_json, status, vendor_org_id, recipient_email, invite_token_expires_at, claimed_at, nda_gate_enforced, nda_confirmed_at"
       )
-      .eq("agency_id", user.id)
+      .eq("lead_org_id", user.id)
       .order("created_at", { ascending: false })
     if (projectIdParam) inboxQuery = inboxQuery.eq("project_id", projectIdParam)
     const { data: allInboxes, error: allInboxErr } = await inboxQuery
@@ -218,7 +218,7 @@ export async function GET(request: Request) {
     }
 
     const inboxIds = [...new Set((allInboxes || []).map((r) => r.id as string))]
-    const partnerIds = [...new Set((allInboxes || []).map((r) => r.partner_id).filter(Boolean) as string[])]
+    const partnerIds = [...new Set((allInboxes || []).map((r) => r.vendor_org_id).filter(Boolean) as string[])]
     let profileById: Record<string, { full_name: string | null; company_name: string | null; email: string | null }> = {}
     if (partnerIds.length > 0) {
       const { data: partnerProfiles, error: partnerProfilesErr } = await supabase
@@ -274,9 +274,9 @@ export async function GET(request: Request) {
     const merged = list.map((r) => {
       const inboxRow = inboxById[r.inbox_item_id as string] ?? null
       const magicToken = !r.inbox_item_id ? magicTokenByResponseId[r.id as string] ?? null : null
-      const pid = inboxRow ? (inboxRow as Record<string,unknown>).partner_id as string | null : null
+      const pid = inboxRow ? (inboxRow as Record<string,unknown>).vendor_org_id as string | null : null
       const pr = pid ? profileById[pid] : null
-      const displayName = pr?.company_name || pr?.full_name || pr?.email || (r.partner_id ? profileById[r.partner_id as string]?.company_name || profileById[r.partner_id as string]?.full_name || profileById[r.partner_id as string]?.email : null) || 'Vendor'
+      const displayName = pr?.company_name || pr?.full_name || pr?.email || (r.vendor_org_id ? profileById[r.vendor_org_id as string]?.company_name || profileById[r.vendor_org_id as string]?.full_name || profileById[r.vendor_org_id as string]?.email : null) || 'Vendor'
       const magicProjectMeta = magicToken?.project_id ? projectMetaById[magicToken.project_id] : null
       // Requirements live on partner_rfp_inbox.master_rfp_json for partner bids, or on
       // rfp_magic_tokens.business_criteria_required for guest bids (no inbox row exists there).
@@ -438,7 +438,7 @@ export async function GET(request: Request) {
     const awaitingRows = (allInboxes || [])
       .filter((i) => !existingInboxIds.has(i.id as string))
       .map((i) => {
-        const pid = (i.partner_id as string | null) || null
+        const pid = (i.vendor_org_id as string | null) || null
         const pr = pid ? profileById[pid] : null
         const displayName =
           pr?.company_name || pr?.full_name || pr?.email || (i.recipient_email as string | null) || "Vendor"

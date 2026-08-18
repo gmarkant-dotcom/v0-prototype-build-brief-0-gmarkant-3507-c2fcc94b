@@ -28,7 +28,7 @@ type AgencyProfile = {
 }
 
 type AccessRequest = {
-  agency_id: string
+  lead_org_id: string
   status: "pending" | "approved" | "declined"
 }
 
@@ -65,7 +65,7 @@ export default function PartnerMarketplacePage() {
     const load = async () => {
       if (isDemo) {
         setAgencies(demoAgencies)
-        setRequests([{ agency_id: "demo-agency-2", status: "pending" }])
+        setRequests([{ lead_org_id: "demo-agency-2", status: "pending" }])
         setLoading(false)
         return
       }
@@ -83,7 +83,7 @@ export default function PartnerMarketplacePage() {
 
         const [discoverableRes, myReqRes] = await Promise.all([
           fetch("/api/marketplace/discoverable?role=agency", { cache: "no-store" }),
-          supabase.from("partner_access_requests").select("agency_id, status").eq("partner_id", user.id),
+          supabase.from("partner_access_requests").select("lead_org_id, status").eq("vendor_org_id", user.id),
         ])
 
         const discoverablePayload = await discoverableRes.json().catch(() => ({}))
@@ -109,11 +109,11 @@ export default function PartnerMarketplacePage() {
     })
   }, [agencies, search])
 
-  const requestStatus = (agencyId: string) => requests.find((r) => r.agency_id === agencyId)?.status
+  const requestStatus = (agencyId: string) => requests.find((r) => r.lead_org_id === agencyId)?.status
 
   const requestConnection = async (agencyId: string) => {
     if (isDemo) {
-      setRequests((prev) => [...prev, { agency_id: agencyId, status: "pending" }])
+      setRequests((prev) => [...prev, { lead_org_id: agencyId, status: "pending" }])
       return
     }
     setSubmittingId(agencyId)
@@ -125,12 +125,12 @@ export default function PartnerMarketplacePage() {
       if (status) return
       const supabase = createClient()
       const { error } = await supabase.from("partner_access_requests").insert({
-        partner_id: userId,
-        agency_id: agencyId,
+        vendor_org_id: userId,
+        lead_org_id: agencyId,
         status: "pending",
       })
       if (error) return
-      setRequests((prev) => [...prev, { agency_id: agencyId, status: "pending" }])
+      setRequests((prev) => [...prev, { lead_org_id: agencyId, status: "pending" }])
     } finally {
       setSubmittingId(null)
     }

@@ -29,26 +29,37 @@ import { actingRole, canActAs } from "./acting-role"
  *   - Adding a colleague costs nothing. A member consumes the organization's quota.
  *
  * ---------------------------------------------------------------------------
- * WHAT MIGRATION 079 CHANGES HERE
+ * THE 079 SEAM, RESOLVED
  *
- * The organization does not exist yet. There is no `org_id` column until 079. Until then
- * the paying entity IS the lead agency's own profile row, which is also what every
- * agency-scoped RLS policy and every `usage_tracking.agency_id` row already keys on -
- * one user, one agency, one payer.
+ * This file used to say "the organization does not exist yet". On this branch it does:
+ * migration 079 creates `organizations` and `org_members`, renames every company
+ * identity column, and `usage_tracking` is keyed on `org_id`. Two of the three seams
+ * this file carried are now closed and the third is blocked on a column 079 does not
+ * create. Stated one at a time:
  *
- * At 079 that stops being true and this file is the seam:
- *
- *   - `agencyEntitlementId()` starts resolving auth.uid() to organizations.id through
- *     org_members, instead of returning the user id unchanged. Every caller of
- *     checkUsageLimit / incrementAiAnalysis / checkUsageLimits must route through it so
- *     a colleague spends the organization's quota rather than opening a fresh one of
+ *   - CLOSED. `agencyEntitlementId()` now resolves auth.uid() to an organizations.id
+ *     through org_members instead of returning the user id unchanged. It is async, and
+ *     every caller of checkUsageLimit / incrementAiAnalysis / checkUsageLimits awaits it,
+ *     so a colleague spends the organization's quota rather than opening a fresh one of
  *     their own.
- *   - `hasAgencyEntitlement()` starts reading the organization's entitlement instead of
- *     `profiles.is_paid`, so every member of a paying organization is entitled without
- *     each of them carrying their own flag.
+ *   - CLOSED. `resolveCallerOrgIds()` is new. It is the membership resolution the 24
+ *     service-role routes need: those routes bypass RLS entirely, so the policy rewrite
+ *     in 079 protects none of them, and `.eq("org_id", session.uid)` stops meaning
+ *     "my company's rows" the moment a company has two members. See
+ *     docs/079-rename-plan.md section 6.
+ *   - NOT CLOSED, AND NOT CLOSEABLE HERE. `hasAgencyEntitlement()` still reads
+ *     `profiles.is_paid`. 079 gives `organizations` exactly four non-timestamp columns -
+ *     id, name, is_lead_agency, is_vendor - and NONE of them is an entitlement. There is
+ *     no organization-level `is_paid` to read, so moving this function to the
+ *     organization would mean inventing a column, which is a migration and a billing
+ *     decision, not a rename. Recorded in docs/079-rename-execution-report.md rather
+ *     than guessed at.
  *
- * The full list of call sites 079 has to revisit is in docs/m1-prework-report.md, Item 2.
- * Every one of them is marked in code with the string "079:".
+ *     The consequence, stated plainly so it is not discovered: billing is ruled PER
+ *     ORGANIZATION, but until that column exists entitlement is still per profile row.
+ *     A colleague added to a paying organization will NOT be entitled until either
+ *     their own profile carries is_paid, or a migration moves entitlement onto
+ *     `organizations`. That is a phase-two blocker, not a rename bug.
  */
 
 export type EntitlementProfile =
@@ -70,15 +81,85 @@ export function isDemoDeployment(): boolean {
 }
 
 /**
+ * A Supabase client, narrowed to the one query these resolvers make. Deliberately loose
+ * for the same reason as lib/vouch-counts.ts: naming the real builder type drags the whole
+ * PostgREST type graph in and tsc reports TS2589. There are no generated `Database` types
+ * in this repository for a strict signature to have checked against.
+ */
+export type OrgLookupClient = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  from: (table: string) => any
+}
+
+/**
+ * Every organization this user belongs to.
+ *
+ * THIS IS THE FUNCTION THE SERVICE-ROLE ROUTES NEED. A client built with
+ * SUPABASE_SERVICE_ROLE_KEY bypasses row level security completely, so the 079 policy
+ * rewrite does not protect any of them - the only thing between a request and the whole
+ * table is the hand-written check in the route. Before 079 those checks were correct by
+ * an accident: `org_id = <session uid>` was simultaneously the ownership check and,
+ * coincidentally, the membership check, because one user was one company. It is not any
+ * more.
+ *
+ * Reads `org_members` directly rather than calling the `current_user_org_ids()` RPC that
+ * 079 creates, because that function resolves `auth.uid()` and a service-role client has
+ * no auth context - it would return an empty set, and an empty set passed to `.in()`
+ * matches nothing, which fails closed but also fails silently. Pass the caller's user id
+ * explicitly and the answer does not depend on which client made the call.
+ *
+ * Returns [] when the user belongs to no organization. Callers must treat that as "no
+ * rows", never as "all rows".
+ */
+export async function resolveCallerOrgIds(userId: string, client: OrgLookupClient): Promise<string[]> {
+  if (!userId) return []
+  const { data, error } = await client.from("org_members").select("org_id").eq("user_id", userId)
+  if (error) {
+    console.error("[entitlements] resolveCallerOrgIds failed", { userId, code: error.code, message: error.message })
+    return []
+  }
+  return ((data ?? []) as Array<{ org_id?: string | null }>)
+    .map((r) => r.org_id)
+    .filter((id): id is string => Boolean(id))
+}
+
+/**
  * The identity that entitlement and quota are keyed to.
  *
- * 079: this returns the caller's organization id, resolved from org_members. Today one
- * user is one agency is one payer, so it returns the user id unchanged. Call this instead
- * of passing `user.id` straight into lib/usage-tracking.ts - when 079 lands, changing this
- * function is meant to be most of the work.
+ * Returns the organization whose quota this caller spends. Where a user belongs to more
+ * than one organization - already true of the dual-role accounts in production - the
+ * one they OWN wins, then the one they administer, then the first by membership. That is
+ * a deterministic rule rather than a correct one: "which organization is this AI analysis
+ * being charged to" is a real product question that a portal switcher will eventually
+ * have to answer explicitly. Deterministic beats arbitrary until it does.
+ *
+ * Returns the user id unchanged when membership cannot be resolved. That is the pre-079
+ * answer and it is deliberate: every organization 079 backfilled carries an id equal to
+ * its founding user's id, so the fallback is correct for all sixteen live accounts and
+ * merely wrong-and-harmless for an organization created later, which would get a fresh
+ * usage_tracking row rather than an error. Failing the request instead would take the
+ * whole AI surface down on a transient lookup failure.
  */
-export function agencyEntitlementId(userId: string): string {
-  return userId
+export async function agencyEntitlementId(userId: string, client: OrgLookupClient): Promise<string> {
+  if (!userId) return userId
+  const { data, error } = await client
+    .from("org_members")
+    .select("org_id, role")
+    .eq("user_id", userId)
+  if (error || !data || (data as unknown[]).length === 0) {
+    if (error) {
+      console.error("[entitlements] agencyEntitlementId falling back to user id", {
+        userId,
+        code: error.code,
+        message: error.message,
+      })
+    }
+    return userId
+  }
+  const rows = data as Array<{ org_id?: string | null; role?: string | null }>
+  const rank = (r?: string | null) => (r === "owner" ? 0 : r === "admin" ? 1 : 2)
+  const best = [...rows].sort((a, b) => rank(a.role) - rank(b.role))[0]
+  return best?.org_id ?? userId
 }
 
 /**
@@ -93,7 +174,10 @@ export function agencyEntitlementId(userId: string): string {
  * and it is the strict one. No live profile carries a null is_paid, verified read-only
  * on 2026-08-17.
  *
- * 079: reads the organization's entitlement, not the member's profile flag.
+ * 079 DID NOT CLOSE THIS SEAM and could not: `organizations` carries no entitlement
+ * column. See the header of this file. Until a migration puts entitlement on the
+ * organization, a colleague of a paying owner is not entitled unless their own profile
+ * row says so.
  */
 export function hasAgencyEntitlement(profile: EntitlementProfile): boolean {
   if (isDemoDeployment()) return true
