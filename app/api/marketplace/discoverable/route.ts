@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { isActivePartnership } from "@/lib/partnership-state"
+import { fetchVouchCounts } from "@/lib/vouch-counts"
 
 export const dynamic = "force-dynamic"
 
@@ -73,19 +74,13 @@ export async function GET(req: NextRequest) {
         : { ...row, email: null as string | null, has_partnership: partnerIdsWithPartnership.has(row.id as string) }
     })
 
-    // Fetch vouch counts (aggregate only — never expose individual voucher identities)
+    // Fetch vouch counts (aggregate only — never expose individual voucher identities).
+    // Routed through lib/vouch-counts.ts so the number arrives as a projection rather
+    // than as a table scan. See migration 082: the `USING (true)` policy on
+    // partner_vouches publishes the whole vouch graph, and this is the read side of
+    // closing it.
     const profileIds = maskedProfiles.map((p) => p.id as string)
-    const vouchCountByPartnerId = new Map<string, number>()
-    if (profileIds.length > 0) {
-      const { data: vouchRows } = await supabase
-        .from("partner_vouches")
-        .select("vouched_partner_id")
-        .in("vouched_partner_id", profileIds)
-      for (const v of vouchRows ?? []) {
-        const pid = v.vouched_partner_id as string
-        vouchCountByPartnerId.set(pid, (vouchCountByPartnerId.get(pid) ?? 0) + 1)
-      }
-    }
+    const vouchCountByPartnerId = await fetchVouchCounts(supabase, profileIds)
 
     const profiles = maskedProfiles.map((p) => ({
       ...p,

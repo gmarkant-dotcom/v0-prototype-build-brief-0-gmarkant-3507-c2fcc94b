@@ -3,11 +3,45 @@
 --                gain the project scoping they have never had.
 --
 -- =====================================================================
--- AUTHORED, NOT APPLIED. Greg runs this in the Supabase SQL Editor.
+-- APPLIED 2026-08-17 and VERIFIED. This file records what actually ran.
 -- =====================================================================
 --
+-- Two things differ from the version first authored, and both are
+-- deliberate:
+--
+--   1. The two DROP statements are plain `DROP POLICY`, NOT
+--      `DROP POLICY IF EXISTS`. The header section "CAPTURE A FRESH
+--      pg_policies SNAPSHOT IMMEDIATELY BEFORE APPLYING" below explains
+--      why that matters: a DROP that matches nothing REPORTS SUCCESS, and
+--      because the DROP and the CREATE share one transaction, a stale name
+--      would have left the new scoped policy created BESIDE the old
+--      unscoped one. RLS policies are OR-ed, so the exposure would have
+--      survived a fix that looked like it worked. Without IF EXISTS a
+--      stale name raises and the whole transaction aborts, which is the
+--      outcome we want. This is the safer statement, not the sloppier one.
+--
+--   2. Verification result #3 below previously said project_documents
+--      should end with four policies and project_messages with three.
+--      That arithmetic was wrong against the 2026-08-13 snapshot, which
+--      records five and four. The live counts confirm five and four.
+--
+-- VERIFICATION RESULTS, observed after COMMIT on 2026-08-17:
+--
+--   * Both new policy names present; both old names gone.
+--   * Exactly ONE INSERT policy on each table. This is check #2, the one
+--      that matters, and it passed.
+--   * Per-table policy totals: project_documents 5, project_messages 4 -
+--      unchanged from the 2026-08-13 snapshot, as expected for a
+--      two-dropped / two-created migration.
+--   * Schema-wide policy total still 104.
+--
+-- NOTE FOR THE 079 RELEASE: docs/schema-snapshot-2026-08-13.md still
+-- records the two OLD policy bodies for these tables. It is authoritative
+-- for everything else and stale for exactly these two rows. The fresh
+-- capture taken at the top of docs/079-release-runbook.md supersedes it.
+--
 -- ---------------------------------------------------------------------
--- THE EXPOSURE TODAY, STATED PLAINLY
+-- THE EXPOSURE THIS CLOSED, STATED PLAINLY (the state before 2026-08-17)
 -- ---------------------------------------------------------------------
 -- Both tables carry an INSERT policy with NO PROJECT SCOPING AT ALL.
 -- From docs/schema-snapshot-2026-08-13.md, the authoritative record:
@@ -82,6 +116,7 @@
 --
 -- ---------------------------------------------------------------------
 -- CAPTURE A FRESH pg_policies SNAPSHOT IMMEDIATELY BEFORE APPLYING
+-- (done on 2026-08-17; both names matched)
 -- ---------------------------------------------------------------------
 -- This file DROPS two policies BY THEIR LIVE NAME. Neither name exists
 -- anywhere in this repository - docs/schema-baseline-2026-08-13.sql
@@ -114,7 +149,7 @@ BEGIN;
 -- ---------------------------------------------------------------------
 -- project_documents
 -- ---------------------------------------------------------------------
-DROP POLICY IF EXISTS "Users can upload documents" ON public.project_documents;
+DROP POLICY "Users can upload documents" ON public.project_documents;  -- no IF EXISTS: a stale name must abort, not silently pass
 
 CREATE POLICY "Users can upload documents to projects they are on"
   ON public.project_documents
@@ -167,7 +202,7 @@ CREATE POLICY "Users can upload documents to projects they are on"
 -- ---------------------------------------------------------------------
 -- project_messages
 -- ---------------------------------------------------------------------
-DROP POLICY IF EXISTS "Users can send messages" ON public.project_messages;
+DROP POLICY "Users can send messages" ON public.project_messages;  -- no IF EXISTS: a stale name must abort, not silently pass
 
 CREATE POLICY "Users can send messages on projects they are on"
   ON public.project_messages
@@ -247,9 +282,10 @@ COMMIT;
 --    GROUP BY tablename;
 --
 -- 3. Nothing else on these two tables changed. Expect the same SELECT,
---    UPDATE and DELETE policies as the 2026-08-13 snapshot: three more on
---    project_documents (two SELECT, one UPDATE, one DELETE = four) and two
---    more on project_messages (two SELECT, one UPDATE = three).
+--    UPDATE and DELETE policies as the 2026-08-13 snapshot: four more on
+--    project_documents (two SELECT, one UPDATE, one DELETE), so FIVE in
+--    total, and three more on project_messages (two SELECT, one UPDATE),
+--    so FOUR in total. OBSERVED 2026-08-17: 5 and 4. Pass.
 --
 --    SELECT tablename, cmd, count(*)
 --    FROM pg_policies

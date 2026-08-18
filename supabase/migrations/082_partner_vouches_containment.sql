@@ -6,9 +6,17 @@
 -- AUTHORED, NOT APPLIED. Greg runs this in the Supabase SQL Editor.
 --
 -- THIS FILE HAS TWO PHASES AND A STOP GATE BETWEEN THEM.
--- PHASE 1 IS SAFE TO APPLY TODAY. PHASE 2 IS NOT, UNTIL A CODE CHANGE
--- SHIPS FIRST. Read "THE ORDER OF OPERATIONS" below before running any
--- of it.
+-- PHASE 1 IS SAFE TO APPLY TODAY. PHASE 2 IS NOT, UNTIL THE VOUCH COUNTS
+-- ARE CONFIRMED RENDERING THROUGH THE RPCs IN PRODUCTION.
+--
+-- STATUS 2026-08-17: the code change that step 2 of "THE ORDER OF
+-- OPERATIONS" demanded IS DEPLOYED (lib/vouch-counts.ts and its three call
+-- sites, on `main`). It was written to tolerate this migration being
+-- unapplied, so it is live and correct against today's database. The STOP
+-- GATE below is STILL LIVE: what remains before phase 2 is applying phase
+-- 1 and watching the numbers render through the RPC path.
+--
+-- Read "THE ORDER OF OPERATIONS" below before running any of it.
 -- =====================================================================
 --
 -- ---------------------------------------------------------------------
@@ -106,20 +114,31 @@
 --      reads them yet and nothing changes.
 --
 --   2. DEPLOY A CODE CHANGE moving all three read sites onto the RPCs.
---      They are, exactly:
---        a. app/api/marketplace/discoverable/route.ts:80-87
---             .from("partner_vouches").select("vouched_partner_id")
---             .in("vouched_partner_id", profileIds)  -- counted in JS
---           becomes  supabase.rpc("partner_vouch_counts", { p_partner_ids: profileIds })
---        b. app/partner/profile/page.tsx:209-213
---             .from("partner_vouches").select("*", { count: "exact", head: true })
---             .eq("vouched_partner_id", user.id)
---           becomes  supabase.rpc("partner_vouch_count", { p_partner_id: user.id })
---        c. app/agency/pool/[partnerId]/page.tsx:227-231, the same head
---           count for one partner
---           becomes  supabase.rpc("partner_vouch_count", { p_partner_id: partnerId })
 --
---      The "have I vouched?" read at app/agency/pool/[partnerId]/page.tsx:234-239
+--      **THIS STEP IS DONE. It shipped on `main` on 2026-08-17, BEFORE
+--      phase 1 was applied, and it is safe in that order.** All three
+--      sites now go through `lib/vouch-counts.ts`:
+--
+--        a. app/api/marketplace/discoverable/route.ts  -> fetchVouchCounts()
+--        b. app/partner/profile/page.tsx               -> fetchVouchCount()
+--        c. app/agency/pool/[partnerId]/page.tsx       -> fetchVouchCount()
+--
+--      Those two helpers call the RPC and fall back to the old direct
+--      table read ONLY when PostgREST answers PGRST202, "could not find
+--      the function in the schema cache". That is the one condition under
+--      which the pre-082 read is still the right answer, and it is exactly
+--      the state production is in until phase 1 runs. Any OTHER rpc error -
+--      a permission failure in particular - is logged and returns 0 rather
+--      than falling back, because falling back on a permission error is how
+--      a post-phase-2 silent zero gets reintroduced.
+--
+--      So the deployed code is correct in all three states: RPC absent
+--      (fallback reads the table, which `USING (true)` still permits), RPC
+--      present with the old policy still there (RPC used), and RPC present
+--      with the old policy dropped (RPC used). Phase 1 and the deploy are
+--      therefore order-independent. Phase 2 is NOT.
+--
+--      The "have I vouched?" read at app/agency/pool/[partnerId]/page.tsx
 --      does NOT change. It selects rows where voucher_agency_id = the
 --      caller, which the colleague-scoped policy in phase 2 still permits.
 --
@@ -127,7 +146,19 @@
 --      touching phase 2. A wrong count after phase 2 is indistinguishable
 --      from a vendor with no vouches.
 --
+--      With the fallback in place, this confirmation is now a check that
+--      the RPC path itself works, not that the code deployed. Confirm it
+--      AFTER phase 1 and BEFORE phase 2, and confirm it by watching the
+--      numbers, not the absence of errors - the fallback is silent when it
+--      succeeds.
+--
 --   4. APPLY PHASE 2.
+--
+--   5. DELETE THE FALLBACK. Both blocks in lib/vouch-counts.ts are marked
+--      `082-FALLBACK`. After phase 2 the fallback can never succeed - the
+--      policy it depended on is gone - so leaving it in place turns a
+--      would-be loud PGRST202 into a quiet 0. Removing it is the last step
+--      of this rollout, and it is one file.
 --
 -- Phase 1 and phase 2 are separate transactions on purpose. Do not paste
 -- this file into the SQL editor as one block.
@@ -257,6 +288,11 @@ COMMIT;
 --   every vouch count in it read zero, quietly, and a vendor with no
 --   vouches looks exactly the same as a vendor whose count stopped
 --   working.
+--
+--   The deployed code narrows this window but does not remove it. Its
+--   fallback only fires on PGRST202 - "function not found" - so if phase 2
+--   runs while phase 1 has NOT run, every count reads 0 exactly as
+--   described above. Phase 1 first, always.
 -- =====================================================================
 -- =====================================================================
 

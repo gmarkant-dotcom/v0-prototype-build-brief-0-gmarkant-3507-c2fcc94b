@@ -280,13 +280,25 @@ The pairs, using the `(V)` set from the map as the vendor-visible whitelist:
 | `onboarding.deploy` | `onboarding.deploy` | **yes** |
 | `delivery.review_complete` | `delivery.review_complete` | no |
 | `status_update.resolve` | `status_update.resolve` | **yes** |
-| `msa.create` / `msa.confirm` / `msa.milestones_set` | same | no |
+| `msa.create` / `msa.milestones_set` | same | no |
+| `msa.confirm` | `msa.confirm` | **yes** - ruled 2026-08-17, see below |
 | `payment.mark_paid` | `payment.mark_paid` | **yes** |
 | `bid.submit` / `bid.revise` | same | **yes** (the agency is the counterparty) |
 | `rfp.view` | `rfp.view` | **yes** |
 | `invitation.accept` / `invitation.decline` | same | **yes** |
 | `nda.acknowledge` | `nda.acknowledge` | **yes** |
 | `status_update.post` | `status_update.post` | **yes** |
+
+**`msa.confirm` was ruled vendor-visible on 2026-08-17.** This table previously said no
+while `docs/milestone-attribution-map.md` section 2 marked the same milestone with a (V),
+and migration 080 followed the whitelist rule and failed closed on the disagreement.
+Greg's ruling settles it in favour of the attribution map: confirming a vendor's NDA or MSA
+is a fact about that vendor's OWN paperwork, and they already see the resulting state.
+Withholding the breadcrumb hid who confirmed it, not whether it was confirmed.
+`msa.confirm` is now in `public.vendor_visible_event_types()` in
+`supabase/migrations/080_milestone_events.sql`, taking that whitelist from 22 entries to 23.
+`msa.create` and `msa.milestones_set` remain not vendor-visible: those are the agency
+drafting its own terms, not a fact about the vendor's paperwork.
 
 **`vendor.vouch` deliberately has no milestone event.** Its visibility rule is the inverse of
 every other event's - colleague-visible, counterparty-invisible - and modelling it as one

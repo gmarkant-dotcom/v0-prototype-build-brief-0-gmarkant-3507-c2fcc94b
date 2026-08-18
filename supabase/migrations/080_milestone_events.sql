@@ -124,12 +124,16 @@ BEGIN;
 -- type here, on purpose: "who may do this" and "who did this" must never
 -- drift into two spellings.
 --
--- DELIBERATELY ABSENT: msa.confirm. docs/capabilities.md section 5 marks
--- it not vendor-visible; docs/milestone-attribution-map.md section 2 marks
--- the same milestone with a (V). The two documents disagree, so this
--- follows the whitelist rule and fails closed. Adding it is a one-line
--- change and a decision for Greg, recorded in
--- docs/safety-net-and-attribution-report.md.
+-- RULED VENDOR-VISIBLE 2026-08-17: msa.confirm. This entry was previously
+-- absent because docs/capabilities.md section 5 marked it not
+-- vendor-visible while docs/milestone-attribution-map.md section 2 marked
+-- the same milestone with a (V), and an unresolved disagreement had to
+-- fail closed. Greg has ruled: confirming a vendor's NDA or MSA is a fact
+-- about that vendor's OWN paperwork, and they already see the resulting
+-- state. Withholding the breadcrumb hid who confirmed it, not whether it
+-- was confirmed. msa.confirm is now in the list under "Onboarding and
+-- delivery". The disagreement is settled in favour of the attribution
+-- map; docs/capabilities.md section 5 is the document now out of date.
 CREATE OR REPLACE FUNCTION public.vendor_visible_event_types()
 RETURNS text[]
 LANGUAGE sql
@@ -154,6 +158,7 @@ AS $$
     -- Onboarding and delivery
     'onboarding.package_send',
     'onboarding.deploy',
+    'msa.confirm',
     'status_update.resolve',
     -- Money
     'payment.mark_paid',
@@ -349,8 +354,9 @@ COMMIT;
 --    WHERE schemaname = 'public' AND tablename = 'milestone_events'
 --      AND (roles && ARRAY['anon', 'public']::name[]);
 --
--- 4. The whitelist function returns the expected set. Expect 22 rows and
---    no row reading 'msa.confirm'.
+-- 4. The whitelist function returns the expected set. Expect 23 rows,
+--    INCLUDING one reading 'msa.confirm' (ruled vendor-visible
+--    2026-08-17; the count was 22 before that ruling).
 --
 --    SELECT unnest(public.vendor_visible_event_types()) AS event_type
 --    ORDER BY 1;

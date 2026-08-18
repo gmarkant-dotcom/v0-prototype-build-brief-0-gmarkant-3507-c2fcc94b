@@ -49,13 +49,18 @@
 -- ---------------------------------------------------------------------
 -- THE EXACT ORDER OF OPERATIONS FOR THE RELEASE
 -- ---------------------------------------------------------------------
---  1. Apply the seven per-account role corrections in
---     docs/m1-prework-report.md Item 1.6. They are a PRECONDITION, not
---     housekeeping: this migration derives each organization's capability
---     flags from profiles.role, and seven of the sixteen live profiles
---     carry role='agency' while their signup metadata says 'partner'
---     (measured read-only 2026-08-17). Applying 079 first stamps seven
---     organizations as lead agencies that are not. See PHASE 2.
+--  1. DONE 2026-08-17. The seven per-account role corrections in
+--     docs/m1-prework-report.md Item 1.6 HAVE BEEN APPLIED. All seven now
+--     read role='partner', active_role='partner', secondary_role='agency'.
+--     They were a PRECONDITION, not housekeeping: this migration derives
+--     each organization's capability flags from profiles.role, and before
+--     the correction seven of the sixteen live profiles carried
+--     role='agency' while their signup metadata said 'partner'. Applying
+--     079 in that state would have stamped seven organizations as lead
+--     agencies that are vendors. That risk is RESOLVED. Rule A now agrees
+--     with the signup metadata for all sixteen accounts. See PHASE 2.
+--     Re-measure before applying anyway - the check is one SELECT and the
+--     cost of being wrong is wrong data in a new table on day one.
 --  2. Capture the fresh pg_policies snapshot, above. Commit it.
 --  3. Regenerate 079_organizations_down.sql from that fresh capture.
 --  4. Merge and deploy the code rename (docs/079-rename-plan.md), which is
@@ -219,21 +224,25 @@ ALTER TABLE public.org_members   ENABLE ROW LEVEL SECURITY;
 -- exact expression migration 078 uses to decide the role at signup, so the
 -- backfill and the trigger cannot disagree.
 --
--- THE PROBLEM WITH RULE A, STATED PLAINLY. profiles.role is wrong for seven
--- of the sixteen live accounts: they chose 'partner' on the signup form and
--- carry role='agency', because the pre-078 trigger hardcoded it. That is
--- the entire gap between Rule A and Rule A'. Applying 079 without first
--- running the seven per-account corrections in docs/m1-prework-report.md
--- Item 1.6 stamps seven organizations as lead agencies that are vendors.
+-- THE PROBLEM WITH RULE A IS RESOLVED AS OF 2026-08-17. It read:
+-- profiles.role is wrong for seven of the sixteen live accounts, who chose
+-- 'partner' on the signup form and carried role='agency' because the
+-- pre-078 trigger hardcoded it. That was the entire gap between Rule A and
+-- Rule A', and applying 079 in that state would have stamped seven
+-- organizations as lead agencies that are vendors.
 --
--- This is a data-quality fault, not a lockout: no policy in this file reads
--- these flags. But it is wrong data written into a new table on day one,
--- and correcting it later is another migration.
+-- THOSE SEVEN ACCOUNTS HAVE BEEN CORRECTED. All seven now read
+-- role='partner', active_role='partner', secondary_role='agency'. Rule A
+-- and Rule A' therefore agree, and Rule A now derives the right flags for
+-- every live account. The distribution measured above is the PRE-correction
+-- one and is retained as the record of why Rule A was chosen; re-measure
+-- before applying rather than trusting either number.
 --
--- GREG'S RULING NEEDED. If you would rather derive from the signup metadata
--- and skip the seven corrections, replace the two derivation expressions
--- below with the Rule A' variant commented beneath them, which reads
--- auth.users.raw_user_meta_data directly.
+-- NO RULING IS OUTSTANDING. Rule A stands, and the Rule A' variant
+-- commented beneath the derivation expressions below is kept only as
+-- documentation of the alternative that was considered. Do not switch to
+-- it: it reads auth.users.raw_user_meta_data, which the product does not
+-- maintain, and it no longer disagrees with Rule A anyway.
 -- =====================================================================
 
 INSERT INTO public.organizations (id, name, is_lead_agency, is_vendor, created_at)

@@ -40,6 +40,7 @@ import {
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
 import { HelpTerm } from "@/components/help-term"
+import { fetchVouchCount } from "@/lib/vouch-counts"
 
 const PAYMENT_TERM_LABELS: Record<string, string> = {
   net_15: "Net 15",
@@ -223,12 +224,10 @@ export default function AgencyPartnerProfilePage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user || cancelled) return
 
-        // Count only — never expose list of vouchers
-        const { count } = await supabase
-          .from("partner_vouches")
-          .select("*", { count: "exact", head: true })
-          .eq("vouched_partner_id", partnerId)
-        if (!cancelled) setVouchCount(count ?? 0)
+        // Count only — never expose list of vouchers. Routed through
+        // lib/vouch-counts.ts; see migration 082.
+        const count = await fetchVouchCount(supabase, partnerId)
+        if (!cancelled) setVouchCount(count)
 
         // Check own vouch status
         const { data: ownVouch } = await supabase

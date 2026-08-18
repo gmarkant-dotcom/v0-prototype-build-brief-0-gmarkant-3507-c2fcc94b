@@ -11,6 +11,7 @@ import { Camera, Loader2, Upload, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
+import { fetchVouchCount } from "@/lib/vouch-counts"
 
 const disciplines = [
   "Video Production",
@@ -204,13 +205,10 @@ export default function PartnerProfilePage() {
       setProfileId(data?.id || user.id)
       setDiscoverable(!!data?.is_discoverable)
 
-      // Fetch own vouch count (aggregate only — partner never sees who vouched)
+      // Fetch own vouch count (aggregate only — partner never sees who vouched).
+      // Routed through lib/vouch-counts.ts; see migration 082.
       setVouchLoading(true)
-      const { count: vc } = await supabase
-        .from("partner_vouches")
-        .select("*", { count: "exact", head: true })
-        .eq("vouched_partner_id", user.id)
-      setVouchCount(vc ?? 0)
+      setVouchCount(await fetchVouchCount(supabase, user.id))
       setVouchLoading(false)
       setFormData((prev) => ({
         ...prev,
