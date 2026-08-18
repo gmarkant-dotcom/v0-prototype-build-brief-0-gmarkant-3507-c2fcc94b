@@ -62,6 +62,48 @@ import { actingRole, canActAs } from "./acting-role"
  *     `organizations`. That is a phase-two blocker, not a rename bug.
  */
 
+/**
+ * THE ROOT CAUSE OF THE PARAMETER-PASSING CLASS, MADE UNTYPEABLE.
+ *
+ * An organization id and a user id are both bare `string`, so nothing in the language
+ * catches a swap. For the sixteen accounts 079 backfilled the two values are EQUAL, so
+ * nothing at runtime catches it either - the swap is correct by accident until an account
+ * whose organization id differs from its user id touches the same code path. That is the
+ * shape three successive widenings of the grep-based scan could not see, because both sides
+ * of the mistake read correctly in isolation.
+ *
+ * `OrgId` is minted in exactly three places: the resolvers below, which read org_members.
+ * Anywhere else an organizations id enters the program it comes off a database column typed
+ * `any` by PostgREST, and the cast at that boundary is deliberate and greppable
+ * (`as unknown as OrgId`) rather than implicit.
+ *
+ * DELIBERATELY NOT BRANDED: `agencyEntitlementId()`. It returns the USER ID unchanged when
+ * membership does not resolve, which is the correct failure for a usage row and a foreign
+ * key violation for anything else. Leaving its return type a bare `string` is what stops it
+ * being handed to a write - the compiler now rejects exactly the substitution that this
+ * whole pass exists to close.
+ */
+export type OrgId = string & { readonly __brand: "OrgId" }
+
+/**
+ * THE OTHER HALF, MEASURED AND NOT APPLIED. A `UserId` brand would make the swap symmetric -
+ * an organization id passed where a user id belongs would fail too, not just the reverse.
+ * It was written, applied to the four resolvers, and measured on 2026-08-19: 154 type errors
+ * across 84 files, because every `user.id` in the codebase reaches a resolver and every auth
+ * boundary in every route would need an `asUserId()` cast. That is not the helpers and their
+ * call sites; that is the whole application, and it is well past the point where a
+ * half-migrated type system costs more than it catches. Reverted deliberately.
+ *
+ * It buys much less than the OrgId half in any case. Every instance of this defect class is
+ * a USER id reaching an ORGANIZATION parameter, and a plain `string` is already not
+ * assignable to `OrgId` - so the one-sided brand catches the whole observed class. The
+ * symmetric brand would catch only the reverse, which has not occurred once.
+ *
+ * A staged version, if it is ever wanted: brand the return of `auth.getUser()` behind one
+ * wrapper in lib/api-auth.ts, so `requireAgencyRole()` hands back a `UserId` and the cast
+ * exists in one file rather than 84. That is a day's work and it should be its own pass.
+ */
+
 export type EntitlementProfile =
   | {
       role?: string | null
@@ -111,7 +153,7 @@ export type OrgLookupClient = {
  * Returns [] when the user belongs to no organization. Callers must treat that as "no
  * rows", never as "all rows".
  */
-export async function resolveCallerOrgIds(userId: string, client: OrgLookupClient): Promise<string[]> {
+export async function resolveCallerOrgIds(userId: string, client: OrgLookupClient): Promise<OrgId[]> {
   if (!userId) return []
   const { data, error } = await client.from("org_members").select("org_id").eq("user_id", userId)
   if (error) {
@@ -120,7 +162,7 @@ export async function resolveCallerOrgIds(userId: string, client: OrgLookupClien
   }
   const orgIds = ((data ?? []) as Array<{ org_id?: string | null }>)
     .map((r) => r.org_id)
-    .filter((id): id is string => Boolean(id))
+    .filter((id): id is OrgId => Boolean(id))
   if (orgIds.length === 0) {
     // Reported here rather than at each of the call sites. An empty set fails CLOSED
     // everywhere it is used - `.in(col, [])` matches nothing and `[].includes(x)` is false -
@@ -132,6 +174,44 @@ export async function resolveCallerOrgIds(userId: string, client: OrgLookupClien
     console.error("[entitlements] resolveCallerOrgIds: caller belongs to no organization", { userId })
   }
   return orgIds
+}
+
+/**
+ * "Is this database column one of the caller's own organizations?"
+ *
+ * The ONE place a PostgREST column crosses into `OrgId`. Every authorization check in the
+ * app was spelled `callerOrgIds.includes(row.org_id as string)`, and that `as string` is a
+ * lie twice over: the column is nullable, and PostgREST types it `any`, so the cast
+ * asserted a shape nobody had checked. This tests the shape instead of asserting it.
+ *
+ * Semantics are identical to what it replaces, deliberately: a null or non-string column
+ * was already `includes(null)` and therefore false. Nothing widens.
+ */
+export function callerOwnsOrg(callerOrgIds: readonly OrgId[], value: unknown): boolean {
+  if (typeof value !== "string" || value.length === 0) return false
+  return (callerOrgIds as readonly string[]).includes(value)
+}
+
+/**
+ * PostgREST organization columns, crossing into `OrgId` at a named boundary.
+ *
+ * There is no way to prove at compile time that `row.lead_org_id` holds an organization id -
+ * PostgREST types every column `any`, and this repository has no generated `Database` types.
+ * So the crossing is a runtime shape check with a name you can grep for, rather than an
+ * `as OrgId` scattered wherever somebody needed one. Every use of this function is a place a
+ * reviewer should ask "is that column really an organization id".
+ *
+ * Non-string and empty values are dropped rather than passed through, so the result is
+ * either a usable id or an empty array - and an empty array is what `.in()` matches nothing
+ * against. Fails closed.
+ */
+export function orgIdsFromColumns(...values: unknown[]): OrgId[] {
+  return values.filter((v): v is OrgId => typeof v === "string" && v.length > 0)
+}
+
+/** The scalar form of orgIdsFromColumns(). Null for anything that is not a usable id. */
+export function orgIdFromColumn(value: unknown): OrgId | null {
+  return typeof value === "string" && value.length > 0 ? (value as OrgId) : null
 }
 
 /**
@@ -204,7 +284,7 @@ export async function agencyEntitlementId(userId: string, client: OrgLookupClien
 export async function resolveCallerWriteOrgId(
   userId: string,
   client: OrgLookupClient
-): Promise<string | null> {
+): Promise<OrgId | null> {
   if (!userId) return null
   const { data, error } = await client.from("org_members").select("org_id, role").eq("user_id", userId)
   if (error) {
@@ -219,7 +299,7 @@ export async function resolveCallerWriteOrgId(
   if (rows.length === 0) return null
   const rank = (r?: string | null) => (r === "owner" ? 0 : r === "admin" ? 1 : 2)
   const best = [...rows].sort((a, b) => rank(a.role) - rank(b.role))[0]
-  return best?.org_id ?? null
+  return (best?.org_id as OrgId | undefined) ?? null
 }
 
 /**
@@ -323,7 +403,7 @@ export function canUseAgencyPortalAi(profile: EntitlementProfile): boolean {
 export async function resolveOrgIdForUser(
   userId: string | null | undefined,
   client: OrgLookupClient
-): Promise<string | null> {
+): Promise<OrgId | null> {
   if (!userId) return null
   const map = await resolveOrgIdsForUsers([userId], client)
   return map.get(userId) ?? null
@@ -344,9 +424,9 @@ export async function resolveOrgIdForUser(
 export async function resolveOrgIdsForUsers(
   userIds: readonly string[],
   client: OrgLookupClient
-): Promise<Map<string, string>> {
+): Promise<Map<string, OrgId>> {
   const wanted = Array.from(new Set(userIds.filter((id): id is string => Boolean(id))))
-  const out = new Map<string, string>()
+  const out = new Map<string, OrgId>()
   if (wanted.length === 0) return out
 
   const { data, error } = await client.from("org_members").select("user_id, org_id, role").in("user_id", wanted)
@@ -369,7 +449,7 @@ export async function resolveOrgIdsForUsers(
     const seen = bestRank.get(uid)
     if (seen === undefined || r < seen) {
       bestRank.set(uid, r)
-      out.set(uid, oid)
+      out.set(uid, oid as OrgId)
     }
   }
   return out

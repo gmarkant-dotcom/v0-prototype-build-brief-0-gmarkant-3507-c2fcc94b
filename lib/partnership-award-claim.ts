@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { OrgId } from "@/lib/entitlements"
 
 /**
  * H3 retroactive fix: claims and activates any partnerships row matching this vendor's email
@@ -24,7 +25,7 @@ export async function claimAwardedGhostPartnershipsByEmail(
    * loudly, which is the one mercy here - and would silently succeed for the sixteen
    * backfilled ones whose id happens to equal their founder's.
    */
-  params: { partnerId: string; vendorEmail: string }
+  params: { partnerId: OrgId; vendorEmail: string }
 ): Promise<void> {
   const { partnerId, vendorEmail } = params
   const normalizedEmail = vendorEmail.trim()

@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -44,7 +44,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       .select("id, org_id")
       .eq("id", projectId)
       .maybeSingle()
-    if (!project || !callerOrgIds.includes(project.org_id as string)) {
+    if (!project || !callerOwnsOrg(callerOrgIds, project.org_id)) {
       return NextResponse.json({ error: "Not found" }, { status: 404, headers: noStoreHeaders })
     }
 

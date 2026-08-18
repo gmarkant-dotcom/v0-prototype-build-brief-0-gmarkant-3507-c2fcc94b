@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import {
@@ -68,7 +68,7 @@ export async function POST(
       .eq('id', projectId)
       .single()
 
-    if (!project || !callerOrgIds.includes(project.org_id as string)) {
+    if (!project || !callerOwnsOrg(callerOrgIds, project.org_id)) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 

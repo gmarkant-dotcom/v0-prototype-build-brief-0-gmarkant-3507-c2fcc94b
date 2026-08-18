@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from "@/lib/api-auth"
 import { createClient } from '@/lib/supabase/server'
@@ -46,7 +46,7 @@ export async function GET(
       .eq('id', projectId)
       .single()
 
-    if (!project || !callerOrgIds.includes(project.org_id as string)) {
+    if (!project || !callerOwnsOrg(callerOrgIds, project.org_id)) {
       return NextResponse.json({ error: 'Project not found or access denied' }, { status: 404 })
     }
 
@@ -123,7 +123,7 @@ export async function POST(
       .eq('id', projectId)
       .single()
 
-    if (!project || !callerOrgIds.includes(project.org_id as string)) {
+    if (!project || !callerOwnsOrg(callerOrgIds, project.org_id)) {
       return NextResponse.json({ error: 'Project not found or access denied' }, { status: 404 })
     }
 
@@ -305,8 +305,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Assignment not found' }, { status: 404 })
     }
 
-    const isAgency = callerOrgIds.includes(assignment.project.org_id as string)
-    const isPartner = callerOrgIds.includes(assignment.partnership.vendor_org_id as string)
+    const isAgency = callerOwnsOrg(callerOrgIds, assignment.project.org_id)
+    const isPartner = callerOwnsOrg(callerOrgIds, assignment.partnership.vendor_org_id)
 
     if (!isAgency && !isPartner) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })

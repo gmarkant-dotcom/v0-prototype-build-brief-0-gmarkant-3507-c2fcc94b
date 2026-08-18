@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import { formatProposalSectionsForPrompt } from "@/lib/proposal-sections"
 import { normalizeBudgetLines, categorySubtotal } from "@/lib/budget-categories"
+import type { OrgId } from "@/lib/entitlements"
 
 // Accepts either the cookie-scoped server client (@/lib/supabase/server) or a
 // service-role client (@supabase/supabase-js) - both are SupabaseClient instances,
@@ -41,7 +42,7 @@ export type BidAnalysisContext = {
 export async function loadBidAnalysisContext(
   supabase: SupabaseServerClient,
   responseId: string,
-  orgIds: string[]
+  orgIds: readonly OrgId[]
 ): Promise<BidAnalysisContext | null> {
   const { data: response } = await supabase
     .from("partner_rfp_responses")
@@ -158,7 +159,7 @@ export type ResponseScope = {
 export async function resolveResponseScope(
   supabase: SupabaseServerClient,
   responseId: string,
-  orgIds: string[]
+  orgIds: readonly OrgId[]
 ): Promise<ResponseScope | null> {
   const { data: response } = await supabase
     .from("partner_rfp_responses")

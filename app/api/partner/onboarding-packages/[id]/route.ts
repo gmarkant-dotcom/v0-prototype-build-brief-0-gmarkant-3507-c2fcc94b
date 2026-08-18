@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -45,7 +45,7 @@ export async function PATCH(
       .eq("id", existing.partnership_id)
       .single()
 
-    if (!ship || !callerOrgIds.includes(ship.vendor_org_id as string)) {
+    if (!ship || !callerOwnsOrg(callerOrgIds, ship.vendor_org_id)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { createOrgNotification } from "@/lib/notifications"
 import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
+import type { OrgId } from "@/lib/entitlements"
 
 /** Fields this module actually reads off a rfp_magic_tokens row - callers pass whatever
  *  shape they already have (select("*") or a narrower select), this just documents the
@@ -226,7 +227,7 @@ async function collapseInvitationRows(
  */
 export async function attachMagicTokenToPartnerInbox(
   supabase: SupabaseClient,
-  params: { tokenRow: MagicTokenForAttach; partnerId: string }
+  params: { tokenRow: MagicTokenForAttach; partnerId: OrgId }
 ): Promise<AttachResult> {
   const { tokenRow, partnerId } = params
 

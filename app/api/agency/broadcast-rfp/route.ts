@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -472,7 +472,7 @@ export async function POST(request: NextRequest) {
         // caller's own organization, already resolved above for the inbox rows themselves.
         orgId: writeOrgId,
         actorId: user.id,
-        vendorOrgId: (row.vendor_org_id as string | null) ?? null,
+        vendorOrgId: orgIdFromColumn(row.vendor_org_id),
         partnershipId: (row.partnership_id as string | null) ?? null,
         subjectType: "project" as const,
         subjectId: (row.project_id as string | null) ?? null,

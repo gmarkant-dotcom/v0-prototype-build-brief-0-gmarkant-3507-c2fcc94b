@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { isActivePartnership } from "@/lib/partnership-state"
@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     const partnerIdsWithPartnership = new Set<string>()
     const activePartnerIds = new Set<string>()
     for (const p of partnershipRows) {
-      const otherId = (callerOrgIds.includes(p.lead_org_id as string) ? p.vendor_org_id : p.lead_org_id) as string | null
+      const otherId = (callerOwnsOrg(callerOrgIds, p.lead_org_id) ? p.vendor_org_id : p.lead_org_id) as string | null
       if (!otherId) continue
       partnerIdsWithPartnership.add(otherId)
       if (isActivePartnership(p)) activePartnerIds.add(otherId)

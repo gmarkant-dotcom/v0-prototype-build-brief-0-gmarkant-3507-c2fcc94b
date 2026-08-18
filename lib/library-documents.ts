@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { OrgId } from "@/lib/entitlements"
 
 /**
  * The one definition of document scope in this codebase.
@@ -113,7 +114,7 @@ export type ScopedLibraryResult = {
  */
 export async function fetchScopedLibraryDocuments(
   supabase: SupabaseClient,
-  orgIds: string[],
+  orgIds: readonly OrgId[],
   scope: LibraryScope
 ): Promise<ScopedLibraryResult> {
   let clientId: string | null = null

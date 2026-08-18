@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, type OrgId } from "@/lib/entitlements"
 import {
   attachMagicTokenToPartnerInbox,
   MAGIC_TOKEN_ATTACH_COLUMNS,
@@ -23,7 +23,7 @@ function getServiceSupabase() {
  *  sweep, since the two routes are fetched in parallel from app/partner/rfps/page.tsx with no
  *  ordering between them. Backfilling here too makes this route self-sufficient rather than
  *  racing the other one. */
-async function backfillGuestResponseLinkage(vendorEmail: string, partnerId: string) {
+async function backfillGuestResponseLinkage(vendorEmail: string, partnerId: OrgId) {
   const service = getServiceSupabase()
   if (!service || !vendorEmail) return
   try {

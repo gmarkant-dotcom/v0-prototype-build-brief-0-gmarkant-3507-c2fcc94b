@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { OrgId } from "@/lib/entitlements"
 
 /**
  * Marks the (agency, vendor email) partnership as invited - invitation_sent_at is what
@@ -9,7 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
  */
 export async function markPartnershipInvited(
   supabase: SupabaseClient,
-  params: { agencyId: string; vendorEmail: string; partnerId?: string | null }
+  params: { agencyId: OrgId; vendorEmail: string; partnerId?: OrgId | null }
 ): Promise<void> {
   const { agencyId, partnerId } = params
   const email = params.vendorEmail.trim().toLowerCase()

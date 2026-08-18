@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { put } from '@vercel/blob'
 import { requireAuth } from "@/lib/api-auth"
 import { type NextRequest, NextResponse } from 'next/server'
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user is the agency owner or an assigned partner
-    const isAgency = callerOrgIds.includes(project.org_id as string)
+    const isAgency = callerOwnsOrg(callerOrgIds, project.org_id)
 
     if (assignmentId) {
       if (isAgency) {

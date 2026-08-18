@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdsFromColumns } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
@@ -366,7 +366,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
 
       // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-      void generateAndSaveBidSummary(supabase, saved.id, [inbox.lead_org_id as string]).catch((err) => {
+      void generateAndSaveBidSummary(supabase, saved.id, orgIdsFromColumns(inbox.lead_org_id)).catch((err) => {
         console.error("[api] fire-and-forget summary generation failed", {
           route,
           responseId: saved.id,

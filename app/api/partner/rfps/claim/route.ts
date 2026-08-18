@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -55,7 +55,7 @@ async function claimByToken(
   }
 
   if (inbox.claimed_at) {
-    if (callerOrgIds.includes(inbox.vendor_org_id as string)) {
+    if (callerOwnsOrg(callerOrgIds, inbox.vendor_org_id)) {
       await switchActiveRoleToPartner(supabase, userId)
       return { ok: true, inboxItemId: inbox.id, ndaGateEnforced: inbox.nda_gate_enforced === true }
     }

@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { get } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
       .eq("id", pkg.partnership_id as string)
       .single()
 
-    if (!ship || !callerOrgIds.includes(ship.vendor_org_id as string)) {
+    if (!ship || !callerOwnsOrg(callerOrgIds, ship.vendor_org_id)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 

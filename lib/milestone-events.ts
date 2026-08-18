@@ -1,5 +1,6 @@
 import type { createClient } from "./supabase/server"
 import type { Capability } from "./capabilities"
+import type { OrgId } from "@/lib/entitlements"
 
 /**
  * Milestone attribution: the breadcrumb of who did what at a key stage.
@@ -79,13 +80,13 @@ export type MilestoneEvent = {
    */
   eventType: Capability
   /** 079: the acting company. A profiles.id today, organizations.id after. */
-  orgId: string
+  orgId: OrgId | null
   /** The acting USER. Null only for guest / magic-link actors, who have no account. */
   actorId: string | null
   /** Identity fallback for those actors. Never rendered to a counterparty. */
   actorEmail?: string | null
   /** 079: the counterparty company, when there is one. */
-  vendorOrgId?: string | null
+  vendorOrgId?: OrgId | null
   /** Set this whenever a vendor is a party. It is what makes the event reachable by them. */
   partnershipId?: string | null
   subjectType: MilestoneSubjectType
@@ -107,7 +108,7 @@ type MilestoneRow = {
   payload: Record<string, unknown>
 }
 
-function toRow(event: MilestoneEvent): MilestoneRow {
+function toRow(event: MilestoneEvent & { orgId: OrgId }): MilestoneRow {
   return {
     org_id: event.orgId,
     vendor_org_id: event.vendorOrgId ?? null,
@@ -149,28 +150,42 @@ export async function recordMilestones(
 ): Promise<void> {
   if (events.length === 0) return
 
+  // 079: `orgId` is typed OrgId | null because it is often read off a database column, and
+  // milestone_events.org_id has NO foreign key (migration 080, deliberately) - so an
+  // unusable value raises nothing and simply produces a row invisible to the organization
+  // that created it, whose policy reads org_id = ANY (current_user_org_ids()). Dropping the
+  // event loudly beats writing a breadcrumb nobody can ever read.
+  const usable = events.filter((e): e is MilestoneEvent & { orgId: OrgId } => Boolean(e.orgId))
+  if (usable.length !== events.length) {
+    console.error("[milestone] dropped event(s) with no resolvable organization", {
+      eventTypes: [...new Set(events.filter((e) => !e.orgId).map((e) => e.eventType))],
+      dropped: events.length - usable.length,
+    })
+  }
+  if (usable.length === 0) return
+
   try {
-    const { error } = await supabase.from("milestone_events").insert(events.map(toRow))
+    const { error } = await supabase.from("milestone_events").insert(usable.map(toRow))
     if (!error) return
 
     if (error.code === "42P01") {
       console.warn(
         "[milestone] milestone_events table not present - migration 080 is authored and not applied. Event(s) dropped.",
-        { eventTypes: [...new Set(events.map((e) => e.eventType))], count: events.length }
+        { eventTypes: [...new Set(usable.map((e) => e.eventType))], count: events.length }
       )
       return
     }
 
     console.error("[milestone] insert failed (the action itself succeeded)", {
-      eventTypes: [...new Set(events.map((e) => e.eventType))],
-      count: events.length,
+      eventTypes: [...new Set(usable.map((e) => e.eventType))],
+      count: usable.length,
       code: error.code,
       message: error.message,
     })
   } catch (e) {
     console.error("[milestone] insert threw (the action itself succeeded)", {
-      eventTypes: [...new Set(events.map((e) => e.eventType))],
-      count: events.length,
+      eventTypes: [...new Set(usable.map((e) => e.eventType))],
+      count: usable.length,
       message: e instanceof Error ? e.message : String(e),
     })
   }

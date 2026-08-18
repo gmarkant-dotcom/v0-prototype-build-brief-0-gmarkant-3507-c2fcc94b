@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { actingRole } from '@/lib/acting-role'
@@ -72,8 +72,8 @@ export async function PATCH(
     // membership instead. An empty set makes both false, which is the direction an
     // authorization check should fail.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
-    const isPartner = acting === 'partner' && callerOrgIds.includes(partnership?.vendor_org_id as string)
-    const isAgency = acting === 'agency' && callerOrgIds.includes(projectRow?.org_id as string)
+    const isPartner = acting === 'partner' && callerOwnsOrg(callerOrgIds, partnership?.vendor_org_id)
+    const isAgency = acting === 'agency' && callerOwnsOrg(callerOrgIds, projectRow?.org_id)
 
     if (!isPartner && !isAgency) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

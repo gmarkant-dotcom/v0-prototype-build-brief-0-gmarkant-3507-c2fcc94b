@@ -3,6 +3,7 @@ import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { resolveRfpRubricForResponse } from "@/lib/rfp-evaluation-criteria-server"
 import { formatRubricForPrompt } from "@/lib/rfp-evaluation-criteria"
+import type { OrgId } from "@/lib/entitlements"
 
 const ANALYST_SYSTEM_PROMPT =
   "You are a procurement analyst helping a creative or production agency evaluate a vendor bid. Be specific and concrete, always grounded in the bid content provided. Never use markdown formatting in your response - plain prose only. Never use a long dash of any kind; use a plain hyphen, a comma, or rewrite."
@@ -33,7 +34,7 @@ export type BidSummaryGenerationResult =
 export async function generateAndSaveBidSummary(
   supabase: SupabaseClient,
   responseId: string,
-  orgIds: string[]
+  orgIds: readonly OrgId[]
 ): Promise<BidSummaryGenerationResult> {
   const ctx = await loadBidAnalysisContext(supabase, responseId, orgIds)
   if (!ctx) return { ok: false, reason: "not_found" }

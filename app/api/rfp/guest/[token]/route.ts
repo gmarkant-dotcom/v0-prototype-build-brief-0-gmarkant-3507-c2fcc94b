@@ -1,3 +1,4 @@
+import { orgIdsFromColumns, orgIdFromColumn } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient as createServiceClient, SupabaseClient } from "@supabase/supabase-js"
 import { serializeBudget, formatBudgetForDisplay } from "@/lib/rfp-response-fields"
@@ -517,7 +518,7 @@ export async function POST(req: Request) {
       }
 
       // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-      void generateAndSaveBidSummary(supabase, tokenRow.response_id as string, [tokenRow.org_id as string]).catch((err) => {
+      void generateAndSaveBidSummary(supabase, tokenRow.response_id as string, orgIdsFromColumns(tokenRow.org_id)).catch((err) => {
         console.error("[api] fire-and-forget summary generation failed", {
           route,
           responseId: tokenRow.response_id,
@@ -537,7 +538,7 @@ export async function POST(req: Request) {
       // company_name, which is what the recipient line below falls back through anyway.
       const [{ data: editProject }, editAgencyRecipients] = await Promise.all([
         supabase.from("projects").select("name").eq("id", tokenRow.project_id).maybeSingle(),
-        resolveOrgNotificationRecipients(tokenRow.org_id as string, supabase),
+        resolveOrgNotificationRecipients(orgIdFromColumn(tokenRow.org_id), supabase),
       ])
       if (editAgencyRecipients.length === 0) {
         console.error("[api] guest bid revision: no notification recipients for the lead agency", {
@@ -633,7 +634,7 @@ export async function POST(req: Request) {
     }
 
     // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-    void generateAndSaveBidSummary(supabase, saved.id as string, [tokenRow.org_id as string]).catch((err) => {
+    void generateAndSaveBidSummary(supabase, saved.id as string, orgIdsFromColumns(tokenRow.org_id)).catch((err) => {
       console.error("[api] fire-and-forget summary generation failed", {
         route,
         responseId: saved.id,
@@ -702,7 +703,7 @@ export async function POST(req: Request) {
       .eq("id", tokenRow.project_id)
       .maybeSingle()
     // 079: as above. Organization recipients, not a profile row of the same id.
-    const agencyRecipients = await resolveOrgNotificationRecipients(tokenRow.org_id as string, supabase)
+    const agencyRecipients = await resolveOrgNotificationRecipients(orgIdFromColumn(tokenRow.org_id), supabase)
     if (agencyRecipients.length === 0) {
       console.error("[api] guest bid submit: no notification recipients for the lead agency", {
         route,

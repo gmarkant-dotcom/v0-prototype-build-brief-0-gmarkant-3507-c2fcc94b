@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerWriteOrgId, type OrgId } from "@/lib/entitlements"
 import {
   attachMagicTokenToPartnerInbox,
   MAGIC_TOKEN_ATTACH_COLUMNS,
@@ -36,7 +36,7 @@ const unexpiredOrRespondedFilter = () => `expires_at.gt.${new Date().toISOString
  * lib/magic-token-attach.ts), so calling this on every list load is safe; a failure here
  * must never break the RFP list itself, only be logged.
  */
-async function sweepOutstandingMagicTokens(vendorEmail: string, partnerId: string) {
+async function sweepOutstandingMagicTokens(vendorEmail: string, partnerId: OrgId) {
   const service = getServiceSupabase()
   if (!service || !vendorEmail) return
   try {

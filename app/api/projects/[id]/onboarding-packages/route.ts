@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -51,7 +51,7 @@ export async function GET(
       })
       return NextResponse.json({ error: "Failed to load project" }, { status: 500 })
     }
-    if (!project || !callerOrgIds.includes(project.org_id as string)) {
+    if (!project || !callerOwnsOrg(callerOrgIds, project.org_id)) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
@@ -156,7 +156,7 @@ export async function POST(
 
     const project = projectById
 
-    if (!project || !callerOrgIds.includes(project.org_id as string)) {
+    if (!project || !callerOwnsOrg(callerOrgIds, project.org_id)) {
       return NextResponse.json({ error: "Project not found", projectId: projectParam }, { status: 404 })
     }
     const projectId = project.id as string
@@ -190,7 +190,7 @@ export async function POST(
       .eq("id", partnershipId)
       .single()
 
-    if (!partnership || !callerOrgIds.includes(partnership.lead_org_id as string)) {
+    if (!partnership || !callerOwnsOrg(callerOrgIds, partnership.lead_org_id)) {
       return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
     }
     if (partnership.status !== "active" || !partnership.vendor_org_id) {

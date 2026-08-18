@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { OrgId } from "@/lib/entitlements"
 
 /**
  * The one place projects.client_id and projects.client_name are reconciled.
@@ -58,7 +59,7 @@ export type ReconcileResult =
  */
 export async function reconcileProjectClientFields(
   supabase: SupabaseClient,
-  orgIds: string[],
+  orgIds: readonly OrgId[],
   input: ReconcileInput
 ): Promise<ReconcileResult> {
   const fields: Partial<ProjectClientFields> = {}

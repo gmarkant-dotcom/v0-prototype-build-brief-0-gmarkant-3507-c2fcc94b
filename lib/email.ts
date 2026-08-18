@@ -1,5 +1,6 @@
 import { Resend } from "resend"
 import { formatDateTime } from "@/lib/utils"
+import type { OrgId } from "@/lib/entitlements"
 
 const defaultFrom = "Ligament <notifications@withligament.com>"
 
@@ -323,7 +324,7 @@ export type OrgRecipient = {
  * `if (recipientEmail)` and used to say nothing.
  */
 export async function resolveOrgNotificationRecipients(
-  orgId: string | null | undefined,
+  orgId: OrgId | null | undefined,
   client: RecipientLookupClient
 ): Promise<OrgRecipient[]> {
   if (!orgId) return []

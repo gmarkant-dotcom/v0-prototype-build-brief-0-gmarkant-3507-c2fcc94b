@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg, type OrgId } from "@/lib/entitlements"
 import { get } from '@vercel/blob'
 import { requireAuth } from "@/lib/api-auth"
 import { type NextRequest, NextResponse } from 'next/server'
@@ -19,7 +19,7 @@ type AssignmentRef = { partnerships?: PartnershipRef | PartnershipRef[] | null }
  */
 function partnerHasAssignmentOnDocument(
   document: { project_assignments?: AssignmentRef | AssignmentRef[] | null },
-  callerOrgIds: string[]
+  callerOrgIds: readonly OrgId[]
 ): boolean {
   const raw = document.project_assignments
   const assignments: AssignmentRef[] = Array.isArray(raw) ? raw : raw ? [raw] : []
@@ -27,7 +27,7 @@ function partnerHasAssignmentOnDocument(
     const ps = pa.partnerships
     const nests: PartnershipRef[] = Array.isArray(ps) ? ps : ps ? [ps] : []
     for (const p of nests) {
-      if (p.vendor_org_id && callerOrgIds.includes(p.vendor_org_id as string)) return true
+      if (p.vendor_org_id && callerOwnsOrg(callerOrgIds, p.vendor_org_id)) return true
     }
   }
   return false
@@ -67,7 +67,7 @@ export async function GET(
     }
 
     // Additional access check beyond RLS (project_assignments may be one row or an array from PostgREST)
-    const isAgency = callerOrgIds.includes(document.projects.org_id as string)
+    const isAgency = callerOwnsOrg(callerOrgIds, document.projects.org_id)
     const isAssignedPartner = partnerHasAssignmentOnDocument(document as { project_assignments?: AssignmentRef | AssignmentRef[] | null }, callerOrgIds)
 
     if (!isAgency && !isAssignedPartner) {

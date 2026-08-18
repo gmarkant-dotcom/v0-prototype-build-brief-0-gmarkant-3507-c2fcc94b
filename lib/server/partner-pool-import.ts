@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
+import type { OrgId } from "@/lib/entitlements"
 
 /**
  * Shared write path for adding a ghost/unclaimed contact to an agency's partner pool -
@@ -167,7 +168,7 @@ export async function importPartnerRows(
    * partnership read and write below on lead_org_id, on a SERVICE-ROLE client that bypasses
    * RLS entirely - so this value is the whole permission, not a filter on top of one.
    */
-  agencyOrgId: string,
+  agencyOrgId: OrgId,
   /**
    * 079: the person making the request. Used only where a PERSON is the right answer - the
    * self-account guard, and the profiles lookup behind the same-domain guard. Before 079

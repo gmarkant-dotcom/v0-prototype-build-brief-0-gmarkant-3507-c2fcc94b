@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { OrgId } from "@/lib/entitlements"
 
 export type DeltaRow = {
   criterion_id: string
@@ -33,7 +34,7 @@ export type DeltaComparison = {
  */
 export async function loadBidDeltaComparison(
   supabase: SupabaseClient,
-  orgIds: string[],
+  orgIds: readonly OrgId[],
   responseId: string | null,
   deliveryScores: { criterion_id: string; score: number | null }[]
 ): Promise<DeltaComparison> {

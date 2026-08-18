@@ -1,3 +1,4 @@
+import { callerOwnsOrg, type OrgId } from "@/lib/entitlements"
 export type PartnerInboxAccessResult =
   | { allowed: true }
   | { allowed: false; reason: "not_found" | "nda_required" | "unauthorized" }
@@ -34,10 +35,10 @@ export function partnerCanAccessPartnerRfpInbox(
     nda_gate_enforced?: boolean | null
     nda_confirmed_at?: string | null
   },
-  callerOrgIds: string[],
+  callerOrgIds: readonly OrgId[],
   profileEmail: string | null | undefined
 ): PartnerInboxAccessResult {
-  const linkedById = Boolean(inbox.vendor_org_id) && callerOrgIds.includes(inbox.vendor_org_id as string)
+  const linkedById = callerOwnsOrg(callerOrgIds, inbox.vendor_org_id)
   const rec = (inbox.recipient_email || "").trim().toLowerCase()
   const pe = (profileEmail || "").trim().toLowerCase()
   const linkedByEmail = Boolean(rec && pe && rec === pe)

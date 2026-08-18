@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
-import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
@@ -831,8 +831,8 @@ export async function PATCH(request: NextRequest) {
 
     // Partners can only accept (pending -> active)
     // Agencies can suspend/terminate
-    const isAgency = callerOrgIds.includes(partnership.lead_org_id as string)
-    const isPartner = callerOrgIds.includes(partnership.vendor_org_id as string)
+    const isAgency = callerOwnsOrg(callerOrgIds, partnership.lead_org_id)
+    const isPartner = callerOwnsOrg(callerOrgIds, partnership.vendor_org_id)
     
     if (!isAgency && !isPartner) {
       return NextResponse.json({ error: 'Access denied - you are not part of this partnership' }, { status: 403 })
@@ -977,9 +977,9 @@ export async function PATCH(request: NextRequest) {
         // `if (!isAgency) return 403`, and isAgency is
         // `callerOrgIds.includes(partnership.lead_org_id)` - so this value is provably one of
         // the caller's own organizations, not a counterparty.
-        orgId: partnership.lead_org_id as string,
+        orgId: orgIdFromColumn(partnership.lead_org_id),
         actorId: user.id,
-        vendorOrgId: (partnership.vendor_org_id as string | null) ?? null,
+        vendorOrgId: orgIdFromColumn(partnership.vendor_org_id),
         partnershipId: partnershipId as string,
         subjectType: 'partnership',
         subjectId: partnershipId as string,
@@ -1173,7 +1173,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Partnership not found' }, { status: 404 })
     }
 
-    if (!callerOrgIds.includes(partnership.lead_org_id as string)) {
+    if (!callerOwnsOrg(callerOrgIds, partnership.lead_org_id)) {
       return NextResponse.json({ error: 'Only the agency can delete this partnership' }, { status: 403 })
     }
 

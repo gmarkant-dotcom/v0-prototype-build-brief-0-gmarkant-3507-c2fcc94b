@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, orgIdFromColumn } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
@@ -528,9 +528,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
         // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
         // caller's own organizations.
-        orgId: existing.lead_org_id as string,
+        orgId: orgIdFromColumn(existing.lead_org_id),
         actorId: user.id,
-        vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
+        vendorOrgId: orgIdFromColumn(existing.vendor_org_id),
         partnershipId: (inboxRow?.partnership_id as string | null) ?? null,
         subjectType: "bid",
         subjectId: id,
@@ -693,9 +693,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
         // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
         // caller's own organizations.
-        orgId: existing.lead_org_id as string,
+        orgId: orgIdFromColumn(existing.lead_org_id),
         actorId: user.id,
-        vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
+        vendorOrgId: orgIdFromColumn(existing.vendor_org_id),
         partnershipId: awardContext.partnershipId,
         subjectType: "bid",
         subjectId: id,
@@ -790,9 +790,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
         // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
         // caller's own organizations.
-        orgId: existing.lead_org_id as string,
+        orgId: orgIdFromColumn(existing.lead_org_id),
         actorId: user.id,
-        vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
+        vendorOrgId: orgIdFromColumn(existing.vendor_org_id),
         partnershipId: (inbox?.partnership_id as string | null) ?? null,
         subjectType: "bid",
         subjectId: id,

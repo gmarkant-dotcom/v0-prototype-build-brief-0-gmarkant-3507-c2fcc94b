@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { requirePartnerRole } from "@/lib/api-auth"
@@ -48,7 +48,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     if (inboxError) return NextResponse.json({ error: "Failed to load RFP" }, { status: 500 })
     if (!inbox) return NextResponse.json({ error: "RFP not found" }, { status: 404 })
 
-    const ownsByPartnerId = callerOrgIds.includes(inbox.vendor_org_id as string)
+    const ownsByPartnerId = callerOwnsOrg(callerOrgIds, inbox.vendor_org_id)
     const ownsByEmail = isSameEmail(inbox.recipient_email, profile?.email || user.email)
     if (!ownsByPartnerId && !ownsByEmail) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
@@ -71,7 +71,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     // 079: an ORGANISATION id. This is the one of the eleven that already failed loudly
     // (it 500s below rather than skipping), and it keeps doing so.
     const [agencyRecipients, { data: projectRow }] = await Promise.all([
-      resolveOrgNotificationRecipients(inbox.lead_org_id, supabase),
+      resolveOrgNotificationRecipients(orgIdFromColumn(inbox.lead_org_id), supabase),
       inbox.project_id
         ? supabase.from("projects").select("id, title").eq("id", inbox.project_id).maybeSingle()
         : Promise.resolve({ data: null }),

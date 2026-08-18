@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { OrgId } from "@/lib/entitlements"
 import {
   normalizeRfpEvaluationCriteria,
   readRfpEvaluationCriteriaFromMasterRfpJson,
@@ -59,7 +60,7 @@ export async function rfpScoreColumnsAvailable(supabase: SupabaseClient): Promis
 export async function resolveRfpRubricForResponse(
   supabase: SupabaseClient,
   responseId: string,
-  orgIds: string[]
+  orgIds: readonly OrgId[]
 ): Promise<RfpEvaluationCriterion[]> {
   if (!(await rfpScoreColumnsAvailable(supabase))) return []
 

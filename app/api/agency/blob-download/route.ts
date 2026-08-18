@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { get } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
         .eq("id", parsedRfp.inboxId)
         .maybeSingle()
 
-      if (inboxErr || !inbox || !callerOrgIds.includes(inbox.lead_org_id as string)) {
+      if (inboxErr || !inbox || !callerOwnsOrg(callerOrgIds, inbox.lead_org_id)) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
 
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
         .eq("id", parsedProject.projectId)
         .maybeSingle()
 
-      if (projectErr || !project || !callerOrgIds.includes(project.org_id as string)) {
+      if (projectErr || !project || !callerOwnsOrg(callerOrgIds, project.org_id)) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
     }
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
         .eq("token", parsedGuestUpload.token)
         .maybeSingle()
 
-      if (tokenErr || !tokenRow || !callerOrgIds.includes(tokenRow.org_id as string)) {
+      if (tokenErr || !tokenRow || !callerOwnsOrg(callerOrgIds, tokenRow.org_id)) {
         return NextResponse.json({ error: "Not found" }, { status: 404 })
       }
     }
