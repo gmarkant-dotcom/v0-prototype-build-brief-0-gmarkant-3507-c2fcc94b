@@ -50,7 +50,9 @@
  *
  * THE ONE FALLBACK RULE, used at all thirteen sites:
  *   display name   organizations.name -> the row's own partner_email/recipient_email
- *                  -> the contact email -> "Unnamed vendor". Never blank.
+ *                  -> the contact email -> a caller-supplied fallback label. Never blank.
+ *                  The pool's pending-request cards pass UNPUBLISHED_VENDOR_LABEL below,
+ *                  which states WHY the name is missing instead of saying "Unnamed".
  *   contact email  primary_contact.email -> the row's own partner_email/recipient_email
  *                  -> null. Null means SKIP THE SEND AND LOG. Never send to "".
  *   contact name   primary_contact.full_name -> the organization name -> the contact
@@ -143,6 +145,34 @@ export function resolveOrgContact(embed: OrgEmbed, rowEmail?: string | null): Or
     contactMissing: !!org && !contact,
   }
 }
+
+/**
+ * THE UNREADABLE-VENDOR LABEL. Greg's ruling, 2026-08-17: option 3 for the release.
+ *
+ * WHERE IT SHOWS. The pending-request cards on /agency/pool. A partner_access_requests
+ * row is a vendor asking to JOIN an agency's pool, so no partnership exists, so that
+ * vendor's organization is not a counterparty of the caller and
+ * current_user_counterparty_org_ids() does not return it. The embed comes back null at
+ * HTTP 200 and there is no name to render. Fourteen of the sixteen live accounts carry
+ * is_discoverable = false, so the discoverable policy does not rescue it either.
+ *
+ * WHY THE COPY SAYS WHY, RATHER THAN "Unnamed vendor". This is expected behaviour that
+ * will still be here in six weeks. A bare "Unnamed vendor" reads as a bug and sends the
+ * next person to read it hunting for one. This string states the actual cause in the
+ * product's own terms - the vendor has not made a profile visible - so the card is
+ * legible rather than alarming, and so nobody "fixes" it by widening a visibility rule.
+ *
+ * WHAT IS NOT CHOSEN. Option 1, a third organizations SELECT policy keyed on
+ * partner_access_requests, is rejected outright: that row is written unilaterally by one
+ * party, so building visibility on it lets a vendor make itself visible to any agency
+ * simply by requesting access. Option 2 - snapshot requested_by_user_id onto the row and
+ * embed the person - is the follow-up, and it ships with the membership feature.
+ *
+ * ONE STRING, ONE DEFINITION. Every surface that renders this fallback imports this
+ * constant. It is deliberately NOT the default of orgDisplayName(): the default fires for
+ * any null organization, and only this surface knows the cause is an unpublished profile.
+ */
+export const UNPUBLISHED_VENDOR_LABEL = 'Vendor has not published a profile'
 
 /** The company name as shown to a human. Never blank. */
 export function orgDisplayName(contact: OrgContact, fallbackLabel = 'Unnamed vendor'): string {

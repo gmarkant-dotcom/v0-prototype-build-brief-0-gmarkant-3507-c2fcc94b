@@ -9,6 +9,7 @@ import {
   type MagicTokenForAttach,
 } from "@/lib/magic-token-attach"
 import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
+import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 
 function getServiceSupabase() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -160,15 +161,28 @@ export async function GET() {
       clientNameByProjectId = Object.fromEntries((projectRows || []).map((p) => [p.id as string, (p.client_name as string | null) ?? null]))
     }
 
+    // 079-ORG-ID-READ. Was `.from("profiles").in("id", <lead org ids>)`. Neither guard
+    // could see it - the column name is already post-079 and there is no embed hint - and
+    // it works today only because every backfilled organization id equals its founding
+    // user's id. After 079, a lead agency organization created by the PHASE 12 trigger
+    // gets gen_random_uuid() and matches no profiles row, so every bid card in the vendor
+    // portal loses the agency's name with no error anywhere.
+    //
+    // agency_company_name is now organizations.name. agency_full_name stays a PERSON's
+    // name and comes from the organization's designated primary contact, because there is
+    // no organization-level equivalent of a full name and inventing one would be a lie.
     const agencyIds = [...new Set(rows.map((r) => r.lead_org_id as string).filter(Boolean))]
     let agencyById: Record<string, { company_name: string | null; full_name: string | null }> = {}
     if (agencyIds.length > 0) {
-      const { data: agencyRows } = await supabase.from("profiles").select("id, company_name, full_name").in("id", agencyIds)
+      const { data: agencyRows } = await supabase
+        .from("organizations")
+        .select(ORG_CONTACT_SELECT)
+        .in("id", agencyIds)
       agencyById = Object.fromEntries(
-        (agencyRows || []).map((a) => [
-          a.id as string,
-          { company_name: (a.company_name as string | null) ?? null, full_name: (a.full_name as string | null) ?? null },
-        ])
+        ((agencyRows || []) as { id?: string | null }[]).map((a) => {
+          const contact = resolveOrgContact(a as OrgEmbed, null)
+          return [a.id as string, { company_name: contact.orgName, full_name: contact.contactFullName }]
+        })
       )
     }
 

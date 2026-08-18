@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 import { isActivePartnership } from "@/lib/partnership-state"
 import { parseDoubleJson } from "@/lib/active-engagement-parse"
 
@@ -166,16 +167,27 @@ export async function GET() {
     // Partner display names - resolved once for every vendor_org_id referenced anywhere
     // below (partnerships, inbox rows, assignments) so activity/attention rows can show a
     // real name instead of an email or raw id.
+    //
+    // 079-ORG-ID-READ. This read USED TO BE `.from("profiles").in("id", <vendor org ids>)`.
+    // Both guards were green on it: the column name is already the post-079 one, so the
+    // identity guard saw nothing, and there is no `table!hint(` embed, so the embed guard
+    // saw nothing. It works today only because every organization 079 backfills carries
+    // its founding user's id, which is the coincidence 079's own table comment warns
+    // against relying on. The first vendor organization created after the migration gets
+    // gen_random_uuid(), matches no profiles row, and every activity line about that
+    // vendor silently reads "A vendor". Read the organization instead.
     const partnerIds = new Set<string>()
     for (const row of partnerships) if (row.vendor_org_id) partnerIds.add(row.vendor_org_id as string)
     for (const row of inboxRows) if (row.vendor_org_id) partnerIds.add(row.vendor_org_id as string)
-    const { data: partnerProfiles } = partnerIds.size
-      ? await supabase.from("profiles").select("id, company_name, full_name, email").in("id", Array.from(partnerIds))
-      : { data: [] as { id: string; company_name: string | null; full_name: string | null; email: string | null }[] }
+    const { data: partnerOrgs } = partnerIds.size
+      ? await supabase.from("organizations").select(ORG_CONTACT_SELECT).in("id", Array.from(partnerIds))
+      : { data: [] as unknown[] }
     const partnerNameById = new Map<string, string>()
-    for (const p of partnerProfiles || []) {
-      const name = (p.company_name || p.full_name || p.email || "").trim()
-      if (name) partnerNameById.set(p.id as string, name)
+    for (const row of (partnerOrgs || []) as { id?: string | null }[]) {
+      const contact = resolveOrgContact(row as OrgEmbed, null)
+      // Same precedence the profiles read had: company, then the person, then the address.
+      const name = (contact.orgName || contact.contactFullName || contact.contactEmail || "").trim()
+      if (row.id && name) partnerNameById.set(row.id as string, name)
     }
     const partnershipById = new Map(partnerships.map((p) => [p.id as string, p]))
     function partnerNameForPartnership(partnershipId: string | null): string {

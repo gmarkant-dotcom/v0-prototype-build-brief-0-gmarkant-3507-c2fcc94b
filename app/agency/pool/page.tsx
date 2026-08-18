@@ -19,6 +19,7 @@ import {
   ORG_CONTACT_SELECT,
   logOrgContactGap,
   orgDisplayName,
+  UNPUBLISHED_VENDOR_LABEL,
   resolveOrgContact,
   type OrgEmbed,
 } from "@/lib/org-contact"
@@ -695,7 +696,15 @@ function PartnerPoolPageInner() {
             // The company name leads now. It used to be the person's, with the company as
             // the fallback; under the organization model the company is the fact this row
             // is about, and orgDisplayName() guarantees it is never blank.
-            partnerName: orgDisplayName(contact, 'Unnamed vendor'),
+            //
+            // GREG'S RULING, option 3: the visibility rule is NOT widened for this card.
+            // A partner_access_requests row is unilateral - the vendor writes it alone -
+            // so admitting it to the counterparty set would let any vendor make itself
+            // visible to any agency by requesting access. The card falls back instead,
+            // and the fallback SAYS WHY so that meeting it in six weeks reads as expected
+            // behaviour rather than as a bug. One string, defined once, in
+            // lib/org-contact.ts.
+            partnerName: orgDisplayName(contact, UNPUBLISHED_VENDOR_LABEL),
             partnerEmail: contact.contactEmail ?? undefined,
             partnerCompany: contact.orgName ?? undefined,
             status: req.status,

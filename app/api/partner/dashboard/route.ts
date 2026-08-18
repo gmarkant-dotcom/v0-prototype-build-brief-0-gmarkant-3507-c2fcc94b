@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requirePartnerRole } from "@/lib/api-auth"
 import { isActivePartnership } from "@/lib/partnership-state"
+import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 
 export const dynamic = "force-dynamic"
 
@@ -143,18 +144,26 @@ export async function GET() {
     for (const row of statusUpdates) if (row.project_id) projectIds.add(row.project_id as string)
 
     const [agenciesRes, projectsRes] = await Promise.all([
+      // 079-ORG-ID-READ. Was `.from("profiles").in("id", <lead org ids>)` - invisible to
+      // both guards (post-079 column name, no embed hint) and correct today only because
+      // every backfilled organization id equals its founding user's id. A lead agency
+      // organization created after 079 has a gen_random_uuid() id, matches no profiles
+      // row, and every "Lead agency" label on this dashboard silently loses its name.
       agencyIds.size > 0
-        ? supabase.from("profiles").select("id, company_name, full_name").in("id", Array.from(agencyIds))
-        : Promise.resolve({ data: [] as { id: string; company_name: string | null; full_name: string | null }[], error: null }),
+        ? supabase.from("organizations").select(ORG_CONTACT_SELECT).in("id", Array.from(agencyIds))
+        : Promise.resolve({ data: [] as unknown[], error: null }),
       projectIds.size > 0
         ? supabase.from("projects").select("id, name, client_name").in("id", Array.from(projectIds))
         : Promise.resolve({ data: [] as { id: string; name: string | null; client_name: string | null }[], error: null }),
     ])
 
     const agencyNameById = new Map<string, string>()
-    for (const a of agenciesRes.data || []) {
-      const name = ((a.company_name as string | null) || (a.full_name as string | null) || "").trim()
-      agencyNameById.set(a.id as string, name || "Lead agency")
+    for (const a of (agenciesRes.data || []) as { id?: string | null }[]) {
+      const contact = resolveOrgContact(a as OrgEmbed, null)
+      // Same precedence the profiles read had: company, then the person. The literal
+      // "Lead agency" fallback is unchanged - it fires when the row resolves with no name.
+      const name = (contact.orgName || contact.contactFullName || "").trim()
+      if (a.id) agencyNameById.set(a.id as string, name || "Lead agency")
     }
     const clientNameByProjectId = new Map<string, string | null>()
     const projectNameById = new Map<string, string>()

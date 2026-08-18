@@ -86,6 +86,16 @@ export async function GET(
       created_at: string
     }
 
+    // 079-ORG-ID-READ, DELIBERATELY NOT FIXED. `project.org_id` is an ORGANISATION id
+    // after 079 and this reads a PERSON with it. It resolves today only because every
+    // backfilled organization carries its founding user's id.
+    //
+    // NOT FIXED BECAUSE THIS ROUTE IS DEAD. A repository-wide search for a caller of
+    // `/api/projects/<id>/partner` finds none - no fetch, no SWR key, no link. The
+    // recommendation in docs/079-embed-closure-report.md is to DELETE the route rather
+    // than repair it, which is a decision to take with eyes open rather than as a
+    // side-effect of a release. Note also `.eq('vendor_org_id', user.id)` above: the same
+    // coincidence in the opposite direction, an organization column compared to a user id.
     const { data: agency } = await supabase
       .from('profiles')
       .select('id, email, full_name, company_name')

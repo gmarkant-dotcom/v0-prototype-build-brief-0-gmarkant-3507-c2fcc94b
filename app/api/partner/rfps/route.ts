@@ -160,6 +160,15 @@ export async function GET() {
     }
 
     const rows = data || []
+    // 079-ORG-ID-READ, DELIBERATELY NOT FIXED. `meeting_url` is a profiles column and
+    // 079 creates NO organization equivalent for it. Repointing this read at
+    // `organizations` would mean inventing one, which is a product decision about what a
+    // company profile contains, not a rename. Written up for Greg in
+    // docs/079-embed-closure-report.md: a meeting link is a PERSON's calendar, so the
+    // honest fix is to reach it through the organization's primary contact - one hop
+    // further, not one table across. Until that is ruled on, this returns nothing for any
+    // lead agency organization created after 079 and the "Book a call" button does not
+    // render. It fails closed, silently, and it is a missing button rather than a wrong one.
     const agencyIds = Array.from(new Set(rows.map((r) => r.lead_org_id).filter(Boolean)))
     let agencyMeetingUrlById: Record<string, string | null> = {}
     if (agencyIds.length > 0) {
