@@ -49,10 +49,17 @@ export async function rfpScoreColumnsAvailable(supabase: SupabaseClient): Promis
  * Magic-link flow reads rfp_magic_tokens.evaluation_criteria through a guarded select, so a
  * missing column is simply "no rubric" rather than a 500.
  */
+/**
+ * 079 PARAMETER CLASS: `orgIds` is the CALLER'S OWN organizations, from
+ * resolveCallerOrgIds() - never a counterparty or visibility set. It replaces a single
+ * parameter that callers filled with `user.id`, comparing an organization column to a
+ * user id. `.in()` on an empty array matches nothing, so a caller with no membership
+ * fails closed rather than silently reading another organization's rows.
+ */
 export async function resolveRfpRubricForResponse(
   supabase: SupabaseClient,
   responseId: string,
-  agencyId: string
+  orgIds: string[]
 ): Promise<RfpEvaluationCriterion[]> {
   if (!(await rfpScoreColumnsAvailable(supabase))) return []
 
@@ -60,7 +67,7 @@ export async function resolveRfpRubricForResponse(
     .from("partner_rfp_responses")
     .select("inbox_item_id")
     .eq("id", responseId)
-    .eq("lead_org_id", agencyId)
+    .in("lead_org_id", orgIds)
     .maybeSingle()
   if (!response) return []
 
@@ -69,7 +76,7 @@ export async function resolveRfpRubricForResponse(
       .from("partner_rfp_inbox")
       .select("master_rfp_json")
       .eq("id", response.inbox_item_id)
-      .eq("lead_org_id", agencyId)
+      .in("lead_org_id", orgIds)
       .maybeSingle()
     return readRfpEvaluationCriteriaFromMasterRfpJson(inbox?.master_rfp_json)
   }
@@ -78,7 +85,7 @@ export async function resolveRfpRubricForResponse(
     .from("rfp_magic_tokens")
     .select("evaluation_criteria")
     .eq("response_id", responseId)
-    .eq("org_id", agencyId)
+    .in("org_id", orgIds)
     .maybeSingle()
   if (tokenErr) {
     if (tokenErr.code !== "42703") {

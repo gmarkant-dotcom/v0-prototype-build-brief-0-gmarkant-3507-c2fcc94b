@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
 
   const comparison = await loadBidDeltaComparison(
     supabase,
-    userId,
+    callerOrgIds,
     (review.response_id as string | null) ?? null,
     (scores || []).map((s) => ({ criterion_id: s.criterion_id as string, score: s.score as number | null }))
   )
@@ -277,7 +277,7 @@ export async function POST(req: Request) {
     let aiDeltaSummary: string | null = null
     let comparison = await loadBidDeltaComparison(
       supabase,
-      userId,
+      callerOrgIds,
       (review.response_id as string | null) ?? null,
       (allScores || []).map((s) => ({ criterion_id: s.criterion_id as string, score: s.score as number | null }))
     )

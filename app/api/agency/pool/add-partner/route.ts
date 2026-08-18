@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { importPartnerRows } from "@/lib/server/partner-pool-import"
-import { agencyEntitlementId } from "@/lib/entitlements"
+import { resolveCallerWriteOrgId } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -29,7 +29,14 @@ export async function POST(request: NextRequest) {
   // 079: the pool belongs to the ORGANISATION, so resolve the caller's membership before
   // writing into it. The user id is still passed alongside, for the self-account and
   // same-domain guards, which are questions about a person.
-  const agencyOrgId = await agencyEntitlementId(auth.user.id, service)
+  // 079 PARAMETER CLASS: importPartnerRows() writes this into partnerships.lead_org_id,
+  // which REFERENCES organizations(id). agencyEntitlementId() was the wrong resolver - it
+  // returns the user id unchanged when membership does not resolve, which is the correct
+  // failure for a usage row and a 23503 for a foreign key. Fails closed instead.
+  const agencyOrgId = await resolveCallerWriteOrgId(auth.user.id, service)
+  if (!agencyOrgId) {
+    return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+  }
   const results = await importPartnerRows(service, agencyOrgId, auth.user.id, [body], "manual", undefined, {
     agencyAuthEmail: auth.user.email,
   })

@@ -303,3 +303,74 @@ export function canUploadFiles(profile: EntitlementProfile): boolean {
 export function canUseAgencyPortalAi(profile: EntitlementProfile): boolean {
   return canActAs(profile, "agency") && hasAgencyEntitlement(profile)
 }
+
+/**
+ * The organization a GIVEN user belongs to - not the caller's own.
+ *
+ * WHY THIS IS SEPARATE FROM THE THREE RESOLVERS ABOVE. All three answer a question about
+ * `auth.uid()`, the person making the request. This one answers it about somebody else:
+ * the vendor whose profile a lead agency just matched by email, the bidder whose vouches
+ * are being counted, the colleague named on a milestone. Before 079 that question had no
+ * answer because it had no question - a profiles.id WAS the company. Now it needs a
+ * lookup, and there was nowhere to put it, which is why nineteen call sites went on
+ * passing a profiles.id straight into an organization column.
+ *
+ * Returns null when the user belongs to no organization. Every caller must treat null as
+ * "no organization", never as "use the user id instead" - that substitution is the exact
+ * defect this closes, and it is invisible for the sixteen backfilled accounts whose
+ * organization id equals their founder's user id.
+ */
+export async function resolveOrgIdForUser(
+  userId: string | null | undefined,
+  client: OrgLookupClient
+): Promise<string | null> {
+  if (!userId) return null
+  const map = await resolveOrgIdsForUsers([userId], client)
+  return map.get(userId) ?? null
+}
+
+/**
+ * The same lookup for many users at once, as a user id -> organization id map.
+ *
+ * One round trip rather than N. Users missing from the returned map belong to no
+ * organization; callers must not fall back to the user id for them.
+ *
+ * Where a user belongs to more than one organization the ranking is owner, then admin,
+ * then member, matching resolveCallerWriteOrgId(). Deterministic rather than correct, for
+ * the same reason stated there: today every user belongs to exactly one organization, so
+ * the ranking never has two rows to sort. It becomes a real product question the moment
+ * colleague invitations ship (M1).
+ */
+export async function resolveOrgIdsForUsers(
+  userIds: readonly string[],
+  client: OrgLookupClient
+): Promise<Map<string, string>> {
+  const wanted = Array.from(new Set(userIds.filter((id): id is string => Boolean(id))))
+  const out = new Map<string, string>()
+  if (wanted.length === 0) return out
+
+  const { data, error } = await client.from("org_members").select("user_id, org_id, role").in("user_id", wanted)
+  if (error) {
+    console.error("[entitlements] resolveOrgIdsForUsers failed", {
+      count: wanted.length,
+      code: error.code,
+      message: error.message,
+    })
+    return out
+  }
+
+  const rank = (r?: string | null) => (r === "owner" ? 0 : r === "admin" ? 1 : 2)
+  const bestRank = new Map<string, number>()
+  for (const row of (data ?? []) as Array<{ user_id?: string | null; org_id?: string | null; role?: string | null }>) {
+    const uid = row.user_id
+    const oid = row.org_id
+    if (!uid || !oid) continue
+    const r = rank(row.role)
+    const seen = bestRank.get(uid)
+    if (seen === undefined || r < seen) {
+      bestRank.set(uid, r)
+      out.set(uid, oid)
+    }
+  }
+  return out
+}

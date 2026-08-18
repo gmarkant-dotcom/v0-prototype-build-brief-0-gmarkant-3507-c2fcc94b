@@ -19,6 +19,13 @@ export type BidSummaryGenerationResult =
   | { ok: false; reason: "not_found" | "ai_failed" | "save_failed" }
 
 /**
+ * 079 PARAMETER CLASS: `orgIds` is the CALLER'S OWN organizations, from
+ * resolveCallerOrgIds() - never a counterparty or visibility set. It replaces a single
+ * parameter that callers filled with `user.id`, comparing an organization column to a
+ * user id. `.in()` on an empty array matches nothing, so a caller with no membership
+ * fails closed rather than silently reading another organization's rows.
+ */
+/**
  * Shared by the agency-facing generate-summary endpoint AND the fire-and-forget
  * calls from the partner/guest bid submission handlers - callers are responsible
  * for their own auth (this function does not re-check it).
@@ -26,15 +33,15 @@ export type BidSummaryGenerationResult =
 export async function generateAndSaveBidSummary(
   supabase: SupabaseClient,
   responseId: string,
-  agencyId: string
+  orgIds: string[]
 ): Promise<BidSummaryGenerationResult> {
-  const ctx = await loadBidAnalysisContext(supabase, responseId, agencyId)
+  const ctx = await loadBidAnalysisContext(supabase, responseId, orgIds)
   if (!ctx) return { ok: false, reason: "not_found" }
 
   // S1: the analysis is told which dimensions this RFP is actually judged on, so it can speak
   // to the agency's own rubric rather than to generic procurement dimensions. Empty for an RFP
   // using the global criteria, in which case the prompt is exactly what it was before.
-  const rubric = await resolveRfpRubricForResponse(supabase, responseId, agencyId)
+  const rubric = await resolveRfpRubricForResponse(supabase, responseId, orgIds)
   const rubricText = formatRubricForPrompt(rubric)
   const bidContext = rubricText
     ? `${formatBidContextForPrompt(ctx)}\n\nThis RFP is scored against its own criteria:\n${rubricText}`
@@ -82,7 +89,7 @@ export async function generateAndSaveBidSummary(
     .from("partner_rfp_responses")
     .update(patch)
     .eq("id", responseId)
-    .eq("lead_org_id", agencyId)
+    .in("lead_org_id", orgIds)
     .select("ai_summary_short, ai_summary_detailed, ai_summary_generated_at")
     .single()
   if (updateErr) {

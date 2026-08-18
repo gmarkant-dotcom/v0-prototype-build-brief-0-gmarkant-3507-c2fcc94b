@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
-import { agencyEntitlementId } from "@/lib/entitlements"
+import { agencyEntitlementId, resolveCallerOrgIds } from "@/lib/entitlements"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -22,7 +22,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
-    const result = await generateAndSaveBidSummary(supabase, responseId, user.id)
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    // Deliberately NOT agencyEntitlementId() above it: that resolver falls back to the user id
+    // when membership does not resolve, which is right for a quota row and wrong for a filter.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    const result = await generateAndSaveBidSummary(supabase, responseId, callerOrgIds)
     if (!result.ok) {
       const status = result.reason === "not_found" ? 404 : 502
       const error = result.reason === "not_found" ? "Bid not found" : "Analysis unavailable"

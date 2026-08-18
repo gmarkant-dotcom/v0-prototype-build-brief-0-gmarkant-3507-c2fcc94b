@@ -49,9 +49,16 @@ export type ReconcileResult =
  * Ownership is verified before any client_id is accepted, so a profile belonging to another
  * agency can never be attached.
  */
+/**
+ * 079 PARAMETER CLASS: `orgIds` is the CALLER'S OWN organizations, from
+ * resolveCallerOrgIds() - never a counterparty or visibility set. It replaces a single
+ * parameter that callers filled with `user.id`, comparing an organization column to a
+ * user id. `.in()` on an empty array matches nothing, so a caller with no membership
+ * fails closed rather than silently reading another organization's rows.
+ */
 export async function reconcileProjectClientFields(
   supabase: SupabaseClient,
-  agencyId: string,
+  orgIds: string[],
   input: ReconcileInput
 ): Promise<ReconcileResult> {
   const fields: Partial<ProjectClientFields> = {}
@@ -71,7 +78,7 @@ export async function reconcileProjectClientFields(
       .from("clients")
       .select("id, name")
       .eq("id", clientId)
-      .eq("org_id", agencyId)
+      .in("org_id", orgIds)
       .maybeSingle()
 
     if (error) {

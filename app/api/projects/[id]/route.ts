@@ -83,7 +83,7 @@ export async function PATCH(
     }
 
     if ('client_id' in body || 'client_name' in body) {
-      const reconciled = await reconcileProjectClientFields(supabase, user.id, {
+      const reconciled = await reconcileProjectClientFields(supabase, callerOrgIds, {
         hasClientId: 'client_id' in body,
         clientId: (body as Record<string, unknown>).client_id as string | null,
         hasClientName: 'client_name' in body,

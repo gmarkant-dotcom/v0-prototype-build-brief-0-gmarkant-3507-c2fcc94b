@@ -594,7 +594,7 @@ export async function POST(request: NextRequest) {
     // Both client fields go through the one reconciler, so a project cannot be CREATED
     // incoherent either. A selected profile sets client_id and takes client_name from that
     // profile's own name; a typed name sets client_name with client_id null.
-    const reconciledClient = await reconcileProjectClientFields(supabase, user.id, {
+    const reconciledClient = await reconcileProjectClientFields(supabase, callerOrgIds, {
       hasClientId: 'client_id' in (body as Record<string, unknown>),
       clientId: (body as Record<string, unknown>).client_id as string | null,
       hasClientName: true,

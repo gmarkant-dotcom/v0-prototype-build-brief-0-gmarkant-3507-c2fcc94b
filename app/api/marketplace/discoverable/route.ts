@@ -95,6 +95,13 @@ export async function GET(req: NextRequest) {
     // partner_vouches publishes the whole vouch graph, and this is the read side of
     // closing it.
     const profileIds = maskedProfiles.map((p) => p.id as string)
+    // 079 PARAMETER CLASS, NOT CLOSED HERE - see docs/vendor-visibility-report.md.
+    // `profileIds` are profiles ids and partner_vouches.vendor_org_id is an ORGANIZATION
+    // column, so every count here is right only for the sixteen backfilled accounts and
+    // silently zero for the rest. Same blocker as the pool detail page: org_members SELECT is
+    // self-row-only, this route uses the session client, and adding the service role to it is
+    // out of bounds. Needs a SECURITY DEFINER mapping in a migration. Undercount, not
+    // disclosure.
     const vouchCountByPartnerId = await fetchVouchCounts(supabase, profileIds)
 
     const profiles = maskedProfiles.map((p) => ({

@@ -59,7 +59,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "One or more bids were not found" }, { status: 404 })
     }
 
-    const scope = await resolveResponseScope(supabase, responseIds[0], user.id)
+    const scope = await resolveResponseScope(supabase, responseIds[0], callerOrgIds)
     if (!scope?.projectId || !scope.scopeItemName) {
       return NextResponse.json({ error: "Could not resolve scope for ranking" }, { status: 400 })
     }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { agencyEntitlementId } from "@/lib/entitlements"
+import { resolveCallerWriteOrgId } from "@/lib/entitlements"
 import {
   attachMagicTokenToPartnerInbox,
   MAGIC_TOKEN_ATTACH_COLUMNS,
@@ -122,16 +122,32 @@ export async function GET() {
     }
 
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
-    await sweepOutstandingMagicTokens(vendorEmail, user.id)
+
+    // 079 PARAMETER CLASS: both calls below WRITE this value into vendor_org_id, which
+    // REFERENCES organizations(id). `user.id` is a user id: accidentally correct for the
+    // sixteen backfilled accounts whose organization id equals their founder's, and a 23503
+    // foreign key violation for every account created since. resolveCallerWriteOrgId() rather
+    // than agencyEntitlementId(), because that one falls back to returning the user id
+    // unchanged - the right failure for a quota row and precisely the wrong one for a foreign
+    // key. Null means "no organization", and the linkage work is skipped rather than guessed;
+    // the list below still renders from the caller's memberships.
+    const vendorWriteOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (vendorWriteOrgId) {
+      await sweepOutstandingMagicTokens(vendorEmail, vendorWriteOrgId)
+    } else {
+      console.error("[partner/rfps] skipping magic-token sweep: caller belongs to no organization", {
+        userId: user.id,
+      })
+    }
     // H3 retroactive fix: an award made before this account existed/was linked (H2's pure-
     // guest branch) leaves its partnerships row vendor_org_id-null forever otherwise - nothing
     // else claims it automatically. Service-role, same reasoning as the sweep above (RLS on
     // project_assignments would otherwise need to already know about a not-yet-linked row).
     const service = getServiceSupabase()
-    if (service) {
+    if (service && vendorWriteOrgId) {
       // 079: the ghost row is claimed BY THE ORGANISATION, so pass its id.
       await claimAwardedGhostPartnershipsByEmail(service, {
-        partnerId: await agencyEntitlementId(user.id, service),
+        partnerId: vendorWriteOrgId,
         vendorEmail,
       })
     }

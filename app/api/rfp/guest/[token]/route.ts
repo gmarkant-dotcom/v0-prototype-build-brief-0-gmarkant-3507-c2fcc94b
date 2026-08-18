@@ -517,7 +517,7 @@ export async function POST(req: Request) {
       }
 
       // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-      void generateAndSaveBidSummary(supabase, tokenRow.response_id as string, tokenRow.org_id as string).catch((err) => {
+      void generateAndSaveBidSummary(supabase, tokenRow.response_id as string, [tokenRow.org_id as string]).catch((err) => {
         console.error("[api] fire-and-forget summary generation failed", {
           route,
           responseId: tokenRow.response_id,
@@ -633,7 +633,7 @@ export async function POST(req: Request) {
     }
 
     // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-    void generateAndSaveBidSummary(supabase, saved.id as string, tokenRow.org_id as string).catch((err) => {
+    void generateAndSaveBidSummary(supabase, saved.id as string, [tokenRow.org_id as string]).catch((err) => {
       console.error("[api] fire-and-forget summary generation failed", {
         route,
         responseId: saved.id,

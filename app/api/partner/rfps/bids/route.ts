@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import {
   attachMagicTokenToPartnerInbox,
   MAGIC_TOKEN_ATTACH_COLUMNS,
@@ -110,7 +110,21 @@ export async function GET() {
     }
 
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
-    await backfillGuestResponseLinkage(vendorEmail, user.id)
+
+    // 079 PARAMETER CLASS: backfillGuestResponseLinkage() WRITES this into vendor_org_id on
+    // partner_rfp_inbox, partner_rfp_responses and partnerships - all three now REFERENCE
+    // organizations(id). This was the one of the three callers of
+    // claimAwardedGhostPartnershipsByEmail() that passed the raw user id with no resolver at
+    // all; the other two used agencyEntitlementId(), whose user-id fallback is wrong for a
+    // foreign key. All three now use the same write resolver and fail closed on null.
+    const vendorWriteOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (vendorWriteOrgId) {
+      await backfillGuestResponseLinkage(vendorEmail, vendorWriteOrgId)
+    } else {
+      console.error("[partner/rfps/bids] skipping linkage backfill: caller belongs to no organization", {
+        userId: user.id,
+      })
+    }
 
     // 079: `.eq("vendor_org_id", user.id)` compares an ORGANISATION column to a USER id.
     // Every organization 079 backfilled has an id equal to its founding user's, so this

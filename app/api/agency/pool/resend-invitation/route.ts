@@ -3,6 +3,7 @@ import { buildBrandedEmailHtml, buildBrandedEmailText, sendTransactionalEmail, s
 import { hasLigamentAccount } from "@/lib/server/account-existence"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { resolveCallerWriteOrgId } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -78,7 +79,21 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      await markPartnershipInvited(supabase, { agencyId: user.id, vendorEmail })
+      // 079 PARAMETER CLASS: `agencyId` is written into partnerships.lead_org_id, which
+      // REFERENCES organizations(id). `user.id` is a user id. Resolved to the caller's own
+      // organization; null skips the stamp rather than writing a value that does not name a
+      // row in organizations. The email has already sent either way, which is why this
+      // failure is logged and swallowed exactly as the surrounding catch already does.
+      const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+      if (!writeOrgId) {
+        console.error("[api] cannot mark partnership invited: caller belongs to no organization", {
+          route,
+          userId: user.id,
+          vendorEmail,
+        })
+      } else {
+        await markPartnershipInvited(supabase, { agencyId: writeOrgId, vendorEmail })
+      }
     } catch (partnershipErr) {
       console.error("[api] failed to mark partnership invited", {
         route,

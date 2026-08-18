@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient as createAnonClient } from "@/lib/supabase/server"
+import { resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import {
   attachMagicTokenToPartnerInbox,
@@ -62,9 +63,20 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
       return NextResponse.json({ error: "email_mismatch" }, { status: 403 })
     }
 
+    // 079 PARAMETER CLASS: `partnerId` is written into vendor_org_id on partner_rfp_inbox,
+    // partner_rfp_responses and partnerships - all three REFERENCE organizations(id) after
+    // 079. `user.id` is a user id, correct only for the sixteen accounts whose organization
+    // was backfilled with their own id. Fails closed: an account with no organization gets a
+    // clear 403 rather than a foreign key violation surfaced as "Failed to attach".
+    const vendorWriteOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!vendorWriteOrgId) {
+      console.error("[api] failure", { route, method: "POST", code: 403, message: "caller belongs to no organization" })
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const result = await attachMagicTokenToPartnerInbox(service, {
       tokenRow: tokenRow as unknown as MagicTokenForAttach,
-      partnerId: user.id,
+      partnerId: vendorWriteOrgId,
     })
     if (!result.attached) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: result.reason })

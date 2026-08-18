@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { fetchVouchCount } from "@/lib/vouch-counts"
+import { resolveOrgIdForUser } from "@/lib/entitlements"
 
 const disciplines = [
   "Video Production",
@@ -211,8 +212,16 @@ export default function PartnerProfilePage() {
 
       // Fetch own vouch count (aggregate only — partner never sees who vouched).
       // Routed through lib/vouch-counts.ts; see migration 082.
+      //
+      // 079 PARAMETER CLASS: partner_vouches.vendor_org_id is an ORGANIZATION column and
+      // `user.id` is a user id - equal only for the sixteen accounts 079 backfilled, and a
+      // silent zero for every account created since. The subject here is the caller
+      // themselves, so their own membership row is readable under the self-row-only SELECT
+      // policy on org_members and this resolves. Null leaves the count at zero, which is what
+      // an account with no organization genuinely has.
       setVouchLoading(true)
-      setVouchCount(await fetchVouchCount(supabase, user.id))
+      const ownOrgId = await resolveOrgIdForUser(user.id, supabase)
+      setVouchCount(ownOrgId ? await fetchVouchCount(supabase, ownOrgId) : 0)
       setVouchLoading(false)
       setFormData((prev) => ({
         ...prev,

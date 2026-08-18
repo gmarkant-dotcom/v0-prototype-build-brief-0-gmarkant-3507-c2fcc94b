@@ -24,9 +24,16 @@ export type DeltaComparison = {
  * criterion_id (not name). Some awarded bids are never formally scored - "no evaluation"
  * is an expected, non-error outcome here, not every delivery review can produce a delta.
  */
+/**
+ * 079 PARAMETER CLASS: `orgIds` is the CALLER'S OWN organizations, from
+ * resolveCallerOrgIds() - never a counterparty or visibility set. It replaces a single
+ * parameter that callers filled with `user.id`, comparing an organization column to a
+ * user id. `.in()` on an empty array matches nothing, so a caller with no membership
+ * fails closed rather than silently reading another organization's rows.
+ */
 export async function loadBidDeltaComparison(
   supabase: SupabaseClient,
-  agencyId: string,
+  orgIds: string[],
   responseId: string | null,
   deliveryScores: { criterion_id: string; score: number | null }[]
 ): Promise<DeltaComparison> {
@@ -36,7 +43,7 @@ export async function loadBidDeltaComparison(
     .from("bid_evaluations")
     .select("id")
     .eq("response_id", responseId)
-    .eq("org_id", agencyId)
+    .in("org_id", orgIds)
     .maybeSingle()
   if (!evaluation) return { hasEvaluation: false, rows: [], unavailableReason: null }
 

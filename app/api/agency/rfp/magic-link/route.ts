@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient as createAnonClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { agencyEntitlementId, resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser } from "@/lib/entitlements"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
@@ -199,9 +199,16 @@ export async function POST(request: NextRequest) {
     const expires_at = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
 
     // 079: a write is attributed to ONE organization, not to the caller's whole membership
-    // set. agencyEntitlementId() picks the organization the caller owns, then administers,
-    // then the first by membership - deterministic rather than arbitrary.
-    const writeOrgId = await agencyEntitlementId(auth.userId, service)
+    // set. resolveCallerWriteOrgId() picks the organization the caller owns, then
+    // administers, then the first by membership - deterministic rather than arbitrary.
+    // Deliberately NOT agencyEntitlementId(): that resolver returns the user id unchanged
+    // when membership does not resolve, and rfp_magic_tokens.org_id REFERENCES
+    // organizations(id) after 079, so the fallback is a 23503 rather than a safe default.
+    const writeOrgId = await resolveCallerWriteOrgId(auth.userId, service)
+    if (!writeOrgId) {
+      console.error("[api] failure", { route, method: "POST", code: 403, message: "caller belongs to no organization" })
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
 
     const tokenUpsertPayload = {
       org_id: writeOrgId,
@@ -259,11 +266,28 @@ export async function POST(request: NextRequest) {
     // looked up above for is_existing_partner) - also surface this RFP in their portal
     // inbox, not just as a bearer link in the invitation email below. Idempotent, so a
     // resend through this same route never creates a duplicate inbox row.
+    // 079 PARAMETER CLASS: the recipient is NOT the caller here, so neither caller resolver
+    // applies - this is "which organization does that person belong to", which had no answer
+    // before 079 because a profiles.id WAS the company. matchedProfile.id is a profiles.id
+    // and is written into vendor_org_id, which REFERENCES organizations(id). Null means the
+    // matched account has no organization: the attach is skipped rather than writing a user
+    // id, and the invitation email below still sends, so the vendor is never left with
+    // nothing.
+    const matchedVendorOrgId = matchedProfile?.id
+      ? await resolveOrgIdForUser(matchedProfile.id as string, service)
+      : null
     let attached = false
-    if (matchedProfile?.id) {
+    if (matchedProfile?.id && !matchedVendorOrgId) {
+      console.error("[api] rfp/magic-link: matched account belongs to no organization, skipping portal attach", {
+        route,
+        matchedProfileId: matchedProfile.id,
+        vendorEmail,
+      })
+    }
+    if (matchedVendorOrgId) {
       const attachResult = await attachMagicTokenToPartnerInbox(service, {
         tokenRow: tokenRow as unknown as MagicTokenForAttach,
-        partnerId: matchedProfile.id as string,
+        partnerId: matchedVendorOrgId,
       })
       if (attachResult.attached) {
         attached = true
@@ -320,10 +344,13 @@ export async function POST(request: NextRequest) {
 
     if (emailSent) {
       try {
+        // 079 PARAMETER CLASS: both ids here are organization ids written into
+        // partnerships.lead_org_id / .vendor_org_id. `auth.userId` was a user id and
+        // `matchedProfile.id` a profiles.id; both REFERENCE organizations(id) now.
         await markPartnershipInvited(service, {
-          agencyId: auth.userId,
+          agencyId: writeOrgId,
           vendorEmail,
-          partnerId: matchedProfile?.id ?? null,
+          partnerId: matchedVendorOrgId,
         })
       } catch (partnershipErr) {
         console.error("[api] failed to mark partnership invited", {

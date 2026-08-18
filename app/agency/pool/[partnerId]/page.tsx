@@ -227,6 +227,16 @@ export default function AgencyPartnerProfilePage() {
 
         // Count only — never expose list of vouchers. Routed through
         // lib/vouch-counts.ts; see migration 082.
+        // 079 PARAMETER CLASS, NOT CLOSED HERE - see docs/vendor-visibility-report.md.
+        // partner_vouches.vendor_org_id is an ORGANIZATION column and `partnerId` is a
+        // profiles id from the route param, so this count is right only for the sixteen
+        // accounts whose organization id equals their founder's and silently zero otherwise.
+        // It cannot be fixed at this layer: org_members carries a self-row-only SELECT policy
+        // ("Members read their own membership row", migration 079), so a browser client
+        // cannot resolve ANOTHER user's organization, and adding the service role to this
+        // surface is out of bounds. Closing it needs a SECURITY DEFINER mapping in a
+        // migration. Read-only and non-privileged: the failure is an undercount, never a
+        // disclosure.
         const count = await fetchVouchCount(supabase, partnerId)
         if (!cancelled) setVouchCount(count)
 

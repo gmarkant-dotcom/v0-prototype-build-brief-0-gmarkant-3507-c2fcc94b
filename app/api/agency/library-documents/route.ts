@@ -1,4 +1,4 @@
-import { resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import {
@@ -30,7 +30,9 @@ export async function GET(request: NextRequest) {
         ? { mode: "project", projectId }
         : { mode: "all" }
 
-    const result = await fetchScopedLibraryDocuments(supabase, user.id, scope)
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+    const result = await fetchScopedLibraryDocuments(supabase, callerOrgIds, scope)
     if (result.error) {
       console.error("[agency/library-documents] GET", result.error)
       return NextResponse.json({ error: result.error || "Failed to load documents", documents: [] }, { status: 500 })

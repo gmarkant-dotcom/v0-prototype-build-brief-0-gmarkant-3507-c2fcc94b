@@ -38,7 +38,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // Documents come through the ONE scoped query (lib/library-documents.ts) so this surface
     // cannot drift from the pickers. mode 'client' means exactly this client: never agency-wide
     // rows, never another client's.
-    const scoped = await fetchScopedLibraryDocuments(supabase, user.id, { mode: "client", clientId: id })
+    const scoped = await fetchScopedLibraryDocuments(supabase, callerOrgIds, { mode: "client", clientId: id })
     if (scoped.error) {
       console.warn("[agency/clients/[id]] documents unavailable, rendering without them", { message: scoped.error })
     }

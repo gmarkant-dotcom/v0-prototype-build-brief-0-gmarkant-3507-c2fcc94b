@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
-import { agencyEntitlementId, resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
 
 export const dynamic = "force-dynamic"
@@ -54,11 +54,20 @@ export async function GET() {
     // having visited /partner/rfps first in the same session.
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
     const service = getServiceSupabase()
-    if (service && vendorEmail) {
+    // 079 PARAMETER CLASS: claimAwardedGhostPartnershipsByEmail() WRITES this into
+    // partnerships.vendor_org_id, which REFERENCES organizations(id). agencyEntitlementId()
+    // was the wrong resolver here - it falls back to returning the user id unchanged, which
+    // is the correct failure for a usage row and a 23503 for a foreign key. Fails closed.
+    const vendorWriteOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (service && vendorEmail && vendorWriteOrgId) {
       // 079: the ghost row is claimed BY THE ORGANISATION, so pass its id.
       await claimAwardedGhostPartnershipsByEmail(service, {
-        partnerId: await agencyEntitlementId(user.id, service),
+        partnerId: vendorWriteOrgId,
         vendorEmail,
+      })
+    } else if (service && vendorEmail && !vendorWriteOrgId) {
+      console.error("[partner/projects] skipping ghost partnership claim: caller belongs to no organization", {
+        userId: user.id,
       })
     }
 

@@ -104,9 +104,16 @@ export type ScopedLibraryResult = {
  * database is ever behind, the caller sees the error rather than a silently unscoped list,
  * which is the safe direction for a filter whose whole job is to exclude other clients' files.
  */
+/**
+ * 079 PARAMETER CLASS: `orgIds` is the CALLER'S OWN organizations, from
+ * resolveCallerOrgIds() - never a counterparty or visibility set. It replaces a single
+ * parameter that callers filled with `user.id`, comparing an organization column to a
+ * user id. `.in()` on an empty array matches nothing, so a caller with no membership
+ * fails closed rather than silently reading another organization's rows.
+ */
 export async function fetchScopedLibraryDocuments(
   supabase: SupabaseClient,
-  agencyId: string,
+  orgIds: string[],
   scope: LibraryScope
 ): Promise<ScopedLibraryResult> {
   let clientId: string | null = null
@@ -119,7 +126,7 @@ export async function fetchScopedLibraryDocuments(
       .from("projects")
       .select("id, client_id")
       .eq("id", scope.projectId)
-      .eq("org_id", agencyId)
+      .in("org_id", orgIds)
       .maybeSingle()
     if (projectErr) {
       return { documents: [], clientId: null, clientName: null, clientNamesById: {}, error: projectErr.message }
@@ -133,12 +140,12 @@ export async function fetchScopedLibraryDocuments(
       .from("clients")
       .select("id, name")
       .eq("id", clientId)
-      .eq("org_id", agencyId)
+      .in("org_id", orgIds)
       .maybeSingle()
     clientName = (client?.name as string | undefined) ?? null
   }
 
-  let query = supabase.from("agency_library_documents").select(LIBRARY_DOCUMENT_COLUMNS).eq("org_id", agencyId)
+  let query = supabase.from("agency_library_documents").select(LIBRARY_DOCUMENT_COLUMNS).in("org_id", orgIds)
 
   if (scope.mode === "client") {
     // Exactly this client. Never agency-wide rows, never another client's.
@@ -178,7 +185,7 @@ export async function fetchScopedLibraryDocuments(
     const { data: clientRows } = await supabase
       .from("clients")
       .select("id, name")
-      .eq("org_id", agencyId)
+      .in("org_id", orgIds)
       .in("id", unresolved)
     for (const row of clientRows || []) clientNamesById[row.id as string] = row.name as string
   }

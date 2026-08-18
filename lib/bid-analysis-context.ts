@@ -26,6 +26,14 @@ export type BidAnalysisContext = {
 }
 
 /**
+ * 079: `orgIds` is the CALLER'S OWN organizations, from resolveCallerOrgIds(). It used to
+ * be a single `agencyId` that every caller filled with `user.id`, which is an organization
+ * column compared to a user id - correct by accident for the sixteen backfilled accounts
+ * whose organization id equals their founder's, and matching zero rows for every account
+ * created since. A plural set rather than a single id because membership is a set: `.in()`
+ * on an empty array matches nothing, so a caller belonging to no organization fails closed.
+ * This is the caller's OWN membership, never a counterparty or visibility set.
+ *
  * Loads a bid plus its originating RFP scope for AI prompting. Partner bids resolve
  * scope via partner_rfp_inbox (inbox_item_id); guest/magic-link bids have no inbox
  * row, so scope comes from rfp_magic_tokens keyed by response_id instead.
@@ -33,7 +41,7 @@ export type BidAnalysisContext = {
 export async function loadBidAnalysisContext(
   supabase: SupabaseServerClient,
   responseId: string,
-  agencyId: string
+  orgIds: string[]
 ): Promise<BidAnalysisContext | null> {
   const { data: response } = await supabase
     .from("partner_rfp_responses")
@@ -41,7 +49,7 @@ export async function loadBidAnalysisContext(
       "id, inbox_item_id, proposal_text, budget_proposal, timeline_proposal, payment_terms, business_criteria_responses, partner_display_name"
     )
     .eq("id", responseId)
-    .eq("lead_org_id", agencyId)
+    .in("lead_org_id", orgIds)
     .maybeSingle()
   if (!response) return null
 
@@ -53,7 +61,7 @@ export async function loadBidAnalysisContext(
     .from("partner_rfp_responses")
     .select("proposal_sections, budget_lines")
     .eq("id", responseId)
-    .eq("lead_org_id", agencyId)
+    .in("lead_org_id", orgIds)
     .maybeSingle()
   if (structuredErr) {
     console.warn("[bid-analysis-context] structured bid columns unavailable, prompting without them", {
@@ -72,7 +80,7 @@ export async function loadBidAnalysisContext(
       .from("partner_rfp_inbox")
       .select("scope_item_name, scope_item_description")
       .eq("id", response.inbox_item_id)
-      .eq("lead_org_id", agencyId)
+      .in("lead_org_id", orgIds)
       .maybeSingle()
     scopeItemName = (inbox?.scope_item_name as string | null) ?? null
     scopeItemDescription = (inbox?.scope_item_description as string | null) ?? null
@@ -81,7 +89,7 @@ export async function loadBidAnalysisContext(
       .from("rfp_magic_tokens")
       .select("scope_item_name, scope_item_description")
       .eq("response_id", responseId)
-      .eq("org_id", agencyId)
+      .in("org_id", orgIds)
       .maybeSingle()
     scopeItemName = (magicToken?.scope_item_name as string | null) ?? null
     scopeItemDescription = (magicToken?.scope_item_description as string | null) ?? null
@@ -150,13 +158,13 @@ export type ResponseScope = {
 export async function resolveResponseScope(
   supabase: SupabaseServerClient,
   responseId: string,
-  agencyId: string
+  orgIds: string[]
 ): Promise<ResponseScope | null> {
   const { data: response } = await supabase
     .from("partner_rfp_responses")
     .select("inbox_item_id")
     .eq("id", responseId)
-    .eq("lead_org_id", agencyId)
+    .in("lead_org_id", orgIds)
     .maybeSingle()
   if (!response) return null
 
@@ -165,7 +173,7 @@ export async function resolveResponseScope(
       .from("partner_rfp_inbox")
       .select("project_id, scope_item_name, scope_item_description")
       .eq("id", response.inbox_item_id)
-      .eq("lead_org_id", agencyId)
+      .in("lead_org_id", orgIds)
       .maybeSingle()
     return {
       projectId: (inbox?.project_id as string | null) ?? null,
@@ -178,7 +186,7 @@ export async function resolveResponseScope(
     .from("rfp_magic_tokens")
     .select("project_id, scope_item_name, scope_item_description")
     .eq("response_id", responseId)
-    .eq("org_id", agencyId)
+    .in("org_id", orgIds)
     .maybeSingle()
   return {
     projectId: (magicToken?.project_id as string | null) ?? null,

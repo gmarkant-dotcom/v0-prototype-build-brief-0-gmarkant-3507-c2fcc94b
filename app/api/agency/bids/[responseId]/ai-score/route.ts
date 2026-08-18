@@ -18,9 +18,15 @@ type Criterion = { id: string; name: string; description: string | null; default
 type AiScoreEntry = { criterion_name?: unknown; score?: unknown; rationale?: unknown }
 type AiScoreResponse = { scores?: unknown }
 
+/**
+ * 079 PARAMETER CLASS: `orgIds` is the caller's own organizations. It was a single
+ * `agencyId` filled with `user.id` at the one call site, comparing partnerships.lead_org_id
+ * to a user id. `partnerId` beside it is already a real vendor organization id - it is read
+ * off partner_rfp_responses.vendor_org_id - so only the agency half was wrong.
+ */
 async function loadVendorTrackRecord(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  agencyId: string,
+  orgIds: string[],
   partnerId: string | null,
   currentResponseId: string
 ): Promise<string> {
@@ -31,7 +37,7 @@ async function loadVendorTrackRecord(
   const { data: partnerships } = await supabase
     .from("partnerships")
     .select("id")
-    .eq("lead_org_id", agencyId)
+    .in("lead_org_id", orgIds)
     .eq("vendor_org_id", partnerId)
   const partnershipIds = (partnerships || []).map((p) => p.id as string)
 
@@ -56,7 +62,7 @@ async function loadVendorTrackRecord(
   const { data: pastEvals } = await supabase
     .from("bid_evaluations")
     .select("composite_score, response_id, partner_rfp_responses!inner(vendor_org_id, lead_org_id)")
-    .eq("partner_rfp_responses.lead_org_id", agencyId)
+    .in("partner_rfp_responses.lead_org_id", orgIds)
     .eq("partner_rfp_responses.vendor_org_id", partnerId)
     .neq("response_id", currentResponseId)
     .not("composite_score", "is", null)
@@ -188,7 +194,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     // P2-3. The model must score against the rubric the agency actually wrote for this RFP,
     // not against the seven built-in dimensions. Empty rubric means the global criteria above,
     // which is every legacy RFP and every RFP before migration 075.
-    const rubric = await resolveRfpRubricForResponse(supabase, responseId, user.id)
+    const rubric = await resolveRfpRubricForResponse(supabase, responseId, callerOrgIds)
     const usingRfpRubric = rubric.length > 0
     const activeCriteria: Criterion[] = usingRfpRubric
       ? rubric.map((c) => ({
@@ -226,7 +232,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
         .eq("id", evaluation.id)
     }
 
-    const ctx = await loadBidAnalysisContext(supabase, responseId, user.id)
+    const ctx = await loadBidAnalysisContext(supabase, responseId, callerOrgIds)
     if (!ctx) return NextResponse.json({ error: "Bid not found" }, { status: 404 })
     const bidContext = formatBidContextForPrompt(ctx)
 
@@ -237,7 +243,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       .in("org_id", callerOrgIds)
       .maybeSingle()
 
-    const trackRecord = await loadVendorTrackRecord(supabase, user.id, (response.vendor_org_id as string) || null, responseId)
+    const trackRecord = await loadVendorTrackRecord(supabase, callerOrgIds, (response.vendor_org_id as string) || null, responseId)
 
     const criteriaList = activeCriteria
       .map((c, i) => `${i + 1}. ${c.name}: ${c.description || "No description provided."}`)

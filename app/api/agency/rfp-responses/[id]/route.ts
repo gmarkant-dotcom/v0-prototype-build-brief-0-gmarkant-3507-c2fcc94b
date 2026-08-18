@@ -522,7 +522,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // 079: user.id is the acting company.
       await recordMilestone(supabase, {
         eventType: "bid.feedback",
-        orgId: user.id,
+        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column with NO
+        // foreign key (migration 080 left it off deliberately), so a user id written here
+        // raises nothing - it only makes the row invisible to the agency that created it,
+        // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
+        // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
+        // caller's own organizations.
+        orgId: existing.lead_org_id as string,
         actorId: user.id,
         vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
         partnershipId: (inboxRow?.partnership_id as string | null) ?? null,
@@ -681,7 +687,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // 079: user.id is the acting company.
       await recordMilestone(supabase, {
         eventType: "bid.award",
-        orgId: user.id,
+        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column with NO
+        // foreign key (migration 080 left it off deliberately), so a user id written here
+        // raises nothing - it only makes the row invisible to the agency that created it,
+        // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
+        // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
+        // caller's own organizations.
+        orgId: existing.lead_org_id as string,
         actorId: user.id,
         vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
         partnershipId: awardContext.partnershipId,
@@ -772,7 +784,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // read rules. 079: user.id is the acting company.
       await recordMilestone(supabase, {
         eventType: "bid.decline",
-        orgId: user.id,
+        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column with NO
+        // foreign key (migration 080 left it off deliberately), so a user id written here
+        // raises nothing - it only makes the row invisible to the agency that created it,
+        // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
+        // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
+        // caller's own organizations.
+        orgId: existing.lead_org_id as string,
         actorId: user.id,
         vendorOrgId: (existing.vendor_org_id as string | null) ?? null,
         partnershipId: (inbox?.partnership_id as string | null) ?? null,

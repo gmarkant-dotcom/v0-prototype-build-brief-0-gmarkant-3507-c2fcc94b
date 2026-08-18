@@ -466,7 +466,11 @@ export async function POST(request: NextRequest) {
       supabase,
       rows.map((row) => ({
         eventType: "rfp.broadcast" as const,
-        orgId: user.id,
+        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column. `user.id`
+        // was a user id - no foreign key catches it, the row simply stops being visible to
+        // the agency that broadcast it once org id and user id diverge. writeOrgId is the
+        // caller's own organization, already resolved above for the inbox rows themselves.
+        orgId: writeOrgId,
         actorId: user.id,
         vendorOrgId: (row.vendor_org_id as string | null) ?? null,
         partnershipId: (row.partnership_id as string | null) ?? null,

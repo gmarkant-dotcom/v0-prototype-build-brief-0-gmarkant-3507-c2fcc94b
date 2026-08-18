@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser } from "@/lib/entitlements"
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
@@ -622,7 +622,11 @@ export async function POST(request: NextRequest) {
         // vendor.invite_resend site and is not emitting yet. 079: user.id is the company.
         await recordMilestone(supabase, {
           eventType: 'vendor.invite',
-          orgId: user.id,
+          // 079 PARAMETER CLASS: milestone_events.org_id is an organization column and has
+          // NO foreign key (migration 080 left it off deliberately), so a user id written
+          // here raises nothing at all - it just makes the row invisible to its own agency,
+          // whose RLS policy reads org_id = ANY (current_user_org_ids()). A silent one.
+          orgId: writeOrgId,
           actorId: user.id,
           vendorOrgId: existingPartnerId ?? null,
           partnershipId: reactivated.id as string,
@@ -661,9 +665,24 @@ export async function POST(request: NextRequest) {
       invitation_message: message || undefined,
     }
     
-    // If partner exists, also set vendor_org_id
-    if (partner) {
-      insertData.vendor_org_id = partner.id
+    // 079 PARAMETER CLASS, PREVIOUSLY DEFERRED. `partner` is a profiles row, and
+    // partnerships.vendor_org_id REFERENCES organizations(id) after 079 - so writing
+    // `partner.id` here puts a user id in an organization column. It is invisible for the
+    // sixteen accounts whose organization was backfilled with their founder's id and a 23503
+    // for every account created since. Resolved through org_members instead. A matched
+    // profile with no organization leaves vendor_org_id null, which is exactly the GHOST row
+    // this product already understands (partner_email set, claimed later) rather than a bad
+    // foreign key.
+    const partnerOrgId = partner ? await resolveOrgIdForUser(partner.id, supabase) : null
+    if (partner && !partnerOrgId) {
+      console.error('[api] POST /partnerships: matched vendor profile belongs to no organization', {
+        route,
+        partnerProfileId: partner.id,
+        partnerEmail,
+      })
+    }
+    if (partnerOrgId) {
+      insertData.vendor_org_id = partnerOrgId
     }
 
     const { data: partnership, error } = await supabase
@@ -690,11 +709,8 @@ export async function POST(request: NextRequest) {
     // an ORGANIZATION id and fans out over its members, so the argument should name the
     // column it comes from.
     //
-    // SEPARATE 079 BUG, NOT FIXED HERE AND REPORTED INSTEAD: `partner` is a profiles row
-    // looked up by the request's partnerId, and the insert stores that PROFILES id in
-    // vendor_org_id. After 079 that column is an organization id, so this write path puts a
-    // user id where an organization id belongs. That is the invite/claim write path, not
-    // the notification, and it is listed in docs/079-embed-closure-report.md.
+    // The write path defect this comment used to report - `partner.id`, a profiles id, stored
+    // in vendor_org_id - is closed above via resolveOrgIdForUser().
     if (partner && partnership.vendor_org_id) {
       await notifyPartnershipInvitation(supabase, partnership.vendor_org_id, agencyName, partnership.id)
     }
@@ -737,9 +753,11 @@ export async function POST(request: NextRequest) {
     // 079: user.id is the acting company here.
     await recordMilestone(supabase, {
       eventType: 'vendor.invite',
-      orgId: user.id,
+      // 079 PARAMETER CLASS: see the sibling emit above. vendorOrgId was `partner?.id`, a
+      // profiles id, and is now the resolved organization - the same value the insert writes.
+      orgId: writeOrgId,
       actorId: user.id,
-      vendorOrgId: partner?.id ?? null,
+      vendorOrgId: partnerOrgId,
       partnershipId: partnership.id as string,
       subjectType: 'partnership',
       subjectId: partnership.id as string,
@@ -954,7 +972,12 @@ export async function PATCH(request: NextRequest) {
       // 079: partnership.lead_org_id is the acting company, partnership.vendor_org_id the vendor.
       await recordMilestone(supabase, {
         eventType: 'msa.confirm',
-        orgId: user.id,
+        // 079 PARAMETER CLASS: the comment above already said lead_org_id is the acting
+        // company; the code said user.id. They agree now. This branch is guarded by
+        // `if (!isAgency) return 403`, and isAgency is
+        // `callerOrgIds.includes(partnership.lead_org_id)` - so this value is provably one of
+        // the caller's own organizations, not a counterparty.
+        orgId: partnership.lead_org_id as string,
         actorId: user.id,
         vendorOrgId: (partnership.vendor_org_id as string | null) ?? null,
         partnershipId: partnershipId as string,

@@ -117,12 +117,12 @@ export async function POST(req: Request) {
 
     // Scope description is shared across all selected bids (compare is only offered for
     // bids on the same RFP scope item), so the first bid's context is representative.
-    const firstCtx = await loadBidAnalysisContext(supabase, responseIds[0], user.id)
+    const firstCtx = await loadBidAnalysisContext(supabase, responseIds[0], callerOrgIds)
     const scopeLabel = firstCtx?.scopeItemName || "this scope"
 
     const vendorSections = await Promise.all(
       responseIds.map(async (id) => {
-        const ctx = await loadBidAnalysisContext(supabase, id, user.id)
+        const ctx = await loadBidAnalysisContext(supabase, id, callerOrgIds)
         const vendorName = ctx?.partnerDisplayName || "Vendor"
         return formatDecompositionForPrompt(vendorName, decompByResponseId.get(id) || [])
       })
