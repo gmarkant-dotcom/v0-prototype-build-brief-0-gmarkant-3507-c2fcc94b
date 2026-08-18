@@ -10,6 +10,9 @@
     "verify-rls": "node scripts/verify-rls.mjs",
     "identity-columns": "node scripts/check-identity-columns.mjs",
     "identity-columns:guard": "node scripts/check-identity-columns.mjs --guard",
+    "org-id-reads": "node scripts/check-org-id-reads.mjs",
+    "org-id-reads:guard": "node scripts/check-org-id-reads.mjs --guard",
+    "embed-targets": "node scripts/check-embed-targets.mjs",
     "policy-audit": "node scripts/audit-policy-snapshot.mjs",
     "policy-audit:guard": "node scripts/audit-policy-snapshot.mjs --guard"
   },

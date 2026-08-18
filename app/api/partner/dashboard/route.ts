@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { requirePartnerRole } from "@/lib/api-auth"
 import { isActivePartnership } from "@/lib/partnership-state"
@@ -51,7 +52,12 @@ export async function GET() {
     const auth = await requirePartnerRole()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
-    const partnerId = user.id
+    // 079: this used to be `const partnerId = user.id`, and every filter below compared an
+    // ORGANIZATION column to it. The alias is why this file appears in neither the
+    // 188-site measurement of 2026-08-17 nor the 230-site one of 2026-08-18 - both
+    // matched the literal token `user.id`. scripts/check-org-id-reads.mjs now resolves
+    // one level of local aliasing, which is how it was found.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const [inboxRes, responsesRes, partnershipsRes] = await Promise.all([
       supabase
@@ -62,10 +68,10 @@ export async function GET() {
       supabase
         .from("partner_rfp_responses")
         .select("id, inbox_item_id, status, submitted_at, shortlisted_at, meeting_requested_at, declined_at")
-        .eq("vendor_org_id", partnerId),
+        .in("vendor_org_id", callerOrgIds),
       // F3: no reliability_summary/reliability_summary_generated_at here - see the note above
       // the reliability computation below, this route must never carry that column at all.
-      supabase.from("partnerships").select("id, lead_org_id, status").eq("vendor_org_id", partnerId),
+      supabase.from("partnerships").select("id, lead_org_id, status").in("vendor_org_id", callerOrgIds),
     ])
 
     for (const [label, res] of [

@@ -1,3 +1,4 @@
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
@@ -73,33 +74,38 @@ export async function GET() {
     const auth = await requireAgencyRole()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
-    const agencyId = user.id
+    // 079: this used to be `const agencyId = user.id`, and every filter below compared an
+    // ORGANIZATION column to it. The alias is why this file appears in neither the
+    // 188-site measurement of 2026-08-17 nor the 230-site one of 2026-08-18 - both
+    // matched the literal token `user.id`. scripts/check-org-id-reads.mjs now resolves
+    // one level of local aliasing, which is how it was found.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const [projectsRes, partnershipsRes, inboxRes, responsesRes, deliveryReviewsRes, magicTokenExistsRes] = await Promise.all([
       supabase
         .from("projects")
         .select("id, name, client_name, status, budget_range, created_at")
-        .eq("org_id", agencyId),
-      supabase.from("partnerships").select("id, status, vendor_org_id, partner_email, created_at").eq("lead_org_id", agencyId),
+        .in("org_id", callerOrgIds),
+      supabase.from("partnerships").select("id, status, vendor_org_id, partner_email, created_at").in("lead_org_id", callerOrgIds),
       supabase
         .from("partner_rfp_inbox")
         .select("id, project_id, scope_item_id, scope_item_name, response_deadline, vendor_org_id, recipient_email, viewed_at, created_at")
-        .eq("lead_org_id", agencyId),
+        .in("lead_org_id", callerOrgIds),
       supabase
         .from("partner_rfp_responses")
         .select("id, inbox_item_id, vendor_org_id, partner_display_name, status, submitted_at, created_at, updated_at, budget_proposal")
-        .eq("lead_org_id", agencyId)
+        .in("lead_org_id", callerOrgIds)
         .order("created_at", { ascending: false })
         .limit(500),
       supabase
         .from("delivery_reviews")
         .select("id, project_id, partnership_id, assignment_id, status, updated_at")
-        .eq("org_id", agencyId),
+        .in("org_id", callerOrgIds),
       // Existence-only check for the Getting Started checklist's "Broadcast an RFP" step -
       // the only one of the four checks not already covered by a table this route fetches
       // anyway (partner_rfp_inbox is, but a magic-link RFP with no portal recipient never
       // creates an inbox row, so that alone would under-count).
-      supabase.from("rfp_magic_tokens").select("id").eq("org_id", agencyId).limit(1),
+      supabase.from("rfp_magic_tokens").select("id").in("org_id", callerOrgIds).limit(1),
     ])
 
     for (const [label, res] of [

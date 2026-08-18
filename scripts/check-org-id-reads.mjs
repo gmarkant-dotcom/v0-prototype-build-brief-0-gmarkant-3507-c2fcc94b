@@ -68,6 +68,46 @@
  *      opposite direction. scripts/check-identity-columns.mjs does not look at the
  *      right-hand side of a filter, so it does not see these either.
  *
+ * =====================================================================
+ * CLASS B, ADDED 2026-08-18. THE MIRROR IMAGE, AND WHY IT IS HERE.
+ * =====================================================================
+ *
+ * Everything above describes CLASS A: a PERSON fetched by a COMPANY id. The paragraph
+ * headed "A HUMAN MUST STILL INSPECT" ends by naming the mirror of it - a COMPANY column
+ * compared to a PERSON id - and says no script looks at the right-hand side of a filter.
+ *
+ * One now does. That is CLASS B, and it is added here rather than in a fifth script
+ * because it is the same coincidence read in the other direction and splitting them
+ * across two files would mean two baselines to keep honest instead of one.
+ *
+ * CLASS B flags an organization column - org_id, lead_org_id, vendor_org_id - that is
+ * compared to, or written from, a value that is a USER id. On ANY table, not only
+ * profiles, and in WRITES as well as reads:
+ *
+ *     .eq("org_id", user.id)              a read that returns nothing after 079
+ *     row.vendor_org_id === user.id       an authorization guard that denies after 079
+ *     { lead_org_id: user.id }            a write that raises 23503 after 079
+ *     .or(`org_id.eq.${user.id},...`)     the same, spelled as a PostgREST filter string
+ *     row.org_id ?? userId                a fallback that hands a user id to a foreign key
+ *
+ * WHY THE OLD SCAN BOUNDED ONE CORNER AND NOT THE CLASS. scanFile() below skips every
+ * `.from()` that is not `.from('profiles')`, so its 25-site baseline described profiles
+ * reads and nothing else. The population it did not look at was measured on 2026-08-18 at
+ * 230 sites across 73 files. Neither of the two ghost-claim writes that broke vendor
+ * invitation claiming was ever flagged, because neither is a profiles read.
+ *
+ * WHAT CLASS B STILL CANNOT SEE, STATED AS PLAINLY AS THE PARAGRAPH ABOVE.
+ * It is a text matcher over ONE expression. It does not follow a value across a function
+ * boundary. Twenty-one exported helpers in lib/ filter or write an organization column
+ * from a parameter - loadBidAnalysisContext, fetchScopedLibraryDocuments,
+ * markPartnershipInvited, resolvePartnershipForAward, recordMilestone,
+ * attachMagicTokenToPartnerInbox, claimAwardedGhostPartnershipsByEmail and others - and
+ * whether a call is a defect depends entirely on what the CALLER passes, one stack frame
+ * away from anything a line matcher can read. Nineteen call sites in seventeen files pass
+ * a user id into one of them. NONE of them is flagged here and none can be. They are
+ * listed in docs/079-hardening-report.md. The permanent answer to that is generated
+ * database types, not a sixth script; the assessment is in the same report.
+ *
  * MODES
  * -----
  *   node scripts/check-org-id-reads.mjs             inventory. Always exits 0.
@@ -75,6 +115,7 @@
  *   --json      machine-readable
  *   --all       show allow-listed sites too
  *   --root DIR  scan a different checkout
+ *   --class A|B limit the report to one class. Both run by default.
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs"
@@ -194,6 +235,379 @@ const KNOWN_OPEN = [
 function isAllowed(file, line) {
   return ALLOWED.find((a) => a.file === file && (!a.lines || a.lines.includes(line)))
 }
+
+// =====================================================================
+// CLASS B: an ORGANIZATION column compared to, or written from, a USER id.
+// =====================================================================
+
+/** The three post-079 organization column names. Nothing else is an organization column. */
+const ORG_COL = "(?:lead_org_id|vendor_org_id|org_id)"
+
+/**
+ * Values that ARE a user id.
+ *
+ * Two tiers, and the distinction is reported rather than flattened:
+ *
+ *   SESSION - the signed-in caller. `.eq("org_id", user.id)` is the caller comparing a
+ *             company column to their own person id. This is the bulk of the class and it
+ *             is mechanically fixable, because the caller's memberships are resolvable
+ *             right there through resolveCallerOrgIds() / resolveCallerWriteOrgId().
+ *
+ *   PROFILE - a COUNTERPARTY's profiles.id, reached through a lookup: `partner.id`,
+ *             `matchedProfile.id`, `existingProfile.id`, `selectedAgency.id`. Same defect,
+ *             NOT mechanically fixable: resolving another person to their organization
+ *             needs a rule for which of their organizations is meant, and
+ *             `organizations.is_lead_agency` / `is_vendor` exist precisely because a
+ *             dual-role person will have both. Reported separately so the two are never
+ *             confused in a baseline.
+ */
+const SESSION_USER_SRC =
+  "(?:user\\.id|session\\.user\\.id|auth\\.uid\\(\\)|auth\\.user\\.id|userId|authUserId|currentUserId|cachedUserId)"
+const PROFILE_ID_SRC =
+  "(?:[A-Za-z_$][\\w$]*)?(?:partner|matchedProfile|existingProfile|selectedAgency|agency|vendor|profile)[\\w$]*!?\\??\\.id"
+
+/**
+ * PARAM tier. A bare local or parameter whose NAME says person - agencyId, partnerId - fed
+ * into an organization column.
+ *
+ * This tier is SUSPECT, not proven, and it is reported separately for that reason. Inside
+ * a lib/ helper `agencyId` is a parameter, and whether the call is a defect depends on
+ * what the CALLER passes, which is a stack frame this matcher cannot see. Two of these
+ * turned out to be real when the alias resolver above proved the local was `user.id`, and
+ * those are reported as SESSION instead. The rest need a human to read the callers.
+ *
+ * It earns its place despite the noise: it is the only signal that reaches the twenty-one
+ * lib/ helpers that filter an organization column from a parameter, and those helpers are
+ * where the nineteen indirect call sites in docs/079-hardening-report.md live.
+ */
+const PARAM_ID_SRC =
+  "(?:partnerId|agencyId|vendorId|partnerProfileId|agencyProfileId|matchedProfileId|partnerIdForResolution)"
+
+/**
+ * The five shapes. Each carries its own regex and a label used in the report.
+ *
+ * Deliberately NOT matched: `.select("org_id")`, which names the column without comparing
+ * it, and `.eq("user_id", userId)` on org_members, which is the correct resolution and is
+ * the one known-good hit the class-A header already talks about.
+ */
+function classBPatterns(userSrc) {
+  return [
+    { shape: "FILTER", re: new RegExp(`\\.(?:eq|neq|in|is)\\(\\s*["'\`](?:[\\w]+\\.)?${ORG_COL}["'\`]\\s*,\\s*${userSrc}\\s*[),]`, "g") },
+    { shape: "GUARD",  re: new RegExp(`${ORG_COL}\\s*(?:===|!==|==|!=)\\s*${userSrc}`, "g") },
+    // The property value is matched up to the next comma or brace rather than anchored to
+    // the token, so a ternary - `vendor_org_id: isExistingUser ? existingProfile!.id : null`
+    // - is caught as well as a bare assignment.
+    { shape: "WRITE",  re: new RegExp(`(?:^|[\\s{,(])${ORG_COL}\\s*:\\s*[^,}\\n]*?${userSrc}`, "gm") },
+    { shape: "WRITE",  re: new RegExp(`\\.${ORG_COL}\\s*=(?!=)\\s*[^;\\n]*?${userSrc}`, "g") },
+    { shape: "ORSTR",  re: new RegExp(`${ORG_COL}\\.(?:eq|in)\\.\\$\\{\\s*${userSrc}`, "g") },
+    { shape: "FALLBK", re: new RegExp(`${ORG_COL}\\s*\\?\\?\\s*${userSrc}`, "g") },
+  ]
+}
+
+/**
+ * KNOWN OPEN for class B. Rebuilt 2026-08-18 from the Tier B sites that survive Phase 3
+ * of docs/079-hardening-inventory.md.
+ *
+ * SAME SEMANTICS AS KNOWN_OPEN ABOVE, AND THE SAME WARNING: this is not an allow-list.
+ * Every entry is broken for any organization created after 079. They are recorded so the
+ * guard can fail when the class GROWS, and every one carries a one-line reason.
+ *
+ * Keyed on file and count. MORE than the count fails. FEWER is reported so the count gets
+ * lowered rather than left to rot; when a count reaches zero, delete the entry.
+ */
+const KNOWN_OPEN_MIRROR = [
+  {
+    file: "app/agency/pool/[partnerId]/page.tsx",
+    count: 3,
+    tiers: "PARAM",
+    why:
+      "partner_vouches vendor_org_id set from and matched against the [partnerId] route param, a profiles id. The lead_org_id half of the same insert IS fixed.",
+  },
+  {
+    file: "app/api/agency/active-engagements/route.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "FALSE POSITIVE, read and established: partnerId here is assigned from pship.vendor_org_id, so it is already an organization id.",
+  },
+  {
+    file: "app/api/agency/bids/[responseId]/ai-score/route.ts",
+    count: 4,
+    tiers: "PARAM",
+    why:
+      "loadVendorTrackRecord's own parameters. agencyId is passed user.id by the route at :240 - an INDIRECT defect the matcher cannot prove from this file.",
+  },
+  {
+    file: "app/api/agency/broadcast-rfp/route.ts",
+    count: 4,
+    tiers: "PARAM/PROFILE",
+    why:
+      "existingProfile.id filtered against and written into vendor_org_id for a manually typed recipient, plus the partnerId local. Needs a counterparty user-to-organization resolver.",
+  },
+  {
+    file: "app/api/agency/client-cash-flow/route.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "a local helper parameter named agencyId. Its callers pass the resolved value; the name is the only thing suspect here.",
+  },
+  {
+    file: "app/api/agency/email-scan/import/route.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "matchedProfileId written into vendor_org_id on the pool-import path. Same counterparty class.",
+  },
+  {
+    file: "app/api/agency/msa/milestones/route.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "FALSE POSITIVE, read and established: partnerId is assigned from row.vendor_org_id, already an organization id.",
+  },
+  {
+    file: "app/api/agency/pool/[partnerId]/notes/route.ts",
+    count: 2,
+    tiers: "PARAM",
+    why:
+      "the [partnerId] route param, a profiles id, matched against vendor_org_id.",
+  },
+  {
+    file: "app/api/agency/pool/[partnerId]/performance/route.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "same [partnerId] route param.",
+  },
+  {
+    file: "app/api/agency/pool/[partnerId]/route.ts",
+    count: 2,
+    tiers: "PARAM",
+    why:
+      "same [partnerId] route param, two sites.",
+  },
+  {
+    file: "app/api/agency/rfp-responses/[id]/route.ts",
+    count: 1,
+    tiers: "PROFILE",
+    why:
+      "matchedProfile.id backfilled into partner_rfp_responses.vendor_org_id on the award path. A WRITE, and it will raise 23503 for a vendor whose account postdates 079.",
+  },
+  {
+    file: "app/api/partner/network/[agencyId]/route.ts",
+    count: 3,
+    tiers: "PARAM",
+    why:
+      "the [agencyId] route param, a profiles id, matched against lead_org_id.",
+  },
+  {
+    file: "app/api/partner/projects/[projectId]/active-engagement/route.ts",
+    count: 2,
+    tiers: "PARAM",
+    why:
+      "partnerId and agencyId locals derived from partnership rows. Needs a read of each to separate the two cases.",
+  },
+  {
+    file: "app/api/partner/projects/route.ts",
+    count: 2,
+    tiers: "PARAM",
+    why:
+      "lead_org_id written from an agencyId local on the display-shaping path.",
+  },
+  {
+    file: "app/api/partnerships/route.ts",
+    count: 2,
+    tiers: "PROFILE",
+    why:
+      "partner.id, a counterparty profiles id, filtered against and then written into vendor_org_id.",
+  },
+  {
+    file: "app/api/projects/[id]/onboarding-packages/route.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "a partnerId local matched against vendor_org_id.",
+  },
+  {
+    file: "app/api/projects/[id]/onboarding-partners/route.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "a partnerId local matched against vendor_org_id.",
+  },
+  {
+    file: "app/api/rfp/guest/[token]/route.ts",
+    count: 9,
+    tiers: "PARAM/PROFILE",
+    why:
+      "the guest-bid path. agencyId and matchedProfileId are written into lead_org_id and vendor_org_id in three places, including a ternary at :602. The largest single Tier B surface.",
+  },
+  {
+    file: "app/partner/marketplace/page.tsx",
+    count: 4,
+    tiers: "PARAM",
+    why:
+      "agencyId is a profiles id from /api/marketplace/discoverable, written into and matched against lead_org_id. The vendor half IS fixed.",
+  },
+  {
+    file: "app/partner/network/page.tsx",
+    count: 4,
+    tiers: "PARAM/PROFILE",
+    why:
+      "selectedAgency.id, same profiles id from the same route, plus one render-time comparison. The vendor half IS fixed.",
+  },
+  {
+    file: "lib/award-partnership-resolution.ts",
+    count: 10,
+    tiers: "PARAM",
+    why:
+      "resolvePartnershipForAward's agencyId and partnerIdForResolution parameters, ten sites including four writes. app/api/agency/rfp-responses/[id]/route.ts passes user.id as agencyId - an INDIRECT defect.",
+  },
+  {
+    file: "lib/bid-analysis-context.ts",
+    count: 7,
+    tiers: "PARAM",
+    why:
+      "loadBidAnalysisContext / resolveResponseScope agencyId parameter, seven sites. Three routes pass user.id into it.",
+  },
+  {
+    file: "lib/bid-summary-generation.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "generateAndSaveBidSummary agencyId parameter. One caller passes user.id.",
+  },
+  {
+    file: "lib/clients-server.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "reconcileProjectClientFields agencyId parameter. Two callers pass user.id.",
+  },
+  {
+    file: "lib/delivery-review.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "loadBidDeltaComparison agencyId parameter.",
+  },
+  {
+    file: "lib/entitlements.ts",
+    count: 1,
+    tiers: "SESSION",
+    why:
+      "agencyEntitlementId returns best?.org_id ?? userId. Deliberate and documented for quota accounting, where failing would take the AI surface down. Recorded because it is the one remaining place a user id can reach a caller expecting an organization id. resolveCallerWriteOrgId is the write-path alternative and returns null.",
+  },
+  {
+    file: "lib/library-documents.ts",
+    count: 4,
+    tiers: "PARAM",
+    why:
+      "fetchScopedLibraryDocuments agencyId parameter, four sites. Two routes pass user.id.",
+  },
+  {
+    file: "lib/magic-token-attach.ts",
+    count: 3,
+    tiers: "PARAM",
+    why:
+      "attachMagicTokenToPartnerInbox partnerId parameter, three WRITES into vendor_org_id. Two callers pass user.id.",
+  },
+  {
+    file: "lib/partnership-award-claim.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "claimAwardedGhostPartnershipsByEmail partnerId parameter, one WRITE. One of three callers passes a raw user.id.",
+  },
+  {
+    file: "lib/partnership-invitations.ts",
+    count: 5,
+    tiers: "PARAM",
+    why:
+      "markPartnershipInvited agencyId and partnerId parameters, including an INSERT of both. resend-invitation passes user.id as agencyId.",
+  },
+  {
+    file: "lib/rfp-evaluation-criteria-server.ts",
+    count: 3,
+    tiers: "PARAM",
+    why:
+      "resolveRfpRubricForResponse agencyId parameter. One route passes user.id.",
+  },
+  {
+    file: "lib/usage-tracking.ts",
+    count: 4,
+    tiers: "PARAM",
+    why:
+      "getOrCreateMonthlyUsage / getActiveProjectsCount agencyId parameter, including the usage_tracking INSERT. Callers pass agencyEntitlementId(), which is correct except on its fallback.",
+  },
+  {
+    file: "lib/vouch-counts.ts",
+    count: 1,
+    tiers: "PARAM",
+    why:
+      "fetchVouchCount partnerId parameter. app/partner/profile/page.tsx passes user.id.",
+  },
+]
+
+/**
+ * ONE LEVEL OF LOCAL ALIASING, RESOLVED.
+ *
+ * `const agencyId = user.id` followed by `.eq("org_id", agencyId)` is the identical defect
+ * spelled through a local, and it is invisible to a matcher that only knows the literal
+ * token `user.id`. That spelling is not hypothetical: it is how the defect appears in
+ * app/api/agency/dashboard/route.ts and app/api/partner/dashboard/route.ts, and BOTH files
+ * were missed by the 188-site measurement of 2026-08-17 AND by the 230-site re-measurement
+ * of 2026-08-18, for exactly this reason. This function found them.
+ *
+ * One level only, and same-file only. It is not dataflow analysis and does not pretend to
+ * be: a value that crosses a function boundary is still invisible here, which is the
+ * limitation the CLASS B header states at length.
+ */
+function sessionAliasesIn(text) {
+  const names = []
+  const re = /\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*(?:user\.id|session\.user\.id|auth\.user\.id|data\.user\.id)\s*(?:[;\n]|$)/g
+  let m
+  while ((m = re.exec(text)) !== null) names.push(m[1])
+  return [...new Set(names)]
+}
+
+function scanFileClassB(absPath) {
+  const rel = relative(REPO_ROOT, absPath)
+  const text = stripComments(readFileSync(absPath, "utf8"))
+  const lines = text.split("\n")
+  const seen = new Set()
+  const findings = []
+  const aliases = sessionAliasesIn(text)
+  const aliasSrc = aliases.length ? `(?:${aliases.join("|")})` : null
+  const tiers = [
+    ["SESSION", SESSION_USER_SRC],
+    ["PROFILE", PROFILE_ID_SRC],
+    ["PARAM", PARAM_ID_SRC],
+  ]
+  // An alias of the session id is a SESSION finding, not a PARAM one: its origin is known.
+  if (aliasSrc) tiers.push(["SESSION", aliasSrc])
+  for (const [tier, src] of tiers) {
+    for (const { shape, re } of classBPatterns(src)) {
+      re.lastIndex = 0
+      let m
+      while ((m = re.exec(text)) !== null) {
+        const lineIdx = text.slice(0, m.index).split("\n").length - 1
+        const key = `${lineIdx}:${shape}:${tier}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        findings.push({
+          file: rel,
+          line: lineIdx + 1,
+          shape,
+          tier,
+          snippet: (lines[lineIdx] || "").trim().slice(0, 90),
+        })
+      }
+    }
+  }
+  return findings.sort((a, b) => a.line - b.line)
+}
+
 
 function walk(path, out) {
   let stat
@@ -338,6 +752,18 @@ function main() {
   const allowed = all.filter((f) => f.allowed)
   const open = all.filter((f) => !f.allowed)
 
+  // CLASS B: an organization column compared to, or written from, a user id.
+  const mirror = files.flatMap(scanFileClassB)
+  const mirrorByFile = new Map()
+  for (const f of mirror) mirrorByFile.set(f.file, (mirrorByFile.get(f.file) || 0) + 1)
+  const mirrorRegressions = []
+  for (const [file, count] of mirrorByFile) {
+    const known = KNOWN_OPEN_MIRROR.find((k) => k.file === file)
+    if (!known) mirrorRegressions.push({ file, count, known: 0 })
+    else if (count > known.count) mirrorRegressions.push({ file, count, known: known.count })
+  }
+  const mirrorFixed = KNOWN_OPEN_MIRROR.filter((k) => (mirrorByFile.get(k.file) || 0) < k.count)
+
   // Regressions: a file with MORE findings than its recorded known-open count, or any
   // finding in a file that is on neither list at all.
   const countByFile = new Map()
@@ -365,6 +791,12 @@ function main() {
           regressions,
           fixed,
           findings: all,
+          classB: {
+            total: mirror.length,
+            regressions: mirrorRegressions,
+            fixed: mirrorFixed,
+            findings: mirror,
+          },
         },
         null,
         2
@@ -394,9 +826,70 @@ function main() {
     console.log(`  REGRESSIONS   ${String(regressions.length).padStart(5)}  files with MORE findings than recorded`)
     console.log(`  IMPROVED      ${String(fixed.length).padStart(5)}  files with FEWER - lower the count in KNOWN_OPEN`)
     console.log("")
+
+    console.log("CLASS B: an ORGANIZATION column compared to, or written from, a USER id")
+    console.log("Every table, reads AND writes. SESSION = the caller's own id. PROFILE = a")
+    console.log("counterparty's profiles.id, which is the same defect and is NOT mechanically")
+    console.log("fixable. See the CLASS B header block.")
+    console.log("")
+    let lastB = null
+    for (const f of mirror) {
+      if (f.file !== lastB) {
+        console.log(`  ${f.file}`)
+        lastB = f.file
+      }
+      console.log(`    ${String(f.line).padStart(5)}  ${f.shape.padEnd(6)} ${f.tier.padEnd(7)} ${f.snippet}`)
+    }
+    if (mirror.length > 0) console.log("")
+    console.log("Class B summary")
+    console.log(`  OPEN          ${String(mirror.length).padStart(5)}  known, reported, deliberately unfixed - see KNOWN_OPEN_MIRROR`)
+    console.log(`  REGRESSIONS   ${String(mirrorRegressions.length).padStart(5)}  files with MORE findings than recorded`)
+    console.log(`  IMPROVED      ${String(mirrorFixed.length).padStart(5)}  files with FEWER - lower the count in KNOWN_OPEN_MIRROR`)
+    console.log("")
   }
 
   if (guard) {
+    if (mirrorFixed.length > 0 && !json) {
+      console.log("CLASS B: these files now have FEWER findings than KNOWN_OPEN_MIRROR records.")
+      console.log("Lower the count, or delete the entry if it reached zero:")
+      for (const k of mirrorFixed) console.log(`  ${k.file}   recorded ${k.count}, found ${mirrorByFile.get(k.file) || 0}`)
+      console.log("")
+    }
+    if (mirrorRegressions.length > 0) {
+      if (!json) {
+        console.error("ORG-COLUMN-VS-USER-ID GUARD FAILED. NEW instances of class B:")
+        console.error("")
+        for (const r of mirrorRegressions) {
+          console.error(`  ${r.file}   found ${r.count}, KNOWN_OPEN_MIRROR records ${r.known}`)
+        }
+        console.error("")
+        console.error("An organization column above is being compared to, or written from, a USER")
+        console.error("id. It is correct today only because migration 079 backfilled every")
+        console.error("organization with its founding user's id. The PHASE 12 signup trigger mints")
+        console.error("gen_random_uuid(), so from the next account onward a READ returns nothing at")
+        console.error("HTTP 200, a GUARD denies a legitimate caller, and a WRITE raises 23503")
+        console.error("against organizations(id).")
+        console.error("")
+        console.error("Fix, and the two halves are NOT interchangeable:")
+        console.error("")
+        console.error("  READ   const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)")
+        console.error('         .in("org_id", callerOrgIds)')
+        console.error("")
+        console.error("  WRITE  const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)")
+        console.error("         if (!writeOrgId) return 403")
+        console.error('         { org_id: writeOrgId }')
+        console.error("")
+        console.error("NEVER scope a write by current_user_counterparty_org_ids() or")
+        console.error("current_user_visible_profile_ids(). Those are VISIBILITY sets, and a vendor")
+        console.error("would be able to write into an agency's organization simply by being")
+        console.error("partnered with it.")
+        console.error("")
+        console.error("If the value really is a person, the column is wrong, not the value:")
+        console.error("uploaded_by, sender_id, actor_id and user_id are person columns and stay")
+        console.error("compared to the user id.")
+      }
+      process.exit(1)
+    }
     if (fixed.length > 0 && !json) {
       console.log("These files now have FEWER findings than KNOWN_OPEN records. Lower the count:")
       for (const k of fixed) console.log(`  ${k.file}   recorded ${k.count}, found ${countByFile.get(k.file) || 0}`)
@@ -429,7 +922,8 @@ function main() {
       process.exit(1)
     }
     if (!json) {
-      console.log("ORG-ID-READ GUARD PASSED. No NEW instance of the class.")
+      console.log("ORG-ID-READ GUARD PASSED. No NEW instance of class A OR class B.")
+      console.log(`Class B: ${mirror.length} known-open sites, baseline unchanged.`)
       console.log(`${open.length} known-open sites remain. They are NOT fixed - see KNOWN_OPEN above`)
       console.log("and docs/079-embed-closure-report.md. Passing here means the class did not grow.")
     }
