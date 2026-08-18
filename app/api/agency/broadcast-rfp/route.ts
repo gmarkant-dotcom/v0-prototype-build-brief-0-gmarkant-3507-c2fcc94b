@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn, resolveOrgIdForUser } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -308,9 +308,28 @@ export async function POST(request: NextRequest) {
           })
         }
 
-        const isExistingUser = Boolean(existingProfile?.id)
+        // 079 PARAMETER CLASS: `existingProfile.id` is a profiles id, and every column it
+        // was being compared to and written into below - partnerships.vendor_org_id,
+        // partner_rfp_inbox.vendor_org_id - is an ORGANIZATION column that REFERENCES
+        // organizations(id). Correct by accident for the sixteen backfilled accounts, and
+        // for every account created since a partnership lookup that finds nothing plus an
+        // inbox row carrying an id that names no organization. Resolved through org_members.
+        //
+        // A matched profile with no organization is treated as NOT an account holder, which
+        // makes the row a GHOST (vendor_org_id null, recipient_email set) - the state this
+        // product already understands and claims later - rather than a bad foreign key.
+        const existingProfileOrgId = existingProfile?.id
+          ? await resolveOrgIdForUser(existingProfile.id, supabase)
+          : null
+        if (existingProfile?.id && !existingProfileOrgId) {
+          console.error("[broadcast-rfp] matched recipient profile belongs to no organization", {
+            email,
+            profileId: existingProfile.id,
+          })
+        }
+        const isExistingUser = Boolean(existingProfileOrgId)
         let partnershipForManual: PartnershipRow | null = null
-        if (isExistingUser) {
+        if (existingProfileOrgId) {
           const { data: existingPartnership } = await supabase
             // 079-EMBED: the embed is REMOVED here rather than rewritten. This lookup
             // consumes exactly two fields - `id` for partnership_id and
@@ -322,7 +341,7 @@ export async function POST(request: NextRequest) {
             .from("partnerships")
             .select("id, nda_confirmed_at, partner_email")
             .in("lead_org_id", callerOrgIds)
-            .eq("vendor_org_id", existingProfile!.id)
+            .eq("vendor_org_id", existingProfileOrgId)
             .in("status", ["active", "pending"])
             .order("created_at", { ascending: false })
             .limit(1)
@@ -339,7 +358,7 @@ export async function POST(request: NextRequest) {
 
         rows.push({
           lead_org_id: writeOrgId,
-          vendor_org_id: isExistingUser ? existingProfile!.id : null,
+          vendor_org_id: existingProfileOrgId,
           recipient_email: email,
           partnership_id: partnershipForManual?.id || null,
           project_id: projectId,
