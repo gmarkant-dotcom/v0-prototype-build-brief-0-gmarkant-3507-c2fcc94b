@@ -1,3 +1,4 @@
+import { resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import {
@@ -55,6 +56,12 @@ export async function POST(request: NextRequest) {
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const body = await request.json()
     const {
       section,
@@ -96,7 +103,7 @@ export async function POST(request: NextRequest) {
     const { data: row, error } = await supabase
       .from("agency_library_documents")
       .insert({
-        org_id: user.id,
+        org_id: writeOrgId,
         section,
         kind,
         label: label.trim(),

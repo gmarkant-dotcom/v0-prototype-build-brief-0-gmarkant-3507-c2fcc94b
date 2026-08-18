@@ -2,6 +2,7 @@ import { get } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { isVercelBlobStorageUrl } from "@/lib/vercel-blob-url"
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -16,11 +17,14 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: row, error } = await supabase
       .from("agency_library_documents")
       .select("id, org_id, label, blob_url, source_type, external_url")
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .single()
 
     if (error || !row) return NextResponse.json({ error: "Not found" }, { status: 404 })

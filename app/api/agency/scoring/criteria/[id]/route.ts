@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -13,11 +14,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data: updated, error: updateErr } = await supabase
       .from("bid_scoring_criteria")
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .select("id")
       .maybeSingle()
     if (updateErr) {

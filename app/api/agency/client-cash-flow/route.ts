@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 
 const noStore = { "Cache-Control": "private, no-store, no-cache, must-revalidate" } as const
@@ -37,13 +37,16 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const url = new URL(req.url)
     const project_id = (url.searchParams.get("project_id") || "").trim()
 
     let query = supabase
       .from("client_cash_flow")
       .select("id, project_id, org_id, label, amount, currency, expected_date, status, received_at, created_at")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .order("expected_date", { ascending: true })
       .order("created_at", { ascending: true })
 
@@ -77,6 +80,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403, headers: noStore })
+    }
+
     const body = await req.json().catch(() => ({}))
     const project_id = (body.project_id as string | undefined)?.trim()
     const label = (body.label as string | undefined)?.trim()
@@ -107,7 +116,7 @@ export async function POST(req: Request) {
       .from("client_cash_flow")
       .insert({
         project_id,
-        org_id: user.id,
+        org_id: writeOrgId,
         label,
         amount,
         currency,
@@ -140,6 +149,9 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = await req.json().catch(() => ({}))
     const id = (body.id as string | undefined)?.trim()
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400, headers: noStore })
@@ -148,7 +160,7 @@ export async function PATCH(req: Request) {
       .from("client_cash_flow")
       .select("id")
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
     if (exErr || !existing) {
       return NextResponse.json({ error: "Entry not found" }, { status: 404, headers: noStore })
@@ -178,7 +190,7 @@ export async function PATCH(req: Request) {
       .from("client_cash_flow")
       .update(updates)
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .select("id, project_id, org_id, label, amount, currency, expected_date, status, received_at, created_at")
       .single()
     if (error) {

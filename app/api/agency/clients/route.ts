@@ -3,7 +3,7 @@ import { requireAgencyRole } from "@/lib/api-auth"
 import { isMissingClientsTable, normalizeClientNameForMatch } from "@/lib/clients"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
-
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 
 /**
@@ -28,10 +28,13 @@ export async function GET() {
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data, error } = await supabase
       .from("clients")
       .select("id, name, notes, default_business_criteria, default_evaluation_criteria, created_at, updated_at")
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .order("name", { ascending: true })
 
     if (error) {
@@ -56,6 +59,9 @@ export async function POST(request: NextRequest) {
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
     const name = typeof body.name === "string" ? body.name.trim() : ""
     if (!name) {
@@ -70,7 +76,7 @@ export async function POST(request: NextRequest) {
       const { data: existingRows, error: dupErr } = await supabase
         .from("clients")
         .select("id, name")
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
       if (dupErr && isMissingClientsTable(dupErr)) {
         return NextResponse.json(
           { error: "Client profiles are not set up yet. Apply migration 077 first.", available: false },
@@ -88,7 +94,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const insertRow: Record<string, unknown> = { org_id: user.id, name }
+    // 079: a write is attributed to the caller's OWN organization, resolved through
+    // membership. Never a visibility set: a counterparty set here would let a vendor create
+    // a client profile inside an agency's organization merely by being partnered with it.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      console.error("[agency/clients] POST aborted, caller belongs to no organization", { route, userId: user.id })
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
+    const insertRow: Record<string, unknown> = { org_id: writeOrgId, name }
     if (typeof body.notes === "string") insertRow.notes = body.notes.trim() || null
     if (body.default_business_criteria != null) {
       insertRow.default_business_criteria = normalizeBusinessCriteriaRequired(body.default_business_criteria)

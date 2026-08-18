@@ -118,9 +118,20 @@ export async function resolveCallerOrgIds(userId: string, client: OrgLookupClien
     console.error("[entitlements] resolveCallerOrgIds failed", { userId, code: error.code, message: error.message })
     return []
   }
-  return ((data ?? []) as Array<{ org_id?: string | null }>)
+  const orgIds = ((data ?? []) as Array<{ org_id?: string | null }>)
     .map((r) => r.org_id)
     .filter((id): id is string => Boolean(id))
+  if (orgIds.length === 0) {
+    // Reported here rather than at each of the call sites. An empty set fails CLOSED
+    // everywhere it is used - `.in(col, [])` matches nothing and `[].includes(x)` is false -
+    // which is the right direction, but a caller who belongs to no organization seeing an
+    // empty page with no error anywhere is precisely the success-shaped non-event this
+    // codebase keeps being bitten by. Post-079 it should be unreachable: PHASE 2 backfilled
+    // one membership per profile and the PHASE 12 trigger creates one per signup. If this
+    // line ever appears in the logs, one of those two is not doing its job.
+    console.error("[entitlements] resolveCallerOrgIds: caller belongs to no organization", { userId })
+  }
+  return orgIds
 }
 
 /**

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { DEFAULT_SCORING_CRITERIA, DEFAULT_TEMPLATE_NAME, DEFAULT_TEMPLATE_DESCRIPTION } from "@/lib/bid-scoring-defaults"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -13,21 +14,34 @@ export async function GET() {
   const { supabase, user } = auth
   const userId = user.id
 
+  // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+  const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
   const { count, error: countErr } = await supabase
     .from("bid_scoring_criteria")
     .select("id", { count: "exact", head: true })
-    .eq("org_id", userId)
+    .in("org_id", callerOrgIds)
   if (countErr) {
     console.error("[api] failure", { route, method: "GET", message: countErr.message })
     return NextResponse.json({ error: "Failed to load criteria" }, { status: 500 })
   }
 
   if ((count ?? 0) === 0) {
+    // 079: the seed is a WRITE, so it is attributed to the caller's OWN organization rather
+    // than to their user id. Resolved HERE rather than at the top of the handler on purpose:
+    // this branch only runs the first time an agency opens Scoring Settings, and a caller
+    // with no resolvable organization must not be refused an ordinary read of an already
+    // seeded list.
+    const writeOrgId = await resolveCallerWriteOrgId(userId, supabase)
+    if (!writeOrgId) {
+      console.error("[api] failure", { route, method: "GET", code: "seed_no_org", message: "caller belongs to no organization" })
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
     const { data: seeded, error: seedErr } = await supabase
       .from("bid_scoring_criteria")
       .insert(
         DEFAULT_SCORING_CRITERIA.map((c, i) => ({
-          org_id: userId,
+          org_id: writeOrgId,
           name: c.name,
           description: c.description,
           category: c.category,
@@ -42,7 +56,7 @@ export async function GET() {
     }
 
     const { error: templateSeedErr } = await supabase.from("bid_scoring_templates").insert({
-      org_id: userId,
+      org_id: writeOrgId,
       name: DEFAULT_TEMPLATE_NAME,
       description: DEFAULT_TEMPLATE_DESCRIPTION,
       criteria_weights: (seeded || []).map((c) => ({ criterion_id: c.id, weight: c.default_weight })),
@@ -58,13 +72,13 @@ export async function GET() {
     supabase
       .from("bid_scoring_criteria")
       .select("id, name, description, category, default_weight, sort_order, is_active")
-      .eq("org_id", userId)
+      .in("org_id", callerOrgIds)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
     supabase
       .from("bid_scoring_templates")
       .select("id, name, description, criteria_weights, is_default, created_at")
-      .eq("org_id", userId)
+      .in("org_id", callerOrgIds)
       .order("created_at", { ascending: true }),
   ])
   if (criteriaErr) {
@@ -86,6 +100,14 @@ export async function POST(req: Request) {
   if (!auth.authorized) return auth.response
   const { supabase, user } = auth
   const userId = user.id
+
+  // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+  const callerOrgIds = await resolveCallerOrgIds(userId, supabase)
+  // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+  const writeOrgId = await resolveCallerWriteOrgId(userId, supabase)
+  if (!writeOrgId) {
+    return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+  }
 
   const body = await req.json().catch(() => ({}))
   const id = typeof body?.id === "string" ? body.id : null
@@ -114,7 +136,7 @@ export async function POST(req: Request) {
       .from("bid_scoring_criteria")
       .update(patch)
       .eq("id", id)
-      .eq("org_id", userId)
+      .in("org_id", callerOrgIds)
       .select("id, name, description, category, default_weight, sort_order, is_active")
       .maybeSingle()
     if (updateErr) {
@@ -128,12 +150,12 @@ export async function POST(req: Request) {
   const { count: existingCount } = await supabase
     .from("bid_scoring_criteria")
     .select("id", { count: "exact", head: true })
-    .eq("org_id", userId)
+    .in("org_id", callerOrgIds)
 
   const { data: created, error: insertErr } = await supabase
     .from("bid_scoring_criteria")
     .insert({
-      org_id: userId,
+      org_id: writeOrgId,
       name,
       description,
       category,

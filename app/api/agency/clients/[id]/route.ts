@@ -4,6 +4,7 @@ import { isMissingClientsTable } from "@/lib/clients"
 import { fetchScopedLibraryDocuments } from "@/lib/library-documents"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -17,11 +18,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const { data, error } = await supabase
       .from("clients")
       .select("id, name, notes, default_business_criteria, default_evaluation_criteria, created_at, updated_at")
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .maybeSingle()
 
     if (error) {
@@ -55,6 +59,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
@@ -82,7 +89,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .from("clients")
       .update(patch)
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .select("id, name, notes, default_business_criteria, default_evaluation_criteria, created_at, updated_at")
       .single()
 

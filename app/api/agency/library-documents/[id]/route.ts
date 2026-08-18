@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -12,6 +13,9 @@ export async function PATCH(
     const auth = await requireAgencyRole()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
+
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
     const body = await request.json()
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
@@ -28,7 +32,7 @@ export async function PATCH(
       .from("agency_library_documents")
       .update(patch)
       .eq("id", id)
-      .eq("org_id", user.id)
+      .in("org_id", callerOrgIds)
       .select()
       .single()
 
@@ -52,7 +56,10 @@ export async function DELETE(
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
-    const { error } = await supabase.from("agency_library_documents").delete().eq("id", id).eq("org_id", user.id)
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
+    const { error } = await supabase.from("agency_library_documents").delete().eq("id", id).in("org_id", callerOrgIds)
 
     if (error) {
       return NextResponse.json({ error: "Delete failed" }, { status: 500 })

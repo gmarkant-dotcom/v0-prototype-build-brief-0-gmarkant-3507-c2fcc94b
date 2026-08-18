@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
-
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 
 type CriteriaWeight = { criterion_id: string; weight: number }
@@ -27,6 +27,15 @@ export async function POST(req: Request) {
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
+    // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
+    const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+    if (!writeOrgId) {
+      return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
+    }
+
+    // 079: an organization column is not a user id. Scope by membership.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
     const body = await req.json().catch(() => ({}))
     const id = typeof body?.id === "string" ? body.id : null
     const name = typeof body?.name === "string" ? body.name.trim() : ""
@@ -43,7 +52,7 @@ export async function POST(req: Request) {
       const { error: unsetErr } = await supabase
         .from("bid_scoring_templates")
         .update({ is_default: false })
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .eq("is_default", true)
       if (unsetErr) {
         console.error("[api] failure", { route, method: "POST", message: unsetErr.message, code: "unset_default" })
@@ -62,7 +71,7 @@ export async function POST(req: Request) {
         .from("bid_scoring_templates")
         .update(patch)
         .eq("id", id)
-        .eq("org_id", user.id)
+        .in("org_id", callerOrgIds)
         .select("id, name, description, criteria_weights, is_default, created_at")
         .maybeSingle()
       if (updateErr) {
@@ -76,7 +85,7 @@ export async function POST(req: Request) {
     const { data: created, error: insertErr } = await supabase
       .from("bid_scoring_templates")
       .insert({
-        org_id: user.id,
+        org_id: writeOrgId,
         name,
         description,
         criteria_weights: criteriaWeights,
