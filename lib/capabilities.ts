@@ -252,6 +252,53 @@ export function orgRoleFor(profile: CapabilityProfile): OrgRole | null {
 }
 
 /**
+ * A Supabase client, narrowed to the one query loadOrgRole() makes. Loose for the same
+ * reason as lib/entitlements.ts and lib/vouch-counts.ts: the real builder type reaches
+ * TS2589, and there are no generated `Database` types here for a strict signature to
+ * check against.
+ */
+export type OrgRoleLookupClient = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  from: (table: string) => any
+}
+
+/**
+ * The caller's real role inside one organization, read from org_members.
+ *
+ * WRITTEN AND DELIBERATELY UNUSED. See orgRoleFor() above for why: 079 backfills exactly
+ * one member per organization and every live caller is its owner, so calling this today
+ * would cost a round trip on every capability check to return the value orgRoleFor()
+ * already hard-codes.
+ *
+ * It exists so that the day the membership interface ships - org_invitations, phase two,
+ * not this branch - closing that gap is replacing the body of orgRoleFor() with a call to
+ * this, rather than writing the lookup under time pressure with colleagues already added.
+ *
+ * Returns null when the user is not a member of that organization. Null is NOT "member":
+ * can() treats a null role as a denial, which is the direction a permission check should
+ * fail. An unrecognised role string is also null, for the same reason.
+ */
+export async function loadOrgRole(
+  userId: string,
+  orgId: string,
+  client: OrgRoleLookupClient
+): Promise<OrgRole | null> {
+  if (!userId || !orgId) return null
+  const { data, error } = await client
+    .from("org_members")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .maybeSingle()
+  if (error) {
+    console.error("[capabilities] loadOrgRole failed", { userId, orgId, code: error.code, message: error.message })
+    return null
+  }
+  const role = (data as { role?: string | null } | null)?.role
+  return role === "owner" || role === "admin" || role === "member" ? role : null
+}
+
+/**
  * May this caller perform this action?
  *
  * Order of the checks, and why each is where it is:
