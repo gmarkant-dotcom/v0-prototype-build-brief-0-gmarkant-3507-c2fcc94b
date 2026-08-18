@@ -1,4 +1,5 @@
 import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { ORG_CONTACT_SELECT_MEETING, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 import { NextResponse } from "next/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { requirePartnerRole } from "@/lib/api-auth"
@@ -84,15 +85,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
+    // PHASE 3, previously deferred - the detail-view half of the same defect as the list
+    // route. `meeting_url` is a profiles column and this looked it up by a lead
+    // ORGANIZATION id, which matches nothing for any agency created after 079. Reached
+    // through the organization's primary contact instead, because a meeting link is a
+    // person's calendar. Same select fragment as the list route so the two cannot drift.
     let agencyMeetingUrl: string | null = null
     if (inboxWithViewed.lead_org_id) {
-      const { data: agencyProfile, error: agencyErr } = await supabase
-        .from("profiles")
-        .select("meeting_url")
+      const { data: agencyOrg, error: agencyErr } = await supabase
+        .from("organizations")
+        .select(ORG_CONTACT_SELECT_MEETING)
         .eq("id", inboxWithViewed.lead_org_id)
         .maybeSingle()
-      if (!agencyErr) {
-        agencyMeetingUrl = (agencyProfile?.meeting_url as string | null) || null
+      if (agencyErr) {
+        console.error("[partner/rfps/[id]] lead agency organization load failed", {
+          message: agencyErr.message,
+          code: agencyErr.code,
+        })
+      } else {
+        agencyMeetingUrl = resolveOrgContact(agencyOrg as OrgEmbed, null).contactMeetingUrl
       }
     }
 

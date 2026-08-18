@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
@@ -103,16 +104,20 @@ export async function GET() {
     // Fetch agency profiles for display names
     const agencyIds = [...new Set([...agencyByPartnership.values()].filter(Boolean))] as string[]
     const agencyNameById = new Map<string, string>()
+    // PHASE 3: was `.from("profiles").in("id", <lead org ids>)`. Those are ORGANIZATION ids
+    // and this is the profiles table - correct only while an organization's id equals its
+    // founder's user id. Read from `organizations` through the shared contact fragment, as
+    // /api/partner/dashboard already does. No new policy: an organization is readable
+    // through current_user_counterparty_org_ids() whenever a partnership row exists.
     if (agencyIds.length > 0) {
-      const { data: agencyProfiles } = await supabase
-        .from("profiles")
-        .select("id, company_name, full_name")
+      const { data: agencyOrgs } = await supabase
+        .from("organizations")
+        .select(ORG_CONTACT_SELECT)
         .in("id", agencyIds)
-      for (const ap of agencyProfiles || []) {
-        agencyNameById.set(
-          ap.id as string,
-          ((ap.company_name as string | null) || (ap.full_name as string | null) || "Lead Agency").trim()
-        )
+      for (const org of (agencyOrgs || []) as unknown[]) {
+        const contact = resolveOrgContact(org as OrgEmbed, null)
+        if (!contact.orgId) continue
+        agencyNameById.set(contact.orgId, contact.orgName || contact.contactFullName || "Lead Agency")
       }
     }
 

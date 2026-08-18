@@ -53,6 +53,54 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
       return NextResponse.json({ error: "Vendor only" }, { status: 403, headers: noStore })
     }
 
+    // ------------------------------------------------------------------------------
+    // PHASE 3: WHICH ID IS THIS?
+    //
+    // This route is opened from two places and they pass two different kinds of id:
+    //
+    //   * the My Agencies / Invitations tabs pass partnership.lead_org.id, an
+    //     ORGANIZATIONS id (GET /api/partnerships resolves it from `organizations`);
+    //   * the Discover tab passes a row from /api/marketplace/discoverable, which is a
+    //     PROFILES id.
+    //
+    // Everything below used the incoming value as both at once - `.eq("lead_org_id", id)`
+    // against partnerships, which wants the organization, and `.eq("id", id)` against
+    // profiles, which wants the person. For the sixteen accounts 079 backfilled those are
+    // the same uuid, so both worked. For an agency created since, exactly one of them works
+    // per entry point: a vendor with an ACTIVE partnership opening a lead agency from My
+    // Agencies got "This agency's profile is private", because the profiles lookup by an
+    // organization id matched nothing and the empty-select refusal fired.
+    //
+    // Resolved once, here, into the pair the rest of the handler needs. Step 2 is a REVERSE
+    // lookup and grants nothing: `organizations` returns a row only where a SELECT policy
+    // already admits it, which post-079 means the caller's own organizations or a
+    // counterparty of one. It can only find an organization this vendor could already read.
+    const byOrgId = await supabase
+      .from("organizations")
+      .select("id, primary_contact_user_id")
+      .eq("id", agencyId)
+      .maybeSingle()
+
+    let leadOrgId: string | null = (byOrgId.data?.id as string | null) ?? null
+    let agencyProfileId: string | null = (byOrgId.data?.primary_contact_user_id as string | null) ?? null
+
+    if (!leadOrgId) {
+      const byContact = await supabase
+        .from("organizations")
+        .select("id, primary_contact_user_id")
+        .eq("primary_contact_user_id", agencyId)
+        .maybeSingle()
+      leadOrgId = (byContact.data?.id as string | null) ?? null
+      agencyProfileId = (byContact.data?.primary_contact_user_id as string | null) ?? null
+    }
+
+    // Neither lookup resolved: no readable organization. The id is then taken at face value
+    // as a profiles id, which is the marketplace path - a discoverable agency the vendor has
+    // no relationship with. That profile is readable through the untouched "Authenticated
+    // users can read discoverable profiles" policy and nothing else, so the public tier is
+    // both what they get and all they can get.
+    if (!agencyProfileId) agencyProfileId = agencyId
+
     // Fetched at ANY status, with the state test applied once by the shared predicate - see
     // lib/partnership-state.ts. Keyed to vendor_org_id = the caller, so this can only ever be the
     // vendor's own side of the relationship.
@@ -65,7 +113,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
       .from("partnerships")
       .select("id, status, nda_confirmed_at, msa_confirmed_at, accepted_at, invitation_sent_at, created_at")
       .in("vendor_org_id", callerOrgIds)
-      .eq("lead_org_id", agencyId)
+      // The ORGANIZATION, not whatever the caller passed. Falls back to the raw value so a
+      // legacy id keeps resolving exactly as it did.
+      .eq("lead_org_id", leadOrgId ?? agencyId)
       .maybeSingle()
 
     if (pErr) {
@@ -84,10 +134,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
     // Contact information and the commercial terms of the relationship.
     const PARTNERSHIP_COLUMNS = "email, meeting_url, payment_terms, payment_terms_custom"
 
+    // The PERSON, not the company. Every column in both tiers - bio, location,
+    // company_website, business_criteria, capabilities, work_examples, payment_terms - lives
+    // on profiles; 079 gives organizations a name and a designated contact and nothing else.
+    // So the organization is the identity and the contact's profile is where the content is,
+    // which is the same two-hop shape lib/org-contact.ts uses at every other org-to-org read.
     const prof = await supabase
       .from("profiles")
       .select(`${PUBLIC_COLUMNS}, ${PARTNERSHIP_COLUMNS}`)
-      .eq("id", agencyId)
+      .eq("id", agencyProfileId)
       .maybeSingle()
 
     // The refusal sits on the EMPTY-SELECT path, not after the tier decision, for the same
@@ -170,7 +225,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
           .from("partner_rfp_responses")
           .select("id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
           .in("vendor_org_id", callerOrgIds)
-          .eq("lead_org_id", agencyId)
+          .eq("lead_org_id", leadOrgId ?? agencyId)
           .eq("status", "awarded")
           .order("updated_at", { ascending: false })
       : { data: [] as unknown[], error: null }
@@ -196,7 +251,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
       const projs = await supabase
         .from("projects")
         .select("id, name, status, updated_at")
-        .eq("org_id", agencyId)
+        .eq("org_id", leadOrgId ?? agencyId)
         .order("updated_at", { ascending: false })
 
       if (projs.error) {

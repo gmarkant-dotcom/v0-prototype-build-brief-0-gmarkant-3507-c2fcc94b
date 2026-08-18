@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { fetchVouchCount } from "@/lib/vouch-counts"
 import { resolveOrgIdForUser } from "@/lib/entitlements"
+import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 
 const disciplines = [
   "Video Production",
@@ -284,17 +285,23 @@ export default function PartnerProfilePage() {
         new Set(partnershipRows.map((row) => String(row.lead_org_id || "")).filter(Boolean))
       )
 
+      // PHASE 3: was `.from("profiles").in("id", <lead org ids>)`. Those are ORGANIZATION
+      // ids. Partnership Context named every lead agency "Lead Agency" for any agency
+      // created after 079. Same organizations read as every other vendor surface.
       let agencyNameById: Record<string, string> = {}
       if (agencyIds.length > 0) {
-        const { data: agencyProfiles } = await supabase
-          .from("profiles")
-          .select("id, company_name, full_name")
+        const { data: agencyOrgs } = await supabase
+          .from("organizations")
+          .select(ORG_CONTACT_SELECT)
           .in("id", agencyIds)
 
         agencyNameById = Object.fromEntries(
-          (agencyProfiles || []).map((profile) => [
-            String(profile.id),
-            String(profile.company_name || profile.full_name || "Lead Agency"),
+          ((agencyOrgs || []) as unknown[])
+            .map((org) => resolveOrgContact(org as OrgEmbed, null))
+            .filter((c) => Boolean(c.orgId))
+            .map((c) => [
+            String(c.orgId),
+            String(c.orgName || c.contactFullName || "Lead Agency"),
           ])
         )
       }

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { createOrgNotification } from "@/lib/notifications"
 import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
 import type { OrgId } from "@/lib/entitlements"
+import { ORG_CONTACT_SELECT, resolveOrgContact, logOrgContactGap, type OrgEmbed } from "@/lib/org-contact"
 
 /** Fields this module actually reads off a rfp_magic_tokens row - callers pass whatever
  *  shape they already have (select("*") or a narrower select), this just documents the
@@ -280,21 +281,31 @@ export async function attachMagicTokenToPartnerInbox(
     return { attached: false, reason: initial.error }
   }
 
-  const [{ data: agencyProfile }, { data: project }] = await Promise.all([
+  // PHASE 3: `tokenRow.org_id` is an ORGANIZATION id and this looked it up in `profiles`.
+  // The value it produces is written into partner_rfp_inbox.agency_company_name, which is
+  // the DENORMALIZED name the vendor's Open RFPs screen renders and groups by - so for a
+  // Lightning RFP from any agency created after 079 the lookup returned nothing and every
+  // invitation was permanently stamped "Lead agency". Permanently, because it is a snapshot:
+  // nothing re-reads it, so fixing the source later does not repair rows already written.
+  //
+  // Read from `organizations` through the shared two-hop fragment, like every other
+  // org-to-org read. This runs on a SERVICE-ROLE client at three of its four call sites, so
+  // RLS is not what was failing here - the table was simply wrong.
+  const [{ data: agencyOrg }, { data: project }] = await Promise.all([
     supabase
-      .from("profiles")
-      .select("company_name, full_name, display_name")
+      .from("organizations")
+      .select(ORG_CONTACT_SELECT)
       .eq("id", tokenRow.org_id)
       .maybeSingle(),
     tokenRow.project_id
       ? supabase.from("projects").select("name, client_name, budget_range").eq("id", tokenRow.project_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ])
-  const agencyCompanyName =
-    agencyProfile?.company_name?.trim() ||
-    agencyProfile?.full_name?.trim() ||
-    agencyProfile?.display_name?.trim() ||
-    "Lead agency"
+  const agencyContact = resolveOrgContact(agencyOrg as OrgEmbed, null)
+  logOrgContactGap("magic-token-attach (lead agency name)", agencyContact, { token: tokenRow.token })
+  // Same precedence and the same literal fallback as before. It now fires only when the
+  // organization genuinely has no name, rather than on every post-079 agency.
+  const agencyCompanyName = agencyContact.orgName || agencyContact.contactFullName || "Lead agency"
 
   let rows = initial.rows
   let created = false

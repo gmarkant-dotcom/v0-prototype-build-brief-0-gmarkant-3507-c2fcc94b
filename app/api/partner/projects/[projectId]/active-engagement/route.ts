@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { ORG_CONTACT_SELECT, resolveOrgContact, logOrgContactGap, type OrgEmbed } from "@/lib/org-contact"
 
 export const dynamic = "force-dynamic"
 
@@ -172,16 +173,35 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
     const projectName = ((project as { name?: string | null }).name || "").trim() || "Untitled project"
     const agencyId = (project as { org_id: string }).org_id
 
-    const { data: leadAgency, error: agencyErr } = await supabase
-      .from("profiles")
-      .select("id, email, full_name, company_name")
+    // PHASE 3, and the worst of the six. `agencyId` is projects.org_id, an ORGANIZATION id,
+    // and this looked it up in `profiles` - correct only while an organization's id equals
+    // its founder's user id. Worse than the sibling surfaces because of `.single()`: for an
+    // agency created after 079 this does not blank a name, it raises PGRST116 on zero rows.
+    // The error was logged and execution continued, so the delivery view rendered with the
+    // whole leadAgency block null and no visible failure - a vendor mid-engagement with no
+    // idea who they are working for.
+    //
+    // Read from `organizations` through the shared two-hop fragment, like every other vendor
+    // surface. maybeSingle() rather than single(): a missing organization is a real state
+    // (no partnership, so no counterparty read) and the response already models leadAgency
+    // as nullable, so it needs a null and not an exception.
+    const { data: leadAgencyOrg, error: agencyErr } = await supabase
+      .from("organizations")
+      .select(ORG_CONTACT_SELECT)
       .eq("id", agencyId)
-      .single()
+      .maybeSingle()
 
     if (agencyErr) {
-      console.error("[api] partner active-engagement agency profile", {
+      console.error("[api] partner active-engagement agency organization", {
         message: agencyErr.message,
         code: agencyErr.code,
+      })
+    }
+    const leadAgencyContact = leadAgencyOrg ? resolveOrgContact(leadAgencyOrg as OrgEmbed, null) : null
+    if (leadAgencyContact) {
+      logOrgContactGap("GET /api/partner/projects/[projectId]/active-engagement", leadAgencyContact, {
+        projectId,
+        leadOrgId: agencyId,
       })
     }
 
@@ -319,11 +339,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
           id: project.id,
           title: projectName,
         },
-        leadAgency: leadAgency
+        leadAgency: leadAgencyContact
           ? {
-              email: leadAgency.email,
-              fullName: leadAgency.full_name,
-              companyName: leadAgency.company_name,
+              email: leadAgencyContact.contactEmail,
+              fullName: leadAgencyContact.contactFullName,
+              companyName: leadAgencyContact.orgName,
             }
           : null,
         engagements,

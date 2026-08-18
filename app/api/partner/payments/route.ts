@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 
 export const dynamic = "force-dynamic"
 
@@ -88,11 +89,19 @@ export async function GET() {
     const partnershipIds = active.map((p) => p.id as string)
     const agencyIds = [...new Set(active.map((p) => p.lead_org_id as string).filter(Boolean))]
 
+    // PHASE 3: was `.from("profiles").in("id", <lead org ids>)`. Those are ORGANIZATION ids
+    // and this is the profiles table - correct only while an organization's id equals its
+    // founder's user id, which is true for the sixteen accounts 079 backfilled and false for
+    // every one created since. The lead agency's name silently became the literal fallback.
+    // Read from `organizations` through the shared contact fragment, exactly as
+    // /api/partner/dashboard already does, so no two vendor surfaces resolve a name
+    // differently. No new policy: an organization is readable through
+    // current_user_counterparty_org_ids() whenever a partnership row exists.
     let agencyNameById: Record<string, string> = {}
     if (agencyIds.length > 0) {
       const { data: agencies, error: aErr } = await supabase
-        .from("profiles")
-        .select("id, company_name, full_name")
+        .from("organizations")
+        .select(ORG_CONTACT_SELECT)
         .in("id", agencyIds)
 
       if (aErr) {
@@ -101,10 +110,12 @@ export async function GET() {
           code: aErr.code,
         })
       } else {
-        for (const a of agencies || []) {
-          const id = a.id as string
-          const label = (a.company_name as string | null)?.trim() || (a.full_name as string | null)?.trim() || "Agency"
-          agencyNameById[id] = label
+        for (const a of (agencies || []) as unknown[]) {
+          const contact = resolveOrgContact(a as OrgEmbed, null)
+          if (!contact.orgId) continue
+          // Same precedence the profiles read had: the company, then the person. The literal
+          // "Agency" fallback is unchanged - it fires when the row resolves with no name.
+          agencyNameById[contact.orgId] = contact.orgName || contact.contactFullName || "Agency"
         }
       }
     }

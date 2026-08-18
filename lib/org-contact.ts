@@ -67,6 +67,8 @@ export type OrgPrimaryContactRow = {
   capabilities?: unknown
   company_logo_url?: string | null
   created_at?: string | null
+  /** Only populated by ORG_CONTACT_SELECT_MEETING. See that constant for why. */
+  meeting_url?: string | null
 }
 
 /** An organizations row reached through any *_org_id foreign key. */
@@ -87,6 +89,26 @@ export type OrgEmbed = OrgEmbedRow | OrgEmbedRow[] | null | undefined
  */
 export const ORG_CONTACT_SELECT =
   'id, name, primary_contact:profiles!primary_contact_user_id(id, email, full_name)'
+
+/**
+ * The "Book a call" variant, for the two vendor surfaces that render a lead agency's
+ * meeting link (/api/partner/rfps and /api/partner/rfps/[id]).
+ *
+ * PHASE 3: this closes the deferral those two files documented. Both read `meeting_url`
+ * out of `profiles` keyed by a lead ORGANIZATION id - correct only while an organization's
+ * id equals its founder's user id, and silently nothing for any agency created since, so
+ * the "Book a call" button simply stopped rendering with no error anywhere.
+ *
+ * The deferral asked the right question and answered it: `organizations` has no meeting_url
+ * and inventing one would be a product decision about what a company profile contains. A
+ * meeting link is a PERSON'S calendar. So the fix is one hop further, not one table across -
+ * the organization's designated primary contact, which is what every other org-to-org read
+ * in this file already does. No new column, no new policy, and the profile is readable
+ * exactly when the organization is: through current_user_visible_profile_ids(), which shares
+ * its counterparty definition with current_user_counterparty_org_ids() by construction.
+ */
+export const ORG_CONTACT_SELECT_MEETING =
+  'id, name, primary_contact:profiles!primary_contact_user_id(id, email, full_name, meeting_url)'
 
 /** The pool card variant. capabilities, company_logo_url and created_at live on profiles
  *  and 079 creates no organization-level column for any of them, so they continue to come
@@ -115,6 +137,10 @@ export type OrgContact = {
   orgMissing: boolean
   /** True when the organization resolved but has no readable primary contact. */
   contactMissing: boolean
+  /** The contact's own calendar link. Null unless the caller used
+   *  ORG_CONTACT_SELECT_MEETING - the other two select fragments do not fetch it, and null
+   *  there means "not asked for", not "none set". */
+  contactMeetingUrl: string | null
 }
 
 function clean(value: unknown): string | null {
@@ -141,6 +167,7 @@ export function resolveOrgContact(embed: OrgEmbed, rowEmail?: string | null): Or
     contactUserId: clean(contact?.id),
     contactEmail: clean(contact?.email) ?? fallbackEmail,
     contactFullName: clean(contact?.full_name),
+    contactMeetingUrl: clean(contact?.meeting_url),
     orgMissing: !org,
     contactMissing: !!org && !contact,
   }

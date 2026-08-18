@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { ORG_CONTACT_SELECT_MEETING, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { resolveCallerWriteOrgId, type OrgId } from "@/lib/entitlements"
 import {
@@ -176,22 +177,36 @@ export async function GET() {
     }
 
     const rows = data || []
-    // 079-ORG-ID-READ, DELIBERATELY NOT FIXED. `meeting_url` is a profiles column and
-    // 079 creates NO organization equivalent for it. Repointing this read at
-    // `organizations` would mean inventing one, which is a product decision about what a
-    // company profile contains, not a rename. Written up for Greg in
-    // docs/079-embed-closure-report.md: a meeting link is a PERSON's calendar, so the
-    // honest fix is to reach it through the organization's primary contact - one hop
-    // further, not one table across. Until that is ruled on, this returns nothing for any
-    // lead agency organization created after 079 and the "Book a call" button does not
-    // render. It fails closed, silently, and it is a missing button rather than a wrong one.
+    // PHASE 3, previously deferred. This read `meeting_url` out of `profiles` keyed by a
+    // lead ORGANIZATION id, which resolves only while an organization's id equals its
+    // founder's user id. For every agency created since 079 it matched nothing and the
+    // "Book a call" button silently stopped rendering - a missing button, no error.
+    //
+    // The deferral's own reasoning is what fixes it: a meeting link is a PERSON'S calendar,
+    // so it is reached through the organization's designated primary contact - one hop
+    // further, not one table across. No new column and no new policy: the organization is
+    // readable through current_user_counterparty_org_ids() and the contact's profile
+    // through current_user_visible_profile_ids(), which share their counterparty definition
+    // by construction. An agency with no partnership to this vendor resolves to null and
+    // the button does not render, which is correct rather than merely unchanged.
     const agencyIds = Array.from(new Set(rows.map((r) => r.lead_org_id).filter(Boolean)))
     let agencyMeetingUrlById: Record<string, string | null> = {}
     if (agencyIds.length > 0) {
-      const { data: agencies } = await supabase.from("profiles").select("id, meeting_url").in("id", agencyIds)
-      agencyMeetingUrlById = Object.fromEntries(
-        (agencies || []).map((a) => [a.id as string, (a.meeting_url as string | null) || null])
-      )
+      const { data: agencyOrgs, error: agencyOrgsErr } = await supabase
+        .from("organizations")
+        .select(ORG_CONTACT_SELECT_MEETING)
+        .in("id", agencyIds)
+      if (agencyOrgsErr) {
+        console.error("[partner/rfps] lead agency organizations batch load failed", {
+          agencyIdCount: agencyIds.length,
+          message: agencyOrgsErr.message,
+          code: agencyOrgsErr.code,
+        })
+      }
+      for (const org of (agencyOrgs || []) as unknown[]) {
+        const contact = resolveOrgContact(org as OrgEmbed, null)
+        if (contact.orgId) agencyMeetingUrlById[contact.orgId] = contact.contactMeetingUrl
+      }
     }
     // LEFT JOIN: get client_name from projects (rows without project_id stay in list with null)
     const projectIds = [...new Set(rows.map((r) => r.project_id as string | null).filter((id): id is string => typeof id === "string" && id.length > 0))]
