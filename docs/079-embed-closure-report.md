@@ -1276,3 +1276,520 @@ and eleven consumers moved with them rather than the eight that were claimed, si
 notifications now address people instead of companies - and whether any of it renders still
 depends on a single unexecuted query that anyone with a browser session can run in thirty
 seconds.
+
+---
+
+# THIRD PASS: release readiness
+
+Written 2026-08-17, from `feat/079-org-rename`. Nothing was pushed, merged or applied.
+No migration was run. No write query of any kind was issued.
+
+---
+
+## READY OR NOT
+
+# YES - with three preconditions, all of which are cheap.
+
+This branch can be released tomorrow. The three things that must happen first, shortest
+list, in order:
+
+1. **Run runbook step 0 and get zero rows.** The storage policy check. If it returns
+   anything, the release stops until those policies are rewritten, and nothing else in the
+   release would have caught it.
+2. **Re-capture `pg_policies` and regenerate the down migration from it** (runbook steps 1
+   and 2). The committed down migration is authored from the Aug 13 capture. A rollback you
+   have not regenerated is a rollback you do not have, and 079 is not reversible from the
+   repository without one.
+3. **Rebase onto `main` and get all five checks to exit 0** (runbook step 3): `tsc`,
+   `pnpm build`, and the three guards.
+
+Everything else on the risk list is either latent (does not affect the sixteen existing
+accounts), degraded-but-legible (the pool card), or already decided.
+
+**The honest qualifier, and it belongs in the same breath as the yes.** Two things are
+true at once:
+
+- **For the sixteen accounts that exist today, this release should be invisible.** Every
+  organization holds exactly one member and carries its founding user's id, so membership
+  resolves to the same person it always did.
+- **For the first customer who signs up after it, twenty-five reads silently return
+  nothing.** They are enumerated below. None of them errors, none of them logs, and no
+  smoke test will show them. **They should be the first thing that ships after this branch,
+  not a backlog item.**
+
+The single largest unmitigated risk is not on this list because it is not fixable tonight:
+**079 has never been parsed by a Postgres server, and there is no scratch database to parse
+it on.** See `docs/079-preflight.md` question 1.
+
+---
+
+## ITEM 1: THE POOL SITE, AS IMPLEMENTED
+
+Commit `1f63c04`. **Option 3, per Greg's ruling. The visibility rule is not touched.**
+
+### The copy, quoted exactly
+
+```
+Vendor has not published a profile
+```
+
+Defined once, as `UNPUBLISHED_VENDOR_LABEL` in `lib/org-contact.ts`, and passed at the one
+site that renders this fallback: `app/agency/pool/page.tsx` `loadAccessRequests`, which now
+reads `orgDisplayName(contact, UNPUBLISHED_VENDOR_LABEL)`.
+
+It replaces `'Unnamed vendor'`. **The point of the change is that the string says why.** A
+bare "Unnamed vendor" reads as a bug and sends the next person who meets it hunting for
+one; this card is going to be here in six weeks, because the fix is deliberately deferred,
+so the copy has to be legible as expected behaviour rather than as breakage. It also
+removes the incentive for somebody to "repair" it by widening a policy.
+
+### Why the string is NOT the default of `orgDisplayName()`
+
+The default fires for **any** null organization - a null foreign key, a deleted row, a
+genuine RLS filter with a different cause. Only this surface knows the cause is an
+unpublished profile. The other two call sites pass `"Vendor"`, which stays right for them.
+
+### Why option 1 was rejected outright, restated so it is not re-proposed
+
+A third `organizations` SELECT policy keyed on `partner_access_requests` is the option that
+looks most like a fix and is the one to avoid. A `partner_access_requests` row is written
+**unilaterally**: one party writes it alone. Building visibility on it means a vendor can
+make itself visible to any agency simply by requesting access. That is precisely the
+property that disqualified the table from the counterparty definition in the first place,
+and admitting it through a side door would re-create the divergence the shared helper was
+built to eliminate.
+
+### Option 2, as the follow-up. NOT authored.
+
+**Add `requested_by_user_id` to `partner_access_requests` and embed that instead.**
+
+- The column does not exist today - confirmed against the live table, whose columns are
+  `agency_id, created_at, id, partner_id, request_message, reviewed_at, status, updated_at`.
+- It touches **no policy at all**. The row would record that a *person* asked, which is
+  what actually happened.
+- **It does not fully resolve on its own.** The requester is a member of an organization
+  that is not a counterparty, so the *profiles* read still needs a visibility tier that
+  permits it. That tier is the open question.
+- **Therefore it ships with the membership feature**, where "a person who has contacted you
+  but is not yet a counterparty" gets decided once, for this surface and for invitations
+  together, rather than twice.
+
+**No migration was authored for it, per the instruction.**
+
+### Live blast radius today
+
+**Zero rows.** `partner_access_requests` holds one row, status `approved`, whose vendor is
+one of the two discoverable accounts. The first real pending request from a
+non-discoverable vendor is the first time anybody sees this card.
+
+---
+
+## ITEM 2: THE BLIND CLASS. THREE FIXED, AND THE CLASS IS FOUR TIMES BIGGER THAN REPORTED.
+
+### The headline correction
+
+The previous run reported this class as **nine sites, three fixed, six open**. That census
+was produced by hand and it was incomplete.
+
+**Mechanically re-measured this run, with a purpose-built checker:**
+
+```
+$ node scripts/check-org-id-reads.mjs
+  OPEN             25
+  ALLOW-LISTED      1
+```
+
+**Twenty-eight sites in the class**: 3 fixed this run, 25 open, plus 2 verified-correct
+reads that sit near organization code and are allow-listed with their reasons. The previous
+run's six were a subset.
+
+This did not change the release decision - every one of the 25 works correctly for all
+sixteen existing accounts - but it changes what has to happen the week after.
+
+---
+
+### The three fixed, with before-and-after visibility
+
+All three are session-scoped clients, so RLS applies to both the old and the new query.
+
+#### FIX 1. `app/api/agency/dashboard/route.ts` - vendor display names
+
+**The ids:** `partnerships.vendor_org_id` and `partner_rfp_inbox.vendor_org_id`, both
+already scoped to the caller's own organizations upstream.
+
+| | What the caller could see |
+|---|---|
+| **BEFORE, today (pre-079)** | The `profiles` row of every vendor the agency has a partnership with, via `"Agencies read profiles of their partners"`, plus any vendor whose profile is `is_discoverable` even with no partnership. Returns rows. |
+| **BEFORE, post-079, unchanged code** | Identical for all sixteen backfilled accounts, because organization id equals user id. **Zero rows for any vendor organization created after 079.** No error. The activity feed reads "A vendor". |
+| **AFTER, post-079, new code** | The `organizations` row of every vendor on the other side of a partnership with one of the caller's organizations, at any status, via `"Members read counterparty organizations"`. The nested `primary_contact` hop resolves through `current_user_visible_profile_ids()`, which returns members of the caller's organizations plus members of exactly that same counterparty set. |
+
+**Does this widen anything? No. It NARROWS in one case, and that case is stated out loud.**
+
+The partnership half of the predicate is identical before and after - both are "a
+partnerships row exists in either direction, at any status". What is **lost** is the
+discoverable half: `organizations` has no discoverable policy, so an inbox row naming a
+vendor the agency has **no partnership with** used to yield that vendor's name if they were
+discoverable, and now yields nothing.
+
+**Consequence, precisely:** in the "viewed the RFP" activity line, such a vendor is
+displayed as `row.recipient_email` instead of their company name - the fallback that was
+already in the code. Two of the sixteen live accounts are discoverable, so the realistic
+scope is small, and the degradation is an email address rather than a blank.
+
+**Nothing becomes visible that was not visible before.**
+
+#### FIX 2. `app/api/partner/dashboard/route.ts` - lead agency display names
+
+**The ids:** `partner_rfp_inbox.lead_org_id` and `partnerships.lead_org_id`, scoped to the
+calling vendor's own rows upstream.
+
+| | What the caller could see |
+|---|---|
+| **BEFORE, today** | The `profiles` row of every lead agency the vendor has a partnership with, via `"Partners read lead agency profiles for their partnerships"`, plus discoverable agencies. |
+| **BEFORE, post-079, unchanged code** | Identical for the sixteen; **nothing** for any lead agency organization created after 079. Every label falls to the literal `"Lead agency"`. |
+| **AFTER** | The `organizations` row of every lead agency on the other side of a partnership with one of the vendor's organizations, at any status. Same predicate, same helper. |
+
+**Widening: none.** Same narrowing as FIX 1 for an inbox row with no partnership behind it,
+and the same pre-existing fallback (`"Lead agency"`) catches it.
+
+#### FIX 3. `app/api/partner/rfps/bids/route.ts` - the agency name on a bid card
+
+**The ids:** `partner_rfp_responses.lead_org_id`, on rows already filtered by
+`.in("vendor_org_id", callerOrgIds)`.
+
+| | What the caller could see |
+|---|---|
+| **BEFORE, today** | `company_name` and `full_name` from the lead agency's `profiles` row. |
+| **BEFORE, post-079, unchanged code** | Identical for the sixteen; **null for both fields** for any lead agency organization created after 079. Every bid card in the vendor portal loses the agency name, with no error. |
+| **AFTER** | `agency_company_name` comes from `organizations.name`. `agency_full_name` comes from the organization's **designated primary contact**, through the same nested hop. |
+
+**Widening: none.** `agency_full_name` is now explicitly a **person's** name - the primary
+contact's - because there is no organization-level full name and inventing one would be a
+lie. The consumer, `app/partner/rfps/page.tsx:185`, reads
+`bid.agency_company_name || bid.agency_full_name || "Agency"`, so the precedence is
+unchanged.
+
+---
+
+### The two written up rather than fixed
+
+Greg's brief described these as "the two involving `meeting_url` and `location`". **Only
+one of the five open sites involves `meeting_url`. None of them involves `location`** -
+`location` is a real loss but it lives somewhere else. Both are set out honestly below.
+
+#### A. `meeting_url` - `app/api/partner/rfps/route.ts:166`
+
+**What the field actually belongs to: A PERSON.**
+
+`profiles.meeting_url` was added by migration 020 as a per-user scheduling link - a Calendly
+or equivalent. It is not a company property. A company does not have one calendar; the
+person you are booking with does. 079 creates **no** organization-level equivalent and
+should not.
+
+**The options, for Greg:**
+
+| Option | What it costs | What it says |
+|---|---|---|
+| **1. Reach it through the primary contact.** `organizations -> primary_contact -> meeting_url`, one hop further, using the existing `ORG_CONTACT_SELECT` shape extended by one field. | A field added to the shared select fragment, and every site that uses `ORG_CONTACT_SELECT` pays for a column it does not read. | **The truthful one.** "Book a call with the person this company designated." It also degrades correctly: no designated contact, no button. |
+| **2. Denormalize `meeting_url` onto `organizations`.** | A migration, a settings surface to edit it, and a second source of truth for a fact that already has one. | "The company has a booking link." That may eventually be what the product wants - a shared team calendar - but it is a product decision, not a rename. |
+| **3. Leave it.** *(what this branch does)* | The button does not render for any lead agency organization created after 079. | Nothing. It fails closed and silently. |
+
+**Recommendation: option 1**, and it is small. It was not done here because it changes the
+shared select fragment that thirteen sites depend on, three days after that fragment was
+introduced, on a release-night branch. **The code carries a comment saying exactly this at
+the site.**
+
+The same field is read a second time, singly, at `app/api/partner/rfps/[id]/route.ts:88`.
+Both move together or neither does.
+
+#### B. `location` - NOT one of the five, and this is worth correcting
+
+`location` is a `profiles` column with no organization equivalent, and it is **not** read by
+any of the five open blind-class sites. The actual loss is at
+`contexts/lead-agency-filter-context.tsx:91`, where `agencyLocation` has been the literal
+`''` since the previous run repointed the embeds onto `organizations`.
+
+**It is not caused by the rename and it is not fixed by the rename.** It was caused by the
+embed rewrite, it is already explicit in the code with a comment rather than silently
+reading a field that cannot exist, and the same three options as `meeting_url` apply -
+except that a company location is far more plausibly a company property than a booking link
+is, so option 2 (a real `organizations.location`) is the better answer here and the worse
+answer there.
+
+`location` is also read on two profile-detail routes,
+`app/api/agency/pool/[partnerId]/route.ts` and `app/api/partner/network/[agencyId]/route.ts`,
+both of which are in the open list below for a different reason.
+
+#### C. `app/api/projects/[id]/partner/route.ts` - the sixth site is a DEAD ROUTE
+
+The remaining one of the previous run's six emits an `agency` object of
+`{ id, email, full_name, company_name }` keyed on `projects.org_id`. It has a clean answer
+under the org model - it is exactly what `ORG_CONTACT_SELECT` is for.
+
+**It was not fixed because nothing calls it.** A repository-wide search for
+`/api/projects/<id>/partner` finds no `fetch`, no SWR key and no link.
+
+**Recommendation: delete the route.** Repairing a route with no caller adds a maintenance
+surface and a false signal that something depends on it. Deleting it is a decision worth
+taking deliberately rather than as a side effect of a release, so it is written up rather
+than done.
+
+It also contains `.eq('vendor_org_id', user.id)` - **the same coincidence in the opposite
+direction**, an organization column compared to a user id. That mirror-image class is
+described under "what the guard cannot do" below.
+
+---
+
+### The twenty-five that remain open
+
+Every one of these reads a `profiles` row using an id that is an organization id after 079.
+Every one works correctly for the sixteen existing accounts and returns **nothing, at HTTP
+200, with no error**, for any organization created after the migration.
+
+`DIRECT` means the filter argument itself names an organization column - no judgment
+involved. `NEARBY` means an organization identifier is in the surrounding code and the
+chain was read by hand.
+
+| File | Line | Evidence | What breaks |
+|---|---:|---|---|
+| `app/api/agency/msa/ai-schedule/route.ts` | 174 | DIRECT | vendor context for the AI milestone schedule |
+| `app/api/agency/msa/milestones/route.ts` | 247 | NEARBY | vendor names on MSA milestones |
+| `app/api/agency/msa/route.ts` | 96 | NEARBY | vendor names on the MSA list |
+| `app/api/agency/payment-synthesis/route.ts` | 198 | NEARBY | vendor names in payment synthesis |
+| `app/api/agency/pool/[partnerId]/route.ts` | 71, 78 | NEARBY | **the whole vendor detail page** |
+| `app/api/agency/projects/[projectId]/status-updates/route.ts` | 201 | DIRECT | the agency's own name in a status-update email |
+| `app/api/agency/rfp-responses/route.ts` | 227 | NEARBY | vendor names on the responses list |
+| `app/api/partner/network/[agencyId]/route.ts` | 86 | NEARBY | **the whole lead agency detail page** |
+| `app/api/partner/payments/route.ts` | 92 | NEARBY | agency names on payments |
+| `app/api/partner/projects/[projectId]/active-engagement/route.ts` | 174 | NEARBY | agency name on an engagement |
+| `app/api/partner/projects/route.ts` | 101 | NEARBY | agency names on the projects list |
+| `app/api/partner/rfps/[id]/route.ts` | 88 | DIRECT | `meeting_url`, see B above |
+| `app/api/partner/rfps/route.ts` | 166 | NEARBY | `meeting_url`, see B above |
+| `app/api/partnerships/route.ts` | 814, 868, 956, 1007 | DIRECT | **four EMAIL ADDRESS lookups.** These send mail. |
+| `app/api/projects/[id]/assignments/route.ts` | 343, 438 | DIRECT | **two EMAIL ADDRESS lookups.** |
+| `app/api/projects/[id]/partner/route.ts` | 92 | DIRECT | dead route, see C above |
+| `app/api/rfp/guest/[token]/route.ts` | 217, 241 | DIRECT | **the agency name and logo on the guest RFP page** |
+| `app/partner/profile/page.tsx` | 279 | NEARBY | agency names on the vendor's own profile |
+| `lib/magic-token-attach.ts` | 286 | DIRECT | the agency name written onto a claimed inbox row |
+
+**The six email-address lookups are the most severe.** `partner?.email` comes back
+undefined, the guarded send is skipped, and nobody is notified - the same silent-recipient
+failure the notification work closed sixteen instances of, surviving in a different shape.
+
+**The two allow-listed sites**, read and established to be user ids:
+
+| File | Why it is correct |
+|---|---|
+| `lib/email.ts:361` | `resolveOrgNotificationRecipients()`. The ids are `org_members.user_id`, resolved from the organization one line earlier. The single-element `[orgId]` fallback is deliberate, fires only pre-079, and logs. |
+| `app/api/partnerships/route.ts:186` | `domain_match_profile_id` and `notes.matched_profile_id` record which PERSON an email domain matched. Not organization columns. 079 does not rename them. |
+
+**Why they are not fixed here.** Twenty-two unreviewed edits to routes nobody asked about,
+on the night before a release, is a larger risk than the bug they close - which is latent,
+affects no existing account, and cannot fire until a new customer both signs up and forms a
+relationship. **The class is recorded so it cannot grow silently, and closing it is the
+first work after this branch ships.**
+
+---
+
+### CAN A GUARD CATCH THIS CLASS?
+
+# PARTLY. AND THE HONEST ANSWER MATTERS MORE THAN THE GUARD.
+
+`scripts/check-org-id-reads.mjs`, added this run. It found all twenty-five, including
+nineteen the hand census missed. Its guard mode was **self-tested by execution**: a
+deliberate new instance was appended to a clean file, the guard exited 1 and named the file
+and the count; the file was restored and it exited 0 again.
+
+But it is a **proximity heuristic over source text, not dataflow analysis**, and the
+difference is the whole finding:
+
+**What it does.** For every `.from('profiles')` filtered by `.in('id', ...)` or
+`.eq('id', ...)`, it flags the site if the filter argument itself names an organization
+column (`DIRECT`) or if an organization identifier appears within forty lines (`NEARBY`).
+Arguments that are user ids by construction (`user.id`, `userId`, `...UserId`) are excluded
+by argument rather than by file, so a genuine finding elsewhere in the same file still
+reports.
+
+**What it CANNOT do, and no amount of work on this script fixes it:**
+
+1. **It misses an org id that travels.** If the id is renamed to something with no `org` in
+   it, arrives as a function argument from another module, or is carried on an object
+   property whose own origin is several hops away, the check is blind.
+   `app/agency/pool/page.tsx` is exactly that shape - `row.partnerId` comes from
+   `p.vendor_org?.id` two functions earlier - and it is caught **only because the same file
+   happens to mention `vendor_org_id` elsewhere. That is luck, not detection.**
+2. **It cannot tell a correct read from an incorrect one.** That is what the allow-list is,
+   and every entry there is a human claim, not a machine fact.
+3. **It cannot see the mirror image.** `.eq('vendor_org_id', user.id)` - an ORGANIZATION
+   column compared to a USER id - is the same coincidence in the opposite direction, and
+   nothing here looks at the right-hand side of a filter. `check-identity-columns` does not
+   either. **This class is currently caught by nobody.**
+4. **It cannot tell you whether the fixed query returns anything.** A row filtered by row
+   level security comes back as an empty array at HTTP 200. Only a live authenticated
+   session answers that.
+
+### THEREFORE, WHAT A HUMAN MUST INSPECT
+
+Because a check that implies more confidence than it has is worse than no check:
+
+1. **Every `.from('profiles')` in the repository, once, against the single question "where
+   did this id come from".** There are 209. The guard is a net under that reading, not a
+   substitute for it.
+2. **Every filter whose right-hand side is `user.id` and whose left-hand side is an
+   organization column.** No guard covers this today. It is the same bug, and it fails the
+   same way: correct for sixteen accounts, silently empty for the seventeenth.
+
+### The pattern this is the third instance of
+
+| # | Class | Caught by | Blind to the next one because |
+|---|---|---|---|
+| 1 | unrenamed identity columns | `check-identity-columns.mjs` | a constraint name has no word boundary before `partner_id` |
+| 2 | embeds through repointed foreign keys | `check-embed-targets.mjs` | a separate query has no `table!hint(` in it |
+| 3 | profiles read by an organization id | `check-org-id-reads.mjs` | the column name is already the post-079 one |
+| 4 | **organization column compared to `auth.uid()`** | **nobody** | nothing reads the right-hand side of a filter |
+
+**Each guard was built to catch the previous blind spot and was blind to the next.** There
+is no reason to believe the fourth is the last, and the reason is structural: every one of
+these is a TYPE error - a company id where a person id belongs - in a codebase where both
+are bare `uuid` strings and the Supabase clients carry no generated types. **The permanent
+fix is generated `Database` types, not a fourth script.** That is the recommendation.
+
+---
+
+## ITEM 3: THE RUNBOOK. WHAT I COULD NOT EXECUTE WITHOUT ASKING.
+
+`docs/079-release-runbook.md` is rewritten. Every step is copy-pasteable and every check
+states its expected result. Structure: phase one is read-only preparation, phase two is the
+outage, phase three is the M1 isolation test behind its own decision point.
+
+**The list below is the deliverable, not a formality.** It is the result of re-reading the
+finished page as if it were 9am with no context, and it is the set of places where I would
+have had to stop and ask somebody. It is reproduced in full at the foot of the runbook.
+
+1. **Which of 080, 081 and 082 are actually applied?** Step 1c's expected count depends on
+   the answer and the answer is written nowhere. `LIGAMENT_CONTEXT.md` lists none of the
+   four migrations 079 through 082.
+2. **Is 078 applied?** `LIGAMENT_CONTEXT.md` says no; 079's PHASE 12 header says yes and
+   verified in production. Step 4.2 resolves it empirically, and I assert it does not block -
+   but I am asserting it.
+3. **How do I put the site in maintenance?** The step says "or accept the outage" and does
+   not say how, because I found no maintenance mode in the repository. I would assume
+   "accept the outage" - an assumption, not an instruction.
+4. **Which account is A2?** Step 8 needs a second real account whose owner will not be
+   surprised to find themselves in somebody else's organization. Sixteen exist. **Name it in
+   advance.**
+5. **Where does A2 check the AI quota?** I wrote `/api/agency/usage`, which is an API route.
+   I do not know whether there is a UI for it.
+6. **How does A2 attempt to update the organization at step 8.5?** I do not know whether
+   `/agency/settings/profile` writes to `organizations` after 079 or still writes to
+   `profiles`. **If it still writes to `profiles`, that step is not testing what it claims
+   to test.**
+7. **What `DROP POLICY` count should step 2 expect if something HAS drifted?** I wrote 83
+   "if nothing has drifted" and cannot give a number for the other case.
+8. **Is there a staging or branch database?** Nothing on the page lets the migration be
+   tested anywhere before production. The answer appears to be no; see `docs/079-preflight.md`.
+9. **At step 8.4, which URL does B paste?** If the agency project page is guarded by the
+   selected-project context rather than by RLS, a 404 proves nothing.
+10. **How long may the second membership stay in place?** If step 8 is stopped halfway, a
+    real person sits in two organizations with no interface to leave one.
+
+### What else the runbook now settles that it did not before
+
+- **Step 0 is the storage policy check**, with the exact query and an explicit STOP, plus
+  the point-in-time-restore window as 0d - because the recovery path for "the down migration
+  failed" is a restore, and finding the button at that moment is too late.
+- **The one-member statement is explicit** and sits immediately above the smoke tests:
+  every step through step 7 runs while every organization holds exactly one member, so
+  nothing should look different and any regression is visible against known-good behaviour.
+- **M1 is phase three with its own decision point**, and the direct `org_members` INSERT is
+  written out in full, with the ids read from a query rather than retyped, and with the role
+  as `'member'` rather than `'owner'` so the admin restriction is actually under test.
+- **Smoke-pass-but-isolation-fail is pre-decided**, because the instinct is wrong in one
+  direction: an empty portal for the colleague is a **lockout**, is invisible to every real
+  user, and **must not** trigger a rollback - delete the test membership and the product is
+  exactly as it was. Organization B seeing organization A's data is a **leak**, and deleting
+  the test membership closes it immediately; roll back only if it reproduces without a
+  second membership.
+- **In-flight users: do it late, announce nothing, invalidate nothing** - at sixteen
+  accounts. Sessions carry no organization claim, so nothing is stale; `org_members` is read
+  fresh through a `STABLE` function on every request. The real cost is a user mid-form, who
+  loses what they typed, because nothing in this codebase drafts form state. **Revisit at
+  the first customer with a team.**
+- **Rollback states the order in a heading**: revert the deploy first, then the down
+  migration, with realistic windows of 5 to 15 minutes forward and 10 to 20 back.
+- **An expected-breakage section** so nobody chases a ghost: the pool card, blank
+  `location`, the missing "Book a call" button, the twenty-five open reads, and the fact
+  that `full_name` and `capabilities` on a company now describe its designated contact.
+
+---
+
+## ITEM 4: THE PRE-FLIGHT PAGE
+
+`docs/079-preflight.md`. One page, nine questions, each with its evidence.
+
+The headline: **079 has never been executed anywhere, by anything.** All four database
+credentials are present-and-empty, verified again this run; there is no `psql` and no
+Postgres driver. **If a Supabase branch database can be obtained, running 079 on it is
+worth more than every other check on that page combined.**
+
+One defect was found and fixed while writing it: **079's own PHASE 2 verification block
+stated the expected capability distribution as `(t,f)=12, (f,t)=4`, which is the
+PRE-correction figure.** After the seven role corrections the correct expectation is
+`(t,f)=5, (f,t)=11`. Greg would have run the migration's own verification, seen 5/11, and
+been told by the migration that something was wrong. **Corrected. Comment only - no
+executable SQL in 079 was touched.**
+
+---
+
+## HONEST VERIFICATION
+
+### Executed from this terminal, results observed
+
+- `npx tsc --noEmit` - exit 0, after each of the two code changes and before each commit.
+- `pnpm build` - exit 0.
+- `node scripts/check-identity-columns.mjs --guard` - exit 0. Inventory: 0 in 0 files.
+- `node scripts/check-embed-targets.mjs --guard` - exit 0. Inventory: 0 REPOINTED, 0 PERSON.
+- `node scripts/check-org-id-reads.mjs --guard` - exit 0 against its recorded baseline;
+  inventory 25 open, 1 allow-listed.
+- **The new guard's failure mode was self-tested by execution.** A deliberate new instance
+  of the class was appended to `app/api/agency/dashboard/route.ts`; the guard exited **1**
+  and printed `found 1, KNOWN_OPEN records 0`. The file was restored and it exited **0**.
+- `node scripts/audit-policy-snapshot.mjs docs/schema-snapshot-2026-08-13.md` - ran to
+  completion; the six allow-listed policy names were read from its output rather than
+  transcribed.
+- **The 83 `DROP POLICY` names in 079 were parsed out of the migration and looked up in the
+  Aug 13 snapshot by script.** 83 drops, 104 snapshot rows, **0 not found, 0 duplicates.**
+- The four database credentials in `.env.production.local` were confirmed **present and
+  empty** by a grep that matched the key with nothing after the `=`.
+- Every file changed in this run was read in full before and after editing.
+
+### NOT executed. Claims that rest on reading.
+
+- **Every claim about post-079 behaviour.** 079 is unapplied. `organizations`,
+  `org_members`, `current_user_counterparty_org_ids()` and the counterparty policy exist in
+  no database. **Every before-and-after visibility statement in Item 2 is a reading of
+  policy text against query text.** The "before" halves describing today's behaviour rest on
+  the Aug 13 snapshot; the "after" halves rest on 079's unapplied policy bodies.
+- **That the migration parses.** It has never been submitted to a Postgres server, including
+  this run's one-comment change.
+- **That the three fixed queries return anything.** No route was exercised, no page loaded.
+  `.from("organizations").select(ORG_CONTACT_SELECT)` has never been issued against a
+  database where that table exists.
+- **That the pool card renders the new string.** The change is a constant substitution in a
+  code path that was not run.
+- **The RLS-filtered embed question** - null or error - remains unresolved, and is
+  unresolvable in this environment because the app makes zero client-side Supabase calls
+  and every credential that would let a terminal issue an authenticated query is empty.
+- **Storage policies** remain UNKNOWN until runbook step 0 is run.
+- **The twenty-five open sites were confirmed as findings by reading the code at each one**,
+  not by executing any of them. Seven of the `DIRECT` ones were opened and read in full
+  during this run; the remainder were confirmed from the filter argument, which names an
+  organization column outright.
+
+### The one sentence to take away
+
+**Every mechanical check that can be run without a database is green, and none of it has
+met a Postgres server or a browser** - so the release is ready in the sense that nothing
+known is broken for the sixteen accounts that exist, and unready in the sense that its
+first execution will be on production and twenty-five reads are waiting for the
+seventeenth account to exist.
