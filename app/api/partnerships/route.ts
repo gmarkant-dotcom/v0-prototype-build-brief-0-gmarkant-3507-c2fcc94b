@@ -1081,7 +1081,54 @@ export async function PATCH(request: NextRequest) {
         
         return NextResponse.json({ partnership: updated })
       } else if (status === 'terminated') {
-        // Decline invitation
+        // Decline invitation.
+        //
+        // 085 ORDERING. BOTH LOOKUPS BELOW HAPPEN BEFORE THE UPDATE, AND THAT ORDER IS LOAD
+        // BEARING. Migration 085 narrows the counterparty half of
+        // current_user_visible_profile_ids() to exclude ended relationships, and 'terminated'
+        // is an ended relationship. Resolved AFTER the update, the lead agency is no longer a
+        // commercial counterparty of this vendor, the profiles read behind
+        // resolveOrgNotificationRecipients() returns nothing, and the decline email is simply
+        // not sent - while the request still returns 200 and the vendor still sees their
+        // invitation cleared. That is the exact silent-notification failure commit c00ca1a was
+        // written to close, reopening through a policy change instead of a lookup bug.
+        //
+        // Reordering costs nothing today: neither lookup depends on the new status, and both
+        // read rows the caller can already see while the partnership is still pending. So this
+        // is correct with or without 085 and is safe to deploy before it. DO NOT MOVE EITHER
+        // LOOKUP BACK BELOW THE UPDATE.
+        const { data: partnerProfile } = await supabase
+          .from('profiles')
+          .select('company_name, full_name')
+          .eq('id', user.id)
+          .single()
+
+        const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'A vendor'
+
+        // Resolved here, while the partnership is still readable as a live counterparty.
+        // Held and used after the update.
+        //
+        // Wrapped in its own try/catch on purpose. Before this reordering the lookup sat
+        // inside the email try/catch, so a lookup failure could never stop the decline from
+        // being recorded. Moving it above the UPDATE without this guard would have quietly
+        // handed it that power - a throw here would 500 the request and the vendor's decline
+        // would not happen at all. Notifying the agency is strictly less important than
+        // recording what the vendor did.
+        let declineRecipient: Awaited<ReturnType<typeof resolveOrgNotificationRecipients>>[number] | null = null
+        try {
+          declineRecipient = (await resolveOrgNotificationRecipients(
+            orgIdFromColumn(partnership.lead_org_id),
+            supabase
+          ))[0] ?? null
+        } catch (recipientErr) {
+          console.error('[api] PATCH /partnerships: decline recipient lookup threw, declining anyway', {
+            route,
+            partnershipId,
+            leadOrgId: partnership.lead_org_id,
+            message: recipientErr instanceof Error ? recipientErr.message : String(recipientErr),
+          })
+        }
+
         const { data: updated, error } = await supabase
           .from('partnerships')
           .update({ status: 'terminated', updated_at: new Date().toISOString() })
@@ -1090,17 +1137,20 @@ export async function PATCH(request: NextRequest) {
           .single()
 
         if (error) throw error
-        
-        // Get partner name for notification
-        const { data: partnerProfile } = await supabase
-          .from('profiles')
-          .select('company_name, full_name')
-          .eq('id', user.id)
-          .single()
-        
-        const partnerName = partnerProfile?.company_name || partnerProfile?.full_name || 'A vendor'
-        
-        // Notify agency that partner declined
+
+        // Notify agency that partner declined.
+        //
+        // KNOWN TO BE FAILING TODAY, AND NOT FIXED HERE. The live "Scoped insert
+        // notifications" policy on public.notifications is
+        //   user_id = auth.uid() OR user_id IN (current_user_active_counterparty_user_ids())
+        // and that helper is status = 'active' only. A declined invitation was 'pending'
+        // before this handler ran and is 'terminated' after it, so the agency's user id is in
+        // neither branch and this INSERT is refused by row level security in both orderings.
+        // It is refused quietly: createOrgNotification() logs and returns false, the request
+        // still returns 200. Widening that policy would scope a WRITE by a visibility set,
+        // which this project's rules forbid outright, so it is reported rather than patched.
+        // See docs/m1-foundation-report.md, Phase 1. THE EMAIL BELOW IS THE PATH THAT ACTUALLY
+        // REACHES THE AGENCY, which is why its ordering is the one that was fixed.
         const { notifyPartnershipDeclined } = await import('@/lib/notifications')
         await notifyPartnershipDeclined(supabase, partnership.lead_org_id, partnerName, partnershipId)
 
@@ -1113,10 +1163,7 @@ export async function PATCH(request: NextRequest) {
           // agency could see it. That is the half of "a vendor cannot clear an invitation"
           // that was actually broken, and it is the half that gets worse the moment Phase 2
           // starts creating invitations nobody chose to send.
-          const agencyProfile = (await resolveOrgNotificationRecipients(
-            orgIdFromColumn(partnership.lead_org_id),
-            supabase
-          ))[0] ?? null
+          const agencyProfile = declineRecipient
           if (!agencyProfile?.email) {
             console.error('[api] PATCH /partnerships: no notification recipient for the lead organization', {
               route,
