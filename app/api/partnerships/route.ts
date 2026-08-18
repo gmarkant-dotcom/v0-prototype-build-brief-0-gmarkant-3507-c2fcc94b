@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
+import { resolveCallerWriteOrgId } from '@/lib/entitlements'
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
@@ -248,20 +249,54 @@ export async function GET(request: NextRequest) {
         } else if (byEmail && byEmail.length > 0) {
           byEmailData = byEmail
 
-          // Auto-claim these invitations by setting vendor_org_id
+          // 079 GHOST CLAIM. This wrote `vendor_org_id: user.id`, which is a USER id in a
+          // column that is a foreign key to organizations(id). Correct by accident for the
+          // sixteen accounts 079 backfilled, where the organization id IS the founding
+          // user's id. For every account created from the PHASE 12 trigger onward the two
+          // differ, so the UPDATE raises 23503 and the invitation is never claimed.
+          //
+          // The old loop logged that error and continued, so the request still returned 200
+          // and the vendor saw "No invitations yet" with nothing broken anywhere they could
+          // see it. That is the failure diagnosed on 2026-08-14 and it would have returned
+          // silently. It does not any more: an unclaimable invitation now fails the request.
+          //
+          // Scoped to the caller's OWN organization, never to a counterparty set. A vendor
+          // claims an invitation into the organization they are a member of and nowhere
+          // else.
+          const claimOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+          if (!claimOrgId) {
+            console.error('[api] GET /partnerships auto-claim aborted, caller belongs to no organization', {
+              route,
+              userId: user.id,
+              unclaimedCount: byEmail.length,
+            })
+            return NextResponse.json(
+              { error: 'Your account is not linked to an organization yet, so these invitations could not be claimed. Contact support.' },
+              { status: 500, headers: noStoreHeaders }
+            )
+          }
+
           for (const invitation of byEmail) {
             const { error: claimErr } = await supabase
               .from('partnerships')
-              .update({ vendor_org_id: user.id })
+              .update({ vendor_org_id: claimOrgId })
               .eq('id', invitation.id)
             if (claimErr) {
               console.error('[api] GET /partnerships auto-claim invitation update failed', {
                 route,
                 userId: user.id,
+                orgId: claimOrgId,
                 partnershipId: invitation.id,
                 message: claimErr.message,
                 code: claimErr.code,
               })
+              // Surfaced, not swallowed. This branch only runs when there IS an unclaimed
+              // invitation, so failing here costs availability only in the case that is
+              // already broken, and it converts a silent empty inbox into a visible error.
+              return NextResponse.json(
+                { error: 'An invitation could not be claimed for your account. Please retry, and contact support if it persists.' },
+                { status: 500, headers: noStoreHeaders }
+              )
             }
           }
         }

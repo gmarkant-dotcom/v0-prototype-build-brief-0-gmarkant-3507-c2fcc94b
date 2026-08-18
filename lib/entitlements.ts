@@ -163,6 +163,55 @@ export async function agencyEntitlementId(userId: string, client: OrgLookupClien
 }
 
 /**
+ * The ONE organization a write may be attributed to: the caller's own.
+ *
+ * WHY THIS EXISTS RATHER THAN REUSING ONE OF THE TWO ABOVE. Both were read first and
+ * neither fits a write, for opposite reasons:
+ *
+ *   - resolveCallerOrgIds() returns a SET. It is exactly right for a read, where
+ *     `.in(col, ids)` is the whole answer, and useless for a column that takes one
+ *     value. Taking `[0]` of it is an unordered pick dressed up as a decision.
+ *   - agencyEntitlementId() returns one id with the right ranking, and then falls back
+ *     to returning `userId` unchanged when membership does not resolve. That fallback is
+ *     deliberate and correct where it is used - a quota lookup that fails should open a
+ *     fresh usage row, not take the AI surface down - but `userId` is PRECISELY the value
+ *     that raises 23503 against organizations(id) for any account created after 079. Its
+ *     failure direction is right for accounting and wrong for a foreign key.
+ *
+ * So: same ranking, opposite failure. Returns null rather than a value, and every caller
+ * must treat null as "fail the request". Writing a guess here is the exact defect this
+ * whole pass exists to close - a value that is accidentally correct for the sixteen
+ * accounts that exist and silently wrong for the seventeenth.
+ *
+ * The ranking (owner, then admin, then member, then first) is copied from
+ * agencyEntitlementId() on purpose. It is deterministic rather than correct: "which of my
+ * organizations does this write belong to" is a real product question that the membership
+ * interface will have to answer explicitly. Today it cannot arise - 079 PHASE 2 backfills
+ * exactly one organization per profile and the PHASE 12 trigger creates exactly one per
+ * signup, so every caller has exactly one and the ranking never has two rows to sort.
+ */
+export async function resolveCallerWriteOrgId(
+  userId: string,
+  client: OrgLookupClient
+): Promise<string | null> {
+  if (!userId) return null
+  const { data, error } = await client.from("org_members").select("org_id, role").eq("user_id", userId)
+  if (error) {
+    console.error("[entitlements] resolveCallerWriteOrgId failed", {
+      userId,
+      code: error.code,
+      message: error.message,
+    })
+    return null
+  }
+  const rows = (data ?? []) as Array<{ org_id?: string | null; role?: string | null }>
+  if (rows.length === 0) return null
+  const rank = (r?: string | null) => (r === "owner" ? 0 : r === "admin" ? 1 : 2)
+  const best = [...rows].sort((a, b) => rank(a.role) - rank(b.role))[0]
+  return best?.org_id ?? null
+}
+
+/**
  * Is the paying entity behind this caller entitled to paid lead agency capability?
  *
  * Billing only. Says nothing about which portal the caller is in - pair it with
