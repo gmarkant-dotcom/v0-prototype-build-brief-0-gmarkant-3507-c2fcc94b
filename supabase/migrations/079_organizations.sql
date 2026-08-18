@@ -398,7 +398,23 @@ ON CONFLICT (org_id, user_id) DO NOTHING;
 --
 --   SELECT is_lead_agency, is_vendor, count(*)
 --   FROM public.organizations GROUP BY 1,2 ORDER BY 1,2;
---   -- Rule A on 2026-08-17 data: (t,f)=12, (f,t)=4
+--   -- EXPECT (t,f)=5 LEAD, (f,t)=11 VENDOR.
+--   --
+--   -- CORRECTED 2026-08-17 (second pass). This line previously read
+--   -- "(t,f)=12, (f,t)=4", which was the PRE-CORRECTION Rule A
+--   -- distribution measured before the seven mis-roled accounts were
+--   -- fixed. Those seven now read role='partner', which moves them from
+--   -- the lead bucket to the vendor bucket: 12-7=5 and 4+7=11. Rule A and
+--   -- Rule A' now agree, and 5/11 is exactly the Rule A' distribution
+--   -- recorded in the PHASE 2 header.
+--   --
+--   -- READ THIS BEFORE TRUSTING EITHER NUMBER. If this query returns
+--   -- 12/4, the seven role corrections are NOT present in the database
+--   -- you just migrated, and seven vendor organizations have been stamped
+--   -- as lead agencies. That is a data-quality fault and not a lockout -
+--   -- no policy reads these flags - but fix it before anything reads them.
+--   -- The precondition query in the runbook, step 4.1, catches this
+--   -- BEFORE the transaction rather than after.
 
 
 -- =====================================================================
