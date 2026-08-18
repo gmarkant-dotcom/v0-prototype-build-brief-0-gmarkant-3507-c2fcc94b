@@ -693,3 +693,586 @@ Items 4 to 9 are carried forward from `docs/079-rename-execution-report.md` unmo
 
 **The one sentence to take away:** the shape is right, the guard can now see this class, and
 whether any of it renders depends on a policy decision that has not been made.
+
+---
+---
+
+# SECOND PASS: Greg's four rulings, and the pool
+
+Appended 2026-08-17. Branch `feat/079-org-rename`. **Nothing pushed, nothing merged, no
+migration applied, no write query run.** Three commits, one per ruled item.
+
+---
+
+## ITEM 2 FIRST, BECAUSE EVERYTHING ELSE ASSUMES IT
+
+### The claim is STILL NOT EXECUTED. It is no longer un-executable for lack of a case.
+
+The load-bearing claim is that a PostgREST to-one embed whose target row is filtered by row
+level security returns `null` at HTTP 200 rather than erroring. The previous run inferred
+it. **I did not execute it either.** What changed is the reason, and the reason matters:
+
+**The previous run reported that no such case could be constructed. That was wrong, and it
+was wrong because it looked for the case in the wrong place.** It searched for an
+anon-readable table with an embeddable foreign key, found only `partner_vouches`, and
+stopped. A case exists, it is in the live database right now, and it is specified exactly
+below. What blocks it is credentials, not the schema.
+
+### The case, exactly
+
+Executed read-only with the service-role key to establish the facts:
+
+| Fact | Value | How |
+|---|---|---|
+| `partner_rfp_inbox` rows where `partner_id = e04e86e8` (`gmarkant+partner71@gmail.com`) | 4 | `GET /partner_rfp_inbox?partner_id=eq.…` |
+| `project_id` on three of them | `e533075f` "Q3 Flagship Product Launch" | same |
+| `project_id` on the fourth | `5473ceeb` "Evergreen Content" | same |
+| Project assignments for that user | exactly one, on `5473ceeb` | `GET /project_assignments?select=…partnerships!…(partner_id)` |
+
+That user can read all four inbox rows (`partner_rfp_inbox` policy "Partners select inbox
+rows by partner_id", `partner_id = auth.uid()`). That user can read project `5473ceeb`
+(`projects_partner_select_assigned`). That user **cannot** read project `e533075f` - no
+assignment, and they are not the agency.
+
+So this single query returns the filtered case and its own control in one response:
+
+```
+GET /rest/v1/partner_rfp_inbox
+    ?select=id,project_id,project:projects!project_id(id,name)
+    &partner_id=eq.e04e86e8-27dc-4235-980e-3703e08175ce
+    &order=id
+```
+
+Three rows carry a **non-null** `project_id` pointing at a row the caller may not read. One
+carries a non-null `project_id` pointing at a row the caller may read. If the three come
+back `"project": null` at HTTP 200 while the fourth resolves, the claim holds. If the
+request 400s, it does not.
+
+**This is a better test than anything the post-079 schema could offer**, because it needs no
+migration: it uses today's policies, today's data, and a non-null foreign key, which is the
+one property the already-executed null-foreign-key case could not supply.
+
+### Why it was not run
+
+Issuing it requires being a real authenticated user. Every credential that would allow that
+is **present in the environment file and empty**:
+
+| Variable | State |
+|---|---|
+| `SUPABASE_JWT_SECRET` | present, empty - cannot mint a JWT |
+| `POSTGRES_URL` | present, empty |
+| `POSTGRES_URL_NON_POOLING` | present, empty |
+| `POSTGRES_PASSWORD` | present, empty |
+
+Checked by parsing `.env.production.local` directly, because `vercel env pull` does not
+export secret values. The remaining routes were considered and rejected: a password grant
+needs a password nobody has; `admin/generate_link` is a `POST` that mutates auth state and
+may send mail, which the standing doctrine forbids; and applying 079 inside a transaction to
+roll it back is a write and an explicit "do not".
+
+**The anon route is genuinely dead, and this run executed the proof rather than reasoning to
+it.** `partner_vouches` is the only table an anon caller gets rows from (`USING (true)`);
+migration 053 declares both its foreign keys against `auth.users`, which PostgREST does not
+expose. Both hint forms were issued and both returned `PGRST200`:
+
+```
+GET /partner_vouches?select=id,v:profiles!voucher_agency_id(id,email)   -> HTTP 400 PGRST200
+GET /partner_vouches?select=id,profiles(id,email)                       -> HTTP 400 PGRST200
+   "Searched for a foreign key relationship between 'partner_vouches' and 'profiles' …
+    but no matches were found."
+```
+
+One near miss worth recording, because it looked like the answer for a while:
+`profiles.linked_agency_id` is a **self-foreign-key on `profiles`**, which the previous run
+missed (it guessed the column was called `invited_by` and got `PGRST200`). A discoverable
+profile linking to a non-discoverable one would have made the test runnable by a caller with
+no relationship to anybody. **All sixteen rows carry `linked_agency_id = null`**, so the
+foreign key exists and the data does not.
+
+### What this means for the release, stated plainly
+
+**The failure mode is still unconfirmed, and the two possibilities carry different risk.**
+
+- If it nulls: the thirteen render blank, silently, at HTTP 200. That is the assumption the
+  whole matrix and all of `lib/org-contact.ts` are built on.
+- If it errors: the thirteen throw a visible 400. **That is better news**, because two of the
+  thirteen sit inside `try`/fallback wrappers that would convert it back into missing fields
+  anyway, but the other eleven would fail loudly in staging instead of quietly in production.
+
+The code is correct either way, because it handles null. `lib/org-contact.ts` has been
+corrected to say the RLS half is an assumption rather than a measured fact - it previously
+read as though both halves had been proved.
+
+**Anyone with a browser session can settle this in thirty seconds.** Log in as
+`gmarkant+partner71@gmail.com`, open devtools, and run the `GET` above against
+`/rest/v1/`. Paste the status code.
+
+---
+
+## ITEM 1: THE COUNTERPARTY ORGANIZATION POLICY
+
+Commit `a644a2f`.
+
+### What was written
+
+`current_user_counterparty_org_ids()`, lifted out of the `counterparty_orgs` CTE that lived
+inside `current_user_visible_profile_ids()`. Same hardening as the other four helpers:
+`STABLE`, `SECURITY DEFINER`, `SET search_path = public, pg_temp`, no parameters, `REVOKE
+EXECUTE FROM PUBLIC`, `GRANT EXECUTE TO authenticated`.
+
+**Reuse, not a second definition.** `current_user_visible_profile_ids()` now calls it:
+
+```sql
+SELECT m.user_id FROM public.org_members m
+WHERE m.org_id IN (SELECT public.current_user_org_ids())
+   OR m.org_id IN (SELECT public.current_user_counterparty_org_ids());
+```
+
+and PHASE 11 gains:
+
+```sql
+CREATE POLICY "Members read counterparty organizations"
+  ON public.organizations AS PERMISSIVE FOR SELECT TO authenticated
+  USING (id IN (SELECT public.current_user_counterparty_org_ids()));
+```
+
+Organization visibility and profile visibility are now **one predicate by construction**.
+They cannot drift, because there is nothing to drift from.
+
+Mirrored in `079_organizations_down.sql`: the policy is dropped by name alongside the other
+five, and the function is dropped **before** `current_user_visible_profile_ids()`, since
+Postgres does not build a dependency graph for a SQL-bodied function body and would let you
+drop the callee first without complaint.
+
+Counts corrected across the file: five helpers not four, six policies on the new tables not
+five, `organizations` at 3 not 2, total 108 not 107.
+
+### What qualifies as a counterparty, and why only that
+
+An organization `O` is a counterparty of caller `U` iff a `partnerships` row exists with
+`lead_org_id ∈ U's orgs AND vendor_org_id = O`, or `vendor_org_id ∈ U's orgs AND lead_org_id
+= O`. **At any status**, including `pending` and `removed`, mirroring
+`current_user_visible_profile_ids()` exactly.
+
+**Partnerships and nothing else.** A partnerships row is the only artifact in this schema
+recording a *two-sided* commercial relationship: the lead agency creates it, the vendor
+claims it. Every other org-to-org link is unilateral - `partner_access_requests` is one
+company asking, `invitation_requests` is one company asking, `partner_rfp_inbox` is one
+company sending. Admitting any of them would let one side manufacture visibility of the
+other by writing a row it already controls.
+
+Any status is deliberate: a `pending` partnership is an agency waiting on a vendor, and the
+vendor's company name has to render on the card that is waiting. A `removed` one still has
+historical projects and invoices naming the company.
+`current_user_active_counterparty_user_ids()` remains the stricter, active-only set, and it
+is still what the contact-information tier and the notifications policy use.
+
+### The security matrix
+
+`organizations` has seven columns and no others: `id`, `name`, `primary_contact_user_id`,
+`is_lead_agency`, `is_vendor`, `created_at`, `updated_at`. RLS is row-level, so the policy
+exposes all seven for a counterparty row.
+
+| Caller relationship to `O` | `organizations` row | `O`'s members' profiles | Net |
+|---|---|---|---|
+| Member of `O` | readable, own-orgs policy | readable, `my_orgs` half | unchanged by this commit |
+| Partnership with `O`, any status | **readable, new policy** | **readable**, counterparty half of the same helper | **the fix** |
+| Pending `partner_access_requests` only | **NOT readable** | not readable unless discoverable | Item 5 |
+| No relationship | **NOT readable** | not readable unless discoverable | unchanged |
+| Anon | not readable (`TO authenticated`, and `EXECUTE` revoked from `PUBLIC`) | unchanged | unchanged |
+
+**Does it expose anything the tiers withhold?** No. `primary_contact_user_id` is an id, not
+contact details; reading the person behind it still has to pass the `profiles` policies
+separately. And it does pass - which is the second thing Greg asked to be checked
+explicitly.
+
+**The nested hop is separately permitted for the same callers, and by construction rather
+than by coincidence.** Hop 1 is `id IN counterparty_org_ids`. Hop 2 is
+`current_user_visible_profile_ids()`, which returns the members of `my_orgs ∪
+counterparty_org_ids` - the same set, from the same function. Any organization whose row
+resolves therefore has its members' profiles readable. **The outer hop cannot resolve while
+the inner one nulls.** Verification steps 8b and 8c were added to the migration to check
+both hops as a real logged-in user rather than trusting this paragraph.
+
+**Enumeration.** The predicate takes no argument. A caller cannot ask about an id it
+supplies; the set is derived entirely from `auth.uid()` inside a `SECURITY DEFINER` body.
+
+### The one residual, and it is real
+
+**"Agencies can create partnerships" constrains `lead_org_id` and says nothing about
+`vendor_org_id`.** So a lead agency can insert a partnership naming any `vendor_org_id` it
+can guess, and thereby add that organization to its own counterparty set.
+
+Three things are true about this, and all three matter:
+
+1. **It is not introduced here.** The identical hole is live today: "Users can view profiles
+   of partnership members" grants a whole profiles row on the same trick, and "Agencies can
+   create partnerships" today has `WITH CHECK (agency_id = auth.uid())` with no constraint
+   on `partner_id`.
+2. **It yields strictly less here than it already yields on profiles.** A company name and
+   two booleans, versus an entire profile row including email.
+3. **It needs a guessable id.** Under the backfill an organization id equals its founding
+   user's id, and user ids leak through discoverable profiles - so for the two discoverable
+   accounts, the id is known. For organizations created after 079 it is a `gen_random_uuid()`
+   nobody can guess.
+
+**Not closed here, because closing it is a product decision, not a policy tidy-up.** The fix
+is to constrain `vendor_org_id` on insert - most cleanly, force it NULL and make the vendor
+claim it - and that would break the flow where an agency adds a known vendor from its pool.
+Greg's call. Written into the migration at the policy site as well as here.
+
+### A second residual, smaller and worth naming
+
+**Nothing constrains `primary_contact_user_id` to be a member of its own organization.**
+Under the backfill it always is. It stops being true the moment a member is removed without
+their contact designation being cleared - `ON DELETE SET NULL` fires on profile deletion,
+not on membership removal. At that point hop 1 resolves and hop 2 nulls, which is exactly
+the "moves the blank one level down" failure Greg warned about. A composite foreign key to
+`org_members(org_id, user_id)` cannot express it (`ON DELETE SET NULL` would try to null the
+primary key too), so this needs a trigger or an application rule, and it belongs with the
+membership feature.
+
+---
+
+## ITEM 3: THE PAYLOAD KEYS
+
+Commit `4593c02`. Separate commit, revertable independently.
+
+### The shape
+
+`LegacyPartnerShape`/`legacyPartnerShape` become `OrgWireShape`/`orgWireShape`. Wire keys
+`partner` and `agency` become **`vendor_org`** and **`lead_org`**, matching the foreign keys
+that reach them.
+
+| Old | New | Source |
+|---|---|---|
+| `partner` / `agency` | `vendor_org` / `lead_org` | `vendor_org_id` / `lead_org_id` |
+| `.id` | `.id` | `organizations.id` |
+| `.company_name` | `.name` | `organizations.name` |
+| `.email` | `.contact_email` | the primary contact's `profiles.email`, or the row's pre-claim address |
+| `.full_name` | `.contact_name` | the primary contact's `profiles.full_name` |
+| - | `.contact_user_id` | `organizations.primary_contact_user_id` |
+| `.capabilities` | `.contact_capabilities` | the contact's `profiles.capabilities` |
+| `.company_logo_url` | `.contact_logo_url` | the contact's `profiles.company_logo_url` |
+| `.created_at` | `.contact_created_at` | the contact's `profiles.created_at` |
+
+**The `contact_` prefix is the point, not decoration.** Calling the contact's address
+`email` on an object keyed `vendor_org` reintroduces the same lie one level down: it reads
+as the company's address. And the rich trio is where this shape admits a real loss of
+fidelity - `capabilities`, `company_logo_url` and `created_at` have no organization-level
+column, so all three still describe the *person*. `contact_created_at` is when that person
+signed up, **not** when the company was created. The names now say so at every read site
+instead of in a comment nobody opens.
+
+**A flat shape, not the raw nested embed.** Emitting
+`vendor_org.primary_contact.email` verbatim would have been truer to the query but strictly
+worse: `contact_email` falls back to the row's own pre-claim address
+(`partnerships.partner_email`, `partner_rfp_inbox.recipient_email`), which is not part of the
+organization at all. The raw shape cannot express that, so every consumer would have had to
+reimplement the fallback. One resolver, one rule.
+
+### The consumer count, verified rather than trusted
+
+**The previous run said eight frontend files. The real number is eleven, and the eight were
+wrong in both directions.**
+
+| | File | Previous run | Reality |
+|---|---|---|---|
+| 1 | `app/agency/page.tsx` | listed | consumer, 4 reads |
+| 2 | `app/agency/pool/page.tsx` | listed | consumer, 4 reads |
+| 3 | `app/agency/msa/page.tsx` | listed | **declares the key, never reads it** - only `id` and `status` are used |
+| 4 | `app/partner/network/page.tsx` | listed | consumer, 13 reads, mixed with a same-named shape from another route |
+| 5 | `app/partner/payments/page.tsx` | listed | consumer, 3 reads incl. demo data |
+| 6 | `contexts/lead-agency-filter-context.tsx` | listed | consumer, 4 reads |
+| 7 | `components/marketplace-content.tsx` | listed | consumer, 1 read |
+| - | `app/partner/page.tsx` | **listed, and NOT a consumer** | reads only `id` and `status` |
+| 8 | `app/agency/project/page.tsx` | **missed** | consumer, 2 reads |
+| 9 | `app/partner/onboarding/page.tsx` | **missed** | consumer, 3 reads |
+| 10 | `components/stage-03-onboarding-production.tsx` | **missed** | consumer, 3 reads |
+| 11 | `components/stage-03-onboarding-workflow.tsx` | **missed** | consumer, 7 reads |
+
+Seven of eight correct, one file listed that is not a consumer, four consumers missed. **The
+four missed are exactly the failure mode Greg named**: each would have rendered `undefined`
+where a vendor name goes, and no compiler would have said a word.
+
+Seven producer routes changed: `partnerships`, `projects`, `projects/[id]/assignments`,
+`projects/[id]/onboarding-packages`, `projects/[id]/onboarding-partners`,
+`agency/active-engagements`, `partner/onboarding-packages`.
+
+### Three things deliberately NOT renamed, with reasons
+
+1. **`partner_display_name`.** It is a real column on `partner_rfp_responses`, not an
+   invented payload key - selected by name in six routes and read in fourteen files.
+   Renaming the wire key would desynchronize it from the column it mirrors. 079 does not
+   rename the column and neither does this.
+2. **`app/api/agency/pool/[partnerId]` and `app/api/partner/network/[agencyId]`.** Both emit
+   a `partner`/`agency` object, but both genuinely read a `profiles` row - bio, location,
+   website, avatar, rate info. Those key names do not lie about their source. They lie about
+   whether the id is a user id, which is a different bug, below.
+3. **`agency_company_name` / `agency_full_name` / `agency_meeting_url`** in the dashboard and
+   RFP routes. Scalar keys outside Greg's ruling, and they belong to the same profiles-by-org-id
+   class below.
+
+### The verification sweep
+
+After the rename, across `app`, `lib`, `components`, `contexts`, `hooks`:
+
+```
+grep -rE "\.(partner|agency)(\?)?\.(company_name|full_name|companyName|fullName)"   -> 0 hits
+grep -r  "legacyPartnerShape\|LegacyPartnerShape"                                   -> 0 hits
+```
+
+---
+
+## THE PROFILES-BY-ORG-ID CLASS: SIX MORE SITES, AND NEITHER GUARD SEES THEM
+
+**New finding this run, and the most important thing in this section.** Both guards report
+zero. Both are correct, and both are blind to this:
+
+```ts
+.from("profiles").select("id, company_name, full_name").in("id", <organization ids>)
+```
+
+The identity guard misses it because the column name is already the post-079 one. The embed
+guard misses it because there is no `table!hint(` embed - it is a separate query. It is the
+same "JOIN profiles ON profiles.id = an org id" trap 079's own table comment warns about, and
+it works perfectly for every backfilled organization and returns **nothing** for every
+organization created after 079.
+
+| # | Site | Resolves | Emits | Status |
+|---:|---|---|---|---|
+| 1 | `app/api/partner/onboarding-packages/route.ts:72` | `onboarding_packages.org_id` | `agency` object | **FIXED** - repointed onto `organizations` and renamed to `lead_org`, because it feeds a key Item 3 renames |
+| 2 | `app/api/agency/dashboard/route.ts:173` | `partnerships` partner ids | `name` scalar | reported |
+| 3 | `app/api/partner/dashboard/route.ts:147` | lead org ids | `name` scalar | reported |
+| 4 | `app/api/partner/rfps/bids/route.ts:166` | lead org ids | `agency_company_name` | reported |
+| 5 | `app/api/partner/rfps/route.ts:166` | lead org ids | `agency_meeting_url` | reported - **`meeting_url` has no organizations equivalent at all** |
+| 6 | `app/api/projects/[id]/partner/route.ts:89` | `projects.org_id` | `agency` object | reported - **no caller found anywhere**, a dead route |
+
+Two more of the same class were already fixed by the previous run (its Item 3.7), so the
+class now stands at **nine sites, three fixed, six open**.
+
+Sites 2 to 6 are **not fixed here** because they are outside the four ruled items and fixing
+them is not mechanical: `meeting_url` and `location` are profiles columns with no
+organization-level equivalent, so repointing them is a product question about what an
+organization profile even contains. **They will silently blank after 079 for every
+organization created post-migration.** They should be a fifth item.
+
+**A related loss already in flight:** `p.agency?.location` in
+`contexts/lead-agency-filter-context.tsx` has been `undefined` since the previous run
+rewrote the embeds onto `organizations`, because `organizations` has no `location`. This run
+made it an explicit `''` with a comment rather than leaving it reading a field that cannot
+exist.
+
+---
+
+## ITEM 4: THE NOTIFICATION RECIPIENTS
+
+Commit `f6efe54`.
+
+### Is `notifications` org-scoped or user-scoped?
+
+**User-scoped, and it always has been.** From the authoritative snapshot:
+
+| Policy | cmd | Predicate |
+|---|---|---|
+| Users can view own notifications | SELECT | `user_id = auth.uid()` |
+| Users can update own notifications | UPDATE | `user_id = auth.uid()` |
+| Scoped insert notifications | INSERT | `user_id = auth.uid() OR` an **active** partnership either way |
+
+079 PHASE 10 preserves the shape exactly, replacing the partnership subqueries with
+`current_user_active_counterparty_user_ids()`. **There is no org-scoped read path and 079
+does not add one.** That settles what the fix can address: the organization has to be
+resolved to users at write time. It cannot be stored as one.
+
+### The ruling
+
+**Every member of the organization. One rule, all sixteen call sites.**
+
+Chosen over the primary contact because `notifications` is an in-app inbox, not outbound
+correspondence. Addressing it to one designated person means the colleague who actually does
+the work never learns the RFP arrived, while every 079 policy grants access to the
+underlying data by *membership* - the notification about that data has to follow membership
+or the two disagree. The primary contact exists so a company is not emailed N times; an
+in-app row has no such cost.
+
+Decisively: **`resolveOrgNotificationRecipients()` in `lib/email.ts` already fans out over
+`org_members` for the email channel.** Two different answers to "who is the company" across
+two channels would be the same class of bug this migration exists to close.
+
+### Is it live today?
+
+**No. Not one of the sixteen is broken today, and the reason is the coincidence 079's own
+table comment warns against relying on.** Every organization the migration backfills carries
+its founding user's id, so an organization id and a user id are the same value for all
+sixteen live accounts. Passing `lead_org_id` into `notifications.user_id` therefore hits a
+real user.
+
+It becomes a bug the moment **both** things are true: 079 is applied, **and** an
+organization is created afterwards. PHASE 12 mints `gen_random_uuid()` for those - a
+notification addressed to nobody, unreadable, with no error anywhere.
+
+**No site passes something that is already not a user id.** I checked all sixteen. The
+nearest thing to a current bug is at `app/api/partnerships/route.ts:642`, which passed
+`partner.id` from a `profiles` lookup - a genuine user id, but only because the lookup key
+happened to resolve; it is reported below as a write-path bug.
+
+### Six named, sixteen found
+
+| # | Site | Passed |
+|---:|---|---|
+| 1 | `projects/[id]/onboarding/deploy:170` | `vendor_org_id` (Greg's list) |
+| 2 | `partnerships:940` accepted | `lead_org_id` (Greg's list) |
+| 3 | `partnerships:989` declined | `lead_org_id` (Greg's list) |
+| 4 | `lib/magic-token-attach:401` | vendor org id (Greg's list) |
+| 5 | `lib/award-partnership-resolution:93` | `agencyId` (Greg's list) |
+| 6 | `lib/award-partnership-resolution:150` | `agencyId` (Greg's list) |
+| 7 | `projects/[id]/onboarding-packages:400` | `vendor_org_id` |
+| 8 | `projects/[id]/assignments:200` | `vendor_org_id` |
+| 9 | `projects/[id]/assignments:333` | `lead_org_id` |
+| 10 | `projects/[id]/assignments:429` | `vendor_org_id` |
+| 11 | `agency/rfp-responses/[id]:663` | `vendor_org_id` |
+| 12 | `partner/rfps/[id]/response:419` | `lead_org_id` |
+| 13 | `rfp/guest/[token]:583` | `tokenRow.org_id` |
+| 14 | `rfp/guest/[token]:766` | `tokenRow.org_id` |
+| 15 | `partnerships:538` re-invitation | `existing.vendor_org_id` |
+| 16 | `partnerships:642` invitation | `partner.id`, written into `vendor_org_id` |
+
+### What was written
+
+`resolveOrgMemberUserIds()` and `createOrgNotification()` in `lib/notifications.ts`, and all
+eight `notify*` helpers converted to take an organization id - the parameter names say so
+now (`vendorOrgId`, `leadOrgId`). `createNotification()` survives as the user-scoped
+primitive and **has no callers left anywhere in the repository**.
+
+**Safe to ship before the migration.** With `org_members` absent the resolver falls back to
+addressing the organization id directly, which is byte-for-byte today's behaviour. That path
+is logged at `info` and named as expected-pre-079, separately from the `warn` for a real
+empty-membership case, so it does not fill production logs with false alarms between now and
+the migration.
+
+`notifyNewMessage` and `notifyDocumentUploaded` have **no call sites anywhere** (verified by
+grep). Converted anyway, so wiring one up later cannot reintroduce the bug.
+
+### Two things found and NOT fixed
+
+1. **The INSERT policy requires an ACTIVE counterparty.** `current_user_active_counterparty_user_ids()`
+   is the active-only set, so an **invitation** (partnership `pending`) and a **decline**
+   (`terminated`) are refused by RLS for every recipient on the session client - sites 2, 3,
+   15 and 16. **This is pre-existing**: today's live policy carries the same
+   `status = 'active'` condition, so those notifications are already being silently rejected
+   in production. Fixing it means editing the notifications INSERT policy. Greg's call. The
+   service-role sites (13, 14) bypass RLS and are unaffected.
+2. **`app/api/partnerships/route.ts` writes a `profiles` id into `partnerships.vendor_org_id`**
+   on the invite path (`insertData.vendor_org_id = partner.id`, where `partner` is a profiles
+   row). After 079 that column is an organization id. That is the invite/claim write path,
+   not the notification, and it is a bigger fix than this item.
+
+---
+
+## ITEM 5: THE POOL SITE. THREE OPTIONS, ONE RECOMMENDATION, NOT IMPLEMENTED
+
+`app/agency/pool/page.tsx` `loadAccessRequests`. **The counterparty policy in Item 1 does not
+help it, by design.** A `partner_access_requests` row is a vendor asking to *join* an
+agency's pool; no partnership exists, so the vendor's organization is not a counterparty, so
+neither hop resolves. Measured read-only: **14 of 16 profiles carry `is_discoverable =
+false`**, and `partner_access_requests` has **no email column** (`agency_id, created_at, id,
+partner_id, request_message, reviewed_at, status, updated_at`), so there is no row-level
+address to fall back to. The card renders `Unnamed vendor` and nothing else.
+
+Live blast radius today: **one row, `approved`, and its vendor is one of the two discoverable
+accounts.** Zero rows are currently affected, which is exactly why this would have shipped
+unnoticed.
+
+| Option | What it costs |
+|---|---|
+| **1. A third `organizations` SELECT policy: name only, for an organization with a *pending* request addressed to one of the caller's organizations.** | One more policy on `organizations`, and a second definition of "who may I see" that is not the partnership rule - the exact drift Item 1 just removed. RLS cannot restrict columns, so "name only" is aspirational: the policy exposes the whole row, which here means the name, two booleans and a contact user id. Needs a new helper to stay consistent with Item 1's approach. |
+| **2. Snapshot the requester on the row: add `requested_by_user_id` to `partner_access_requests` and embed that instead.** | A migration - the column does not exist today, confirmed against the live table. Touches no policy at all: the requester is a member of a counterparty-or-not organization, but the *profiles* read still needs a tier that permits it, so on its own it can still null. Truthful about what the row actually is: one person asked. |
+| **3. Leave it.** | Pending-request cards read `Unnamed vendor` for the fourteen non-discoverable accounts. Zero live rows today; the first real pending request from a non-discoverable vendor is an unusable card. |
+
+### Recommendation: **Option 3 for the release, Option 2 as the follow-up.**
+
+Option 1 is the one to avoid, and it is the one that looks most like a fix. It re-creates
+precisely the divergence Item 1 was ruled to eliminate: a second, differently-shaped answer
+to "which organizations may I read", built on a **unilateral** row that one party writes
+alone. That is the property that disqualified `partner_access_requests` from the counterparty
+definition in the first place, and admitting it through a side door would mean a vendor could
+make itself visible to any agency by requesting access.
+
+Option 3 for the release because the live blast radius is **zero rows**, the failure is a
+degraded card rather than a broken page, and it blocks nothing. Option 2 as the follow-up
+because it fixes the right thing: the row records that a *person* asked, and storing who
+asked is honest and needs no visibility rule to be widened. It should ship with the
+membership feature, where the profiles tier for "a person who has contacted you but is not
+yet a counterparty" gets decided once for this surface and for invitations together.
+
+**Not implemented. This is Greg's ruling.**
+
+---
+
+## GUARDS AND BUILD
+
+Run before each of the three commits. Every one of these was executed from this terminal and
+the exit code observed:
+
+| Check | Item 1 | Item 3 | Item 4 |
+|---|---|---|---|
+| `node scripts/check-identity-columns.mjs --guard` | 0 | 0 | 0 |
+| `node scripts/check-embed-targets.mjs --guard` | 0 | 0 | 0 |
+| `npx tsc --noEmit` | 0 | 0 | 0 |
+| `pnpm build` | 0 | 0 | 0 |
+
+**AND A GREEN BUILD STILL PROVES ONLY SYNTAX.** The Supabase clients are constructed without
+generated `Database` types, so every `.select()` argument is an untyped string and every
+`row.vendor_org` is a property on an untyped record. For Item 3 specifically this is worth
+being blunt about: **TypeScript checked none of the eleven consumer files against the actual
+payload.** Every one was verified by reading the producer and the consumer and matching them
+by hand, then by a repository-wide grep for surviving reads of the old names. That is the
+strongest evidence available without a running database, and it is not proof.
+
+The embed guard going green likewise proves only that no embed names a repointed foreign
+key. It cannot tell you whether a query returns data.
+
+---
+
+## HONEST VERIFICATION
+
+**Executed from this terminal, results observed:**
+
+- The three guard/typecheck/build sets above, twelve commands, all exit 0.
+- Read-only `GET` requests to the live PostgREST endpoint, service-role key: the full
+  foreign-key map from the OpenAPI spec; `profiles` discoverability and `linked_agency_id`;
+  `partnerships` by status; all `partner_rfp_inbox` rows; `project_assignments` with their
+  partnership vendor; all `projects`; `partner_access_requests` columns and rows;
+  `onboarding_package_documents`.
+- Read-only `GET` requests with the **anon** key: `partner_vouches` plain, and two embed
+  attempts, both `HTTP 400 PGRST200`. Quoted verbatim in Item 2.
+- **No write of any kind. No migration applied. No `POST`, `PATCH` or `DELETE` issued to
+  PostgREST. No notification inserted. No email sent. Nothing pushed, nothing merged.**
+- Every one of the eleven consumer files and seven producer routes in Item 3 was opened and
+  read before and after editing.
+- `.env.production.local` parsed to establish which credentials exist; four are present and
+  empty.
+
+**NOT executed. Claims that rest on reading:**
+
+- **The Item 2 case itself.** Specified exactly, not run. This is the headline and it is
+  still the weakest link.
+- **Every claim about post-079 behaviour.** 079 is unapplied. `organizations`,
+  `org_members`, `current_user_counterparty_org_ids()` and the counterparty policy do not
+  exist in any database. The security matrix is a reading of policy text.
+- **That the migration parses.** `079_organizations.sql` has never been submitted to a
+  Postgres server, including this run's additions. No `psql`, no Postgres driver, and
+  `POSTGRES_URL` is empty.
+- **That the renamed payloads render.** No route was exercised, no page loaded. Eleven
+  consumer files were changed against a payload no compiler checks.
+- **That the notification fan-out writes anything.** `createOrgNotification()` has never
+  run. Its `org_members` query has never been issued against a database where that table
+  exists.
+- Storage policies remain unknown, per runbook step 0.
+
+**The one sentence to take away:** the counterparty policy is written and reuses the one
+definition of counterparty so the two hops cannot disagree, the payload keys no longer lie
+and eleven consumers moved with them rather than the eight that were claimed, sixteen
+notifications now address people instead of companies - and whether any of it renders still
+depends on a single unexecuted query that anyone with a browser session can run in thirty
+seconds.
