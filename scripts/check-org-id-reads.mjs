@@ -184,7 +184,9 @@ const ALLOWED = [
   },
   {
     file: "app/agency/settings/team/page.tsx",
-    lines: [152, 158],
+    // 160 and 166 since the two 086 banners were deleted and the file header rewritten to
+    // say why. Same two reads, same reason; only the line numbers moved.
+    lines: [160, 166],
     why:
       "The team roster. Both flagged reads are .in(\"id\", userIds) against profiles where " +
       "userIds comes from org_members.user_id one statement earlier - real user ids, by " +
