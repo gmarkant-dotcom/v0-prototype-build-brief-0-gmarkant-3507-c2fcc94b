@@ -336,7 +336,7 @@ const KNOWN_OPEN_MIRROR = [
     count: 3,
     tiers: "PARAM",
     why:
-      "partner_vouches vendor_org_id set from and matched against the [partnerId] route param, a profiles id. The lead_org_id half of the same insert IS fixed.",
+      "FALSE POSITIVE, read and established 2026-08-19: partner_vouches vendor_org_id is set from and matched against the [partnerId] route param, and that param is an ORGANIZATION id - every link into /agency/pool/[partnerId] sets it from a vendor_org column (app/agency/pool/page.tsx:460 vendor_org.id||vendor_org_id, :696 req.vendor_org_id, components/bid-detail-sheet.tsx:900 row.vendor_org_id). The entry used to call it a profiles id; that was the baseline claim for this whole route and it was wrong.",
   },
   {
     file: "app/api/agency/active-engagements/route.ts",
@@ -360,13 +360,6 @@ const KNOWN_OPEN_MIRROR = [
       "existingProfile.id filtered against and written into vendor_org_id for a manually typed recipient, plus the partnerId local. Needs a counterparty user-to-organization resolver.",
   },
   {
-    file: "app/api/agency/client-cash-flow/route.ts",
-    count: 1,
-    tiers: "PARAM",
-    why:
-      "a local helper parameter named agencyId. Its callers pass the resolved value; the name is the only thing suspect here.",
-  },
-  {
     file: "app/api/agency/email-scan/import/route.ts",
     count: 1,
     tiers: "PARAM",
@@ -374,39 +367,25 @@ const KNOWN_OPEN_MIRROR = [
       "matchedProfileId written into vendor_org_id on the pool-import path. Same counterparty class.",
   },
   {
-    file: "app/api/agency/msa/milestones/route.ts",
+    file: "app/api/agency/pool/[partnerId]/notes/route.ts",
     count: 1,
     tiers: "PARAM",
     why:
-      "FALSE POSITIVE, read and established: partnerId is assigned from row.vendor_org_id, already an organization id.",
-  },
-  {
-    file: "app/api/agency/pool/[partnerId]/notes/route.ts",
-    count: 2,
-    tiers: "PARAM",
-    why:
-      "the [partnerId] route param, a profiles id, matched against vendor_org_id.",
+      "FALSE POSITIVE on the surviving site, same establishment as app/agency/pool/[partnerId]/page.tsx above: the [partnerId] route param is an organization id, not a profiles id. Was 2. The second site was REAL and is fixed - assertActiveAgencyPartnership() matched lead_org_id against user.id, and its agencyOrgIds parameter is now typed readonly OrgId[], so the compiler refuses that substitution.",
   },
   {
     file: "app/api/agency/pool/[partnerId]/performance/route.ts",
     count: 1,
     tiers: "PARAM",
     why:
-      "same [partnerId] route param.",
+      "same [partnerId] route param, and by the establishment above it is an organization id - FALSE POSITIVE, not a pending fix.",
   },
   {
     file: "app/api/agency/pool/[partnerId]/route.ts",
     count: 2,
     tiers: "PARAM",
     why:
-      "same [partnerId] route param, two sites.",
-  },
-  {
-    file: "app/api/agency/rfp-responses/[id]/route.ts",
-    count: 1,
-    tiers: "PROFILE",
-    why:
-      "matchedProfile.id backfilled into partner_rfp_responses.vendor_org_id on the award path. A WRITE, and it will raise 23503 for a vendor whose account postdates 079.",
+      "same [partnerId] route param, two sites - FALSE POSITIVE by the same establishment.",
   },
   {
     file: "app/api/partner/network/[agencyId]/route.ts",

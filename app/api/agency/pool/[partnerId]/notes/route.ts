@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, type OrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -41,26 +41,50 @@ function mergeNotes(base: PartnershipNotesShape, patch: PartnershipNotesShape): 
   }
 }
 
+/**
+ * 079 PARAMETER CLASS, BRANDED. `partnerships.lead_org_id` REFERENCES organizations(id),
+ * and both call sites below passed `user.id` into it. `OrgId` is not assignable from a
+ * bare string, so that substitution is now a compile error rather than a partnership this
+ * agency owns coming back as "No active partnership".
+ *
+ * A SET rather than a scalar: the POST path's own update is already scoped
+ * `.in("lead_org_id", callerOrgIds)`, and a gate that reads the row under a narrower rule
+ * than the write that follows it is the seam this whole pass exists to close.
+ *
+ * `partnerId` stays a plain string on purpose - see the call sites. It is the [partnerId]
+ * route param, which the Vendor Pool page sets from `vendor_org_id`, so it is already an
+ * organization id; branding it would need a cast at every caller to assert a fact this
+ * function cannot check, which buys a false sense of proof rather than a check.
+ */
 async function assertActiveAgencyPartnership(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  agencyId: string,
+  agencyOrgIds: readonly OrgId[],
   partnerId: string
 ): Promise<{ id: string; partnership_notes: unknown } | null> {
+  if (agencyOrgIds.length === 0) return null
   const { data, error } = await supabase
     .from("partnerships")
     .select("id, partnership_notes")
-    .eq("lead_org_id", agencyId)
+    .in("lead_org_id", agencyOrgIds)
     .eq("vendor_org_id", partnerId)
     // The same single predicate as isActivePartnership() in lib/partnership-state.ts,
     // expressed in SQL because this gate can be pushed into the query.
     .eq("status", "active")
-    .maybeSingle()
+    // `.limit(1)` rather than `.maybeSingle()`. Widening the organization filter from `.eq`
+    // to `.in` makes two matching rows reachable - a caller in two organizations that have
+    // each partnered with the same vendor - and maybeSingle() answers that with PGRST116,
+    // which this function reports as "No active partnership". Locking an agency out of its
+    // own notes is a worse answer than picking one of two rows it owns; the update that
+    // follows is scoped `.eq("id", row.id).in("lead_org_id", callerOrgIds)` either way, so
+    // whichever row is picked, the write stays inside the caller's organizations.
+    .limit(1)
 
   if (error) {
     console.error("[api/agency/pool/notes] partnership", error)
     return null
   }
-  return data as { id: string; partnership_notes: unknown } | null
+  const rows = (data ?? []) as Array<{ id: string; partnership_notes: unknown }>
+  return rows[0] ?? null
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ partnerId: string }> }) {
@@ -83,7 +107,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
     }
 
-    const row = await assertActiveAgencyPartnership(supabase, user.id, partnerId)
+    // 079: an organization column is not a user id. Reads scope to the caller's memberships.
+    // The POST below already resolved this; the GET did not, so its gate was reading
+    // partnerships.lead_org_id against a profiles id and reporting "No active partnership"
+    // for a partnership the agency owns.
+    const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+
+    const row = await assertActiveAgencyPartnership(supabase, callerOrgIds, partnerId)
     if (!row) {
       return NextResponse.json({ error: "No active partnership" }, { status: 404, headers: noStore })
     }
@@ -121,7 +151,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
-    const row = await assertActiveAgencyPartnership(supabase, user.id, partnerId)
+    // 079 PARAMETER CLASS: `user.id` matched partnerships.lead_org_id, an organization
+    // column. Same set the update below is scoped by, so the read gate and the write agree.
+    const row = await assertActiveAgencyPartnership(supabase, callerOrgIds, partnerId)
     if (!row) {
       return NextResponse.json({ error: "No active partnership" }, { status: 404, headers: noStore })
     }

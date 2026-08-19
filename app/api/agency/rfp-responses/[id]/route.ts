@@ -1,6 +1,7 @@
-import { resolveCallerOrgIds, orgIdFromColumn } from "@/lib/entitlements"
+import { resolveCallerOrgIds, orgIdFromColumn, resolveOrgIdForUser, type OrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { notifyProjectAwarded } from "@/lib/notifications"
 import { resolvePartnershipForAward } from "@/lib/award-partnership-resolution"
@@ -9,6 +10,25 @@ import { can, capabilityDeniedMessage } from "@/lib/capabilities"
 import { recordMilestone } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
+
+/** Service role, used for TWO counterparty identity reads inside the award path and nothing
+ *  else - see the H3 block below. Both reads ask a question about the vendor that RLS is
+ *  designed to refuse the agency: "which profile holds this email" and "which organization
+ *  does that profile belong to". Both `profiles` and `org_members` are scoped to the caller's
+ *  own side (`org_members` admits only `user_id = auth.uid()` or the caller's own orgs), so on
+ *  the session client both return zero rows for every counterparty, always - which is the
+ *  correct answer to a visibility question and the wrong answer to this one. The agency user
+ *  is authenticated and role-checked at the top of this handler before either read runs, the
+ *  email being resolved is one the agency itself sent the RFP to, and neither read returns
+ *  anything to the client. Returns null when the key is absent (previews/local) - callers fall
+ *  back to the session client rather than failing the award.
+ *  Same pattern and same justification as app/api/agency/rfp/magic-link/route.ts:14-21. */
+function getServiceSupabase() {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return null
+  }
+  return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+}
 
 type PatchBody = {
   status?: "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
@@ -176,6 +196,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         project_id: string | null
         vendor_org_id: string | null
         partnership_id: string | null
+        // The address the broadcast was sent TO. Selected because it is the only vendor email
+        // the agency can read without RLS' permission - see the vendor identity block below.
+        recipient_email: string | null
         scope_item_name: string | null
         master_rfp_json: unknown
       }
@@ -184,7 +207,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (resolvedInboxItemId) {
         const { data, error: inboxFetchErr } = await supabase
           .from("partner_rfp_inbox")
-          .select("id, project_id, vendor_org_id, partnership_id, scope_item_name, master_rfp_json")
+          .select("id, project_id, vendor_org_id, partnership_id, recipient_email, scope_item_name, master_rfp_json")
           .eq("id", resolvedInboxItemId)
           .in("lead_org_id", callerOrgIds)
           .maybeSingle()
@@ -228,7 +251,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         if (tokenRow?.token) {
           const { data: synthesized, error: synthErr } = await supabase
             .from("partner_rfp_inbox")
-            .select("id, project_id, vendor_org_id, partnership_id, scope_item_name, master_rfp_json")
+            .select("id, project_id, vendor_org_id, partnership_id, recipient_email, scope_item_name, master_rfp_json")
             .in("lead_org_id", callerOrgIds)
             .contains("master_rfp_json", { _magic_token: tokenRow.token })
             .maybeSingle()
@@ -282,6 +305,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             project_id: projectIdFromToken,
             vendor_org_id: (existing.vendor_org_id as string | null) ?? null,
             partnership_id: null,
+            // No inbox row exists on this path, so there is no recipient_email to carry. The
+            // magic token is this shape's only email source, and it is read below.
+            recipient_email: null,
             scope_item_name: (tokenRow?.scope_item_name as string | null) ?? null,
             master_rfp_json: null,
           }
@@ -307,7 +333,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
       // a. Partnership already linked to this broadcast/inbox row - today's behavior, unchanged.
       let partnershipId = inboxRow.partnership_id as string | null
-      let partnerIdForResolution = (inboxRow.vendor_org_id as string | null) || existing.vendor_org_id
+      // 079 PARAMETER CLASS: both sources are `vendor_org_id`, an organization column
+      // PostgREST hands back as `any` - and `any` is assignable to `OrgId`, so the brand on
+      // resolvePartnershipForAward() proved nothing here until this local was typed. Crossed
+      // in through the named boundary instead. `??` matches the old `||` exactly:
+      // orgIdFromColumn() already returns null for the empty string.
+      let partnerIdForResolution: OrgId | null =
+        orgIdFromColumn(inboxRow.vendor_org_id) ?? orgIdFromColumn(existing.vendor_org_id)
 
       if (!partnershipId) {
         // H2: award is mutual consent - resolve (claim or create) the partnership rather
@@ -328,6 +360,62 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             partnerProfile?.email?.trim() ||
             "Vendor"
           vendorContactName = (partnerProfile?.full_name as string | null) || null
+
+          // THE PROFILE READ ABOVE IS ALLOWED TO RETURN NOTHING, AND USUALLY DOES.
+          // resolveOrgNotificationRecipients() runs on the session client. Its org_members
+          // read is scoped to the caller's own organizations and its profiles fallback needs
+          // either an existing partnership - which is precisely what does not exist on this
+          // branch - or is_discoverable = true on the vendor. So for a non-discoverable
+          // vendor it correctly resolves nobody, vendorEmail comes back null, and migration
+          // 087's INSERT policy then refuses the partnership the award depends on:
+          // `vendor_org_id IS NULL OR org_has_member_with_email(vendor_org_id, partner_email)`
+          // is false on both disjuncts when the email is null (087:499-513, 087:566-575).
+          // The email is NOT actually unavailable - it is on the inbox row this handler has
+          // already fetched, and on the magic token. Preferring the profile read keeps the
+          // richer company/contact names where it succeeds; these two only fill the null.
+          if (!vendorEmail) {
+            // 1. partner_rfp_inbox.recipient_email. Every inbox shape that can reach this
+            //    branch carries it: the pool-vendor broadcast row is the only writer that
+            //    leaves it null, and that row always carries partnership_id, so branch a
+            //    returns before here. On the manual-recipient and magic-token-attach rows the
+            //    address and vendor_org_id were derived from each other at write time, which
+            //    is the same pairing 087 checks.
+            vendorEmail = (inboxRow.recipient_email as string | null)?.trim() || null
+
+            // 2. rfp_magic_tokens.vendor_email, the source 087:394 nominated. Same query the
+            //    sibling branch below runs; readable here because the token rows are the
+            //    agency's own (079:1666-1668).
+            if (!vendorEmail) {
+              const { data: tokenForOrgVendor, error: tokenVendorErr } = await supabase
+                .from("rfp_magic_tokens")
+                .select("vendor_email, vendor_name")
+                .eq("response_id", id)
+                .maybeSingle()
+              if (tokenVendorErr) {
+                console.error("[api] bid award: magic token vendor_email fallback failed (non-fatal)", {
+                  route,
+                  responseId: id,
+                  message: tokenVendorErr.message,
+                  code: tokenVendorErr.code,
+                })
+              }
+              vendorEmail = (tokenForOrgVendor?.vendor_email as string | null)?.trim() || null
+              vendorContactName = vendorContactName || ((tokenForOrgVendor?.vendor_name as string | null) || null)
+            }
+
+            // The profile read produced no names either if it produced no email, so the
+            // placeholder is only correct while there is nothing better. Now there is.
+            if (vendorDisplayName === "Vendor") {
+              vendorDisplayName = vendorContactName || vendorEmail || "Vendor"
+            }
+
+            console.error(
+              vendorEmail
+                ? "[api] bid award: vendor email resolved from the inbox/token fallback, not the profile read (RLS hid the vendor profile)"
+                : "[api] bid award: no vendor email from profile, inbox recipient_email, or magic token - partnership will be created as a ghost",
+              { route, responseId: id, partnerIdForResolution, inboxId: inboxRow.id, hasEmail: Boolean(vendorEmail) }
+            )
+          }
         } else {
           const { data: tokenForVendor } = await supabase
             .from("rfp_magic_tokens")
@@ -346,16 +434,73 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           // Re-check by email now, and backfill the response row so this is fixed going
           // forward too, not just for this one award.
           if (vendorEmail) {
-            const { data: matchedProfile } = await supabase
+            // BOTH READS IN THIS BLOCK RUN ON THE SERVICE CLIENT, AND THEY HAVE TO.
+            // They are counterparty identity questions, not visibility questions, and every
+            // policy on both tables answers them with zero rows for a session client:
+            //   - profiles: `id = auth.uid() OR id IN (current_user_visible_profile_ids())`,
+            //     and that set is derived from partnerships rows only (079:721-728, 766-777).
+            //     No partnership exists yet - that is why this code is running - so a vendor
+            //     resolves only when is_discoverable = true.
+            //   - org_members: `user_id = auth.uid()` (079:1736-1738) or
+            //     `org_id IN (current_user_org_ids())` (086:148-150). Neither ever admits a
+            //     counterparty's roster.
+            // On the session client resolveOrgIdForUser() therefore returned null for EVERY
+            // vendor, so matchedVendorOrgId was always null, the vendor_org_id upgrade never
+            // fired, the response backfill never ran, and this path logged "belongs to no
+            // organization" for vendors that plainly do. Dead code with a misleading log line.
+            // The caller is an authenticated, role-checked agency user and vendorEmail is an
+            // address that agency itself invited; nothing read here reaches the response.
+            const identityClient = getServiceSupabase()
+            if (!identityClient) {
+              console.error("[api] bid award: SUPABASE_SERVICE_ROLE_KEY absent - vendor org re-link falls back to the session client and will not resolve", {
+                route,
+                responseId: id,
+              })
+            }
+            const vendorIdentityClient = identityClient ?? supabase
+            const { data: matchedProfile, error: matchedProfileErr } = await vendorIdentityClient
               .from("profiles")
               .select("id")
               .ilike("email", vendorEmail)
               .maybeSingle()
-            if (matchedProfile?.id) {
-              partnerIdForResolution = matchedProfile.id as string
+            if (matchedProfileErr) {
+              // Includes PGRST116 when two profiles share an address - visible now that the
+              // read is not silently narrowed to one row by RLS. Non-fatal: the award falls
+              // through to the guest shape rather than guessing which profile is the vendor.
+              console.error("[api] bid award: vendor profile lookup by email failed (non-fatal, staying a guest)", {
+                route,
+                responseId: id,
+                message: matchedProfileErr.message,
+                code: matchedProfileErr.code,
+              })
+            }
+            // 079 PARAMETER CLASS: `matchedProfile.id` is a profiles id, and BOTH columns it
+            // reached are organization columns that REFERENCE organizations(id) -
+            // partner_rfp_responses.vendor_org_id in the backfill below, and
+            // partnerships.vendor_org_id through partnerIdForResolution. Correct by accident
+            // for the accounts 079 backfilled, a 23503 for a vendor whose account postdates
+            // it. Resolved through org_members, the same crossing
+            // app/api/agency/rfp/magic-link/route.ts makes for the identical question.
+            //
+            // A matched profile that belongs to NO organization is left as a pure guest -
+            // vendor_org_id stays null and the resolver's email branch claims the row later -
+            // rather than writing a user id into a foreign key. That is the state the product
+            // already understands; a bad key is not.
+            const matchedVendorOrgId = matchedProfile?.id
+              ? await resolveOrgIdForUser(matchedProfile.id as string, vendorIdentityClient)
+              : null
+            if (matchedProfile?.id && !matchedVendorOrgId) {
+              console.error("[api] bid award: vendor matched by email belongs to no organization, staying a guest", {
+                route,
+                responseId: id,
+                matchedProfileId: matchedProfile.id,
+              })
+            }
+            if (matchedVendorOrgId) {
+              partnerIdForResolution = matchedVendorOrgId
               const { error: backfillErr } = await supabase
                 .from("partner_rfp_responses")
-                .update({ vendor_org_id: matchedProfile.id })
+                .update({ vendor_org_id: matchedVendorOrgId })
                 .eq("id", id)
                 .in("lead_org_id", callerOrgIds)
                 .is("vendor_org_id", null)
@@ -370,8 +515,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           }
         }
 
+        // 079 PARAMETER CLASS: partnerships.lead_org_id REFERENCES organizations(id) and
+        // this passed `user.id`, a profiles id. `existing.lead_org_id` was fetched under
+        // `.in("lead_org_id", callerOrgIds)`, so it is provably one of the caller's own
+        // organizations - the same crossing the three recordMilestone calls in this file
+        // already make.
+        const leadOrgId = orgIdFromColumn(existing.lead_org_id)
+        if (!leadOrgId) {
+          console.error("[api] bid award: response carries no lead_org_id - refusing award", {
+            route,
+            responseId: id,
+            inbox_item_id: existing.inbox_item_id,
+          })
+          // Named for what it is. This refusal used to be reported with the vendor-side
+          // message below, which sent agencies to look at the bidder's account for a
+          // problem that was on their own side of the row.
+          return NextResponse.json(
+            {
+              error:
+                "Cannot award this bid: it is not linked to your agency's organization record, so the partnership cannot be created. Contact support with this bid's link.",
+            },
+            { status: 500 }
+          )
+        }
+
         const resolution = await resolvePartnershipForAward(supabase, {
-          agencyId: user.id,
+          agencyId: leadOrgId,
           partnerIdForResolution,
           vendorEmail,
           vendorDisplayName,
@@ -388,8 +557,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             vendorEmail,
             message: resolution.error,
           })
+          // The resolver refuses for two unrelated reasons and they are not the same news:
+          // there is no vendor identity to form a relationship WITH, or forming it failed at
+          // the database. Only the first is about the vendor's account, so only the first
+          // says so.
+          const noVendorIdentity = !partnerIdForResolution && !vendorEmail
           return NextResponse.json(
-            { error: "Cannot award this bid: no vendor account or email is linked to it, so no relationship could be established." },
+            {
+              error: noVendorIdentity
+                ? "Cannot award this bid: no vendor account or email is linked to it, so no relationship could be established."
+                : "Cannot award this bid: the partnership record could not be saved. Try again, and contact support if it keeps happening.",
+            },
             { status: 500 }
           )
         }

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { OrgId } from "@/lib/entitlements"
 import { notifyPartnershipAccepted } from "@/lib/notifications"
 
 export type PartnershipResolution = { partnershipId: string } | { error: string }
@@ -17,14 +18,23 @@ export type PartnershipResolution = { partnershipId: string } | { error: string 
  *      pending/unclaimed ghost shape, never invented, since Vendor Pool can never bucket a
  *      vendor_org_id-null row as "Active" regardless of status - a pure guest's row stays
  *      "Discovered" until they create an account and it gets claimed for real.
+ *      A "profile-linked bidder" here means BOTH a vendor_org_id and an email: migration 087
+ *      refuses the linked shape without the email, so a known organization with no resolvable
+ *      address degrades to the ghost shape rather than to a 42501. See the insert below.
  * (Branch a - a partnership already linked to the broadcast/inbox row - is resolved by the
  * caller before this runs, unchanged from today.)
  */
 export async function resolvePartnershipForAward(
   supabase: SupabaseClient,
   params: {
-    agencyId: string
-    partnerIdForResolution: string | null
+    /** 079 PARAMETER CLASS: partnerships.lead_org_id REFERENCES organizations(id). Branded
+     *  so a profiles id - which is what the award path passed until this was typed - cannot
+     *  reach it. Mint it from resolveCallerWriteOrgId(), or cross a column in through
+     *  orgIdFromColumn(); never from user.id. */
+    agencyId: OrgId
+    /** Same column class on the other side: partnerships.vendor_org_id. A matched profile's
+     *  id is NOT this value - resolve it through resolveOrgIdForUser() first. */
+    partnerIdForResolution: OrgId | null
     vendorEmail: string | null
     /** Best available display name for the in-app "partnership active" notification below -
      *  falls back to the email itself rather than a vague placeholder when no name is known. */
@@ -131,7 +141,16 @@ export async function resolvePartnershipForAward(
     }
   }
 
-  if (partnerIdForResolution) {
+  // MIGRATION 087 DECIDES THE SHAPE OF THIS INSERT, NOT THIS FUNCTION'S PREFERENCE.
+  // The linked shape requires BOTH halves of the vendor identity: the policy is
+  // `vendor_org_id IS NULL OR org_has_member_with_email(vendor_org_id, partner_email)`, and
+  // org_has_member_with_email() returns false on a null email by construction (087:513). So
+  // `vendor_org_id` set with `partner_email` null is not a partial row - it is a row the
+  // database refuses with 42501, which surfaces as a failed award and a 500. The caller
+  // resolves the email from three sources before reaching here
+  // (app/api/agency/rfp-responses/[id]/route.ts); if all three came back empty, the linked
+  // shape is unreachable and the choice is a ghost row or no award at all.
+  if (partnerIdForResolution && normalizedEmail) {
     const { data: created, error: insertErr } = await supabase
       .from("partnerships")
       .insert({
@@ -157,8 +176,29 @@ export async function resolvePartnershipForAward(
     return { partnershipId: created.id as string }
   }
 
-  if (!normalizedEmail) {
+  if (!normalizedEmail && !partnerIdForResolution) {
+    // No identity of any kind. Nothing to file a relationship against - the caller reports
+    // this to the agency as "no vendor account or email is linked to it".
     return { error: "no vendor_org_id and no vendor email to resolve a partnership from" }
+  }
+
+  if (!normalizedEmail) {
+    // DEGRADED: a vendor organization is known but no address for it could be found, so the
+    // linked shape above would be refused by 087. A ghost row is written instead - it
+    // satisfies the policy's first disjunct, gives the award a partnership_id to key
+    // project_assignments to, and grants the named organization nothing.
+    // IT ALSO DROPS THE ONE FACT WE HAD. The row carries neither vendor_org_id nor
+    // partner_email, so nothing later can match it: this resolver's branch c looks for
+    // exactly those two columns, and 084's unique index on unclaimed rows only covers
+    // `vendor_org_id IS NULL AND partner_email IS NOT NULL`. It will read as an unidentified
+    // Discovered vendor in the pool until someone reconciles it by hand. That is a worse
+    // record than a linked partnership and a better outcome than a 500 that loses the award,
+    // and it is deliberately loud rather than silent.
+    console.error("[award-partnership-resolution] no vendor email available - writing an unidentified GHOST partnership rather than a row 087 will refuse", {
+      leadOrgId: agencyId,
+      partnerIdForResolution,
+      vendorDisplayName,
+    })
   }
 
   // Pure guest (no account) - the exact ghost/discovered shape classifyGuestVendorForPool's

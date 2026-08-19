@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, type OrgId } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 
 const noStore = { "Cache-Control": "private, no-store, no-cache, must-revalidate" } as const
@@ -11,16 +11,30 @@ async function requireAgency(supabase: Awaited<ReturnType<typeof createClient>>,
   return profile?.role === "agency" || profile?.active_role === "agency"
 }
 
+/**
+ * 079 PARAMETER CLASS, BRANDED. `projects.org_id` REFERENCES organizations(id), and both
+ * call sites below passed `user.id` into it - correct by accident for the accounts whose
+ * organization id equals their founder's user id, and a silent 404 for every account
+ * created after 079. `OrgId` is not assignable from a bare string, so the compiler now
+ * refuses the substitution rather than production discovering it.
+ *
+ * A SET rather than a scalar, deliberately. The read this gates is already scoped
+ * `.in("org_id", callerOrgIds)`; a scalar here would have to invent an acting-organization
+ * pick that the surrounding query does not make, and would 404 a multi-organization
+ * caller on a project their own list query returns. Same shape as the `.in()` filters
+ * either side of it.
+ */
 async function assertProjectOwned(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  agencyId: string,
+  agencyOrgIds: readonly OrgId[],
   projectId: string
 ) {
+  if (agencyOrgIds.length === 0) return false
   const { data, error } = await supabase
     .from("projects")
     .select("id")
     .eq("id", projectId)
-    .eq("org_id", agencyId)
+    .in("org_id", agencyOrgIds)
     .maybeSingle()
   if (error || !data) return false
   return true
@@ -51,7 +65,10 @@ export async function GET(req: Request) {
       .order("created_at", { ascending: true })
 
     if (project_id) {
-      if (!(await assertProjectOwned(supabase, user.id, project_id))) {
+      // 079 PARAMETER CLASS: `user.id` here filtered projects.org_id - an organization
+      // column - by a profiles id. The list query above is already scoped by membership;
+      // this narrowing gate now uses the same set, so the 404 and the empty page agree.
+      if (!(await assertProjectOwned(supabase, callerOrgIds, project_id))) {
         return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
       }
       query = query.eq("project_id", project_id)
@@ -107,7 +124,12 @@ export async function POST(req: Request) {
     if (!Number.isFinite(amount)) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400, headers: noStore })
     }
-    if (!(await assertProjectOwned(supabase, user.id, project_id))) {
+    // 079 PARAMETER CLASS: same defect as the GET, checked against the organization the
+    // row is about to be attributed to rather than the caller's whole membership set - the
+    // insert below writes `org_id: writeOrgId`, so a cash flow entry can only be added to a
+    // project that same organization owns. Checking a wider set here would let a
+    // multi-organization caller attach one organization's project to another's ledger.
+    if (!(await assertProjectOwned(supabase, [writeOrgId], project_id))) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
     }
 

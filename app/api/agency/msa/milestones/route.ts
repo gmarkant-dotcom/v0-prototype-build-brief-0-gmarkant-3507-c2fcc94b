@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, type OrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -23,16 +23,26 @@ async function requireAgency(supabase: Awaited<ReturnType<typeof createClient>>,
   return profile
 }
 
+/**
+ * 079 PARAMETER CLASS, BRANDED. The local copy of the same helper in
+ * app/api/agency/client-cash-flow/route.ts, with the same defect and the same fix:
+ * `projects.org_id` REFERENCES organizations(id) and the POST call site passed `user.id`.
+ * A SET rather than a scalar for the reason stated there - the POST body's own
+ * `.in("lead_org_id", callerOrgIds)` check a few lines below this helper's call site is
+ * scoped exactly this way, and the two must agree or an awarded response resolves for a
+ * project the ownership gate has already refused.
+ */
 async function assertProjectOwned(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  agencyId: string,
+  agencyOrgIds: readonly OrgId[],
   projectId: string
 ) {
+  if (agencyOrgIds.length === 0) return false
   const { data, error } = await supabase
     .from("projects")
     .select("id")
     .eq("id", projectId)
-    .eq("org_id", agencyId)
+    .in("org_id", agencyOrgIds)
     .maybeSingle()
   if (error || !data) return false
   return true
@@ -444,7 +454,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid amount" }, { status: 400, headers: noStore })
     }
 
-    if (!(await assertProjectOwned(supabase, user.id, project_id))) {
+    // 079 PARAMETER CLASS: `user.id` filtered projects.org_id, an organization column, by a
+    // profiles id. `callerOrgIds` is the same set the awarded-response check below uses.
+    if (!(await assertProjectOwned(supabase, callerOrgIds, project_id))) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
     }
 

@@ -227,16 +227,21 @@ export default function AgencyPartnerProfilePage() {
 
         // Count only — never expose list of vouchers. Routed through
         // lib/vouch-counts.ts; see migration 082.
-        // 079 PARAMETER CLASS, NOT CLOSED HERE - see docs/vendor-visibility-report.md.
-        // partner_vouches.vendor_org_id is an ORGANIZATION column and `partnerId` is a
-        // profiles id from the route param, so this count is right only for the sixteen
-        // accounts whose organization id equals their founder's and silently zero otherwise.
-        // It cannot be fixed at this layer: org_members carries a self-row-only SELECT policy
-        // ("Members read their own membership row", migration 079), so a browser client
-        // cannot resolve ANOTHER user's organization, and adding the service role to this
-        // surface is out of bounds. Closing it needs a SECURITY DEFINER mapping in a
-        // migration. Read-only and non-privileged: the failure is an undercount, never a
-        // disclosure.
+        // NOT A 079 PARAMETER-CLASS SITE. This comment used to say `partnerId` was a profiles
+        // id and that the count was therefore right only for the accounts whose organization
+        // id equals their founder's. That was wrong, and it was load-bearing - it is what
+        // scripts/check-org-id-reads.mjs recorded as its baseline for this whole route.
+        // `partnerId` is the [partnerId] route param, and EVERY link into this route sets it
+        // from an organization column: app/agency/pool/page.tsx:460 (vendor_org.id, falling
+        // back to vendor_org_id) and :696 (req.vendor_org_id) build the two Vendor Pool
+        // hrefs, and components/bid-detail-sheet.tsx:900 passes row.vendor_org_id into the
+        // only other link. partner_vouches.vendor_org_id is an organization column and this
+        // is an organization id, so the count is correct, and so is the insert below.
+        //
+        // The org_members escape hatch the old comment reached for - a SECURITY DEFINER
+        // mapping, because org_members SELECT is self-row-only under 079 - is not needed
+        // HERE. It is still needed by the surfaces that genuinely hold a profiles id:
+        // app/partner/profile/page.tsx:217 and app/api/marketplace/discoverable/route.ts:99.
         const count = await fetchVouchCount(supabase, partnerId)
         if (!cancelled) setVouchCount(count)
 
