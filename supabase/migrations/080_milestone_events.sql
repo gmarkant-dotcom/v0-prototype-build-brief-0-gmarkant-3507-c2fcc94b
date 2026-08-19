@@ -48,41 +48,65 @@
 -- append-only table records both facts.
 --
 -- ---------------------------------------------------------------------
--- THE 079 SEAM. READ THIS BEFORE CHANGING ANYTHING HERE.
+-- THE 079 SEAM IS CLOSED. THIS FILE IS POST-079.
 -- ---------------------------------------------------------------------
--- TODAY, COMPANY MEANS A USER ID. One user is one company. `org_id` below
--- holds the lead agency's `profiles.id`, and `vendor_org_id` holds the
--- vendor's, exactly as `agency_id` and `partner_id` do on every other
--- table in this schema.
+-- 079 IS APPLIED. A company is an `organizations` row, membership lives in
+-- `org_members`, and `public.current_user_org_ids()` resolves the caller's
+-- organizations. `org_id` below holds an `organizations.id`, and so does
+-- `vendor_org_id` - not a `profiles.id`, and not by way of a later
+-- backfill, but from the first row this table ever takes.
 --
--- The COLUMNS are nonetheless named for the post-079 world on purpose.
--- 079 renames 30 columns across 23 tables and the census counts 707+
--- references in application source; naming two more columns `agency_id`
--- and `partner_id` today would add to that surface for no benefit. What
--- changes at 079 is the VALUE these columns hold, not their name, so this
--- table costs the rename nothing.
+-- The COLUMNS were always named for this world. 079 renamed 30 columns
+-- across 23 tables against a census of 707+ references in application
+-- source; what changed here at 079 was the VALUE these columns hold, not
+-- their name, so the rename never touched this table and no reference in
+-- application source had to move.
 --
--- Three things 079 (or a follow-up) MUST do to this table. Every one is
--- marked "079:" at the site below:
+-- The three things this file's earlier header said 079 still owed the
+-- table are all settled here, in this file, before it is applied:
 --
---   1. Rewrite both SELECT policies and the INSERT policy to resolve
---      membership through the organization helper functions instead of
---      comparing to auth.uid(). Until that happens these policies are
---      bucket (a) of docs/policy-rewrite-surface.md and
---      `pnpm policy-audit` will flag them. THAT IS CORRECT AND THEY ARE
---      NOT ALLOW-LISTED. A policy keyed on auth.uid() works perfectly for
---      a single-member organization and shows a colleague nothing at all.
+--   1. THE POLICIES: REWRITTEN BELOW. Both SELECT policies and the INSERT
+--      policy resolve membership through `public.current_user_org_ids()`
+--      instead of comparing a company column to auth.uid(). They are no
+--      longer bucket (a) of docs/policy-rewrite-surface.md and
+--      `pnpm policy-audit` has nothing here to flag. The counterparty
+--      policy in particular had to change for this file to apply AT ALL:
+--      it tested `partnerships.partner_id`, which 079 renamed to
+--      `vendor_org_id`, so the file as written raised 42703
+--      undefined_column at CREATE POLICY and took the whole transaction
+--      down with it.
 --
---   2. Backfill `org_id` and `vendor_org_id` from user ids to
---      organization ids, in the same statement block that backfills every
---      other company column.
+--      ON THE SPELLING. The predicate is
+--      `IN (SELECT public.current_user_org_ids())` and NOT the
+--      `= ANY (public.current_user_org_ids())` the old instruction
+--      comments asked for. `current_user_org_ids()` RETURNS SETOF uuid,
+--      not uuid[]; `= ANY (f())` over a set-returning function raises
+--      42809, "op ANY/ALL (array) requires array on right side of ANY".
+--      Every policy predicate 079 actually shipped uses the IN (SELECT)
+--      form. The `= ANY` spelling never existed anywhere but in
+--      instruction comments, here and in 081.
 --
---   3. Add the foreign keys. There are DELIBERATELY none on `org_id` and
---      `vendor_org_id` today: 079 repoints existing FKs from `profiles` to
---      `organizations` through a DO block generated from a table list that
---      predates this file, so an FK to `profiles` added here would survive
---      079 unnoticed and then reject every write made by an organization
---      created after it - organizations whose ids belong to no user.
+--   2. THE BACKFILL: MOOT. THERE ARE NO ROWS TO BACKFILL. This migration
+--      has never been applied, so `milestone_events` does not exist and
+--      holds nothing - confirmed live, where every emit from
+--      lib/milestone-events.ts is dropped against a PostgREST PGRST205 for
+--      a table absent from the schema cache. There are no user ids in
+--      these columns to convert to organization ids, because there are no
+--      values in these columns at all. The table is created holding
+--      organization ids and has never held anything else. No backfill
+--      statement belongs in this migration or in any later one.
+--
+--   3. THE FOREIGN KEYS: ADDED HERE, pointing at `organizations(id)`. They
+--      were left off because 079 repoints existing FKs through a DO block
+--      generated from a table list that predates this file, so an FK to
+--      `profiles` written here would have survived 079 unseen. 079 is now
+--      applied and its DO block never named this table, so if this file
+--      does not add them nothing ever will. The ON DELETE actions follow
+--      079 PHASE 7's own stated rule - CASCADE on a NOT NULL company
+--      column, SET NULL on a nullable one - and the constraint names
+--      follow its `<table>_<column>_org_fkey` convention, so a future
+--      audit that reads either finds this table where it expects it. Each
+--      action is argued at its column declaration below.
 --
 -- ---------------------------------------------------------------------
 -- SNAPSHOT NOTE
@@ -187,13 +211,42 @@ GRANT  EXECUTE ON FUNCTION public.vendor_visible_event_types() TO authenticated;
 CREATE TABLE IF NOT EXISTS public.milestone_events (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 
-  -- 079: holds a lead agency's profiles.id today, organizations.id after.
-  org_id          uuid        NOT NULL,
+  -- The lead agency organization this event belongs to.
+  --
+  -- ON DELETE CASCADE, per 079 PHASE 7's rule for a NOT NULL company
+  -- column. This does not weaken the append-only rule: that rule governs
+  -- what a CALLER may do to a row, and it is enforced by the absence of an
+  -- UPDATE policy and a DELETE policy for anybody. An organization ceasing
+  -- to exist is not a caller editing a breadcrumb. Once it is gone, no
+  -- policy on this table can match these rows ever again - the read
+  -- predicate is `org_id IN (SELECT public.current_user_org_ids())` and
+  -- there is nothing left to match - so CASCADE removes rows already
+  -- unreadable by every role. RESTRICT would make an organization with one
+  -- breadcrumb permanently undeletable, and SET NULL is not available on a
+  -- NOT NULL column.
+  org_id          uuid        NOT NULL
+    CONSTRAINT milestone_events_org_id_org_fkey
+    REFERENCES public.organizations(id) ON DELETE CASCADE,
 
-  -- 079: holds a vendor's profiles.id today, organizations.id after. NULL
-  -- for events with no counterparty, and for guest recipients who have no
-  -- account at all.
-  vendor_org_id   uuid        NULL,
+  -- The counterparty organization, or NULL: events with no counterparty at
+  -- all, and guest recipients who have no account and therefore no
+  -- organization.
+  --
+  -- ON DELETE SET NULL, per the same 079 rule for a nullable column, and
+  -- the same action `partnership_id` below already carries for the same
+  -- situation. CASCADE would be wrong here in a way it is not on org_id:
+  -- it would delete a LEAD AGENCY's own breadcrumbs because a counterparty
+  -- was removed, destroying the log of an organization that still exists
+  -- and can still read it. RESTRICT would block deleting any organization
+  -- that had ever been on the receiving end of a milestone. SET NULL is
+  -- the only action that leaves the owning agency's record standing: the
+  -- actor, the event type, the subject and the payload are untouched. It
+  -- costs no visibility either, because counterparty reads were never
+  -- keyed on this column - they are keyed on `partnership_id`, in the
+  -- policy below.
+  vendor_org_id   uuid        NULL
+    CONSTRAINT milestone_events_vendor_org_id_org_fkey
+    REFERENCES public.organizations(id) ON DELETE SET NULL,
 
   -- Drives counterparty visibility. NULL means agency-internal: the
   -- counterparty SELECT policy below cannot match it under any event type.
@@ -235,14 +288,16 @@ COMMENT ON TABLE public.milestone_events IS
   'Append-only attribution log. INSERT and SELECT only - there is no UPDATE policy and no '
   'DELETE policy for anybody, deliberately. Corrections are new rows.';
 COMMENT ON COLUMN public.milestone_events.org_id IS
-  '079 SEAM. The company the event belongs to. Holds a lead agency profiles.id today because '
-  'one user is one company; becomes organizations.id at 079. No FK on purpose - see the file '
-  'header.';
+  'The lead agency organization the event belongs to. An organizations.id - this table is '
+  'post-079 and has never held a profiles.id. FK to organizations(id) ON DELETE CASCADE.';
 COMMENT ON COLUMN public.milestone_events.vendor_org_id IS
-  '079 SEAM. The counterparty company, or NULL. Same shape as org_id.';
+  'The counterparty organization, or NULL for an event with no counterparty and for guest '
+  'recipients who have no account. FK to organizations(id) ON DELETE SET NULL, so removing a '
+  'counterparty does not delete the owning agency''s own breadcrumbs. Counterparty visibility '
+  'is NOT keyed on this column - it is keyed on partnership_id.';
 COMMENT ON COLUMN public.milestone_events.actor_id IS
-  'The acting user. NULL for guest / magic-link actors, who have no account. Not renamed by '
-  '079: the actor is a person either way.';
+  'The acting user, not a company: a profiles.id, and 079 did not rename it. NULL for guest / '
+  'magic-link actors, who have no account.';
 COMMENT ON COLUMN public.milestone_events.event_type IS
   'A capability name from docs/capabilities.md. One vocabulary for "who may do this" and '
   '"who did this", so the two cannot drift into different spellings.';
@@ -279,16 +334,19 @@ ALTER TABLE public.milestone_events ENABLE ROW LEVEL SECURITY;
 -- anon key reads nothing here. That is the defect this product already has
 -- live on partner_vouches (see migration 082) and it is not repeated.
 
--- 079: replace `org_id = auth.uid()` with
---      `org_id = ANY (public.current_user_org_ids())`.
 CREATE POLICY "Members read own company milestone events"
   ON public.milestone_events
   FOR SELECT
   TO authenticated
-  USING (org_id = auth.uid());
+  USING (org_id IN (SELECT public.current_user_org_ids()));
 
--- 079: replace the partnerships subquery's `p.partner_id = auth.uid()`
---      with `p.vendor_org_id = ANY (public.current_user_org_ids())`.
+-- No status predicate on the partnership, deliberately, and consistent
+-- with `current_user_counterparty_org_ids()` which 085 left status-free on
+-- purpose. 085 drew its boundary around COMMERCIAL TERMS. A milestone is
+-- not a commercial term: it is the record of an act the counterparty was a
+-- party to, and a vendor whose partnership later went 'removed' does not
+-- stop having been sent that RFP. The whitelist, not the status, is what
+-- fails closed here.
 CREATE POLICY "Counterparty reads whitelisted milestone events"
   ON public.milestone_events
   FOR SELECT
@@ -299,7 +357,7 @@ CREATE POLICY "Counterparty reads whitelisted milestone events"
     AND EXISTS (
       SELECT 1 FROM public.partnerships p
       WHERE p.id = milestone_events.partnership_id
-        AND p.partner_id = auth.uid()
+        AND p.vendor_org_id IN (SELECT public.current_user_org_ids())
     )
   );
 
@@ -312,16 +370,13 @@ CREATE POLICY "Counterparty reads whitelisted milestone events"
 -- the same commit, and it will have to permit the guest path's NULL
 -- actor_id without permitting an authenticated caller to write somebody
 -- else's name.
---
--- 079: replace `org_id = auth.uid()` with
---      `org_id = ANY (public.current_user_org_ids())`.
 CREATE POLICY "Members insert own company milestone events"
   ON public.milestone_events
   FOR INSERT
   TO authenticated
   WITH CHECK (
     actor_side = 'agency'
-    AND org_id = auth.uid()
+    AND org_id IN (SELECT public.current_user_org_ids())
     AND (actor_id IS NULL OR actor_id = auth.uid())
   );
 
@@ -371,6 +426,22 @@ COMMIT;
 --    policy by name is unsafe until a fresh snapshot is taken.
 --
 --    SELECT count(*) FROM pg_policies WHERE schemaname = 'public';
+--
+-- 7. Both company columns are foreign keys to organizations, with the
+--    stated ON DELETE actions. Expect exactly 2 rows:
+--      org_id        -> milestone_events_org_id_org_fkey        ... c (CASCADE)
+--      vendor_org_id -> milestone_events_vendor_org_id_org_fkey ... n (SET NULL)
+--    Zero rows means the FKs were lost and nothing else will add them.
+--
+--    SELECT a.attname AS column_name, c.conname, c.confdeltype
+--    FROM pg_constraint c
+--    JOIN pg_class      r ON r.oid = c.conrelid
+--    JOIN pg_class      f ON f.oid = c.confrelid
+--    JOIN pg_attribute  a ON a.attrelid = r.oid AND a.attnum = c.conkey[1]
+--    WHERE c.contype = 'f'
+--      AND r.relname = 'milestone_events'
+--      AND f.relname = 'organizations'
+--    ORDER BY 1;
 --
 -- =====================================================================
 -- CONTACT TIERING IS A SEPARATE CONTROL AND IS NOT ENFORCED HERE
