@@ -10,6 +10,31 @@
 -- left open. It does NOT change what a permitted reader sees, and it does
 -- NOT change any SELECT policy.
 --
+-- TWO THINGS THIS FILE MISSED IN DRAFT, BOTH CONFIRMED NECESSARY BY QUERY
+-- AGAINST THE LIVE DATABASE, BOTH CARRIED HERE:
+--
+--   THE anon REVOKE. pg_default_acl carries TWO rows for functions in
+--   schema public, one granted by postgres and one by supabase_admin, and
+--   BOTH of them contain anon=X. CREATE FUNCTION therefore grants anon
+--   EXECUTE DIRECTLY, and a REVOKE ... FROM PUBLIC does not take a direct
+--   grant away - it is a no-op against anon. Without the explicit
+--   REVOKE ... FROM anon this file would hand the membership oracle
+--   described at part 1 to the anon key, which is the one key this project
+--   assumes is in an attacker's hands. V1 asserts f, t.
+--
+--   THE VALUE -> NULL RESIDUAL ON vendor_org_id. The trigger's
+--   vendor_org_id transition block is entered only when the NEW value IS
+--   NOT NULL, so clearing a linked vendor back to NULL fell straight
+--   through it, and a cleared row is a ghost row again - relinkable to any
+--   organization by the claim path this file exists to constrain.
+--   vendor_org_id is now pinned in both directions: NULL -> value is
+--   checked against partner_email, value -> value is refused, value ->
+--   NULL is refused. It costs nothing on today's code. No writer in this
+--   repository clears the column; all four sites that write it NULL are
+--   INSERTs (app/api/agency/email-scan/import/route.ts,
+--   app/api/rfp/guest/[token]/route.ts, lib/award-partnership-resolution.ts,
+--   lib/server/partner-pool-import.ts).
+--
 -- =====================================================================
 -- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
 -- =====================================================================
@@ -19,18 +44,18 @@
 -- PATH and every POSTGRES_* credential in this environment is an empty
 -- string. It is applied by Greg, by hand, in the Supabase SQL Editor.
 --
--- TRANSACTION CONTROL. This file carries an explicit BEGIN on LINE 411 and
--- an explicit COMMIT on LINE 583. They are the only executable occurrences
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN on LINE 471 and
+-- an explicit COMMIT on LINE 670. They are the only executable occurrences
 -- of either word: every other appearance is inside this comment block or
 -- is the plpgsql BEGIN/END of the trigger body, which carries no semicolon.
 --
--- TO DRY RUN: change the COMMIT; on line 583 to ROLLBACK; and run the whole
+-- TO DRY RUN: change the COMMIT; on line 670 to ROLLBACK; and run the whole
 -- file. Every statement executes, every error surfaces, and nothing
 -- persists. Migration 086 shipped with NO transaction control at all, so
 -- that same swap silently did nothing and what was believed to be a dry run
 -- applied for real with no rollback available. Verify before trusting:
---   grep -n '^BEGIN;$'  -> exactly one hit, line 411
---   grep -n '^COMMIT;$' -> exactly one hit, line 583
+--   grep -n '^BEGIN;$'  -> exactly one hit, line 471
+--   grep -n '^COMMIT;$' -> exactly one hit, line 670
 --
 -- Sequence, in order, no step skipped:
 --
@@ -286,20 +311,55 @@
 -- rows and no error - the success-shaped non-event this codebase has been
 -- bitten by five separate times. A trigger that refuses says so.
 --
--- THE COST OF THE TRIGGER, STATED: it fires for the service role too. It
--- is therefore written to guard TRANSITIONS THAT NO CODE PATH PERFORMS,
+-- THE COST OF THE TRIGGER, STATED: it fires for the service role too, and
+-- IT DOES WORK ON DAY ONE. An earlier draft of this header claimed the
+-- trigger was a no-op against today's code. That was WRONG, and it is
+-- corrected here rather than left to be discovered during the dry run.
+--
+-- THE THREE TRANSITION GUARDS ARE NO-OPS on today's code. That much holds,
 -- verified by reading every writer:
---   lead_org_id is never updated anywhere. Grep of app/ and lib/ for an
---   update touching it returns nothing.
---   vendor_org_id is only ever written NULL -> value. Every site that
---   writes it guards on the old value being null:
+--   lead_org_id is never updated anywhere, so the immutability guard at
+--   087:606 cannot fire. Grep of app/ and lib/ for an update touching it
+--   returns nothing.
+--   vendor_org_id is only ever written NULL -> value, so neither the
+--   value -> NULL clear guard nor the value -> value repoint guard can
+--   fire. Every site that writes it guards on the old value being null:
 --     lib/award-partnership-resolution.ts   `...(existingRow.vendor_org_id ? {} : ...)`
 --     lib/partnership-award-claim.ts        `.is("vendor_org_id", null)`
 --     app/api/rfp/guest/[token]/route.ts    `else if (!existingPartnership.vendor_org_id)`
 --     app/api/agency/email-scan/import/route.ts  comment: "never touch
 --                                           status/profile_status/vendor_org_id here"
--- So on today's code the trigger is a no-op that starts doing work the day
--- somebody writes a repoint.
+--
+-- THE MEMBERSHIP CHECK IS THE OPPOSITE. It sits inside the NULL -> value
+-- branch, and NULL -> value is precisely the transition every claim path in
+-- this repository performs. It runs on day one, on every claim, and it
+-- refuses any claim naming a vendor_org_id with no member whose email
+-- matches partner_email. TWO PATHS HIT IT IMMEDIATELY:
+--
+--   app/api/partner/partnerships/claim/route.ts, ON THE
+--   agencyEntitlementId() FALLBACK. That helper returns the USER id
+--   unchanged when org_members resolves nothing for the caller
+--   (lib/entitlements.ts:240-253, two return sites). A user id is not an
+--   organizations id, so the check finds no member and raises 23514. Note
+--   what this is: that write is ALREADY invalid - vendor_org_id REFERENCES
+--   organizations(id) after 079, so it is an FK violation today for every
+--   vendor whose organization id differs from their user id. The trigger
+--   reaches it first and names it correctly. On the normal path the helper
+--   returns a real organization id and the caller is a member of it with
+--   the matching email, so the check passes.
+--
+--   app/api/rfp/guest/[token]/route.ts, FOR EVERY NON-LEGACY VENDOR. Its
+--   claim branch writes `vendor_org_id: matchedProfileId` (route.ts:88) -
+--   a PROFILE id, into an organizations column. For the sixteen accounts
+--   079 backfilled, profile id and organization id are equal and the check
+--   passes by accident. For every vendor onboarded since, they differ and
+--   the trigger refuses. Same story: already an FK violation, now a named
+--   one.
+--
+-- Both are LOUD failures on writes that are already wrong against the 079
+-- schema, which is the trigger doing its job. But it means this migration
+-- is NOT invisible on day one. Step 2 of the sequence above is where that
+-- gets accepted, alongside the bid-award behaviour change.
 --
 -- NOTHING HERE WIDENS ANY PREDICATE. The INSERT policy gains an AND. The
 -- trigger only refuses. No SELECT policy, no helper that any SELECT policy
@@ -468,7 +528,19 @@ COMMENT ON FUNCTION public.org_has_member_with_email(uuid, text) IS
   'organization id, which would turn a confirm-oracle into a lookup-oracle.';
 
 REVOKE EXECUTE ON FUNCTION public.org_has_member_with_email(uuid, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.org_has_member_with_email(uuid, text) FROM anon;
 GRANT  EXECUTE ON FUNCTION public.org_has_member_with_email(uuid, text) TO authenticated;
+
+-- service_role IS GRANTED EXPLICITLY, NOT BY DEFAULT. It already holds the
+-- privilege: pg_default_acl in the live database carries service_role=X on
+-- both rows, so a bare CREATE FUNCTION would have granted it. This file does
+-- not depend on that. The trigger function below is NOT SECURITY DEFINER
+-- (see 087:588-590) - it executes as the INVOKING role, and it
+-- calls this helper. All three claim paths are service-client writes. If the
+-- default ACL is ever tightened, an implicit grant disappears silently and
+-- every claim starts raising 42501 from inside the trigger. Stated once,
+-- here, so the file is self-sufficient.
+GRANT  EXECUTE ON FUNCTION public.org_has_member_with_email(uuid, text) TO service_role;
 
 -- ---------------------------------------------------------------------
 -- 2. The INSERT policy, narrowed.
@@ -508,8 +580,10 @@ CREATE POLICY "Agencies can create partnerships"
 -- ---------------------------------------------------------------------
 -- 3. The UPDATE trigger.
 --
--- Three refusals, each closing one of the holes enumerated above, and
--- each guarding a transition no code path in this repository performs.
+-- Four refusals. Three close the holes enumerated above; the fourth pins
+-- vendor_org_id against being cleared, which is not one of those holes but
+-- is the door back to them. Each guards a transition no code path in this
+-- repository performs.
 --
 -- NOT SECURITY DEFINER. It reads only NEW and OLD, and the one table read
 -- it needs is inside org_has_member_with_email(), which is already
@@ -533,6 +607,19 @@ BEGIN
     RAISE EXCEPTION
       'partnerships.lead_org_id is immutable (attempted % -> %)',
       OLD.lead_org_id, NEW.lead_org_id
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- THE VALUE -> NULL RESIDUAL. The transition block below is entered only
+  -- when the new value IS NOT NULL, so clearing a linked vendor back to
+  -- NULL falls straight through it - and a cleared row is then a ghost row
+  -- again, relinkable to any organization by the claim path. vendor_org_id
+  -- is pinned in both directions or it is not pinned. No writer in this
+  -- repository clears it: all four sites that write NULL are INSERTs.
+  IF OLD.vendor_org_id IS NOT NULL AND NEW.vendor_org_id IS NULL THEN
+    RAISE EXCEPTION
+      'partnerships.vendor_org_id cannot be cleared once set (attempted % -> NULL)',
+      OLD.vendor_org_id
       USING ERRCODE = '42501';
   END IF;
 
@@ -596,8 +683,22 @@ COMMIT;
 --
 --     EXPECTED: 1 row. prosecdef = t, provolatile = 's',
 --     proconfig = {"search_path=public, pg_temp"}, and proacl contains
---     authenticated=X/ with NO bare =X/ entry (that would be the PUBLIC
---     grant this file revokes).
+--     authenticated=X/ AND service_role=X/ with NO bare =X/ entry (that
+--     would be the PUBLIC grant this file revokes) and NO anon=X/ entry
+--     (that would be the DEFAULT PRIVILEGE grant this file revokes
+--     separately - see the header; a REVOKE FROM PUBLIC does not remove
+--     it). service_role=X/ would be present from the default ACL even
+--     without this file's explicit GRANT; the GRANT is what stops that
+--     being an assumption.
+--
+--     AND the same thing asserted directly rather than read out of an acl
+--     string, which is the house pattern at 082:395-403:
+--
+--       SELECT has_function_privilege('anon',          'public.org_has_member_with_email(uuid, text)', 'EXECUTE'),
+--              has_function_privilege('authenticated', 'public.org_has_member_with_email(uuid, text)', 'EXECUTE'),
+--              has_function_privilege('service_role',  'public.org_has_member_with_email(uuid, text)', 'EXECUTE');
+--
+--     EXPECTED: f, t, t
 --
 -- V2. The six visibility and membership helpers are UNTOUCHED. This
 --     migration must not have moved any of them.
