@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { normalizeCompanyName } from "@/lib/company-identity"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -160,7 +161,16 @@ function SignUpContent() {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
-          company_name: companyName,
+          // TRIMMED HERE, AND THIS IS THE ROOT CAUSE OF THE ONE DRIFTED ROW. This metadata
+          // is read twice by handle_new_user(): organizations.name goes through
+          // NULLIF(btrim(...), '') and profiles.company_name is a bare
+          // COALESCE(raw_user_meta_data->>'company_name', '') with no btrim at all
+          // (migration 079, PHASE 12; PHASE 2's backfill has the same asymmetry). So a
+          // trailing space typed on this form survived in exactly one of the two columns,
+          // which is why one live organization's mirror is one byte longer than its name.
+          // Normalising at the source closes it for every future signup without touching
+          // the trigger. The SQL asymmetry itself is reported rather than migrated.
+          company_name: normalizeCompanyName(companyName) ?? "",
           company_linkedin_url: companyLinkedin,
           role: (hasRfpInviteContext || hasPartnershipInviteContext) ? 'partner' : role,
           terms_accepted_at: new Date().toISOString(),

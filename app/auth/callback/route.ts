@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { SupabaseClient, User } from "@supabase/supabase-js"
 import { resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { normalizeCompanyName } from "@/lib/company-identity"
 
 // Helper function to sync user profile after auth
 async function syncUserProfile(supabase: any, user: any) {
@@ -23,7 +24,20 @@ async function syncUserProfile(supabase: any, user: any) {
       id: user.id,
       email: user.email,
       full_name: metadata.full_name || '',
-      company_name: metadata.company_name || '',
+      // NORMALIZED, BUT NOT RECONCILED, AND THE DIFFERENCE IS DELIBERATE. Every other
+      // writer of this column goes through saveCompanyIdentity(), which writes
+      // organizations.name first and the mirror second. This one cannot: it runs only when
+      // handle_new_user() did NOT fire, and that trigger is what creates the organization
+      // and the org_members row. There is no organization to reconcile against here, so
+      // saveCompanyIdentity() would resolve "no-membership" and fail closed, turning a
+      // recoverable signup into a blocked one. It gets the trim - the invariant that does
+      // not need an organization - and nothing else.
+      //
+      // WHAT THIS LEAVES OPEN, stated rather than buried: a profile created down this path
+      // has NO organization and NO membership, which post-079 is an account locked out of
+      // its own data by deny-by-default. That is a pre-existing gap in this route, not one
+      // introduced here, and it is reported rather than fixed in a company-name change.
+      company_name: normalizeCompanyName(metadata.company_name) ?? '',
       company_linkedin_url: metadata.company_linkedin_url || null,
       role: role,
       active_role: role,

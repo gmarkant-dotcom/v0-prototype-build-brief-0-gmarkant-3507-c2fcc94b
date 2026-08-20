@@ -15,6 +15,7 @@ import { isDemoMode } from "@/lib/demo-data"
 import { fetchVouchCount } from "@/lib/vouch-counts"
 import { resolveOrgIdForUser } from "@/lib/entitlements"
 import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
+import { saveCompanyIdentity } from "@/lib/company-identity"
 
 const disciplines = [
   "Video Production",
@@ -626,10 +627,20 @@ export default function PartnerProfilePage() {
           return
         }
         const targetProfileId = profileId || user.id
-        const { error } = await supabase
-          .from("profiles")
-          .update({
-            company_name: formData.companyName,
+        // THE COMPANY NAME DOES NOT GO IN THIS PAYLOAD. organizations.name is the name every
+        // lead agency actually reads for this vendor, and this form used to write only the
+        // profiles.company_name mirror, so a rename here never reached them. Both columns
+        // now move together through lib/company-identity.ts, which also trims - this form
+        // previously wrote formData.companyName raw, with no normalisation anywhere.
+        const result = await saveCompanyIdentity(
+          supabase,
+          targetProfileId,
+          {
+            hasCompanyName: true,
+            companyName: formData.companyName,
+            fallbackName: accountFullName,
+          },
+          {
             company_website: formData.companyWebsite || null,
             company_linkedin_url: formData.companyLinkedin || null,
             company_logo_url: companyLogoUrl || null,
@@ -642,10 +653,12 @@ export default function PartnerProfilePage() {
             credentials,
             work_examples: workExamples,
             is_discoverable: discoverable,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", targetProfileId)
-        if (error) throw error
+          }
+        )
+        if (!result.ok) throw new Error(result.error)
+        // Echo the normalized name back, so the field shows what the database holds rather
+        // than the untrimmed string that was typed.
+        if (result.name) setFormData((prev) => ({ ...prev, companyName: result.name as string }))
       }
       if (typeof window !== "undefined") {
         localStorage.setItem("partnerPrimaryDiscipline", formData.primaryDiscipline)

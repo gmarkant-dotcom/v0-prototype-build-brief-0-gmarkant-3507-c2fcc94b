@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Checkbox } from "@/components/ui/checkbox"
 import { createClient } from "@/lib/supabase/client"
+import { saveCompanyIdentity } from "@/lib/company-identity"
 import { Camera, Loader2 } from "lucide-react"
 import { isDemoMode } from "@/lib/demo-data"
 import {
@@ -252,10 +253,16 @@ export default function AgencyProfileSettingsPage() {
       return
     }
     const supabase = createClient()
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        company_name: form.company_name || form.full_name || null,
+    // THE COMPANY NAME DOES NOT GO IN THIS PAYLOAD. It is one fact stored in two columns -
+    // organizations.name, which every counterparty reads, and profiles.company_name, which
+    // mirrors it - and lib/company-identity.ts is the only path that writes either. This
+    // form used to write the mirror alone, so a rename here never reached the name vendors
+    // actually see. See that file's header for the ruling.
+    const result = await saveCompanyIdentity(
+      supabase,
+      form.id,
+      { hasCompanyName: true, companyName: form.company_name, fallbackName: form.full_name },
+      {
         company_website: form.company_website || null,
         company_linkedin_url: form.company_linkedin_url || null,
         default_nda_url: form.default_nda_url || null,
@@ -269,15 +276,20 @@ export default function AgencyProfileSettingsPage() {
         payment_terms_custom:
           form.payment_terms === "custom" ? form.payment_terms_custom.trim() || null : null,
         business_criteria: businessCriteria,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", form.id)
-    if (!error && typeof window !== "undefined") {
+      }
+    )
+    if (result.ok && typeof window !== "undefined") {
       localStorage.setItem("agencyPrimaryDiscipline", primaryDiscipline)
       localStorage.setItem("agencySelectedCapabilities", JSON.stringify(selectedCapabilities))
       localStorage.setItem("agencyCustomCapabilities", JSON.stringify(customCapabilities))
     }
-    setMessage(error ? error.message : "Agency profile updated.")
+    if (result.ok) {
+      // Echo the normalized name back into the field. A trailing space typed here is
+      // trimmed on write, and leaving the untrimmed string on screen would show the user
+      // something the database does not hold.
+      setForm((prev) => ({ ...prev, company_name: result.name ?? prev.company_name }))
+    }
+    setMessage(result.ok ? "Agency profile updated." : result.error)
     setSaving(false)
   }
 
