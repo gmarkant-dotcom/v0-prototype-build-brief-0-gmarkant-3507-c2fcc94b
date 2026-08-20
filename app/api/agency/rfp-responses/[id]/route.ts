@@ -30,6 +30,82 @@ function getServiceSupabase() {
   return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
+/**
+ * Scope title, partnership and RFP snapshot for a bid whose response carries no
+ * `inbox_item_id`.
+ *
+ * Guest / magic-link bids (migration 057) never get a `partner_rfp_inbox` row, so every read
+ * that goes through `partner_rfp_responses.inbox_item_id` returns nothing for them. That is
+ * what wrote `{"scope_item_name": null}` onto `bid.decline`, and it is what put the unnamed
+ * "Update on your recent bid submission" on the mail sent beside it: the title was never
+ * missing, it was on the originating `rfp_magic_tokens` row the whole time.
+ *
+ * The award path already resolves both of this shape's sources - the G1-synthesized inbox
+ * row found by the `master_rfp_json._magic_token` marker, then the token row itself - which
+ * is why `bid.award` never had the gap. This is that same resolution, factored out for the
+ * two emitters that had neither.
+ *
+ * Read-only and non-fatal by construction: every failure returns nulls, which is exactly
+ * what the callers rendered before. A breadcrumb and a subject line are not worth failing a
+ * decline over.
+ */
+type GuestBidContext = {
+  scopeItemName: string | null
+  partnershipId: string | null
+  masterRfpJson: unknown
+}
+
+async function resolveGuestBidContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  { responseId, callerOrgIds, route }: { responseId: string; callerOrgIds: OrgId[]; route: string }
+): Promise<GuestBidContext> {
+  const empty: GuestBidContext = { scopeItemName: null, partnershipId: null, masterRfpJson: null }
+
+  const { data: tokenRow, error: tokenErr } = await supabase
+    .from("rfp_magic_tokens")
+    .select("token, scope_item_name")
+    .eq("response_id", responseId)
+    .maybeSingle()
+  if (tokenErr) {
+    console.error("[api] guest bid context: magic token lookup failed (non-fatal)", {
+      route,
+      responseId,
+      message: tokenErr.message,
+      code: tokenErr.code,
+    })
+    return empty
+  }
+  if (!tokenRow?.token) return empty
+
+  const tokenScopeItemName = (tokenRow.scope_item_name as string | null)?.trim() || null
+
+  // A G1-synthesized inbox row is preferred over the token where one exists, because it is
+  // the only source of `partnership_id` - and partnership_id is what makes a milestone
+  // reachable by the vendor the milestone is about. Scoped to the caller's organizations,
+  // matching the identical lookup on the award path.
+  const { data: synthesized, error: synthErr } = await supabase
+    .from("partner_rfp_inbox")
+    .select("scope_item_name, master_rfp_json, partnership_id")
+    .in("lead_org_id", callerOrgIds)
+    .contains("master_rfp_json", { _magic_token: tokenRow.token })
+    .maybeSingle()
+  if (synthErr) {
+    console.error("[api] guest bid context: G1-synthesized inbox lookup failed (falling back to the token)", {
+      route,
+      responseId,
+      message: synthErr.message,
+      code: synthErr.code,
+    })
+    return { ...empty, scopeItemName: tokenScopeItemName }
+  }
+
+  return {
+    scopeItemName: ((synthesized?.scope_item_name as string | null) || "").trim() || tokenScopeItemName,
+    partnershipId: (synthesized?.partnership_id as string | null) ?? null,
+    masterRfpJson: synthesized?.master_rfp_json ?? null,
+  }
+}
+
 type PatchBody = {
   status?: "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
   agency_feedback?: string
@@ -662,7 +738,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         })
       }
 
-      const scopeName = inboxRow?.scope_item_name?.trim?.() || ""
+      // A guest / magic-link bid has no inbox row to have selected anything from, so the
+      // scope title AND the partnership both come back null above. Both exist elsewhere -
+      // see resolveGuestBidContext(). Only consulted when there is no inbox row at all: a
+      // real one is authoritative even where its own scope_item_name is blank.
+      const guest = inboxRow ? null : await resolveGuestBidContext(supabase, { responseId: id, callerOrgIds, route })
+
+      const scopeName = (inboxRow?.scope_item_name ?? guest?.scopeItemName)?.trim?.() || ""
       const agencyName = profile.company_name || profile.full_name || "Lead agency"
       const feedbackSubject = scopeName
         ? `Feedback received on your bid for ${scopeName}`
@@ -709,7 +791,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         orgId: orgIdFromColumn(existing.lead_org_id),
         actorId: user.id,
         vendorOrgId: orgIdFromColumn(existing.vendor_org_id),
-        partnershipId: (inboxRow?.partnership_id as string | null) ?? null,
+        partnershipId: (inboxRow?.partnership_id as string | null) ?? guest?.partnershipId ?? null,
         subjectType: "bid",
         subjectId: id,
         payload: { scope_item_name: scopeName || null, status: nextStatus },
@@ -880,7 +962,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         payload: {
           project_id: awardContext.projectId,
           project_name: projectName,
-          scope_item_name: scopeItemName,
+          // `rawScopeItemName`, not `scopeItemName`. The two differ only when the name could
+          // not be resolved, and that is exactly the case that matters: `scopeItemName` is
+          // the EMAIL's placeholder ("Scope item"), and storing it here would hand the feed
+          // a string that looks like a real title, so lib/activity-feed.ts renders
+          // "awarded the bid on Scope item" instead of taking its own "a scope item"
+          // fallback. Null is the honest value, and it is what bid.decline and bid.feedback
+          // already write.
+          scope_item_name: rawScopeItemName || null,
         },
       })
     }
@@ -918,9 +1007,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           code: inboxRes.error.code,
         })
       }
+      // THE BUG THIS FIXES. `existing.inbox_item_id` is null on every guest / magic-link bid,
+      // so the query above was skipped entirely and `inbox` was null - which is how the
+      // milestone came out as {"scope_item_name": null} and the mail went out titled
+      // "Update on your recent bid submission" for a scope that has a perfectly good name on
+      // its rfp_magic_tokens row. Same resolution the award path has always used.
+      const guest = inbox ? null : await resolveGuestBidContext(supabase, { responseId: id, callerOrgIds, route })
+
       const rawProjectName =
-        (inbox?.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || ""
-      const rawScopeItemName = inbox?.scope_item_name?.trim?.() || ""
+        ((inbox?.master_rfp_json ?? guest?.masterRfpJson) as Record<string, unknown> | null)?.projectName?.toString?.() || ""
+      const rawScopeItemName = (inbox?.scope_item_name ?? guest?.scopeItemName)?.trim?.() || ""
       const projectName = rawProjectName || "Project"
       const scopeItemName = rawScopeItemName || "Scope item"
       const partnerName = partner?.company_name || partner?.full_name || partner?.email || "Vendor"
@@ -971,7 +1067,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         orgId: orgIdFromColumn(existing.lead_org_id),
         actorId: user.id,
         vendorOrgId: orgIdFromColumn(existing.vendor_org_id),
-        partnershipId: (inbox?.partnership_id as string | null) ?? null,
+        partnershipId: (inbox?.partnership_id as string | null) ?? guest?.partnershipId ?? null,
         subjectType: "bid",
         subjectId: id,
         payload: {
