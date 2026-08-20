@@ -807,7 +807,7 @@ export async function POST(req: Request) {
      * by relation rather than by side, so it renders as a counterparty without a change there.
      *
      * WHY THIS NEEDS NO NEW POLICY, AND WHY IT IS ONLY WRITTEN HERE. This route is
-     * service-role throughout (getServiceSupabase(), used at :191 and :378) and RLS is not
+     * service-role throughout (getServiceSupabase(), used at :192 and :379) and RLS is not
      * enforced for the service key, so 080's agency-only INSERT policy is never consulted.
      * That is not a loophole: a magic-link guest is not `authenticated`, holds a bearer token
      * rather than a session, and `auth.uid()` is null for them - no policy `TO authenticated`
@@ -818,7 +818,7 @@ export async function POST(req: Request) {
      * The authenticated portal bid submit (app/api/partner/rfps/[id]/response/route.ts) is a
      * SESSION client and gets no emitter here. It is reported, not written.
      *
-     * ONCE, ON THE TRANSITION. This branch is the first-submission branch: :414 returns 409
+     * ONCE, ON THE TRANSITION. This branch is the first-submission branch: :416 returns 409
      * for a token already marked submitted, and the edit branch returns before reaching here.
      * One bid.submit per token, and a later revision records nothing (bid.revise on the edit
      * branch is the obvious next one and is deliberately not written in this commit).

@@ -555,7 +555,7 @@ export async function PATCH(req: Request) {
      * 2. The pre-read gains `status`, so a transition into paid can be told apart from a
      *    re-save of a milestone that was already paid.
      * 3. The vendor is looked up from `partnerships`, the read the GET half of this file
-     *    already performs at :237-241 and the PATCH half never did.
+     *    already performs at :237-243 and the PATCH half never did.
      */
     const { data: agencyProjectRows, error: apErr } = await supabase
       .from("projects")
@@ -643,7 +643,7 @@ export async function PATCH(req: Request) {
     if (paidPartnershipId) {
       const { data: partnershipRow, error: partnershipErr } = await supabase
         .from("partnerships")
-        // Same read, same scoping, as the GET half of this file at :237-241.
+        // Same read, same scoping, as the GET half of this file at :237-243.
         .select("id, vendor_org_id")
         .eq("id", paidPartnershipId)
         .in("lead_org_id", callerOrgIds)
@@ -672,7 +672,7 @@ export async function PATCH(req: Request) {
      * type is on 080's vendor-visible whitelist and RLS hands the counterparty the whole row,
      * payload included. What must never appear here is anything project-level:
      * `total_paid`, `total_outstanding` and `total_milestones_amount` are computed in the GET
-     * half of this same file at :364-366 and are one variable away, and every one of them
+     * half of this same file at :365-367 and are one variable away, and every one of them
      * sums across all vendors on the project. A project's total paid tells one vendor what
      * the others are being paid.
      *
