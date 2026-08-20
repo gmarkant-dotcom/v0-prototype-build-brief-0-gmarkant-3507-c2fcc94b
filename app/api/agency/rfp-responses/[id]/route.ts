@@ -782,12 +782,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // 079: user.id is the acting company.
       await recordMilestone(supabase, {
         eventType: "bid.feedback",
-        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column with NO
-        // foreign key (migration 080 left it off deliberately), so a user id written here
-        // raises nothing - it only makes the row invisible to the agency that created it,
-        // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
-        // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
-        // caller's own organizations.
+        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column, and as of
+        // applied-080 it carries milestone_events_org_id_org_fkey REFERENCES
+        // organizations(id). A user id written here therefore raises 23503; it is no longer
+        // the silent defect this comment used to describe. Visibility is the second gate,
+        // and the policy reads `org_id IN (SELECT public.current_user_org_ids())` - IN
+        // (SELECT ...), not `= ANY (...)`, which raises 42809 on a SETOF-returning function.
+        // `existing.lead_org_id` was fetched under `.in("lead_org_id", callerOrgIds)`, so it
+        // is provably one of the caller's own organizations and clears both gates.
         orgId: orgIdFromColumn(existing.lead_org_id),
         actorId: user.id,
         vendorOrgId: orgIdFromColumn(existing.vendor_org_id),
@@ -947,12 +949,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // 079: user.id is the acting company.
       await recordMilestone(supabase, {
         eventType: "bid.award",
-        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column with NO
-        // foreign key (migration 080 left it off deliberately), so a user id written here
-        // raises nothing - it only makes the row invisible to the agency that created it,
-        // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
-        // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
-        // caller's own organizations.
+        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column, and as of
+        // applied-080 it carries milestone_events_org_id_org_fkey REFERENCES
+        // organizations(id). A user id written here therefore raises 23503; it is no longer
+        // the silent defect this comment used to describe. Visibility is the second gate,
+        // and the policy reads `org_id IN (SELECT public.current_user_org_ids())` - IN
+        // (SELECT ...), not `= ANY (...)`, which raises 42809 on a SETOF-returning function.
+        // `existing.lead_org_id` was fetched under `.in("lead_org_id", callerOrgIds)`, so it
+        // is provably one of the caller's own organizations and clears both gates.
         orgId: orgIdFromColumn(existing.lead_org_id),
         actorId: user.id,
         vendorOrgId: orgIdFromColumn(existing.vendor_org_id),
@@ -1058,12 +1062,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // read rules. 079: user.id is the acting company.
       await recordMilestone(supabase, {
         eventType: "bid.decline",
-        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column with NO
-        // foreign key (migration 080 left it off deliberately), so a user id written here
-        // raises nothing - it only makes the row invisible to the agency that created it,
-        // whose policy reads org_id = ANY (current_user_org_ids()). `existing.lead_org_id`
-        // was fetched under `.in("lead_org_id", callerOrgIds)`, so it is provably one of the
-        // caller's own organizations.
+        // 079 PARAMETER CLASS: milestone_events.org_id is an organization column, and as of
+        // applied-080 it carries milestone_events_org_id_org_fkey REFERENCES
+        // organizations(id). A user id written here therefore raises 23503; it is no longer
+        // the silent defect this comment used to describe. Visibility is the second gate,
+        // and the policy reads `org_id IN (SELECT public.current_user_org_ids())` - IN
+        // (SELECT ...), not `= ANY (...)`, which raises 42809 on a SETOF-returning function.
+        // `existing.lead_org_id` was fetched under `.in("lead_org_id", callerOrgIds)`, so it
+        // is provably one of the caller's own organizations and clears both gates.
         orgId: orgIdFromColumn(existing.lead_org_id),
         actorId: user.id,
         vendorOrgId: orgIdFromColumn(existing.vendor_org_id),

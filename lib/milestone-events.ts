@@ -23,20 +23,22 @@ import type { OrgId } from "@/lib/entitlements"
  * So this writes to `milestone_events`, created by supabase/migrations/080_milestone_events.sql.
  *
  * ---------------------------------------------------------------------------
- * 080 IS AUTHORED AND NOT APPLIED, WHICH IS WHY NOTHING HERE THROWS
+ * 080 IS APPLIED. THE INSERT IS STILL FIRE-AND-FORGET, AND THAT IS DELIBERATE
  *
- * Until Greg runs 080, `milestone_events` does not exist and every insert from this module
- * returns Postgres 42P01, undefined_table. That is expected, and it must not take down a
- * broadcast, an award or an invitation with it.
+ * `milestone_events` exists. What can still fail is narrower than it was, and worth naming:
+ * a foreign key violation (23503) on org_id, vendor_org_id, partnership_id or actor_id,
+ * since 080 put real keys on all four; and a denial from the INSERT policy. Neither may take
+ * down a broadcast, an award or an invitation with it.
  *
  * Every function here is fire-and-forget: it catches everything, returns void, and logs. A
  * breadcrumb is strictly less important than the action it describes, and this follows the
  * same rule the email sends in this codebase already follow - the award is recorded, then the
  * mail is attempted inside try/catch, and a failed mail never rolls back the award.
  *
- * The one behaviour worth knowing: a missing table logs at WARN, once per call, with a
- * message naming migration 080. Everything else logs at ERROR. So an unapplied migration
- * reads as an unapplied migration in the logs, not as a fault.
+ * The one behaviour worth knowing: a missing table logs at WARN, once per call, separately
+ * from everything else, because "the table is not there" is a different thing to act on than
+ * "the insert was rejected". With 080 applied it now means a broken environment rather than
+ * a pending migration. Everything else logs at ERROR.
  *
  * ---------------------------------------------------------------------------
  * WHAT MIGRATION 079 CHANGES HERE
@@ -150,11 +152,15 @@ export async function recordMilestones(
 ): Promise<void> {
   if (events.length === 0) return
 
-  // 079: `orgId` is typed OrgId | null because it is often read off a database column, and
-  // milestone_events.org_id has NO foreign key (migration 080, deliberately) - so an
-  // unusable value raises nothing and simply produces a row invisible to the organization
-  // that created it, whose policy reads org_id = ANY (current_user_org_ids()). Dropping the
-  // event loudly beats writing a breadcrumb nobody can ever read.
+  // 079: `orgId` is typed OrgId | null because it is often read off a database column. Two
+  // gates now stand behind it, and this filter is in front of both. Since 080 was applied,
+  // milestone_events.org_id REFERENCES organizations(id), so an id that is not an
+  // organization raises 23503 rather than passing silently; and an id that IS an
+  // organization but not one of the caller's produces a row RLS hides, because the SELECT
+  // predicate reads `org_id IN (SELECT public.current_user_org_ids())` - IN (SELECT ...),
+  // not `= ANY (...)`, because current_user_org_ids() RETURNS SETOF uuid and `= ANY` on it
+  // raises 42809. Dropping the event loudly here beats both a logged key violation and a
+  // breadcrumb nobody can ever read.
   const usable = events.filter((e): e is MilestoneEvent & { orgId: OrgId } => Boolean(e.orgId))
   if (usable.length !== events.length) {
     console.error("[milestone] dropped event(s) with no resolvable organization", {
@@ -168,10 +174,24 @@ export async function recordMilestones(
     const { error } = await supabase.from("milestone_events").insert(usable.map(toRow))
     if (!error) return
 
-    if (error.code === "42P01") {
+    // This branch was dead for its entire working life. A PostgREST request against an
+    // unknown relation never reaches the planner - the table is absent from the schema
+    // cache, and the client is answered PGRST205, not Postgres 42P01. So the WARN this was
+    // written to produce has never fired: not once while 080 was unapplied and this was
+    // supposed to be the expected path, and not since. Every one of those drops went out at
+    // ERROR through the generic branch below. lib/notifications.ts:57 already tests both
+    // codes; this now matches it. 42P01 is kept rather than swapped because it is what a
+    // direct SQL path would return, and this module takes whatever client it is handed.
+    if (error.code === "PGRST205" || error.code === "42P01") {
       console.warn(
-        "[milestone] milestone_events table not present - migration 080 is authored and not applied. Event(s) dropped.",
-        { eventTypes: [...new Set(usable.map((e) => e.eventType))], count: events.length }
+        "[milestone] milestone_events is not in the schema cache. 080 IS applied on this project, so this is an environment fault - a stale cache or the wrong database - not a pending migration. Event(s) dropped.",
+        {
+          eventTypes: [...new Set(usable.map((e) => e.eventType))],
+          // usable.length, not events.length: the ones actually handed to the insert. The
+          // other two branches always counted it this way.
+          count: usable.length,
+          code: error.code,
+        }
       )
       return
     }

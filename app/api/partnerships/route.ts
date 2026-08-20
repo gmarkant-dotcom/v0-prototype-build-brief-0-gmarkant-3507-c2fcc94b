@@ -622,10 +622,11 @@ export async function POST(request: NextRequest) {
         // vendor.invite_resend site and is not emitting yet. 079: user.id is the company.
         await recordMilestone(supabase, {
           eventType: 'vendor.invite',
-          // 079 PARAMETER CLASS: milestone_events.org_id is an organization column and has
-          // NO foreign key (migration 080 left it off deliberately), so a user id written
-          // here raises nothing at all - it just makes the row invisible to its own agency,
-          // whose RLS policy reads org_id = ANY (current_user_org_ids()). A silent one.
+          // 079 PARAMETER CLASS: milestone_events.org_id is an organization column, and
+          // since 080 was applied it REFERENCES organizations(id). A user id written here
+          // raises 23503 - this is no longer the silent one. Invisibility is still the
+          // second gate: the RLS policy reads
+          // `org_id IN (SELECT public.current_user_org_ids())`.
           orgId: writeOrgId,
           actorId: user.id,
           vendorOrgId: existingPartnerId ?? null,

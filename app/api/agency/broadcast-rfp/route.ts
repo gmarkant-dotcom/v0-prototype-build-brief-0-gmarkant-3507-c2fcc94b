@@ -552,9 +552,11 @@ export async function POST(request: NextRequest) {
       rows.map((row) => ({
         eventType: "rfp.broadcast" as const,
         // 079 PARAMETER CLASS: milestone_events.org_id is an organization column. `user.id`
-        // was a user id - no foreign key catches it, the row simply stops being visible to
-        // the agency that broadcast it once org id and user id diverge. writeOrgId is the
-        // caller's own organization, already resolved above for the inbox rows themselves.
+        // was a user id - and since 080 was applied a foreign key DOES catch it, raising
+        // 23503 against milestone_events_org_id_org_fkey rather than quietly writing a row
+        // the agency that broadcast it cannot see. writeOrgId is the caller's own
+        // organization, already resolved above for the inbox rows themselves, so it clears
+        // both the key and the policy's `org_id IN (SELECT public.current_user_org_ids())`.
         orgId: writeOrgId,
         actorId: user.id,
         vendorOrgId: orgIdFromColumn(row.vendor_org_id),
