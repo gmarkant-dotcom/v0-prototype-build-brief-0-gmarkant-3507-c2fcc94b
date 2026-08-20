@@ -396,51 +396,6 @@ export async function notifyProjectResponse(
   })
 }
 
-// notifyNewMessage and notifyDocumentUploaded have NO call sites anywhere in the
-// repository, verified by grep across app, lib and components. They are converted with the
-// rest so that wiring one up later cannot reintroduce the org-id-as-user-id bug.
-export async function notifyNewMessage(
-  supabase: SupabaseClient,
-  recipientOrgId: string,
-  senderName: string,
-  projectName: string,
-  projectId: string,
-  assignmentId?: string
-) {
-  return createOrgNotification({
-    supabase,
-    orgId: recipientOrgId,
-    site: 'notifyNewMessage',
-    type: 'new_message',
-    title: 'New Message',
-    message: `${senderName} sent a message on "${projectName}".`,
-    link: assignmentId
-      ? `/partner/projects/${projectId}?tab=messages`
-      : `/agency/project?tab=messages`,
-    data: { projectId, projectName, senderName, assignmentId }
-  })
-}
-
-export async function notifyDocumentUploaded(
-  supabase: SupabaseClient,
-  recipientOrgId: string,
-  uploaderName: string,
-  documentName: string,
-  projectName: string,
-  projectId: string
-) {
-  return createOrgNotification({
-    supabase,
-    orgId: recipientOrgId,
-    site: 'notifyDocumentUploaded',
-    type: 'document_uploaded',
-    title: 'New Document Uploaded',
-    message: `${uploaderName} uploaded "${documentName}" to "${projectName}".`,
-    link: `/agency/project?tab=documents`,
-    data: { projectId, projectName, documentName, uploaderName }
-  })
-}
-
 export async function notifyBidSubmitted(
   supabase: SupabaseClient,
   leadOrgId: string,
