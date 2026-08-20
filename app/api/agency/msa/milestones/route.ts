@@ -1,6 +1,7 @@
-import { resolveCallerOrgIds, type OrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, orgIdFromColumn, type OrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { recordMilestone } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
 
@@ -657,10 +658,52 @@ export async function PATCH(req: Request) {
       }
       paidVendorOrgId = (partnershipRow?.vendor_org_id as string | null) ?? null
     }
-    // paidOrgId / paidVendorOrgId / paidPartnershipId are the emitter's four parameters less
-    // the subject id, which is `id`. Nothing reads them yet, by design - see the block above.
-    void paidOrgId
-    void paidVendorOrgId
+    /**
+     * Milestone: payment.mark_paid.
+     *
+     * Fires on the transition only. `isMarkingPaid` is `!wasPaid && next === "paid"`, and
+     * `wasPaid` is the prior status read before the update - so a re-save of an already-paid
+     * milestone records nothing, and a milestone moved back to pending and paid again records
+     * a second, genuinely second, event.
+     *
+     * PAYLOAD: `{ amount, currency, paid_at }` and NOTHING ELSE.
+     *
+     * The amount is the vendor's own, on their own milestone, and it is theirs to see - the
+     * type is on 080's vendor-visible whitelist and RLS hands the counterparty the whole row,
+     * payload included. What must never appear here is anything project-level:
+     * `total_paid`, `total_outstanding` and `total_milestones_amount` are computed in the GET
+     * half of this same file at :364-366 and are one variable away, and every one of them
+     * sums across all vendors on the project. A project's total paid tells one vendor what
+     * the others are being paid.
+     *
+     * Non-fatal and last: recordMilestone() catches everything and returns void, and this runs
+     * after the update has already succeeded, so the emitter cannot change the result of the
+     * payment it describes.
+     */
+    if (isMarkingPaid) {
+      await recordMilestone(supabase, {
+        eventType: "payment.mark_paid",
+        // 079 PARAMETER CLASS: resolved from the milestone's project through a map built under
+        // `.in("org_id", callerOrgIds)`, so it is provably one of the caller's own
+        // organizations - it clears 080's org_id foreign key and the SELECT policy's
+        // `org_id IN (SELECT public.current_user_org_ids())` alike.
+        orgId: orgIdFromColumn(paidOrgId),
+        actorId: user.id,
+        vendorOrgId: orgIdFromColumn(paidVendorOrgId),
+        // What makes the row reachable by the vendor being paid.
+        partnershipId: paidPartnershipId,
+        subjectType: "payment_milestone",
+        // The payment_milestones row id - the same id the caller passed and the same one the
+        // update keyed on.
+        subjectId: id,
+        payload: {
+          // Nulls, not placeholders: a milestone with no amount recorded says so.
+          amount: row?.amount != null ? Number(row.amount) : null,
+          currency: typeof row?.currency === "string" ? row.currency.trim() || null : null,
+          paid_at: (row?.paid_at as string | null) ?? null,
+        },
+      })
+    }
 
     return NextResponse.json({ milestone: row }, { headers: noStore })
   } catch (e) {
