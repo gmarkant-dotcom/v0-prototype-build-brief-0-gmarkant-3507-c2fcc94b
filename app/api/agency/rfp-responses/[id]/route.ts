@@ -965,7 +965,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         subjectId: id,
         payload: {
           project_id: awardContext.projectId,
-          project_name: projectName,
+          // `rawProjectName`, not `projectName`, for exactly the reason given below about
+          // the scope title - `projectName` is the EMAIL's placeholder ("Project"). Nothing
+          // renders this field today (lib/activity-feed.ts resolves the project name from
+          // project_id and never from a payload, and payloadString reads only
+          // scope_item_name), so this is not a visible defect. It is fixed anyway: the
+          // payload of a whitelisted event type is counterparty-readable in full, so this
+          // row currently tells a vendor their project is called "Project", and the next
+          // reader of the field would inherit the same trap the scope title just sprang.
+          project_name: rawProjectName || null,
           // `rawScopeItemName`, not `scopeItemName`. The two differ only when the name could
           // not be resolved, and that is exactly the case that matters: `scopeItemName` is
           // the EMAIL's placeholder ("Scope item"), and storing it here would hand the feed
