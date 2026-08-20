@@ -8,6 +8,7 @@ import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
 import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
+import { recordMilestones, type MilestoneEvent } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
 
@@ -210,6 +211,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
     }
 
+    // The deadline this send is about to OVERWRITE, read before the upsert discards it.
+    //
+    // This is what tells rfp.deadline_set from rfp.deadline_change, and it is the whole
+    // reason migration 080's header calls the deadline path destructive today: the upsert
+    // below writes `response_deadline` unconditionally, so a resend carrying a new date
+    // replaces the old one with nothing anywhere recording what it was or who changed it.
+    //
+    // Deliberately a SEPARATE, best-effort query rather than a column added to the
+    // `existingToken` select above. That select is load-bearing for the invitation itself -
+    // it decides whether the live token is reused - and widening its column list would let a
+    // missing column (74's `response_deadline`, guarded against everywhere else in this
+    // file) fail a real send for the sake of a breadcrumb. An emitter may not change the
+    // success or failure of the action it observes.
+    //
+    // Skipped entirely when there is no prior row, which is every first send: absent row
+    // means absent deadline, known without asking. `priorDeadlineKnown` stays false only
+    // when the read itself failed, and a deadline event is then not emitted at all - a
+    // guessed one would be worse than a missing one.
+    let priorDeadline: string | null = null
+    let priorDeadlineKnown = false
+    if (responseDeadline) {
+      if (!existingToken) {
+        priorDeadlineKnown = true
+      } else {
+        try {
+          const { data: priorRow, error: priorErr } = await service
+            .from("rfp_magic_tokens")
+            .select("response_deadline")
+            .in("org_id", callerOrgIds)
+            .eq("project_id", projectId)
+            .eq("vendor_email", vendorEmail)
+            .maybeSingle()
+          if (priorErr) {
+            console.warn("[api] rfp/magic-link: could not read the prior response_deadline; deadline milestone skipped", {
+              route,
+              projectId,
+              code: priorErr.code,
+            })
+          } else {
+            priorDeadline = (priorRow?.response_deadline as string | null) ?? null
+            priorDeadlineKnown = true
+          }
+        } catch (priorReadErr) {
+          console.warn("[api] rfp/magic-link: prior response_deadline read threw; deadline milestone skipped", {
+            route,
+            projectId,
+            message: priorReadErr instanceof Error ? priorReadErr.message : String(priorReadErr),
+          })
+        }
+      }
+    }
+
     const tokenUpsertPayload = {
       org_id: writeOrgId,
       project_id: projectId,
@@ -342,16 +395,18 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    let partnershipId: string | null = null
     if (emailSent) {
       try {
         // 079 PARAMETER CLASS: both ids here are organization ids written into
         // partnerships.lead_org_id / .vendor_org_id. `auth.userId` was a user id and
         // `matchedProfile.id` a profiles.id; both REFERENCE organizations(id) now.
-        await markPartnershipInvited(service, {
+        const ref = await markPartnershipInvited(service, {
           agencyId: writeOrgId,
           vendorEmail,
           partnerId: matchedVendorOrgId,
         })
+        partnershipId = ref.partnershipId
       } catch (partnershipErr) {
         console.error("[api] failed to mark partnership invited", {
           route,
@@ -360,6 +415,82 @@ export async function POST(request: NextRequest) {
           message: partnershipErr instanceof Error ? partnershipErr.message : String(partnershipErr),
         })
       }
+    }
+
+    // Milestones: rfp.magic_link_send, and rfp.deadline_set / rfp.deadline_change.
+    //
+    // ONE recordMilestones call, so all of them share one statement, one transaction and
+    // therefore one `created_at` - which is what lets the feed group them
+    // (lib/activity-feed.ts, milestoneGroupKey). recordMilestones catches everything and
+    // returns void; nothing below can change what this route returns.
+    //
+    // ON THE SERVICE CLIENT. Every other emit in the product runs on a session client, so
+    // this is the first row written with RLS bypassed: migration 080's INSERT policy does
+    // not run here and the checks at the top of this file ARE the permission, exactly as
+    // the 079 note at line 80 says for every other write on this route. The row is still
+    // correct for RLS on the way OUT - `writeOrgId` is the caller's own organization, so
+    // the SELECT policy's `org_id IN (SELECT public.current_user_org_ids())` matches for
+    // the team, and `partnership_id` is what the counterparty policy reads.
+    //
+    // EVERY PAYLOAD FIELD BELOW IS ABOUT THE ONE RECIPIENT THIS ROW IS FOR. All three types
+    // are on public.vendor_visible_event_types() and the counterparty policy grants the
+    // WHOLE row, payload included. This route sends to exactly ONE vendor per call, so
+    // there is no cross-vendor figure available to leak here even by accident - and the
+    // one field that must never appear regardless is `tokenRow.token`, which is a BEARER
+    // CREDENTIAL for this RFP. It is deliberately absent below.
+    const milestones: MilestoneEvent[] = []
+    if (emailSent) {
+      milestones.push({
+        eventType: "rfp.magic_link_send",
+        // 079 PARAMETER CLASS: milestone_events.org_id REFERENCES organizations(id).
+        // writeOrgId is the caller's own organization, already resolved above for the token
+        // row itself, so both the key and the read policy are satisfied by the same value.
+        orgId: writeOrgId,
+        actorId: auth.userId,
+        // Null whenever the recipient has no account, or has one that belongs to no
+        // organization - both are ordinary here, this route exists to reach vendors who are
+        // not on the platform yet.
+        vendorOrgId: matchedVendorOrgId,
+        partnershipId,
+        // Same subject as rfp.broadcast: the project. That is what makes the feed resolve a
+        // project name and a project href for this line rather than dropping it on
+        // /agency/bids. Not in UNION_REPLACING_EVENT_TYPES, so it dedupes nothing away.
+        subjectType: "project",
+        subjectId: projectId,
+        payload: {
+          scope_item_name: scopeItemName,
+          recipient_email: vendorEmail,
+          response_deadline: responseDeadline,
+        },
+      })
+    }
+    // The deadline pair. Emitted on the persisted value, NOT gated on `emailSent`: the
+    // upsert has already committed the new deadline by this point, so it is true whether or
+    // not the mail left. Nothing is emitted when the read of the prior value failed, and
+    // nothing is emitted when the deadline did not actually move.
+    if (responseDeadline && priorDeadlineKnown && priorDeadline !== responseDeadline) {
+      milestones.push({
+        eventType: priorDeadline === null ? "rfp.deadline_set" : "rfp.deadline_change",
+        orgId: writeOrgId,
+        actorId: auth.userId,
+        vendorOrgId: matchedVendorOrgId,
+        partnershipId,
+        subjectType: "project",
+        subjectId: projectId,
+        payload: {
+          scope_item_name: scopeItemName,
+          response_deadline: responseDeadline,
+          // The value the upsert discarded. Greg's ruling: the old deadline IS this
+          // vendor's own and may be shown to them; what may not be shown is who ELSE the
+          // change touched, and this route touches exactly one vendor, so no such figure
+          // exists here. Null on a first set - never a placeholder string, so the renderer
+          // and any later consumer can tell "there was none" from "there was one".
+          previous_response_deadline: priorDeadline,
+        },
+      })
+    }
+    if (milestones.length > 0) {
+      await recordMilestones(service, milestones)
     }
 
     console.log("[api] success", { route, method: "POST", userId: auth.userId, projectId, is_existing_partner, emailSent, attached })

@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/lib/org-contact"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { createOrgNotification } from "@/lib/notifications"
+import { recordMilestone } from "@/lib/milestone-events"
 import { normalizeMeetingUrlForHref } from "@/lib/utils"
 export const dynamic = "force-dynamic"
 
@@ -453,6 +454,44 @@ export async function POST(
       message: `${agencyName} sent onboarding materials for "${projectTitle}".`,
       link: "/partner/onboarding",
       data: { projectId, packageId: pkg.id },
+    })
+
+    // Milestone: onboarding.package_send. Emitted last, after the package row, its document
+    // rows, the vendor's email and the vendor's in-app notification are all in - so a
+    // breadcrumb never outlives the package it describes. recordMilestone catches
+    // everything and returns void, so it cannot turn a delivered package into a 500.
+    //
+    // EVERY FIELD BELOW IS ABOUT THE ONE RECIPIENT THIS ROW IS FOR. onboarding.package_send
+    // is on public.vendor_visible_event_types(), and migration 080's counterparty policy
+    // grants the WHOLE row, payload included, to the vendor org behind partnership_id. A
+    // package is sent to exactly ONE partnership per call, so every fact below is that
+    // vendor's own - the size of THEIR document list, the kickoff mode THEY were offered -
+    // and all of it was already in the email they received. `custom_message` is left out:
+    // it is agency prose, it adds nothing the vendor was not sent verbatim, and a payload
+    // is the wrong place to accumulate free text.
+    //
+    // 079 PARAMETER CLASS: milestone_events.org_id REFERENCES organizations(id). writeOrgId
+    // is the caller's own organization - the same value written to onboarding_packages.org_id
+    // above. vendor_org_id is read off the partnerships row, which the guard at line 196
+    // has already proved non-null. user.id is the ACTOR, never the company.
+    await recordMilestone(supabase, {
+      eventType: "onboarding.package_send",
+      orgId: writeOrgId,
+      actorId: user.id,
+      vendorOrgId: orgIdFromColumn(partnership.vendor_org_id),
+      partnershipId,
+      // The project, not the package. Source 4 of the derived union keys on
+      // `onboarding_package:<pkg.id>` and stands for the vendor's ACKNOWLEDGEMENT, a
+      // different act by the other party; onboarding.package_send is not in
+      // UNION_REPLACING_EVENT_TYPES and must not collide with it. A project subject also
+      // resolves a project name and a project href for the line.
+      subjectType: "project",
+      subjectId: projectId,
+      payload: {
+        package_id: pkg.id,
+        document_count: docs.length,
+        kickoff_type: kt,
+      },
     })
 
     return NextResponse.json({ success: true, package: pkg })

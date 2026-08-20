@@ -1,4 +1,5 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, orgIdFromColumn } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import {
@@ -189,6 +190,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
     }
 
     if (!wasResolved && updated.is_resolved === true) {
+      // Hoisted out of the try below only so the milestone after it can name the vendor.
+      // Nothing inside the try changes: if the lookup or the mail throws, this stays null
+      // and the breadcrumb is still written, just without a company name on the line.
+      let resolvedVendorOrgId: string | null = null
       try {
         const { data: partnership } = await supabase
           .from("partnerships")
@@ -197,6 +202,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
           .maybeSingle()
 
         const partnerId = partnership?.vendor_org_id
+        resolvedVendorOrgId = (partnerId as string | null) ?? null
         if (partnerId) {
           // 079: partnerId is a vendor ORGANISATION id. Resolve it to that organization's
           // notification recipients rather than to a profile row of the same id.
@@ -242,6 +248,41 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
       } catch (emailError) {
         console.error("[agency/status-updates] PATCH notification email failed", emailError)
       }
+
+      // Milestone: status_update.resolve. Inside the same `!wasResolved` guard the email
+      // uses, so it fires ONCE - on the transition - and a repeat PATCH of an
+      // already-resolved update writes nothing. Emitted after the mail and outside its
+      // try/catch: a failed notification must not cost the breadcrumb, and recordMilestone
+      // catches everything and returns void, so the breadcrumb cannot cost the resolve.
+      //
+      // EVERY FIELD BELOW IS ABOUT THE ONE RECIPIENT THIS ROW IS FOR. status_update.resolve
+      // is on public.vendor_visible_event_types() and migration 080's counterparty policy
+      // grants the WHOLE row, payload included, to the vendor org behind partnership_id.
+      // The vendor being told is the one who POSTED this update, and both payload fields
+      // are about their own row: which update was resolved, and when. `notes` is left out -
+      // it can carry the "[Agency override]" text this same route writes in POST, which is
+      // the agency's own annotation and not something the vendor is sent anywhere else.
+      //
+      // 079 PARAMETER CLASS: milestone_events.org_id REFERENCES organizations(id).
+      // `project.org_id` is used rather than a caller resolver because the project was
+      // fetched with `.in("org_id", callerOrgIds)` above - so it is PROVABLY one of the
+      // caller's own organizations, the same argument the msa.confirm site makes for
+      // partnerships.lead_org_id. user.id is the ACTOR, never the company.
+      await recordMilestone(supabase, {
+        eventType: "status_update.resolve",
+        orgId: orgIdFromColumn(project.org_id),
+        actorId: user.id,
+        vendorOrgId: orgIdFromColumn(resolvedVendorOrgId),
+        partnershipId: (updated.partnership_id as string | null) ?? null,
+        // The project. status_update.resolve is not in UNION_REPLACING_EVENT_TYPES, so it
+        // cannot dedupe a derived line away, and its feed predicate renders a project name.
+        subjectType: "project",
+        subjectId: projectId,
+        payload: {
+          status_update_id: updated.id,
+          resolved_at: now,
+        },
+      })
     }
 
     return NextResponse.json({ update: updated }, { headers: noStoreHeaders })

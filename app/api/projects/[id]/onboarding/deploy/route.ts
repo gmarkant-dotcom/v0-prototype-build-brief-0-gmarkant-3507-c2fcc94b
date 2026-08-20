@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import {
@@ -11,6 +11,7 @@ import {
 import { canActAs } from '@/lib/acting-role'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { createOrgNotification } from '@/lib/notifications'
+import { recordMilestone } from '@/lib/milestone-events'
 
 export async function POST(
   request: NextRequest,
@@ -79,6 +80,7 @@ export async function POST(
         id,
         project_id,
         partnership:partnerships(
+          id,
           vendor_org_id,
           partner_email,
           vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT})
@@ -201,6 +203,48 @@ export async function POST(
         ctaText: "View Onboarding Package",
         ctaUrl: onboardingUrl,
       }),
+    })
+
+    // Milestone: onboarding.deploy. Emitted last, after the deployment row, the agreement
+    // rows, the vendor's notification and the vendor's email - so a breadcrumb never
+    // outlives the deploy it describes. recordMilestone catches everything and returns
+    // void, so it cannot turn a completed deploy into a 500.
+    //
+    // EVERY FIELD BELOW IS ABOUT THE ONE RECIPIENT THIS ROW IS FOR. onboarding.deploy is on
+    // public.vendor_visible_event_types() and migration 080's counterparty policy grants the
+    // WHOLE row, payload included, to the vendor org behind partnership_id. A deploy targets
+    // exactly ONE assignment, so each fact below is that vendor's own: how many documents
+    // went to them, and whether an NDA or an SOW was raised for them. All of it is already
+    // visible to them in their own onboarding tab. `customMessage` is left out for the same
+    // reason as on the package route - they were sent it verbatim in the mail.
+    //
+    // 079 PARAMETER CLASS: milestone_events.org_id REFERENCES organizations(id). writeOrgId
+    // is the caller's own organization - the same value written to
+    // onboarding_deployments.org_id above. `partnerId` is partnerships.vendor_org_id, an
+    // ORGANIZATION id, already proved non-null by the guard at line 116. user.id is the ACTOR.
+    await recordMilestone(supabase, {
+      eventType: 'onboarding.deploy',
+      orgId: writeOrgId,
+      actorId: user.id,
+      vendorOrgId: orgIdFromColumn(partnerId),
+      // Null only if the embed could not read the partnership row, which the guard above
+      // has effectively ruled out; kept nullable rather than asserted, because a null here
+      // costs the vendor visibility of one line and an assertion would cost the deploy.
+      partnershipId: (partnership?.id as string | null) ?? null,
+      // The project. `onboarding.deploy` is not in UNION_REPLACING_EVENT_TYPES so it cannot
+      // dedupe a derived line away, and a project subject is what resolves the project name
+      // its feed predicate renders.
+      subjectType: 'project',
+      subjectId: projectId,
+      payload: {
+        deployment_id: deployment.id,
+        // Never `documentIds.length` directly: documentIds comes off the request body and
+        // is only defaulted when absent, so a non-array client payload would put a string
+        // length in a counterparty-readable field.
+        document_count: Array.isArray(documentIds) ? documentIds.length : 0,
+        nda_created: createNda === true,
+        sow_created: createSow === true,
+      },
     })
 
     return NextResponse.json({ success: true, deployment })

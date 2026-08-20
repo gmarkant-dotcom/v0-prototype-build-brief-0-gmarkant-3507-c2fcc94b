@@ -4,6 +4,7 @@ import { hasLigamentAccount } from "@/lib/server/account-existence"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
 
@@ -92,7 +93,52 @@ export async function POST(request: NextRequest) {
           vendorEmail,
         })
       } else {
-        await markPartnershipInvited(supabase, { agencyId: writeOrgId, vendorEmail })
+        const ref = await markPartnershipInvited(supabase, { agencyId: writeOrgId, vendorEmail })
+
+        // Milestone: vendor.invite_resend. THE site named for this event type by the comment
+        // at app/api/partnerships/route.ts:618-622, which distinguishes it from vendor.invite:
+        // that one covers a first touch and the revival of a TERMINATED partnership, this one
+        // covers the repeat nudge to a row that is already Discovered or Invited.
+        //
+        // Emitted after the mail, and only past the `if (!sent)` 500 above - so a breadcrumb
+        // never claims a resend that Resend refused. recordMilestone catches everything and
+        // returns void, so it cannot change this route's result; it also sits inside the
+        // partnership try/catch that was already here and already swallows.
+        //
+        // EVERY FIELD BELOW IS ABOUT THE ONE RECIPIENT THIS ROW IS FOR. vendor.invite_resend
+        // is on public.vendor_visible_event_types() and migration 080's counterparty policy
+        // grants the WHOLE row, payload included, to the vendor org behind partnership_id.
+        // Both payload fields are facts about this vendor and nobody else: their own address,
+        // and whether their own address already has a Ligament account - which is exactly
+        // what the email they just received told them by which CTA it carried.
+        //
+        // 079 PARAMETER CLASS: milestone_events.org_id REFERENCES organizations(id). writeOrgId
+        // is the caller's own resolved organization - the same value markPartnershipInvited
+        // just wrote to partnerships.lead_org_id - so it clears the key and the SELECT policy's
+        // `org_id IN (SELECT public.current_user_org_ids())` alike. user.id is the ACTOR.
+        await recordMilestone(supabase, {
+          eventType: "vendor.invite_resend",
+          orgId: writeOrgId,
+          actorId: user.id,
+          // Read off the partnerships row, never guessed: this route is handed an email and
+          // no vendor id at all, and the row it stamped is usually a ghost whose
+          // vendor_org_id is genuinely null. Null is the honest value and the feed degrades
+          // to "resent the invitation to a vendor" rather than naming the wrong company.
+          vendorOrgId: ref.vendorOrgId,
+          // The whole reachability of this row for the vendor. Null when the read-back was
+          // denied, which leaves the event agency-only rather than dropping it.
+          partnershipId: ref.partnershipId,
+          // Same subject as vendor.invite at app/api/partnerships/route.ts:754 - the
+          // partnership row - so the two invitation events sit on one subject and the pool
+          // href resolves. vendor.invite_resend is NOT in UNION_REPLACING_EVENT_TYPES, so it
+          // can never dedupe a derived line away; it is additive to the feed.
+          subjectType: "partnership",
+          subjectId: ref.partnershipId,
+          payload: {
+            partner_email: vendorEmail,
+            invitee_has_account: isClaimed,
+          },
+        })
       }
     } catch (partnershipErr) {
       console.error("[api] failed to mark partnership invited", {
