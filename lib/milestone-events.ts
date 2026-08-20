@@ -95,6 +95,18 @@ export type MilestoneEvent = {
   vendorOrgId?: OrgId | null
   /** Set this whenever a vendor is a party. It is what makes the event reachable by them. */
   partnershipId?: string | null
+  /**
+   * Which side of the relationship acted. Defaults to "agency", which every emitter written
+   * before the vendor side existed relied on and none of them pass.
+   *
+   * A "vendor" row can only be written by a client RLS does not apply to. 080 ships exactly
+   * one INSERT policy - `actor_side = 'agency' AND org_id IN (current_user_org_ids())` - so a
+   * session client is refused twice over on a vendor row: the side is wrong, and `org_id` on
+   * a vendor-side row names the AGENCY, which is not one of the vendor's organizations.
+   * That is not a defect in the policy. On a vendor row the acting company is carried by
+   * `vendorOrgId`, and `orgId` stays the agency so the agency's own SELECT policy can find it.
+   */
+  actorSide?: "agency" | "vendor"
   subjectType: MilestoneSubjectType
   subjectId?: string | null
   /** Vendor-readable on a whitelisted event type. Names, counts and titles only. */
@@ -107,7 +119,7 @@ type MilestoneRow = {
   partnership_id: string | null
   actor_id: string | null
   actor_email: string | null
-  actor_side: "agency"
+  actor_side: "agency" | "vendor"
   event_type: string
   subject_type: string
   subject_id: string | null
@@ -156,9 +168,11 @@ function toRow(event: MilestoneEvent & { orgId: OrgId }): MilestoneRow {
     partnership_id: event.partnershipId ?? null,
     actor_id: event.actorId,
     actor_email: resolveActorEmail(event),
-    // Only the agency side emits today, and migration 080's INSERT policy permits only the
-    // agency side. The vendor-side policy and the vendor-side emitters ship together.
-    actor_side: "agency",
+    // Defaults to the agency, because every emitter written before the vendor side existed
+    // omits it. A "vendor" row reaches the database only through a service-role client - see
+    // the field's doc on MilestoneEvent for why RLS refuses it on a session client, and why
+    // that refusal is correct rather than a gap to be widened.
+    actor_side: event.actorSide ?? "agency",
     event_type: event.eventType,
     subject_type: event.subjectType,
     subject_id: event.subjectId ?? null,

@@ -1,4 +1,4 @@
-import { orgIdsFromColumns, orgIdFromColumn } from "@/lib/entitlements"
+import { orgIdsFromColumns, orgIdFromColumn, resolveOrgIdForUser } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient as createServiceClient, SupabaseClient } from "@supabase/supabase-js"
 import { serializeBudget, formatBudgetForDisplay } from "@/lib/rfp-response-fields"
@@ -11,6 +11,7 @@ import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
+import { recordMilestone } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
 
@@ -794,6 +795,88 @@ export async function POST(req: Request) {
           message: emailErr instanceof Error ? emailErr.message : String(emailErr),
         })
       }
+    }
+
+    /**
+     * Milestone: bid.submit. THE FIRST VENDOR-SIDE EVENT IN THE PRODUCT.
+     *
+     * Everything recorded until now was the agency acting on a vendor. This is the vendor
+     * acting on the agency, and it lands on the AGENCY's feed - `org_id` is the agency, which
+     * is what "Members read own company milestone events" reads, so their own dashboard shows
+     * a line whose actor is the counterparty. `lib/activity-feed.ts` already names actor kinds
+     * by relation rather than by side, so it renders as a counterparty without a change there.
+     *
+     * WHY THIS NEEDS NO NEW POLICY, AND WHY IT IS ONLY WRITTEN HERE. This route is
+     * service-role throughout (getServiceSupabase(), used at :191 and :378) and RLS is not
+     * enforced for the service key, so 080's agency-only INSERT policy is never consulted.
+     * That is not a loophole: a magic-link guest is not `authenticated`, holds a bearer token
+     * rather than a session, and `auth.uid()` is null for them - no policy `TO authenticated`
+     * could ever serve this caller, and the alternative, granting `anon` an INSERT, would be
+     * forgeable by anyone holding the anon key. The token check this route already performed
+     * is a stronger constraint than any RLS predicate could express.
+     *
+     * The authenticated portal bid submit (app/api/partner/rfps/[id]/response/route.ts) is a
+     * SESSION client and gets no emitter here. It is reported, not written.
+     *
+     * ONCE, ON THE TRANSITION. This branch is the first-submission branch: :414 returns 409
+     * for a token already marked submitted, and the edit branch returns before reaching here.
+     * One bid.submit per token, and a later revision records nothing (bid.revise on the edit
+     * branch is the obvious next one and is deliberately not written in this commit).
+     *
+     * IDENTITY. actor_id is null - a guest has no account - and actor_email is the vendor's
+     * address FROM THE TOKEN ROW, never from the request body. That is the shape the writer's
+     * actor_email rule permits, and the only shape it permits.
+     *
+     * PAYLOAD is about this vendor and this scope only: the scope item they were invited to
+     * bid on. Nothing about the other recipients of the same broadcast, nothing about their
+     * bid's contents, and no amount - the agency reads the bid itself in the portal, and a
+     * figure in a counterparty-readable payload is a figure with a second set of read rules.
+     */
+    try {
+      // The partnership the classification above created or found, read back independently
+      // rather than by widening classifyGuestVendorForPool()'s return type - it is what makes
+      // the row reachable by the vendor on their own feed. Same key the classifier uses.
+      const { data: milestonePartnership } = await supabase
+        .from("partnerships")
+        .select("id")
+        .eq("lead_org_id", tokenRow.org_id)
+        .ilike("partner_email", vendorEmail)
+        .limit(1)
+        .maybeSingle()
+
+      // NOT `matchedProfile.id`. insertRow above writes a profiles id into
+      // partner_rfp_responses.vendor_org_id, which is this file's share of the known class B
+      // debt; milestone_events.vendor_org_id REFERENCES organizations(id) and a profiles id
+      // there raises 23503. Resolved properly, and null where the matched person belongs to
+      // no organization - which is the true answer, not a fallback.
+      const milestoneVendorOrgId = matchedProfile?.id
+        ? await resolveOrgIdForUser(matchedProfile.id as string, supabase)
+        : null
+
+      await recordMilestone(supabase, {
+        eventType: "bid.submit",
+        actorSide: "vendor",
+        // The agency. On a vendor-side row org_id still names the agency - it is the column
+        // their SELECT policy reads, and the acting company is carried by vendorOrgId.
+        orgId: orgIdFromColumn(tokenRow.org_id),
+        actorId: null,
+        actorEmail: vendorEmail || null,
+        vendorOrgId: orgIdFromColumn(milestoneVendorOrgId),
+        partnershipId: (milestonePartnership?.id as string | null) ?? null,
+        // The response id, NOT the inbox id - a guest bid has no inbox row at all, and
+        // lib/activity-feed.ts:498 keys the derived union for this type on the response.
+        subjectType: "bid",
+        subjectId: saved.id as string,
+        payload: { scope_item_name: (tokenRow.scope_item_name as string | null)?.trim?.() || null },
+      })
+    } catch (milestoneErr) {
+      // recordMilestone() never throws; this catches the two reads above. A breadcrumb is
+      // strictly less important than the bid it describes, and the bid is already saved.
+      console.error("[api] guest bid submission: milestone context lookup failed (non-fatal)", {
+        route,
+        responseId: saved.id,
+        message: milestoneErr instanceof Error ? milestoneErr.message : String(milestoneErr),
+      })
     }
 
     console.log("[api] success", {
