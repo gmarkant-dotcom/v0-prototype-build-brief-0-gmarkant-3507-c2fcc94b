@@ -90,7 +90,30 @@ type DashboardData = {
     committedSpend: number
     lastActivityAt: string
   }[]
-  activity: { id: string; text: string; href: string; timestamp: string }[]
+  /**
+   * Structurally the same declaration the route builds, kept in step by hand rather than
+   * imported - see the note beside ActivityLine below for why that is deliberate here.
+   *
+   * `text` is a PREDICATE with no leading subject, except for kind "system", which has no
+   * actor and whose predicate is the whole line. `actor.email` exists on guests only, is
+   * agency-only, and is rendered as a hover title - never in the line.
+   */
+  activity: {
+    id: string
+    text: string
+    href: string
+    timestamp: string
+    actor:
+      | { kind: "self" }
+      | { kind: "teammate"; name: string }
+      | { kind: "counterparty"; name: string }
+      | { kind: "guest"; name: string; email?: string | null }
+      | { kind: "system" }
+    count?: number
+    countIsPartial?: boolean
+    projectId?: string | null
+    source: "milestone" | "derived"
+  }[]
 }
 
 const STAGE_STYLES: Record<string, { color: string; bg: string }> = {
@@ -519,6 +542,52 @@ function UsageCard() {
 
 // ── Activity feed ─────────────────────────────────────────────────────────────
 
+/**
+ * One line = actor + predicate.
+ *
+ * The actor kinds are named by RELATION TO THE VIEWER - self / teammate / counterparty /
+ * guest / system - and not by side, so this renderer serves the vendor dashboard unchanged
+ * whenever that feed is built. Kinds named agency/vendor would invert their meaning the
+ * moment the same component was pointed at the other portal, and the branch that
+ * de-emphasises "your own action" would silently de-emphasise the counterparty's instead.
+ *
+ * The visual ranking is the ruling made visible:
+ *   teammate      strongest - this is the line the whole feature exists to produce
+ *   self          muted     - a receipt, not news
+ *   counterparty  unchanged from before the merge
+ *   system        no actor at all; the predicate is the line
+ *
+ * A grouped batch says "to 49 vendors" INSIDE the predicate rather than in a badge beside
+ * it. A "49" pill next to a line reading "broadcast the RFP" invites the reading that it
+ * happened 49 times.
+ *
+ * The guest email is a `title` - available on hover, never in the line. It is the one piece
+ * of identity the agency may see that the line itself will not show.
+ */
+function ActivityLine({ item }: { item: DashboardData["activity"][number] }) {
+  const actor = item.actor
+  if (actor.kind === "system") {
+    return <>{item.text.charAt(0).toUpperCase() + item.text.slice(1)}</>
+  }
+  const label = actor.kind === "self" ? "You" : actor.name
+  return (
+    <>
+      <span
+        className={cn(
+          actor.kind === "teammate" && "font-medium text-foreground",
+          actor.kind === "self" && "text-foreground-muted"
+        )}
+        title={actor.kind === "guest" && actor.email ? actor.email : undefined}
+      >
+        {label}
+      </span>{" "}
+      <span className={cn((actor.kind === "teammate" || actor.kind === "self") && "text-foreground-muted")}>
+        {item.text}
+      </span>
+    </>
+  )
+}
+
 function ActivityFeed({ items }: { items: DashboardData["activity"] }) {
   const { collapsed, toggle } = useSectionCollapse("agency", "recent-activity")
   const { visible, hasMore, expanded, toggle: toggleShowAll, total } = useCappedList(items, SECTION_LIST_CAP)
@@ -543,7 +612,12 @@ function ActivityFeed({ items }: { items: DashboardData["activity"] }) {
             <>
               {visible.map((item) => (
                 <Link key={item.id} href={item.href} className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors">
-                  <span className="flex-1 text-sm text-foreground min-w-0 truncate">{item.text}</span>
+                  {/* truncate stays on the COMBINED run, not on either span - a long
+                      project name inside the predicate must eat the ellipsis rather than
+                      push the timestamp off the row. */}
+                  <span className="flex-1 text-sm text-foreground min-w-0 truncate">
+                    <ActivityLine item={item} />
+                  </span>
                   <span className="font-mono text-2xs text-foreground-muted shrink-0">{formatRelativeTime(item.timestamp)}</span>
                 </Link>
               ))}

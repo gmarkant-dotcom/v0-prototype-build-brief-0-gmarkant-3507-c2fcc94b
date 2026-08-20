@@ -198,6 +198,26 @@ const ALLOWED = [
       "SCOPED so that any future profiles read added to this file is a real finding.",
   },
   {
+    file: "app/api/agency/dashboard/route.ts",
+    // The Recent Activity feed's teammate-name lookup. Line-scoped, so any FUTURE profiles
+    // read added to this route is a real finding rather than something this entry quietly
+    // covers - the same discipline the roster entry above uses, and it fails closed: if the
+    // line shifts, the entry stops matching and the guard fails rather than silently
+    // allowing more.
+    lines: [357],
+    why:
+      "teammateIds are milestone_events.actor_id values. That column is a profiles(id) " +
+      "FOREIGN KEY, declared as one in supabase/migrations/080_milestone_events.sql, and " +
+      "080's own column comment states it in words: \"the acting user, not a company: a " +
+      "profiles.id, and 079 did not rename it\". It is nullable only for guest / magic-link " +
+      "actors with no account, and the route filters those out before this read. The NEARBY " +
+      "heuristic fires because callerOrgIds is in scope in the same 40-line window - that is " +
+      "the milestone_events org_id filter, not this profiles filter. The COMPANY names this " +
+      "route needs are read from organizations a few lines above, through ORG_CONTACT_SELECT " +
+      "and resolveOrgContact(), which is the fix this guard asks for and which is already in " +
+      "place for every vendor name in the same feed.",
+  },
+  {
     file: "app/api/partnerships/route.ts",
     lines: [186],
     why:
