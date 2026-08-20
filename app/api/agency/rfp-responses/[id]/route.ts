@@ -240,16 +240,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     /**
-     * Capability gates. Three transitions on this one route, three separate capabilities,
+     * Capability gates. Five transitions on this one route, five separate capabilities,
      * checked here because this is the last point before any write and the first point where
      * the intended transition is known.
      *
-     * All three are irreversible in the sense docs/capabilities.md uses: each sends mail the
-     * vendor has already read by the time anyone reconsiders. The route's only other gate is
-     * `.in("lead_org_id", callerOrgIds)`, which is ownership - and 079 turns ownership into
-     * membership, at which point every colleague passes it identically and this is the only
-     * thing left that can distinguish an admin from a member. All three resolve true for
-     * everyone today.
+     * The three that send mail are irreversible in the sense docs/capabilities.md uses: each
+     * puts something in front of the vendor that they have already read by the time anyone
+     * reconsiders. The route's only other gate is `.in("lead_org_id", callerOrgIds)`, which is
+     * ownership - and 079 turns ownership into membership, at which point every colleague
+     * passes it identically and this is the only thing left that can distinguish an admin from
+     * a member.
+     *
+     * `bid.shortlist` and `bid.meeting_request` were declared in CAPABILITY_MINIMUM_ROLE
+     * (lib/capabilities.ts:140-141, both "member") and never checked. The declaration is what
+     * every reader of that file takes for the gate, so the route read as gated and was not.
+     * Both now check, in the same shape as the three beside them. Both minimums are "member" and every
+     * organization's owner is also a member, so this denies nobody today - it closes the gap
+     * between what the capability table says and what the route does, before a role below
+     * member exists to fall through it.
+     *
+     * All five resolve true for everyone today.
      */
     const isAwarding = existing.status !== "awarded" && nextStatus === "awarded"
     const isDeclining = existing.status !== "declined" && nextStatus === "declined"
@@ -264,6 +274,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     if (isDeclining && !can(profile, "bid.decline")) {
       return NextResponse.json({ error: capabilityDeniedMessage("bid.decline") }, { status: 403 })
+    }
+    // Gated on the transition, not on the requested status: a re-save of an already-shortlisted
+    // bid is not a shortlist act and must not be refused as one. Same boolean the timestamp
+    // and the milestone use.
+    if (isShortlisting && !can(profile, "bid.shortlist")) {
+      return NextResponse.json({ error: capabilityDeniedMessage("bid.shortlist") }, { status: 403 })
+    }
+    if (isRequestingMeeting && !can(profile, "bid.meeting_request")) {
+      return NextResponse.json({ error: capabilityDeniedMessage("bid.meeting_request") }, { status: 403 })
     }
     // Gated on the same condition that sends the feedback email, so the gate and the
     // irreversible act cannot drift apart: feedback that is not new does not send mail and is
