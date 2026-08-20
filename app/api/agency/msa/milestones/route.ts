@@ -540,28 +540,54 @@ export async function PATCH(req: Request) {
     const id = (body.id as string | undefined)?.trim()
     if (!id) return NextResponse.json({ error: "id is required" }, { status: 400, headers: noStore })
 
+    /**
+     * PREREQUISITES FOR THE payment.mark_paid MILESTONE. NOT THE MILESTONE ITSELF.
+     *
+     * Nothing in this commit emits anything. Three things this handler could not answer are
+     * made answerable, in their own commit, because widening the queries an action runs is a
+     * change to the action - and an emitter is not allowed to make one. The emitter follows
+     * separately and only reads what is derived here.
+     *
+     * 1. `projects` gains `org_id`, so the acting organization can be resolved from the
+     *    milestone's project. This handler resolved `callerOrgIds` and a flat list of project
+     *    ids and had no single org_id to attribute anything to.
+     * 2. The pre-read gains `status`, so a transition into paid can be told apart from a
+     *    re-save of a milestone that was already paid.
+     * 3. The vendor is looked up from `partnerships`, the read the GET half of this file
+     *    already performs at :237-241 and the PATCH half never did.
+     */
     const { data: agencyProjectRows, error: apErr } = await supabase
       .from("projects")
-      .select("id")
+      // 079: org_id is the acting organization. Selected under `.in("org_id", callerOrgIds)`,
+      // so every value returned is provably one of the caller's own.
+      .select("id, org_id")
       .in("org_id", callerOrgIds)
     if (apErr) {
       console.error("[api/agency/msa/milestones] PATCH agency projects", apErr)
       return NextResponse.json({ error: "Failed to verify projects" }, { status: 500, headers: noStore })
     }
     const agencyProjectIds = (agencyProjectRows || []).map((p) => p.id as string)
+    const orgIdByProjectId = new Map<string, string>(
+      (agencyProjectRows || [])
+        .filter((p) => p.id != null && p.org_id != null)
+        .map((p) => [String(p.id), String(p.org_id)] as const)
+    )
     if (agencyProjectIds.length === 0) {
       return NextResponse.json({ error: "Milestone not found" }, { status: 404, headers: noStore })
     }
 
     const { data: existing, error: exErr } = await supabase
       .from("payment_milestones")
-      .select("id")
+      // `status` is the prior value. Without it this handler cannot tell a transition from a
+      // repeat, and every emitter in the product fires on the transition.
+      .select("id, status")
       .eq("id", id)
       .in("project_id", agencyProjectIds)
       .maybeSingle()
     if (exErr || !existing) {
       return NextResponse.json({ error: "Milestone not found" }, { status: 404, headers: noStore })
     }
+    const wasPaid = existing.status === "paid"
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
@@ -601,6 +627,40 @@ export async function PATCH(req: Request) {
       console.error("[api/agency/msa/milestones] PATCH", error)
       return NextResponse.json({ error: error.message }, { status: 500, headers: noStore })
     }
+
+    // The transition, not the requested status: `wasPaid` is the prior value read above, so a
+    // re-save of an already-paid milestone is not a mark-paid act.
+    const isMarkingPaid = !wasPaid && updates.status === "paid"
+
+    // The acting organization, and the vendor being paid. Resolved only on the transition, so
+    // an ordinary edit runs no query it did not run before. Both are non-fatal: this runs
+    // after the update has already succeeded and returned to nobody's detriment, and a
+    // failure here must leave that success exactly as it is.
+    const paidOrgId = isMarkingPaid ? (orgIdByProjectId.get(String(row?.project_id ?? "")) ?? null) : null
+    let paidVendorOrgId: string | null = null
+    const paidPartnershipId = isMarkingPaid ? ((row?.partnership_id as string | null) ?? null) : null
+    if (paidPartnershipId) {
+      const { data: partnershipRow, error: partnershipErr } = await supabase
+        .from("partnerships")
+        // Same read, same scoping, as the GET half of this file at :237-241.
+        .select("id, vendor_org_id")
+        .eq("id", paidPartnershipId)
+        .in("lead_org_id", callerOrgIds)
+        .maybeSingle()
+      if (partnershipErr) {
+        console.error("[api/agency/msa/milestones] PATCH partnership lookup failed (non-fatal)", {
+          milestoneId: id,
+          partnershipId: paidPartnershipId,
+          message: partnershipErr.message,
+          code: partnershipErr.code,
+        })
+      }
+      paidVendorOrgId = (partnershipRow?.vendor_org_id as string | null) ?? null
+    }
+    // paidOrgId / paidVendorOrgId / paidPartnershipId are the emitter's four parameters less
+    // the subject id, which is `id`. Nothing reads them yet, by design - see the block above.
+    void paidOrgId
+    void paidVendorOrgId
 
     return NextResponse.json({ milestone: row }, { headers: noStore })
   } catch (e) {
