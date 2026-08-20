@@ -85,7 +85,11 @@ export type MilestoneEvent = {
   orgId: OrgId | null
   /** The acting USER. Null only for guest / magic-link actors, who have no account. */
   actorId: string | null
-  /** Identity fallback for those actors. Never rendered to a counterparty. */
+  /**
+   * Identity fallback for an actor with no account, and ONLY for one. Setting this beside a
+   * non-null `actorId` is a defect: it is enforced below, not merely asked for. Only ever
+   * rendered to a counterparty as a domain - see `emailDomain()` in lib/activity-feed.ts.
+   */
   actorEmail?: string | null
   /** 079: the counterparty company, when there is one. */
   vendorOrgId?: OrgId | null
@@ -110,13 +114,48 @@ type MilestoneRow = {
   payload: Record<string, unknown>
 }
 
+/**
+ * THE actor_email RULE, ENFORCED HERE RATHER THAN ASKED FOR.
+ *
+ * `actor_email` may be populated only when `actor_id` is null.
+ *
+ * A guest has no account. The address is their only identity, it is the one the agency
+ * themselves sent the invitation to, and without it the row attributes the act to nobody.
+ * An authenticated actor is the opposite case in every respect: they have a profile, the
+ * renderers already join it, and a stored address is a second copy of an identity that is
+ * already resolvable - one that never updates when the profile does, and one sitting in a
+ * column the counterparty can read on every whitelisted event type.
+ *
+ * So the rule is not "prefer the profile". It is that the column has exactly one purpose and
+ * a row with both values set has no reading at all: two identities, one of them stale.
+ *
+ * The enforcement drops the address and keeps the event. A breadcrumb missing an email it was
+ * never allowed to carry is correct; a dropped breadcrumb is not, and this module's whole
+ * contract is that it never costs the caller anything. The drop logs at ERROR because it means
+ * a call site is wrong, and a call site being wrong is something to go and fix.
+ */
+function resolveActorEmail(event: MilestoneEvent): string | null {
+  const email = event.actorEmail ?? null
+  if (email === null) return null
+  if (event.actorId === null) return email
+  console.error(
+    "[milestone] actor_email set beside a non-null actor_id - dropping the address, keeping the event. actor_email is the identity of an actor with NO account and may only be written when actor_id is null.",
+    {
+      eventType: event.eventType,
+      subjectType: event.subjectType,
+      subjectId: event.subjectId ?? null,
+    }
+  )
+  return null
+}
+
 function toRow(event: MilestoneEvent & { orgId: OrgId }): MilestoneRow {
   return {
     org_id: event.orgId,
     vendor_org_id: event.vendorOrgId ?? null,
     partnership_id: event.partnershipId ?? null,
     actor_id: event.actorId,
-    actor_email: event.actorEmail ?? null,
+    actor_email: resolveActorEmail(event),
     // Only the agency side emits today, and migration 080's INSERT policy permits only the
     // agency side. The vendor-side policy and the vendor-side emitters ship together.
     actor_side: "agency",
