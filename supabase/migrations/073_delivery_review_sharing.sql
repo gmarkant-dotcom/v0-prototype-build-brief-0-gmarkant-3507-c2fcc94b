@@ -1,0 +1,473 @@
+-- =====================================================================
+-- Migration 073: a delivery review stops being visible to the vendor the
+--                moment it is completed, and becomes visible only when the
+--                agency deliberately shares that ONE review.
+--
+--   NEW      delivery_reviews.shared_with_vendor      boolean NOT NULL DEFAULT false
+--   NEW      delivery_reviews.shared_with_vendor_at   timestamptz
+--   NEW      delivery_reviews.shared_with_vendor_by   uuid -> profiles(id)
+--   NEW      index delivery_reviews_vendor_shared_idx  (partial)
+--   REPLACED policy "Partners view own complete delivery reviews" (narrowed)
+--   CLEARED  partnerships.reliability_summary / _generated_at  (cache invalidation)
+--
+-- DEFAULT PRIVATE. The column is NOT NULL DEFAULT false, so every review
+-- that exists today and every review written after this file stops being
+-- vendor-readable until somebody sets the flag. That is the point, and it
+-- is a DELIBERATE REMOVAL OF AN EXISTING DISCLOSURE, not a no-op: today
+-- `status = 'complete'` is the whole gate, so completing a review publishes
+-- it to the vendor as a side effect of finishing it.
+--
+-- This file does NOT add a toggle route, a button, or any writer for the
+-- new column. It creates the gate and closes it. Until agency-side code
+-- ships that sets `shared_with_vendor`, NO vendor sees ANY delivery review.
+-- READ "ORDERING AGAINST THE CODE" BELOW BEFORE APPLYING - that is the one
+-- user-visible regression in this file and it is intended, but it is not
+-- something to discover afterwards.
+--
+-- =====================================================================
+-- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
+-- =====================================================================
+--
+-- This file is AUTHORED, NOT APPLIED. Nothing in the session that wrote it
+-- executed a single statement against any database. It is applied by Greg,
+-- by hand, in the Supabase SQL Editor.
+--
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN on LINE 265 and
+-- an explicit COMMIT on LINE 381. They are the only executable occurrences
+-- of either word; every other appearance is inside a comment block.
+--
+-- TO DRY RUN: change the COMMIT; on line 381 to ROLLBACK; and run the whole
+-- file. Every statement executes, every error surfaces, and nothing
+-- persists. Migration 086 shipped with NO transaction control at all, so
+-- that same swap silently did nothing and what was believed to be a dry run
+-- applied for real. Verify before trusting:
+--   grep -n '^BEGIN;$'  -> exactly one hit, line 265
+--   grep -n '^COMMIT;$' -> exactly one hit, line 381
+--
+-- Sequence, in order, no step skipped:
+--
+--   1. Run the PRE-FLIGHT CAPTURE below. It has FOUR queries. P1 and P2 can
+--      stop this migration outright. Read all four before running anything.
+--   2. READ "ORDERING AGAINST THE CODE". One vendor-facing section goes
+--      empty on apply and stays empty until agency code ships. Decide
+--      whether to accept that before applying.
+--   3. Dry run: swap COMMIT for ROLLBACK, run, confirm no errors.
+--   4. Run this file for real. Expect "Success. No rows returned".
+--   5. Run the VERIFICATION block at the foot. Every query states its
+--      expected value. If any one disagrees, roll back with
+--      073_delivery_review_sharing_down.sql.
+--   6. Only then, update the migrations table in LIGAMENT_CONTEXT.md.
+--
+-- =====================================================================
+-- WHAT IS WRONG TODAY
+-- =====================================================================
+--
+-- THE LIVE POLICY, quoted exactly as migration 079 recreated it
+-- (supabase/migrations/079_organizations.sql lines 1207-1214):
+--
+--   CREATE POLICY "Partners view own complete delivery reviews"
+--     ON public.delivery_reviews AS PERMISSIVE FOR SELECT TO authenticated
+--     USING (
+--       status = 'complete'::text
+--       AND EXISTS (
+--         SELECT 1 FROM public.partnerships p
+--         WHERE p.id = delivery_reviews.partnership_id
+--           AND p.vendor_org_id IN (SELECT public.current_user_org_ids())));
+--
+-- `status` is a WORKFLOW state - draft, in_progress, complete. It says the
+-- agency finished writing. It does not say the agency chose to show it to
+-- anyone. Those are two different decisions and one column is carrying
+-- both, so the act of finishing a review is also the act of publishing it,
+-- and there is no way to finish one without publishing it.
+--
+-- RLS is ROW level. The policy above grants the WHOLE ROW, so a vendor who
+-- reads it reads `on_time_notes`, `on_budget_notes`, `client_feedback` and
+-- `ai_delta_summary` as well as the scores. Migration 066's own header
+-- (lines 13-16) records that those four are withheld by THE APP LAYER
+-- ONLY - "the app layer additionally never selects or renders" them. That
+-- is a convention in one query's select list, not a boundary, and it is one
+-- forgotten column away from shipping a client's private feedback about a
+-- vendor to that vendor.
+--
+-- =====================================================================
+-- THE FOUR SITES THIS GATES, AND WHAT EACH DOES AFTER
+-- =====================================================================
+--
+-- S1. THE POLICY ITSELF - the only real gate. Everything else on this list
+--     is downstream of it.
+--       supabase/migrations/079_organizations.sql:1207-1214
+--     After: the same policy AND `shared_with_vendor` is true.
+--
+-- S2. app/partner/projects/page.tsx:685-689 - the vendor's "Performance
+--     Scores" section, which queries delivery_reviews DIRECTLY from the
+--     browser client with `.eq("status", "complete")`.
+--     After: returns zero rows until an agency shares a review. The query
+--     is unchanged and needs no code change - RLS narrows it. The section
+--     already renders nothing on an empty array, and the surrounding code
+--     already treats any error as "do not render" rather than as a crash.
+--
+-- S3. app/api/partner/dashboard/route.ts:293 - the vendor's reliability
+--     block, which counts completed reviews and averages composite_score.
+--     After: hasCompletedReviews false, reviewCount 0, avgCompositeScore
+--     null, until an agency shares a review. Same mechanism as S2.
+--
+-- S4. partnerships.reliability_summary / reliability_summary_generated_at
+--     (migration 066:59-60) - THE ONE RLS CANNOT REACH, and the reason it
+--     is on this list rather than assumed handled.
+--
+--     These two columns are on `partnerships`, not on `delivery_reviews`,
+--     so the policy this file narrows does not govern them. The vendor
+--     reads their own partnership row through
+--
+--       CREATE POLICY "Partners can view their partnerships"
+--         ON public.partnerships AS PERMISSIVE FOR SELECT TO authenticated
+--         USING (vendor_org_id IN (SELECT public.current_user_org_ids()));
+--
+--     which is row level and therefore grants BOTH columns. The only thing
+--     keeping agency-facing AI prose about a vendor away from that vendor
+--     today is that no partner-side query lists the column - the F3 stopgap
+--     recorded at app/api/partner/dashboard/route.ts:277-280, which names
+--     this migration as the real fix.
+--
+--     WHAT THIS FILE ACTUALLY DOES ABOUT IT, AND WHAT IT DOES NOT:
+--
+--     DOES: invalidates the cache. The summary is an AI paragraph computed
+--     over EVERY completed review (see the generator at
+--     app/api/agency/pool/[partnerId]/performance/route.ts:160-221). Under
+--     the new rule most of those reviews are private, so every cached
+--     summary is stale BY CONSTRUCTION the moment this file commits, and a
+--     stale summary is exactly the thing that would leak the content of an
+--     unshared review in prose. Setting both columns NULL removes every
+--     such value that exists.
+--
+--     This is SELF-HEALING for the agency and costs one AI call. The
+--     generator regenerates on a NULL summary - `!reliabilitySummary` is
+--     already one of its three regeneration triggers at line 160 - and
+--     re-caches. No agency-side code change is required for this step.
+--
+--     DOES NOT: stop a REGENERATED summary landing back in the same
+--     vendor-readable column. That is the residual, and it is stated here
+--     rather than buried because it is the reason this file is not the
+--     whole story. Column-level `REVOKE SELECT (reliability_summary)` does
+--     NOT work: privileges are granted to ROLES, both the agency and the
+--     vendor are `authenticated`, and revoking it takes it from both. The
+--     real fix is to move the cache to an agency-only table, which needs
+--     the agency route to read the new location and therefore needs CODE TO
+--     SHIP FIRST. That is a separate migration, deliberately not folded in
+--     here, because this file must not break the agency read.
+--
+-- NOT A GOAL, STATED SO IT IS NOT READ AS AN OVERSIGHT: this file does not
+-- give vendors any read on `delivery_review_scores`. They have none today -
+-- 079 created only "Agencies manage own delivery review scores" - and
+-- adding one would WIDEN vendor visibility in the same file that exists to
+-- narrow it. If shared reviews should carry their per-criterion scores,
+-- that is a product ruling and a separate migration.
+--
+-- =====================================================================
+-- ORDERING AGAINST THE CODE
+-- =====================================================================
+--
+-- THIS FILE MAY SHIP BEFORE ITS CODE. Nothing in the repository reads or
+-- writes `shared_with_vendor`, so no deploy is required to make this file
+-- safe, and no deployed code breaks when it lands. Verified by grep: zero
+-- occurrences of `shared_with_vendor` in app/, lib/, components/ and
+-- scripts/ at the time of authoring.
+--
+-- THE ONE BEHAVIOUR CHANGE, AND IT IS IMMEDIATE: on commit, every vendor's
+-- Performance Scores section (S2) and reliability block (S3) go empty, for
+-- every vendor, at once. There is no partial state and no ramp. Whatever
+-- delivery scores vendors can see today, they stop seeing the moment this
+-- commits, and they do not see them again until agency-side code ships a
+-- per-review share toggle and an agency uses it.
+--
+-- That is the intended end state - default private is the ruling - but it
+-- means this file makes a vendor-facing surface WORSE before the feature
+-- makes it better. Two ways to sequence it, and the choice is Greg's:
+--
+--   A. Apply now. Vendors lose the section immediately; the share toggle
+--      follows. Correct-by-default the whole time, visibly empty in
+--      between. Reversible with the down file at any point.
+--
+--   B. Ship the agency toggle UI first against the column added by a
+--      cut-down version of this file (STEP 1 only, no policy change), then
+--      apply the policy change once agencies have had a chance to share the
+--      reviews they intend to share. Nothing is ever visibly broken, at the
+--      cost of the disclosure staying open for the length of that window.
+--
+-- P4 in the pre-flight tells you how many vendors option A actually
+-- affects. If it is 0, the choice does not matter and A is simpler.
+--
+-- =====================================================================
+-- PRE-FLIGHT CAPTURE. RUN THESE FOUR FIRST. READ ONLY.
+-- =====================================================================
+--
+-- P1. THE ONE THAT CAN STOP THIS MIGRATION. Confirm the policy this file
+--     replaces is exactly what it thinks it is.
+--
+--       SELECT policyname, cmd, roles, qual, with_check
+--       FROM pg_policies
+--       WHERE schemaname = 'public' AND tablename = 'delivery_reviews'
+--       ORDER BY policyname;
+--
+--     EXPECTED: exactly 2 rows.
+--       "Agencies manage own delivery reviews"        cmd = ALL
+--       "Partners view own complete delivery reviews" cmd = SELECT, and its
+--       qual is the one quoted under WHAT IS WRONG TODAY - status =
+--       'complete' AND an EXISTS against partnerships.vendor_org_id.
+--     If the partner policy already mentions shared_with_vendor, this file
+--     has already been applied. If there is a THIRD policy, read it before
+--     applying - this file drops one policy by name and creates one, and a
+--     third grant would survive it and could re-open what this closes.
+--
+-- P2. THE SECOND ONE THAT CAN STOP THIS. Confirm the column does not exist
+--     already under a different definition.
+--
+--       SELECT column_name, data_type, is_nullable, column_default
+--       FROM information_schema.columns
+--       WHERE table_schema = 'public' AND table_name = 'delivery_reviews'
+--       ORDER BY ordinal_position;
+--
+--     EXPECTED: no `shared_with_vendor` row. If one exists and is NULLABLE
+--     or defaults to true, STOP - this file's ADD COLUMN IF NOT EXISTS
+--     would leave that definition in place and the gate would not close.
+--
+-- P3. What this file is about to make invisible. Capture it - after the
+--     commit you cannot tell which reviews used to be readable.
+--
+--       SELECT r.id, r.partnership_id, r.project_id, r.status, r.updated_at,
+--              p.vendor_org_id
+--       FROM public.delivery_reviews r
+--       JOIN public.partnerships p ON p.id = r.partnership_id
+--       WHERE r.status = 'complete' AND p.vendor_org_id IS NOT NULL
+--       ORDER BY r.updated_at DESC;
+--
+--     EXPECTED: whatever it is. THIS IS THE ROLLFORWARD LIST. Every row
+--     here is a review a vendor can read today and cannot read after. If
+--     the intent is to preserve today's visibility for these specific
+--     reviews rather than to close them all, that is the list to feed a
+--     one-off UPDATE ... SET shared_with_vendor = true after applying - and
+--     that decision is Greg's, not this file's, which is why this file does
+--     NOT do it. See STEP 1's note.
+--
+-- P4. How many vendors option A in ORDERING actually affects.
+--
+--       SELECT count(DISTINCT p.vendor_org_id) AS vendor_orgs_losing_scores
+--       FROM public.delivery_reviews r
+--       JOIN public.partnerships p ON p.id = r.partnership_id
+--       WHERE r.status = 'complete' AND p.vendor_org_id IS NOT NULL;
+--
+--     EXPECTED: 0 or a small number. If 0, no vendor can see a delivery
+--     review today and option A costs nothing at all.
+--
+-- =====================================================================
+
+
+BEGIN;
+
+-- ---------------------------------------------------------------------
+-- STEP 1. The flag. Default private.
+--
+-- NOT NULL DEFAULT false, so there is no third state: a review is shared
+-- or it is not, and "nobody has decided yet" is not representable. A
+-- nullable flag would put the decision in the reader's hands - every
+-- consumer would have to pick a meaning for NULL, and the safe pick and
+-- the convenient pick are different, which is how a gate ends up open.
+--
+-- EXISTING ROWS TAKE THE DEFAULT AND BECOME PRIVATE. This is deliberate
+-- and it is the whole behaviour change. Reviews completed before this file
+-- were published to the vendor by the act of completing them; nobody chose
+-- to share them, so nobody's choice is being overridden by closing them.
+-- If today's visibility should be preserved for the rows P3 captured, that
+-- is a separate, deliberate UPDATE run afterwards against that list - not a
+-- DEFAULT true here, which would make the gate ship open and silently
+-- reproduce exactly the disclosure this file exists to close.
+-- ---------------------------------------------------------------------
+ALTER TABLE public.delivery_reviews
+  ADD COLUMN IF NOT EXISTS shared_with_vendor    boolean     NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS shared_with_vendor_at timestamptz NULL,
+  -- The person who shared it. profiles(id) ON DELETE SET NULL, matching
+  -- milestone_events.actor_id (080:262) - a departed colleague must not take
+  -- the review row with them, and losing the attribution is the right cost.
+  ADD COLUMN IF NOT EXISTS shared_with_vendor_by uuid        NULL
+    REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+COMMENT ON COLUMN public.delivery_reviews.shared_with_vendor IS
+  'Per-review vendor visibility. Default false: completing a review does NOT publish it. '
+  'The partner SELECT policy requires this AND status = ''complete''. Migration 073.';
+
+COMMENT ON COLUMN public.delivery_reviews.shared_with_vendor_at IS
+  'When the flag was last set true. Null while unshared. Never a placeholder timestamp.';
+
+COMMENT ON COLUMN public.delivery_reviews.shared_with_vendor_by IS
+  'The profiles.id of the colleague who shared it. Null while unshared, and null again if '
+  'that account is deleted.';
+
+-- ---------------------------------------------------------------------
+-- STEP 2. The index the narrowed policy needs.
+--
+-- PARTIAL, on the exact predicate the vendor read runs: partnership_id,
+-- where the row is both shared and complete. The vendor path is the only
+-- query that filters this way; the agency path filters on org_id and is
+-- already served by idx_delivery_reviews_agency (066:41), which 079's
+-- column rename left in place under its original name.
+--
+-- Partial rather than plain because the shared set is expected to stay a
+-- small minority of the table under a default-private rule, which is
+-- exactly when a partial index earns its keep.
+-- ---------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS delivery_reviews_vendor_shared_idx
+  ON public.delivery_reviews (partnership_id)
+  WHERE shared_with_vendor AND status = 'complete';
+
+-- ---------------------------------------------------------------------
+-- STEP 3. The gate.
+--
+-- DROP then CREATE rather than ALTER POLICY, matching how 079 and 085 do
+-- it: ALTER POLICY ... USING replaces the expression silently and leaves no
+-- trace of what it replaced, and this predicate is worth being explicit
+-- about. IF EXISTS so a re-run after a partial failure is not fatal.
+--
+-- `IN (SELECT public.current_user_org_ids())`, NEVER `= ANY (...)`.
+-- current_user_org_ids() RETURNS SETOF uuid; `= ANY` against a set-returning
+-- function raises 42809 (op ANY/ALL requires array on right side) at plan
+-- time, so the policy would fail every evaluation rather than fail open.
+-- Every predicate 079 wrote uses the IN (SELECT ...) form for this reason.
+--
+-- The order of the two conjuncts is deliberate: `shared_with_vendor` is a
+-- cheap boolean on the row and goes first, so the EXISTS subquery against
+-- partnerships is not evaluated at all for the majority of rows.
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "Partners view own complete delivery reviews" ON public.delivery_reviews;
+
+CREATE POLICY "Partners view own shared delivery reviews"
+  ON public.delivery_reviews AS PERMISSIVE FOR SELECT TO authenticated
+  USING (
+    shared_with_vendor
+    AND status = 'complete'::text
+    AND EXISTS (
+      SELECT 1 FROM public.partnerships p
+      WHERE p.id = delivery_reviews.partnership_id
+        AND p.vendor_org_id IN (SELECT public.current_user_org_ids())));
+
+-- ---------------------------------------------------------------------
+-- STEP 4. Invalidate the reliability cache. See S4 in the header.
+--
+-- Every cached summary was computed over every completed review, and under
+-- the rule this file establishes most of those reviews are private. So each
+-- cached paragraph is now a summary of material the vendor is not entitled
+-- to, sitting in a column the vendor's own partnerships-row SELECT policy
+-- grants them.
+--
+-- NULL, not a placeholder string. The generator's regeneration trigger is
+-- `!reliabilitySummary`
+-- (app/api/agency/pool/[partnerId]/performance/route.ts:160), so NULL is
+-- what makes it recompute; any non-empty sentinel would be treated as a
+-- valid cached summary and rendered to the agency verbatim.
+--
+-- Both columns, together. Clearing the text but leaving the timestamp would
+-- leave `isStale` (line 157-158) comparing a real generated_at against the
+-- newest review and possibly deciding the cache is fresh.
+--
+-- WHERE-guarded so the statement touches only rows that actually hold a
+-- cached value, and the row count it reports is the number of summaries
+-- actually discarded rather than the size of the table.
+-- ---------------------------------------------------------------------
+UPDATE public.partnerships
+   SET reliability_summary              = NULL,
+       reliability_summary_generated_at = NULL
+ WHERE reliability_summary IS NOT NULL
+    OR reliability_summary_generated_at IS NOT NULL;
+
+COMMIT;
+
+
+-- =====================================================================
+-- VERIFICATION. RUN AFTER APPLYING. READ ONLY. EXPECTED VALUES STATED.
+-- =====================================================================
+--
+-- V1. The three columns exist with the right definition. The NOT NULL and
+--     the false default are the gate; a nullable column would not close it.
+--
+--       SELECT column_name, data_type, is_nullable, column_default
+--       FROM information_schema.columns
+--       WHERE table_schema = 'public' AND table_name = 'delivery_reviews'
+--         AND column_name LIKE 'shared\_with\_vendor%'
+--       ORDER BY column_name;
+--
+--     EXPECTED: 3 rows.
+--       shared_with_vendor     boolean     NO  false
+--       shared_with_vendor_at  timestamp with time zone  YES  (null)
+--       shared_with_vendor_by  uuid        YES  (null)
+--
+-- V2. Every existing review is private. This is the assertion that the
+--     default actually took on the rows that were already there.
+--
+--       SELECT count(*) FILTER (WHERE shared_with_vendor)       AS shared,
+--              count(*) FILTER (WHERE NOT shared_with_vendor)   AS private,
+--              count(*)                                         AS total
+--       FROM public.delivery_reviews;
+--
+--     EXPECTED: shared = 0, private = total. If shared is not 0, either
+--     this file was applied twice with an UPDATE in between, or P2's
+--     warning applied and a pre-existing column kept its own default.
+--
+-- V3. Exactly two policies, and the partner one is the new one.
+--
+--       SELECT policyname, cmd, roles, qual
+--       FROM pg_policies
+--       WHERE schemaname = 'public' AND tablename = 'delivery_reviews'
+--       ORDER BY policyname;
+--
+--     EXPECTED: 2 rows.
+--       "Agencies manage own delivery reviews"       ALL,    byte-identical
+--         to what P1 captured - this file must not have moved it.
+--       "Partners view own shared delivery reviews"  SELECT, {authenticated},
+--         qual mentions shared_with_vendor AND status AND
+--         current_user_org_ids.
+--     "Partners view own complete delivery reviews" must be ABSENT. If it
+--     is still present alongside the new one, the DROP did not match and
+--     BOTH policies are live - policies are OR-ed, so the old one would
+--     grant everything the new one withholds and this file has done
+--     nothing. That is the single most important line in this block.
+--
+-- V4. The index exists and is partial.
+--
+--       SELECT indexname, indexdef
+--       FROM pg_indexes
+--       WHERE schemaname = 'public' AND tablename = 'delivery_reviews'
+--       ORDER BY indexname;
+--
+--     EXPECTED: delivery_reviews_vendor_shared_idx present, and its
+--     indexdef ends with a WHERE clause naming shared_with_vendor and
+--     status. No WHERE clause means it was created plain and the partial
+--     definition was lost.
+--
+-- V5. The reliability cache is empty.
+--
+--       SELECT count(*) FILTER (WHERE reliability_summary IS NOT NULL)              AS text_left,
+--              count(*) FILTER (WHERE reliability_summary_generated_at IS NOT NULL) AS stamps_left
+--       FROM public.partnerships;
+--
+--     EXPECTED: 0, 0. A non-zero text_left means STEP 4 did not run - check
+--     that the COMMIT was not still a ROLLBACK from the dry run.
+--
+-- V6. The vendor read is actually closed. The only end-to-end check here,
+--     and the only one that tests the policy rather than its text.
+--
+--     As a vendor account that P3 showed HAS a completed review, from the
+--     app or from an authenticated PostgREST call:
+--
+--       SELECT id, status FROM public.delivery_reviews;
+--
+--     EXPECTED: 0 rows. Then, from the SQL editor, share exactly one:
+--
+--       UPDATE public.delivery_reviews SET shared_with_vendor = true,
+--              shared_with_vendor_at = now()
+--        WHERE id = '<one id from P3>';
+--
+--     and repeat the vendor-side select. EXPECTED: exactly 1 row. Then set
+--     it back to false unless the intent is to leave it shared.
+--
+--     IF THE FIRST SELECT RETURNS ROWS, V3 is the place to look: an
+--     un-dropped old policy is the only way this file leaves the read open.
+-- =====================================================================
