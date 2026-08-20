@@ -5,11 +5,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    instrumentationHook: true,
-    turbo: {
-      resolveExtensions: ['.ts', '.tsx', '.js', '.jsx'],
-    },
+  // `experimental.instrumentationHook` was removed in Next 15 - instrumentation.ts is a
+  // stable convention now and is picked up by its filename alone. Next 16.1.6 does not
+  // recognise the key and silently ignores it, so the file was already loading on the
+  // filename; deleting the key changes nothing except the warning.
+  //
+  // `experimental.turbo` graduated to top-level `turbopack` in Next 15.3. Same shape,
+  // same TurbopackOptions type (config-shared.d.ts), just no longer under experimental.
+  turbopack: {
+    resolveExtensions: ['.ts', '.tsx', '.js', '.jsx'],
   },
   // Keep pdfjs-dist out of the server bundle (native Node resolution; avoids DOMMatrix/Turbopack issues).
   serverExternalPackages: ["pdfjs-dist", "unpdf"],
@@ -32,5 +36,15 @@ export default withSentryConfig(nextConfig, {
   silent: true,
   widenClientFileUpload: true,
   hideSourceMaps: true,
-  disableLogger: true,
+  // Was `disableLogger: true`. This is the exact rewrite the SDK's own compatibility shim
+  // performs (config/withSentryConfig/deprecatedWebpackOptions.js) before warning about it.
+  // Note that neither form does anything on this project: the `webpack.*` options are
+  // documented as having no effect under Turbopack, which is what Next 16 builds with. The
+  // old key was a no-op that warned; the new key is a no-op that does not. Kept rather than
+  // deleted so the intent survives if this ever builds under webpack again.
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
 })
