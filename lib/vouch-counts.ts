@@ -3,66 +3,53 @@
  *
  * WHY THIS FILE EXISTS
  * ---------------------------------------------------------------------------
- * `partner_vouches` currently carries a policy reading
+ * `partner_vouches` used to carry a policy reading
  *
  *   "Anyone can count vouches"  SELECT  {public}  USING (true)
  *
  * A policy grants access to ROWS, never to an aggregate, so `USING (true)` for
- * role `public` hands the complete who-vouched-for-whom graph of the whole
- * platform to anyone holding the publishable anon key. Migration 082 closes
+ * role `public` handed the complete who-vouched-for-whom graph of the whole
+ * platform to anyone holding the publishable anon key. Migration 082 closed
  * that. See supabase/migrations/082_partner_vouches_containment.sql.
  *
- * 082 phase 1 creates two SECURITY DEFINER functions that return the NUMBER
+ * 082 phase 1 created two SECURITY DEFINER functions that return the NUMBER
  * without granting row access:
  *
  *   partner_vouch_count(p_partner_id uuid)      -> bigint
  *   partner_vouch_counts(p_partner_ids uuid[])  -> (vendor_org_id, vouch_count)
  *
- * 082 phase 2 then drops the `USING (true)` policy. The STOP GATE in that file
- * exists because dropping the policy does not make a counting query FAIL - it
- * makes it return 0. PostgREST filters the rows out and reports the count of
- * what survived, which is nothing. Every vouch badge in the product would read
- * zero with no error, no log line and no 500, and a vendor with no vouches
- * looks exactly like a vendor whose count stopped working.
+ * 082 phase 2 then dropped the `USING (true)` policy. Both phases are applied
+ * and verified. These two RPCs are now the only way to obtain a vouch count.
  *
- * THE ORDERING PROBLEM THIS SOLVES
+ * THE FALLBACKS ARE GONE, AND THEY HAD TO GO
  * ---------------------------------------------------------------------------
- * This code ships to production on `main` and deploys immediately. 082 has not
- * been applied, so on the day this lands the two RPCs DO NOT EXIST. A bare
- * `supabase.rpc("partner_vouch_count", ...)` would fail against today's
- * database, which is exactly the failure the STOP GATE is trying to prevent,
- * only in the other direction.
+ * Until phase 2 landed, both functions here fell back to a direct
+ * `partner_vouches` table read when PostgREST reported the RPC missing
+ * (PGRST202). That fallback was correct for exactly as long as the `USING
+ * (true)` policy existed to permit it, and this file said so at the time: "AFTER
+ * 082 PHASE 2 IS APPLIED AND VERIFIED, DELETE THE FALLBACK."
  *
- * So both functions below try the RPC first and fall back to the direct table
- * read ONLY when PostgREST reports that the function is not in the schema
- * cache (error code PGRST202). That makes them correct in all three states:
+ * Leaving it in would have been worse than untidy. With the policy dropped, the
+ * fallback query no longer fails - it returns 0, because PostgREST filters the
+ * rows out and reports the count of what survived, which is nothing. That is the
+ * exact silent zero the STOP GATE in 082 was written to prevent: every vouch
+ * badge in the product reading zero with no error, no log line and no 500, and a
+ * vendor with no vouches looking identical to a vendor whose count stopped
+ * working. Dead code that cannot run is harmless; dead code that CAN run and
+ * quietly answers wrong is a trap.
  *
- *   before 082 phase 1   RPC absent  -> PGRST202 -> table read, permitted by
- *                        the `USING (true)` policy. Correct count.
- *   after phase 1,       RPC present -> RPC used. Correct count. The table is
- *   before phase 2       still readable but is no longer read.
- *   after phase 2        RPC present -> RPC used. Correct count. The fallback
- *                        cannot trigger, because phase 2 never drops the
- *                        functions phase 1 created.
- *
- * The fallback is narrow on purpose. Any other RPC error - a permission
- * failure, a network failure - is NOT swallowed into a table read; it returns
- * an empty count the same way the previous code did on a failed query, and it
- * logs. Falling back on a permission error is how a post-phase-2 silent zero
- * would get reintroduced.
- *
- * AFTER 082 PHASE 2 IS APPLIED AND VERIFIED, DELETE THE FALLBACK.
- * Both fallbacks are marked `082-FALLBACK` so they are greppable. Deleting
- * them is the last step of the 082 rollout and it is a two-function edit in
- * this one file, not a hunt across three call sites.
+ * So an RPC error is now just an RPC error: it logs with its code and returns an
+ * empty count, which is what all three call sites already did on a failed query.
+ * A PGRST202 in those logs means the 082 functions are missing from the schema
+ * cache and every badge is reading zero - that log line is the whole warning
+ * system now, which is why the code is included in it.
  *
  * 079 SEAM
  * ---------------------------------------------------------------------------
  * `partner_vouches.vendor_org_id` and `lead_org_id` are the post-079 names of the two
- * pre-079 vouched-partner / voucher-agency columns. The fallback query below names
- * the old column and is marked "079:" at the site. The RPC parameter names do
- * not change; what changes is that the id passed becomes an organization id
- * rather than a profile id.
+ * pre-079 vouched-partner / voucher-agency columns. The RPC parameter names do
+ * not change; what changes is that the id passed is an organization id rather
+ * than a profile id.
  */
 
 /**
@@ -73,26 +60,15 @@
  * no real safety - and the repository has no generated `Database` types for the
  * strict version to have checked against anyway (docs/079-rename-plan.md, "The one
  * thing to read before anything else").
+ *
+ * `from` is deliberately absent. It was here only for the deleted table-read
+ * fallbacks, and leaving it off means this module cannot reach `partner_vouches`
+ * directly even by accident.
  */
 type PostgrestErrorish = { code?: string; message?: string } | null
 
 type VouchCapableClient = {
   rpc: (fn: string, params?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: PostgrestErrorish }>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  from: (table: string) => any
-}
-
-/**
- * PostgREST's "function not found in the schema cache" code. This is the one and
- * only condition under which the pre-082 table read is still the right answer.
- */
-const FUNCTION_NOT_FOUND = "PGRST202"
-
-function isFunctionMissing(error: PostgrestErrorish): boolean {
-  if (!error) return false
-  if (error.code === FUNCTION_NOT_FOUND) return true
-  // Some PostgREST versions surface the same condition without the code set.
-  return typeof error.message === "string" && /Could not find the function/i.test(error.message)
 }
 
 /**
@@ -102,33 +78,13 @@ function isFunctionMissing(error: PostgrestErrorish): boolean {
 export async function fetchVouchCount(supabase: VouchCapableClient, partnerId: string): Promise<number> {
   const { data, error } = await supabase.rpc("partner_vouch_count", { p_partner_id: partnerId })
 
-  if (!error) {
-    const n = typeof data === "number" ? data : Number(data)
-    return Number.isFinite(n) ? n : 0
-  }
-
-  if (!isFunctionMissing(error)) {
+  if (error) {
     console.error("[vouch-counts] partner_vouch_count failed", { code: error.code, message: error.message })
     return 0
   }
 
-  // 082-FALLBACK: the RPC does not exist yet, so 082 phase 1 has not been applied
-  // and the `USING (true)` policy is still in place. Delete this block once phase 2
-  // is applied and verified.
-  // 079: this names partner_vouches.vendor_org_id - the pre-079 vouched-partner column -
-  // and the id passed is an organization id rather than a profile id.
-  const { count, error: tableError } = (await supabase
-    .from("partner_vouches")
-    .select("*", { count: "exact", head: true })
-    .eq("vendor_org_id", partnerId)) as { count: number | null; error: PostgrestErrorish }
-  if (tableError) {
-    console.error("[vouch-counts] partner_vouches count fallback failed", {
-      code: tableError.code,
-      message: tableError.message,
-    })
-    return 0
-  }
-  return count ?? 0
+  const n = typeof data === "number" ? data : Number(data)
+  return Number.isFinite(n) ? n : 0
 }
 
 /**
@@ -144,47 +100,22 @@ export async function fetchVouchCounts(
 
   const { data, error } = await supabase.rpc("partner_vouch_counts", { p_partner_ids: partnerIds })
 
-  if (!error) {
-    // 079-DEPENDENCY: this reads `vendor_org_id` off the RPC result, which means the
-    // 082 function must have been RECREATED after 079. As authored, partner_vouch_counts()
-    // declares its returned column under the PRE-079 vouched-partner name, not this one.
-    // Re-running 082 phase 1 after 079 is a required step of the release runbook.
-    // If it is skipped, every key here is undefined and every count reads 0, silently.
-    for (const row of (data as Array<{ vendor_org_id?: string; vouch_count?: number | string }> | null) ?? []) {
-      const pid = row?.vendor_org_id
-      if (!pid) continue
-      const n = Number(row.vouch_count)
-      counts.set(pid, Number.isFinite(n) ? n : 0)
-    }
-    return counts
-  }
-
-  if (!isFunctionMissing(error)) {
+  if (error) {
     console.error("[vouch-counts] partner_vouch_counts failed", { code: error.code, message: error.message })
     return counts
   }
 
-  // 082-FALLBACK: see fetchVouchCount above. Delete once 082 phase 2 is applied.
-  // 079: this names partner_vouches.vendor_org_id - the pre-079 vouched-partner column -
-  // and the id passed is an organization id rather than a profile id.
-  const { data: rows, error: tableError } = (await supabase
-    .from("partner_vouches")
-    .select("vendor_org_id")
-    .in("vendor_org_id", partnerIds)) as {
-    data: Array<{ vendor_org_id?: string }> | null
-    error: PostgrestErrorish
-  }
-  if (tableError) {
-    console.error("[vouch-counts] partner_vouches rows fallback failed", {
-      code: tableError.code,
-      message: tableError.message,
-    })
-    return counts
-  }
-  for (const row of rows ?? []) {
+  // This reads `vendor_org_id` off the RPC result. 082 as applied declares
+  // `RETURNS TABLE (vendor_org_id uuid, vouch_count bigint)` (082:330), the post-079
+  // name, so the two agree. If that function were ever recreated from a pre-079 copy of
+  // the file it would return the old vouched-partner name instead, every key here would
+  // be undefined, and every count would read 0 silently. 082's verification step V3
+  // exists to catch exactly that.
+  for (const row of (data as Array<{ vendor_org_id?: string; vouch_count?: number | string }> | null) ?? []) {
     const pid = row?.vendor_org_id
     if (!pid) continue
-    counts.set(pid, (counts.get(pid) ?? 0) + 1)
+    const n = Number(row.vouch_count)
+    counts.set(pid, Number.isFinite(n) ? n : 0)
   }
   return counts
 }
