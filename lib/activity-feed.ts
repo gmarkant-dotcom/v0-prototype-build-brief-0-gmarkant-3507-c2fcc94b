@@ -86,7 +86,7 @@ export type ActivityItem<A extends ActivityActor = ActivityActor> = {
   href: string
   timestamp: string
   actor: A
-  /** >1 when this line stands for a grouped batch. Absent means 1. */
+  /** >1 when this line stands for a grouped batch: DISTINCT VENDORS, not rows. Absent means 1. */
   count?: number
   /** True when the batch was cut by the fetch ceiling and `count` is a floor. Section 1.6. */
   countIsPartial?: boolean
@@ -162,11 +162,26 @@ export function milestoneGroupKey(row: MilestoneFeedRow): string {
 export type MilestoneGroup = {
   /** The row every field of the line is read from. All rows in a group agree on the key. */
   head: MilestoneFeedRow
-  /** How many rows the group stands for. 1 for an ungrouped event. */
+  /** How many ROWS the group stands for. 1 for an ungrouped event. */
   count: number
   /**
-   * True when this group was cut by the fetch ceiling, so `count` is a FLOOR and the line
-   * must render "200+" rather than a bare, wrong "200". Section 1.6.
+   * How many DISTINCT VENDORS those rows are addressed to. Never larger than `count`.
+   *
+   * This is the number "to N vendors" renders, and it is not `count`. An RFP broadcast
+   * writes one row per RECIPIENT PER SCOPE ITEM - `rows` in
+   * app/api/agency/broadcast-rfp/route.ts is built by iterating scope items and recipients -
+   * and the whole broadcast is one insert, so one transaction, so one `created_at`, so one
+   * group. Three scope items sent to twenty vendors is therefore sixty rows in a single
+   * group, and counting rows rendered "broadcast the RFP for Key Art to 60 vendors" to an
+   * agency that had invited twenty companies.
+   *
+   * Counting distinct vendors instead needs no migration, no emitter change and no batch
+   * id: the identity is already on every row. See `vendorIdentity`.
+   */
+  vendorCount: number
+  /**
+   * True when this group was cut by the fetch ceiling, so both counts are FLOORS and the
+   * line must render "200+" rather than a bare, wrong "200". Section 1.6.
    */
   countIsPartial: boolean
 }
@@ -179,6 +194,43 @@ export type GroupingCeilingInfo = {
   singleBatchOverflow: boolean
   /** Rows discarded because their tie group straddled the boundary. */
   discarded: number
+}
+
+/**
+ * Who a milestone row is ADDRESSED TO, as one comparable string. Used only to count
+ * distinct vendors inside a group; never rendered, never returned to a caller.
+ *
+ * The precedence is most-identifying first, and every step of it is already on the row:
+ *
+ *   1. `vendor_org_id` - the vendor's organization. Set on every pool-path broadcast row,
+ *      and on a manual-email row whose address matched a claimed profile.
+ *   2. `partnership_id` - set when the relationship exists but the organization is not
+ *      resolved on this row.
+ *   3. `payload.recipient_email` - the GHOST case, and it is not an edge case: a broadcast
+ *      to addresses with no Ligament account writes rows with both ids null
+ *      (app/api/agency/broadcast-rfp/route.ts:373-380). Without this step every ghost in a
+ *      broadcast would collapse to one identity and the line would say "to 1 vendor",
+ *      which is worse than the over-count it replaces.
+ *   4. The row id - each row that carries no vendor identity at all counts as its own
+ *      recipient, which is exactly the pre-existing behaviour for rows this cannot key.
+ *
+ * READING A SECOND PAYLOAD KEY IS DELIBERATE AND BOUNDED. `payloadString` above is the only
+ * function that puts a payload value anywhere a caller can see it, and that is still true:
+ * the address read here is hashed into a Set, counted, and discarded inside this module. It
+ * never reaches `PredicateInput`, `ActivityItem`, or the wire. The file header's rule is
+ * "no payload passthrough", and a local cardinality count is not a passthrough.
+ *
+ * Known and accepted: one vendor reached BOTH through the pool path and, in the same
+ * broadcast, as a manual address that did not resolve to their organization would count
+ * twice. That requires a duplicate recipient in one request, and it over-counts by one
+ * rather than by a factor of the scope-item count.
+ */
+function vendorIdentity(row: MilestoneFeedRow): string {
+  if (row.vendor_org_id) return `org:${row.vendor_org_id}`
+  if (row.partnership_id) return `pship:${row.partnership_id}`
+  const email = row.payload?.recipient_email
+  if (typeof email === "string" && email.trim()) return `email:${email.trim().toLowerCase()}`
+  return `row:${row.id}`
 }
 
 /**
@@ -237,15 +289,23 @@ export function groupMilestoneRows(
     }
   }
 
+  // Two parallel maps rather than a Set on the group object, so `MilestoneGroup` stays a
+  // plain data shape a caller can construct in a test without knowing how counting works.
   const groups = new Map<string, MilestoneGroup>()
+  const vendorsByKey = new Map<string, Set<string>>()
   for (const row of usable) {
     const key = milestoneGroupKey(row)
     const existing = groups.get(key)
     if (existing) {
       existing.count += 1
     } else {
-      groups.set(key, { head: row, count: 1, countIsPartial: partialAll })
+      groups.set(key, { head: row, count: 1, vendorCount: 1, countIsPartial: partialAll })
+      vendorsByKey.set(key, new Set())
     }
+    vendorsByKey.get(key)!.add(vendorIdentity(row))
+  }
+  for (const [key, group] of groups) {
+    group.vendorCount = vendorsByKey.get(key)?.size ?? group.count
   }
   return Array.from(groups.values())
 }
@@ -275,9 +335,11 @@ type PredicateInput = {
   vendor: string | null
   /** The project's display name, resolved by the caller from an id, never from a payload. */
   project: string | null
-  /** Group size. 1 for an ungrouped event. */
+  /** Group size in ROWS. 1 for an ungrouped event. */
   count: number
-  /** True when `count` is a floor - render "N+". Section 1.6. */
+  /** Distinct vendors the group is addressed to. This is what "to N vendors" renders. */
+  recipientCount: number
+  /** True when the counts are floors - render "N+". Section 1.6. */
   countIsPartial: boolean
 }
 
@@ -290,13 +352,18 @@ function vendorOf(input: PredicateInput): string {
 }
 
 /**
- * "to 49 vendors" is DERIVED from group size and never stored - the stored version leaked
- * how many competitors each vendor was bidding against. The suffix is dropped entirely at
- * count 1, because "to 1 vendor" reads as a defect rather than as a fact.
+ * "to 49 vendors" is DERIVED and never stored - the stored version leaked how many
+ * competitors each vendor was bidding against. The suffix is dropped entirely at one
+ * recipient, because "to 1 vendor" reads as a defect rather than as a fact.
+ *
+ * DERIVED FROM DISTINCT VENDORS, NOT FROM GROUP SIZE. A broadcast writes one row per
+ * recipient PER SCOPE ITEM, so group size is recipients times scope items: three scopes to
+ * twenty vendors counted sixty. See `MilestoneGroup.vendorCount`. A single-scope broadcast
+ * has one row per vendor, so the two numbers are equal there and that line is unchanged.
  */
 function recipients(input: PredicateInput): string {
-  if (input.count <= 1) return ""
-  return ` to ${input.count}${input.countIsPartial ? "+" : ""} vendors`
+  if (input.recipientCount <= 1) return ""
+  return ` to ${input.recipientCount}${input.countIsPartial ? "+" : ""} vendors`
 }
 
 /**
@@ -381,6 +448,7 @@ export function mapMilestoneGroup<A extends ActivityActor>(
     vendor: ctx.counterpartyName(row),
     project: ctx.projectName(projectId),
     count: group.count,
+    recipientCount: group.vendorCount,
     countIsPartial: group.countIsPartial,
   }
   return {
@@ -389,7 +457,10 @@ export function mapMilestoneGroup<A extends ActivityActor>(
     href: ctx.href(row, projectId),
     timestamp: row.created_at,
     actor: ctx.actor(row),
-    ...(group.count > 1 ? { count: group.count } : {}),
+    // The RECIPIENT count, not the row count, so `count` and the rendered "to N vendors"
+    // can never disagree. They differ only for a multi-scope broadcast; for every other
+    // event type each group is one row addressed to one vendor and the two are identical.
+    ...(group.vendorCount > 1 ? { count: group.vendorCount } : {}),
     ...(group.countIsPartial ? { countIsPartial: true } : {}),
     projectId,
     source: "milestone" as const,
