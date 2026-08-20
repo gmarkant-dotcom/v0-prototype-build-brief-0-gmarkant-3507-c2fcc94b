@@ -106,6 +106,61 @@ async function resolveGuestBidContext(
   }
 }
 
+/**
+ * Scope title and partnership for a bid milestone that has no email beside it to have
+ * resolved them already.
+ *
+ * `bid.feedback` and `bid.decline` get both as a by-product of composing their mail: the inbox
+ * row where `inbox_item_id` is set, `resolveGuestBidContext()` where it is not. The shortlist
+ * and meeting-request transitions send no mail, so they have nothing to ride on and make the
+ * same two reads here.
+ *
+ * Non-fatal by construction, like the resolver it wraps. A failed lookup returns nulls and the
+ * milestone records without a scope title, which is exactly what it would have written had the
+ * row genuinely carried none. A breadcrumb never fails a status change.
+ */
+async function resolveBidMilestoneContext(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  {
+    responseId,
+    inboxItemId,
+    callerOrgIds,
+    route,
+  }: { responseId: string; inboxItemId: string | null; callerOrgIds: OrgId[]; route: string }
+): Promise<{ scopeItemName: string | null; partnershipId: string | null }> {
+  // `.eq("id", null)` on a uuid column is a Postgres type error rather than an empty result,
+  // so a guest bid has to skip this query entirely - the same guard the two mail-sending
+  // paths put in front of their own inbox reads.
+  if (inboxItemId) {
+    const { data, error } = await supabase
+      .from("partner_rfp_inbox")
+      .select("scope_item_name, partnership_id")
+      .eq("id", inboxItemId)
+      .in("lead_org_id", callerOrgIds)
+      .maybeSingle()
+    if (error) {
+      console.error("[api] bid milestone context: inbox select failed (non-fatal)", {
+        route,
+        responseId,
+        inbox_item_id: inboxItemId,
+        message: error.message,
+        code: error.code,
+      })
+    }
+    // A real inbox row is authoritative even where its own scope_item_name is blank, matching
+    // the feedback path exactly: the guest fallback is consulted only when there is no row.
+    if (data) {
+      return {
+        scopeItemName: ((data.scope_item_name as string | null) || "").trim() || null,
+        partnershipId: (data.partnership_id as string | null) ?? null,
+      }
+    }
+  }
+
+  const guest = await resolveGuestBidContext(supabase, { responseId, callerOrgIds, route })
+  return { scopeItemName: guest.scopeItemName, partnershipId: guest.partnershipId }
+}
+
 type PatchBody = {
   status?: "submitted" | "under_review" | "shortlisted" | "meeting_requested" | "awarded" | "declined"
   agency_feedback?: string
@@ -198,6 +253,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
      */
     const isAwarding = existing.status !== "awarded" && nextStatus === "awarded"
     const isDeclining = existing.status !== "declined" && nextStatus === "declined"
+    // Named here rather than inline at the timestamp stamping below, so the one expression
+    // that decides "this is the transition" is also the one the milestone fires on. nextStatus
+    // holds a single value, so these two are mutually exclusive and at most one can be true.
+    const isShortlisting = existing.status !== "shortlisted" && nextStatus === "shortlisted"
+    const isRequestingMeeting =
+      existing.status !== "meeting_requested" && nextStatus === "meeting_requested"
     if (isAwarding && !can(profile, "bid.award")) {
       return NextResponse.json({ error: capabilityDeniedMessage("bid.award") }, { status: 403 })
     }
@@ -229,10 +290,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Bid action timestamps (migration 069) - only stamped on the transition into that
     // status, mirroring the awarded_at/decline-email guards below. No timestamp is ever
     // overwritten by a later transition away from and back to the same status.
-    if (existing.status !== "shortlisted" && nextStatus === "shortlisted") {
+    if (isShortlisting) {
       patch.shortlisted_at = patch.updated_at
     }
-    if (existing.status !== "meeting_requested" && nextStatus === "meeting_requested") {
+    if (isRequestingMeeting) {
       patch.meeting_requested_at = patch.updated_at
     }
     if (isDeclining) {
@@ -696,6 +757,58 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         })
         return NextResponse.json({ error: "Bid updated but inbox status sync failed." }, { status: 500 })
       }
+    }
+
+    /**
+     * Milestones: bid.shortlist and bid.meeting_request.
+     *
+     * The two transitions on this route that send no mail, and until now the two that recorded
+     * nothing either - the vendor's own bid moved and the only trace was a timestamp column
+     * nobody renders. Both are on 080's vendor-visible whitelist and both already have a
+     * render string in lib/activity-feed.ts, so the row lands on the vendor's feed the moment
+     * it is written.
+     *
+     * PAYLOAD: `{ scope_item_name }` and nothing else. Specifically NOT a shortlist size, a
+     * position, or a "3 of 11". How many vendors made the shortlist is the size of the field
+     * this vendor is competing against - the same disclosure class as the recipient count
+     * closed on 2026-08-20 - and the agency tells them that nowhere else in the product.
+     *
+     * Fires on the transition only: `isShortlisting` / `isRequestingMeeting` are the same
+     * booleans that stamp shortlisted_at / meeting_requested_at above, so a re-save of an
+     * already-shortlisted bid stamps nothing and records nothing. They are mutually exclusive,
+     * so this block emits at most one row per request.
+     *
+     * Placed after the update, like the other three: an emitter observes an action that has
+     * already succeeded, and recordMilestone() is fire-and-forget, so nothing here can change
+     * the result of the status change it describes.
+     */
+    if (isShortlisting || isRequestingMeeting) {
+      const { scopeItemName, partnershipId } = await resolveBidMilestoneContext(supabase, {
+        responseId: id,
+        // Guest / magic-link bids carry null here and are the common shape on this table -
+        // the resolver falls through to rfp_magic_tokens for them.
+        inboxItemId: (existing.inbox_item_id as string | null) ?? null,
+        callerOrgIds,
+        route,
+      })
+
+      await recordMilestone(supabase, {
+        eventType: isShortlisting ? "bid.shortlist" : "bid.meeting_request",
+        // 079 PARAMETER CLASS: `existing.lead_org_id` was fetched under
+        // `.in("lead_org_id", callerOrgIds)`, so it is provably one of the caller's own
+        // organizations - it clears both 080's org_id foreign key and the SELECT policy's
+        // `org_id IN (SELECT public.current_user_org_ids())`. Identical argument to the three
+        // recordMilestone calls already in this file.
+        orgId: orgIdFromColumn(existing.lead_org_id),
+        actorId: user.id,
+        vendorOrgId: orgIdFromColumn(existing.vendor_org_id),
+        partnershipId,
+        // The same row id bid.award, bid.decline and bid.feedback key on, so the derived
+        // union collapses all four onto one bid.
+        subjectType: "bid",
+        subjectId: id,
+        payload: { scope_item_name: scopeItemName },
+      })
     }
 
     if (shouldSendAgencyFeedbackEmail) {
