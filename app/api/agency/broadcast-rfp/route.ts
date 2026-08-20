@@ -530,6 +530,23 @@ export async function POST(request: NextRequest) {
     // invisible to every vendor it was actually sent to. Emitted after the inbox rows are
     // safely in, and fire-and-forget: a missing breadcrumb must never fail a broadcast that
     // has already sent mail. 079: user.id is the acting company here.
+    //
+    // EVERY FIELD BELOW MUST BE ABOUT THE ONE RECIPIENT THIS ROW IS FOR.
+    // `rfp.broadcast` is on public.vendor_visible_event_types(), and RLS is row level: the
+    // counterparty SELECT policy in migration 080 grants the WHOLE row, `payload` included,
+    // to the vendor org behind this row's partnership_id. So a payload field describing the
+    // BROADCAST rather than the RECIPIENT is read by every vendor in it.
+    //
+    // `recipient_count: rows.length` was exactly that and is removed. It told each vendor
+    // how many competitors were invited - the size of the field they are bidding against,
+    // which the agency never tells them anywhere else. Removed 2026-08-20, before any
+    // rfp.broadcast row had ever been written, so there is nothing to redact.
+    //
+    // The agency still needs "to 49 vendors" on its own feed. It is DERIVED, not stored:
+    // recordMilestones issues one insert for the whole batch, so every row here shares one
+    // transaction timestamp, and the dashboard feed groups on it and counts the group. See
+    // docs/recent-activity-merge-design.md section 1. The count exists agency-side only
+    // because it is never written down.
     await recordMilestones(
       supabase,
       rows.map((row) => ({
@@ -549,7 +566,6 @@ export async function POST(request: NextRequest) {
           recipient_email: (row.recipient_email as string | null) ?? null,
           response_deadline: (row.response_deadline as string | null) ?? null,
           nda_gate_enforced: row.nda_gate_enforced === true,
-          recipient_count: rows.length,
         },
       }))
     )

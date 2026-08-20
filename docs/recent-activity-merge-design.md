@@ -145,6 +145,41 @@ Two consequences, both easy to trip over:
    `projectId` on `ActivityItem` and this loop reads that field. The regex should be deleted
    in the same change; leaving both is how the two drift.
 
+### 1.6 The derived count and the fetch ceiling
+
+`payload.recipient_count` is gone (see the closed finding at the end of this document), so
+"to 49 vendors" is now **group size**, computed from the rows actually fetched. That makes
+the count a function of `ACTIVITY_FETCH_LIMIT`, and the failure is silent unless it is
+handled, so the rule is stated exactly.
+
+Rows come back `ORDER BY created_at DESC LIMIT ACTIVITY_FETCH_LIMIT`. A batch shares one
+timestamp (§1.1), so it is a contiguous run in that ordering — but ties have **no**
+deterministic order within them and `LIMIT` cuts at an arbitrary point inside the tie group
+that straddles the boundary. Only the **oldest** timestamp in the window can straddle it;
+everything newer is fetched whole. So:
+
+- **`rows.length < ACTIVITY_FETCH_LIMIT`** — the query exhausted the table. Every group is
+  complete, every count is exact. This is the only case that occurs at current volume.
+- **`rows.length === ACTIVITY_FETCH_LIMIT` and more than one distinct `created_at` is
+  present** — discard every row at the oldest timestamp. It is the only group that can be
+  short, and it is the group the 15-line display cap was most likely to drop anyway. Every
+  surviving count is then exact.
+- **`rows.length === ACTIVITY_FETCH_LIMIT` and only one distinct `created_at` is present** —
+  a single broadcast is larger than the fetch limit. Discarding it would delete the largest
+  broadcast in the product from the feed, which is worse than an approximate number. Keep it,
+  set `countIsPartial: true`, and render **"to 200+ vendors"**, never a bare "200".
+
+**So, plainly: a broadcast larger than `ACTIVITY_FETCH_LIMIT` can never be counted exactly
+from a capped fetch, and is rendered with a `+` suffix rather than a wrong number.** At 200,
+that needs a single broadcast to 200+ recipients; the largest ever sent is 49. The ceiling
+log from §1.4 is the signal, and it now means two things — the feed may be incomplete *and* a
+count may be short.
+
+An exact count independent of the fetch would need a `GROUP BY`, which PostgREST cannot
+express without an RPC, or one `count: "exact"` query per group. Neither is worth a migration
+or N round trips for a number that is decoration on a feed line. The `+` is the honest answer
+and it costs nothing.
+
 ---
 
 ## 2. The merge: fifth source, not a replacement
@@ -414,16 +449,21 @@ does not port is the key mapping table in §3.2, which is agency-source-specific
 table belongs beside each source loop as a comment, not in a shared constant that pretends to
 be universal.
 
-### One thing found on the way that is not this design's to fix
+### One thing found on the way — CLOSED 2026-08-20
 
-`payload.recipient_count: rows.length` is written on every `rfp.broadcast` row
-(`app/api/agency/broadcast-rfp/route.ts:546`). `rfp.broadcast` is on the vendor-visible
-whitelist, and the counterparty SELECT policy grants the **whole row**, `payload` included.
-So a vendor can read how many vendors the RFP went to — the size of the competitive field. It
-is live today and independent of this design, which reads that field but does not send it
-anywhere new. Flagging it because a vendor feed is the surface that would make it visible,
-and because §1.2's proposed `payload.batch_id` lands in the same vendor-readable payload and
-must therefore be opaque (a random uuid, never a counter, never a recipient list).
+`payload.recipient_count: rows.length` was written on every `rfp.broadcast` row, on a
+whitelisted event type whose counterparty policy grants the **whole row**, `payload`
+included — so every vendor in a broadcast could read how many competitors were invited.
+
+**Removed**, before any `rfp.broadcast` row had ever been written, so nothing needed
+redacting. See `docs/broadcast-payload-leak-fix.md`. The agency's "to 49 vendors" is now
+**derived from the group size** by the rule in §1.1 rather than stored — the count exists
+agency-side precisely because it is never written down. §1.6 states what that costs when the
+group is truncated by `ACTIVITY_FETCH_LIMIT`.
+
+The caution attached to that finding still stands and now applies to §1.2's proposed
+`payload.batch_id`: it lands in the same vendor-readable payload and must therefore be
+opaque — a random uuid, never a counter, never a recipient list.
 
 ---
 
@@ -433,6 +473,7 @@ must therefore be opaque (a random uuid, never a counter, never a recipient list
 |---|---|
 | 1 | Group on exact `created_at` + type + actor + subject; `"-"` sentinel when `subject_id` is null, timestamp carries the discrimination. Add opaque `payload.batch_id` for new rows. |
 | 2 | Group server-side, before the merge, before any cap. Split `ACTIVITY_FETCH_LIMIT = 200` (SQL, both sources) from `RECENT_ACTIVITY_LIMIT = 15` (display, applied last). Log on hitting the ceiling. |
+| 2b | The batch size is **derived**, never stored (the leak fix). Drop the oldest tie group when the fetch hits its ceiling; a single batch bigger than the ceiling renders "200+", never a bare wrong number. |
 | 3 | Keep `lastActivityByProject` on the **uncapped** array and switch it from the href regex to an explicit `projectId`. |
 | 4 | Fifth source, not a replacement. Only `project.create` can retire a union source today; the other three wait on the vendor-side INSERT policy. |
 | 5 | Zero duplicates today, provably. Build subject-identity dedupe now anyway; milestone wins over derived. Require future emitters to key `subject_id` on the row the union source keys on. |
