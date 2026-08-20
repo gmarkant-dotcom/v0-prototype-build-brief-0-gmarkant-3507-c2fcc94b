@@ -50,15 +50,29 @@ async function syncUserProfile(supabase: any, user: any) {
     })
   } else {
     const updatePayload: Record<string, unknown> = {}
-    // migration 056's handle_new_user() trigger inserts every brand-new profile with
-    // role='agency'/active_role='agency' unconditionally, ignoring signup metadata - so by
-    // the time this route runs (right after email confirmation), existingProfile.role is
-    // never null and the old "only set role if not set" guard never fired, silently keeping
-    // every vendor-flavored signup (RFP invite, partnership invite, magic-link "Create
-    // profile") on the agency side. This route only runs once per confirmation link (not on
-    // routine logins - those go through /auth/login directly), so correcting role/active_role
-    // here whenever the signup's own metadata says "partner" cannot clobber an established
-    // dual-role user's later, deliberate active_role choice.
+    // WHAT THIS CORRECTS, AND WHY IT IS NOW A BELT AND NOT THE TROUSERS.
+    //
+    // This comment used to describe migration 056's handle_new_user() as current: a trigger
+    // that inserted every brand-new profile with role='agency' unconditionally, ignoring
+    // signup metadata, so existingProfile.role was never null, the old "only set role if not
+    // set" guard never fired, and every vendor-flavoured signup stayed on the agency side.
+    //
+    // That trigger is gone. 079 PHASE 12 (079_organizations.sql:1841-1926) CREATE OR REPLACEs
+    // handle_new_user() wholesale on a body that reads raw_user_meta_data->>'role', and the
+    // live definition confirms it - dumped 2026-08-20, query D1. The forward defect is closed
+    // at the trigger, and the live data agrees: all 18 accounts carry profiles.role matching
+    // their signup choice, zero mismatches (query D4).
+    //
+    // The correction below stays anyway, and is not dead code. It is the only thing standing
+    // between a vendor and the wrong portal if the trigger is ever bypassed - it does not fire
+    // for every insert path, and this route also handles the branch where the profile row
+    // already existed before confirmation. It is a no-op on every account today, which is
+    // exactly what a belt should be.
+    //
+    // This route runs once per confirmation link, not on routine logins (those go through
+    // /auth/login directly), so correcting role/active_role here whenever the signup's own
+    // metadata says "partner" cannot clobber an established dual-role user's later,
+    // deliberate active_role choice.
     if (role === 'partner' && (existingProfile.role !== 'partner' || existingProfile.active_role !== 'partner')) {
       updatePayload.role = 'partner'
       updatePayload.active_role = 'partner'

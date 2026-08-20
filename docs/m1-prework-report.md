@@ -62,6 +62,28 @@ Nothing else in this run needs you before it is useful.
 
 ## Item 1: the signup role trigger and the role backfill
 
+> ## RETIRED 2026-08-20. DO NOT RUN THE STATEMENTS IN THIS ITEM.
+>
+> Both halves of this item are closed, and neither by anything written here.
+>
+> **The trigger.** 079 PHASE 12 (`079_organizations.sql:1841-1926`) `CREATE OR REPLACE`s
+> `handle_new_user()` wholesale on a body that reads `raw_user_meta_data->>'role'`, and 079 is
+> applied. The live definition was dumped on 2026-08-20 (query D1) and confirms it. Migration
+> 078, which this item was written to accompany, is now strictly OLDER than what is live -
+> running it would remove the organization and owner-membership creation and lock out every
+> account created afterwards. It is marked SUPERSEDED in `LIGAMENT_CONTEXT.md`.
+>
+> **The backfill.** This item measured 15 accounts on 2026-08-17, 7 of which chose `partner` at
+> signup and carried `role='agency'`, and wrote per-account `UPDATE` statements for them below.
+> Live query D4 on 2026-08-20 returns **18 accounts, every one with `profiles.role` matching
+> its signup choice, and zero mismatches.** The backfill has no members. The statements below
+> name specific account ids measured three days earlier and must not be run against today's
+> data; if this is ever reopened, re-measure first.
+>
+> Everything below is kept as the record of how the defect was found and what it cost. It is
+> history, not a to-do list.
+
+
 ### 1.1 What migration 056 says on disk
 
 ```sql
