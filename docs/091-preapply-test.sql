@@ -18,100 +18,109 @@
 -- =====================================================================
 --
 --   1. Paste THIS ENTIRE FILE into one Supabase SQL Editor tab.
---   2. Run it ONCE, as one statement batch. Do NOT run it in pieces:
---      it opens a transaction at the top and closes it with ROLLBACK at
---      the bottom, and running only the first half leaves that
---      transaction open.
---   3. READ THE RESULT GRID. The results arrive as a RESULT SET - a
---      table of seq / test / verdict / detail - not as log output.
+--   2. Run it ONCE, as one statement batch. Do NOT run it in pieces.
+--   3. READ THE ERROR MESSAGE. That is where the result is.
 --
--- >>> EXPECT EXACTLY 17 ROWS. <<<
+-- =====================================================================
+-- >>> THIS FILE ENDS IN AN ERROR. THE ERROR IS THE RESULT.        <<<
+-- >>> A RUN THAT DOES **NOT** ERROR MEANS SOMETHING WENT WRONG.   <<<
+-- =====================================================================
 --
---        11  assertions          T1, T2, T3, T4a-T4e, T5, T6, T7
---         5  tally rows          assertions run, PASS, FAIL,
---                                INCONCLUSIVE, VERDICT
---         1  ROW COUNT CHECK     verdict OK or MISMATCH
---       ----
---        17
+-- The DO block finishes with RAISE EXCEPTION carrying the whole report.
+-- So a correct, healthy, everything-worked run looks like a red error box
+-- with a multi-line message in it. That is not a failure. That IS the
+-- output, and the verdict is the first line of it.
 --
---   COUNT THEM. A grid of 17 rows whose last row says OK is a complete
---   run. FEWER THAN 17 means an assertion ran and logged nothing, and the
---   ROW COUNT CHECK row will say MISMATCH and give both numbers.
+-- WHY IT HAS TO BE AN ERROR, since it looks perverse. Two other
+-- mechanisms were tried against this editor and both were dead ends:
 --
--- WHY IT IS A RESULT SET AND NOT NOTICES. THE SUPABASE SQL EDITOR DOES
--- NOT RENDER NOTICES - it has no Messages panel. An earlier version of
--- this file reported every verdict through RAISE NOTICE alone, and the
--- first real run of it produced "Success. No rows returned": the test had
--- executed correctly and the entire output was invisible. The RAISE
--- NOTICE lines are still here, unchanged, because they cost nothing and
--- they keep the file usable in psql - but THE RESULT SET IS
--- AUTHORITATIVE and the notices are a psql convenience.
+--   RAISE NOTICE - the Supabase SQL Editor has no Messages panel and does
+--   not render notices at all. Every assertion ran, every verdict was
+--   produced, and the editor said "Success. No rows returned".
 --
--- >>> "Success. No rows returned" NOW MEANS SOMETHING WENT WRONG. <<<
+--   A TEMP TABLE AND A FINAL SELECT - the editor returned
+--   3F000 schema "pg_temp" does not exist. That session has no temp
+--   namespace, so no results table can exist in it under any spelling.
+--   Nothing written inside this file can create one.
 --
--- It used to be the expected message. It is not any more. This file ends
--- in a SELECT, so a correct run RETURNS ROWS. "No rows returned" means
--- the SELECT did not run, or your client is showing you the result of the
--- ROLLBACK instead of the result of the SELECT - see THE FALLBACK below.
--- Either way you have learned nothing about 091 and you must not apply it
--- on that basis.
+-- An error is the one channel every SQL client displays. It also aborts
+-- the transaction, which is the same outcome the ROLLBACK at the foot was
+-- always there to produce - so nothing is given up in safety.
 --
--- IT LEAVES NOTHING BEHIND. Every statement below - the CREATE TEMP
--- TABLE, the CREATE FUNCTION, the CREATE TRIGGER, the REVOKEs and every
--- UPDATE - is inside one transaction that ends in ROLLBACK. PostgreSQL
--- rolls back DDL, so after this runs the database is byte-identical to
--- before, whether 091 has been applied or not. The temp table goes with
--- it.
+-- WHAT THE ERROR LOOKS LIKE. Verdict first, tally second, per-assertion
+-- lines last, because a client that truncates a long message truncates
+-- the END of it:
+--
+--     ERROR:  P0001
+--     =====================================================
+--     SAFE TO APPLY 091.  All 11 assertions passed.
+--     =====================================================
+--     assertions run  : 11   (expected 11)
+--     PASS            : 11   (expected 11)
+--     FAIL            : 0    (expected 0)
+--     INCONCLUSIVE    : 0    (expected 0)
+--     verdicts logged : 11   (must equal assertions run: OK)
+--
+--     VERDICT         : SAFE TO APPLY 091.
+--     -----------------------------------------------------
+--       T1  settings-shaped save        PASS          (1 row written)
+--       T2  portal switch (active_role) PASS          (1 row written)
+--       ... nine more ...
+--     =====================================================
+--     This error IS the result. The transaction is rolled back with it.
+--
+-- READ THE FIRST LINE AND NOTHING ELSE IF YOU READ NOTHING ELSE:
+--
+--     "SAFE TO APPLY 091."        -> and only this - apply it.
+--     "DO NOT APPLY 091."         -> an assertion FAILED, or the test
+--                                    itself is broken. Do not apply.
+--     "DO NOT APPLY 091 YET."     -> INCONCLUSIVE. Nothing failed, but
+--                                    the guarded writes were never
+--                                    exercised, so the run says NOTHING
+--                                    about whether the guard bites. IT IS
+--                                    NOT A GREEN LIGHT.
+--
+-- >>> "Success. No rows returned" MEANS THE RUN DID NOT WORK. <<<
+--
+-- It is not the expected message and it never was. If you see it, the DO
+-- block did not reach its RAISE - most likely the batch was run in pieces
+-- or the editor swallowed the error. You have learned nothing about 091
+-- and you must not apply it on that basis.
+--
+-- IT LEAVES NOTHING BEHIND. Every statement below - the CREATE FUNCTION,
+-- the CREATE TRIGGER, the REVOKEs and every UPDATE - is inside one
+-- transaction, and the RAISE EXCEPTION aborts it. PostgreSQL rolls back
+-- DDL, so after this runs the database is byte-identical to before,
+-- whether 091 has been applied or not.
 --
 -- IT IS SAFE TO RUN WHETHER OR NOT 091 IS ALREADY APPLIED. If it is, the
 -- CREATE OR REPLACE and the DROP/CREATE TRIGGER simply reinstall the same
--- objects and the ROLLBACK restores the originals.
+-- objects and the abort restores the originals.
 --
 -- =====================================================================
--- THE ONE FAILURE MODE OF THIS DESIGN: AN ABORTED TRANSACTION
+-- THE ONE FAILURE MODE OF THIS DESIGN: AN EARLY ABORT
 -- =====================================================================
 --
 -- Every assertion is wrapped in its own plpgsql subtransaction with an
 -- EXCEPTION handler, so an expected LG007 is caught and reported. IF ANY
 -- RAISE EVER ESCAPES A HANDLER - a statement outside a BEGIN/EXCEPTION
--- block, or an error class no handler names - THE WHOLE TRANSACTION
--- ABORTS. From that point every later statement, INCLUDING THE FINAL
--- SELECT, returns:
+-- block, or an error class no handler names - the DO block aborts THERE,
+-- before it reaches the report.
 --
---     25P02  current transaction is aborted, commands ignored until end
---            of transaction block
---
--- WHAT YOU WOULD SEE: one error, and NO GRID AT ALL.
+-- WHAT YOU WOULD SEE: an error, as usual, but one WITHOUT the
+-- ===== banner and WITHOUT a tally. A raw SQLSTATE and a one-line
+-- message instead of the report shape above.
 --
 -- >>> THAT OUTCOME IS A FAILURE OF THIS TEST FILE. IT IS NOT A VERDICT
 -- >>> ON MIGRATION 091, IN EITHER DIRECTION. It tells you an assertion
 -- >>> raised outside its handler. It does not tell you the guard works,
 -- >>> and it does not tell you the guard is broken.
 -- >>>
--- >>> DO NOT APPLY 091 ON THAT RESULT. Fix the escaping raise, re-run,
--- >>> and get 17 rows.
+-- >>> DO NOT APPLY 091 ON THAT RESULT. Fix the escaping raise and re-run
+-- >>> until you get the banner and a tally.
 --
--- =====================================================================
--- THE FALLBACK, IF YOUR CLIENT SHOWS NO GRID
--- =====================================================================
---
--- Some clients render only the LAST result set in a batch, and in this
--- file the ROLLBACK follows the SELECT. If that is what you are hitting -
--- the run succeeds, no error, but no grid - this reports the tally as an
--- ERROR instead, and an error is displayed by every client there is. It
--- also aborts the transaction, which is the SAME outcome as the ROLLBACK:
--- nothing persists either way.
---
--- ONE UNCOMMENT. Replace the final `END` of the DO block in section B
--- with the four lines below. You lose the per-assertion grid and keep the
--- tally, so use it to find out whether the run is working at all, then
--- put it back.
---
---     RAISE EXCEPTION
---       '091 PRE-APPLY: ran=% (expected 11)  PASS=%  FAIL=%  INCONCLUSIVE=%  VERDICT: %',
---       v_ran, v_pass, v_fail, v_inconc, v_verdict_text;
---     END
---
+-- TELLING THE TWO ERRORS APART IS THE WHOLE SKILL HERE: an error with the
+-- banner and a tally is the report. An error without them is a crash.
 --
 -- =====================================================================
 -- HOW TO READ IT. AN ERROR IS A PASS FOR SOME OF THESE.
@@ -180,13 +189,16 @@
 -- NEW COLUMN. A test file that tests last week's function is worse than
 -- no test file.
 --
--- THREE NUMBERS MOVE TOGETHER when you add an assertion, and all three
--- are hard-coded: the `v_ran = 11` term in the VERDICT condition, the
--- 'expected 11' strings in the tally rows, and THE EXPECTED ROW COUNT OF
--- 17 stated above and in section C. A set of six guarded columns makes
--- them 12, 12 and 18. The ROW COUNT CHECK row does NOT catch a missed
--- update to those - it checks that every assertion that RAN also logged,
--- which is a different question.
+-- TWO NUMBERS MOVE TOGETHER when you add an assertion, and both are
+-- hard-coded: the `v_ran = 11` term in the VERDICT condition, and the
+-- '(expected 11)' strings in the tally the report prints. A sixth guarded
+-- column makes them both 12.
+--
+-- THE SELF-CHECK DOES NOT CATCH A MISSED UPDATE TO THOSE, and it is worth
+-- knowing what it does and does not do. It compares v_logged against
+-- v_ran - two counters incremented in different places - so it catches an
+-- assertion that RAN WITHOUT REPORTING. It cannot catch a stale literal in
+-- a comparison, because nothing counts those.
 -- =====================================================================
 
 
@@ -194,87 +206,41 @@ BEGIN;
 
 
 -- =====================================================================
--- SECTION 0. WHERE THE RESULTS GO.
+-- SECTION 0. WHERE THE RESULTS GO. READ THIS FIRST.
 --
--- THE SUPABASE SQL EDITOR DOES NOT RENDER NOTICES. It has no Messages
--- panel, so RAISE NOTICE output is invisible in the only client this
--- project uses - the file runs, every assertion executes, and the editor
--- says "Success. No rows returned". That is what happened the first time
--- this was run.
+-- >>> THE RESULT OF THIS FILE ARRIVES AS AN ERROR. THAT IS CORRECT. <<<
 --
--- So every verdict is ALSO written to this table, and section C SELECTs
--- it as the last statement inside the transaction. THE RESULT SET IS THE
--- AUTHORITATIVE OUTPUT. The RAISE NOTICE lines are kept because they cost
--- nothing and they keep the file usable in psql, where notices DO render.
+-- Two reporting mechanisms were tried against the Supabase SQL Editor and
+-- both failed, for different reasons. This is the third, and the reason
+-- it works is that an error is the ONE thing every client displays.
 --
--- NO `ON COMMIT DROP`, DELIBERATELY. This transaction ends in ROLLBACK,
--- never in COMMIT, so an ON COMMIT clause would describe an event that
--- never happens and would read as though the table outlives the run. It
--- does not: CREATE TEMP TABLE is DDL, PostgreSQL rolls DDL back, and the
--- ROLLBACK at the foot of this file removes the table along with
--- everything else. Nothing persists either way; this spelling just does
--- not lie about the reason.
+--   ATTEMPT 1 - RAISE NOTICE.  The editor has no Messages panel and does
+--   not render notices at all. Every assertion ran and the entire output
+--   was invisible: the editor reported "Success. No rows returned".
 --
+--   ATTEMPT 2 - a temp table plus a final SELECT.  The editor returned
+--   3F000 schema "pg_temp" does not exist - the first rung of the ladder
+--   this file used to document. THAT SESSION HAS NO TEMP NAMESPACE, so a
+--   results table cannot exist in it under any spelling, qualified or
+--   not. No in-file change can create one.
+--
+--   ATTEMPT 3 - THIS ONE.  Every verdict is accumulated into a plain text
+--   variable and the DO block ends with RAISE EXCEPTION carrying it. No
+--   table, no temp schema, no result set, no notices. An error is
+--   displayed by every SQL client there is, and it aborts the
+--   transaction, which is the same outcome the ROLLBACK at the foot was
+--   always there to produce. NOTHING PERSISTS EITHER WAY.
+--
+-- WHAT REPLACED WHAT, so the shape is not mistaken for an accident:
+-- v_lines accumulates one line per assertion in the order they run, using
+-- the same wording the table rows carried. v_logged counts them, and is
+-- checked against v_ran - which the assertions increment independently -
+-- so an assertion that ran without logging still shows up.
+--
+-- THE RAISE NOTICE LINES ARE ALL KEPT AND UNCHANGED. They cost nothing
+-- and they are the whole output in psql, where notices do render. They
+-- are simply not the mechanism this file relies on any more.
 -- =====================================================================
--- EVERY REFERENCE TO THIS TABLE IS WRITTEN pg_temp._lg091_results,
--- INCLUDING THIS CREATE. DO NOT "SIMPLIFY" THE QUALIFIER AWAY.
--- =====================================================================
---
--- The unqualified spelling shipped first and a real run in the Supabase
--- SQL Editor returned, on the first INSERT:
---
---     ERROR: 42P01: relation "_lg091_results" does not exist
---
--- The table had been created. It was the NAME that did not resolve.
---
--- THE DISTINCTION THAT MATTERS, AND IT IS THE WHOLE REASON THIS LOOKS
--- REDUNDANT. `pg_temp` behaves differently in the two places it can
--- appear:
---
---   AS A search_path ENTRY it is unreliable. PostgreSQL resolves the
---   literal `pg_temp` to the session's real temp schema - pg_temp_N -
---   when it RECOMPUTES the path. If the session had no temp namespace at
---   that moment, the entry resolves to nothing and silently drops off,
---   and every unqualified relation name stops finding the temp schema.
---   Nothing warns. You get 42P01 on a table you just created.
---
---   AS A QUALIFIER it is reliable. `pg_temp.x` is resolved at USE time,
---   against this session's temp namespace, every time. It does not
---   depend on any search_path, on who set one, or on when.
---
--- So the qualifier is not belt-and-braces around the same mechanism. It
--- is a DIFFERENT mechanism, and it is the one that holds.
---
--- WHERE THE BAD search_path CAME FROM IS NOT IN THIS FILE, and that was
--- checked rather than assumed: the only `SET search_path` here is the
--- one on profiles_guard_authority_columns() below, which is a FUNCTION
--- ATTRIBUTE copied byte-identically from migration 091 - it applies
--- while that function runs and to nothing else, and that function never
--- touches this table. It must stay exactly as it is or this file stops
--- testing the real migration. The path that failed belongs to the
--- executing client's own session or wrapper.
---
--- IF IT FAILS AGAIN, THE NEW ERROR NAMES THE CAUSE. Qualification turns
--- one ambiguous error into three that can be told apart:
---
---   3F000  schema "pg_temp" does not exist
---          -> this session has NO temp namespace, so the CREATE above ran
---             somewhere else. The client is splitting the batch across
---             connections and no in-file change can fix it.
---   42P01  relation "pg_temp._lg091_results" does not exist
---          -> the temp schema is there and the table is not: the CREATE
---             did not run, or was rolled back before the reference.
---   42501  permission denied for schema pg_temp_N
---          -> a role change is still in effect at that statement.
---
--- =====================================================================
--- =====================================================================
-CREATE TEMP TABLE pg_temp._lg091_results (
-  seq     integer GENERATED ALWAYS AS IDENTITY,
-  test    text,
-  verdict text,
-  detail  text
-);
 
 
 -- =====================================================================
@@ -365,7 +331,13 @@ DECLARE
   v_ran        integer := 0;
   v_verdict      text;
   v_verdict_text text;
-  v_rows_logged  integer;
+  -- THE ACCUMULATOR AND ITS COUNTER. v_lines holds one line per assertion,
+  -- appended in the order the assertions run. v_logged counts them and is
+  -- checked against v_ran at the foot - see THE SELF-CHECK there.
+  v_lines        text := '';
+  v_logged       integer := 0;
+  v_headline     text;
+  v_report       text;
 BEGIN
   -- THE SUBJECT. One real profile, chosen deterministically so a re-run
   -- exercises the same row. Nothing is written to it that outlives this
@@ -417,19 +389,19 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T1  settings-shaped save          PASS   (1 row written)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T1  settings-shaped save', 'PASS', '(1 row written)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T1  settings-shaped save', 34) || rpad('PASS', 14) || '(1 row written)';
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T1  settings-shaped save          FAIL   <- matched % rows, expected 1. A zero-row write is not a success.', v_rows;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T1  settings-shaped save', 'FAIL', format('matched %s rows, expected 1. A zero-row write is not a success.', v_rows));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T1  settings-shaped save', 34) || rpad('FAIL', 14) || format('matched %s rows, expected 1. A zero-row write is not a success.', v_rows);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T1  settings-shaped save          FAIL   <- % %  DO NOT APPLY 091.', SQLSTATE, SQLERRM;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T1  settings-shaped save', 'FAIL', format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T1  settings-shaped save', 34) || rpad('FAIL', 14) || format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM);
     v_fail := v_fail + 1;
   END;
 
@@ -454,19 +426,19 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T2  portal switch (active_role)   PASS   (1 row written)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T2  portal switch (active_role)', 'PASS', '(1 row written)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T2  portal switch (active_role)', 34) || rpad('PASS', 14) || '(1 row written)';
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T2  portal switch (active_role)   FAIL   <- matched % rows, expected 1.', v_rows;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T2  portal switch (active_role)', 'FAIL', format('matched %s rows, expected 1.', v_rows));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T2  portal switch (active_role)', 34) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T2  portal switch (active_role)   FAIL   <- % %  DO NOT APPLY 091.', SQLSTATE, SQLERRM;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T2  portal switch (active_role)', 'FAIL', format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T2  portal switch (active_role)', 34) || rpad('FAIL', 14) || format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM);
     v_fail := v_fail + 1;
   END;
 
@@ -490,19 +462,19 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T3  self-grant secondary_role     PASS   (1 row written)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T3  self-grant secondary_role', 'PASS', '(1 row written)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T3  self-grant secondary_role', 34) || rpad('PASS', 14) || '(1 row written)';
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T3  self-grant secondary_role     FAIL   <- matched % rows, expected 1.', v_rows;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T3  self-grant secondary_role', 'FAIL', format('matched %s rows, expected 1.', v_rows));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T3  self-grant secondary_role', 34) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T3  self-grant secondary_role     FAIL   <- % %  DO NOT APPLY 091.', SQLSTATE, SQLERRM;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T3  self-grant secondary_role', 'FAIL', format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T3  self-grant secondary_role', 34) || rpad('FAIL', 14) || format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM);
     v_fail := v_fail + 1;
   END;
 
@@ -523,24 +495,24 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4a self-grant is_paid            FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T4a self-grant is_paid', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T4a self-grant is_paid', 34) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows);
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4a self-grant is_paid            PASS   (refused, LG007)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4a self-grant is_paid', 'PASS', '(refused, LG007)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4a self-grant is_paid', 34) || rpad('PASS', 14) || '(refused, LG007)';
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4a self-grant is_paid            INCONCLUSIVE  42501: authenticated holds no UPDATE on profiles. See the header.';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4a self-grant is_paid', 'INCONCLUSIVE', '42501: authenticated holds no UPDATE on profiles. See the header.');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4a self-grant is_paid', 34) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE on profiles. See the header.';
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4a self-grant is_paid            FAIL   <- refused, but with the WRONG error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4a self-grant is_paid', 'FAIL', format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4a self-grant is_paid', 34) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
@@ -558,24 +530,24 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4b self-grant is_admin           FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T4b self-grant is_admin', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T4b self-grant is_admin', 34) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows);
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4b self-grant is_admin           PASS   (refused, LG007)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4b self-grant is_admin', 'PASS', '(refused, LG007)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4b self-grant is_admin', 34) || rpad('PASS', 14) || '(refused, LG007)';
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4b self-grant is_admin           INCONCLUSIVE  42501, see T4a.';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4b self-grant is_admin', 'INCONCLUSIVE', '42501, see T4a.');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4b self-grant is_admin', 34) || rpad('INCONCLUSIVE', 14) || '42501, see T4a.';
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4b self-grant is_admin           FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4b self-grant is_admin', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4b self-grant is_admin', 34) || rpad('FAIL', 14) || format('wrong error: %s %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
@@ -592,24 +564,24 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4c self-grant demo_access        FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T4c self-grant demo_access', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T4c self-grant demo_access', 34) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows);
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4c self-grant demo_access        PASS   (refused, LG007)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4c self-grant demo_access', 'PASS', '(refused, LG007)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c self-grant demo_access', 34) || rpad('PASS', 14) || '(refused, LG007)';
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4c self-grant demo_access        INCONCLUSIVE  42501, see T4a.';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4c self-grant demo_access', 'INCONCLUSIVE', '42501, see T4a.');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c self-grant demo_access', 34) || rpad('INCONCLUSIVE', 14) || '42501, see T4a.';
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4c self-grant demo_access        FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4c self-grant demo_access', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c self-grant demo_access', 34) || rpad('FAIL', 14) || format('wrong error: %s %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
@@ -628,24 +600,24 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4d rewrite email                 FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T4d rewrite email', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T4d rewrite email', 34) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows);
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4d rewrite email                 PASS   (refused, LG007)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4d rewrite email', 'PASS', '(refused, LG007)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d rewrite email', 34) || rpad('PASS', 14) || '(refused, LG007)';
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4d rewrite email                 INCONCLUSIVE  42501, see T4a.';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4d rewrite email', 'INCONCLUSIVE', '42501, see T4a.');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d rewrite email', 34) || rpad('INCONCLUSIVE', 14) || '42501, see T4a.';
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4d rewrite email                 FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4d rewrite email', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d rewrite email', 34) || rpad('FAIL', 14) || format('wrong error: %s %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
@@ -662,24 +634,24 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4e claim linked_agency_id        FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T4e claim linked_agency_id', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T4e claim linked_agency_id', 34) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows);
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4e claim linked_agency_id        PASS   (refused, LG007)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4e claim linked_agency_id', 'PASS', '(refused, LG007)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e claim linked_agency_id', 34) || rpad('PASS', 14) || '(refused, LG007)';
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4e claim linked_agency_id        INCONCLUSIVE  42501, see T4a.';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4e claim linked_agency_id', 'INCONCLUSIVE', '42501, see T4a.');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e claim linked_agency_id', 34) || rpad('INCONCLUSIVE', 14) || '42501, see T4a.';
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4e claim linked_agency_id        FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T4e claim linked_agency_id', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e claim linked_agency_id', 34) || rpad('FAIL', 14) || format('wrong error: %s %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
@@ -714,19 +686,19 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T5  no-op write, all five back    PASS   (early return, 1 row)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T5  no-op write, all five back', 'PASS', '(early return, 1 row)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T5  no-op write, all five back', 34) || rpad('PASS', 14) || '(early return, 1 row)';
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T5  no-op write, all five back    FAIL   <- matched % rows, expected 1.', v_rows;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T5  no-op write, all five back', 'FAIL', format('matched %s rows, expected 1.', v_rows));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T5  no-op write, all five back', 34) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T5  no-op write, all five back    FAIL   <- % %  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T5  no-op write, all five back', 'FAIL', format('%s %s  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T5  no-op write, all five back', 34) || rpad('FAIL', 14) || format('%s %s  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM);
     v_fail := v_fail + 1;
   END;
 
@@ -754,19 +726,19 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T6  no-session write is exempt    PASS   (1 row written)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T6  no-session write is exempt', 'PASS', '(1 row written)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T6  no-session write is exempt', 34) || rpad('PASS', 14) || '(1 row written)';
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T6  no-session write is exempt    FAIL   <- matched % rows, expected 1.', v_rows;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T6  no-session write is exempt', 'FAIL', format('matched %s rows, expected 1.', v_rows));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T6  no-session write is exempt', 34) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T6  no-session write is exempt    FAIL   <- % %  091 WOULD BLOCK MIGRATIONS. DO NOT APPLY.', SQLSTATE, SQLERRM;
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T6  no-session write is exempt', 'FAIL', format('%s %s  091 WOULD BLOCK MIGRATIONS. DO NOT APPLY.', SQLSTATE, SQLERRM));
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T6  no-session write is exempt', 34) || rpad('FAIL', 14) || format('%s %s  091 WOULD BLOCK MIGRATIONS. DO NOT APPLY.', SQLSTATE, SQLERRM);
     v_fail := v_fail + 1;
   END;
 
@@ -783,19 +755,19 @@ BEGIN
        SET active_org_id = '00000000-0000-0000-0000-000000000000'
      WHERE id = v_uid;
     RAISE NOTICE 'T7  090 guard still bites         FAIL   <- SUCCEEDED. 090s trigger is not firing.';
-    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-      ('T7  090 guard still bites', 'FAIL', 'SUCCEEDED. 090s trigger is not firing.');
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T7  090 guard still bites', 34) || rpad('FAIL', 14) || 'SUCCEEDED. 090s trigger is not firing.';
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG005' THEN
       RAISE NOTICE 'T7  090 guard still bites         PASS   (refused, LG005 - 090s code, not 091s)';
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T7  090 guard still bites', 'PASS', '(refused, LG005 - 090s code, not 091s)');
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T7  090 guard still bites', 34) || rpad('PASS', 14) || '(refused, LG005 - 090s code, not 091s)';
       v_pass := v_pass + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T7  090 guard still bites         FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-        ('T7  090 guard still bites', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T7  090 guard still bites', 34) || rpad('FAIL', 14) || format('wrong error: %s %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
@@ -807,13 +779,15 @@ BEGIN
   RAISE NOTICE 'PASS           : %', v_pass;
   RAISE NOTICE 'FAIL           : %', v_fail;
   RAISE NOTICE 'INCONCLUSIVE   : %', v_inconc;
-  -- THE CONDITIONS BELOW ARE UNCHANGED. The only additions are the two
-  -- variables, so the verdict can be written to the result set as well as
-  -- to a notice nobody can see.
+  -- THE CONDITIONS BELOW ARE UNCHANGED, across two reporting rewrites now.
+  -- The only additions are the variables that carry the verdict into the
+  -- raised message, because neither a notice nor a result set can be seen
+  -- in the editor this has to run in.
   IF v_fail = 0 AND v_inconc = 0 AND v_ran = 11 AND v_pass = 11 THEN
     RAISE NOTICE 'VERDICT        : SAFE TO APPLY 091.';
     v_verdict      := 'SAFE TO APPLY';
     v_verdict_text := 'SAFE TO APPLY 091.';
+    v_headline     := format('SAFE TO APPLY 091.  All %s assertions passed.', v_pass);
   ELSIF v_inconc > 0 AND v_fail = 0 THEN
     RAISE NOTICE 'VERDICT        : nothing is BROKEN, but the guarded writes could';
     RAISE NOTICE '                 not be exercised - authenticated appears to hold';
@@ -821,56 +795,95 @@ BEGIN
     RAISE NOTICE '                 applying: 091 may be unnecessary.';
     v_verdict      := 'INCONCLUSIVE';
     v_verdict_text := 'nothing is BROKEN, but the guarded writes could not be exercised - authenticated appears to hold no UPDATE on profiles. Settle that before applying: 091 may be unnecessary.';
+    -- NOT A GREEN LIGHT, and the first line has to say so. Nothing FAILED,
+    -- but the writes 091 exists to refuse were never actually attempted, so
+    -- this run says nothing at all about whether the guard bites.
+    v_headline     := format('DO NOT APPLY 091 YET.  %s assertion(s) INCONCLUSIVE - nothing FAILED, but the guarded writes were never exercised, so this run does NOT show the guard works. It is not a green light.', v_inconc);
   ELSE
     RAISE NOTICE 'VERDICT        : DO NOT APPLY. Read every FAIL line above.';
     v_verdict      := 'DO NOT APPLY';
     v_verdict_text := 'DO NOT APPLY. Read every FAIL row above.';
+    v_headline     := format('DO NOT APPLY 091.  %s assertion(s) FAILED.', v_fail);
   END IF;
 
-  -- THE TALLY, AS ROWS. Five of them, matching the five notices above.
-  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-    ('TALLY  assertions run', v_ran::text,    'expected 11');
-  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-    ('TALLY  PASS',           v_pass::text,   'expected 11');
-  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-    ('TALLY  FAIL',           v_fail::text,   'expected 0');
-  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-    ('TALLY  INCONCLUSIVE',   v_inconc::text, 'expected 0');
-  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-    ('VERDICT',               v_verdict,      v_verdict_text);
+  -- THE SELF-CHECK OVERRIDES THE HEADLINE, and it is an ADDITION - the
+  -- condition above is untouched. If an assertion ran without logging a
+  -- line, the report is incomplete and no verdict drawn from it can be
+  -- trusted, including a clean one. That has to outrank SAFE TO APPLY.
+  IF v_logged <> v_ran THEN
+    v_headline := format('DO NOT APPLY 091.  THE TEST ITSELF IS BROKEN: %s assertions ran but %s logged a verdict. The report below is incomplete and no verdict drawn from it means anything.', v_ran, v_logged);
+  END IF;
 
-  -- THE SELF-CHECK. It catches the one thing this reporting change could
-  -- have broken: a report site that got a notice and no INSERT. The DO
-  -- block counts assertions in v_ran independently of the table, so if an
-  -- assertion ran and did not log, the two numbers disagree HERE, in the
-  -- output, rather than showing up as a silently shorter grid that looks
-  -- fine unless you happen to know how many rows to expect.
-  SELECT count(*) INTO v_rows_logged FROM pg_temp._lg091_results;
-  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
-    ('ROW COUNT CHECK',
-     CASE WHEN v_rows_logged = v_ran + 5 THEN 'OK' ELSE 'MISMATCH' END,
-     format('%s rows logged before this one; expected %s, being %s assertions plus 5 tally rows. With this row the grid is %s rows. MISMATCH means an assertion ran but logged nothing - a report site was missed, and the grid is incomplete.',
-            v_rows_logged, v_ran + 5, v_ran, v_rows_logged + 1));
   RAISE NOTICE 'Everything above is about to be rolled back.';
   RAISE NOTICE '=====================================================';
+
+  -- =================================================================
+  -- THE REPORT.
+  --
+  -- ORDER IS LOAD-BEARING: HEADLINE, THEN TALLY, THEN THE PER-ASSERTION
+  -- LINES. A client that truncates a long error message truncates the
+  -- END of it, so the verdict and the counts must be at the TOP where
+  -- they survive. The 11 detail lines are the part that can afford to be
+  -- cut off - if they are, the tally still says how many failed and the
+  -- headline still says whether to apply.
+  -- =================================================================
+  v_report :=
+       E'\n'
+    || E'=====================================================\n'
+    || v_headline || E'\n'
+    || E'=====================================================\n'
+    || format(E'assertions run  : %s   (expected 11)\n', v_ran)
+    || format(E'PASS            : %s   (expected 11)\n', v_pass)
+    || format(E'FAIL            : %s   (expected 0)\n',  v_fail)
+    || format(E'INCONCLUSIVE    : %s   (expected 0)\n',  v_inconc)
+    -- THE SELF-CHECK, IN THE OUTPUT RATHER THAN INFERRED FROM IT. v_ran is
+    -- incremented by the assertions themselves and v_logged by the report
+    -- sites, so the two numbers are counted independently. Equal means every
+    -- assertion that ran also reported. Unequal means a report site was
+    -- missed and the lines below are incomplete - which is why it overrides
+    -- the headline above rather than sitting quietly in a footnote.
+    || format(E'verdicts logged : %s   (must equal assertions run: %s)\n',
+              v_logged, CASE WHEN v_logged = v_ran THEN 'OK' ELSE 'MISMATCH' END)
+    || E'\n'
+    || 'VERDICT         : ' || v_verdict_text || E'\n'
+    || E'-----------------------------------------------------'
+    || v_lines
+    || E'\n=====================================================\n'
+    || E'This error IS the result. The transaction is rolled back with it.\n';
+
+  -- >>> THE RESULT ARRIVES AS AN ERROR, AND THAT IS THE DESIGN. <<<
+  --
+  -- Notices are invisible in the Supabase SQL Editor and a temp table
+  -- cannot be created in that session at all (3F000). An error is the one
+  -- channel every client renders. It also aborts the transaction, which is
+  -- exactly what the ROLLBACK at the foot was always there to do - so
+  -- reporting this way costs nothing in safety and buys the only output
+  -- that can actually be read.
+  --
+  -- NO CUSTOM ERRCODE. This is not a database condition and must never be
+  -- mistaken for one of the LG0xx codes 089, 090 and 091 define. The
+  -- default P0001 (raise_exception) is correct and deliberate.
+  RAISE EXCEPTION '%', v_report;
 END
 $test$;
 
 
 -- =====================================================================
--- SECTION C. THE OUTPUT. THIS IS THE RESULT, AND IT IS AUTHORITATIVE.
+-- THE BACKSTOP. IT STAYS.
 --
--- The LAST statement inside the transaction, immediately before the
--- ROLLBACK. EXPECT 17 ROWS: 11 assertions, 5 tally rows, 1 row count
--- check. Any other number is itself a finding - see the header.
--- =====================================================================
-SELECT seq, test, verdict, detail
-FROM pg_temp._lg091_results
-ORDER BY seq;
-
-
--- =====================================================================
--- NOTHING PERSISTS. This is the line that makes the whole file safe.
--- It removes the temp table above along with everything else.
+-- IT IS NOT REACHED ON THE EXPECTED PATH. The DO block above ends in
+-- RAISE EXCEPTION, and the outer block has no handler, so the exception
+-- propagates out of section B, aborts the transaction, and every
+-- statement after it - including this one - is skipped.
+--
+-- IT IS NOT DEAD CODE AND MUST NOT BE DELETED. It is the safety net for
+-- the case where that exception is CAUGHT rather than propagated: an
+-- enclosing EXCEPTION handler added here later, or a client that wraps
+-- the batch in its own block and swallows the error. In that case the
+-- transaction is still open and still holds a CREATE FUNCTION, a CREATE
+-- TRIGGER and eight UPDATEs against real profiles, and this line is the
+-- only thing that undoes them.
+--
+-- Cheap insurance against a failure mode that leaves writes behind.
 -- =====================================================================
 ROLLBACK;
