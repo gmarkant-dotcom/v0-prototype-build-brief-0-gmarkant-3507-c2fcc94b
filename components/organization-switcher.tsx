@@ -198,9 +198,15 @@ export function OrganizationSwitcher({
       // A HARD NAVIGATION, NOT router.refresh(). Switching company changes which rows
       // every query on the page is allowed to return, and the current URL may name a
       // project the new organization cannot read. A full load clears the SWR cache and
-      // the selected-project context together, and the dashboard is the one agency route
-      // that is correct for any organization.
-      window.location.assign("/agency/dashboard")
+      // the selected-project context together, and each portal's summary dashboard is
+      // the one route in it that is correct for any organization.
+      //
+      // IT LANDS IN THE PORTAL IT WAS CALLED FROM. Switching organization is not
+      // switching portal - that is RoleToggle's job, and middleware would bounce the
+      // user back on active_role anyway. Sending a vendor to /agency/dashboard would
+      // be a redirect they did not ask for, on their way to answering a different
+      // question.
+      window.location.assign(variant === "vendor" ? "/partner" : "/agency/dashboard")
     } catch (e) {
       console.error("[OrganizationSwitcher] error:", e)
       setError("That did not go through. Try again.")

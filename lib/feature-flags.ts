@@ -43,28 +43,42 @@ export function broadcastCuesPartnership(): boolean {
  * WHY IT IS OFF, AND IT IS NOT CAUTION FOR ITS OWN SAKE.
  *
  * accept_org_invitation() is the first thing in this product's history that can give an
- * account a SECOND organization membership. `resolveActingOrgId()` (lib/acting-org.ts:205)
+ * account a SECOND organization membership. `resolveActingOrgId()` (lib/acting-org.ts)
  * fails closed with reason "ambiguous" the moment a caller belongs to more than one
- * organization and nothing says which they are acting as - and the tie-breaker it looks
- * for, `profiles.active_org_id`, DOES NOT EXIST AS A COLUMN. lib/acting-org.ts:169 guards
- * a 42703 for precisely that reason.
+ * organization and nothing says which they are acting as, and the tie-breaker it looks
+ * for is `profiles.active_org_id`.
  *
- * So a colleague who accepts an invitation today cannot write anywhere in the product:
- * every write path resolves through that function or through
+ * So a colleague who accepts an invitation without that tie-breaker in place cannot write
+ * anywhere in the product: every write path resolves through that function or through
  * resolveCallerWriteOrgId(), which delegates to it. Both realistic paths reach it - an
  * invitee who already has an account has one membership from their own signup, and an
  * invitee who does not gets one from handle_new_user() before they can accept.
  *
- * MIGRATION 090 FIXES IT: it adds profiles.active_org_id and the switcher that sets it.
- * THIS FLAG STAYS OFF UNTIL 090 IS APPLIED. Turning it on before then hands the first
- * colleague who accepts an account that can read everything and write nothing, with no
- * error message that explains why.
+ * MIGRATION 090 IS WHAT FIXES IT: it adds profiles.active_org_id, the set_active_org()
+ * function, and the set-if-null clause in accept_org_invitation(); the switcher that
+ * calls it is components/organization-switcher.tsx, in both account chips.
+ *
+ * THIS FLAG STAYS OFF UNTIL 090 IS APPLIED **IN THE DATABASE**. Authored is not applied.
+ * The code being merged proves nothing: no gate in this repository reads a .sql file, so
+ * a green build says only that the TypeScript compiles. Turning this on before 090 has
+ * been run and verified in the Supabase SQL Editor hands the first colleague who accepts
+ * an account that reads everything and writes nothing, with no error that explains why.
  *
  * ORDER, STATED SO IT IS NOT INFERRED:
- *   1. apply 089            - safe on its own, nothing calls it
- *   2. push this branch     - safe with the flag off, the surface is unreachable
- *   3. apply 090            - profiles.active_org_id and the switcher
+ *   1. apply 089            - DONE. Safe on its own, nothing called it.
+ *   2. push feat/m1-invitations - DONE. Safe with the flag off, the surface is
+ *                                unreachable.
+ *   3. apply 090            - profiles.active_org_id, set_active_org(), the replaced
+ *                             accept_org_invitation(). Then deploy the switcher and the
+ *                             lib/acting-org.ts commit that drops its 42703 guard.
  *   4. THEN set COLLEAGUE_INVITATIONS=true in Vercel and redeploy
+ *
+ * HOW TO CHECK STEP 3 ACTUALLY HAPPENED, rather than assuming it:
+ *
+ *     SELECT column_name FROM information_schema.columns
+ *     WHERE table_schema = 'public' AND table_name = 'profiles'
+ *       AND column_name = 'active_org_id';
+ *     -- One row means 090 landed. Zero rows means DO NOT FLIP THIS FLAG.
  *
  * WHAT THE FLAG GATES, AND WHAT IT DELIBERATELY DOES NOT.
  *
