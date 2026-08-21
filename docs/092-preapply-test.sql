@@ -9,9 +9,18 @@
 -- backfill wrote anything at all. Those are the questions this file
 -- answers, before anything is committed.
 --
+-- >>> AND IT MATTERS MORE NOW THAN IT DID, BECAUSE 092'S GUARD IS A
+-- >>> PERMIT LIST. A deny list can only be too small in one direction -
+-- >>> it can miss a column that ought to be guarded, which is a hole. A
+-- >>> PERMIT LIST CAN BE TOO SMALL IN THE OTHER DIRECTION TOO: a column
+-- >>> that a session client legitimately writes, left off the list, is a
+-- >>> WRITE THAT STARTS RAISING LG008 THE MOMENT THE MIGRATION IS
+-- >>> APPLIED. T1, T2 and T3 exercise the one permitted column three
+-- >>> different ways for exactly that reason.
+--
 -- IT IS ALSO THE ONLY THING THAT EXERCISES THE BACKFILL BEFORE IT IS
 -- REAL. Section A below runs 092's backfill inside this transaction, and
--- T4 checks its result row by row. A backfill that matches nothing is the
+-- T5 checks its result row by row. A backfill that matches nothing is the
 -- one failure in this migration that commits happily and locks every
 -- paying customer out on the next deploy.
 --
@@ -55,18 +64,18 @@
 --
 --     ERROR:  P0001
 --     =====================================================
---     SAFE TO APPLY 092.  All 7 assertions passed.
+--     SAFE TO APPLY 092.  All 14 assertions passed.
 --     =====================================================
---     assertions run  : 7    (expected 7)
---     PASS            : 7    (expected 7)
+--     assertions run  : 14   (expected 14)
+--     PASS            : 14   (expected 14)
 --     FAIL            : 0    (expected 0)
 --     INCONCLUSIVE    : 0    (expected 0)
---     verdicts logged : 7    (must equal assertions run: OK)
+--     verdicts logged : 14   (must equal assertions run: OK)
 --
 --     VERDICT         : SAFE TO APPLY 092.
 --     -----------------------------------------------------
---       T1  rename org as admin       PASS          (1 row written)
---       ... six more ...
+--       T1  rename, permitted column      PASS      (1 row written)
+--       ... thirteen more ...
 --     =====================================================
 --     This error IS the result. The transaction is rolled back with it.
 --
@@ -138,68 +147,85 @@
 -- TELLING THESE APART IS THE WHOLE SKILL HERE.
 --
 -- =====================================================================
--- HOW TO READ IT. AN ERROR IS A PASS FOR SOME OF THESE.
+-- HOW TO READ IT. AN ERROR IS A PASS FOR SEVEN OF THESE FOURTEEN.
 -- =====================================================================
 --
--- The seven assertions are scored in opposite directions, which is why
--- each line says so rather than leaving it to be inferred:
+-- THE PERMIT LIST IS {name}. Everything else on public.organizations is
+-- guarded. So the assertions come in two directions and each line says
+-- which, rather than leaving it to be inferred.
 --
---   T1  THE RENAME MUST STILL WORK. lib/company-identity.ts:306 is the
---       ONLY writer of public.organizations in the entire application,
---       it is a SESSION client, and every company rename in the product
---       goes through it. PASS = the write SUCCEEDED and matched exactly
---       one row. A FAIL here means the early return is wrong and 092
---       breaks renaming your company. DO NOT APPLY.
+--   T1  THE PERMITTED COLUMN, WRITTEN BARE. `.update({ name })`, which is
+--       lib/company-identity.ts:306 exactly - the ONLY session-client
+--       writer of this table in the product, and the path every company
+--       rename takes. PASS = the write SUCCEEDED, 1 row. A FAIL here
+--       means 092 breaks renaming your company. DO NOT APPLY.
 --
---   T2  THE SELF-GRANT MUST NOW BE REFUSED. This is the assertion the
---       whole migration exists for. The subject is an OWNER or ADMIN of
---       the organization being written, so the "Org admins update their
---       organization" policy PERMITS the row - and the guard must refuse
---       the column anyway. PASS = the write RAISED LG008. A SUCCESS HERE
---       IS A FAIL: it means any user can mark their own company paid.
+--   T2  >>> THE ASSERTION THIS WHOLE SHAPE DEPENDS ON. <<<
+--       A WHOLE-ROW WRITE that names ALL EIGHT COLUMNS and alters only
+--       `name`. That is what a read-modify-write PATCH produces, and it is
+--       what both settings forms in this product send.
 --
---   T3  THE NO-OP MUST PASS THE EARLY RETURN. A read-modify-write that
---       sends is_paid back unchanged is the normal shape of a PostgREST
---       patch built from a row that was just read. PASS = SUCCEEDED. It
---       is also what proves IS NOT DISTINCT FROM was used rather than <>.
+--       A TRIGGER CANNOT SEE THE SET CLAUSE - only OLD and NEW. If 092
+--       had been implemented as "was this column named in the UPDATE" it
+--       could not have been implemented at all, and any approximation of
+--       it would refuse this write for MENTIONING is_paid even though it
+--       sent back the identical value. EVERY WHOLE-ROW WRITE IN THE
+--       PRODUCT WOULD BREAK.
 --
---   T4  THE BACKFILL MUST HAVE LANDED. READ-ONLY. PASS = zero
---       organizations whose is_paid disagrees with their member's. This
---       runs BEFORE T5 deliberately - see THE ORDER OF T4 AND T5 below.
+--       092 compares VALUES with IS DISTINCT FROM, per column, so this
+--       passes because nothing outside the permit list MOVED. PASS = the
+--       write SUCCEEDED, 1 row. A FAIL here is the single most important
+--       failure in this file.
 --
---   T5  THE EXEMPTION MUST EXEMPT. A write with no end-user session,
---       which is what the admin grant route on the service role is and
+--   T3  A WHOLE-ROW NO-OP. Every column sent back unchanged, including
+--       `name`. Proves the early return is a value comparison and not a
+--       column-mention comparison from the other side. PASS = SUCCEEDED.
+--
+--   T4a-T4g  THE SEVEN GUARDED COLUMNS, ONE AT A TIME, AS AN OWNER OR
+--       ADMIN OF THAT ORGANIZATION. The policy PERMITS the row - the
+--       subject is an admin of it, which is exactly what "Org admins
+--       update their organization" asks and exactly why that policy buys
+--       nothing. The GUARD must refuse the column.
+--       PASS = the write RAISED LG008. A SUCCESS HERE IS A FAIL.
+--
+--   T5  THE BACKFILL MUST HAVE LANDED. READ-ONLY. PASS = zero
+--       organizations whose is_paid disagrees with their member's. Runs
+--       BEFORE T6 deliberately - see THE ORDER OF T5 AND T6 below.
+--
+--   T6  THE EXEMPTION MUST EXEMPT. A write with no end-user session,
+--       which is what the admin grant routes on the service role are and
 --       what every migration is. PASS = SUCCEEDED. A FAIL here is the
 --       serious one: it would mean 092 has locked the only route that
 --       marks a customer paid out of the column it just created.
 --
---   T6  091's GUARD MUST STILL BITE, WITH ITS OWN CODE. PASS = LG007,
+--   T7  091's GUARD MUST STILL BITE, WITH ITS OWN CODE. PASS = LG007,
 --       091's code, NOT LG008. Two guards on two tables with two codes;
 --       if 092's code comes back here, they have been confused.
 --
---   T7  THE COLUMN MUST HAVE THE RIGHT SHAPE. READ-ONLY. PASS = boolean,
+--   T8  THE COLUMN MUST HAVE THE RIGHT SHAPE. READ-ONLY. PASS = boolean,
 --       NOT NULL, DEFAULT false. A nullable entitlement is a third state
 --       and every gate in the codebase reads `is_paid === true`.
 --
 -- EVERY REFUSAL TEST RUNS IN ITS OWN plpgsql SUBTRANSACTION, so an
--- expected LG008 does not abort the run. That is what lets all seven
+-- expected LG008 does not abort the run. That is what lets all fourteen
 -- assertions report from a single paste.
 --
 -- =====================================================================
--- THE ORDER OF T4 AND T5 IS LOAD-BEARING. DO NOT SWAP THEM.
+-- THE ORDER OF T5 AND T6 IS LOAD-BEARING. DO NOT SWAP THEM.
 -- =====================================================================
 --
--- T5 is a WRITE that deliberately MOVES organizations.is_paid, on the
--- exempt path. T4 checks that every organization's is_paid still equals
+-- T6 is a WRITE that deliberately MOVES organizations.is_paid, on the
+-- exempt path. T5 checks that every organization's is_paid still equals
 -- its member's profile flag.
 --
--- >>> IF T5 RAN FIRST, IT WOULD FLIP ONE ORGANIZATION'S FLAG AND T4
+-- >>> IF T6 RAN FIRST, IT WOULD FLIP ONE ORGANIZATION'S FLAG AND T5
 -- >>> WOULD THEN REPORT A MISMATCH - AGAINST A BACKFILL THAT IS
 -- >>> PERFECTLY CORRECT. A test that fails on its own side effects is
 -- >>> worse than no test, because the failure looks like a real one.
 --
--- T4 is therefore read-only and runs first. Nothing before it moves
--- is_paid: T1 writes `name`, T2 raises, T3 writes is_paid back unchanged.
+-- T5 is therefore read-only and runs first. Nothing before it moves
+-- is_paid: T1, T2 and T3 write `name` and values that do not move, and
+-- every T4 raises and rolls its own subtransaction back.
 --
 -- =====================================================================
 -- TWO IMPLEMENTATION NOTES, BOTH DELIBERATE
@@ -208,10 +234,10 @@
 --   BOTH JWT GUCs ARE SET, not one. Supabase's auth.uid() has shipped in
 --   two forms across its history - one reading request.jwt.claim.sub, one
 --   reading request.jwt.claims ->> 'sub'. Setting only the form this
---   session guessed at would leave auth.uid() NULL, T2 would sail through
---   the exemption, and it would report FAIL against a guard that is in
---   fact correct. Setting both makes the test agree with either
---   definition.
+--   session guessed at would leave auth.uid() NULL, every T4 would sail
+--   through the exemption, and all seven would report FAIL against a
+--   guard that is in fact correct. Setting both makes the test agree with
+--   either definition.
 --
 --   IF YOUR EDITOR REJECTS `SET LOCAL ROLE authenticated` inside the DO
 --   block, replace every occurrence with
@@ -221,19 +247,21 @@
 --   form goes through a function call rather than plpgsql's utility
 --   statement handling.
 --
--- ONE OUTCOME IS NEITHER PASS NOR FAIL AND IT IS REPORTED SEPARATELY.
--- Two ways to reach it, and they mean different things:
+-- OUTCOMES THAT ARE NEITHER PASS NOR FAIL, REPORTED SEPARATELY:
 --
---   42501 (insufficient_privilege) on T1/T2/T3 - role `authenticated`
---   holds no UPDATE on organizations at all, so the self-grant hole never
---   existed on this table and 092's guard is unnecessary rather than
---   wrong. INCONCLUSIVE.
+--   42501 (insufficient_privilege) - role `authenticated` holds no UPDATE
+--   on organizations at all, so the self-grant hole never existed on this
+--   table and 092's guard is unnecessary rather than wrong. INCONCLUSIVE.
 --
---   A ZERO-ROW UPDATE on T2 - the "Org admins update their organization"
---   policy filtered the row before the trigger could fire, so the guard
---   was never reached. That says NOTHING about whether the guard bites.
---   INCONCLUSIVE, and it also means the subject selection below did not
---   find a genuine admin.
+--   A ZERO-ROW UPDATE on any T4 - the "Org admins update their
+--   organization" policy filtered the row before the trigger could fire,
+--   so the guard was never reached. INCONCLUSIVE, and it also means the
+--   subject selection below did not find a genuine admin.
+--
+--   23514 or 23503 on T4c/T4d/T4e/T4g - a CHECK constraint or a foreign
+--   key answered before the trigger did. BEFORE ROW triggers are supposed
+--   to run first, so this is worth reading rather than passing.
+--   INCONCLUSIVE.
 --
 -- =====================================================================
 -- THE ONE MAINTENANCE HAZARD IN THIS FILE
@@ -245,14 +273,13 @@
 -- be a copy: the brief is one paste, and the SQL Editor cannot \include.
 --
 -- IF YOU EDIT THE MIGRATION - and in particular IF YOU ADD A COLUMN TO
--- THE GUARDED SET, or SWITCH TO THE PERMIT-LIST SHAPE the design doc
--- argued for - RE-COPY SECTION A HERE AND ADD AN ASSERTION FOR THE
--- CHANGE. A test file that tests last week's function is worse than no
--- test file.
+-- v_permitted - RE-COPY SECTION A HERE, MOVE THAT COLUMN'S ASSERTION FROM
+-- THE T4 GROUP TO THE T1-T3 GROUP, AND CHANGE ITS EXPECTED DIRECTION. A
+-- test file that tests last week's function is worse than no test file.
 --
--- TWO NUMBERS MOVE TOGETHER when you add an assertion, and both are
--- hard-coded: the `v_ran = 7` term in the VERDICT condition, and the
--- '(expected 7)' strings in the tally. THE SELF-CHECK DOES NOT CATCH A
+-- TWO NUMBERS MOVE TOGETHER when you add or move an assertion, and both
+-- are hard-coded: the `v_ran = 14` term in the VERDICT condition, and the
+-- '(expected 14)' strings in the tally. THE SELF-CHECK DOES NOT CATCH A
 -- MISSED UPDATE TO THOSE. It compares v_logged against v_ran - two
 -- counters incremented in different places - so it catches an assertion
 -- that RAN WITHOUT REPORTING. It cannot catch a stale literal in a
@@ -270,6 +297,10 @@ BEGIN;
 -- of them raises, this run ends with "BACKFILL REFUSED: ..." and no
 -- banner - which is outcome (2) in the header, a real answer of DO NOT
 -- APPLY, not a crash.
+--
+-- The COMMENT ON TABLE public.profiles from 092 section 6 is deliberately
+-- NOT copied: it writes no data and no schema and nothing here asserts on
+-- it.
 -- =====================================================================
 
 ALTER TABLE public.organizations
@@ -350,43 +381,87 @@ BEGIN
 END
 $backfill$;
 
-CREATE OR REPLACE FUNCTION public.organizations_guard_entitlement()
+CREATE OR REPLACE FUNCTION public.organizations_guard_columns()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
+DECLARE
+  -- THE PERMIT LIST. THE ONLY PLACE IT EXISTS IN THIS FUNCTION - there is
+  -- no second chain to keep in step with it, which is the point.
+  -- Derived from docs/092-organizations-writer-census.md, W1.
+  v_permitted CONSTANT text[] := ARRAY['name'];
+  v_old_rest  jsonb;
+  v_new_rest  jsonb;
+  v_moved     text[];
 BEGIN
-  IF NEW.is_paid IS NOT DISTINCT FROM OLD.is_paid THEN
+  -- THE ROW, MINUS THE PERMITTED COLUMNS, ON BOTH SIDES.
+  v_old_rest := to_jsonb(OLD) - v_permitted;
+  v_new_rest := to_jsonb(NEW) - v_permitted;
+
+  -- THE EARLY RETURN THAT MAKES THIS FREE, AND IT IS FIRST ON PURPOSE.
+  -- Every rename in the product leaves here - including a whole-row write
+  -- that names all eight columns and alters only `name` - having done one
+  -- jsonb comparison and NOT having called auth.uid().
+  --
+  -- This is a VALUE comparison, not a SET-clause comparison. See the
+  -- header block above; it is the property the shape depends on.
+  IF v_new_rest = v_old_rest THEN
     RETURN NEW;
   END IF;
 
+  -- THE EXEMPTION. A write with no end-user session behind it is trusted
+  -- code that has already made its own authorization decision: the admin
+  -- grant routes on the service role (census W2, W3), a future billing
+  -- webhook, this migration's own backfill (W6), handle_new_user (W5),
+  -- and every migration after this one. See the header for why this test
+  -- and not current_user, session_user or auth.role() - the same four
+  -- candidates 091 walked, with the same outcome.
+  --
+  -- >>> EXEMPT IS NOT THE SAME AS PERMITTED. is_paid is written by W2 and
+  -- >>> W3 and is deliberately NOT on the permit list: those two are
+  -- >>> service-role callers and pass HERE, before the permit list is ever
+  -- >>> consulted. Adding is_paid to v_permitted would additionally let a
+  -- >>> BROWSER write it, and the browser is the entire threat model -
+  -- >>> every user is an owner of their own organization, so the UPDATE
+  -- >>> policy already authorises them to write their own row. THAT EDIT
+  -- >>> WOULD DELETE THIS MIGRATION'S ENTIRE EFFECT WHILE APPEARING TO
+  -- >>> REFLECT THE CENSUS.
   IF auth.uid() IS NULL THEN
     RETURN NEW;
   END IF;
 
-  IF NEW.is_paid IS DISTINCT FROM OLD.is_paid THEN
-    RAISE EXCEPTION 'That is not a field you can change.'
-      USING ERRCODE = 'LG008',
-            DETAIL  = 'organizations.is_paid is the company plan, guarded by migration 092. Only the service role, a database function, or a migration may write it. Being an owner or admin of an organization does not permit it: every user is an owner of their own organization, so that role would grant this to everybody.';
-  END IF;
+  -- FROM HERE DOWN: a signed-in caller moved a column that is not on the
+  -- permit list. RAISE, never silently revert to OLD. A silently reverted
+  -- plan change is a customer who believes they upgraded and a company
+  -- that goes on being refused - the same class of quiet wrongness 090 and
+  -- 091 both refused for their own columns, delivered to a paying reader.
+  SELECT array_agg(k ORDER BY k)
+    INTO v_moved
+  FROM jsonb_object_keys(v_new_rest) AS k
+  WHERE v_new_rest -> k IS DISTINCT FROM v_old_rest -> k;
 
   RAISE EXCEPTION 'That is not a field you can change.'
     USING ERRCODE = 'LG008',
-          DETAIL  = 'A guarded column on organizations moved but migration 092 has no refusal for it. The guarded set in organizations_guard_entitlement() is out of step with itself - see the ROT instruction in 092_org_entitlement.sql.';
+          DETAIL  = format(
+            'organizations.%s may not be written by a browser. Migration 092 guards every column on this table except %s, which is the only one a session client legitimately writes. Only the service role, a database function, or a migration may write the rest. Being an owner or admin of an organization does not permit it: every user is an owner of their own organization, so that role would grant this to everybody.',
+            array_to_string(v_moved, ', organizations.'),
+            array_to_string(v_permitted, ', ')
+          );
 END;
 $$;
 
-DROP TRIGGER IF EXISTS organizations_entitlement_guard ON public.organizations;
+DROP TRIGGER IF EXISTS organizations_columns_guard ON public.organizations;
 
-CREATE TRIGGER organizations_entitlement_guard
+CREATE TRIGGER organizations_columns_guard
   BEFORE UPDATE ON public.organizations
   FOR EACH ROW
-  EXECUTE FUNCTION public.organizations_guard_entitlement();
+  EXECUTE FUNCTION public.organizations_guard_columns();
 
-REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM anon;
-REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM authenticated;
+REVOKE EXECUTE ON FUNCTION public.organizations_guard_columns() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.organizations_guard_columns() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.organizations_guard_columns() FROM authenticated;
 
 
 -- =====================================================================
@@ -425,7 +500,8 @@ BEGIN
   -- organization, chosen deterministically so a re-run exercises the same
   -- pair. It has to be an admin: the "Org admins update their
   -- organization" policy filters on exactly that, and a non-admin subject
-  -- would make T2 a zero-row update that proves nothing about the guard.
+  -- would make every T4 a zero-row update that proves nothing about the
+  -- guard.
   SELECT m.user_id, m.org_id, o.name, m.role
     INTO v_uid, v_org, v_org_name, v_role
   FROM public.org_members m
@@ -444,16 +520,16 @@ BEGIN
   v_claims := json_build_object('sub', v_uid::text, 'role', 'authenticated')::text;
 
   RAISE NOTICE '=====================================================';
-  RAISE NOTICE '092 PRE-APPLY TEST';
+  RAISE NOTICE '092 PRE-APPLY TEST   permit list = {name}';
   RAISE NOTICE 'subject user id      : %', v_uid;
   RAISE NOTICE 'subject organization : %  (%)', v_org, v_org_name;
   RAISE NOTICE 'subject org role     : %', v_role;
   RAISE NOTICE '=====================================================';
   RAISE NOTICE '';
-  RAISE NOTICE '-- T1, T3, T5: MUST STILL WORK. PASS = the write succeeded. --';
+  RAISE NOTICE '-- T1-T3: THE PERMITTED COLUMN. PASS = the write succeeded. --';
 
   -- -------------------------------------------------------------------
-  -- T1. THE COMPANY RENAME. THE ONLY SESSION WRITE OF THIS TABLE.
+  -- T1. THE COMPANY RENAME, BARE. THE ONLY SESSION WRITE OF THIS TABLE.
   -- Mirrors lib/company-identity.ts:306, which writes { name } and
   -- nothing else - not even updated_at. Every rename in the product goes
   -- through it. PASS = SUCCEEDS and matches exactly 1 row.
@@ -472,45 +548,152 @@ BEGIN
     RESET ROLE;
 
     IF v_rows = 1 THEN
-      RAISE NOTICE 'T1  rename org as admin           PASS   (1 row written, early return)';
+      RAISE NOTICE 'T1  rename, permitted column          PASS   (1 row written, early return)';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T1  rename org as admin', 34) || rpad('PASS', 14) || '(1 row written, early return)';
+      v_lines  := v_lines || E'\n  ' || rpad('T1  rename, permitted column', 38) || rpad('PASS', 14) || '(1 row written, early return)';
       v_pass := v_pass + 1;
     ELSE
-      RAISE NOTICE 'T1  rename org as admin           FAIL   <- matched % rows, expected 1. A zero-row write is not a success.', v_rows;
+      RAISE NOTICE 'T1  rename, permitted column          FAIL   <- matched % rows, expected 1. A zero-row write is not a success.', v_rows;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T1  rename org as admin', 34) || rpad('FAIL', 14) || format('matched %s rows, expected 1. A zero-row write is not a success.', v_rows);
+      v_lines  := v_lines || E'\n  ' || rpad('T1  rename, permitted column', 38) || rpad('FAIL', 14) || format('matched %s rows, expected 1. A zero-row write is not a success.', v_rows);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION
     WHEN sqlstate 'LG008' THEN
-      RAISE NOTICE 'T1  rename org as admin           FAIL   <- LG008. THE EARLY RETURN IS WRONG - 092 breaks every company rename. DO NOT APPLY.';
+      RAISE NOTICE 'T1  rename, permitted column          FAIL   <- LG008. `name` IS NOT ON THE PERMIT LIST. 092 breaks every company rename. DO NOT APPLY.';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T1  rename org as admin', 34) || rpad('FAIL', 14) || 'LG008. THE EARLY RETURN IS WRONG - 092 breaks every company rename. DO NOT APPLY.';
+      v_lines  := v_lines || E'\n  ' || rpad('T1  rename, permitted column', 38) || rpad('FAIL', 14) || 'LG008. `name` is not on the permit list. 092 breaks every company rename. DO NOT APPLY.';
       v_fail := v_fail + 1;
     WHEN insufficient_privilege THEN
-      RAISE NOTICE 'T1  rename org as admin           INCONCLUSIVE  42501: authenticated holds no UPDATE on organizations. See the header.';
+      RAISE NOTICE 'T1  rename, permitted column          INCONCLUSIVE  42501: authenticated holds no UPDATE on organizations.';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T1  rename org as admin', 34) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE on organizations. See the header.';
+      v_lines  := v_lines || E'\n  ' || rpad('T1  rename, permitted column', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE on organizations. See the header.';
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
-      RAISE NOTICE 'T1  rename org as admin           FAIL   <- % %  DO NOT APPLY 092.', SQLSTATE, SQLERRM;
+      RAISE NOTICE 'T1  rename, permitted column          FAIL   <- % %  DO NOT APPLY 092.', SQLSTATE, SQLERRM;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T1  rename org as admin', 34) || rpad('FAIL', 14) || format('%s %s  DO NOT APPLY 092.', SQLSTATE, SQLERRM);
+      v_lines  := v_lines || E'\n  ' || rpad('T1  rename, permitted column', 38) || rpad('FAIL', 14) || format('%s %s  DO NOT APPLY 092.', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
-  RAISE NOTICE '';
-  RAISE NOTICE '-- T2: MUST NOW BE REFUSED. PASS = the write RAISED LG008. --';
+  -- -------------------------------------------------------------------
+  -- T2. >>> THE ASSERTION THE WHOLE SHAPE DEPENDS ON. <<<
+  --
+  -- A WHOLE-ROW WRITE naming ALL EIGHT COLUMNS, altering only `name`.
+  -- This is what a read-modify-write PATCH produces.
+  --
+  -- IT PASSES ONLY BECAUSE THE GUARD COMPARES VALUES RATHER THAN THE SET
+  -- CLAUSE. A trigger cannot see the SET clause at all - it has OLD and
+  -- NEW and nothing else - so any implementation that tried to refuse on
+  -- "was this column named" would refuse this write for MENTIONING
+  -- is_paid while sending back the identical value, and every whole-row
+  -- write in the product would break.
+  --
+  -- PASS = SUCCEEDS, 1 row. A FAIL here is the most important failure in
+  -- this file.
+  -- -------------------------------------------------------------------
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+
+    UPDATE public.organizations
+       SET id                      = id,
+           name                    = '092 whole-row test',
+           primary_contact_user_id = primary_contact_user_id,
+           is_lead_agency          = is_lead_agency,
+           is_vendor               = is_vendor,
+           created_at              = created_at,
+           updated_at              = updated_at,
+           is_paid                 = is_paid
+     WHERE id = v_org;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+
+    IF v_rows = 1 THEN
+      RAISE NOTICE 'T2  whole-row write, name only        PASS   (1 row; value comparison, not SET clause)';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T2  whole-row write, name only', 38) || rpad('PASS', 14) || '(1 row; the guard compares VALUES, not the SET clause)';
+      v_pass := v_pass + 1;
+    ELSE
+      RAISE NOTICE 'T2  whole-row write, name only        FAIL   <- matched % rows, expected 1.', v_rows;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T2  whole-row write, name only', 38) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
+      v_fail := v_fail + 1;
+    END IF;
+  EXCEPTION
+    WHEN sqlstate 'LG008' THEN
+      RAISE NOTICE 'T2  whole-row write, name only        FAIL   <- LG008. THE GUARD IS TESTING THE SET CLAUSE, NOT THE VALUES. Every whole-row write in the product will break. DO NOT APPLY.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T2  whole-row write, name only', 38) || rpad('FAIL', 14) || 'LG008. The guard refuses a column that did NOT move. Every whole-row write in the product breaks. DO NOT APPLY.';
+      v_fail := v_fail + 1;
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'T2  whole-row write, name only        INCONCLUSIVE  42501.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T2  whole-row write, name only', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE on organizations.';
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'T2  whole-row write, name only        FAIL   <- % %', SQLSTATE, SQLERRM;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T2  whole-row write, name only', 38) || rpad('FAIL', 14) || format('%s %s  DO NOT APPLY 092.', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
 
   -- -------------------------------------------------------------------
-  -- T2. SELF-GRANT organizations.is_paid, AS AN OWNER OR ADMIN OF THAT
-  -- ORGANIZATION. THE ONE THIS MIGRATION EXISTS FOR.
+  -- T3. A WHOLE-ROW NO-OP. Every column sent back unchanged, including
+  -- the permitted one. The other half of T2's property: the early return
+  -- fires because nothing MOVED, not because nothing was named.
+  -- PASS = SUCCEEDS, 1 row.
+  -- -------------------------------------------------------------------
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+
+    UPDATE public.organizations
+       SET id                      = id,
+           name                    = name,
+           primary_contact_user_id = primary_contact_user_id,
+           is_lead_agency          = is_lead_agency,
+           is_vendor               = is_vendor,
+           created_at              = created_at,
+           updated_at              = updated_at,
+           is_paid                 = is_paid
+     WHERE id = v_org;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+
+    IF v_rows = 1 THEN
+      RAISE NOTICE 'T3  whole-row no-op                   PASS   (early return, 1 row)';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T3  whole-row no-op', 38) || rpad('PASS', 14) || '(early return, 1 row)';
+      v_pass := v_pass + 1;
+    ELSE
+      RAISE NOTICE 'T3  whole-row no-op                   FAIL   <- matched % rows, expected 1.', v_rows;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T3  whole-row no-op', 38) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
+      v_fail := v_fail + 1;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'T3  whole-row no-op                   FAIL   <- % %  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM;
+    v_logged := v_logged + 1;
+    v_lines  := v_lines || E'\n  ' || rpad('T3  whole-row no-op', 38) || rpad('FAIL', 14) || format('%s %s  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM);
+    v_fail := v_fail + 1;
+  END;
+
+  RAISE NOTICE '';
+  RAISE NOTICE '-- T4a-T4g: THE SEVEN GUARDED COLUMNS. PASS = the write RAISED LG008. --';
+
+  -- -------------------------------------------------------------------
+  -- T4a. is_paid IS NOT ON THE PERMIT LIST. PASS = LG008.
   --
-  -- The policy PERMITS this row - the subject is an admin of it, which is
-  -- exactly what "Org admins update their organization" asks and exactly
-  -- why that policy buys nothing. The GUARD must refuse the column.
-  -- PASS = LG008.
+  -- THE BILLING COLUMN. The one this migration was created for, and the one a
+  -- mechanical read of the census would wrongly have PERMITTED - the admin routes
+  -- write it, but on the SERVICE ROLE, so they are EXEMPT and not permitted.
   -- -------------------------------------------------------------------
   v_ran := v_ran + 1;
   BEGIN
@@ -523,46 +706,46 @@ BEGIN
     RESET ROLE;
 
     IF v_rows = 0 THEN
-      -- NOT A PASS. The policy filtered the row before the trigger could
-      -- fire, so the guard was never reached and this run says nothing
-      -- about whether it bites. It also means the subject is not the
-      -- admin the selection above believed it found.
-      RAISE NOTICE 'T2  self-grant org is_paid        INCONCLUSIVE  0 rows: the UPDATE policy filtered the row, so the guard never fired.';
+      RAISE NOTICE 'T4a refuse is_paid                    INCONCLUSIVE  0 rows: the UPDATE policy filtered the row, so the guard never fired.';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T2  self-grant org is_paid', 34) || rpad('INCONCLUSIVE', 14) || '0 rows: the UPDATE policy filtered the row, so the guard never fired. Nothing proven.';
+      v_lines  := v_lines || E'\n  ' || rpad('T4a refuse is_paid', 38) || rpad('INCONCLUSIVE', 14) || '0 rows: the UPDATE policy filtered the row, so the guard never fired. Nothing proven.';
       v_inconc := v_inconc + 1;
     ELSE
-      RAISE NOTICE 'T2  self-grant org is_paid        FAIL   <- SUCCEEDED, % row(s). ANY USER CAN MARK THEIR OWN COMPANY PAID. DO NOT APPLY.', v_rows;
+      RAISE NOTICE 'T4a refuse is_paid                    FAIL   <- SUCCEEDED, % row(s). THE PERMIT LIST IS NOT BITING.', v_rows;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T2  self-grant org is_paid', 34) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). ANY USER CAN MARK THEIR OWN COMPANY PAID. The guard is not biting.', v_rows);
+      v_lines  := v_lines || E'\n  ' || rpad('T4a refuse is_paid', 38) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). THE PERMIT LIST IS NOT BITING on is_paid.', v_rows);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION
     WHEN sqlstate 'LG008' THEN
-      RAISE NOTICE 'T2  self-grant org is_paid        PASS   (refused, LG008)';
+      RAISE NOTICE 'T4a refuse is_paid                    PASS   (refused, LG008)';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T2  self-grant org is_paid', 34) || rpad('PASS', 14) || '(refused, LG008)';
+      v_lines  := v_lines || E'\n  ' || rpad('T4a refuse is_paid', 38) || rpad('PASS', 14) || '(refused, LG008)';
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
-      RAISE NOTICE 'T2  self-grant org is_paid        INCONCLUSIVE  42501: authenticated holds no UPDATE on organizations. 092 may be unnecessary.';
+      RAISE NOTICE 'T4a refuse is_paid                    INCONCLUSIVE  42501: the policy answered before the guard could.';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T2  self-grant org is_paid', 34) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE on organizations. 092 may be unnecessary.';
+      v_lines  := v_lines || E'\n  ' || rpad('T4a refuse is_paid', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE, or the with_check answered before the trigger. The guard was not exercised.';
+      v_inconc := v_inconc + 1;
+    WHEN check_violation OR foreign_key_violation THEN
+      RAISE NOTICE 'T4a refuse is_paid                    INCONCLUSIVE  % : a constraint answered before the trigger did.', SQLSTATE;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4a refuse is_paid', 38) || rpad('INCONCLUSIVE', 14) || format('%s: a constraint answered before the trigger did. BEFORE ROW triggers are supposed to run first, so this is worth reading.', SQLSTATE);
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
-      RAISE NOTICE 'T2  self-grant org is_paid        FAIL   <- refused, but with the WRONG error: % %', SQLSTATE, SQLERRM;
+      RAISE NOTICE 'T4a refuse is_paid                    FAIL   <- refused with the WRONG error: % %', SQLSTATE, SQLERRM;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T2  self-grant org is_paid', 34) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
+      v_lines  := v_lines || E'\n  ' || rpad('T4a refuse is_paid', 38) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
-  RAISE NOTICE '';
-  RAISE NOTICE '-- T3: THE EARLY RETURN. PASS = the write succeeded. --';
-
   -- -------------------------------------------------------------------
-  -- T3. THE NO-OP. is_paid sent BACK UNCHANGED, alongside a real edit.
-  -- This is the normal shape of a PostgREST patch assembled from a row
-  -- that was just read, and it is what proves IS NOT DISTINCT FROM was
-  -- used rather than <>. PASS = SUCCEEDS.
+  -- T4b. updated_at IS NOT ON THE PERMIT LIST. PASS = LG008.
+  --
+  -- THE ONE MOST LIKELY TO BE A SURPRISE. It is written by W2, W3 and 092's own
+  -- backfill - all exempt - and by NO session client: lib/company-identity.ts:306
+  -- writes { name } and nothing else. If that line ever adds updated_at, THIS
+  -- ASSERTION IS WHAT WILL START FAILING, which is the tripwire working.
   -- -------------------------------------------------------------------
   v_ran := v_ran + 1;
   BEGIN
@@ -570,40 +753,305 @@ BEGIN
     PERFORM set_config('request.jwt.claims',    v_claims,    true);
     PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
     SET LOCAL ROLE authenticated;
-
-    UPDATE public.organizations
-       SET is_paid    = is_paid,
-           name       = name,
-           updated_at = now()
-     WHERE id = v_org;
+    UPDATE public.organizations SET updated_at = updated_at + interval '1 day' WHERE id = v_org;
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
 
-    IF v_rows = 1 THEN
-      RAISE NOTICE 'T3  no-op write, is_paid back     PASS   (early return, 1 row)';
+    IF v_rows = 0 THEN
+      RAISE NOTICE 'T4b refuse updated_at                 INCONCLUSIVE  0 rows: the UPDATE policy filtered the row, so the guard never fired.';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T3  no-op write, is_paid back', 34) || rpad('PASS', 14) || '(early return, 1 row)';
-      v_pass := v_pass + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4b refuse updated_at', 38) || rpad('INCONCLUSIVE', 14) || '0 rows: the UPDATE policy filtered the row, so the guard never fired. Nothing proven.';
+      v_inconc := v_inconc + 1;
     ELSE
-      RAISE NOTICE 'T3  no-op write, is_paid back     FAIL   <- matched % rows, expected 1.', v_rows;
+      RAISE NOTICE 'T4b refuse updated_at                 FAIL   <- SUCCEEDED, % row(s). THE PERMIT LIST IS NOT BITING.', v_rows;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T3  no-op write, is_paid back', 34) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
+      v_lines  := v_lines || E'\n  ' || rpad('T4b refuse updated_at', 38) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). THE PERMIT LIST IS NOT BITING on updated_at.', v_rows);
       v_fail := v_fail + 1;
     END IF;
-  EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'T3  no-op write, is_paid back     FAIL   <- % %  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM;
-    v_logged := v_logged + 1;
-    v_lines  := v_lines || E'\n  ' || rpad('T3  no-op write, is_paid back', 34) || rpad('FAIL', 14) || format('%s %s  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM);
-    v_fail := v_fail + 1;
+  EXCEPTION
+    WHEN sqlstate 'LG008' THEN
+      RAISE NOTICE 'T4b refuse updated_at                 PASS   (refused, LG008)';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4b refuse updated_at', 38) || rpad('PASS', 14) || '(refused, LG008)';
+      v_pass := v_pass + 1;
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'T4b refuse updated_at                 INCONCLUSIVE  42501: the policy answered before the guard could.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4b refuse updated_at', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE, or the with_check answered before the trigger. The guard was not exercised.';
+      v_inconc := v_inconc + 1;
+    WHEN check_violation OR foreign_key_violation THEN
+      RAISE NOTICE 'T4b refuse updated_at                 INCONCLUSIVE  % : a constraint answered before the trigger did.', SQLSTATE;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4b refuse updated_at', 38) || rpad('INCONCLUSIVE', 14) || format('%s: a constraint answered before the trigger did. BEFORE ROW triggers are supposed to run first, so this is worth reading.', SQLSTATE);
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'T4b refuse updated_at                 FAIL   <- refused with the WRONG error: % %', SQLSTATE, SQLERRM;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4b refuse updated_at', 38) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
+
+  -- -------------------------------------------------------------------
+  -- T4c. is_lead_agency IS NOT ON THE PERMIT LIST. PASS = LG008.
+  --
+  -- A CAPABILITY FLAG. 079:220 calls these DESCRIPTIVE rather than authorization,
+  -- which is why they were not in a deny list. That is not a reason to PERMIT
+  -- them: no session client writes either, so guarding them costs nothing and
+  -- stops a vendor organization relabelling itself a lead agency.
+  -- -------------------------------------------------------------------
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+    UPDATE public.organizations SET is_lead_agency = NOT is_lead_agency WHERE id = v_org;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+
+    IF v_rows = 0 THEN
+      RAISE NOTICE 'T4c refuse is_lead_agency             INCONCLUSIVE  0 rows: the UPDATE policy filtered the row, so the guard never fired.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c refuse is_lead_agency', 38) || rpad('INCONCLUSIVE', 14) || '0 rows: the UPDATE policy filtered the row, so the guard never fired. Nothing proven.';
+      v_inconc := v_inconc + 1;
+    ELSE
+      RAISE NOTICE 'T4c refuse is_lead_agency             FAIL   <- SUCCEEDED, % row(s). THE PERMIT LIST IS NOT BITING.', v_rows;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c refuse is_lead_agency', 38) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). THE PERMIT LIST IS NOT BITING on is_lead_agency.', v_rows);
+      v_fail := v_fail + 1;
+    END IF;
+  EXCEPTION
+    WHEN sqlstate 'LG008' THEN
+      RAISE NOTICE 'T4c refuse is_lead_agency             PASS   (refused, LG008)';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c refuse is_lead_agency', 38) || rpad('PASS', 14) || '(refused, LG008)';
+      v_pass := v_pass + 1;
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'T4c refuse is_lead_agency             INCONCLUSIVE  42501: the policy answered before the guard could.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c refuse is_lead_agency', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE, or the with_check answered before the trigger. The guard was not exercised.';
+      v_inconc := v_inconc + 1;
+    WHEN check_violation OR foreign_key_violation THEN
+      RAISE NOTICE 'T4c refuse is_lead_agency             INCONCLUSIVE  % : a constraint answered before the trigger did.', SQLSTATE;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c refuse is_lead_agency', 38) || rpad('INCONCLUSIVE', 14) || format('%s: a constraint answered before the trigger did. BEFORE ROW triggers are supposed to run first, so this is worth reading.', SQLSTATE);
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'T4c refuse is_lead_agency             FAIL   <- refused with the WRONG error: % %', SQLSTATE, SQLERRM;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4c refuse is_lead_agency', 38) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
+
+  -- -------------------------------------------------------------------
+  -- T4d. is_vendor IS NOT ON THE PERMIT LIST. PASS = LG008.
+  --
+  -- The other capability flag. See T4c.
+  -- -------------------------------------------------------------------
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+    UPDATE public.organizations SET is_vendor = NOT is_vendor WHERE id = v_org;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+
+    IF v_rows = 0 THEN
+      RAISE NOTICE 'T4d refuse is_vendor                  INCONCLUSIVE  0 rows: the UPDATE policy filtered the row, so the guard never fired.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d refuse is_vendor', 38) || rpad('INCONCLUSIVE', 14) || '0 rows: the UPDATE policy filtered the row, so the guard never fired. Nothing proven.';
+      v_inconc := v_inconc + 1;
+    ELSE
+      RAISE NOTICE 'T4d refuse is_vendor                  FAIL   <- SUCCEEDED, % row(s). THE PERMIT LIST IS NOT BITING.', v_rows;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d refuse is_vendor', 38) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). THE PERMIT LIST IS NOT BITING on is_vendor.', v_rows);
+      v_fail := v_fail + 1;
+    END IF;
+  EXCEPTION
+    WHEN sqlstate 'LG008' THEN
+      RAISE NOTICE 'T4d refuse is_vendor                  PASS   (refused, LG008)';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d refuse is_vendor', 38) || rpad('PASS', 14) || '(refused, LG008)';
+      v_pass := v_pass + 1;
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'T4d refuse is_vendor                  INCONCLUSIVE  42501: the policy answered before the guard could.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d refuse is_vendor', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE, or the with_check answered before the trigger. The guard was not exercised.';
+      v_inconc := v_inconc + 1;
+    WHEN check_violation OR foreign_key_violation THEN
+      RAISE NOTICE 'T4d refuse is_vendor                  INCONCLUSIVE  % : a constraint answered before the trigger did.', SQLSTATE;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d refuse is_vendor', 38) || rpad('INCONCLUSIVE', 14) || format('%s: a constraint answered before the trigger did. BEFORE ROW triggers are supposed to run first, so this is worth reading.', SQLSTATE);
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'T4d refuse is_vendor                  FAIL   <- refused with the WRONG error: % %', SQLSTATE, SQLERRM;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4d refuse is_vendor', 38) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
+
+  -- -------------------------------------------------------------------
+  -- T4e. primary_contact_user_id IS NOT ON THE PERMIT LIST. PASS = LG008.
+  --
+  -- A POINTER AT A PERSON. Written by W4 and W5 only, both migration-side. The
+  -- CASE guarantees the value MOVES whichever way the row currently sits - a test
+  -- that sets a column to what it already holds proves nothing.
+  -- -------------------------------------------------------------------
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+    UPDATE public.organizations SET primary_contact_user_id = CASE WHEN primary_contact_user_id IS NULL THEN v_uid ELSE NULL END WHERE id = v_org;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+
+    IF v_rows = 0 THEN
+      RAISE NOTICE 'T4e refuse primary_contact_user_id    INCONCLUSIVE  0 rows: the UPDATE policy filtered the row, so the guard never fired.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e refuse primary_contact_user_id', 38) || rpad('INCONCLUSIVE', 14) || '0 rows: the UPDATE policy filtered the row, so the guard never fired. Nothing proven.';
+      v_inconc := v_inconc + 1;
+    ELSE
+      RAISE NOTICE 'T4e refuse primary_contact_user_id    FAIL   <- SUCCEEDED, % row(s). THE PERMIT LIST IS NOT BITING.', v_rows;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e refuse primary_contact_user_id', 38) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). THE PERMIT LIST IS NOT BITING on primary_contact_user_id.', v_rows);
+      v_fail := v_fail + 1;
+    END IF;
+  EXCEPTION
+    WHEN sqlstate 'LG008' THEN
+      RAISE NOTICE 'T4e refuse primary_contact_user_id    PASS   (refused, LG008)';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e refuse primary_contact_user_id', 38) || rpad('PASS', 14) || '(refused, LG008)';
+      v_pass := v_pass + 1;
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'T4e refuse primary_contact_user_id    INCONCLUSIVE  42501: the policy answered before the guard could.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e refuse primary_contact_user_id', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE, or the with_check answered before the trigger. The guard was not exercised.';
+      v_inconc := v_inconc + 1;
+    WHEN check_violation OR foreign_key_violation THEN
+      RAISE NOTICE 'T4e refuse primary_contact_user_id    INCONCLUSIVE  % : a constraint answered before the trigger did.', SQLSTATE;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e refuse primary_contact_user_id', 38) || rpad('INCONCLUSIVE', 14) || format('%s: a constraint answered before the trigger did. BEFORE ROW triggers are supposed to run first, so this is worth reading.', SQLSTATE);
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'T4e refuse primary_contact_user_id    FAIL   <- refused with the WRONG error: % %', SQLSTATE, SQLERRM;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4e refuse primary_contact_user_id', 38) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
+
+  -- -------------------------------------------------------------------
+  -- T4f. created_at IS NOT ON THE PERMIT LIST. PASS = LG008.
+  --
+  -- A creation timestamp is not something a browser revises.
+  -- -------------------------------------------------------------------
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+    UPDATE public.organizations SET created_at = created_at - interval '1 day' WHERE id = v_org;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+
+    IF v_rows = 0 THEN
+      RAISE NOTICE 'T4f refuse created_at                 INCONCLUSIVE  0 rows: the UPDATE policy filtered the row, so the guard never fired.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4f refuse created_at', 38) || rpad('INCONCLUSIVE', 14) || '0 rows: the UPDATE policy filtered the row, so the guard never fired. Nothing proven.';
+      v_inconc := v_inconc + 1;
+    ELSE
+      RAISE NOTICE 'T4f refuse created_at                 FAIL   <- SUCCEEDED, % row(s). THE PERMIT LIST IS NOT BITING.', v_rows;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4f refuse created_at', 38) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). THE PERMIT LIST IS NOT BITING on created_at.', v_rows);
+      v_fail := v_fail + 1;
+    END IF;
+  EXCEPTION
+    WHEN sqlstate 'LG008' THEN
+      RAISE NOTICE 'T4f refuse created_at                 PASS   (refused, LG008)';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4f refuse created_at', 38) || rpad('PASS', 14) || '(refused, LG008)';
+      v_pass := v_pass + 1;
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'T4f refuse created_at                 INCONCLUSIVE  42501: the policy answered before the guard could.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4f refuse created_at', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE, or the with_check answered before the trigger. The guard was not exercised.';
+      v_inconc := v_inconc + 1;
+    WHEN check_violation OR foreign_key_violation THEN
+      RAISE NOTICE 'T4f refuse created_at                 INCONCLUSIVE  % : a constraint answered before the trigger did.', SQLSTATE;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4f refuse created_at', 38) || rpad('INCONCLUSIVE', 14) || format('%s: a constraint answered before the trigger did. BEFORE ROW triggers are supposed to run first, so this is worth reading.', SQLSTATE);
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'T4f refuse created_at                 FAIL   <- refused with the WRONG error: % %', SQLSTATE, SQLERRM;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4f refuse created_at', 38) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
+
+  -- -------------------------------------------------------------------
+  -- T4g. id IS NOT ON THE PERMIT LIST. PASS = LG008.
+  --
+  -- THE PRIMARY KEY. Note the ordering this depends on: BEFORE ROW triggers run
+  -- BEFORE the RLS WITH CHECK and BEFORE constraint checking, so LG008 wins over
+  -- both the policy's with_check and the org_members foreign key. If a 42501 or
+  -- a 23503 comes back instead, the trigger did NOT fire first and that is
+  -- reported as INCONCLUSIVE, not as a pass.
+  -- -------------------------------------------------------------------
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+    UPDATE public.organizations SET id = gen_random_uuid() WHERE id = v_org;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+
+    IF v_rows = 0 THEN
+      RAISE NOTICE 'T4g refuse id                         INCONCLUSIVE  0 rows: the UPDATE policy filtered the row, so the guard never fired.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4g refuse id', 38) || rpad('INCONCLUSIVE', 14) || '0 rows: the UPDATE policy filtered the row, so the guard never fired. Nothing proven.';
+      v_inconc := v_inconc + 1;
+    ELSE
+      RAISE NOTICE 'T4g refuse id                         FAIL   <- SUCCEEDED, % row(s). THE PERMIT LIST IS NOT BITING.', v_rows;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4g refuse id', 38) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). THE PERMIT LIST IS NOT BITING on id.', v_rows);
+      v_fail := v_fail + 1;
+    END IF;
+  EXCEPTION
+    WHEN sqlstate 'LG008' THEN
+      RAISE NOTICE 'T4g refuse id                         PASS   (refused, LG008)';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4g refuse id', 38) || rpad('PASS', 14) || '(refused, LG008)';
+      v_pass := v_pass + 1;
+    WHEN insufficient_privilege THEN
+      RAISE NOTICE 'T4g refuse id                         INCONCLUSIVE  42501: the policy answered before the guard could.';
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4g refuse id', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE, or the with_check answered before the trigger. The guard was not exercised.';
+      v_inconc := v_inconc + 1;
+    WHEN check_violation OR foreign_key_violation THEN
+      RAISE NOTICE 'T4g refuse id                         INCONCLUSIVE  % : a constraint answered before the trigger did.', SQLSTATE;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4g refuse id', 38) || rpad('INCONCLUSIVE', 14) || format('%s: a constraint answered before the trigger did. BEFORE ROW triggers are supposed to run first, so this is worth reading.', SQLSTATE);
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'T4g refuse id                         FAIL   <- refused with the WRONG error: % %', SQLSTATE, SQLERRM;
+      v_logged := v_logged + 1;
+      v_lines  := v_lines || E'\n  ' || rpad('T4g refuse id', 38) || rpad('FAIL', 14) || format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
   END;
 
   RAISE NOTICE '';
-  RAISE NOTICE '-- T4: THE BACKFILL. READ-ONLY, AND IT RUNS BEFORE T5 MOVES ANYTHING. --';
+  RAISE NOTICE '-- T5: THE BACKFILL. READ-ONLY, AND IT RUNS BEFORE T6 MOVES ANYTHING. --';
 
   -- -------------------------------------------------------------------
-  -- T4. THE BACKFILL AGREES WITH ITS SOURCE, ROW BY ROW.
+  -- T5. THE BACKFILL AGREES WITH ITS SOURCE, ROW BY ROW.
   --
-  -- READ-ONLY, AND IT MUST STAY BEFORE T5. T5 deliberately moves one
+  -- READ-ONLY, AND IT MUST STAY BEFORE T6. T6 deliberately moves one
   -- organization's is_paid on the exempt path; if it ran first, this
   -- assertion would report a mismatch against a backfill that is
   -- perfectly correct.
@@ -631,34 +1079,38 @@ BEGIN
     FROM public.organizations;
 
     IF v_mismatch = 0 THEN
-      RAISE NOTICE 'T4  backfill matches source       PASS   (0 mismatches; is_paid true=%, false=%)', v_paid, v_unpaid;
+      RAISE NOTICE 'T5  backfill matches source           PASS   (0 mismatches; is_paid true=%, false=%)', v_paid, v_unpaid;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T4  backfill matches source', 34) || rpad('PASS', 14) || format('(0 mismatches; true=%s, false=%s. EXPECTED AT AUTHORING: 16 / 2)', v_paid, v_unpaid);
+      v_lines  := v_lines || E'\n  ' || rpad('T5  backfill matches source', 38) || rpad('PASS', 14) || format('(0 mismatches; true=%s, false=%s. EXPECTED AT AUTHORING: 16 / 2)', v_paid, v_unpaid);
       v_pass := v_pass + 1;
     ELSE
-      RAISE NOTICE 'T4  backfill matches source       FAIL   <- % organization(s) disagree with their member. DO NOT APPLY.', v_mismatch;
+      RAISE NOTICE 'T5  backfill matches source           FAIL   <- % organization(s) disagree with their member. DO NOT APPLY.', v_mismatch;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T4  backfill matches source', 34) || rpad('FAIL', 14) || format('%s organization(s) disagree with their member (true=%s, false=%s). DO NOT APPLY.', v_mismatch, v_paid, v_unpaid);
+      v_lines  := v_lines || E'\n  ' || rpad('T5  backfill matches source', 38) || rpad('FAIL', 14) || format('%s organization(s) disagree with their member (true=%s, false=%s). DO NOT APPLY.', v_mismatch, v_paid, v_unpaid);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'T4  backfill matches source       FAIL   <- % %', SQLSTATE, SQLERRM;
+    RAISE NOTICE 'T5  backfill matches source           FAIL   <- % %', SQLSTATE, SQLERRM;
     v_logged := v_logged + 1;
-    v_lines  := v_lines || E'\n  ' || rpad('T4  backfill matches source', 34) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
+    v_lines  := v_lines || E'\n  ' || rpad('T5  backfill matches source', 38) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
     v_fail := v_fail + 1;
   END;
 
   RAISE NOTICE '';
-  RAISE NOTICE '-- T5: THE EXEMPTION. PASS = the write succeeded. THIS ONE MOVES is_paid. --';
+  RAISE NOTICE '-- T6: THE EXEMPTION. PASS = the write succeeded. THIS ONE MOVES is_paid. --';
 
   -- -------------------------------------------------------------------
-  -- T5. THE EXEMPTION. No claims, no role change - so auth.uid() is NULL,
-  -- exactly as it is for the service-role admin grant routes, for a
-  -- future billing webhook, and for every migration.
+  -- T6. THE EXEMPTION. No claims, no role change - so auth.uid() is NULL,
+  -- exactly as it is for the service-role admin grant routes (census W2
+  -- and W3), for a future billing webhook, and for every migration.
   --
   -- THIS IS THE MOST IMPORTANT LINE IN THE FILE. If it FAILs, 092 has
   -- locked the only route that marks a customer paid out of the column it
   -- just created, and it must not be applied at all.
+  --
+  -- NOTE WHAT IT PROVES ABOUT THE PERMIT LIST: is_paid is NOT permitted,
+  -- and this write succeeds anyway. EXEMPT IS NOT PERMITTED, and this is
+  -- that distinction under test.
   --
   -- IT MUTATES is_paid. Everything that reads the backfill runs above it.
   -- PASS = SUCCEEDS.
@@ -675,28 +1127,28 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
 
     IF v_rows = 1 THEN
-      RAISE NOTICE 'T5  no-session write is exempt    PASS   (1 row written)';
+      RAISE NOTICE 'T6  no-session write is exempt        PASS   (1 row written)';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T5  no-session write is exempt', 34) || rpad('PASS', 14) || '(1 row written)';
+      v_lines  := v_lines || E'\n  ' || rpad('T6  no-session write is exempt', 38) || rpad('PASS', 14) || '(1 row written; exempt is not permitted)';
       v_pass := v_pass + 1;
     ELSE
-      RAISE NOTICE 'T5  no-session write is exempt    FAIL   <- matched % rows, expected 1.', v_rows;
+      RAISE NOTICE 'T6  no-session write is exempt        FAIL   <- matched % rows, expected 1.', v_rows;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T5  no-session write is exempt', 34) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
+      v_lines  := v_lines || E'\n  ' || rpad('T6  no-session write is exempt', 38) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'T5  no-session write is exempt    FAIL   <- % %  092 WOULD BLOCK THE ADMIN GRANT ROUTE AND EVERY MIGRATION. DO NOT APPLY.', SQLSTATE, SQLERRM;
+    RAISE NOTICE 'T6  no-session write is exempt        FAIL   <- % %  092 WOULD BLOCK THE ADMIN GRANT ROUTE AND EVERY MIGRATION. DO NOT APPLY.', SQLSTATE, SQLERRM;
     v_logged := v_logged + 1;
-    v_lines  := v_lines || E'\n  ' || rpad('T5  no-session write is exempt', 34) || rpad('FAIL', 14) || format('%s %s  092 WOULD BLOCK THE ADMIN GRANT ROUTE AND EVERY MIGRATION. DO NOT APPLY.', SQLSTATE, SQLERRM);
+    v_lines  := v_lines || E'\n  ' || rpad('T6  no-session write is exempt', 38) || rpad('FAIL', 14) || format('%s %s  092 WOULD BLOCK THE ADMIN GRANT ROUTE AND EVERY MIGRATION. DO NOT APPLY.', SQLSTATE, SQLERRM);
     v_fail := v_fail + 1;
   END;
 
   RAISE NOTICE '';
-  RAISE NOTICE '-- T6: 091 IS UNDISTURBED. PASS = LG007, NOT LG008. --';
+  RAISE NOTICE '-- T7-T8: 091 IS UNDISTURBED, AND THE COLUMN SHAPE. --';
 
   -- -------------------------------------------------------------------
-  -- T6. 091's PROFILES GUARD STILL BITES, WITH ITS OWN CODE.
+  -- T7. 091's PROFILES GUARD STILL BITES, WITH ITS OWN CODE.
   --
   -- 092 must not have displaced it, and the two must not have been
   -- confused with each other. A signed-in user moving profiles.is_paid is
@@ -716,38 +1168,35 @@ BEGIN
     UPDATE public.profiles SET is_paid = NOT COALESCE(is_paid, false) WHERE id = v_uid;
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
-    RAISE NOTICE 'T6  091 guard still bites         FAIL   <- SUCCEEDED, % row(s). 091s trigger is not firing.', v_rows;
+    RAISE NOTICE 'T7  091 guard still bites             FAIL   <- SUCCEEDED, % row(s). 091s trigger is not firing.', v_rows;
     v_logged := v_logged + 1;
-    v_lines  := v_lines || E'\n  ' || rpad('T6  091 guard still bites', 34) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). 091s trigger is not firing.', v_rows);
+    v_lines  := v_lines || E'\n  ' || rpad('T7  091 guard still bites', 38) || rpad('FAIL', 14) || format('SUCCEEDED, %s row(s). 091s trigger is not firing.', v_rows);
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
-      RAISE NOTICE 'T6  091 guard still bites         PASS   (refused, LG007 - 091s code, not 092s)';
+      RAISE NOTICE 'T7  091 guard still bites             PASS   (refused, LG007 - 091s code, not 092s)';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T6  091 guard still bites', 34) || rpad('PASS', 14) || '(refused, LG007 - 091s code, not 092s)';
+      v_lines  := v_lines || E'\n  ' || rpad('T7  091 guard still bites', 38) || rpad('PASS', 14) || '(refused, LG007 - 091s code, not 092s)';
       v_pass := v_pass + 1;
     WHEN sqlstate 'LG008' THEN
-      RAISE NOTICE 'T6  091 guard still bites         FAIL   <- LG008. THE WRONG TRIGGER ANSWERED. The two guards have been confused.';
+      RAISE NOTICE 'T7  091 guard still bites             FAIL   <- LG008. THE WRONG TRIGGER ANSWERED. The two guards have been confused.';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T6  091 guard still bites', 34) || rpad('FAIL', 14) || 'LG008. THE WRONG TRIGGER ANSWERED. The two guards have been confused.';
+      v_lines  := v_lines || E'\n  ' || rpad('T7  091 guard still bites', 38) || rpad('FAIL', 14) || 'LG008. THE WRONG TRIGGER ANSWERED. The two guards have been confused.';
       v_fail := v_fail + 1;
     WHEN insufficient_privilege THEN
-      RAISE NOTICE 'T6  091 guard still bites         INCONCLUSIVE  42501: authenticated holds no UPDATE on profiles.';
+      RAISE NOTICE 'T7  091 guard still bites             INCONCLUSIVE  42501: authenticated holds no UPDATE on profiles.';
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T6  091 guard still bites', 34) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE on profiles.';
+      v_lines  := v_lines || E'\n  ' || rpad('T7  091 guard still bites', 38) || rpad('INCONCLUSIVE', 14) || '42501: authenticated holds no UPDATE on profiles.';
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
-      RAISE NOTICE 'T6  091 guard still bites         FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
+      RAISE NOTICE 'T7  091 guard still bites             FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T6  091 guard still bites', 34) || rpad('FAIL', 14) || format('wrong error: %s %s', SQLSTATE, SQLERRM);
+      v_lines  := v_lines || E'\n  ' || rpad('T7  091 guard still bites', 38) || rpad('FAIL', 14) || format('wrong error: %s %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
-  RAISE NOTICE '';
-  RAISE NOTICE '-- T7: THE COLUMN SHAPE. READ-ONLY. --';
-
   -- -------------------------------------------------------------------
-  -- T7. THE COLUMN IS boolean, NOT NULL, DEFAULT false.
+  -- T8. THE COLUMN IS boolean, NOT NULL, DEFAULT false.
   --
   -- READ-ONLY. A nullable entitlement is a third state, and every gate in
   -- the codebase reads `is_paid === true` - a spelling 091 recorded as
@@ -766,20 +1215,20 @@ BEGIN
       AND c.column_name  = 'is_paid';
 
     IF v_type = 'boolean' AND v_nullable = 'NO' AND v_default LIKE '%false%' THEN
-      RAISE NOTICE 'T7  column shape                  PASS   (boolean, NOT NULL, default %)', v_default;
+      RAISE NOTICE 'T8  column shape                      PASS   (boolean, NOT NULL, default %)', v_default;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T7  column shape', 34) || rpad('PASS', 14) || format('(boolean, NOT NULL, default %s)', v_default);
+      v_lines  := v_lines || E'\n  ' || rpad('T8  column shape', 38) || rpad('PASS', 14) || format('(boolean, NOT NULL, default %s)', v_default);
       v_pass := v_pass + 1;
     ELSE
-      RAISE NOTICE 'T7  column shape                  FAIL   <- type=%, nullable=%, default=%', v_type, v_nullable, v_default;
+      RAISE NOTICE 'T8  column shape                      FAIL   <- type=%, nullable=%, default=%', v_type, v_nullable, v_default;
       v_logged := v_logged + 1;
-      v_lines  := v_lines || E'\n  ' || rpad('T7  column shape', 34) || rpad('FAIL', 14) || format('type=%s, nullable=%s, default=%s. Expected boolean / NO / false.', COALESCE(v_type,'<missing>'), COALESCE(v_nullable,'<missing>'), v_default);
+      v_lines  := v_lines || E'\n  ' || rpad('T8  column shape', 38) || rpad('FAIL', 14) || format('type=%s, nullable=%s, default=%s. Expected boolean / NO / false.', COALESCE(v_type,'<missing>'), COALESCE(v_nullable,'<missing>'), v_default);
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'T7  column shape                  FAIL   <- % %', SQLSTATE, SQLERRM;
+    RAISE NOTICE 'T8  column shape                      FAIL   <- % %', SQLSTATE, SQLERRM;
     v_logged := v_logged + 1;
-    v_lines  := v_lines || E'\n  ' || rpad('T7  column shape', 34) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
+    v_lines  := v_lines || E'\n  ' || rpad('T8  column shape', 38) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
     v_fail := v_fail + 1;
   END;
 
@@ -787,12 +1236,12 @@ BEGIN
 
   RAISE NOTICE '';
   RAISE NOTICE '=====================================================';
-  RAISE NOTICE 'assertions run : %   (expected 7)', v_ran;
+  RAISE NOTICE 'assertions run : %   (expected 14)', v_ran;
   RAISE NOTICE 'PASS           : %', v_pass;
   RAISE NOTICE 'FAIL           : %', v_fail;
   RAISE NOTICE 'INCONCLUSIVE   : %', v_inconc;
 
-  IF v_fail = 0 AND v_inconc = 0 AND v_ran = 7 AND v_pass = 7 THEN
+  IF v_fail = 0 AND v_inconc = 0 AND v_ran = 14 AND v_pass = 14 THEN
     RAISE NOTICE 'VERDICT        : SAFE TO APPLY 092.';
     v_verdict      := 'SAFE TO APPLY';
     v_verdict_text := 'SAFE TO APPLY 092.';
@@ -831,7 +1280,7 @@ BEGIN
   -- ORDER IS LOAD-BEARING: HEADLINE, THEN TALLY, THEN THE PER-ASSERTION
   -- LINES. A client that truncates a long error message truncates the
   -- END of it, so the verdict and the counts must be at the TOP where
-  -- they survive. The 7 detail lines are the part that can afford to be
+  -- they survive. The 14 detail lines are the part that can afford to be
   -- cut off - if they are, the tally still says how many failed and the
   -- headline still says whether to apply.
   -- =================================================================
@@ -840,8 +1289,8 @@ BEGIN
     || E'=====================================================\n'
     || v_headline || E'\n'
     || E'=====================================================\n'
-    || format(E'assertions run  : %s   (expected 7)\n', v_ran)
-    || format(E'PASS            : %s   (expected 7)\n', v_pass)
+    || format(E'assertions run  : %s   (expected 14)\n', v_ran)
+    || format(E'PASS            : %s   (expected 14)\n', v_pass)
     || format(E'FAIL            : %s   (expected 0)\n',  v_fail)
     || format(E'INCONCLUSIVE    : %s   (expected 0)\n',  v_inconc)
     -- THE SELF-CHECK, IN THE OUTPUT RATHER THAN INFERRED FROM IT. v_ran is
@@ -853,6 +1302,7 @@ BEGIN
     || format(E'verdicts logged : %s   (must equal assertions run: %s)\n',
               v_logged, CASE WHEN v_logged = v_ran THEN 'OK' ELSE 'MISMATCH' END)
     || E'\n'
+    || 'PERMIT LIST     : name   (everything else on organizations is guarded)' || E'\n'
     || 'VERDICT         : ' || v_verdict_text || E'\n'
     || E'-----------------------------------------------------'
     || v_lines
@@ -883,7 +1333,7 @@ $test$;
 -- the batch in its own block and swallows the error. In that case the
 -- transaction is still open and still holds an ALTER TABLE, a backfill
 -- that rewrote every organization, a CREATE FUNCTION, a CREATE TRIGGER
--- and five UPDATEs against real rows, and this line is the only thing
+-- and several UPDATEs against real rows, and this line is the only thing
 -- that undoes them.
 --
 -- IT MATTERS MORE HERE THAN IT DID IN 091. 091's test wrote only to

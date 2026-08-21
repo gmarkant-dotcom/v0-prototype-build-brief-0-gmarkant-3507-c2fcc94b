@@ -16,6 +16,10 @@ rather than left undone, and both were instructed:
 - **A DELETE policy on `public.partnerships`** (Phase 6) — the fix that would
   make that route actually work is an RLS widening, which this session is
   forbidden to do and which is a product decision besides. Raised as OPEN-092-1.
+- **The two `partnerships` policy findings** from a live `pg_policies` query —
+  **logged, not fixed, as instructed.** OPEN-092-8 (ILIKE where equality belongs)
+  and OPEN-092-9 (an UPDATE policy with no column restriction). Both fixes are RLS
+  or migration changes.
 
 ---
 
@@ -23,7 +27,7 @@ rather than left undone, and both were instructed:
 
 ```
   1.  Run docs/092-preapply-test.sql          <- one paste, ends in an error
-  2.  Dry run 092: COMMIT -> ROLLBACK on LINE 845, run, put it back
+  2.  Dry run 092: COMMIT -> ROLLBACK on LINE 1049, run, put it back
   3.  Run 092 for real
   4.  Run 092's VERIFICATION block            <- V1-V9, after the COMMIT
   5.  Update the migrations table in LIGAMENT_CONTEXT.md
@@ -69,16 +73,16 @@ work** and you have learned nothing.
 
 ```bash
 grep -n -i '^begin\|^commit\|^rollback' supabase/migrations/092_org_entitlement.sql
-#   432  BEGIN;    <- executable. The transaction.
-#   513  BEGIN     <- plpgsql, the backfill assertion block. No semicolon.
-#   658  BEGIN     <- plpgsql, the guard function body. No semicolon.
-#   845  COMMIT;   <- THE ONE TO SWAP FOR ROLLBACK;
+#    459  BEGIN;    <- executable. The transaction.
+#    544  BEGIN     <- plpgsql, the backfill assertion block. No semicolon.
+#    856  BEGIN     <- plpgsql, the guard function body. No semicolon.
+#   1049  COMMIT;   <- THE ONE TO SWAP FOR ROLLBACK;
 ```
 
-**Change the `COMMIT;` on line 845 to `ROLLBACK;`.** Re-grep before trusting
-those numbers — **they moved twice during this session, both times because of
-the header edit that was recording them.** The down file is `99 BEGIN;` /
-`136 COMMIT;`.
+**Change the `COMMIT;` on line 1049 to `ROLLBACK;`.** Re-grep before trusting
+those numbers — **they have moved four times across this branch**, twice because
+of the header edit that was recording them and twice more when the guard became
+a permit list. The down file is now `113 BEGIN;` / `150 COMMIT;`.
 
 ---
 
@@ -232,15 +236,129 @@ not change" is a statement about two rows.
   090's and 091's on `profiles`. So there is no firing-order question here and no
   `updated_at` auto-stamp trigger to interact with.
 
-## The guarded set is ONE column, and the design doc argued for the inverse
+## The guard is a PERMIT LIST of one column, `name` — OPEN-092-4 is closed
 
-`docs/092-entitlements-design.md` §1 argued for a **permit list of `{name}`** —
-refuse any column but `name` moving under a session — on the grounds that
-`organizations` has seven columns and a session client writes exactly one.
+**The first draft of 092 carried a deny list of `{is_paid}`, per the brief. That
+was wrong and the design doc was right.** The correction is the substance of this
+revision.
 
-**Built as instructed: a deny-list of `is_paid`,** following 091's mechanism.
-Both halves are written into 092's header so the choice is visible, along with
-the one-line edit that switches shapes. **Raised as OPEN-092-4.**
+### Why the logic inverts rather than 091 being wrong
+
+| | `profiles` (091) | `organizations` (092) |
+|---|---|---|
+| Columns | 44 | **8** |
+| Written by a session client | 37, across 24 sites | **1** — `name` |
+| A permit list would be | 37 entries, **one omission silently breaks a save** | **1 entry** |
+| **What the NEXT column is likely to be** | more profile content — a bio, a preference, a contact field | **AUTHORITY-SHAPED: plan tier, seat limit, billing customer id** |
+| Cost of the wrong choice | a broken save, loudly, at development time | **a privilege column ships self-grantable, silently** |
+
+**That last row is the whole ruling.** On `profiles`, adding `bio` is not a
+deliberate act and adding a privilege column is, so the deny list carried the
+smaller risk. **On `organizations` every plausible future column is
+authority-shaped** — this is the billing table now. A deny list leaves each one
+unguarded until somebody remembers, and *"somebody remembers"* is not a mechanism.
+
+> **A permit list guards them BY DEFAULT, and its failure mode is a write that
+> FAILS LOUDLY rather than a hole that opens silently.**
+
+### The permit list, and the census it came from
+
+```
+  PERMITTED:  name
+```
+
+**One entry, and it is derived and not guessed.**
+`docs/092-organizations-writer-census.md` was written and committed **before 092
+was edited**, because getting a permit list one entry short does not fail a
+build — **it breaks a write in production on the day the migration is applied.**
+
+It found **five writers** of `public.organizations` in the whole repository, with
+every column each writes enumerated, and **its gap table is empty**: all eight
+columns have an identified writer, so nothing here is a guess at an unaccounted
+column. **Had one been UNACCOUNTED the census would have stopped there and 092
+would not have been touched.**
+
+**The rule: a column belongs on the list only if a SESSION-CLIENT writer
+legitimately writes it.** The census row that justifies the one entry:
+
+> **W1** — `lib/company-identity.ts:306`, **SESSION** client,
+> `.from("organizations").update({ name })`. Every company rename in the product
+> goes through that line, and it is the only session write of this table that
+> exists.
+
+And the row that excludes each of the other seven is quoted in 092's section 3.
+The two worth repeating here:
+
+- **`is_paid` IS NOT ON THE LIST, and a mechanical derivation would have put it
+  there.** W2 and W3 write it — so a script asking *"does anything write this
+  column"* would have permitted it, **and that would delete the entire point of
+  migration 092.** Both use the **service role**, so they pass the
+  `auth.uid() IS NULL` exemption **before the permit list is ever consulted**.
+  **EXEMPT IS NOT PERMITTED.** Putting it on the list would additionally let a
+  **browser** write it, and the browser is the entire threat model.
+- **`updated_at` is not on it either, and that one is a near miss.** W2, W3 and
+  092's own backfill stamp it — all exempt. **W1 writes `{ name }` and nothing
+  else, not even `updated_at`.** That is quoted from the object literal, not
+  inferred. **The tripwire is recorded**: if that line ever gains a column, that
+  column joins `v_permitted` in the same commit, or every rename starts raising
+  LG008.
+
+### The mechanism, and the one thing that decides whether it works
+
+> **THE TEST IS "DID THIS COLUMN CHANGE", NEVER "WAS THIS COLUMN IN THE SET
+> CLAUSE".**
+
+**A trigger cannot see the SET clause.** It has `OLD` and `NEW` and nothing else.
+**That is not a limitation here — it is the property the shape depends on:**
+
+A caller that sends the **whole row** back with one field altered — which is what
+a read-modify-write PATCH produces — names **every** column in its SET clause. A
+guard that refused on *"was it named"* would reject that write for **mentioning**
+`is_paid` while sending back the identical value. **Every whole-row write in the
+product would break.** Comparing **values** makes it pass, because nothing outside
+the permit list **moved**.
+
+**T2 in the pre-apply test is that property under test**, and it is not there for
+symmetry.
+
+The comparison is expressed over the row with the permitted columns subtracted:
+
+```sql
+v_old_rest := to_jsonb(OLD) - v_permitted;   -- v_permitted = ARRAY['name']
+v_new_rest := to_jsonb(NEW) - v_permitted;
+IF v_new_rest = v_old_rest THEN RETURN NEW; END IF;
+```
+
+**An `IS NOT DISTINCT FROM` chain naming the seven guarded columns was rejected**,
+because such a chain has to be edited every time a column is added — **which makes
+it a deny list wearing a permit list's clothes.** With the projection form, **a
+column added to this table next year is guarded from the moment it exists, with
+no edit to this function.**
+
+### The function was renamed, and 092 has not been applied so nothing is stranded
+
+`organizations_guard_entitlement()` → **`organizations_guard_columns()`**, and the
+trigger `organizations_entitlement_guard` → **`organizations_columns_guard`**. A
+name saying *"entitlement"* on a guard that also refuses `is_lead_agency`,
+`primary_contact_user_id` and every future column is the kind of lie that makes
+somebody add a second trigger for the rest. **No object under the old name has
+ever existed**, so there is nothing to rename in any database; the down file says
+what to do if an older copy of 092 was applied anyway.
+
+### The DETAIL names columns and never values — reassessed, not inherited
+
+091's rule was *"name the column, never the value, because the caller supplied the
+column name."* **This differs on one point and it is written into the header: the
+moved-column list is COMPUTED FROM A DIFF, not read back from what the caller
+named.** So a caller who sends a whole row and gets `is_paid` back has learned
+their stored value differed from what they sent.
+
+**That is not an oracle here, structurally rather than by judgement:** the trigger
+only fires on a row **the UPDATE policy already admitted**, and the SELECT policy
+*"Members read their organizations"* lets that same caller read every column of
+that same row directly. **The DETAIL reveals nothing a single GET does not already
+give up.** For a row they do not belong to, the policy filters the UPDATE to zero
+rows and the trigger never runs. **Values are still never interpolated.**
 
 ## The follow-up this migration owes
 
@@ -265,7 +383,9 @@ rather than one.
 
 # PHASE 2 — `docs/092-preapply-test.sql`
 
-**Seven assertions. Expected count: 7 run, 7 PASS, 0 FAIL, 0 INCONCLUSIVE.**
+**FOURTEEN assertions. Expected: 14 run, 14 PASS, 0 FAIL, 0 INCONCLUSIVE.**
+*(It was seven when the guard was a deny list. The permit list needs a refusal
+per guarded column and a whole-row case, so the count doubled.)*
 
 Same shape as `docs/091-preapply-test.sql`, same mechanism, and **no fourth
 mechanism was invented**: notices are invisible in the Supabase SQL Editor, that
@@ -278,26 +398,54 @@ clean one.
 
 | # | Assertion | **PASS is** |
 |---|---|---|
-| T1 | The company rename, as an org admin | **SUCCEEDS**, 1 row (early return) |
-| T2 | An owner/admin self-granting `organizations.is_paid` | **RAISES LG008** — a success here is a FAIL |
-| T3 | A no-op write, `is_paid` sent back unchanged | **SUCCEEDS**, 1 row |
-| T4 | The backfill agrees with its source, row by row | **0 mismatching organizations** *(read-only)* |
-| T5 | A no-session write of `is_paid` | **SUCCEEDS** — the exemption |
-| T6 | 091's profiles guard still bites | **RAISES LG007**, *not* LG008 |
-| T7 | The column is `boolean`, `NOT NULL`, `DEFAULT false` | all three correct *(read-only)* |
+| T1 | The company rename, **bare** `{ name }`, as an org admin | **SUCCEEDS**, 1 row |
+| **T2** | **A WHOLE-ROW write naming all 8 columns, altering only `name`** | **SUCCEEDS**, 1 row — *the 2(a) property under test* |
+| T3 | A whole-row **no-op**, every column sent back unchanged | **SUCCEEDS**, 1 row |
+| T4a | `is_paid` moved | **RAISES LG008** |
+| T4b | `updated_at` moved | **RAISES LG008** |
+| T4c | `is_lead_agency` moved | **RAISES LG008** |
+| T4d | `is_vendor` moved | **RAISES LG008** |
+| T4e | `primary_contact_user_id` moved | **RAISES LG008** |
+| T4f | `created_at` moved | **RAISES LG008** |
+| T4g | `id` moved | **RAISES LG008** |
+| T5 | The backfill agrees with its source, row by row | **0 mismatches** *(read-only)* |
+| T6 | A no-session write of `is_paid` | **SUCCEEDS** — the exemption |
+| T7 | 091's profiles guard still bites | **RAISES LG007**, *not* LG008 |
+| T8 | The column is `boolean`, `NOT NULL`, `DEFAULT false` | all three correct *(read-only)* |
 
-**Three design points that are not cosmetic:**
+**Seven of the fourteen pass by raising.** Every refusal runs in its own plpgsql
+subtransaction, which is what lets all fourteen report from a single paste.
 
-- **T4 RUNS BEFORE T5 AND THE ORDER IS LOAD-BEARING.** T5 deliberately moves
-  `is_paid` on the exempt path. If it ran first, T4 would report a mismatch
+### T2 is the one that matters most, and it is new
+
+**A permit list can be too small in a direction a deny list cannot.** A deny list
+can only miss a column that ought to be guarded — a hole. **A permit list can also
+omit a column a session client legitimately writes, and that is a write that
+starts raising LG008 the moment the migration is applied.** T1, T2 and T3 exercise
+the single permitted column three different ways for exactly that reason.
+
+T2 sends **all eight columns** with only `name` altered. If the guard tested the
+SET clause rather than the values, it would refuse that write for **mentioning**
+`is_paid`, and every whole-row write in the product would break. **A FAIL on T2 is
+the single most important failure in the file.**
+
+### Four design points that are not cosmetic
+
+- **T5 RUNS BEFORE T6 AND THE ORDER IS LOAD-BEARING.** T6 deliberately moves
+  `is_paid` on the exempt path. If it ran first, T5 would report a mismatch
   **against a backfill that is perfectly correct** — a test failing on its own
   side effects, which is worse than no test because the failure looks real.
 - **The subject is selected as an OWNER or ADMIN of the organization under test.**
-  A non-admin subject would make T2 a **zero-row update that proves nothing** —
-  the policy would have filtered the row before the trigger could fire. That
-  outcome is reported as **INCONCLUSIVE**, not as a pass.
-- **T6 treats LG008 as a FAIL, not just "not LG007".** Two guards, two tables, two
-  codes; if 092's code comes back from a `profiles` write, they have been confused.
+  A non-admin subject would make every T4 a **zero-row update that proves
+  nothing** — the policy would have filtered the row before the trigger fired.
+  Reported as **INCONCLUSIVE**, not as a pass.
+- **T6 proves "exempt is not permitted".** `is_paid` is not on the permit list and
+  that write succeeds anyway, because it has no session behind it. That
+  distinction is the one a mechanical derivation gets wrong.
+- **T4c/T4d/T4e/T4g carry constraint handlers.** A `23514` or `23503` there would
+  mean a CHECK or a foreign key answered **before** the trigger. BEFORE ROW
+  triggers are supposed to run first, so that outcome is reported **INCONCLUSIVE
+  and flagged as worth reading**, never passed.
 
 **Three ways the run can end, and only one is a verdict** — the header spells all
 three out. The second is worth knowing here: **an error reading
@@ -315,6 +463,13 @@ and it is not zero, in three specific places named in the header: **the backfill
 instead of `IS NOT DISTINCT FROM` would fall through to the refusal), and **the
 one live session writer**, `lib/company-identity.ts:306`, through which every
 company rename in the product passes.
+
+**The permit list adds a fourth, and it is the one the deny list did not have:
+A PERMIT LIST CAN BE TOO SMALL IN THE OTHER DIRECTION.** A column a session
+client legitimately writes, left off the list, is a write that starts raising
+LG008 on apply. That is why the list is derived from a written census rather
+than from reading the code once, and why T1, T2 and T3 exercise the one
+permitted column three different ways.
 
 ---
 
@@ -630,6 +785,10 @@ named.** None was judged by grep.
 > `docs/schema-snapshot-2026-08-13.md`, which lists **four** DELETE policies in
 > the entire schema and **none** on this table.
 >
+> **AND SINCE CONFIRMED AGAINST THE LIVE DATABASE.** A `pg_policies` query run
+> today returns **six policies on `public.partnerships` and no DELETE among
+> them.** This finding has moved from REASONED to EXECUTED — see OPEN-092-1.
+>
 > Same shape as `admin/grant-agency-access`, **and worse** — that one at least
 > worked on the admin's own row. The ownership pre-check above it was never the
 > problem: it correctly refuses a partnership the caller does not own, it simply
@@ -703,7 +862,14 @@ entry was touched.**
 
 # OPEN — every item, with the query or command that settles it
 
-## OPEN-092-1. `public.partnerships` has no DELETE policy
+## OPEN-092-1. `public.partnerships` has no DELETE policy — **NOW CONFIRMED AGAINST THE LIVE DATABASE**
+
+> **THIS IS NO LONGER REASONED. IT IS EXECUTED.** A `pg_policies` query was run
+> against the live database today: **`public.partnerships` carries six policies
+> and NONE of them is a DELETE.** The finding stands exactly as written — that
+> route could never have deleted anything, for anybody — and it is now a measured
+> fact rather than an inference from migration files and a snapshot dated
+> 2026-08-13.
 
 The route is now honest (501). Making removal work needs a policy, which is a
 **widening** and a **product decision**: who may remove a partnership, and whether
@@ -711,12 +877,12 @@ The route is now honest (501). Making removal work needs a policy, which is a
 reference these.
 
 ```sql
--- Confirm the gap against the live database, not against a migration file.
+-- The query that was run, kept so it can be re-run after any policy change.
 SELECT cmd, count(*) FROM pg_policies
 WHERE schemaname='public' AND tablename='partnerships'
 GROUP BY cmd ORDER BY cmd;
--- EXPECTED per every migration: INSERT 1, SELECT 2, UPDATE 3. NO DELETE ROW.
--- A DELETE row means somebody added one outside the migration set.
+-- MEASURED TODAY: INSERT 1, SELECT 2, UPDATE 3. Six policies. NO DELETE ROW.
+-- A DELETE row appearing later means somebody added one outside the migration set.
 
 -- And what a delete would orphan, before anybody writes that policy:
 SELECT 'project_assignments' AS t, count(*) FROM public.project_assignments WHERE partnership_id IS NOT NULL
@@ -751,16 +917,23 @@ ORDER BY id_coincides, o.created_at;
 -- EXPECTED: 18 rows, 16 with id_coincides = true.
 ```
 
-## OPEN-092-4. Deny-list or permit-list on the organizations guard
+## OPEN-092-4. Deny list or permit list on the organizations guard — **CLOSED**
 
-**PRODUCT/ENGINEERING RULING, GREG'S.** Built as a **deny-list of `is_paid`**, per
-the brief. `docs/092-entitlements-design.md` §1 argued for a **permit list of
-`{name}`**, whose failure mode is loud and lands at development time rather than
-silent and in production.
+**RULED: PERMIT LIST.** The brief specified a deny list and the design doc argued
+for a permit list; **the design doc was right and the brief was wrong.** 092 now
+carries a permit list of one column, `name`, derived from
+`docs/092-organizations-writer-census.md`. The full reasoning is in Phase 1 above
+and in 092's own header; the short form is that **every plausible future column on
+`organizations` is authority-shaped — a plan tier, a seat limit, a billing
+customer id — so a deny list would leave each one unguarded until somebody
+remembered.**
 
-**It is a one-line difference** and 092's header names it. The trade: a permit
-list guards every future column by default; its cost is that a new user-editable
-column breaks until somebody adds one word to a list.
+**One thing this leaves owed, and it is small:** the permit list has to gain a
+column whenever a **session-client** writer legitimately starts writing one. There
+is exactly one such writer, `lib/company-identity.ts:306`, and the tripwire is
+recorded in the census, in 092's header, and in the pre-apply test's maintenance
+note. **T1, T2 and T3 are what would fail if somebody misses it**, at development
+time, which is the failure mode the shape was chosen for.
 
 ## OPEN-092-5. LG007 and LG008 are not mapped at the API layer
 
@@ -795,6 +968,94 @@ FROM public.usage_tracking GROUP BY plan_tier ORDER BY plan_tier;
 -- EXPECTED if nothing has been hand-edited: one row, 'starter'.
 ```
 
+## OPEN-092-8. `"Partners can claim partnership by email"` matches with ILIKE, not equality
+
+**FROM A LIVE `pg_policies` QUERY RUN TODAY. LOGGED, NOT FIXED** — fixing it is an
+RLS change and this session is forbidden to make one.
+
+The policy's email comparison uses **`~~*` (ILIKE)** rather than `=`. **In an
+ILIKE pattern, `%` and `_` are wildcards**, so an address containing either would
+match rows belonging to other people: `a_b@x.com` would match `aXb@x.com`, and an
+address containing `%` would match far more.
+
+**Two things bound it, and neither makes it correct:**
+
+1. **No live email contains `%` or `_`.** So it is not currently exploitable.
+   That is a property of the current data, not of the policy.
+2. **It reads `profiles.email`, which 091 now guards against self-rewriting.**
+   Before 091 a user could set their own email to `%@%` and claim every
+   unclaimed partnership on the platform. **091 closed that**, so the policy is
+   **narrower than it was** — a user can no longer choose the pattern they match
+   with. It would take an address containing a wildcard to arrive through signup.
+
+**The fix is a one-word change from `~~*` to `=` with `lower(btrim(...))` on both
+sides**, matching the spelling `org_has_member_with_email` and
+`accept_org_invitation` already use. It is not made here.
+
+```sql
+-- 1. Confirm the operator is still ILIKE.
+SELECT policyname, qual FROM pg_policies
+WHERE schemaname='public' AND tablename='partnerships'
+  AND policyname='Partners can claim partnership by email';
+-- Look for ~~* in the qual. A '=' means somebody has already fixed it.
+
+-- 2. Does any address in the system contain a wildcard? THE ONE THAT MATTERS.
+SELECT id, email FROM public.profiles WHERE email LIKE '%\%%' OR email LIKE '%\_%';
+SELECT id, partner_email FROM public.partnerships
+WHERE partner_email LIKE '%\%%' OR partner_email LIKE '%\_%';
+-- EXPECTED: 0 rows from both. ANY ROW makes this reachable today.
+
+-- 3. What is claimable at all - the blast radius if it ever is.
+SELECT count(*) FROM public.partnerships WHERE vendor_org_id IS NULL;
+```
+
+## OPEN-092-9. `"Partners can update partnership status"` has NO column restriction
+
+**FROM THE SAME LIVE QUERY. LOGGED, NOT FIXED.** **This is the same class as the
+`profiles` hole 091 closed, one table over, and it is the more serious of the
+two findings.**
+
+The policy is `USING (vendor_org_id IN (SELECT current_user_org_ids()))` with the
+same `WITH CHECK`. It constrains **which row**, and says nothing about **which
+columns**. RLS has no column granularity — that is the whole argument 087, 090,
+091 and 092 each reached for a trigger over.
+
+> **So a vendor can rewrite ANY column on a partnership they belong to,
+> including `lead_org_id`** — the column that says which agency the partnership
+> belongs to. The name of the policy says "status"; **nothing in the database
+> restricts it to status.**
+
+**And 087 already guards this table**, which is what makes the gap concrete rather
+than theoretical: `partnerships_guard_identity_columns` exists precisely because
+identity columns on `partnerships` must not be rewritten. **Whether `lead_org_id`
+is inside that guard's set is the first thing to check**, and it is the query
+below. If it is, the exposure is much smaller than the policy suggests; if it is
+not, a vendor can reassign a partnership to a different lead agency.
+
+**The fix has the same shape as 092's**: extend `partnerships_guard_identity_columns`
+rather than touch the policy — a `WITH CHECK` has no `OLD` and cannot express
+column immutability. **Not done here: it is a migration, and one that can refuse
+writes that work today.**
+
+```sql
+-- 1. The policy, confirmed.
+SELECT policyname, cmd, qual, with_check FROM pg_policies
+WHERE schemaname='public' AND tablename='partnerships' AND cmd='UPDATE'
+ORDER BY policyname;
+
+-- 2. THE ONE THAT DECIDES THE SEVERITY: what does 087's guard actually cover?
+SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname='public' AND p.proname='partnerships_guard_identity_columns';
+-- Read the IS DISTINCT FROM lines. If lead_org_id is NOT among them, a vendor
+-- can move a partnership to another agency and 087 will not stop them.
+
+-- 3. Is the guard even enabled?
+SELECT t.tgname, t.tgenabled FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+WHERE c.relname='partnerships' AND NOT t.tgisinternal;
+-- EXPECTED: partnerships_guard_identity_columns, tgenabled = O.
+```
+
 ## Carried forward from 091, unresolved and untouched by this session
 
 - **OPEN-091-1** — `admin/grant-agency-access` writing another user's row with a
@@ -827,6 +1088,11 @@ after every phase; roughly forty `grep`/`sed`/`cat` passes; eight `git commit`s.
 **No `git push`. No PR. No `vercel` command. No dev server. No network call. No
 database query.**
 
+**WRITTEN.** `docs/092-organizations-writer-census.md` — the five writers of
+`public.organizations`, every column each one writes, and the gap table the permit
+list is derived from. **Committed on its own, before 092 was edited**, because a
+permit list derived after the fact is a guess with a citation.
+
 **READ IN FULL.** `docs/092-entitlements-design.md`; `docs/091-entitlements-surface.md`;
 `supabase/migrations/091_profiles_column_guard.sql`; `docs/091-preapply-test.sql`;
 `lib/entitlements.ts`; `lib/acting-org.ts`; `contexts/paid-user-context.tsx`;
@@ -844,15 +1110,23 @@ policy list); `docs/091b-session-report.md` (the Class B inventory);
 `lib/feature-flags.ts`; `lib/company-identity.ts`; `app/admin/users/page.tsx`;
 `app/api/admin/grant-access/route.ts`; `app/auth/callback/route.ts`.
 
+**EXECUTED BY GREG, NOT BY THIS SESSION, AND FOLDED IN.** A `pg_policies` query
+against the live `partnerships` table. It settles three things: the **DELETE
+finding is now measured** (six policies, none of them DELETE — OPEN-092-1 has
+moved from REASONED to EXECUTED), and it surfaced **two new findings that are
+logged and NOT fixed**, OPEN-092-8 (an ILIKE email comparison where equality
+belongs) and OPEN-092-9 (an UPDATE policy with no column restriction, which is
+091's hole one table over). **This session still ran no query itself and holds no
+credential that could.**
+
 **REASONED, AND THEREFORE UNVERIFIED AGAINST THE LIVE DATABASE.** Every claim
 about what 092 will do when applied — the backfill counts (16/2 is taken from the
 brief, not measured), the guard's behaviour under each writer, the pre-apply
-test's seven outcomes. **The service-role exemption**, which is derived from 091's
-writer-outcome table rather than observed. **The `partnerships` DELETE finding** —
-the *absence* of a policy is read from every migration file and from a snapshot
-dated 2026-08-13; `pg_policies` would settle it in one query and is the first
-thing in OPEN-092-1. Everything about a two-membership account, which no account
-currently has.
+test's fourteen outcomes. **The service-role exemption**, which is derived from
+091's writer-outcome table rather than observed. **The writer census** — it is
+exhaustive over the *repository*, and nothing in a repository can prove a column
+is unwritten in *production*; the census carries the one query that would check
+it. Everything about a two-membership account, which no account currently has.
 
 **NOT DONE.** No migration applied. No policy widened. `middleware.ts` untouched.
 No guard allow-list or `KNOWN_OPEN` count edited. No migration numbered 091 or
@@ -874,5 +1148,33 @@ read. The budget spine untouched.
 | `bc087ee` | 6 | `DELETE /api/partnerships` had never deleted anything. |
 | `3c7c2d2` | 6 | The library-document delete reported success for nothing. |
 | `04d197b` | 7 | The org-id-reads guard was right; the two ids got a function boundary. |
+| `9ee4b5f` | 7 | This report. |
+| `bcabf26` | — | **The organizations writer census.** Committed alone, before 092 was edited. |
+| *(this one)* | — | **The guard becomes a permit list**, plus the down file, the fourteen-assertion test and this report. |
 
 **Nothing pushed.**
+
+---
+
+# THE REVISION: WHAT CHANGED AFTER THE FIRST EIGHT COMMITS
+
+**OPEN-092-4 was ruled the other way and the guard was rebuilt.** Five files, no
+`.ts` or `.tsx` among them:
+
+| File | What changed |
+|---|---|
+| `docs/092-organizations-writer-census.md` | **NEW.** The derivation the permit list needs. |
+| `supabase/migrations/092_org_entitlement.sql` | Guard rewritten as a permit list; function and trigger renamed; header rewritten; **BEGIN/COMMIT now 459 / 1049**. |
+| `supabase/migrations/092_org_entitlement_down.sql` | New object names, the rename recorded; **BEGIN/COMMIT now 113 / 150**. |
+| `docs/092-preapply-test.sql` | **7 assertions → 14.** SECTION A re-copied. |
+| `docs/092-session-report.md` | This. |
+
+**NO GATE WAS RUN, deliberately.** This revision touches only `.sql` and `.md`,
+and **no gate in this repository reads either**. The Phase 0 / Phase 7 gate table
+above is unchanged and still current: the last `.ts` change on this branch was
+`04d197b`.
+
+**The three prohibitions that applied: nothing pushed, no migration numbered 091
+or lower touched, no RLS policy widened.** The two new `partnerships` findings are
+logged with their queries and left alone — fixing either is exactly the RLS change
+that was forbidden.

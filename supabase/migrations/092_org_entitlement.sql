@@ -6,8 +6,15 @@
 --                same transaction that opens it.
 --
 --   NEW   public.organizations.is_paid  boolean NOT NULL DEFAULT false
---   NEW   public.organizations_guard_entitlement()  -> trigger
---   NEW   trigger organizations_entitlement_guard   BEFORE UPDATE ON organizations
+--   NEW   public.organizations_guard_columns()  -> trigger
+--   NEW   trigger organizations_columns_guard   BEFORE UPDATE ON organizations
+--
+--   >>> THE GUARD IS A PERMIT LIST, NOT A DENY LIST. The only column a
+--   >>> caller with an end-user session may change is `name`. Everything
+--   >>> else on this table is refused with LG008 - INCLUDING COLUMNS THAT
+--   >>> DO NOT EXIST YET. See THE SHAPE below for why that inverts 091's
+--   >>> reasoning rather than contradicting it, and
+--   >>> docs/092-organizations-writer-census.md for the derivation.
 --
 --   ALSO: one COMMENT ON TABLE public.profiles. No data, no schema, and
 --   the only statement in this file that names that table - see section 6
@@ -60,12 +67,19 @@
 --   3. THE ONE LIVE WRITER. lib/company-identity.ts:306 renames the
 --      organization with a SESSION client. Every company rename in the
 --      product goes through it. It must still work. T1 proves it.
+--   4. THE PERMIT LIST ITSELF. A deny list can only be too small; a
+--      PERMIT LIST CAN BE TOO SMALL IN THE OTHER DIRECTION - a column a
+--      session client legitimately writes, left off the list, is a write
+--      that starts raising LG008 on apply. That is why this file is
+--      derived from a written census rather than from reading the code
+--      once, and why T1, T2 and T3 exercise the rename three different
+--      ways: bare, whole-row, and no-op.
 --
--- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 432
--- and an explicit COMMIT; on LINE 845. Those are the only EXECUTABLE
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 459
+-- and an explicit COMMIT; on LINE 1049. Those are the only EXECUTABLE
 -- occurrences of either word.
 --
--- TO DRY RUN: change the COMMIT; on line 845 to ROLLBACK; and run the
+-- TO DRY RUN: change the COMMIT; on line 1049 to ROLLBACK; and run the
 -- whole file. Every statement executes, every error surfaces, nothing
 -- persists. Verify the line numbers before trusting them, with:
 --
@@ -73,13 +87,13 @@
 --       supabase/migrations/092_org_entitlement.sql
 --
 -- THAT GREP RETURNS FOUR HITS, AND FOUR IS CORRECT:
---     432  BEGIN;    <- executable. The transaction.
---     517  BEGIN     <- plpgsql, the backfill assertion block's body.
+--     459  BEGIN;    <- executable. The transaction.
+--     544  BEGIN     <- plpgsql, the backfill assertion block's body.
 --                       No semicolon; matched by the case-insensitive
 --                       form only, not a transaction statement.
---     658  BEGIN     <- plpgsql, organizations_guard_entitlement's body.
+--     856  BEGIN     <- plpgsql, organizations_guard_columns's body.
 --                       Same. No semicolon.
---     845  COMMIT;   <- executable. The one to swap for ROLLBACK;.
+--     1049 COMMIT;   <- executable. The one to swap for ROLLBACK;.
 -- Exactly one line ends in `BEGIN;` and exactly one in `COMMIT;`.
 -- If your grep shows a different set, this is not the file that was read.
 --
@@ -228,64 +242,77 @@
 -- there is no window at all.
 --
 -- =====================================================================
--- THE GUARDED SET: ONE COLUMN, is_paid. AND THE SHAPE THE DESIGN DOC
--- ARGUED FOR INSTEAD, RECORDED SO THE CHOICE IS VISIBLE.
+-- THE SHAPE: A PERMIT LIST OF ONE COLUMN, name. NOT A DENY LIST.
+-- THE LOGIC THAT MADE A DENY LIST RIGHT FOR profiles INVERTS HERE.
 -- =====================================================================
 --
--- docs/092-entitlements-design.md section 1 argued for the INVERSE
--- shape: a PERMIT LIST of {name}, refusing any other column moving under
--- a session. Its argument is good and it is not adopted here, so both
--- halves are written down.
+-- AN EARLIER DRAFT OF THIS FILE CARRIED A DENY LIST OF {is_paid},
+-- following 091's mechanism. THAT WAS WRONG, and the reason is not that
+-- 091 was wrong - it is that the argument 091 made does not transfer.
 --
--- WHAT IS BUILT: a deny-list of ONE column, is_paid. It matches the
--- instruction for this migration and 091's mechanism exactly.
+-- 091'S ARGUMENT, WHICH WAS CORRECT FOR profiles:
 --
--- WHAT IT COSTS: a FUTURE privilege column on organizations ships
--- unguarded unless somebody adds it to this set. That is 091's failure
--- mode, and 091's ROT instruction is the countermeasure. It is repeated
--- below.
+--   profiles has 44 columns, 37 of which are ordinary content a user
+--   edits from a settings form, across 24 session write sites. A permit
+--   list there is 37 entries where ONE OMISSION SILENTLY BREAKS A SAVE -
+--   the exact shape app/api/profile/route.ts:35 records having shipped
+--   for two migrations with personal_linkedin_url. A deny list is five
+--   entries whose only failure mode is a FUTURE privilege column going
+--   unguarded. And on profiles the next column is probably more profile
+--   content - a bio, a preference, a contact field. Adding a privilege
+--   column is a deliberate act; adding `bio` is not. So the deny list
+--   carried the smaller risk.
 --
--- WHAT THE PERMIT LIST WOULD HAVE BOUGHT: every future column guarded by
--- default, with a loud development-time failure (a save raises LG008 and
--- somebody adds one word to a list) instead of a silent production one.
--- organizations has seven columns and a session client writes exactly
--- ONE of them - `name`, at lib/company-identity.ts:306, which writes
--- { name } and nothing else, not even updated_at - so the permit list
--- would be one entry long and would break nothing today.
+-- ON organizations EVERY TERM IN THAT ARGUMENT FLIPS:
 --
--- IT IS A ONE-LINE DIFFERENCE IF GREG WANTS IT: replace the early return
--- and the single refusal below with "NEW.name IS DISTINCT FROM OLD.name
--- is the only permitted movement". RECORDED AS AN OPEN ITEM in
--- docs/092-session-report.md rather than decided here.
+--   EIGHT columns, not 44. ONE of them is written by a session client -
+--   `name`. So a permit list is ONE ENTRY, not 37, and the "one omission
+--   breaks a save" cost is almost nil.
 --
--- WHAT IS DELIBERATELY NOT GUARDED, so the omissions are choices:
---   name                     the one live session write. Guarding it
---                            would break every company rename.
---   is_lead_agency,          079:220 states these are DESCRIPTIVE, not
---   is_vendor                authorization: "no policy in this file
---                            reads them, precisely so a wrong flag
---                            cannot lock anybody out of their own data."
---                            Nothing grants on them. 092 does not change
---                            that.
---   primary_contact_user_id  a pointer at a person, already writable by
---                            an org admin today. 092 changes nothing
---                            about it, and guarding it would be a
---                            behaviour change dressed up as a migration.
---   created_at, updated_at   timestamps. Not authority.
+--   AND - THIS IS THE PART THAT DECIDES IT - EVERY PLAUSIBLE FUTURE
+--   COLUMN ON THIS TABLE IS AUTHORITY-SHAPED. A plan tier. A seat limit.
+--   A billing customer id. A trial expiry. There is no `bio` coming for
+--   organizations; this is the billing table now.
 --
--- >>> THE ROT INSTRUCTION. CARRIED FORWARD FROM 091 UNCHANGED. <<<
+--   A DENY LIST LEAVES EACH OF THOSE UNGUARDED UNTIL SOMEBODY REMEMBERS,
+--   and "somebody remembers" is not a mechanism. A PERMIT LIST GUARDS
+--   THEM BY DEFAULT, and its failure mode is a write that FAILS LOUDLY -
+--   somebody adds a user-editable column, a save raises LG008 at
+--   development time, and they add one word to a list - RATHER THAN A
+--   HOLE THAT OPENS SILENTLY IN PRODUCTION.
 --
---   THE SET LIVES IN EXACTLY TWO PLACES IN THIS FILE AND NOWHERE ELSE:
---   the IS NOT DISTINCT FROM early return, and the IS DISTINCT FROM
---   refusal below it. Plus the COMMENT ON FUNCTION, which repeats it so
---   a pg_proc query can answer "what is guarded" without opening a .sql
---   file.
+-- THAT IS THE WHOLE RULING. docs/092-entitlements-design.md section 1
+-- reached the same conclusion by the same route and the first draft of
+-- this file did not follow it.
 --
---   ANY NEW COLUMN ON public.organizations THAT GRANTS ANYTHING - access,
---   a plan, a seat allowance, a limit - MUST JOIN THIS SET IN THE SAME
---   MIGRATION THAT CREATES IT. Not in a follow-up. A privilege column
---   that ships unguarded is self-grantable from a browser the moment it
---   exists, because every user is an admin of their own organization.
+-- >>> THE LIST IS DERIVED FROM A CENSUS, NOT FROM A GUESS. <<<
+--
+-- docs/092-organizations-writer-census.md enumerates all five writers of
+-- this table anywhere in the repository and every column each one writes,
+-- and ITS GAP TABLE IS EMPTY - all eight columns have an identified
+-- writer. A PERMIT LIST CANNOT BE DERIVED WITHOUT THAT: getting one entry
+-- short does not fail a build, it breaks a write in production on the day
+-- this file is applied. Section 3 quotes the census row that justifies
+-- the one permitted column and the census row that excludes each of the
+-- other seven.
+--
+-- >>> THE ROT INSTRUCTION, AND IT IS SHORTER THAN 091's BECAUSE THE
+-- >>> SHAPE DOES THE WORK. <<<
+--
+--   THE PERMIT LIST LIVES IN ONE PLACE: `v_permitted` in
+--   public.organizations_guard_columns(). There is no second chain to
+--   keep in step with it. The COMMENT ON FUNCTION repeats it so a pg_proc
+--   query can answer "what may be written" without opening a .sql file.
+--
+--   ADDING A COLUMN TO public.organizations REQUIRES NO EDIT HERE. It is
+--   guarded from the moment it exists.
+--
+--   THE ONE THING THAT DOES REQUIRE AN EDIT: if a SESSION-CLIENT writer
+--   legitimately starts writing a new column, THAT COLUMN JOINS
+--   v_permitted IN THE SAME COMMIT. There is exactly one such writer
+--   today, lib/company-identity.ts:306, and it writes `{ name }` and
+--   nothing else - not even updated_at. The tripwire is recorded in the
+--   census, section 2.
 --
 -- =====================================================================
 -- THE EXEMPTION TEST: auth.uid() IS NULL. THE SAME TEST AS 091, FOR A
@@ -466,7 +493,7 @@ COMMENT ON COLUMN public.organizations.is_paid IS
   'organization-keyed AI-analyses and Projects quotas. Read by '
   'hasAgencyEntitlement() for the ACTING organization. Written ONLY by the '
   'service role - the admin grant routes today, a billing provider webhook '
-  'later. A browser cannot write it: organizations_entitlement_guard refuses '
+  'later. A browser cannot write it: organizations_columns_guard refuses '
   'with LG008, because every user is an owner of their own organization and the '
   '"Org admins update their organization" policy therefore grants nothing here. '
   'BOOLEAN, NOT A DATE, DELIBERATELY - there is no source of truth for an expiry '
@@ -635,7 +662,11 @@ $backfill$;
 
 
 -- ---------------------------------------------------------------------
--- 3. THE GUARD. public.organizations_guard_entitlement() -> trigger
+-- 3. THE GUARD. public.organizations_guard_columns() -> trigger
+--
+-- >>> IT IS A PERMIT LIST OF ONE COLUMN: name. EVERYTHING ELSE ON THIS
+-- >>> TABLE IS GUARDED BY DEFAULT, INCLUDING COLUMNS THAT DO NOT EXIST
+-- >>> YET.
 --
 -- CREATED AFTER THE BACKFILL, so it never evaluates this migration's own
 -- write. See the ORDER IS LOAD-BEARING section in the header.
@@ -648,86 +679,259 @@ $backfill$;
 --
 -- SET search_path = public, pg_temp, as every function in 089, 090 and
 -- 091.
+--
+-- =====================================================================
+-- THE TEST IS "DID THIS COLUMN CHANGE", NEVER "WAS THIS COLUMN IN THE
+-- SET CLAUSE". THIS IS THE PARAGRAPH THAT DECIDES WHETHER A PERMIT LIST
+-- IS SAFE AT ALL.
+-- =====================================================================
+--
+-- A TRIGGER CANNOT SEE THE SET CLAUSE. It has OLD and NEW and nothing
+-- else. There is no way, from inside a plpgsql trigger, to ask "which
+-- columns did the caller name in their UPDATE" - and PostgREST does not
+-- pass that information anywhere a trigger could reach it.
+--
+-- THAT IS NOT A LIMITATION HERE. IT IS THE PROPERTY THE WHOLE SHAPE
+-- DEPENDS ON:
+--
+--   A caller that sends the WHOLE ROW back with one field altered - which
+--   is exactly what a read-modify-write PATCH produces, and exactly what
+--   both settings forms in this product do - names EVERY column in its
+--   SET clause. If this guard refused on "was it in the SET clause", that
+--   write would be refused for mentioning `is_paid` at all, even though
+--   it sent back the identical value. EVERY WHOLE-ROW WRITE IN THE
+--   PRODUCT WOULD BREAK.
+--
+--   Comparing VALUES with IS DISTINCT FROM makes that write pass, because
+--   nothing outside the permit list MOVED. The caller may name any column
+--   it likes; it may not change one.
+--
+-- >>> IMPLEMENT IT THE OTHER WAY AND EVERY WHOLE-ROW WRITE BREAKS. T2 in
+-- >>> docs/092-preapply-test.sql is that property under test, and it is
+-- >>> not there for symmetry.
+--
+-- IS DISTINCT FROM, never <>. `null <> null` is null, which is not true,
+-- which would fall THROUGH a "did it move" test and report no movement on
+-- a column that went from a value to NULL. Three of these eight columns
+-- are nullable in practice, so this is not hypothetical.
+--
+-- =====================================================================
+-- HOW THE PERMIT LIST IS EXPRESSED, AND WHY NOT A COLUMN CHAIN
+-- =====================================================================
+--
+-- The obvious spelling is an IS NOT DISTINCT FROM chain naming the seven
+-- guarded columns. IT WAS REJECTED, and the reason is the entire ruling:
+-- SUCH A CHAIN HAS TO BE EDITED EVERY TIME A COLUMN IS ADDED, which makes
+-- it a deny list wearing a permit list's clothes. A column somebody
+-- forgets to add is unguarded, silently, which is the failure mode this
+-- migration exists to stop.
+--
+-- So the comparison is over the ROW, with the permitted columns SUBTRACTED:
+--
+--     to_jsonb(NEW) - v_permitted   vs   to_jsonb(OLD) - v_permitted
+--
+-- `jsonb - text[]` deletes those keys. If the two projections are equal,
+-- nothing outside the permit list moved. A COLUMN ADDED TO THIS TABLE
+-- NEXT YEAR APPEARS IN BOTH PROJECTIONS AUTOMATICALLY AND IS THEREFORE
+-- GUARDED FROM THE MOMENT IT EXISTS, with no edit to this function.
+--
+-- jsonb equality is by key set and value, not by key order, so the
+-- comparison is well defined. Both sides are the same table's rowtype, so
+-- every value serialises the same way on both sides.
+--
+-- >>> THE ONE MAINTENANCE ACT THIS SHAPE STILL REQUIRES: if a
+-- >>> SESSION-CLIENT writer legitimately starts writing a new column, that
+-- >>> column joins v_permitted IN THE SAME COMMIT. There is exactly one
+-- >>> such writer today - lib/company-identity.ts:306 - and the tripwire
+-- >>> is recorded in docs/092-organizations-writer-census.md section 2.
+--
+-- =====================================================================
+-- THE PERMIT LIST, DERIVED FROM THE CENSUS AND NOT FROM A GUESS
+-- =====================================================================
+--
+-- docs/092-organizations-writer-census.md enumerates every writer of this
+-- table anywhere in the repository - five of them - and every column each
+-- one writes. ITS GAP TABLE IS EMPTY: all eight columns have an
+-- identified writer, so nothing here is a guess at an unaccounted column.
+--
+-- THE RULE: a column belongs on the permit list only if a SESSION-CLIENT
+-- writer legitimately writes it.
+--
+--   name          PERMITTED.  Census W1, lib/company-identity.ts:306:
+--                             `.from("organizations").update({ name })`
+--                             on a SESSION client. Every company rename in
+--                             the product goes through that line. It is
+--                             the only session write of this table that
+--                             exists.
+--
+-- AND EVERY OTHER COLUMN IS GUARDED. Stated one at a time, with the
+-- census row that excludes it, because "it is not on the list" is not a
+-- reason:
+--
+--   is_paid       GUARDED. See the block below - it is written by W2 and
+--                 W3 and a mechanical derivation would have permitted it.
+--                 That block exists because that mistake is the easy one.
+--
+--   updated_at    GUARDED. Census W2, W3 and W6 write it; ALL THREE ARE
+--                 EXEMPT (service role, service role, migration). W1, the
+--                 one session writer, writes `{ name }` and NOTHING ELSE -
+--                 not even updated_at. That is quoted from the object
+--                 literal, not inferred. There is also no updated_at
+--                 auto-stamp trigger on this table; before this migration
+--                 organizations carries no trigger at all.
+--
+--   is_lead_agency, is_vendor, primary_contact_user_id
+--                 GUARDED. Census W4 and W5 only - the 079 backfill and
+--                 handle_new_user. Both are migration/trigger writers with
+--                 no request.jwt.claims, so auth.uid() is NULL and both
+--                 are exempt. NO SESSION CLIENT WRITES ANY OF THE THREE.
+--                 079:220 additionally records that the two capability
+--                 flags are DESCRIPTIVE rather than authorization - which
+--                 is a reason they were not in a deny list, and NOT a
+--                 reason to permit them: nothing legitimate writes them
+--                 from a browser, so guarding them costs nothing and stops
+--                 a vendor org relabelling itself a lead agency.
+--
+--   id, created_at
+--                 GUARDED. Census W4 writes both explicitly; W5 omits both
+--                 and takes the column defaults. No session writer, and a
+--                 primary key and a creation timestamp are not things a
+--                 browser revises.
+--
+-- >>> ANY NEW COLUMN ON public.organizations IS GUARDED THE MOMENT IT
+-- >>> EXISTS AND NOBODY HAS TO REMEMBER ANYTHING. That is the whole
+-- >>> reason for the shape, and it is the answer to the question the deny
+-- >>> list could not answer: the next column on this table is a plan tier,
+-- >>> a seat limit or a billing customer id, and every one of those is
+-- >>> authority-shaped.
+--
+-- =====================================================================
+-- THE DETAIL NAMES COLUMNS AND NEVER VALUES. ASSESSED, NOT INHERITED.
+-- =====================================================================
+--
+-- 091's rule was: name the column, never the value, because the caller
+-- supplied the column name in their own request.
+--
+-- THIS FILE DIFFERS ON ONE POINT AND IT IS WORTH BEING EXPLICIT: the
+-- moved-column list below is COMPUTED FROM A DIFF, not read back from
+-- what the caller named. So a caller who sends a whole row and gets
+-- `is_paid` back in the DETAIL has learned that their stored is_paid
+-- differed from what they sent.
+--
+-- THAT IS NOT AN ORACLE HERE, and the reason is structural rather than a
+-- judgement call: THIS TRIGGER ONLY FIRES ON A ROW THE UPDATE POLICY
+-- ALREADY ADMITTED - "Org admins update their organization",
+-- id IN (SELECT current_user_admin_org_ids()) - and the SELECT policy
+-- "Members read their organizations" lets that same caller read every
+-- column of that same row directly. The DETAIL reveals nothing a single
+-- GET does not already give up. For a row they do NOT belong to, the
+-- policy filters the UPDATE to zero rows and this trigger never runs.
+--
+-- VALUES ARE STILL NEVER INTERPOLATED. Not OLD, not NEW. "You cannot
+-- change is_paid from false to true" would be a different thing entirely
+-- and must not be added.
+--
+-- WHY NAME THEM AT ALL: the highest-probability real event is not an
+-- attack, it is a legitimate writer tripping this guard on a path nobody
+-- traced - most likely lib/company-identity.ts:306 having gained a
+-- column. A DETAIL that names the moved column turns that investigation
+-- into a two-minute read. That is the 087 lesson and it applies here more
+-- than it did to 091, because a permit list can be tripped by a column
+-- nobody was thinking about.
 -- ---------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.organizations_guard_entitlement()
+CREATE OR REPLACE FUNCTION public.organizations_guard_columns()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
+DECLARE
+  -- THE PERMIT LIST. THE ONLY PLACE IT EXISTS IN THIS FUNCTION - there is
+  -- no second chain to keep in step with it, which is the point.
+  -- Derived from docs/092-organizations-writer-census.md, W1.
+  v_permitted CONSTANT text[] := ARRAY['name'];
+  v_old_rest  jsonb;
+  v_new_rest  jsonb;
+  v_moved     text[];
 BEGIN
+  -- THE ROW, MINUS THE PERMITTED COLUMNS, ON BOTH SIDES.
+  v_old_rest := to_jsonb(OLD) - v_permitted;
+  v_new_rest := to_jsonb(NEW) - v_permitted;
+
   -- THE EARLY RETURN THAT MAKES THIS FREE, AND IT IS FIRST ON PURPOSE.
-  -- The ONE session-client writer of this table is the company rename at
-  -- lib/company-identity.ts:306, which writes { name } and nothing else.
-  -- It leaves here having done one comparison and NOT having called
-  -- auth.uid(). Every rename in the product goes through that line, so
-  -- this is the common path and it should not pay for the caller test.
+  -- Every rename in the product leaves here - including a whole-row write
+  -- that names all eight columns and alters only `name` - having done one
+  -- jsonb comparison and NOT having called auth.uid().
   --
-  -- IS NOT DISTINCT FROM, never <>: a read-modify-write that sends the
-  -- same value back must pass, and null <> null is null, which is not
-  -- true, which would fall through to the refusal. The column is NOT NULL
-  -- so a null cannot arise from the table - but a PATCH body is free to
-  -- send one, and the spelling costs nothing.
-  --
-  -- THE GUARDED SET, PLACE 1 OF 2. See the ROT instruction in the header
-  -- before adding to it.
-  IF NEW.is_paid IS NOT DISTINCT FROM OLD.is_paid THEN
+  -- This is a VALUE comparison, not a SET-clause comparison. See the
+  -- header block above; it is the property the shape depends on.
+  IF v_new_rest = v_old_rest THEN
     RETURN NEW;
   END IF;
 
   -- THE EXEMPTION. A write with no end-user session behind it is trusted
   -- code that has already made its own authorization decision: the admin
-  -- grant routes on the service role, a future billing webhook, this
-  -- migration, and every migration after it. See the header for why this
-  -- test and not current_user, session_user or auth.role() - the same
-  -- four candidates 091 walked, with the same outcome.
+  -- grant routes on the service role (census W2, W3), a future billing
+  -- webhook, this migration's own backfill (W6), handle_new_user (W5),
+  -- and every migration after this one. See the header for why this test
+  -- and not current_user, session_user or auth.role() - the same four
+  -- candidates 091 walked, with the same outcome.
+  --
+  -- >>> EXEMPT IS NOT THE SAME AS PERMITTED. is_paid is written by W2 and
+  -- >>> W3 and is deliberately NOT on the permit list: those two are
+  -- >>> service-role callers and pass HERE, before the permit list is ever
+  -- >>> consulted. Adding is_paid to v_permitted would additionally let a
+  -- >>> BROWSER write it, and the browser is the entire threat model -
+  -- >>> every user is an owner of their own organization, so the UPDATE
+  -- >>> policy already authorises them to write their own row. THAT EDIT
+  -- >>> WOULD DELETE THIS MIGRATION'S ENTIRE EFFECT WHILE APPEARING TO
+  -- >>> REFLECT THE CENSUS.
   IF auth.uid() IS NULL THEN
     RETURN NEW;
   END IF;
 
-  -- FROM HERE DOWN: a signed-in caller moved the billing column. RAISE,
-  -- never silently revert to OLD. A silently reverted plan change is a
-  -- customer who believes they upgraded and a company that goes on being
-  -- refused - the same class of quiet wrongness 090 and 091 both refused
-  -- for their own columns, delivered to a paying reader.
-  --
-  -- THE GUARDED SET, PLACE 2 OF 2. The DETAIL is a FIXED LITERAL. No
-  -- value is ever interpolated into it - see the oracle assessment in the
-  -- header.
-  IF NEW.is_paid IS DISTINCT FROM OLD.is_paid THEN
-    RAISE EXCEPTION 'That is not a field you can change.'
-      USING ERRCODE = 'LG008',
-            DETAIL  = 'organizations.is_paid is the company plan, guarded by migration 092. Only the service role, a database function, or a migration may write it. Being an owner or admin of an organization does not permit it: every user is an owner of their own organization, so that role would grant this to everybody.';
-  END IF;
+  -- FROM HERE DOWN: a signed-in caller moved a column that is not on the
+  -- permit list. RAISE, never silently revert to OLD. A silently reverted
+  -- plan change is a customer who believes they upgraded and a company
+  -- that goes on being refused - the same class of quiet wrongness 090 and
+  -- 091 both refused for their own columns, delivered to a paying reader.
+  SELECT array_agg(k ORDER BY k)
+    INTO v_moved
+  FROM jsonb_object_keys(v_new_rest) AS k
+  WHERE v_new_rest -> k IS DISTINCT FROM v_old_rest -> k;
 
-  -- UNREACHABLE BY CONSTRUCTION: the early return covers the case where
-  -- is_paid did not move, and the block above covers the case where it
-  -- did. It is here so that adding a column to the early return and
-  -- forgetting to add its refusal below fails LOUDLY rather than silently
-  -- permitting the write.
   RAISE EXCEPTION 'That is not a field you can change.'
     USING ERRCODE = 'LG008',
-          DETAIL  = 'A guarded column on organizations moved but migration 092 has no refusal for it. The guarded set in organizations_guard_entitlement() is out of step with itself - see the ROT instruction in 092_org_entitlement.sql.';
+          DETAIL  = format(
+            'organizations.%s may not be written by a browser. Migration 092 guards every column on this table except %s, which is the only one a session client legitimately writes. Only the service role, a database function, or a migration may write the rest. Being an owner or admin of an organization does not permit it: every user is an owner of their own organization, so that role would grant this to everybody.',
+            array_to_string(v_moved, ', organizations.'),
+            array_to_string(v_permitted, ', ')
+          );
 END;
 $$;
 
-COMMENT ON FUNCTION public.organizations_guard_entitlement() IS
-  'BEFORE UPDATE guard on the organizations GUARDED SET: is_paid, and only '
-  'is_paid. Refuses with LG008 when a caller that HAS an end-user session '
-  '(auth.uid() IS NOT NULL) moves it. Exempts service_role, postgres and '
-  'migrations, all of which resolve auth.uid() to NULL - without that exemption '
-  'the admin grant routes and every future migration would break, and a billing '
-  'provider webhook could never write a plan. Returns immediately when is_paid '
-  'did not move, which is every company rename. IT EXISTS BECAUSE THE ROLE GATE '
-  'BUYS NOTHING: "Org admins update their organization" is keyed on '
-  'current_user_admin_org_ids(), and every user is an owner of their own '
-  'organization by construction (079 PHASE 2 and PHASE 12), so that policy '
-  'authorises every authenticated user to UPDATE some organization row. RLS has '
-  'no column granularity and a WITH CHECK has no OLD, so neither can express '
-  'column immutability. DO NOT AMEND THIS TO LET OWNERS THROUGH - that would '
-  'delete its entire effect while appearing to refine it. ANY NEW PRIVILEGE '
-  'COLUMN ON organizations MUST JOIN THIS SET IN THE MIGRATION THAT CREATES IT. '
-  'See supabase/migrations/092_org_entitlement.sql.';
+COMMENT ON FUNCTION public.organizations_guard_columns() IS
+  'BEFORE UPDATE guard on public.organizations. IT IS A PERMIT LIST, NOT A DENY '
+  'LIST: the ONLY column a caller with an end-user session may change is `name`. '
+  'Every other column - id, primary_contact_user_id, is_lead_agency, is_vendor, '
+  'created_at, updated_at, is_paid, AND ANY COLUMN ADDED LATER - is refused with '
+  'LG008. The list lives in v_permitted and nowhere else; the comparison is '
+  'to_jsonb(NEW) - v_permitted against to_jsonb(OLD) - v_permitted, so a new '
+  'column is guarded from the moment it exists with no edit to this function. '
+  'IT COMPARES VALUES, NEVER THE SET CLAUSE - a trigger cannot see the SET '
+  'clause, and comparing values is what lets a whole-row read-modify-write pass '
+  'when only `name` moved. Exempts service_role, postgres, handle_new_user and '
+  'migrations, all of which resolve auth.uid() to NULL - EXEMPT IS NOT PERMITTED, '
+  'which is why is_paid is written by the admin grant routes and is still not on '
+  'the list. IT EXISTS BECAUSE THE ROLE GATE BUYS NOTHING: "Org admins update '
+  'their organization" is keyed on current_user_admin_org_ids(), and every user '
+  'is an owner of their own organization by construction (079 PHASE 2 and PHASE '
+  '12), so that policy authorises every authenticated user to UPDATE some '
+  'organization row. RLS has no column granularity and a WITH CHECK has no OLD. '
+  'DO NOT AMEND THIS TO LET OWNERS THROUGH - that would delete its entire effect '
+  'while appearing to refine it. Permit list derived from '
+  'docs/092-organizations-writer-census.md; a column joins it only when a '
+  'SESSION-CLIENT writer legitimately writes it, in the same commit.';
 
 
 -- ---------------------------------------------------------------------
@@ -747,12 +951,12 @@ COMMENT ON FUNCTION public.organizations_guard_entitlement() IS
 -- BY TRIGGER NAME, and that what makes such a pair safe is each one
 -- early-returning when its own columns have not moved - not the ordering.
 -- ---------------------------------------------------------------------
-DROP TRIGGER IF EXISTS organizations_entitlement_guard ON public.organizations;
+DROP TRIGGER IF EXISTS organizations_columns_guard ON public.organizations;
 
-CREATE TRIGGER organizations_entitlement_guard
+CREATE TRIGGER organizations_columns_guard
   BEFORE UPDATE ON public.organizations
   FOR EACH ROW
-  EXECUTE FUNCTION public.organizations_guard_entitlement();
+  EXECUTE FUNCTION public.organizations_guard_columns();
 
 
 -- ---------------------------------------------------------------------
@@ -780,9 +984,9 @@ CREATE TRIGGER organizations_entitlement_guard
 -- default privilege and V6 ASSERTS that inherited value rather than this
 -- file writing a GRANT that pretends to have set it - 082's precedent.
 -- ---------------------------------------------------------------------
-REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM anon;
-REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM authenticated;
+REVOKE EXECUTE ON FUNCTION public.organizations_guard_columns() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.organizations_guard_columns() FROM anon;
+REVOKE EXECUTE ON FUNCTION public.organizations_guard_columns() FROM authenticated;
 
 
 -- ---------------------------------------------------------------------
@@ -924,8 +1128,8 @@ COMMIT;
 --       WHERE c.relname = 'organizations' AND NOT t.tgisinternal
 --       ORDER BY t.tgname;
 --       -- EXPECTED: exactly 1 row.
---       --   organizations_entitlement_guard   tgenabled = O
---       --   proname = organizations_guard_entitlement
+--       --   organizations_columns_guard   tgenabled = O
+--       --   proname = organizations_guard_columns
 --       -- A SECOND ROW means somebody added a trigger to this table that
 --       -- this file does not know about, and it fires on the same
 --       -- writes. Find it before trusting this guard.
@@ -935,16 +1139,16 @@ COMMIT;
 --       SELECT p.proname, p.prosecdef, p.proconfig
 --       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 --       WHERE n.nspname = 'public'
---         AND p.proname = 'organizations_guard_entitlement';
+--         AND p.proname = 'organizations_guard_columns';
 --       -- EXPECTED: exactly 1 row.
 --       --   prosecdef = t
 --       --   proconfig = {"search_path=public, pg_temp"}
 --
 -- V6. THE GRANTS. THE ONE THAT CATCHES THE 088 MISTAKE.
 --
---       SELECT has_function_privilege('anon',          'public.organizations_guard_entitlement()', 'EXECUTE') AS anon,
---              has_function_privilege('authenticated', 'public.organizations_guard_entitlement()', 'EXECUTE') AS authenticated,
---              has_function_privilege('service_role',  'public.organizations_guard_entitlement()', 'EXECUTE') AS service_role;
+--       SELECT has_function_privilege('anon',          'public.organizations_guard_columns()', 'EXECUTE') AS anon,
+--              has_function_privilege('authenticated', 'public.organizations_guard_columns()', 'EXECUTE') AS authenticated,
+--              has_function_privilege('service_role',  'public.organizations_guard_columns()', 'EXECUTE') AS service_role;
 --       -- EXPECTED: anon = f, authenticated = f, service_role = t.
 --       -- anon = f IS THE ASSERTION THIS SECTION EXISTS FOR.
 --       -- authenticated = f is correct and deliberate: trigger functions

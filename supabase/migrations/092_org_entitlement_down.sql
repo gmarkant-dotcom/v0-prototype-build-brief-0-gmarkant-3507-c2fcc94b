@@ -1,8 +1,22 @@
 -- =====================================================================
 -- Migration 092 ROLLBACK: 092_org_entitlement_down.sql
 --
---   DROP  trigger organizations_entitlement_guard ON public.organizations
---   DROP  public.organizations_guard_entitlement()
+--   DROP  trigger organizations_columns_guard ON public.organizations
+--   DROP  public.organizations_guard_columns()
+--
+--   THE FUNCTION AND TRIGGER WERE RENAMED. An earlier draft of 092 called
+--   them organizations_guard_entitlement() and
+--   organizations_entitlement_guard, when the guard was a deny list of one
+--   billing column. It is now a PERMIT LIST over the whole table, so the
+--   old names would have understated it - and a name that says
+--   "entitlement" on a guard that also refuses is_lead_agency,
+--   primary_contact_user_id and every future column is the kind of lie
+--   that makes somebody add a second trigger for the rest.
+--
+--   >>> NOTHING NEEDS RENAMING IN THE DATABASE. 092 HAS NOT BEEN APPLIED,
+--   >>> so no object under the old name has ever existed. If you are
+--   >>> reading this having applied an older copy of 092, DROP the old
+--   >>> pair by name first - this file will not find them.
 --   DROP  COLUMN public.organizations.is_paid
 --   NULL  the COMMENT ON TABLE public.profiles that 092 section 6 set
 --
@@ -73,16 +87,16 @@
 -- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
 -- =====================================================================
 --
--- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 99
--- and an explicit COMMIT; on LINE 136. Those are the only occurrences of
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 113
+-- and an explicit COMMIT; on LINE 150. Those are the only occurrences of
 -- either word, executable or otherwise - this file defines no plpgsql
 -- body, so there is no third hit the way there is in 092 itself.
 --
 --     grep -n -i '^begin\|^commit\|^rollback' \
 --       supabase/migrations/092_org_entitlement_down.sql
---     -- EXPECTED: exactly 2 hits.  99 BEGIN;   136 COMMIT;
+--     -- EXPECTED: exactly 2 hits.  113 BEGIN;   150 COMMIT;
 --
--- TO DRY RUN: change the COMMIT; on line 136 to ROLLBACK;. A dry run of
+-- TO DRY RUN: change the COMMIT; on line 150 to ROLLBACK;. A dry run of
 -- THIS file is worth more than a dry run of most, because the DROP
 -- COLUMN is the statement most likely to fail on a dependency nobody
 -- remembered - a view, an index, a later constraint.
@@ -99,10 +113,10 @@
 BEGIN;
 
 -- 1. The trigger first. It depends on the function.
-DROP TRIGGER IF EXISTS organizations_entitlement_guard ON public.organizations;
+DROP TRIGGER IF EXISTS organizations_columns_guard ON public.organizations;
 
 -- 2. Then the function. No dependent object remains after step 1.
-DROP FUNCTION IF EXISTS public.organizations_guard_entitlement();
+DROP FUNCTION IF EXISTS public.organizations_guard_columns();
 
 -- 3. Then the column. THIS IS THE DESTRUCTIVE STATEMENT.
 --
@@ -162,7 +176,7 @@ COMMIT;
 --
 --       SELECT p.proname FROM pg_proc p
 --       JOIN pg_namespace n ON n.oid = p.pronamespace
---       WHERE n.nspname='public' AND p.proname='organizations_guard_entitlement';
+--       WHERE n.nspname='public' AND p.proname='organizations_guard_columns';
 --       -- EXPECTED: 0 rows.
 --
 -- V3. THE POLICY COUNT STILL DID NOT MOVE.
