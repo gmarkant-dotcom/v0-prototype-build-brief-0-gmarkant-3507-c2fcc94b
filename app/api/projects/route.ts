@@ -13,6 +13,7 @@ import { parseDoubleJson } from '@/lib/active-engagement-parse'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { agencyEntitlementId, hasAgencyEntitlement, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 export const dynamic = 'force-dynamic'
 
 type BudgetJson = { amount?: number; currency?: string }
@@ -629,6 +630,33 @@ export async function POST(request: NextRequest) {
       const msg = insertError?.message || insertError?.details || insertError?.hint || 'Project creation failed'
       throw new Error(String(msg))
     }
+
+    // project.create - LAST, AND NON-FATAL. The project exists and has been returned to
+    // the caller by the time this runs; a lost breadcrumb must never turn a successful
+    // creation into an error. recordMilestone() catches everything and returns void.
+    //
+    // AGENCY-SIDE, so actorSide is left to its "agency" default and no partnership is
+    // involved: 080's INSERT policy asks only that org_id is one of the caller's
+    // organizations, and writeOrgId was resolved from membership above.
+    //
+    // NOTHING HAD TO BE WIDENED FOR THIS. lib/activity-feed.ts already renders
+    // project.create at :383 and already records its expected subject_type as "project" at
+    // :504. It is the ONE agency-side event type in the whole vocabulary that had a
+    // renderer and no emitter - the other eighteen need a renderer written first, which is
+    // a copy decision rather than a mechanical one. See docs/emitter-coverage.md.
+    //
+    // NOT vendor-visible, deliberately and correctly: project.create is absent from
+    // vendor_visible_event_types(), so this row is agency-internal. A vendor has no
+    // business seeing that a project exists before they are invited to bid on it.
+    await recordMilestone(supabase, {
+      eventType: 'project.create',
+      orgId: writeOrgId,
+      actorId: user.id,
+      actorEmail: user.email ?? null,
+      subjectType: 'project',
+      subjectId: project.id as string,
+      payload: { project_name: safeName },
+    })
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, recordId: project.id })
     return NextResponse.json({ project })

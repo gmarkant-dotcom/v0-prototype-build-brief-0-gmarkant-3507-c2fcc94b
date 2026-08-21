@@ -1,4 +1,5 @@
-import { resolveCallerOrgIds, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
+import { resolveCallerOrgIds, callerOwnsOrg, orgIdFromColumn, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 import { NextResponse } from "next/server"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { requirePartnerRole } from "@/lib/api-auth"
@@ -116,6 +117,65 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       .update({ agency_nda_notified_at: now, updated_at: now })
       .eq("id", id)
     if (updateError) return NextResponse.json({ error: "Failed to update notification status" }, { status: 500 })
+
+    // nda.acknowledge - LAST, AND NON-FATAL.
+    //
+    // After the stamp, deliberately: the agency has already been emailed and the row
+    // already records that, so a breadcrumb that fails must not turn a completed
+    // notification into an error the vendor sees. recordMilestone() catches everything and
+    // returns void; the try/catch here is for the two lookups below it.
+    //
+    // NOTHING HAD TO BE WIDENED FOR THIS. nda.acknowledge is already on
+    // vendor_emittable_event_types() (088:411) and on vendor_visible_event_types() (080),
+    // and lib/activity-feed.ts already renders it at :407. The emitter was never written.
+    //
+    // THE SUBJECT IS THE INBOX ROW, not a partnership. The vendor acknowledged the NDA for
+    // ONE scope item on one RFP, and that is the thing the agency's feed line names.
+    try {
+      const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+
+      // partnership_id is not in this route's select list, so it is resolved the same
+      // two-step way the bid.submit emitter does at
+      // app/api/partner/rfps/[id]/response/route.ts:495.
+      const { data: link } = await supabase
+        .from("partner_rfp_inbox")
+        .select("partnership_id")
+        .eq("id", id)
+        .maybeSingle<{ partnership_id: string | null }>()
+
+      let milestonePartnershipId = link?.partnership_id ?? null
+      if (!milestonePartnershipId) {
+        const { data: pair } = await supabase
+          .from("partnerships")
+          .select("id")
+          .eq("lead_org_id", inbox.lead_org_id)
+          .in("vendor_org_id", callerOrgIds)
+          .limit(1)
+          .maybeSingle()
+        milestonePartnershipId = (pair?.id as string | null) ?? null
+      }
+
+      // KNOWN RESIDUAL, NOT FIXED HERE. 088's vendor INSERT policy requires
+      // partnership_id IS NOT NULL, so a vendor with no partnership loses this breadcrumb
+      // silently. See docs/emitter-coverage.md - the only fix is a policy change.
+      await recordMilestone(supabase, {
+        eventType: "nda.acknowledge",
+        actorSide: "vendor",
+        orgId: orgIdFromColumn(inbox.lead_org_id),
+        actorId: user.id,
+        // actorEmail deliberately absent: 088's policy requires actor_email IS NULL on a
+        // vendor row.
+        vendorOrgId: writeOrgId,
+        partnershipId: milestonePartnershipId,
+        subjectType: "rfp_inbox",
+        subjectId: inbox.id,
+        payload: {
+          scope_item_name: inbox.scope_item_name?.trim() || null,
+        },
+      })
+    } catch (milestoneErr) {
+      console.error("[partner/rfps/[id]/nda-notify] nda.acknowledge milestone failed (non-fatal)", milestoneErr)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

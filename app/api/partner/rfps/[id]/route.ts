@@ -1,4 +1,5 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 import { ORG_CONTACT_SELECT_MEETING, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 import { NextResponse } from "next/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
@@ -82,6 +83,63 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
       if (updatedInbox) {
         inboxWithViewed = updatedInbox
+
+        // rfp.view - THE FIRST VIEW, AND ONLY THE FIRST.
+        //
+        // This sits inside `if (updatedInbox)` on purpose. The UPDATE above carries
+        // `.is("viewed_at", null)`, so it matches exactly once per inbox row and
+        // `updatedInbox` is truthy only on the run that actually stamped it. A vendor
+        // reloading the page emits nothing. Putting the emit outside this branch would put
+        // one line on the agency's feed per page load.
+        //
+        // NOTHING HAD TO BE WIDENED FOR THIS. rfp.view is already on
+        // vendor_emittable_event_types() (088:408) and on vendor_visible_event_types()
+        // (080), and lib/activity-feed.ts already renders it at :404 with the expected
+        // subject_type "rfp_inbox" recorded at :506. The emitter was simply never written.
+        try {
+          const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+
+          // partnership_id off the inbox row when it has one, and a lookup when it does
+          // not - the same two-step the bid.submit emitter uses at
+          // app/api/partner/rfps/[id]/response/route.ts:495.
+          let milestonePartnershipId = (inbox.partnership_id as string | null) ?? null
+          if (!milestonePartnershipId) {
+            const { data: pair } = await supabase
+              .from("partnerships")
+              .select("id")
+              .eq("lead_org_id", inbox.lead_org_id)
+              .in("vendor_org_id", callerOrgIds)
+              .limit(1)
+              .maybeSingle()
+            milestonePartnershipId = (pair?.id as string | null) ?? null
+          }
+
+          // KNOWN RESIDUAL, NOT FIXED HERE. 088's vendor INSERT policy requires
+          // partnership_id IS NOT NULL, so when the lookup above finds nothing this emit is
+          // refused by RLS and recordMilestone() swallows it - the breadcrumb is silently
+          // lost. That collides with the ruling that a vendor may bid without a
+          // partnership. Reported in docs/emitter-coverage.md rather than worked around,
+          // because the only workaround is a policy change.
+          await recordMilestone(supabase, {
+            eventType: "rfp.view",
+            actorSide: "vendor",
+            orgId: orgIdFromColumn(inbox.lead_org_id),
+            actorId: user.id,
+            // actorEmail deliberately absent: 088's policy requires actor_email IS NULL on
+            // a vendor row.
+            vendorOrgId: writeOrgId,
+            partnershipId: milestonePartnershipId,
+            subjectType: "rfp_inbox",
+            subjectId: inbox.id as string,
+            payload: {
+              scope_item_name: (inbox.scope_item_name as string | null)?.trim?.() || null,
+            },
+          })
+        } catch (milestoneErr) {
+          // recordMilestone() never throws; this catches the two lookups above. A missing
+          // breadcrumb must never cost the vendor their view of the RFP.
+          console.error("[partner/rfps/[id]] rfp.view milestone failed (non-fatal)", milestoneErr)
+        }
       }
     }
 
