@@ -65,7 +65,7 @@ export async function POST(req: Request) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role, is_paid, is_admin, payment_terms, payment_terms_custom")
+      .select("role, active_role, is_admin, payment_terms, payment_terms_custom")
       .eq("id", user.id)
       .single()
 
@@ -73,9 +73,9 @@ export async function POST(req: Request) {
     // is a billing fact about the paying entity, not a fact about the signup role column,
     // and folding the two together would deny a paying dual-role account its own agency
     // tools the moment migration 078's role correction lands.
-    // 079: entitlement moves onto the organization. Read the org's entitlement here rather
-    // than this member's profile flag, and key it with agencyEntitlementId(user.id).
-    if (!hasAgencyEntitlement(profile)) {
+    // 092: entitlement is read from the ACTING ORGANIZATION's organizations.is_paid, not
+    // from this member's profile flag. Fails closed with no fallback.
+    if (!(await hasAgencyEntitlement(profile, user.id, supabase))) {
       return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403, headers: noStore })
     }
 

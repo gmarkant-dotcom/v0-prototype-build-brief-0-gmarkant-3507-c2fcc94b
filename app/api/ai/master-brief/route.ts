@@ -45,11 +45,14 @@ export async function POST(req: Request) {
     // than this member's profile flag, and key it with agencyEntitlementId(user.id).
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role, is_paid, is_admin")
+      .select("role, active_role, is_admin")
       .eq("id", user.id)
       .single()
 
-    if (!canUseAgencyAi(profile)) {
+    // 092: the billing half reads the ACTING ORGANIZATION's organizations.is_paid. The
+    // portal half is unchanged and is still checked first, so a vendor-side caller never
+    // causes an organizations read.
+    if (!(await canUseAgencyAi(profile, user.id, supabase))) {
       return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403 })
     }
 

@@ -14,7 +14,14 @@ async function syncUserProfile(supabase: any, user: any) {
   // Check if profile exists
   const { data: existingProfile } = await supabase
     .from('profiles')
-    .select('id, role, active_role, is_paid, demo_access')
+    // 092: is_paid AND demo_access ARE GONE FROM THIS SELECT, AND NEITHER WAS EVER USED.
+    // This branch reads existingProfile.role and existingProfile.active_role and nothing
+    // else - grep the file. is_paid in particular is now a vestigial profiles column whose
+    // entitlement meaning moved to organizations.is_paid at 092, so a read here would have
+    // been a read of the wrong thing as well as an unused one, and it is the FIRST
+    // statement PostgREST would fail with 42703 when a later migration drops the column.
+    // The post-authentication routing decision does not need either flag.
+    .select('id, role, active_role')
     .eq('id', user.id)
     .single()
 

@@ -1,4 +1,10 @@
 import { actingRole, canActAs } from "./acting-role"
+// TYPE-ONLY, AND IT HAS TO BE. lib/acting-org.ts imports OrgId from this file, so a
+// value import either way round would be a runtime cycle. `import type` is erased at
+// compile time, and the one place this module needs acting-org at RUNTIME -
+// resolveAgencyEntitlement() and the two resolvers above it - reaches it through a
+// dynamic `await import()`, which was already the shape here before 092.
+import type { ActingOrgReason } from "./acting-org"
 
 /**
  * The one definition of "is this caller entitled to the paid lead agency capability".
@@ -117,6 +123,22 @@ export type EntitlementProfile =
   | {
       role?: string | null
       active_role?: string | null
+      /**
+       * VESTIGIAL AS OF 092, AND KEPT FOR EXACTLY ONE CALLER.
+       *
+       * Entitlement is read from `organizations.is_paid` now - see
+       * resolveAgencyEntitlement() below. The only function in this module that still
+       * consults this field is canUploadVendorFiles(), and its own header explains why
+       * that is not a billing read at all.
+       *
+       * `profiles.is_paid` STILL EXISTS IN THE DATABASE. 092 deliberately does not drop
+       * it: fifteen select lists named it before this pass, PostgREST fails a whole
+       * statement on one unknown column, and a migration goes live the moment it is
+       * pasted into the SQL Editor - independently of any deploy. A LATER MIGRATION
+       * DROPS IT, once the code that reads organizations.is_paid is live. When that
+       * happens this field, its guard entry in 091, and canUploadVendorFiles()'s term
+       * all go in the same change.
+       */
       is_paid?: boolean | null
       is_admin?: boolean | null
     }
@@ -387,70 +409,240 @@ export async function resolveCallerWriteOrgId(
 }
 
 /**
+ * THE ENTITLEMENT READ. IT IS ORG-KEYED AS OF 092, AND IT IS ASYNC BECAUSE OF THAT.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT CHANGED AND WHY THE SIGNATURE HAD TO
+ *
+ * Until 092 this was `hasAgencyEntitlement(profile)`, synchronous, reading
+ * `profile.is_paid` off a row the caller had already fetched. That is not answerable from
+ * a profile row any more, and the reason is not stylistic:
+ *
+ *   BILLING IS PER ORGANIZATION AND ALWAYS WAS (the ruling is at the head of this file).
+ *   A colleague of a paying owner was refused at app/api/projects/route.ts with "Active
+ *   subscription required" while their own company was paid up, because the flag sat on
+ *   the wrong row. 079 moved the QUOTA counters onto the organization and could not move
+ *   the entitlement - `organizations` carried no column to move it to. Migration 092
+ *   creates `organizations.is_paid` and this reads it.
+ *
+ *   AND AFTER 090 AN ACCOUNT CAN HOLD TWO MEMBERSHIPS. Entitlement then becomes a property
+ *   of the ACTING organization rather than of the session: the same person is entitled
+ *   while acting for the paying company and not while acting for the lapsed one. A profile
+ *   column cannot express that at all. So the read needs the acting organization resolved
+ *   first, and resolving it is a query.
+ *
+ * ---------------------------------------------------------------------------
+ * NO FALLBACK. NOT ONE. THIS IS THE PART TO NOT "IMPROVE".
+ *
+ * `agencyEntitlementId()` deliberately falls back to the caller's USER id when the acting
+ * organization does not resolve, and that is right for accounting - a transient org_members
+ * failure must not take the whole AI surface down. IT IS WRONG HERE, and 091 measured
+ * exactly how wrong (docs/091-entitlements-surface.md, item 2):
+ *
+ *   For the SIXTEEN accounts 079 backfilled with organizations.id = profiles.id, `userId`
+ *   IS a valid organizations.id, the lookup succeeds, and the answer is right BY THE SAME
+ *   ACCIDENT THAT HAS HIDDEN EVERY ID-CONFUSION DEFECT IN THIS REPOSITORY.
+ *   For every other account it matches no row, is_paid reads as undefined, and the account
+ *   is locked out of project creation, duplication, all four AI routes, uploads and - once
+ *   PaidUserContext reads the same thing - the entire agency portal. WITH NO ADMIN TOGGLE
+ *   ABLE TO FIX IT, because the profile flag is no longer what is read.
+ *
+ * It fails OPEN for the legacy set and CLOSED AND INVISIBLY for the new set, which is the
+ * worst of both directions. So this uses `resolveActingOrgId()` directly, which returns
+ * null rather than guessing, and an unresolved organization is NOT ENTITLED with a reason
+ * that says so - never an accidental pass and never a silent refusal. The 082 fallbacks are
+ * the cautionary tale here: three of them have already been removed from this codebase
+ * because a fallback that fires silently returns a wrong answer instead of an error.
+ *
+ * EVERY REFUSAL PATH LOGS. A person locked out of their own product must leave a trace
+ * somebody can find, and "no error anywhere" is the failure shape this file exists to stop.
+ */
+export type EntitlementReason =
+  /** NEXT_PUBLIC_IS_DEMO. Nothing is gated on the demo deployment. */
+  | "demo-deployment"
+  /** profiles.is_admin. Platform staff bypass, as they do everywhere else in this file. */
+  | "platform-admin"
+  /** The acting organization resolved and organizations.is_paid is true. The paid path. */
+  | "org-entitled"
+  /** The acting organization resolved and organizations.is_paid is false. THE LAPSE. */
+  | "org-not-entitled"
+  /** No profile row was passed. Fails closed. */
+  | "no-profile"
+  /** resolveActingOrgId() refused. `actingOrgReason` carries which of its six branches. */
+  | "org-unresolved"
+  /** The organization id resolved but no organizations row came back for it. */
+  | "org-row-missing"
+  /** The organizations read itself errored. Fails closed. */
+  | "lookup-failed"
+
+export type EntitlementDecision = {
+  entitled: boolean
+  /** The organization the answer is ABOUT. Null on every refusal that could not resolve one. */
+  orgId: OrgId | null
+  reason: EntitlementReason
+  /** Populated only when reason is "org-unresolved", so a caller can tell "ambiguous" from "no-membership". */
+  actingOrgReason: ActingOrgReason | null
+}
+
+/**
+ * THE ONE CHOKE POINT. Everything that asks "is the paying entity behind this caller
+ * entitled" goes through here, including the three gates below it.
+ *
+ * THAT PROPERTY IS WORTH PROTECTING RATHER THAN NOTED IN PASSING. A future expiry warning -
+ * deferred by Greg, not built - reads exactly one predicate to decide whether to warn, and
+ * that predicate is `(await resolveAgencyEntitlement(...)).reason === "org-not-entitled"`.
+ * If a second place ever learns to answer this question, that stops being true and a
+ * warning can disagree with the wall the user then hits.
+ *
+ * The bypasses are ordered deliberately and the order is the same one every function in
+ * this file has used since it was written: demo, then null-profile, then admin, then the
+ * billing fact. Only the last of the four costs a query.
+ */
+export async function resolveAgencyEntitlement(
+  profile: EntitlementProfile,
+  userId: string,
+  client: OrgLookupClient
+): Promise<EntitlementDecision> {
+  if (isDemoDeployment()) {
+    return { entitled: true, orgId: null, reason: "demo-deployment", actingOrgReason: null }
+  }
+  if (!profile) {
+    console.error("[entitlements] entitlement asked for with no profile row, refusing", { userId })
+    return { entitled: false, orgId: null, reason: "no-profile", actingOrgReason: null }
+  }
+  if (profile.is_admin === true) {
+    return { entitled: true, orgId: null, reason: "platform-admin", actingOrgReason: null }
+  }
+
+  const { resolveActingOrgId } = await import("@/lib/acting-org")
+  const acting = await resolveActingOrgId(userId, client)
+  if (!acting.orgId) {
+    // resolveActingOrgId has already logged at error in every branch that is not a definite
+    // answer. Nothing is re-logged here; the reason is carried out instead, because
+    // "ambiguous" and "no-membership" want different copy and a route deciding between 403
+    // and 500 needs to tell them apart.
+    return { entitled: false, orgId: null, reason: "org-unresolved", actingOrgReason: acting.reason }
+  }
+
+  // 092. THE COLUMN THIS READS DOES NOT EXIST UNTIL THAT MIGRATION IS APPLIED, and a
+  // PostgREST 42703 lands in the `error` branch below - refused, and LOUDLY, rather than
+  // swallowed into a false. That is the intended behaviour for a deploy that got ahead of
+  // its migration: it is visible in the logs on the first request instead of presenting as
+  // "everybody's subscription lapsed".
+  const { data, error } = await client
+    .from("organizations")
+    .select("is_paid")
+    .eq("id", acting.orgId)
+    .maybeSingle()
+
+  if (error) {
+    console.error("[entitlements] organizations.is_paid read failed, refusing", {
+      userId,
+      orgId: acting.orgId,
+      code: error.code,
+      message: error.message,
+      hint: error.code === "42703"
+        ? "42703 is undefined_column: migration 092 has not been applied to this database, but the code that reads it is deployed. Apply supabase/migrations/092_org_entitlement.sql."
+        : undefined,
+    })
+    return { entitled: false, orgId: acting.orgId, reason: "lookup-failed", actingOrgReason: null }
+  }
+
+  const row = data as { is_paid?: boolean | null } | null
+  if (!row) {
+    // The caller is a member of an organization whose row cannot be read. Either it was
+    // deleted underneath a live membership, or the SELECT policy filtered it - and
+    // "Members read their organizations" is keyed on the same membership that just
+    // resolved, so neither should be reachable.
+    console.error("[entitlements] acting organization resolved but no organizations row came back, refusing", {
+      userId,
+      orgId: acting.orgId,
+    })
+    return { entitled: false, orgId: acting.orgId, reason: "org-row-missing", actingOrgReason: null }
+  }
+
+  // `=== true` rather than `!== false`. A null entitlement is not an entitlement, and the
+  // two spellings had already drifted apart across routes when this lived on profiles. The
+  // 092 column is NOT NULL, so a null cannot arise from the table - the strict spelling is
+  // kept because it is the one that survives somebody relaxing that.
+  if (row.is_paid === true) {
+    return { entitled: true, orgId: acting.orgId, reason: "org-entitled", actingOrgReason: null }
+  }
+  return { entitled: false, orgId: acting.orgId, reason: "org-not-entitled", actingOrgReason: null }
+}
+
+/**
  * Is the paying entity behind this caller entitled to paid lead agency capability?
  *
  * Billing only. Says nothing about which portal the caller is in - pair it with
  * canActAs()/actingRole() when the route also needs to answer that.
  *
- * `is_paid === true` rather than `is_paid !== false`: a null entitlement is not an
- * entitlement, and the two spellings were already inconsistent across routes (the AI
- * routes used `!== false`, the project and upload routes used truthiness). One spelling,
- * and it is the strict one. No live profile carries a null is_paid, verified read-only
- * on 2026-08-17.
- *
- * 079 DID NOT CLOSE THIS SEAM and could not: `organizations` carries no entitlement
- * column. See the header of this file. Until a migration puts entitlement on the
- * organization, a colleague of a paying owner is not entitled unless their own profile
- * row says so.
+ * The boolean form of resolveAgencyEntitlement(), for the four route gates that only need
+ * to decide between "proceed" and "403". Anything that needs to explain the refusal to a
+ * person - the lapsed-subscription page, a future expiry warning - calls the resolver and
+ * reads the reason.
  */
-export function hasAgencyEntitlement(profile: EntitlementProfile): boolean {
-  if (isDemoDeployment()) return true
-  if (!profile) return false
-  if (profile.is_admin === true) return true
-  return profile.is_paid === true
+export async function hasAgencyEntitlement(
+  profile: EntitlementProfile,
+  userId: string,
+  client: OrgLookupClient
+): Promise<boolean> {
+  return (await resolveAgencyEntitlement(profile, userId, client)).entitled
 }
 
 /**
  * May this caller run the agency-side AI features - master brief generation, RFP output
  * templates, bid scoring narratives, the generic /api/ai tools?
  *
- * Both halves are required: operating the agency side AND entitled. Admins bypass, as
- * they do everywhere else in this codebase.
+ * Both halves are required: operating the agency side AND entitled. Admins bypass, as they
+ * do everywhere else in this codebase - and they bypass inside resolveAgencyEntitlement(),
+ * which is why there is no second is_admin test here.
  *
- * This deliberately drops the old standalone `role === 'partner'` allow clause. No vendor
- * surface calls any of these routes - every caller of /api/ai/master-brief,
- * /api/ai/rfp-output-template and /api/documents/extract-text lives under app/agency/,
- * verified by grep - so that clause granted an agency capability to the vendor side for
- * nothing in return.
+ * THE PORTAL HALF IS CHECKED FIRST AND THAT IS NOT AN OPTIMISATION. A vendor-side caller
+ * must not cause an organizations read at all: they have no agency entitlement to look up,
+ * and the answer for them is "no" for a reason that has nothing to do with billing.
+ *
+ * This deliberately drops nothing that was here before: the old standalone
+ * `role === 'partner'` allow clause was removed when this file was written, because no
+ * vendor surface calls any of these routes.
  */
-export function canUseAgencyAi(profile: EntitlementProfile): boolean {
+export async function canUseAgencyAi(
+  profile: EntitlementProfile,
+  userId: string,
+  client: OrgLookupClient
+): Promise<boolean> {
   if (isDemoDeployment()) return true
   if (!profile) return false
   if (profile.is_admin === true) return true
-  return actingRole(profile) === "agency" && profile.is_paid === true
+  if (actingRole(profile) !== "agency") return false
+  return (await resolveAgencyEntitlement(profile, userId, client)).entitled
 }
 
 /**
  * May this caller upload a file?
  *
- * The vendor side is free: a vendor uploads bid attachments, legal documents and reel
- * links without an entitlement of their own, and under the ruled model their own company
- * is a separate organization with its own (currently non-existent) billing. So the vendor
- * branch returns true without a billing test - that is the product decision, not an
- * oversight.
+ * THE VENDOR SIDE IS FREE and that branch returns before any organizations read. A vendor
+ * uploads bid attachments, legal documents and reel links without an entitlement of their
+ * own; under the ruled model their own company is a separate organization with its own
+ * (currently non-existent) billing. That is the product decision, not an oversight, and it
+ * is the same reason `organizations.is_paid` must not be read for a vendor organization -
+ * see canUploadVendorFiles() below.
  *
- * The agency side is not free, and before this it effectively was: the previous
+ * The agency side is not free, and before this file existed it effectively was: the
  * expression was `isDemo || role === 'partner' || role === 'agency' || is_admin ||
  * is_paid`, and since every live profile carries a role of exactly 'agency' or 'partner',
- * the second and third clauses between them matched every authenticated caller. The gate
- * returned 403 for nobody.
+ * the second and third clauses between them matched every authenticated caller.
  */
-export function canUploadFiles(profile: EntitlementProfile): boolean {
+export async function canUploadFiles(
+  profile: EntitlementProfile,
+  userId: string,
+  client: OrgLookupClient
+): Promise<boolean> {
   if (isDemoDeployment()) return true
   if (!profile) return false
   if (profile.is_admin === true) return true
   if (actingRole(profile) === "partner") return true
-  return profile.is_paid === true
+  return (await resolveAgencyEntitlement(profile, userId, client)).entitled
 }
 
 /**
@@ -501,6 +693,31 @@ export function canUploadFiles(profile: EntitlementProfile): boolean {
  * as a cleanup, and because 079 makes the vendor's own company an organization: if
  * vendor-side billing ever exists, its entitlement is read HERE, once, instead of in two
  * routes that have already drifted apart once.
+ *
+ * ---------------------------------------------------------------------------
+ * 092: THIS IS THE ONE REMAINING READER OF `profiles.is_paid` IN THE APPLICATION, AND
+ * IT IS DELIBERATE. Everything else moved to `organizations.is_paid`.
+ *
+ * IT DID NOT MOVE, AND IT MUST NOT, FOR TWO REASONS:
+ *
+ *   1. VENDOR ORGANIZATIONS HAVE NO ENTITLEMENT CONCEPT. Vendor access is free by the
+ *      pricing copy, established four independent ways in
+ *      docs/091-entitlements-surface.md item 6. Pointing this at
+ *      organizations.is_paid would give every vendor organization an entitlement it has
+ *      never had, defaulting to false - which is the lockout 092's own design doc names
+ *      as OPEN-4. This function must not be the door that lets the agency gate reach
+ *      sideways onto the vendor side.
+ *   2. IT IS NOT A BILLING READ. It is the clause that lets an agency-side caller fall
+ *      through to the MORE ACCURATE refusal underneath. Deleting it - the obvious
+ *      "it decides nothing, so remove it" move - would hand a paid agency account
+ *      "Upgrade to upload files" where it currently gets "Vendors only", which is a copy
+ *      regression and a support ticket. Measured against both routes, not assumed.
+ *
+ * >>> IT IS THEREFORE A NAMED DEPENDENCY OF THE MIGRATION THAT DROPS
+ * >>> profiles.is_paid. That migration must delete this term - and the `is_paid` in both
+ * >>> vendor routes' select lists - IN THE SAME CHANGE, having first decided which of the
+ * >>> two refusal messages an agency-side caller should get. See
+ * >>> supabase/migrations/092_org_entitlement.sql, DO NOT DROP profiles.is_paid.
  */
 export function canUploadVendorFiles(profile: EntitlementProfile): boolean {
   if (isDemoDeployment()) return true
@@ -509,51 +726,34 @@ export function canUploadVendorFiles(profile: EntitlementProfile): boolean {
 }
 
 /**
- * Portal-entitlement pair for the two routes that gate on "agency portal AND paid":
- * /api/agency/msa/ai-schedule and /api/agency/payment-synthesis.
+ * canUseAgencyPortalAi() WAS HERE AND IS DELETED AT 092. THIS NOTE IS THE RECEIPT.
  *
- * Those two used canActAs() for the portal half - deliberately the permissive OR over
- * role/active_role, because switch-role already checks entitlement before it can ever
- * write active_role='agency'. That half is preserved exactly. Only the billing half
- * changes, from `role === 'agency' && (is_paid || is_admin)` to a plain entitlement test,
- * which is what the ruling asks for and what stops migration 078's role correction from
- * locking a paying dual-role account out of its own agency tools.
+ * It composed `canActAs(profile, "agency") && hasAgencyEntitlement(profile)` and it had
+ * ZERO CALLERS - grepped by name across every file type in the repository at 091, with no
+ * namespace import of this module anywhere, so genuinely uncalled rather than apparently
+ * uncalled.
  *
- * ---------------------------------------------------------------------------
- * IT HAS ZERO CALLERS. MEASURED, AND DELIBERATELY NOT DELETED.
+ * 091 DELIBERATELY KEPT IT, and wrote down the exact condition under which it should go:
  *
- * Grepped by name across EVERY file type in the repository - .ts, .tsx, .sql, .md, .json,
- * everything outside .git, node_modules and .next. Two hits: this definition, and one row
- * in a documentation table at docs/m1-prework-report.md:479. No alternate spelling, no
- * case variant. AND NO NAMESPACE IMPORT OF THIS MODULE EXISTS ANYWHERE, so there is no
- * `entitlements.canUseAgencyPortalAi` property-access path a name grep would miss. It is
- * genuinely uncalled, not apparently uncalled.
+ *   "RECOMMENDATION: leave it until entitlement moves onto the organization. At that point
+ *    hasAgencyEntitlement() stops being answerable from a profile row and this composition
+ *    is the natural single place to make the portal-plus-entitlement pair async. If that
+ *    design lands without using it, delete it in the same change - with the two messages
+ *    resolved."
  *
- * WHY IT STAYS. Twice in this codebase's history, "dead" code has turned out to be live
- * through a redirect or a default, so the bar for deleting is higher than a grep. Two
- * reasons beyond that, and the second is the load-bearing one:
+ * THAT CONDITION IS NOW MET AND THE DESIGN LANDED WITHOUT IT. resolveAgencyEntitlement()
+ * is the async pair-maker, and the two routes it was written for -
+ * /api/agency/msa/ai-schedule and /api/agency/payment-synthesis - deliberately keep their
+ * halves as two statements, because they return TWO DIFFERENT REFUSALS: "Subscription
+ * required for AI features" and "Agency only". Collapsing them would tell a caller who is
+ * entitled but in the wrong portal that they need a subscription. Keeping an uncalled
+ * export whose stated purpose has been served, past the milestone its own header named as
+ * the deadline, is how dead code becomes permanent.
  *
- *   1. It is an EXPORT. Removing it is a change to this module's public surface, made in a
- *      pass whose subject is a migration.
- *
- *   2. ADOPTING IT AT THE TWO ROUTES IT NAMES IS NOT FREE, and that is the thing to know
- *      before somebody "finishes the job". app/api/agency/msa/ai-schedule/route.ts:78 and
- *      app/api/agency/payment-synthesis/route.ts:69 each run the two halves as two
- *      statements returning TWO DIFFERENT REFUSALS - "Subscription required for AI
- *      features" and "Agency only". Collapsing them into this one boolean would tell a
- *      caller who is entitled but in the wrong portal that they need a subscription, which
- *      is a copy regression and a support ticket. Adoption needs the messages resolved
- *      first, and that is a product decision.
- *
- * RECOMMENDATION: leave it until entitlement moves onto the organization. At that point
- * hasAgencyEntitlement() stops being answerable from a profile row and this composition is
- * the natural single place to make the portal-plus-entitlement pair async. If that design
- * lands without using it, delete it in the same change - with the two messages resolved.
- * Recorded in docs/091-session-report.md.
+ * IF THE PAIR IS EVER WANTED AS ONE CALL, it is two lines against
+ * resolveAgencyEntitlement() - and the two messages have to be resolved first, which is a
+ * product decision and not a refactor.
  */
-export function canUseAgencyPortalAi(profile: EntitlementProfile): boolean {
-  return canActAs(profile, "agency") && hasAgencyEntitlement(profile)
-}
 
 /**
  * The organization a GIVEN user belongs to - not the caller's own.

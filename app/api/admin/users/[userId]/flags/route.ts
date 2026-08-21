@@ -1,12 +1,44 @@
 import { NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { requireAdminRole } from "@/lib/api-auth"
+import { resolveOrgIdForUser } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
 /**
  * The admin panel's account flag toggles.
  *
+ * ---------------------------------------------------------------------------
+ * 092: is_paid IS NO LONGER A PROFILE FLAG. IT IS THE COMPANY PLAN.
+ *
+ * This route now writes THREE FLAGS TO TWO TABLES, and the split is not cosmetic:
+ *
+ *   is_paid      -> public.organizations, on the target user's organization.
+ *                   Entitlement is an ORGANIZATION fact - one price per company, any
+ *                   number of colleagues - and every gate in the product reads it there
+ *                   as of 092. See lib/entitlements.ts, resolveAgencyEntitlement().
+ *   is_admin     -> public.profiles. Platform staff. A property of a PERSON.
+ *   demo_access  -> public.profiles. Same.
+ *
+ * WITHOUT THIS CHANGE GREG CAN NO LONGER MARK ANYBODY PAID. The toggle would go on
+ * flipping profiles.is_paid, report success, and grant nobody anything - because after
+ * the 092 deploy nothing reads that column as an entitlement. That is the exact
+ * silent-success shape this route was written to fix, delivered a second time through a
+ * different door.
+ *
+ * THE SERVICE ROLE IS WHAT MAKES THE ORGANIZATIONS WRITE POSSIBLE, and it was verified
+ * against 092's exemption rather than assumed. organizations_entitlement_guard refuses a
+ * write to is_paid when auth.uid() IS NOT NULL. A service_role JWT carries no `sub`
+ * claim, so auth.uid() resolves NULL and this route is EXEMPT - the same outcome 091's
+ * writer-outcome table records for this same route against the profiles guard. Same
+ * client, same mechanism, same answer.
+ *
+ * >>> IF THIS ROUTE IS EVER MOVED TO A SESSION CLIENT, THE is_paid WRITE STOPS WORKING
+ * >>> AND RAISES LG008. That is the guard doing its job: being an admin of an
+ * >>> organization must not permit writing its plan, because every user is an admin of
+ * >>> their own organization.
+ *
+ * ---------------------------------------------------------------------------
  * These used to be issued straight from the browser as
  * `supabase.from('profiles').update({...}).eq('id', otherUserId)`. Per
  * docs/schema-snapshot-2026-08-13.md, profiles carries exactly one UPDATE policy - "Users
@@ -28,9 +60,20 @@ export const dynamic = "force-dynamic"
  *      the Supabase SQL editor, which is not a state to strand someone in by accident.
  */
 
-/** Allow-list. The request body is never spread into the update. */
+/**
+ * Allow-list. The request body is never spread into any update.
+ *
+ * THE WIRE CONTRACT IS UNCHANGED BY 092 - the admin page still PATCHes
+ * `{ is_paid: true }` and still reads `user.is_paid` off the response. Only the table
+ * underneath `is_paid` moved. Keeping the field name is deliberate: renaming it would be
+ * a client change for no benefit, and "is this company paid" is what the toggle has
+ * always meant.
+ */
 const MUTABLE_FLAGS = ["is_paid", "demo_access", "is_admin"] as const
 type MutableFlag = (typeof MUTABLE_FLAGS)[number]
+
+/** The two that are still facts about a PERSON, and therefore still live on profiles. */
+const PROFILE_FLAGS = ["demo_access", "is_admin"] as const
 
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -108,30 +151,149 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ userId
       }
     }
 
-    // updated_at is stamped on every flag change, and it is the ONLY column written
-    // alongside the allow-listed booleans. Without it a read-only census cannot tell a
-    // deliberate grant from an automatic one: profiles.updated_at equals created_at on
-    // every account whose flags nobody has touched, so a differing value is evidence that
-    // somebody decided something. Twelve of the sixteen live profiles read
-    // updated_at = created_at today, which is exactly the signal this preserves.
-    const { data: updated, error } = await service
-      .from("profiles")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", targetId)
-      .select("id, is_paid, demo_access, is_admin")
+    const stamp = new Date().toISOString()
 
-    if (error) {
-      console.error("[api] failure", { route, method: "PATCH", code: 500, message: error.message })
-      return NextResponse.json({ error: "Failed to update account" }, { status: 500 })
+    // =================================================================
+    // 1. THE ORGANIZATION FLAG. is_paid, and only is_paid.
+    //
+    // FIRST, DELIBERATELY. It is the one that can fail for a reason that is nobody's
+    // mistake - a target who belongs to no organization - and doing it first means such a
+    // request changes NOTHING at all rather than half-applying and reporting an error.
+    // =================================================================
+    let orgIsPaid: boolean | null = null
+
+    if (updates.is_paid !== undefined) {
+      // The target's organization, resolved server-side from their user id. Never from the
+      // request: this route is reached with an arbitrary userId in the path.
+      const orgId = await resolveOrgIdForUser(targetId, service)
+
+      if (!orgId) {
+        // NOT A SILENT SUCCESS, AND NOT A GUESS. Post-079 every account has exactly one
+        // membership - the backfill made one per profile and the signup trigger makes one
+        // per signup - so this should be unreachable. If it happens, the account is
+        // already locked out of its own data by deny-by-default and no entitlement can be
+        // written for it, because there is no organization to write it to. Falling back to
+        // profiles.is_paid here would be a write nothing reads.
+        console.error("[api] failure", {
+          route,
+          method: "PATCH",
+          code: 409,
+          message: "target belongs to no organization, cannot set is_paid",
+          targetId,
+        })
+        return NextResponse.json(
+          {
+            error:
+              "That account is not linked to a company yet, so there is no subscription to change. Entitlement is per company, not per person.",
+          },
+          { status: 409 }
+        )
+      }
+
+      // THE SERVICE ROLE IS LOAD-BEARING ON THIS LINE. 092's
+      // organizations_entitlement_guard refuses this write when auth.uid() IS NOT NULL,
+      // and a service_role JWT carries no `sub` claim, so it is exempt. A session client
+      // here would raise LG008 no matter how much of an admin the caller is.
+      //
+      // .select() IS NOT DECORATION. Same invariant as the profiles write below: a
+      // zero-row update is the bug this route exists to fix.
+      const { data: orgRows, error: orgError } = await service
+        .from("organizations")
+        .update({ is_paid: updates.is_paid, updated_at: stamp })
+        .eq("id", orgId)
+        .select("id, is_paid")
+
+      if (orgError) {
+        console.error("[api] failure", {
+          route,
+          method: "PATCH",
+          code: 500,
+          message: orgError.message,
+          orgId,
+          hint:
+            orgError.code === "42703"
+              ? "42703 is undefined_column: migration 092 has not been applied to this database. Apply supabase/migrations/092_org_entitlement.sql before deploying the code that reads it."
+              : orgError.code === "LG008"
+                ? "LG008 is 092's entitlement guard. It fires only when auth.uid() is not null, which means this write did NOT go out on the service role."
+                : undefined,
+        })
+        return NextResponse.json({ error: "Failed to update the company subscription" }, { status: 500 })
+      }
+
+      if (!Array.isArray(orgRows) || orgRows.length === 0) {
+        console.error("[api] failure", {
+          route,
+          method: "PATCH",
+          code: 404,
+          message: "organizations update matched no row",
+          orgId,
+        })
+        return NextResponse.json(
+          { error: "No company was updated. The organization may no longer exist." },
+          { status: 404 }
+        )
+      }
+
+      orgIsPaid = (orgRows[0] as { is_paid?: boolean | null }).is_paid ?? null
     }
 
-    // The whole point of this route. A zero-row update is the bug being fixed, so it is
-    // reported as a failure rather than returned as `{ success: true }`.
-    if (!updated || updated.length === 0) {
-      return NextResponse.json({ error: "No account was updated. The user id may no longer exist." }, { status: 404 })
+    // =================================================================
+    // 2. THE PROFILE FLAGS. is_admin and demo_access - facts about a PERSON.
+    //
+    // SKIPPED ENTIRELY when the request carries neither, which is the common case now:
+    // the admin page's paid toggle sends `is_paid` alone. Writing profiles anyway, to
+    // stamp updated_at on a row nothing changed, would destroy the signal the next
+    // paragraph describes.
+    // =================================================================
+    const profileUpdates: Partial<Record<MutableFlag, boolean>> = {}
+    for (const flag of PROFILE_FLAGS) {
+      if (updates[flag] !== undefined) profileUpdates[flag] = updates[flag]
     }
 
-    return NextResponse.json({ user: updated[0], updated: Object.keys(updates) })
+    let profileRow: Record<string, unknown> | null = null
+
+    if (Object.keys(profileUpdates).length > 0) {
+      // updated_at is stamped on every flag change, and it is the ONLY column written
+      // alongside the allow-listed booleans. Without it a read-only census cannot tell a
+      // deliberate grant from an automatic one: profiles.updated_at equals created_at on
+      // every account whose flags nobody has touched, so a differing value is evidence that
+      // somebody decided something. Twelve of the sixteen live profiles read
+      // updated_at = created_at today, which is exactly the signal this preserves.
+      const { data: updated, error } = await service
+        .from("profiles")
+        .update({ ...profileUpdates, updated_at: stamp })
+        .eq("id", targetId)
+        .select("id, demo_access, is_admin")
+
+      if (error) {
+        console.error("[api] failure", { route, method: "PATCH", code: 500, message: error.message })
+        return NextResponse.json({ error: "Failed to update account" }, { status: 500 })
+      }
+
+      // The whole point of this route. A zero-row update is the bug being fixed, so it is
+      // reported as a failure rather than returned as `{ success: true }`.
+      if (!updated || updated.length === 0) {
+        return NextResponse.json({ error: "No account was updated. The user id may no longer exist." }, { status: 404 })
+      }
+
+      profileRow = updated[0] as Record<string, unknown>
+    }
+
+    // THE RESPONSE SHAPE IS UNCHANGED, so app/admin/users/page.tsx needs no change to keep
+    // working: it reads `payload.user.is_paid` and `payload.user.demo_access`. `is_paid`
+    // now comes off organizations and the other two off profiles, composed here.
+    //
+    // A flag the request did not touch comes back null rather than stale-and-plausible.
+    // The page only reads the ones it just sent.
+    return NextResponse.json({
+      user: {
+        id: targetId,
+        is_paid: orgIsPaid,
+        demo_access: profileRow ? (profileRow.demo_access ?? null) : null,
+        is_admin: profileRow ? (profileRow.is_admin ?? null) : null,
+      },
+      updated: Object.keys(updates),
+    })
   } catch (e) {
     console.error("[api] failure", { route, method: "PATCH", code: 500, message: String(e) })
     return NextResponse.json({ error: "Internal error" }, { status: 500 })

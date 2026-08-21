@@ -40,10 +40,12 @@ export async function POST(request: NextRequest) {
     // than this member's profile flag.
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role, is_paid, is_admin")
+      .select("role, active_role, is_admin")
       .eq("id", user.id)
       .maybeSingle()
-    if (!hasAgencyEntitlement(profile)) {
+    // 092: entitlement is read from the ACTING ORGANIZATION's organizations.is_paid, not
+    // from this member's profile flag. Fails closed with no fallback.
+    if (!(await hasAgencyEntitlement(profile, user.id, supabase))) {
       return NextResponse.json({ error: "Active subscription required" }, { status: 403 })
     }
 

@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import * as Sentry from "@sentry/nextjs"
 import { verifyGrantAccessToken } from "@/lib/grant-access-token"
 import { requireAdminRole } from "@/lib/api-auth"
+import { resolveOrgIdForUser } from "@/lib/entitlements"
 
 /**
  * Why this route is shaped the way it is.
@@ -162,13 +163,52 @@ export async function POST(req: Request) {
 
     if (profileError || !profile) return invalidLinkResponse()
 
-    const { error: updateError } = await supabase
-      .from("profiles")
+    // 092: THE GRANT LANDS ON THE COMPANY, NOT ON THE PERSON.
+    //
+    // This used to be `.update({ is_paid: true })` on profiles. After 092 nothing reads
+    // that column as an entitlement, so leaving it here would mean the admin clicks the
+    // link, sees "Access Granted", and grants nobody anything - the silent-success shape
+    // this surface keeps producing.
+    //
+    // THE SERVICE ROLE IS LOAD-BEARING. 092's organizations_entitlement_guard refuses a
+    // write to is_paid whenever auth.uid() IS NOT NULL. A service_role JWT carries no
+    // `sub` claim, so auth.uid() is NULL and this write is EXEMPT - the same outcome 091
+    // recorded for this same route against the profiles guard. `supabase` here is built
+    // from SUPABASE_SERVICE_ROLE_KEY a few lines above, after the admin gate.
+    const orgId = await resolveOrgIdForUser(userId, supabase)
+    if (!orgId) {
+      // No organization means no entitlement can be written, and there is no honest
+      // fallback: writing profiles.is_paid would report success against a column nothing
+      // reads. Post-079 every account has exactly one membership, so this should be
+      // unreachable - and if it is reached, that account is already locked out of its own
+      // data by deny-by-default and needs a different fix than this link.
+      console.error("[admin/grant-access] target belongs to no organization", { userId })
+      return invalidLinkResponse()
+    }
+
+    // .select() IS NOT DECORATION. A zero-row update is the failure mode this whole
+    // surface exists to stop, and PostgREST reports one as success.
+    const { data: orgRows, error: updateError } = await supabase
+      .from("organizations")
       .update({ is_paid: true, updated_at: new Date().toISOString() })
-      .eq("id", userId)
+      .eq("id", orgId)
+      .select("id")
 
     if (updateError) {
-      console.error("[admin/grant-access] update failed", updateError.message)
+      console.error("[admin/grant-access] update failed", updateError.message, {
+        code: updateError.code,
+        hint:
+          updateError.code === "42703"
+            ? "42703 is undefined_column: migration 092 has not been applied to this database."
+            : updateError.code === "LG008"
+              ? "LG008 is 092's entitlement guard, which fires only when auth.uid() is not null - so this write did not go out on the service role."
+              : undefined,
+      })
+      return invalidLinkResponse()
+    }
+
+    if (!Array.isArray(orgRows) || orgRows.length === 0) {
+      console.error("[admin/grant-access] organizations update matched no row", { userId, orgId })
       return invalidLinkResponse()
     }
 

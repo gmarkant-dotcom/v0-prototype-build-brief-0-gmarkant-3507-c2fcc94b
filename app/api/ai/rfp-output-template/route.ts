@@ -37,11 +37,12 @@ export async function POST(req: Request) {
     // than this member's profile flag, and key it with agencyEntitlementId(user.id).
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role, is_paid, is_admin")
+      .select("role, active_role, is_admin")
       .eq("id", user.id)
       .single()
 
-    if (!canUseAgencyAi(profile)) {
+    // 092: the billing half reads the ACTING ORGANIZATION's organizations.is_paid.
+    if (!(await canUseAgencyAi(profile, user.id, supabase))) {
       return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403 })
     }
 

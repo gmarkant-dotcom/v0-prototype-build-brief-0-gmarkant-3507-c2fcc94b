@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     // than this member's profile flag, and key it with agencyEntitlementId(user.id).
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, active_role, is_paid, is_admin')
+      .select('role, active_role, is_admin')
       .eq('id', user.id)
       .single()
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
     // The vendor side uploads free. The agency side needs an entitlement, which the
     // previous expression never actually required - it allowed role === 'agency'
     // outright, so this 403 was unreachable for every authenticated caller.
-    if (!canUploadFiles(profile)) {
+    // 092: the agency half reads the ACTING ORGANIZATION's organizations.is_paid. The
+    // vendor branch returns before any organizations read - vendor access is free.
+    if (!(await canUploadFiles(profile, user.id, supabase))) {
       return NextResponse.json({ error: 'Upgrade to upload files' }, { status: 403 })
     }
 

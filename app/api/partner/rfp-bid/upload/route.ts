@@ -26,6 +26,15 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("profiles")
+      // 092: THE is_paid IN THIS SELECT IS THE VESTIGIAL profiles COLUMN, ON PURPOSE.
+      // Entitlement moved to organizations.is_paid at 092 and every agency gate reads it
+      // there. This route is VENDOR-SIDE, and vendor organizations have no entitlement
+      // concept at all - vendor access is free by the pricing copy - so it must NOT read
+      // the organization flag. canUploadVendorFiles() consumes this field as the clause
+      // that lets an agency-side caller fall through to the more accurate "Vendors only"
+      // refusal below, not as a billing test. See its header in lib/entitlements.ts.
+      // >>> THE MIGRATION THAT DROPS profiles.is_paid MUST DELETE THIS COLUMN FROM THIS
+      // >>> SELECT LIST IN THE SAME CHANGE, or PostgREST fails the whole statement 42703.
       .select("role, active_role, is_paid, is_admin, email")
       .eq("id", user.id)
       .single()

@@ -539,7 +539,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, active_role, is_paid, is_admin')
+      .select('role, active_role, is_admin')
       .eq('id', user.id)
       .single()
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
@@ -548,9 +548,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only agencies can create projects' }, { status: 403 })
     }
 
-    // 079: entitlement moves onto the organization. Read the org's entitlement here rather
-    // than this member's profile flag.
-    if (!hasAgencyEntitlement(profile)) {
+    // 092: ENTITLEMENT IS NOW READ FROM THE ACTING ORGANIZATION, not from this member's
+    // profile flag. This is the refusal OPEN-1 named: a colleague of a paying owner used to
+    // land here with "Active subscription required" while their own company was paid up,
+    // because the flag sat on the wrong row. It reads organizations.is_paid for the
+    // organization resolveActingOrgId() returns, and it fails CLOSED with no fallback -
+    // see resolveAgencyEntitlement().
+    if (!(await hasAgencyEntitlement(profile, user.id, supabase))) {
       return NextResponse.json({ error: 'Active subscription required' }, { status: 403 })
     }
 

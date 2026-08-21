@@ -18,6 +18,14 @@ type User = {
   full_name: string | null
   company_name: string | null
   role: string | null
+  /**
+   * 092: THE COMPANY'S FLAG, NOT THIS PERSON'S. Entitlement moved onto
+   * `organizations.is_paid` - one price per company, any number of colleagues - and
+   * /api/admin/users composes it onto each row from the user's organization. Two
+   * colleagues of the same company therefore show the SAME value here, which is correct
+   * and is the whole point. The field name is kept because the wire contract and the
+   * toggle's meaning are unchanged.
+   */
   is_paid: boolean
   demo_access: boolean
   created_at: string
@@ -107,12 +115,22 @@ export default function AdminUsersPage() {
       }
 
       // Trust the returned row, not the value we asked for.
+      //
+      // 092: MERGE PER FIELD, AND ONLY WHAT THE SERVER ACTUALLY WROTE. `is_paid` now lives
+      // on the organization and `demo_access` on the profile, so the route touches only the
+      // table the request named and returns null for the flag it did not write. The
+      // previous form - Boolean(payload.user?.demo_access) unconditionally - would read
+      // that null as false and WIPE the demo badge off the row every time somebody toggled
+      // the paid flag. A display that lies about a value nobody changed is the same class
+      // of quiet wrongness the optimistic flip above was removed for.
       setUsers(prev =>
-        prev.map(u =>
-          u.id === userId
-            ? { ...u, is_paid: Boolean(payload.user?.is_paid), demo_access: Boolean(payload.user?.demo_access) }
-            : u
-        )
+        prev.map(u => {
+          if (u.id !== userId) return u
+          const next = { ...u }
+          if (typeof payload.user?.is_paid === 'boolean') next.is_paid = payload.user.is_paid
+          if (typeof payload.user?.demo_access === 'boolean') next.demo_access = payload.user.demo_access
+          return next
+        })
       )
     } catch {
       setError('Update failed. Check your connection and try again.')
