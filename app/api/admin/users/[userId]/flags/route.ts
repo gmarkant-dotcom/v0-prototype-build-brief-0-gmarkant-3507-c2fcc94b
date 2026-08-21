@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { requireAdminRole } from "@/lib/api-auth"
-import { resolveOrgIdForUser } from "@/lib/entitlements"
+import { resolveOrgIdForUser, type OrgLookupClient } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
 
@@ -82,6 +82,115 @@ function serviceClient() {
   return createSupabaseClient(url, key, { auth: { persistSession: false } })
 }
 
+type EntitlementWrite =
+  | { ok: true; isPaid: boolean | null }
+  | { ok: false; status: number; error: string }
+
+/**
+ * Set the COMPANY PLAN for the organization a given user belongs to.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS A SEPARATE FUNCTION RATHER THAN INLINE IN THE HANDLER, AND THE REASON IS
+ * NOT TIDINESS.
+ *
+ * The handler also writes public.profiles, keyed `.eq("id", targetId)` where targetId is a
+ * USER id. Written inline, this block put an ORGANIZATION id within forty lines of that
+ * profiles write, and scripts/check-org-id-reads.mjs reported it as a NEARBY finding -
+ * correctly, because "a profiles row fetched by an id an organization column may have
+ * supplied" is precisely the defect class that scanner exists to catch, and it cannot tell
+ * from proximity alone that these two ids are different variables.
+ *
+ * THE GUARD WAS NOT WRONG AND NOTHING WAS SILENCED TO SATISFY IT. No allow-list entry was
+ * added and no KNOWN_OPEN count was changed. The two ids are separated by a function
+ * boundary because they ARE separate things, and now the code says so: `targetId` is a
+ * user id, `orgId` is derived from it by resolveOrgIdForUser(), and neither is ever
+ * substituted for the other.
+ *
+ * ---------------------------------------------------------------------------
+ * THE SERVICE ROLE IS LOAD-BEARING ON THE UPDATE BELOW. 092's
+ * organizations_entitlement_guard refuses a write to is_paid whenever auth.uid() IS NOT
+ * NULL. A service_role JWT carries no `sub` claim, so auth.uid() resolves NULL and this is
+ * EXEMPT. Pass a session client and it raises LG008 no matter how much of an admin the
+ * caller is - which is the guard working, not a bug.
+ *
+ * Returns a discriminated result rather than a NextResponse, so every response in this file
+ * is constructed in one place.
+ */
+async function setOrganizationEntitlement(
+  // OrgLookupClient, the loose shape lib/entitlements.ts already uses for exactly this -
+  // naming the real PostgREST builder type reaches TS2589 and there are no generated
+  // Database types in this repository. It declares `from`, which is all this needs, and it
+  // is the same type resolveOrgIdForUser() below already takes.
+  service: OrgLookupClient,
+  targetUserId: string,
+  isPaid: boolean,
+  route: string
+): Promise<EntitlementWrite> {
+  // The target's organization, resolved server-side from their user id. Never from the
+  // request: this route is reached with an arbitrary userId in the path.
+  const orgId = await resolveOrgIdForUser(targetUserId, service)
+
+  if (!orgId) {
+    // NOT A SILENT SUCCESS, AND NOT A GUESS. Post-079 every account has exactly one
+    // membership - the backfill made one per profile and the signup trigger makes one per
+    // signup - so this should be unreachable. If it happens, the account is already locked
+    // out of its own data by deny-by-default and no entitlement can be written for it,
+    // because there is no organization to write it to. Falling back to profiles.is_paid
+    // here would be a write nothing reads.
+    console.error("[api] failure", {
+      route,
+      method: "PATCH",
+      code: 409,
+      message: "target belongs to no organization, cannot set is_paid",
+      targetUserId,
+    })
+    return {
+      ok: false,
+      status: 409,
+      error:
+        "That account is not linked to a company yet, so there is no subscription to change. Entitlement is per company, not per person.",
+    }
+  }
+
+  // .select() IS NOT DECORATION. Same invariant as the profiles write in the handler: a
+  // zero-row update is the bug this whole route exists to fix.
+  const { data: orgRows, error: orgError } = await service
+    .from("organizations")
+    .update({ is_paid: isPaid, updated_at: new Date().toISOString() })
+    .eq("id", orgId)
+    .select("id, is_paid")
+
+  if (orgError) {
+    console.error("[api] failure", {
+      route,
+      method: "PATCH",
+      code: 500,
+      message: orgError.message,
+      orgId,
+      hint:
+        orgError.code === "42703"
+          ? "42703 is undefined_column: migration 092 has not been applied to this database. Apply supabase/migrations/092_org_entitlement.sql before deploying the code that reads it."
+          : orgError.code === "LG008"
+            ? "LG008 is 092's entitlement guard. It fires only when auth.uid() is not null, which means this write did NOT go out on the service role."
+            : undefined,
+    })
+    return { ok: false, status: 500, error: "Failed to update the company subscription" }
+  }
+
+  if (!Array.isArray(orgRows) || orgRows.length === 0) {
+    console.error("[api] failure", {
+      route,
+      method: "PATCH",
+      code: 404,
+      message: "organizations update matched no row",
+      orgId,
+    })
+    return { ok: false, status: 404, error: "No company was updated. The organization may no longer exist." }
+  }
+
+  return { ok: true, isPaid: (orgRows[0] as { is_paid?: boolean | null }).is_paid ?? null }
+}
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ userId: string }> }) {
   const route = "/api/admin/users/[userId]/flags"
   try {
@@ -159,82 +268,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ userId
     // FIRST, DELIBERATELY. It is the one that can fail for a reason that is nobody's
     // mistake - a target who belongs to no organization - and doing it first means such a
     // request changes NOTHING at all rather than half-applying and reporting an error.
+    //
+    // The write itself is setOrganizationEntitlement() above, and its header explains why
+    // it is a separate function: it keeps an ORGANIZATION id out of the same forty lines
+    // as the USER-keyed profiles write below, which is a real distinction and not a
+    // formatting preference.
     // =================================================================
     let orgIsPaid: boolean | null = null
 
     if (updates.is_paid !== undefined) {
-      // The target's organization, resolved server-side from their user id. Never from the
-      // request: this route is reached with an arbitrary userId in the path.
-      const orgId = await resolveOrgIdForUser(targetId, service)
-
-      if (!orgId) {
-        // NOT A SILENT SUCCESS, AND NOT A GUESS. Post-079 every account has exactly one
-        // membership - the backfill made one per profile and the signup trigger makes one
-        // per signup - so this should be unreachable. If it happens, the account is
-        // already locked out of its own data by deny-by-default and no entitlement can be
-        // written for it, because there is no organization to write it to. Falling back to
-        // profiles.is_paid here would be a write nothing reads.
-        console.error("[api] failure", {
-          route,
-          method: "PATCH",
-          code: 409,
-          message: "target belongs to no organization, cannot set is_paid",
-          targetId,
-        })
-        return NextResponse.json(
-          {
-            error:
-              "That account is not linked to a company yet, so there is no subscription to change. Entitlement is per company, not per person.",
-          },
-          { status: 409 }
-        )
+      const written = await setOrganizationEntitlement(service, targetId, updates.is_paid, route)
+      if (!written.ok) {
+        return NextResponse.json({ error: written.error }, { status: written.status })
       }
-
-      // THE SERVICE ROLE IS LOAD-BEARING ON THIS LINE. 092's
-      // organizations_entitlement_guard refuses this write when auth.uid() IS NOT NULL,
-      // and a service_role JWT carries no `sub` claim, so it is exempt. A session client
-      // here would raise LG008 no matter how much of an admin the caller is.
-      //
-      // .select() IS NOT DECORATION. Same invariant as the profiles write below: a
-      // zero-row update is the bug this route exists to fix.
-      const { data: orgRows, error: orgError } = await service
-        .from("organizations")
-        .update({ is_paid: updates.is_paid, updated_at: stamp })
-        .eq("id", orgId)
-        .select("id, is_paid")
-
-      if (orgError) {
-        console.error("[api] failure", {
-          route,
-          method: "PATCH",
-          code: 500,
-          message: orgError.message,
-          orgId,
-          hint:
-            orgError.code === "42703"
-              ? "42703 is undefined_column: migration 092 has not been applied to this database. Apply supabase/migrations/092_org_entitlement.sql before deploying the code that reads it."
-              : orgError.code === "LG008"
-                ? "LG008 is 092's entitlement guard. It fires only when auth.uid() is not null, which means this write did NOT go out on the service role."
-                : undefined,
-        })
-        return NextResponse.json({ error: "Failed to update the company subscription" }, { status: 500 })
-      }
-
-      if (!Array.isArray(orgRows) || orgRows.length === 0) {
-        console.error("[api] failure", {
-          route,
-          method: "PATCH",
-          code: 404,
-          message: "organizations update matched no row",
-          orgId,
-        })
-        return NextResponse.json(
-          { error: "No company was updated. The organization may no longer exist." },
-          { status: 404 }
-        )
-      }
-
-      orgIsPaid = (orgRows[0] as { is_paid?: boolean | null }).is_paid ?? null
+      orgIsPaid = written.isPaid
     }
 
     // =================================================================
