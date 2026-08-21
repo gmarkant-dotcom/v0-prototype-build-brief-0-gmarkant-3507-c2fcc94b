@@ -1,0 +1,181 @@
+-- =====================================================================
+-- Migration 092 ROLLBACK: 092_org_entitlement_down.sql
+--
+--   DROP  trigger organizations_entitlement_guard ON public.organizations
+--   DROP  public.organizations_guard_entitlement()
+--   DROP  COLUMN public.organizations.is_paid
+--
+-- THAT IS THE WHOLE FILE. Three statements.
+--
+-- ORDER MATTERS AND IT IS THE ORDER ABOVE. Dropping the function while
+-- the trigger still points at it fails on the dependency, and a rollback
+-- that stops halfway is worse than one that does not start. The column
+-- goes last, so that if the DROP COLUMN is the statement that raises,
+-- the guard is already gone and the column is at least writable again.
+--
+-- =====================================================================
+-- >>> THIS ONE DESTROYS DATA. 091's DID NOT. READ THE NEXT PARAGRAPH.
+-- =====================================================================
+--
+-- 091's rollback created no column and wrote no row, so it was the
+-- cheapest in the migration set. THIS IS NOT THAT.
+--
+-- DROP COLUMN organizations.is_paid DESTROYS THE BACKFILL. Every "this
+-- company is paid" fact that migration 092 wrote is gone the moment that
+-- statement commits, and PostgreSQL will not give it back.
+--
+-- IT IS RECOVERABLE TODAY, AND ONLY TODAY, AND THAT IS THE WHOLE REASON
+-- THIS PARAGRAPH IS HERE. profiles.is_paid still exists - 092
+-- deliberately does not drop it - so re-running 092 reconstructs the
+-- same values from the same source. THAT STOPS BEING TRUE ON THE DAY THE
+-- FOLLOW-UP MIGRATION DROPS profiles.is_paid.
+--
+-- >>> AFTER profiles.is_paid IS DROPPED, THIS FILE IS A ONE-WAY DOOR AND
+-- >>> THE ENTITLEMENT OF EVERY PAYING CUSTOMER IS UNRECOVERABLE FROM THE
+-- >>> DATABASE. Capture it first. The query, and run it BEFORE the DROP:
+-- >>>
+-- >>>   SELECT id, name, is_paid FROM public.organizations ORDER BY name;
+-- >>>
+-- >>> Save the output somewhere outside the database. Restoring means
+-- >>> re-running 092 and then writing those values back by hand with the
+-- >>> service role or the SQL Editor - both of which auth.uid() resolves
+-- >>> NULL for, so the guard exempts them.
+--
+-- =====================================================================
+-- WHAT ELSE ROLLING BACK COSTS
+-- =====================================================================
+--
+-- THE CODE THAT READS THE COLUMN MUST COME OFF FIRST, OR THE SITE
+-- BREAKS. This is the mirror image of 092's own apply ordering and it
+-- runs in the opposite direction:
+--
+--   APPLY:    migration first, then push the code.
+--   ROLLBACK: revert the code first, then run this file.
+--
+-- PostgREST raises 42703 for an ENTIRE STATEMENT on one unknown column.
+-- So if this file runs while the Phase 3 code is deployed, every read of
+-- organizations.is_paid fails, hasAgencyEntitlement() cannot resolve, and
+-- the agency portal falls to its unpaid branch for everybody - the exact
+-- window 092's header describes in the other direction.
+--
+-- THE HOLE COMES BACK WITH IT, and it is worth being explicit: after
+-- this file runs, there is no organizations.is_paid to self-grant, so
+-- there is nothing to reopen on THIS table. But entitlement is once
+-- again read from profiles.is_paid, and 091's guard - which is NOT
+-- touched by this file - is the only thing stopping a browser writing
+-- that. Do not roll 091 back at the same time.
+--
+-- 090's and 091's triggers on profiles are UNTOUCHED by 092 and are
+-- UNTOUCHED by this file. V4 below asserts that.
+--
+-- =====================================================================
+-- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
+-- =====================================================================
+--
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 98
+-- and an explicit COMMIT; on LINE 117. Those are the only occurrences of
+-- either word, executable or otherwise - this file defines no plpgsql
+-- body, so there is no third hit the way there is in 092 itself.
+--
+--     grep -n -i '^begin\|^commit\|^rollback' \
+--       supabase/migrations/092_org_entitlement_down.sql
+--     -- EXPECTED: exactly 2 hits.  98 BEGIN;   117 COMMIT;
+--
+-- TO DRY RUN: change the COMMIT; on line 117 to ROLLBACK;. A dry run of
+-- THIS file is worth more than a dry run of most, because the DROP
+-- COLUMN is the statement most likely to fail on a dependency nobody
+-- remembered - a view, an index, a later constraint.
+--
+-- Do NOT verify with grep -n '^BEGIN;$'. That anchored form has produced
+-- false negatives in this repository.
+--
+-- "Success. No rows returned" IS THE IDENTICAL MESSAGE for this file dry
+-- run, this file applied, and this file pasted into the wrong project's
+-- tab. The VERIFICATION block at the foot is what distinguishes them.
+-- ---------------------------------------------------------------------
+
+
+BEGIN;
+
+-- 1. The trigger first. It depends on the function.
+DROP TRIGGER IF EXISTS organizations_entitlement_guard ON public.organizations;
+
+-- 2. Then the function. No dependent object remains after step 1.
+DROP FUNCTION IF EXISTS public.organizations_guard_entitlement();
+
+-- 3. Then the column. THIS IS THE DESTRUCTIVE STATEMENT.
+--
+-- NOT CASCADE, deliberately. If anything else in the schema has come to
+-- depend on this column since 092 was applied - a view, an index, a
+-- generated column, a constraint - RESTRICT is the default and this
+-- statement RAISES rather than silently dropping that object too. A
+-- rollback that quietly deletes a dependent it did not create is worse
+-- than a rollback that stops and tells you what it found.
+ALTER TABLE public.organizations
+  DROP COLUMN IF EXISTS is_paid;
+
+COMMIT;
+
+
+-- =====================================================================
+-- 4. VERIFICATION. RUN AFTER ROLLING BACK. ALL READ-ONLY.
+--
+-- Commented out so they cannot run inside the transaction above, and so
+-- a dry run stops at the COMMIT line.
+-- =====================================================================
+--
+-- V1. THE COLUMN IS GONE AND THE TABLE IS BACK TO SEVEN COLUMNS.
+--
+--       SELECT count(*) AS organizations_columns
+--       FROM information_schema.columns
+--       WHERE table_schema='public' AND table_name='organizations';
+--       -- EXPECTED: 7 - id, name, primary_contact_user_id,
+--       -- is_lead_agency, is_vendor, created_at, updated_at.
+--       -- An 8 means the DROP COLUMN did not run.
+--
+-- V2. THE TRIGGER AND THE FUNCTION ARE GONE.
+--
+--       SELECT t.tgname FROM pg_trigger t
+--       JOIN pg_class c ON c.oid = t.tgrelid
+--       WHERE c.relname = 'organizations' AND NOT t.tgisinternal;
+--       -- EXPECTED: 0 rows. organizations carried no trigger before 092
+--       -- and carries none after this.
+--
+--       SELECT p.proname FROM pg_proc p
+--       JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname='public' AND p.proname='organizations_guard_entitlement';
+--       -- EXPECTED: 0 rows.
+--
+-- V3. THE POLICY COUNT STILL DID NOT MOVE.
+--
+--       SELECT count(*) FROM pg_policies WHERE schemaname = 'public';
+--       -- EXPECTED: 117. 092 added no policy, so its rollback drops
+--       -- none. Same number before 092, after 092, and after this.
+--
+-- V4. 090's AND 091's GUARDS ON profiles ARE UNTOUCHED.
+--     THE MOST IMPORTANT CHECK IN THIS FILE, because rolling back to a
+--     world where entitlement lives on profiles.is_paid again is exactly
+--     the world in which 091's guard is load-bearing.
+--
+--       SELECT t.tgname, t.tgenabled FROM pg_trigger t
+--       JOIN pg_class c ON c.oid = t.tgrelid
+--       WHERE c.relname = 'profiles' AND NOT t.tgisinternal
+--       ORDER BY t.tgname;
+--       -- EXPECTED: 3 rows, all unchanged by this file:
+--       --   notify-new-user
+--       --   profiles_active_org_guard         tgenabled = O
+--       --   profiles_authority_columns_guard  tgenabled = O
+--       -- A MISSING profiles_authority_columns_guard means
+--       -- profiles.is_paid is self-grantable again AND it is once more
+--       -- the column entitlement is read from. Re-apply 091 before
+--       -- anything else.
+--
+-- V5. profiles.is_paid IS STILL THERE AND STILL HOLDS THE TRUTH.
+--
+--       SELECT is_paid, count(*) FROM public.profiles
+--       GROUP BY is_paid ORDER BY is_paid;
+--       -- EXPECTED AT AUTHORING TIME: false = 2, true = 16.
+--       -- This is the source 092's backfill read and the source a
+--       -- re-application would read again. If this does not match what
+--       -- V3 of 092 reported, something wrote profiles.is_paid in
+--       -- between and a re-apply will not reproduce the same state.
