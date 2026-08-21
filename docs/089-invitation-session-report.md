@@ -21,9 +21,12 @@ below is marked as one of:
 - **REASONED** — a conclusion drawn from what was read, with no execution
   behind it. Every one of these is a candidate for being wrong.
 
-**Migration 089 is AUTHORED, NOT APPLIED**, and the Phase 2 code calls
-functions that do not exist in the database yet. That is expected. The apply
-order is below and it matters.
+**MIGRATION 089 IS NOW APPLIED AND VERIFIED IN THE LIVE DATABASE.** It was
+authored in this session and applied by Greg afterwards. Everything below that
+reads as "before 089 is applied" is describing a state that has passed; it is
+kept because a policy can be rolled back and because the failure shapes are
+worth having written down. The **SEQUENCING** section at the foot is the
+current, correct order.
 
 **THE ONE THING THAT WOULD STOP ME SHIPPING THIS.** Accepting a colleague
 invitation makes an account belong to two organizations, and
@@ -230,7 +233,8 @@ destination. It was not repurposed.
 
 ### Phase 1 — migration 089 (`7a23fdf`)
 
-**AUTHORED, NOT APPLIED.** 956 lines up, 245 down.
+**Authored in this session; SINCE APPLIED AND VERIFIED by Greg.** 956 lines
+up, 245 down.
 
 | | |
 |---|---|
@@ -865,15 +869,16 @@ Vercel not having the variable keeps the whole surface inert.
 
 ## The order
 
-### 1. Migration 089 may be applied IMMEDIATELY.
+### 1. Migration 089 may be applied IMMEDIATELY. ✅ DONE — applied and verified.
 
-It is safe on its own and it is safe alone. With no code deployed against it,
+It was safe on its own and it was safe alone. With no code deployed against it,
 089 adds three functions no caller calls, three policies no writer exercises,
 and one CHECK constraint that admits a value nothing writes. **Nothing in the
-product changes.** Apply it whenever it suits; there is no window to manage.
+product changed.**
 
-Dry run first: `COMMIT;` on **line 777** → `ROLLBACK;`. Then the verification
-block.
+For the record, and for the rollback path: dry run is `COMMIT;` on **line 777**
+→ `ROLLBACK;`, then the verification block. The down file is
+`089_org_invitation_lifecycle_down.sql`, `BEGIN;` 127, `COMMIT;` 177.
 
 ### 2. The branch may be PUSHED with the flag off.
 
@@ -986,3 +991,133 @@ corrected to the new numbers and re-checked against the grep afterwards.
 The down file is unchanged: `BEGIN;` line 127, `COMMIT;` line 177. It never
 referenced the deleted statements — its only mention of `'expired'` is inside
 the restored CHECK constraint, which is correct and untouched.
+
+---
+
+# ADDENDUM — the create route was not gated. Closed.
+
+## The gap
+
+`colleagueInvitationsEnabled()` was read in exactly two places —
+`app/join/[token]/page.tsx` and `app/agency/settings/team/page.tsx`. **The
+create-invitation API route was not gated at all**, so the flag hid a button
+while leaving the endpoint live.
+
+**That is worse than not gating at all,** and the failure needs nobody to do
+anything clever:
+
+1. An invitation is created while the flag is off — by a direct POST, or by any
+   client that still has the page loaded from before the flag was flipped.
+2. The email goes out. Its `/join/<token>` link returns **404**, because `/join`
+   *is* gated.
+3. The invitee holds a link they can neither accept nor decline. The row stays
+   `'pending'`.
+4. That address is now wedged for that organization through
+   `org_invitations_one_live_per_email` — one live pending row per
+   `(org_id, lower(email))` — and nothing in the product can clear it, because
+   there is no DELETE policy on `org_invitations` by design and the create
+   route's sweep only clears rows that have already **lapsed**.
+
+It is the same "never strand something already in flight" failure the flag
+header already argued against, reached from the creating side instead of the
+resolving side.
+
+## The rule, now written into the flag header
+
+**GATE CREATION, NEVER GATE RESOLUTION.** Creating an invitation is the only
+operation in this feature that puts something *new* into the world. Accept,
+decline and revoke all resolve something that already exists.
+
+| Operation | Gated? | Why |
+|---|---|---|
+| `POST /api/org/invitations` (create) | **YES** | the only thing that creates |
+| `/join/<token>` | **YES** | presents a surface that should not exist yet |
+| team page invite affordance | **YES** | same |
+| team roster | no | reading your own organization needed no ruling; live since 086 |
+| `POST .../accept` | no | an invitation already sent must stay answerable |
+| `POST .../decline` | no | same — otherwise a live link cannot even be refused |
+| `POST .../revoke` | **no, and this is the important one** | revoke is the admin's **only escape** from an address wedged in the partial unique index. No DELETE policy exists, and the expiry sweep only clears already-lapsed rows. Gating it would mean flipping the flag off with a live pending invitation outstanding locks that address out of the organization until it expires on its own. The escape hatch has to work when the feature does not |
+
+## 1. The new gate — file and line
+
+**`app/api/org/invitations/route.ts:83`**
+
+```ts
+if (!colleagueInvitationsEnabled()) {
+  console.warn("[api] POST /org/invitations refused: COLLEAGUE_INVITATIONS is off", { route })
+  return NextResponse.json({ error: "Not found" }, { status: 404, headers: noStoreHeaders })
+}
+```
+
+Import at `:3`. The comment block above it is `:54-82`.
+
+**Status: 404, chosen to match `/join/[token]`.** That route calls `notFound()`
+when the flag is off, which is an HTTP 404, and this answers identically on
+purpose — the two are one surface and it either exists or it does not.
+
+- **Not 503.** A 503 says "temporarily unavailable, retry", which invites
+  exactly the retry loop this is meant to prevent.
+- **Not 403.** That would say the caller lacks permission, when in fact nobody
+  has it.
+
+**It sits before the auth check, deliberately.** A caller learns nothing here
+that `/join` does not already tell anyone who visits it, and answering
+identically whether or not there is a session is what makes the endpoint
+indistinguishable from a path that was never built.
+
+## 2. Accept, decline and revoke left ungated
+
+Unchanged, and `revoke` is now named explicitly in
+`lib/feature-flags.ts`'s "what this does not gate" section with the
+partial-unique-index reasoning above.
+
+## 3. Does the team client actually hide the form, or only take the prop?
+
+**It hides it.** Verified by reading, in
+`app/agency/settings/team/team-roster-client.tsx`:
+
+| Line | What it does |
+|---|---|
+| **`:368`** | `const mayInvite = invitationsEnabled && (callerRole === "owner" \|\| callerRole === "admin")` — the flag and the permission are ANDed, and they answer different questions |
+| **`:459`** | `{mayInvite && !inviteOpen && (` — gates the **"Invite colleague" button** |
+| **`:476`** | `{mayInvite && inviteOpen && (` — gates the **invite form itself**, independently |
+| `:618` | `{invitationsEnabled && pending.length > 0 && (` — the pending list |
+| `:679` | `{invitationsEnabled && resolved.length > 0 && (` — the past list |
+| `:654` | `{mayInvite && (` — the per-row Revoke button |
+
+`:476` is the answer to the question. The form's guard is **independent of the
+button having rendered**, not derived from it: `inviteOpen` starts `false`
+(`:161`) and the only thing that sets it true is the button at `:460`, which is
+itself behind `mayInvite`. So with `invitationsEnabled === false` there is no
+path to the form — and even if `inviteOpen` were somehow true, `:476` would
+still refuse to render it.
+
+## 4. Gates, re-run
+
+**EXECUTED**, once each. All match the Phase 0 baseline.
+
+| Gate | Baseline | Now |
+|---|---|---|
+| `npx tsc --noEmit` | 0 | **0** |
+| `pnpm build` | 0 | **0** |
+| `pnpm lint` | 1, 182 problems (154 errors, 28 warnings) | **1, 182 problems (154/28)** — identical |
+| `pnpm identity-columns:guard` | 0, 372 files, TOTAL 0 | **0, 380 files, TOTAL 0** |
+| `pnpm embed-targets` | 0, 372 files, REPOINTED 0 / PERSON 0 | **0, 380 files, REPOINTED 0 / PERSON 0** |
+| `pnpm org-id-reads:guard` | 0, 371 files, OPEN 14/61 | **0, 379 files, OPEN 14/61, IMPROVED 0/0, REGRESSIONS 0/0** |
+
+File counts are **unchanged from the previous run** — these edits added no
+files. The +8 against the Phase 0 baseline is still the six new source files
+plus the two from the feature-flag split.
+
+`verify-rls` (exit 2) and `policy-audit:guard` (exit 1) were not re-run this
+time; both are environmental, neither reads a `.ts` file, and nothing in this
+change could move them.
+
+## One thing corrected while in the file
+
+`app/api/org/invitations/route.ts`'s header opened with *"Before 089 is
+applied…"*. **089 is applied and verified**, so that read as a current
+statement about a state that has passed. Reworded to say 089 is applied, with
+the 42501 → 403 branch kept and its reason restated: a policy can be rolled
+back, and a loud refusal is the intended failure either way. The same
+correction was made to this report's opening and to SEQUENCING step 1.

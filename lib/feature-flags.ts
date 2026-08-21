@@ -66,12 +66,43 @@ export function broadcastCuesPartnership(): boolean {
  *   3. apply 090            - profiles.active_org_id and the switcher
  *   4. THEN set COLLEAGUE_INVITATIONS=true in Vercel and redeploy
  *
- * WHAT THE FLAG DOES NOT GATE, AND WHY. The accept and decline API routes are NOT behind
- * it. An invitation that was already sent while the flag was on must stay answerable if
- * the flag is turned off again - the alternative is an invitee holding a live link that
- * returns 503 with no way to decline it, and a pending row nobody can clear that then
- * blocks that address through org_invitations_one_live_per_email. A flag should make a
- * surface unreachable going forward, never strand something already in flight.
+ * WHAT THE FLAG GATES, AND WHAT IT DELIBERATELY DOES NOT.
+ *
+ * THE RULE IS: GATE CREATION, NEVER GATE RESOLUTION. Creating an invitation is the only
+ * operation in this feature that puts something NEW into the world. Accepting, declining
+ * and revoking all RESOLVE something that already exists, and a flag that blocked them
+ * would strand whatever was in flight when it was flipped.
+ *
+ * GATED - the three creating or presenting surfaces:
+ *   app/api/org/invitations/route.ts   POST create. Answers 404 when off.
+ *   app/join/<token>/page.tsx          the invitee landing page. notFound() when off.
+ *   app/agency/settings/team/page.tsx  the invite affordance. The roster is NOT gated.
+ *
+ * The create route MUST be gated and it is the load-bearing one. Hiding the button while
+ * leaving the endpoint live is worse than no flag at all: an invitation created while the
+ * flag is off sends an email whose /join/<token> link 404s, so the invitee holds a link
+ * they can neither accept nor decline, and the pending row then wedges that address
+ * through org_invitations_one_live_per_email with nothing able to clear it.
+ *
+ * NOT GATED - the three resolving operations:
+ *
+ *   ACCEPT and DECLINE. An invitation that was already sent while the flag was on must
+ *   stay answerable if the flag is turned off again. The alternative is an invitee holding
+ *   a live link that refuses with no way to decline it, and a pending row nobody can clear
+ *   that then blocks that address through org_invitations_one_live_per_email.
+ *
+ *   REVOKE. Same reason from the admin's side, and it is the one that matters most when
+ *   something has gone wrong: revoke is the ADMIN'S ONLY ESCAPE from an address wedged in
+ *   org_invitations_one_live_per_email. That index admits exactly one pending row per
+ *   (org_id, lower(email)), there is no DELETE policy on org_invitations by design, and
+ *   the create route's expiry sweep only clears rows that have already lapsed. So if
+ *   revoke were gated, flipping the flag off with a live pending invitation outstanding
+ *   would lock that address out of the organization until the invitation expired on its
+ *   own - or forever, if it was created without one. The escape hatch has to work when the
+ *   feature does not.
+ *
+ * A flag should make a surface unreachable going forward. It must never strand something
+ * already in flight, from either side.
  *
  * To turn it on: set COLLEAGUE_INVITATIONS=true in Vercel (Production and Preview) and
  * redeploy. To turn it off: unset it. No already accepted membership is undone by

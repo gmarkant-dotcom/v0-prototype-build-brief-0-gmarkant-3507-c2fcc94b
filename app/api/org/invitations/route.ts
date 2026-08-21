@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { colleagueInvitationsEnabled } from "@/lib/feature-flags"
 import { resolveActingOrgId } from "@/lib/acting-org"
 import { loadOrgRole } from "@/lib/capabilities"
 import { hasLigamentAccount } from "@/lib/server/account-existence"
@@ -20,12 +21,13 @@ import type { OrgId } from "@/lib/entitlements"
 /**
  * POST /api/org/invitations - invite a colleague into the caller's own organization.
  *
- * THIS ROUTE DEPENDS ON MIGRATION 089 AND HAS NO FALLBACK. Before 089 is applied,
- * org_invitations has no INSERT policy at all, so the insert below returns 42501 and this
- * route answers 403 with an explicit message. That is the intended failure. Do not add a
- * service-role path to "make it work" - the 082 fallback blocks are this repository's own
- * example of what that costs, and a fallback that fires silently returns a wrong answer
- * instead of an error.
+ * THIS ROUTE DEPENDS ON MIGRATION 089, WHICH IS APPLIED AND VERIFIED, AND IT HAS NO
+ * FALLBACK. Without 089's "Org admins create invitations" policy, org_invitations has no
+ * INSERT policy at all and the insert below returns 42501, which this route reports as 403
+ * with an explicit message. That branch is kept because a policy can be rolled back, and
+ * because a loud refusal is the intended failure. Do not add a service-role path to "make
+ * it work" - the 082 fallback blocks are this repository's own example of what that costs,
+ * and a fallback that fires silently returns a wrong answer instead of an error.
  *
  * WHY THE SESSION CLIENT. The new INSERT policy is
  * `org_id IN (SELECT current_user_admin_org_ids())`, which resolves auth.uid(). A
@@ -49,6 +51,43 @@ const noStoreHeaders = {
 export async function POST(request: NextRequest) {
   const route = "/api/org/invitations"
   try {
+    /**
+     * THE FEATURE GATE, AND IT IS FIRST FOR A REASON.
+     *
+     * GATE CREATION, NEVER GATE RESOLUTION. Creating an invitation is the only operation in
+     * this feature that puts something NEW into the world; accept, decline and revoke all
+     * resolve something that already exists. A flag that hid the button but left this
+     * endpoint live would be worse than no flag at all, and the failure is reachable without
+     * anybody doing anything clever:
+     *
+     *   An invitation created while the flag is off sends an email whose /join/<token> link
+     *   returns 404, because /join IS gated. The invitee holds a dead link they cannot
+     *   accept and cannot decline. The row stays 'pending', and it then wedges that address
+     *   through org_invitations_one_live_per_email - one live pending row per
+     *   (org_id, lower(email)) - with nothing in the product able to clear it.
+     *
+     * That is the exact "never strand something already in flight" failure the flag header
+     * in lib/feature-flags.ts argues against, arrived at from the creating side instead of
+     * the resolving side.
+     *
+     * 404, MATCHING /join/[token]. That route calls notFound() when the flag is off, which
+     * is an HTTP 404, and this answers with the same status deliberately: the two are one
+     * surface and it either exists or it does not. 404 and not 503 - a 503 says "temporarily
+     * unavailable, retry", which invites exactly the retry loop this is meant to prevent -
+     * and not 403, which would say the caller lacks permission when in fact nobody has it.
+     *
+     * BEFORE THE AUTH CHECK, deliberately. A caller learns nothing here that /join does not
+     * already tell anyone who visits it, and answering identically whether or not there is a
+     * session is what makes the endpoint indistinguishable from a path that was never built.
+     */
+    if (!colleagueInvitationsEnabled()) {
+      console.warn("[api] POST /org/invitations refused: COLLEAGUE_INVITATIONS is off", { route })
+      return NextResponse.json(
+        { error: "Not found" },
+        { status: 404, headers: noStoreHeaders }
+      )
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
