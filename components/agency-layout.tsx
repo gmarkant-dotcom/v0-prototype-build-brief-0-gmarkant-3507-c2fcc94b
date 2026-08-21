@@ -17,6 +17,7 @@ import { UsageLimitModalProvider } from "@/contexts/usage-limit-modal-context"
 import { RoleToggle } from "@/components/role-toggle"
 import { NewProjectDialog } from "@/components/new-project-dialog"
 import { NewClientDialog } from "@/components/new-client-dialog"
+import { OrganizationSwitcher } from "@/components/organization-switcher"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -703,6 +704,19 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             
             {userMenuOpen && (
               <div className="absolute bottom-full left-0 right-0 mb-2 bg-background border border-border rounded-lg shadow-xl overflow-hidden">
+                {/* WHICH COMPANY AM I ACTING FOR. Built INTO the existing chip rather than
+                    beside it: this button already reads as "who am I here", and a second
+                    control saying the same thing in a different place is how two answers
+                    start disagreeing. It renders nothing at all below two memberships,
+                    which is every account today - see components/organization-switcher.tsx.
+
+                    THIS IS NOT THE SAME CONTROL AS RoleToggle ("Switch to Vendor Mode") IN
+                    THE SIDEBAR HEADER. That one switches ACTING ROLE, lead agency against
+                    vendor; this one switches ACTING ORGANIZATION, which company. They are
+                    orthogonal and a person can need both. Whether two switchers is the
+                    right interface is a product question Greg has not ruled - it is
+                    written up as the open question in docs/090-active-org-report.md. */}
+                <OrganizationSwitcher onSwitched={() => setUserMenuOpen(false)} />
                 <Link
                   href="/agency/settings/user"
                   onClick={() => setUserMenuOpen(false)}

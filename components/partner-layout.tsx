@@ -11,6 +11,7 @@ import { LigamentLogo } from "./ligament-logo"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { LeadAgencyFilterProvider } from "@/contexts/lead-agency-filter-context"
 import { RoleToggle } from "./role-toggle"
+import { OrganizationSwitcher } from "@/components/organization-switcher"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 declare global {
@@ -209,6 +210,19 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
                 
                 {userMenuOpen && (
                   <div className="absolute top-full right-0 mt-2 w-56 bg-vendor-surface rounded-lg shadow-xl overflow-hidden z-50">
+                    {/* WHICH COMPANY AM I ACTING FOR. The same control as the agency
+                        sidebar's, in the chip that already answers "who am I here", and
+                        it renders nothing at all below two memberships - which is every
+                        account today. An organization can be a vendor, so a vendor org's
+                        colleague hits the same "ambiguous" lockout an agency org's does
+                        and needs the same way out. variant="vendor" because this portal
+                        is light and uses the vendor-* tokens.
+
+                        NOT THE SAME CONTROL AS RoleToggle below ("Switch to Lead
+                        Agency"): that switches acting ROLE, this switches acting
+                        ORGANIZATION. Whether two switchers is the right interface is an
+                        open product question - docs/090-active-org-report.md. */}
+                    <OrganizationSwitcher variant="vendor" onSwitched={() => setUserMenuOpen(false)} />
                     <button
                       onClick={() => navigateFromMenu("/partner/settings/user")}
                       className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-vendor-background transition-colors text-vendor-foreground"
