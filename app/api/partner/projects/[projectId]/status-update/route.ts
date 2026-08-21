@@ -1,6 +1,7 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, orgIdFromColumn } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { recordMilestone } from "@/lib/milestone-events"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import {
   PARTNER_BUDGET_STATUSES,
@@ -130,8 +131,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     }
 
     const bodyRaw = await req.json().catch(() => null)
-    const { data: partnerships } = await supabase.from("partnerships").select("id").in("vendor_org_id", callerOrgIds)
-    const partnershipIds = (partnerships || []).map((p) => p.id as string)
+    // lead_org_id and vendor_org_id are read alongside id because the milestone at the foot
+    // of this handler needs BOTH: migration 088's vendor INSERT policy pins org_id to the
+    // partnership's lead_org_id through an EXISTS, and keys the membership test on
+    // vendor_org_id. Taking them off the same row the assignment resolves through is what
+    // makes that join satisfied by construction. The GET above is unchanged.
+    const { data: partnerships } = await supabase
+      .from("partnerships")
+      .select("id, lead_org_id, vendor_org_id")
+      .in("vendor_org_id", callerOrgIds)
+    const partnershipRows = (partnerships || []) as Array<{
+      id: string
+      lead_org_id: string | null
+      vendor_org_id: string | null
+    }>
+    const partnershipIds = partnershipRows.map((p) => p.id)
     if (partnershipIds.length === 0) {
       return NextResponse.json({ error: "No partnership" }, { status: 403, headers: noStoreHeaders })
     }
@@ -258,6 +272,59 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
       }
     } catch (emailError) {
       console.error("[partner/status-update] notification email failed", emailError)
+    }
+
+    /**
+     * Milestone: status_update.post, VENDOR SIDE.
+     *
+     * Unblocked by migration 088 - 'status_update.post' is on
+     * vendor_emittable_event_types() - and needing no ruling: the copy already exists at
+     * lib/activity-feed.ts:396 and the type is already on 080's vendor-visible whitelist.
+     * The agency-side counterpart, status_update.resolve, has had an emitter since 080.
+     *
+     * EVERY VALUE COMES OFF THE PARTNERSHIP ROW THE ASSIGNMENT RESOLVED THROUGH, not off a
+     * parameter and not off the caller's user id. `partnershipRows` was filtered by
+     * `.in("vendor_org_id", callerOrgIds)`, so the row found here is provably one whose
+     * vendor side is one of the caller's own organizations - which is the membership test
+     * 088 makes - and its lead_org_id is the agency, which is the org_id the EXISTS pins.
+     *
+     * PAYLOAD: the completion percentage and the workflow status, both of which are ALREADY
+     * in the email this handler sends to the same agency, and neither of which says anything
+     * about any other vendor. No counts, no cross-vendor totals, no recipient list.
+     *
+     * NON-FATAL, LIKE EVERY OTHER MILESTONE. The status update is already committed. If the
+     * partnership row cannot be found, or 088 is not applied and the insert is refused with
+     * 42501, lib/milestone-events.ts logs and returns void.
+     */
+    try {
+      const milestonePartnership = partnershipRows.find((p) => p.id === assignment.partnership_id) ?? null
+      if (!milestonePartnership) {
+        console.error("[partner/status-update] milestone skipped: assignment partnership not in caller set", {
+          route: ROUTE,
+          partnershipId: assignment.partnership_id,
+        })
+      } else {
+        await recordMilestone(supabase, {
+          eventType: "status_update.post",
+          actorSide: "vendor",
+          orgId: orgIdFromColumn(milestonePartnership.lead_org_id),
+          actorId: user.id,
+          vendorOrgId: orgIdFromColumn(milestonePartnership.vendor_org_id),
+          partnershipId: milestonePartnership.id,
+          subjectType: "project",
+          subjectId: projectId,
+          payload: {
+            completion_pct: body.completion_pct,
+            status: body.status,
+          },
+        })
+      }
+    } catch (milestoneErr) {
+      console.error("[partner/status-update] milestone context failed (non-fatal)", {
+        route: ROUTE,
+        projectId,
+        message: milestoneErr instanceof Error ? milestoneErr.message : String(milestoneErr),
+      })
     }
 
     console.log("[api] success", { route: ROUTE, method: "POST", userId: user.id, projectId })

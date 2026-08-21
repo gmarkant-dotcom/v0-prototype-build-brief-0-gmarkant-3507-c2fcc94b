@@ -462,15 +462,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
        *   - partnership_id is REQUIRED by the policy, which pins org_id through it. Resolved
        *     below, non-fatally: no partnership means no breadcrumb, never a failed bid.
        *
-       * ONCE, ON THE TRANSITION. `nextVersion === 1` means no prior version row exists for
+       * ONE TYPE PER TRANSITION. `nextVersion === 1` means no prior version row exists for
        * this response, and version rows are written only inside this `status === "submitted"`
-       * branch - so this is the first submitted transition, and a revision records nothing.
-       * (bid.revise is in the emittable whitelist and is the obvious next one; not written
-       * here, matching the guest path.) The one way this could fire twice is if a previous
-       * version insert failed - which logs loudly above - and even then the feed absorbs it:
-       * both rows carry the dedupe key `bid:<response_id>` and mergeActivityEntries keeps one.
+       * branch - so version 1 is the first submitted transition and every later one is a
+       * revision.
+       *
+       * bid.revise WAS ADDED AFTERWARDS and it is the same emit with a different type. It is
+       * on vendor_emittable_event_types() already (088), lib/activity-feed.ts:392 already
+       * carries its copy, and nothing about it needed a ruling - the only reason it was not
+       * in the original commit is that the original commit was about the policy. The guest
+       * path still records neither, because a magic-link guest has no version history to
+       * revise.
+       *
+       * The one way version 1 could fire twice is if a previous version insert failed -
+       * which logs loudly above - and even then the feed absorbs it: both rows carry the
+       * dedupe key `bid:<response_id>` and mergeActivityEntries keeps one.
        */
-      if (nextVersion === 1) {
+      {
+        const milestoneType = nextVersion === 1 ? ("bid.submit" as const) : ("bid.revise" as const)
         try {
           // The partnership, read independently rather than by widening either the acting
           // query or the notification query above. Preferred from the inbox row, which is the
@@ -494,7 +503,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           }
 
           await recordMilestone(supabase, {
-            eventType: "bid.submit",
+            eventType: milestoneType,
             actorSide: "vendor",
             orgId: orgIdFromColumn(inbox.lead_org_id),
             actorId: user.id,
@@ -518,6 +527,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           console.error("[api] bid submission: milestone context lookup failed (non-fatal)", {
             route,
             responseId: saved.id,
+            milestoneType,
             message: milestoneErr instanceof Error ? milestoneErr.message : String(milestoneErr),
           })
         }

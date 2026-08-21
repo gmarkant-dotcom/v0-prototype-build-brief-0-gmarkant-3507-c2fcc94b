@@ -1045,6 +1045,50 @@ export async function PATCH(request: NextRequest) {
         // Notify agency that partner accepted
         await notifyPartnershipAccepted(supabase, partnership.lead_org_id, partnerName, partnershipId)
 
+        /**
+         * Milestone: invitation.accept, VENDOR SIDE.
+         *
+         * Unblocked by migration 088, which put 'invitation.accept' on
+         * vendor_emittable_event_types(), and needing no ruling: the copy already exists at
+         * lib/activity-feed.ts:393, the type is already on 080's vendor-visible whitelist,
+         * and every value the policy demands is in hand from a row this branch has already
+         * proved the caller is the vendor of.
+         *
+         * WHICH INVITATION THIS IS. The PARTNERSHIP invitation - one company accepting
+         * another company's offer of a commercial relationship. It is NOT the colleague
+         * invitation added by migration 089, which has no milestone of its own and must not
+         * borrow this type: they are different tables, different parties and different
+         * consequences, and one feed line meaning both would be unreadable.
+         *
+         * EVERY CLAUSE OF THE 088 POLICY, AND WHERE THE VALUE COMES FROM:
+         *   actor_side 'vendor'          literal.
+         *   actor_id = auth.uid()        user.id, from supabase.auth.getUser().
+         *   actor_email IS NULL          not passed. resolveActorEmail() returns null.
+         *   vendor_org_id in my orgs     partnership.vendor_org_id, and `isPartner` above is
+         *                                callerOwnsOrg(callerOrgIds, that value) - so it is
+         *                                provably one of the caller's own organizations.
+         *   event_type emittable         'invitation.accept', on the list of seven.
+         *   partnership_id NOT NULL      partnershipId, the row being updated.
+         *   EXISTS pinning org_id        org_id is partnership.lead_org_id, read off the SAME
+         *                                partnership row, so the join is satisfied by
+         *                                construction rather than by hope.
+         *
+         * PAYLOAD CARRIES NOTHING COMPETITIVE. Empty. There is nothing about this act worth
+         * persisting that the row's own columns do not already say, and the two worked
+         * examples of getting this wrong - the recipient_count leak and the
+         * payment.mark_paid totals - were both a payload carrying more than the act.
+         */
+        await recordMilestone(supabase, {
+          eventType: 'invitation.accept',
+          actorSide: 'vendor',
+          orgId: orgIdFromColumn(partnership.lead_org_id),
+          actorId: user.id,
+          vendorOrgId: orgIdFromColumn(partnership.vendor_org_id),
+          partnershipId: partnershipId as string,
+          subjectType: 'partnership',
+          subjectId: partnershipId as string,
+        })
+
         // PHASE 5: the ACCEPT half of the decline path's defect. This looked the lead
         // agency up in `profiles` by an ORGANIZATION id, ignored the error, and skipped the
         // email when it resolved to nothing - so a vendor accepting an invitation from any
@@ -1154,6 +1198,39 @@ export async function PATCH(request: NextRequest) {
         // REACHES THE AGENCY, which is why its ordering is the one that was fixed.
         const { notifyPartnershipDeclined } = await import('@/lib/notifications')
         await notifyPartnershipDeclined(supabase, partnership.lead_org_id, partnerName, partnershipId)
+
+        /**
+         * Milestone: invitation.decline, VENDOR SIDE. The mirror of the accept branch above,
+         * and it is what actually reaches the agency's feed on this path.
+         *
+         * WHY IT IS WORTH MORE HERE THAN ON THE ACCEPT SIDE. The comment immediately above
+         * records that the notifications INSERT on this path is refused by row level
+         * security and has been failing quietly the whole time, leaving the email as the
+         * only channel. A milestone is a second one, and it goes through a different policy
+         * with a different predicate: 088's vendor INSERT keys on vendor_org_id and the
+         * partnership row, neither of which cares that the status is now 'terminated'.
+         *
+         * AFTER THE UPDATE, DELIBERATELY, and it survives 085. The 085 ordering note above
+         * is about `profiles` reads through current_user_visible_profile_ids(), which 085
+         * narrows to exclude ended relationships. This policy reads `partnerships`, through
+         * "Partners can view their partnerships" - USING vendor_org_id IN
+         * current_user_org_ids(), which says nothing about status - so the EXISTS still
+         * finds the row after it turns 'terminated'. Emitting after is what makes the event
+         * describe something that actually happened.
+         *
+         * If 088 is not applied the insert is refused with 42501, swallowed by
+         * lib/milestone-events.ts, and the decline is unaffected.
+         */
+        await recordMilestone(supabase, {
+          eventType: 'invitation.decline',
+          actorSide: 'vendor',
+          orgId: orgIdFromColumn(partnership.lead_org_id),
+          actorId: user.id,
+          vendorOrgId: orgIdFromColumn(partnership.vendor_org_id),
+          partnershipId: partnershipId as string,
+          subjectType: 'partnership',
+          subjectId: partnershipId as string,
+        })
 
         // Send email to agency notifying them of the decline
         try {
