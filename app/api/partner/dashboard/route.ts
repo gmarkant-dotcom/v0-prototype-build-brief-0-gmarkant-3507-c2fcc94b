@@ -1,4 +1,6 @@
 import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveActingOrgId } from "@/lib/acting-org"
+import { vendorOwnsPartnerRfpInboxRow } from "@/lib/partner-inbox-access"
 import { NextResponse } from "next/server"
 import { requirePartnerRole } from "@/lib/api-auth"
 import { isActivePartnership } from "@/lib/partnership-state"
@@ -59,11 +61,43 @@ export async function GET() {
     // one level of local aliasing, which is how it was found.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
+    // THE SAME READ-SCOPE DEFECT AS /api/partner/rfps, ON THE SAME TABLE, ON THE VENDOR
+    // DASHBOARD. `partner_rfp_inbox` has an agency SELECT arm on `lead_org_id` and two vendor
+    // SELECT arms, and permissive policies OR together, so an unqualified select hands a
+    // dual-role caller their own OUTBOUND broadcasts as inbound bid opportunities.
+    //
+    // ITS OWN TWO SIBLINGS IN THIS Promise.all ALREADY CARRIED `.in("vendor_org_id",
+    // callerOrgIds)` AND THE INBOX READ DID NOT. `callerOrgIds` was resolved on the line
+    // above and simply not applied here. That is the shape of the whole class: the 079 rename
+    // sweep rewrote every read that HAD a company filter, and a read with no filter to
+    // rewrite was never visited.
+    //
+    // The email arm is applied in application code below rather than as a PostgREST filter,
+    // because it compares lower(btrim()) on both sides and the nearest available operator,
+    // ilike, would treat % and _ in a stored address as wildcards.
+    //
+    // RLS RELIANCE IS KEPT. The policy is still the wall. This decides which portal the row
+    // belongs in, which no policy on this table can know.
+    const actingOrg = await resolveActingOrgId(user.id, supabase)
+    const actingOrgIds = actingOrg.orgId ? [actingOrg.orgId] : []
+    if (!actingOrg.orgId) {
+      console.error("[partner/dashboard] no acting organization, inbox narrows to the email arm only", {
+        userId: user.id,
+        reason: actingOrg.reason,
+      })
+    }
+    const { data: emailProfile } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", user.id)
+      .maybeSingle<{ email: string | null }>()
+    const vendorEmail = (emailProfile?.email || user.email || "").trim().toLowerCase()
+
     const [inboxRes, responsesRes, partnershipsRes] = await Promise.all([
       supabase
         .from("partner_rfp_inbox")
         .select(
-          "id, lead_org_id, project_id, scope_item_name, status, response_deadline, nda_gate_enforced, nda_confirmed_at, created_at"
+          "id, lead_org_id, vendor_org_id, recipient_email, project_id, scope_item_name, status, response_deadline, nda_gate_enforced, nda_confirmed_at, created_at"
         ),
       supabase
         .from("partner_rfp_responses")
@@ -85,7 +119,28 @@ export async function GET() {
       }
     }
 
-    const inboxRows = inboxRes.data || []
+    // Same comparison as /api/partner/rfps and /api/partner/rfps/[id], reached through the
+    // one exported definition rather than restated. NDA-gated rows are KEPT - the dashboard's
+    // "needs response" list is where a vendor learns an NDA is outstanding.
+    const unscopedInboxRows = inboxRes.data || []
+    const inboxRows = unscopedInboxRows.filter((row) =>
+      vendorOwnsPartnerRfpInboxRow(
+        {
+          vendor_org_id: (row.vendor_org_id as string | null) ?? null,
+          recipient_email: (row.recipient_email as string | null) ?? null,
+        },
+        actingOrgIds,
+        vendorEmail
+      )
+    )
+    if (unscopedInboxRows.length !== inboxRows.length) {
+      console.log("[partner/dashboard] acting-role filter dropped rows the caller sees as the lead agency", {
+        userId: user.id,
+        returnedByRls: unscopedInboxRows.length,
+        keptForVendorPortal: inboxRows.length,
+        actingOrgResolution: actingOrg.reason,
+      })
+    }
     const responses = responsesRes.data || []
     const partnerships = partnershipsRes.data || []
 

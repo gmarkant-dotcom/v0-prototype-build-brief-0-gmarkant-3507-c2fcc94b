@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 import { ORG_CONTACT_SELECT_MEETING, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { resolveCallerWriteOrgId, type OrgId } from "@/lib/entitlements"
+import { resolveActingOrgId } from "@/lib/acting-org"
+import { canActAs } from "@/lib/acting-role"
+import { vendorOwnsPartnerRfpInboxRow } from "@/lib/partner-inbox-access"
 import {
   attachMagicTokenToPartnerInbox,
   MAGIC_TOKEN_ATTACH_COLUMNS,
@@ -115,7 +118,13 @@ export async function GET() {
       .eq("id", user.id)
       .single()
 
-    if (profile?.role !== "partner" && profile?.active_role !== "partner") {
+    // WHICH SIDE, not which company. lib/acting-role.ts, term for term with the hand-rolled
+    // `role !== "partner" && active_role !== "partner"` this replaces - canActAs() grants the
+    // portal when EITHER column names it, which is what that disjunction said. The one
+    // non-identity is that canActAs normalizes case and surrounding whitespace, so a stored
+    // " Partner" now resolves instead of 403-ing. Same substitution already made at
+    // app/api/partner/rfp-bid/upload/route.ts:46-50.
+    if (!canActAs(profile, "partner")) {
       console.warn(
         `[partner/rfps] GET: wrong role — userId=${user.id} email=${user.email ?? profile?.email ?? "n/a"} profileRole=${profile?.role ?? "null"}`
       )
@@ -123,6 +132,36 @@ export async function GET() {
     }
 
     const vendorEmail = (profile?.email || user.email || "").trim().toLowerCase()
+
+    // WHICH ORGANIZATION IS THIS CALLER ACTING FOR? The sanctioned answer, from
+    // lib/acting-org.ts, which derives the set from `org_members` on every call and fails
+    // closed on ambiguity. Deliberately NOT an org id resolved from a user id: that
+    // substitution is only ever correct for the sixteen accounts 079 backfilled, whose
+    // organization id equals their founder's.
+    //
+    // WHY A SINGLE ID RATHER THAN THE MEMBERSHIP SET. `resolveCallerOrgIds()` answers "every
+    // company this person belongs to", which is the right question for an AUTHORIZATION check
+    // - the detail route asks it that way and should. This is not an authorization check. It
+    // is "which company's vendor portal am I looking at", and that has one answer.
+    // resolveActingOrgId() is the module whose entire purpose is giving it, and it refuses
+    // rather than guessing when a caller belongs to more than one organization with no
+    // preference set.
+    //
+    // ON A REFUSAL THE VENDOR LIST IS EMPTY, NOT UNSCOPED. `orgIds` stays empty, the email arm
+    // still applies, and the list narrows to invitations addressed to the caller personally.
+    // That is the fail-closed direction and it is the direction acting-org.ts exists to take.
+    // UNREACHABLE TODAY: every live account has exactly one org_members row, so every caller
+    // takes the "sole-membership" branch. See OPEN-RS-4 in the session report for the
+    // divergence this would create against the detail route on the day that changes.
+    const actingOrg = await resolveActingOrgId(user.id, supabase)
+    const actingOrgIds = actingOrg.orgId ? [actingOrg.orgId] : []
+    if (!actingOrg.orgId) {
+      console.error("[partner/rfps] no acting organization, vendor list falls back to the email arm only", {
+        userId: user.id,
+        reason: actingOrg.reason,
+        memberOrgCount: actingOrg.memberOrgIds.length,
+      })
+    }
 
     // 079 PARAMETER CLASS: both calls below WRITE this value into vendor_org_id, which
     // REFERENCES organizations(id). `user.id` is a user id: accidentally correct for the
@@ -158,11 +197,37 @@ export async function GET() {
     // which docs/079-rename-plan.md section 6 route 16 flagged as a lie the next reader
     // would trust. It is now true and worth keeping true.
     //
-    // 079: the policy resolves the vendor side through current_user_org_ids() rather than
-    // comparing vendor_org_id to auth.uid(), and the recipient_email disjunct is unchanged -
-    // it matches a PERSON by email and is deliberately allow-listed out of the policy audit.
-    // No application-side org filter is needed because there is no application-side filter
-    // here at all: the select is unqualified and RLS is the whole scoping.
+    // RLS IS THE WALL. IT WAS NEVER THE SCOPE, AND THIS ROUTE USED TO TREAT IT AS BOTH.
+    //
+    // `partner_rfp_inbox` carries five policies: an agency SELECT on `lead_org_id`, a vendor
+    // SELECT on `vendor_org_id`, and a vendor SELECT on `recipient_email`. Permissive
+    // policies of the same command OR together, so this select returns THE UNION OF EVERY
+    // ARM THE CALLER SATISFIES. The agency arm knows nothing about which portal the caller
+    // is looking at. For a lead agency browsing their own vendor portal that union is their
+    // entire OUTBOUND broadcast history, rendered as inbound bid opportunities: measured live
+    // on 2026-08-21 as 96 rows, of which visible_as_lead_agency = 96, visible_as_vendor_org
+    // = 0, visible_by_recipient_email = 0.
+    //
+    // The comment that stood here said "no application-side org filter is needed because
+    // there is no application-side filter here at all: the select is unqualified and RLS is
+    // the whole scoping". That is an accurate description of the defect.
+    //
+    // THE FILTER IS ADDED, THE RLS RELIANCE IS KEPT. Belt and braces: the policy still
+    // decides whether the caller may see a row, and this decides whether the VENDOR PORTAL is
+    // where it belongs. Removing either would be wrong - a filter alone is not an
+    // authorization boundary, and a policy alone cannot tell the two portals apart.
+    //
+    // The comparison is `vendorOwnsPartnerRfpInboxRow()`, the same function
+    // /api/partner/rfps/[id] reaches through `partnerCanAccessPartnerRfpInbox()`. That route
+    // is the reference implementation because it is the one that behaved correctly: it
+    // returned "Not found" for a row this list had just rendered. Two surfaces disagreeing
+    // about what a vendor row is are how the Aug 14 pool bug shipped, so they share one
+    // definition rather than two that agree today.
+    //
+    // NDA-GATED ROWS STAY IN THE LIST. The ownership half is asked deliberately, not the
+    // whole access check: a vendor has to SEE an NDA-gated RFP to know there is an NDA to
+    // sign. The detail route still refuses its contents. That difference is the reason the
+    // ownership test is a separate exported function.
     const { data, error } = await supabase
       .from("partner_rfp_inbox")
       .select("*")
@@ -176,7 +241,27 @@ export async function GET() {
       )
     }
 
-    const rows = data || []
+    const unscopedRows = data || []
+    const rows = unscopedRows.filter((row) =>
+      vendorOwnsPartnerRfpInboxRow(
+        {
+          vendor_org_id: (row.vendor_org_id as string | null) ?? null,
+          recipient_email: (row.recipient_email as string | null) ?? null,
+        },
+        actingOrgIds,
+        vendorEmail
+      )
+    )
+    if (unscopedRows.length !== rows.length) {
+      // Not an error. This is the measurement of the defect this filter exists to close, and
+      // it is logged so the number can be watched rather than assumed to be zero.
+      console.log("[partner/rfps] acting-role filter dropped rows the caller sees as the lead agency", {
+        userId: user.id,
+        returnedByRls: unscopedRows.length,
+        keptForVendorPortal: rows.length,
+        actingOrgResolution: actingOrg.reason,
+      })
+    }
     // PHASE 3, previously deferred. This read `meeting_url` out of `profiles` keyed by a
     // lead ORGANIZATION id, which resolves only while an organization's id equals its
     // founder's user id. For every agency created since 079 it matched nothing and the

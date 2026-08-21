@@ -28,6 +28,39 @@ export type PartnerInboxAccessResult =
  * An empty array denies by id, which is correct: a caller who belongs to no organization
  * owns no inbox row. The recipient_email branch is unaffected and still applies.
  */
+/**
+ * IS THE CALLER THE VENDOR ON THIS ROW? The ownership half of the check below, on its own.
+ *
+ * WHY IT IS SPLIT OUT RATHER THAN COPIED. A LIST is not a detail view. The vendor portal must
+ * SHOW an NDA-gated RFP - that row is how the vendor learns there is an NDA to sign - while
+ * the detail route must REFUSE its contents until the NDA is confirmed. Those are two
+ * different answers to the NDA question and one answer to the ownership question, so the
+ * ownership question is asked in exactly one place and both callers reach it here. A list
+ * route that re-expressed `vendor_org_id OR recipient_email` inline would be a second
+ * definition of vendor ownership, and the whole point of the read-scope work is that there is
+ * only ever one.
+ *
+ * DO NOT PUSH THIS INTO THE QUERY AS A PostgREST FILTER. The email arm compares
+ * `lower(btrim())` on both sides. PostgREST cannot express btrim, and the nearest available
+ * operator, `ilike`, treats `%` and `_` in the stored address as WILDCARDS - which is
+ * migration 093's HOLE 1 on `partnerships`, reintroduced on a second table. The rows are
+ * already being fetched; comparing them here costs nothing and cannot acquire that hole.
+ *
+ * This narrows. It does not authorize: row level security is still the wall, and it is still
+ * the thing that decides the caller may see the row at all.
+ */
+export function vendorOwnsPartnerRfpInboxRow(
+  inbox: { vendor_org_id: string | null; recipient_email: string | null },
+  callerOrgIds: readonly OrgId[],
+  profileEmail: string | null | undefined
+): boolean {
+  const linkedById = callerOwnsOrg(callerOrgIds, inbox.vendor_org_id)
+  const rec = (inbox.recipient_email || "").trim().toLowerCase()
+  const pe = (profileEmail || "").trim().toLowerCase()
+  const linkedByEmail = Boolean(rec && pe && rec === pe)
+  return linkedById || linkedByEmail
+}
+
 export function partnerCanAccessPartnerRfpInbox(
   inbox: {
     vendor_org_id: string | null
@@ -38,12 +71,7 @@ export function partnerCanAccessPartnerRfpInbox(
   callerOrgIds: readonly OrgId[],
   profileEmail: string | null | undefined
 ): PartnerInboxAccessResult {
-  const linkedById = callerOwnsOrg(callerOrgIds, inbox.vendor_org_id)
-  const rec = (inbox.recipient_email || "").trim().toLowerCase()
-  const pe = (profileEmail || "").trim().toLowerCase()
-  const linkedByEmail = Boolean(rec && pe && rec === pe)
-
-  if (!linkedById && !linkedByEmail) {
+  if (!vendorOwnsPartnerRfpInboxRow(inbox, callerOrgIds, profileEmail)) {
     return { allowed: false, reason: "unauthorized" }
   }
 
