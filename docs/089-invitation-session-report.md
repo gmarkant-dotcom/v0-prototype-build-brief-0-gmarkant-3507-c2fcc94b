@@ -44,14 +44,14 @@ Both runs EXECUTED, once each, in this repository.
 | `pnpm lint` | exit **1**, **182 problems (154 errors, 28 warnings)** | exit **1**, **182 problems (154 errors, 28 warnings)** | **none — identical** |
 | `pnpm verify-rls` | exit **2** | exit **2** | none; output byte-identical |
 | `pnpm policy-audit:guard` | exit **1**, parsed 104, 60 company-scoped, **FLAGGED 53** | exit **1**, parsed 104, 60 company-scoped, **FLAGGED 53** | **none — identical** |
-| `pnpm identity-columns:guard` | exit **0**, 372 files, TOTAL 0 | exit **0**, **378 files**, TOTAL 0 | **+6 files scanned** |
-| `pnpm embed-targets` | exit **0**, 372 files, REPOINTED 0 | exit **0**, **378 files**, REPOINTED 0 | **+6 files scanned** |
-| `pnpm org-id-reads:guard` | exit **0**, 371 files, OPEN 14 / 61, **IMPROVED 8 / 11** | exit **0**, **377 files**, OPEN 14 / 61, **IMPROVED 0 / 0** | **+6 files; IMPROVED 8→0 and 11→0** |
+| `pnpm identity-columns:guard` | exit **0**, 372 files, TOTAL 0 | exit **0**, **380 files**, TOTAL 0 | **+8 files scanned** |
+| `pnpm embed-targets` | exit **0**, 372 files, REPOINTED 0 | exit **0**, **380 files**, REPOINTED 0 | **+8 files scanned** |
+| `pnpm org-id-reads:guard` | exit **0**, 371 files, OPEN 14 / 61, **IMPROVED 8 / 11** | exit **0**, **379 files**, OPEN 14 / 61, **IMPROVED 0 / 0** | **+8 files; IMPROVED 8→0 and 11→0** |
 
 ### Every movement, explained
 
-**+6 files scanned, in all three file-counting guards.** Six source files were
-added this session and every one is under a scanned root:
+**+8 files scanned, in all three file-counting guards.** Eight source files were
+added and every one is under a scanned root:
 
 ```
 lib/org-invitations.ts
@@ -59,11 +59,18 @@ app/api/org/invitations/route.ts
 app/api/org/invitations/accept/route.ts
 app/api/org/invitations/decline/route.ts
 app/api/org/invitations/revoke/route.ts
-app/join/[token]/page.tsx
+app/join/[token]/page.tsx                      <- server, the feature gate
+app/join/[token]/join-invitation-client.tsx    <- client, the surface
+app/agency/settings/team/team-roster-client.tsx <- client half of an existing page
 ```
 
-`org-id-reads` reads 377 rather than 378 because its roots exclude
-`middleware.ts`. 371 + 6 = 377 and 372 + 6 = 378 — both consistent.
+Six of those are new code. The other two are the **feature-flag split**: a client
+component cannot read a server-side env var, so each flagged page is now a
+one-line server `page.tsx` beside the client component it renders. That turns
+one file into two in each of two places, which is +2 on top of the +6.
+
+`org-id-reads` reads 379 rather than 380 because its roots exclude
+`middleware.ts`. 371 + 8 = 379 and 372 + 8 = 380 — both consistent.
 
 **IMPROVED 8 → 0 and 11 → 0** is Phase 6(b), and it is bookkeeping, not repair.
 Those nineteen entries recorded MORE findings than the script finds; the
@@ -128,7 +135,7 @@ which is **already applied**.
 ## The dry run for 089
 
 **File:** `supabase/migrations/089_org_invitation_lifecycle.sql`
-**Change the `COMMIT;` on LINE 740 to `ROLLBACK;`**, run the whole file, confirm
+**Change the `COMMIT;` on LINE 777 to `ROLLBACK;`**, run the whole file, confirm
 no errors, then change it back.
 
 Verify the line numbers before trusting them (**EXECUTED**, and this is the
@@ -136,10 +143,10 @@ output as of this commit):
 
 ```
 $ grep -n -i '^begin\|^commit\|^rollback' supabase/migrations/089_org_invitation_lifecycle.sql
-299:BEGIN;
-491:BEGIN      <- plpgsql, accept_org_invitation's body. No semicolon.
-640:BEGIN      <- plpgsql, decline_org_invitation's body. No semicolon.
-740:COMMIT;
+315:BEGIN;
+507:BEGIN      <- plpgsql, accept_org_invitation's body. No semicolon.
+676:BEGIN      <- plpgsql, decline_org_invitation's body. No semicolon.
+777:COMMIT;
 ```
 
 Four hits is correct. Exactly one line ends in `BEGIN;` and exactly one in
@@ -223,18 +230,18 @@ destination. It was not repurposed.
 
 ### Phase 1 — migration 089 (`7a23fdf`)
 
-**AUTHORED, NOT APPLIED.** 919 lines up, 245 down.
+**AUTHORED, NOT APPLIED.** 956 lines up, 245 down.
 
 | | |
 |---|---|
-| `current_user_email()` | `:334`. No arguments, so unlike 087's `org_has_member_with_email(uuid, text)` it is not a confirm-oracle — there is nothing to pass it |
-| status CHECK | `:375` DROP, `:378` ADD. `+ 'declined'`. Zero rows, so it validates against nothing and the new list is a strict superset of the old |
-| `"Invitees read their own invitation"` | `:408`. SELECT. **The gap nobody had named** — without it the landing page renders an empty result, not an error |
-| `"Org admins create invitations"` | `:435`. INSERT |
-| `"Org admins manage their invitations"` | `:457`. UPDATE, covering revoke and the expiry stamp. **No DELETE policy** |
-| `accept_org_invitation(text)` | `:479`. Returns jsonb |
-| `decline_org_invitation(text)` | `:629` |
-| REVOKEs | section 8, `:728-738`. All three carry `REVOKE EXECUTE ... FROM anon` **by name** |
+| `current_user_email()` | `:350`. No arguments, so unlike 087's `org_has_member_with_email(uuid, text)` it is not a confirm-oracle — there is nothing to pass it |
+| status CHECK | `:391` DROP, `:394` ADD. `+ 'declined'`. Zero rows, so it validates against nothing and the new list is a strict superset of the old |
+| `"Invitees read their own invitation"` | `:424`. SELECT. **The gap nobody had named** — without it the landing page renders an empty result, not an error |
+| `"Org admins create invitations"` | `:451`. INSERT |
+| `"Org admins manage their invitations"` | `:473`. UPDATE, covering revoke and the expiry stamp. **No DELETE policy** |
+| `accept_org_invitation(text)` | `:495`. Returns jsonb |
+| `decline_org_invitation(text)` | `:665` |
+| REVOKEs | section 8, `:765-775`. All three carry `REVOKE EXECUTE ... FROM anon` **by name** |
 
 `service_role` is deliberately **not** granted — it inherits, V1 asserts the
 inherited value rather than a GRANT pretending to set it (082's precedent), and
@@ -252,7 +259,8 @@ no service-role caller exists in this path by ruling.
 | `app/api/org/invitations/accept/route.ts` | POST accept. One `.rpc()` |
 | `app/api/org/invitations/decline/route.ts` | POST decline. One `.rpc()` |
 | `app/join/[token]/page.tsx` | the invitee landing surface |
-| `app/agency/settings/team/page.tsx` | invite form, pending list, revoke, past list, roster-of-one |
+| `app/agency/settings/team/team-roster-client.tsx` | invite form, pending list, revoke, past list, roster-of-one (client half) |
+| `app/agency/settings/team/page.tsx` | one-line server component: reads the flag, passes it in |
 | `lib/email.ts:192` | `buildColleagueInvitationEmail()` |
 
 **Expiry: 7 days** (`lib/org-invitations.ts:31`). `expires_at` is NOT NULL with
@@ -289,7 +297,12 @@ functions stamp a lapsed invitation `'expired'` and then RAISE — **and the RAI
 rolls the stamp back**, because PostgREST wraps each call in one transaction and
 there is no way to both raise and persist inside one. This is flagged at the
 top of 089's header, at both call sites in the function bodies, and in
-**OPEN-4** below. **The durable stamp is the create route's pre-insert sweep**
+**OPEN-4** below. Both statements were subsequently **deleted** rather than
+kept-and-annotated, because a statement that reads as working and provably never
+runs to completion is the same class as the dead 42P01 branch in
+`lib/milestone-events.ts`. The RAISE was kept exactly as it is: a raise fails
+loudly where a returned status code fails silently. **The only durable expiry
+writer is the create route's pre-insert sweep**
 (`app/api/org/invitations/route.ts:178`), which is also the only place a stale
 row is ever felt — a lapsed pending row costs nobody anything until it blocks a
 re-invite through the partial unique index.
@@ -492,28 +505,33 @@ block with a `why`; the file/count lines are quoted):
 added.** `app/api/partner/network/[agencyId]/route.ts` stays in `KNOWN_OPEN` at
 count 1 — only its `KNOWN_OPEN_MIRROR` entry reached zero.
 
-**ONE ALLOW-LIST CHANGE, AND IT IS A RENUMBERING.** The team page edit moved
-two pre-existing `profiles` reads, and the scoped `ALLOWED` entry that already
-covered them stopped matching, so the guard reported them as NEW. The entry's
-own comment records that this has happened before. Changed:
+**ONE ALLOW-LIST ENTRY WAS REPOINTED, AND IT IS NOT AN EXEMPTION.** The scoped
+`ALLOWED` entry that already covered two pre-existing `profiles` reads stopped
+matching twice: first when the invitation surface landed above them and moved
+their line numbers, then when the feature-flag split renamed the file. Both are
+relocations of the same two reads. Final state, against what it said at the
+start of the session:
 
 ```
+-    file: "app/agency/settings/team/page.tsx",
 -    // 160 and 166 since the two 086 banners were deleted and the file header rewritten to
 -    // say why. Same two reads, same reason; only the line numbers moved.
 -    lines: [160, 166],
-+    // 268 and 274 since the invitation surface landed above them (migration 089's team-page
-+    // half: the invite form, the pending list and the loadInvitations callback). SAME TWO
-+    // READS, SAME REASON, SAME CODE - only the line numbers moved, which is the third time
-+    // this entry has been renumbered and the reason it is worth saying so each time. The
-+    // scoping is deliberately KEPT: any profiles read added to this file on a line other
-+    // than these two is still a real finding.
-+    lines: [268, 274],
++    // RENAMED, not re-scoped. The roster is now a client component beside a one-line server
++    // page.tsx that reads the COLLEAGUE_INVITATIONS flag, because a client component cannot
++    // read a server-side env var. page.tsx itself contains no query of any kind.
++    file: "app/agency/settings/team/team-roster-client.tsx",
++    // 291 and 297. SAME TWO READS, SAME REASON, SAME CODE - the file was renamed and the
++    // invitation surface landed above them. The scoping is deliberately KEPT: any profiles
++    // read added to this file on a line other than these two is still a real finding.
++    lines: [291, 297],
 ```
 
 The `why` text is untouched, the entry stays **scoped** to two lines, and no
-file was added to `ALLOWED`. It is the same two `.in("id", userIds)` reads
-against `profiles`, where `userIds` comes from `org_members.user_id` one
-statement earlier.
+file was ADDED to `ALLOWED` — the count of entries is unchanged. It is the same
+two `.in("id", userIds)` reads against `profiles`, where `userIds` comes from
+`org_members.user_id` one statement earlier. The new `page.tsx` contains no
+query of any kind and is not on any list.
 
 ---
 
@@ -644,37 +662,48 @@ WHERE o.id = (SELECT org_id FROM public.org_invitations
 -- EXPECTED per this session's reading: 0 rows.
 ```
 
-### OPEN-4. The in-function expiry stamp does not persist
+### OPEN-4. A lapsed invitation keeps `status = 'pending'` until somebody re-invites
 
-Both RPC functions `UPDATE ... SET status = 'expired'` and then `RAISE`. The
-RAISE aborts the transaction PostgREST opened and takes the UPDATE with it.
-There is no way to both raise and persist inside one Postgres transaction and
-no way to commit from inside a function PostgREST is calling.
+**RESOLVED AS A CODE DEFECT; THE BEHAVIOUR IT DESCRIBES IS NOW DELIBERATE.**
 
-The statement is written anyway, per the ruling, and it is flagged in three
-places in the file. **The durable stamp is the create route's pre-insert
-sweep**, and that is also the only place a stale row is ever felt.
+An earlier draft of 089 wrote `UPDATE ... SET status = 'expired'` immediately
+before the `RAISE` in each function. It could never have persisted: PostgREST
+wraps every RPC call in one transaction and an exception aborts it, so both
+UPDATEs would have been rolled back with the RAISE every single time.
 
-**Consequence:** an accept attempt against a lapsed invitation returns the right
-error (LG004) and leaves `status = 'pending'` on disk. The admin's pending list
-would show it as pending. **This is handled in the interface**: the team page
-renders "Lapsed" rather than a date when `expires_at` has passed
-(`app/agency/settings/team/page.tsx`, the pending table's Expires cell), so the
-list does not lie even though the column does.
+**Both statements are now DELETED** (`:570` and `:702` are the surviving
+RAISEs), and a comment naming the reason stands in each place. Annotating a
+dead statement is not enough — the next person greps for the UPDATE, finds it,
+and believes it. That is exactly what the 42P01 branch in
+`lib/milestone-events.ts` did: dead for its entire working life while reading as
+a live guard, and it cost a real investigation to find.
+
+**The RAISE was kept unchanged.** Returning a status code instead would let a
+stamp persist, but that trade runs the wrong way — a raise fails LOUDLY at the
+caller, a returned code fails silently the first time a caller forgets to check
+it.
+
+**The only durable expiry writer in this product** is the create route's
+pre-insert sweep, `app/api/org/invitations/route.ts:178`. It commits because
+nothing raises after it, and it is the only moment a stale pending row is ever
+felt — such a row costs nobody anything until it blocks a re-invite through
+`org_invitations_one_live_per_email`.
+
+**What remains open, and it is a data-shape fact rather than a defect:** a
+lapsed invitation reads `'pending'` in the database until somebody re-invites
+that address. **The interface does not repeat the omission** — the team page
+reads `expires_at` and renders "Lapsed" rather than trusting the column
+(`app/agency/settings/team/team-roster-client.tsx`, the pending table's Expires
+cell).
 
 **The query that shows it:**
 
 ```sql
--- After a failed accept against an expired invitation:
 SELECT token, status, expires_at, updated_at FROM public.org_invitations
-WHERE expires_at <= now();
--- EXPECTED: status still 'pending'. If it reads 'expired', something
--- committed that this session believes cannot commit - worth knowing.
+WHERE expires_at <= now() AND status = 'pending';
+-- EXPECTED: rows, and that is correct now rather than a bug. Anything
+-- reading 'expired' here was stamped by the create route, not by an RPC.
 ```
-
-**If you want it to persist,** the change is to have refusals return jsonb
-rather than raise. The function bodies are already correct for that; only the
-`RAISE` lines and the routes' error mapping would move.
 
 ### OPEN-5. The email-match convention is assumed to hold for every live profile
 
@@ -819,3 +848,141 @@ Nothing was pushed. `middleware.ts` was not touched.
 `BROADCAST_CUES_PARTNERSHIP` was not read, set or flipped. No migration was
 applied and no script connecting to Supabase was written. The budget spine was
 not touched.
+
+---
+
+# SEQUENCING
+
+Added after the three follow-up edits (the dead expiry UPDATEs deleted, the
+feature flag, and this section). **This supersedes nothing above; it is the
+order to actually do things in.**
+
+The colleague-invitation surface is now behind `COLLEAGUE_INVITATIONS`, a
+server-side flag in `lib/feature-flags.ts` in the exact
+`process.env.X === "true"` form `BROADCAST_CUES_PARTNERSHIP` uses. **Absent
+means off.** No env file in this repository sets it and none was touched, so
+Vercel not having the variable keeps the whole surface inert.
+
+## The order
+
+### 1. Migration 089 may be applied IMMEDIATELY.
+
+It is safe on its own and it is safe alone. With no code deployed against it,
+089 adds three functions no caller calls, three policies no writer exercises,
+and one CHECK constraint that admits a value nothing writes. **Nothing in the
+product changes.** Apply it whenever it suits; there is no window to manage.
+
+Dry run first: `COMMIT;` on **line 777** → `ROLLBACK;`. Then the verification
+block.
+
+### 2. The branch may be PUSHED with the flag off.
+
+Everything on `feat/m1-invitations` is safe to merge and deploy without the
+variable set. What a user sees with `COLLEAGUE_INVITATIONS` unset:
+
+| Surface | With the flag off |
+|---|---|
+| `/agency/settings/team` | **exactly what it rendered before 089** — the read-only roster, and a footer reading "Inviting and removing colleagues is not available yet." No invite button, no form, no pending list, no past list |
+| `/join/<token>` | **404.** `notFound()`, not a "coming soon" page — the surface genuinely does not exist yet, and a page explaining it would advertise an unreleased feature to anyone who guessed the URL |
+| `POST /api/org/invitations` and `/revoke` | reachable, but nothing in the product calls them and no invitation can exist to revoke |
+| Phases 3, 4, 5, 6 | **not flagged and not affected.** The four milestone emitters, the signup company-name fix, the `/partner/rfps/null` fix and the guard trims are all live on deploy, and all are independent of 089 |
+
+Order between steps 1 and 2 does not matter **while the flag is off**. If the
+branch ships before 089 is applied, the flagged surface is unreachable anyway;
+if 089 is applied first, nothing calls it. Either way there is no broken state
+and no data to repair.
+
+### 3. Migration 090 must be applied BEFORE the flag is flipped.
+
+**This is the one hard ordering constraint in the whole piece.**
+
+090 does not exist yet. It must add `profiles.active_org_id` and the switcher
+that sets it, because `resolveActingOrgId()` (`lib/acting-org.ts:205`) fails
+closed with reason `"ambiguous"` the moment an account belongs to more than one
+organization — and `accept_org_invitation()` is the first thing in this
+product's history that can produce that second membership.
+`lib/acting-org.ts:169` guards a 42703 for the missing column, so this is not a
+prediction; the column is absent today.
+
+**What happens if the flag is flipped before 090:** the first colleague who
+accepts gets an account that can read everything and write nothing, with no
+error message that explains why. Every write path resolves through
+`resolveActingOrgId()` or `resolveCallerWriteOrgId()`, which delegates to it.
+Both realistic paths reach it — an invitee with an account already has one
+membership from their own signup, and an invitee without one gets a membership
+from `handle_new_user()` before they can accept.
+
+The accept route counts memberships afterwards and the landing page states the
+problem to the user in plain language. **That is honesty, not a fix.**
+
+### 4. Only then set `COLLEAGUE_INVITATIONS=true` in Vercel and redeploy.
+
+Production and Preview. To turn it off again, unset it — but note what unsetting
+does **not** undo: an `org_members` row an accept already wrote is real and
+stays, and so does any `org_invitations` row.
+
+## What the flag deliberately does NOT gate
+
+**The accept and decline API routes.** An invitation that was already sent while
+the flag was on must stay answerable if the flag is turned back off. Otherwise
+an invitee holds a live link that returns 503 with no way to decline it, and the
+pending row nobody can clear then blocks that address permanently through
+`org_invitations_one_live_per_email`. **A flag should make a surface unreachable
+going forward; it must never strand something already in flight.**
+
+`/join/<token>` being 404 while accept and decline still work is not a
+contradiction — it means a link sent under the old regime can still be answered
+by anyone who kept the email, and no new one can be created.
+
+**The roster.** Reading who is in your own organization needed no ruling and
+needs no flag. It has been live since 086.
+
+**The pending-invitation database read.** `loadInvitations()` still runs when the
+flag is false; what the flag decides is whether any of it is rendered or
+actionable. `"Org admins read their invitations"` has been live since 086, and a
+flag that changed what the database returns would be a different kind of thing
+entirely.
+
+## Gates, re-run after these three edits
+
+All eight, once, **EXECUTED**. Every one matches the Phase 0 baseline:
+
+| Gate | Baseline | After the edits |
+|---|---|---|
+| `npx tsc --noEmit` | 0 | **0** |
+| `pnpm build` | 0 | **0** |
+| `pnpm lint` | 1, 182 problems (154/28) | **1, 182 problems (154/28)** — identical |
+| `pnpm verify-rls` | 2 | **2** — output byte-identical |
+| `pnpm policy-audit:guard` | 1, FLAGGED 53 | **1, FLAGGED 53** — identical |
+| `pnpm identity-columns:guard` | 0, 372 files | **0, 380 files** |
+| `pnpm embed-targets` | 0, 372 files | **0, 380 files** |
+| `pnpm org-id-reads:guard` | 0, 371 files, OPEN 14/61 | **0, 379 files, OPEN 14/61, IMPROVED 0/0** |
+
+The only movement is the file count, **+8** rather than the +6 reported earlier:
+six new source files, plus two from the feature-flag split, which turns one file
+into two in each of the two flagged pages. `org-id-reads` reads one fewer
+because its roots exclude `middleware.ts`. Nothing else moved, nothing was
+reworded to satisfy a guard, and no exemption was added.
+
+## Transaction control, re-verified after the edits
+
+Deleting the two dead UPDATEs and expanding the comments in their place moved
+the `COMMIT;`. **Re-grepped after the last edit, not before** — this is the
+mistake 087 nearly burned a dry run on:
+
+```
+$ grep -n -i '^begin\|^commit\|^rollback' supabase/migrations/089_org_invitation_lifecycle.sql
+315:BEGIN;
+507:BEGIN      <- plpgsql, accept_org_invitation's body. No semicolon.
+676:BEGIN      <- plpgsql, decline_org_invitation's body. No semicolon.
+777:COMMIT;
+```
+
+**`BEGIN;` is line 315. `COMMIT;` is line 777.** Both were 299 and 740 before
+these edits; the header and the dry-run instruction in the file have been
+corrected to the new numbers and re-checked against the grep afterwards.
+`grep -c '^BEGIN;$'` and `grep -c '^COMMIT;$'` both return **1**.
+
+The down file is unchanged: `BEGIN;` line 127, `COMMIT;` line 177. It never
+referenced the deleted statements — its only mention of `'expired'` is inside
+the restored CHECK constraint, which is correct and untouched.

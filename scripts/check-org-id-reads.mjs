@@ -183,14 +183,14 @@ const ALLOWED = [
       "and is documented at the call site as byte-for-byte today's behaviour.",
   },
   {
-    file: "app/agency/settings/team/page.tsx",
-    // 268 and 274 since the invitation surface landed above them (migration 089's team-page
-    // half: the invite form, the pending list and the loadInvitations callback). SAME TWO
-    // READS, SAME REASON, SAME CODE - only the line numbers moved, which is the third time
-    // this entry has been renumbered and the reason it is worth saying so each time. The
-    // scoping is deliberately KEPT: any profiles read added to this file on a line other
-    // than these two is still a real finding.
-    lines: [268, 274],
+    // RENAMED, not re-scoped. The roster is now a client component beside a one-line server
+    // page.tsx that reads the COLLEAGUE_INVITATIONS flag, because a client component cannot
+    // read a server-side env var. page.tsx itself contains no query of any kind.
+    file: "app/agency/settings/team/team-roster-client.tsx",
+    // 291 and 297. SAME TWO READS, SAME REASON, SAME CODE - the file was renamed and the
+    // invitation surface landed above them. The scoping is deliberately KEPT: any profiles
+    // read added to this file on a line other than these two is still a real finding.
+    lines: [291, 297],
     why:
       "The team roster. Both flagged reads are .in(\"id\", userIds) against profiles where " +
       "userIds comes from org_members.user_id one statement earlier - real user ids, by " +

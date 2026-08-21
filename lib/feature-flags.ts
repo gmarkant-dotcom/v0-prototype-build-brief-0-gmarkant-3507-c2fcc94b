@@ -31,3 +31,52 @@
 export function broadcastCuesPartnership(): boolean {
   return process.env.BROADCAST_CUES_PARTNERSHIP === "true"
 }
+
+/**
+ * COLLEAGUE_INVITATIONS - is the colleague-invitation surface reachable?
+ *
+ * DEFAULT OFF, AND MERGING THIS CHANGES NOTHING UNTIL IT IS FLIPPED. With the variable
+ * absent - which is what Vercel has today, and no env file in this repository sets it -
+ * the team page renders exactly the read-only roster it rendered before, and
+ * /join/<token> returns a 404. The whole surface is inert.
+ *
+ * WHY IT IS OFF, AND IT IS NOT CAUTION FOR ITS OWN SAKE.
+ *
+ * accept_org_invitation() is the first thing in this product's history that can give an
+ * account a SECOND organization membership. `resolveActingOrgId()` (lib/acting-org.ts:205)
+ * fails closed with reason "ambiguous" the moment a caller belongs to more than one
+ * organization and nothing says which they are acting as - and the tie-breaker it looks
+ * for, `profiles.active_org_id`, DOES NOT EXIST AS A COLUMN. lib/acting-org.ts:169 guards
+ * a 42703 for precisely that reason.
+ *
+ * So a colleague who accepts an invitation today cannot write anywhere in the product:
+ * every write path resolves through that function or through
+ * resolveCallerWriteOrgId(), which delegates to it. Both realistic paths reach it - an
+ * invitee who already has an account has one membership from their own signup, and an
+ * invitee who does not gets one from handle_new_user() before they can accept.
+ *
+ * MIGRATION 090 FIXES IT: it adds profiles.active_org_id and the switcher that sets it.
+ * THIS FLAG STAYS OFF UNTIL 090 IS APPLIED. Turning it on before then hands the first
+ * colleague who accepts an account that can read everything and write nothing, with no
+ * error message that explains why.
+ *
+ * ORDER, STATED SO IT IS NOT INFERRED:
+ *   1. apply 089            - safe on its own, nothing calls it
+ *   2. push this branch     - safe with the flag off, the surface is unreachable
+ *   3. apply 090            - profiles.active_org_id and the switcher
+ *   4. THEN set COLLEAGUE_INVITATIONS=true in Vercel and redeploy
+ *
+ * WHAT THE FLAG DOES NOT GATE, AND WHY. The accept and decline API routes are NOT behind
+ * it. An invitation that was already sent while the flag was on must stay answerable if
+ * the flag is turned off again - the alternative is an invitee holding a live link that
+ * returns 503 with no way to decline it, and a pending row nobody can clear that then
+ * blocks that address through org_invitations_one_live_per_email. A flag should make a
+ * surface unreachable going forward, never strand something already in flight.
+ *
+ * To turn it on: set COLLEAGUE_INVITATIONS=true in Vercel (Production and Preview) and
+ * redeploy. To turn it off: unset it. No already accepted membership is undone by
+ * unsetting it - org_members rows are real and stay.
+ */
+export function colleagueInvitationsEnabled(): boolean {
+  return process.env.COLLEAGUE_INVITATIONS === "true"
+}

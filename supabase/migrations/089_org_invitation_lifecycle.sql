@@ -18,11 +18,11 @@
 -- no statement against any database and holds no credential that could.
 -- It is applied by Greg, by hand, in the Supabase SQL Editor.
 --
--- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 299
--- and an explicit COMMIT; on LINE 740. Those are the only EXECUTABLE
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 315
+-- and an explicit COMMIT; on LINE 777. Those are the only EXECUTABLE
 -- occurrences of either word.
 --
--- TO DRY RUN: change the COMMIT; on line 740 to ROLLBACK; and run the
+-- TO DRY RUN: change the COMMIT; on line 777 to ROLLBACK; and run the
 -- whole file. Every statement executes, every error surfaces, nothing
 -- persists. Verify the line numbers before trusting them, with:
 --
@@ -30,12 +30,12 @@
 --       supabase/migrations/089_org_invitation_lifecycle.sql
 --
 -- THAT GREP RETURNS FOUR HITS, AND FOUR IS CORRECT:
---     299  BEGIN;    <- executable. The transaction.
---     491  BEGIN     <- plpgsql, accept_org_invitation's body. No
+--     315  BEGIN;    <- executable. The transaction.
+--     507  BEGIN     <- plpgsql, accept_org_invitation's body. No
 --                       semicolon, matched by the case-insensitive form
 --                       only, not a transaction statement.
---     640  BEGIN     <- plpgsql, decline_org_invitation's body. Same.
---     740  COMMIT;   <- executable. The one to swap for ROLLBACK;.
+--     676  BEGIN     <- plpgsql, decline_org_invitation's body. Same.
+--     777  COMMIT;   <- executable. The one to swap for ROLLBACK;.
 -- Exactly one line ends in `BEGIN;` and exactly one in `COMMIT;`. If
 -- your grep shows a different set, this is not the file that was read.
 --
@@ -112,31 +112,47 @@
 -- service-role client anywhere in the accept or decline path.
 --
 -- =====================================================================
--- THE LAZY EXPIRY STAMP DOES NOT PERSIST FROM INSIDE THESE FUNCTIONS.
--- READ THIS BEFORE BELIEVING THE STATUS COLUMN.
+-- NEITHER FUNCTION STAMPS 'expired'. READ THIS BEFORE BELIEVING THE
+-- STATUS COLUMN.
 -- =====================================================================
 --
--- Both functions, on finding a lapsed invitation, UPDATE it to 'expired'
--- and then RAISE. THE RAISE ROLLS THE UPDATE BACK. PostgREST wraps every
--- RPC call in one transaction and an exception aborts it, so an accept
--- attempt against an expired invitation returns the right error and
--- leaves status = 'pending' on disk. There is no way to both raise and
--- persist inside one Postgres transaction, and no way to commit from
--- inside a function PostgREST is calling.
+-- A lapsed invitation is REFUSED by both functions, with LG004, and its
+-- status column is LEFT AT 'pending'. Nothing in either function body
+-- advances it, and that is a decision rather than an omission.
 --
--- The statement is written anyway, deliberately, because it is the
--- branch's correct behaviour and because the day refusals are ruled to
--- return data rather than raise, this file is already right. It is
--- flagged here rather than left to be discovered because a status column
--- that silently does not advance is exactly the class of quiet wrongness
--- this codebase keeps paying for.
+-- WHY THERE IS NO STAMP. An earlier draft wrote UPDATE ... SET status =
+-- 'expired' immediately before the RAISE in each function. It could
+-- never have persisted: PostgREST wraps every RPC call in ONE
+-- transaction and an exception aborts it, so both UPDATEs would have
+-- been rolled back with the RAISE every single time. There is no way to
+-- both raise and persist inside one Postgres transaction, and no way to
+-- commit from inside a function PostgREST is calling.
 --
--- THE DURABLE HALF OF EXPIRY IS IN THE CODE, NOT HERE. The create route
--- stamps any lapsed pending row for that (org, address) to 'expired'
--- BEFORE it inserts, through the new UPDATE policy. That is the only
--- place the stamp survives, and it is also the only place the stale row
--- is ever FELT - a lapsed pending row costs nobody anything until it
--- blocks a re-invite through the partial unique index.
+-- Both statements were DELETED rather than kept-and-annotated. A
+-- statement that reads as working and provably never runs to completion
+-- is worse than no statement: it is the same class as the 42P01 branch
+-- in lib/milestone-events.ts, which was dead for its entire working life
+-- while looking like a live guard, and which cost a real investigation
+-- to find. A comment saying "this does not persist" does not fix that -
+-- the next person greps for the UPDATE, finds it, and believes it.
+--
+-- THE RAISE STAYS. Making refusals return a status code instead would
+-- let a stamp persist, and that trade runs the wrong way: a raise fails
+-- LOUDLY at the caller, a returned code fails silently the first time a
+-- caller forgets to check it.
+--
+-- THE ONLY DURABLE EXPIRY WRITER IN THIS PRODUCT is the create route,
+-- app/api/org/invitations/route.ts. Before inserting, it stamps any
+-- lapsed pending row for that (org_id, lower(email)) to 'expired'
+-- through the UPDATE policy below. It commits because nothing raises
+-- after it. It is also the only moment a stale pending row is ever FELT:
+-- such a row costs nobody anything until it blocks a re-invite through
+-- org_invitations_one_live_per_email.
+--
+-- SO WHAT AN ADMIN SEES. A lapsed invitation reads 'pending' in the
+-- database until somebody re-invites that address. The team page does
+-- NOT repeat the omission: it reads expires_at and renders "Lapsed"
+-- rather than trusting the status column.
 --
 -- =====================================================================
 -- WHAT THE FUNCTIONS DELIBERATELY DO NOT DO
@@ -520,16 +536,36 @@ BEGIN
   -- Expiry BEFORE status, so a lapsed invitation says "expired" rather
   -- than the vaguer "no longer pending".
   --
-  -- THE UPDATE ON THE NEXT LINE DOES NOT PERSIST. The RAISE below aborts
-  -- the transaction PostgREST opened for this call and takes the UPDATE
-  -- with it. It is written because it is what this branch should do, and
-  -- because it is already correct if refusals are ever ruled to return
-  -- data instead of raising. The stamp that survives is the one the
-  -- create route makes before inserting a replacement. See the header.
+  -- THERE IS NO status = 'expired' STAMP HERE, AND THAT IS DELIBERATE.
+  --
+  -- An earlier draft of this file wrote one immediately before the RAISE.
+  -- It could never have persisted: PostgREST wraps every RPC call in one
+  -- transaction and an exception aborts it, so the UPDATE would have been
+  -- rolled back with the RAISE every single time. A statement that reads
+  -- as working and provably never runs to completion is worse than no
+  -- statement - it is the same class as the 42P01 branch in
+  -- lib/milestone-events.ts, which was dead for its entire working life
+  -- while looking like a live guard, and which cost a real investigation
+  -- to discover.
+  --
+  -- THE RAISE STAYS EXACTLY AS IT IS. Returning a status code instead
+  -- would let the stamp persist, and that trade is the wrong way round: a
+  -- raise fails LOUDLY, a returned code fails silently the moment one
+  -- caller forgets to check it.
+  --
+  -- THE ONLY DURABLE EXPIRY WRITER IN THIS PRODUCT is the create route's
+  -- pre-insert sweep, app/api/org/invitations/route.ts, which stamps any
+  -- lapsed pending row for that (org_id, lower(email)) before inserting a
+  -- replacement. It commits because nothing raises after it. It is also
+  -- the only moment a stale pending row is ever FELT: such a row costs
+  -- nobody anything until it blocks a re-invite through
+  -- org_invitations_one_live_per_email.
+  --
+  -- So status stays 'pending' on disk for a lapsed invitation until
+  -- somebody re-invites that address. The team page reads expires_at and
+  -- renders "Lapsed" rather than trusting the column, so the interface
+  -- does not repeat the omission.
   IF v_inv.expires_at <= now() THEN
-    UPDATE public.org_invitations
-       SET status = 'expired', updated_at = now()
-     WHERE id = v_inv.id;
     RAISE EXCEPTION 'That invitation has expired. Ask for a new one.'
       USING ERRCODE = 'LG004';
   END IF;
@@ -656,11 +692,12 @@ BEGIN
       USING ERRCODE = 'LG001';
   END IF;
 
-  -- Same non-persisting stamp as accept. See the header.
+  -- NO 'expired' STAMP HERE EITHER, for the reason set out at length in
+  -- accept_org_invitation() above: the RAISE aborts the transaction, so
+  -- any UPDATE written here would be rolled back every time and would be
+  -- dead code that reads as working. The durable writer is the create
+  -- route's pre-insert sweep and nothing else.
   IF v_inv.expires_at <= now() THEN
-    UPDATE public.org_invitations
-       SET status = 'expired', updated_at = now()
-     WHERE id = v_inv.id;
     RAISE EXCEPTION 'That invitation has expired.'
       USING ERRCODE = 'LG004';
   END IF;
