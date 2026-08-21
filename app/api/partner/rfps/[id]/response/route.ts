@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdsFromColumns } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdsFromColumns, orgIdFromColumn } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
@@ -11,6 +11,7 @@ import { isBiddingClosed, BIDDING_CLOSED_API_MESSAGE } from "@/lib/bid-close"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureDefaults } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
+import { recordMilestone } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
 
@@ -432,6 +433,94 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           responseId: saved.id,
           message: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
         })
+      }
+
+      /**
+       * Milestone: bid.submit, from the PORTAL. The first vendor-side write in the product
+       * that RLS actually applies to.
+       *
+       * This route runs on a SESSION client, so unlike the guest path it goes through a
+       * policy - "Vendors insert own company milestone events", authored in
+       * supabase/migrations/088_vendor_milestone_events.sql and shipped in this same commit,
+       * which is what 080:366-372 said would happen.
+       *
+       * IF 088 IS NOT APPLIED YET, THIS IS HARMLESS. Deny-by-default refuses the insert with
+       * 42501, lib/milestone-events.ts catches it, logs at ERROR and returns void. The bid is
+       * already saved by this point and nothing here can touch it. The cost of the window
+       * between deploy and apply is lost breadcrumbs, nothing else - see ORDERING AGAINST THE
+       * CODE in the migration.
+       *
+       * WHAT THE POLICY REQUIRES, AND WHY EACH FIELD IS WHAT IT IS:
+       *   - actor_side "vendor", actor_id = auth.uid(). The policy demands the caller's own
+       *     id and does NOT accept a null one; a null actor is the guest shape and this
+       *     caller is not a guest.
+       *   - NO actorEmail. The policy requires `actor_email IS NULL`, which is the writer's
+       *     own rule (resolveActorEmail) made structural. An authenticated actor has a
+       *     profile and never needs one stored.
+       *   - org_id is the AGENCY. It is the column the agency's SELECT policy reads, so it is
+       *     what puts this line on their dashboard. The acting company rides on vendor_org_id.
+       *   - partnership_id is REQUIRED by the policy, which pins org_id through it. Resolved
+       *     below, non-fatally: no partnership means no breadcrumb, never a failed bid.
+       *
+       * ONCE, ON THE TRANSITION. `nextVersion === 1` means no prior version row exists for
+       * this response, and version rows are written only inside this `status === "submitted"`
+       * branch - so this is the first submitted transition, and a revision records nothing.
+       * (bid.revise is in the emittable whitelist and is the obvious next one; not written
+       * here, matching the guest path.) The one way this could fire twice is if a previous
+       * version insert failed - which logs loudly above - and even then the feed absorbs it:
+       * both rows carry the dedupe key `bid:<response_id>` and mergeActivityEntries keeps one.
+       */
+      if (nextVersion === 1) {
+        try {
+          // The partnership, read independently rather than by widening either the acting
+          // query or the notification query above. Preferred from the inbox row, which is the
+          // authoritative link; falling back to the (lead, vendor) pair for inbox rows that
+          // predate the link. Both are scoped to the caller by RLS already.
+          const { data: inboxLink } = await supabase
+            .from("partner_rfp_inbox")
+            .select("partnership_id")
+            .eq("id", inboxId)
+            .maybeSingle()
+          let milestonePartnershipId = (inboxLink?.partnership_id as string | null) ?? null
+          if (!milestonePartnershipId) {
+            const { data: pair } = await supabase
+              .from("partnerships")
+              .select("id")
+              .eq("lead_org_id", inbox.lead_org_id)
+              .in("vendor_org_id", callerOrgIds)
+              .limit(1)
+              .maybeSingle()
+            milestonePartnershipId = (pair?.id as string | null) ?? null
+          }
+
+          await recordMilestone(supabase, {
+            eventType: "bid.submit",
+            actorSide: "vendor",
+            orgId: orgIdFromColumn(inbox.lead_org_id),
+            actorId: user.id,
+            // actorEmail deliberately absent. See the block above.
+            vendorOrgId: writeOrgId,
+            partnershipId: milestonePartnershipId,
+            // The response id, not the inbox id - lib/activity-feed.ts:498 keys the derived
+            // union for this type on the response, and source 2 on the agency dashboard keys
+            // on the same id.
+            subjectType: "bid",
+            subjectId: saved.id as string,
+            // inboxDetail?.scope_item_name, NOT scopeItemName: the latter has already fallen
+            // back to the literal "Scope item" for the email subject line, and a display
+            // placeholder must never be persisted where a null belongs.
+            payload: {
+              scope_item_name: (inboxDetail?.scope_item_name as string | null)?.trim?.() || null,
+            },
+          })
+        } catch (milestoneErr) {
+          // recordMilestone() never throws; this catches the two lookups above.
+          console.error("[api] bid submission: milestone context lookup failed (non-fatal)", {
+            route,
+            responseId: saved.id,
+            message: milestoneErr instanceof Error ? milestoneErr.message : String(milestoneErr),
+          })
+        }
       }
     }
 

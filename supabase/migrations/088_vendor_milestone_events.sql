@@ -1,0 +1,592 @@
+-- =====================================================================
+-- Migration 088: the vendor-side INSERT policy on milestone_events.
+--
+-- =====================================================================
+-- AUTHORED, NOT APPLIED. Greg runs this in the Supabase SQL Editor.
+-- =====================================================================
+--
+-- This file is AUTHORED, NOT APPLIED. Nothing in the session that wrote
+-- it executed a single statement against any database - there is no psql
+-- on PATH and every POSTGRES_* credential in this environment is an empty
+-- string. It is applied by Greg, by hand, in the Supabase SQL Editor.
+--
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN on LINE 374
+-- and an explicit COMMIT on LINE 463. They are the only executable
+-- occurrences of either word: every other appearance is inside a comment
+-- block.
+--
+-- TO DRY RUN: change the COMMIT; on line 463 to ROLLBACK; and run the
+-- whole file. Every statement executes, every error surfaces, and nothing
+-- persists. Migration 086 shipped with NO transaction control at all, so
+-- that same swap silently did nothing and what was believed to be a dry
+-- run applied for real with no rollback available. Verify before trusting:
+--   grep -n '^BEGIN;$'  -> exactly one hit, line 374
+--   grep -n '^COMMIT;$' -> exactly one hit, line 463
+--
+-- Sequence, in order, no step skipped:
+--
+--   1. Run the PRE-FLIGHT CAPTURE below. It has FOUR queries. P1 can stop
+--      this migration outright. Read all four before running anything.
+--   2. READ "ORDERING AGAINST THE CODE". The application code that uses
+--      this policy is in the SAME COMMIT as this file, which is what
+--      080's own header said would happen. There is an ordering
+--      constraint and it runs the opposite way to the usual one.
+--   3. Dry run: swap COMMIT for ROLLBACK, run, confirm no errors.
+--   4. Run this file for real. Expect "Success. No rows returned".
+--   5. Run the VERIFICATION block at the foot. Every query states its
+--      expected value. V5 and V6 are WRITES and are the only two that
+--      prove the policy rather than describe it. If any query disagrees,
+--      roll back with 088_vendor_milestone_events_down.sql.
+--   6. Only then, update the migrations table in LIGAMENT_CONTEXT.md.
+--
+-- =====================================================================
+-- WHAT THIS ADDS, AND WHAT 080 SAID ABOUT IT
+-- =====================================================================
+--
+-- 080 shipped milestone_events with exactly one INSERT policy
+-- (080_milestone_events.sql:373-381):
+--
+--     CREATE POLICY "Members insert own company milestone events"
+--       ON public.milestone_events FOR INSERT TO authenticated
+--       WITH CHECK (
+--         actor_side = 'agency'
+--         AND org_id IN (SELECT public.current_user_org_ids())
+--       );
+--
+-- and said this, at :366-372, about the one that was missing:
+--
+--     "There is deliberately no vendor-side INSERT policy yet. Nothing in
+--      the application emits a vendor-side event, and a policy that grants
+--      a write nobody makes is a policy nobody has reviewed against a real
+--      caller. The vendor-side INSERT policy ships with the first
+--      vendor-side emitter, in the same commit."
+--
+-- That condition is now met. The application half of this commit adds
+-- `bid.submit` to app/api/partner/rfps/[id]/response/route.ts, which is
+-- the authenticated portal bid submit and runs on a SESSION client. It is
+-- the first vendor-side write in the product that RLS actually applies to.
+--
+-- WHAT ALREADY SHIPPED WITHOUT A POLICY, AND WHY THAT WAS CORRECT
+-- ---------------------------------------------------------------------
+-- The GUEST bid path (app/api/rfp/guest/[token]/route.ts) already emits
+-- `bid.submit` with actor_side = 'vendor'. It needs nothing from this
+-- file: that route is service-role throughout and RLS is not enforced for
+-- the service key.
+--
+-- That is not a gap this migration closes, and it must not be "tidied up"
+-- into this policy later. A magic-link guest is NOT `authenticated` - they
+-- hold a bearer token, not a session, and auth.uid() is NULL for them. A
+-- policy TO authenticated can never apply to that caller. The only way to
+-- serve them by policy would be granting `anon` an INSERT, and `anon` is
+-- the key this project assumes is in an attacker's hands, so any WITH
+-- CHECK reachable by `anon` is forgeable by construction. The guest
+-- route's token check is a stronger constraint than RLS can express.
+--
+-- So after this file there are two vendor write paths with two different
+-- mechanisms, on purpose:
+--
+--   guest  -> service role, constrained by the magic-link token
+--   portal -> session client, constrained by the policy below
+--
+-- =====================================================================
+-- THE POLICY, AND EVERY CLAUSE IN IT
+-- =====================================================================
+--
+-- THE FIRST THING TO GET RIGHT: org_id DOES NOT CARRY THE MEMBERSHIP TEST
+-- ---------------------------------------------------------------------
+-- On a vendor-side row `org_id` names the AGENCY, not the acting company.
+-- It has to: `org_id` is the column the agency's own read policy uses
+-- ("Members read own company milestone events" USING org_id IN (SELECT
+-- public.current_user_org_ids())), and the entire point of a vendor-side
+-- event is that it appears on the AGENCY's feed. A vendor-side row whose
+-- org_id named the vendor would be invisible to the only party meant to
+-- see it.
+--
+-- So mirroring the agency policy is wrong. `org_id IN (SELECT
+-- public.current_user_org_ids())` on a vendor caller denies every
+-- legitimate write, because the agency is by definition not one of the
+-- vendor's organizations. The acting company is carried by
+-- `vendor_org_id`, and that is where the membership test goes.
+--
+-- IN (SELECT ...), NEVER = ANY. public.current_user_org_ids() RETURNS
+-- SETOF uuid. `x = ANY (public.current_user_org_ids())` raises 42809,
+-- "op ANY/ALL (array) requires array on right side". Every existing
+-- policy in this schema spells it IN (SELECT ...) for that reason and
+-- this one does too.
+--
+-- CLAUSE BY CLAUSE
+-- ---------------------------------------------------------------------
+--   actor_side = 'vendor'
+--       Keeps this policy and the agency one disjoint. A caller cannot
+--       use this policy to write an agency-side row, and the agency
+--       policy cannot be used to write a vendor-side one. Two policies,
+--       two non-overlapping grants, no third state.
+--
+--   actor_id = auth.uid()
+--       The vendor writes their own name and nobody else's.
+--
+--       THIS IS DELIBERATELY NOT `(actor_id IS NULL OR actor_id =
+--       auth.uid())`, which is what the agency policy's shape would
+--       suggest and what an earlier draft of this policy proposed. The
+--       agency side can afford the NULL disjunct because no agency
+--       emitter writes a null actor, so the branch is unreachable. On the
+--       vendor side a NULL actor is the GUEST shape - it renders through
+--       guestDisplayName() as "a guest at their-domain.com" - so
+--       permitting it here would let a logged-in vendor file their own
+--       act as an anonymous one. That is an attribution the row cannot
+--       substantiate, and it is exactly the hole the guest path does NOT
+--       have, because the guest path never passes through a policy.
+--
+--       Consequence, stated so it is not discovered: this policy does not
+--       serve the guest path. It is not meant to. See above.
+--
+--   actor_email IS NULL
+--       The writer-side rule made structural. lib/milestone-events.ts
+--       enforces "actor_email may be populated only when actor_id is
+--       null" in resolveActorEmail(). Since actor_id = auth.uid() is
+--       required above, actor_id is never null on this path, so
+--       actor_email must be null - and a rule that holds in one module is
+--       worth nothing against a caller that does not use that module.
+--       The database now refuses the row instead of trusting the client.
+--
+--   vendor_org_id IN (SELECT public.current_user_org_ids())
+--       The membership test. The acting company must be one of the
+--       caller's own.
+--
+--   event_type = ANY (public.vendor_emittable_event_types())
+--       See the function below. Without it a vendor could write
+--       `bid.award` or `payment.mark_paid` - agency acts - onto the
+--       agency's own feed, attributed to themselves. Both are on the
+--       vendor-VISIBLE whitelist, because a vendor may READ them; neither
+--       has any business being WRITTEN by one.
+--
+--       Note this one IS `= ANY (...)`, and correctly so:
+--       vendor_emittable_event_types() RETURNS text[], a real array,
+--       exactly like vendor_visible_event_types() which 080's counterparty
+--       SELECT policy already calls the same way. The IN (SELECT ...)
+--       rule above is about SETOF-returning functions, not about arrays.
+--
+--   partnership_id IS NOT NULL
+--   AND EXISTS (SELECT 1 FROM public.partnerships p
+--               WHERE p.id           = milestone_events.partnership_id
+--                 AND p.vendor_org_id = milestone_events.vendor_org_id
+--                 AND p.lead_org_id   = milestone_events.org_id)
+--       THIS IS THE CLAUSE THAT MATTERS MOST, and it is doing two jobs.
+--
+--       Job one: it stops a vendor naming a partnership they are not part
+--       of. `p.vendor_org_id = milestone_events.vendor_org_id`, combined
+--       with the membership test above, means the partnership's vendor
+--       side must be an organization the caller belongs to.
+--
+--       Job two, and this is the one that is easy to miss: it PINS
+--       `org_id`. Nothing else in this policy constrains org_id at all.
+--       Without this clause a vendor could write vendor_org_id = their
+--       own organization (passing every other test) and org_id = ANY
+--       organization id they can obtain - and org_id is precisely what
+--       the agency's SELECT policy reads. The result would be a line the
+--       vendor composed appearing on an arbitrary agency's dashboard,
+--       with a payload the vendor also composed: lib/activity-feed.ts
+--       renders payload.scope_item_name straight into the line text. That
+--       is feed injection, and this clause is the only thing preventing
+--       it. Do not simplify this EXISTS.
+--
+--       WHY THE JOIN CONDITIONS ARE SPELLED OUT RATHER THAN LEANING ON
+--       partnerships' OWN RLS. A subquery inside a policy expression runs
+--       as the invoking user, so "Partners can view their partnerships"
+--       (USING vendor_org_id IN (SELECT public.current_user_org_ids()))
+--       would already filter this EXISTS to the caller's own rows. That
+--       is true today and it is not what this policy relies on. A
+--       predicate whose correctness depends on another table's policy set
+--       widens silently the day somebody adds a broader SELECT policy to
+--       partnerships. Both join conditions are written explicitly so this
+--       policy is correct on its own terms.
+--
+--       Cost of requiring partnership_id: a portal bid whose inbox row has
+--       no partnership link records nothing. That is a LOUD failure - the
+--       insert is denied, lib/milestone-events.ts logs at ERROR, and the
+--       bid itself is unaffected because the emitter is fire-and-forget.
+--       PRE-FLIGHT P3 bounds how often it can happen on live data.
+--
+-- WHAT A VENDOR CAN DO AFTER THIS THAT THEY COULD NOT BEFORE
+-- ---------------------------------------------------------------------
+-- Exactly one thing: insert a row into public.milestone_events in which
+-- ALL of the following hold simultaneously -
+--
+--     actor_side      = 'vendor'
+--     actor_id        = their own auth.uid()
+--     actor_email     IS NULL
+--     vendor_org_id   = an organization they are a member of
+--     event_type      = one of the seven in vendor_emittable_event_types()
+--     partnership_id  = a partnership whose vendor side is that same
+--                       organization
+--     org_id          = that same partnership's lead_org_id, and nothing
+--                       else
+--
+-- and `payload`, `subject_type`, `subject_id` and `created_at` free.
+--
+-- CAN THEY NAME A PARTNERSHIP THEY ARE NOT PART OF? NO. The EXISTS
+-- requires a real partnerships row whose vendor_org_id equals the
+-- vendor_org_id on the event, and the membership test requires that to be
+-- one of the caller's own organizations. A partnership they are not the
+-- vendor on fails both the join and, separately, partnerships' own SELECT
+-- policy. A partnership id that does not exist fails the EXISTS. A
+-- partnership where they are the LEAD rather than the vendor fails the
+-- join too, which is correct - this policy is the vendor grant, and an
+-- agency writing about itself uses the agency policy.
+--
+-- CAN THEY REACH AN AGENCY THEY HAVE NO RELATIONSHIP WITH? NO, and this
+-- is the org_id pinning above. The only org_id they can write is the
+-- lead_org_id of a partnership they are already the vendor on.
+--
+-- WHAT IS STILL FREE, AND WHY THAT IS ACCEPTED RATHER THAN OVERLOOKED
+-- ---------------------------------------------------------------------
+--   * `payload` is unconstrained. A vendor can put anything in it,
+--     including a crafted `scope_item_name` that renders into their own
+--     feed line on that agency's dashboard. This is bounded to agencies
+--     they already have a partnership with, and the line is already
+--     attributed to them as the counterparty, so it is a vendor writing
+--     something odd about themselves to a partner who knows who they are.
+--     Constraining a jsonb column by policy is not expressive enough to
+--     help here; the answer if this ever matters is a length cap and
+--     server-side composition, not a WITH CHECK.
+--
+--   * `subject_id` is unconstrained. A vendor can point a row at a
+--     response id that is not theirs. The consequence is a mis-grouped
+--     feed line, not a disclosure - subject_id is not read as an
+--     authorisation key anywhere, only as a grouping and dedupe key
+--     (lib/activity-feed.ts milestoneDedupeKey). Worth knowing before
+--     anything starts joining on it.
+--
+--   * `created_at` has a DEFAULT but is not immutable on insert, so a
+--     vendor can backdate their own row. Same class: it changes feed
+--     ordering, nothing else. Noted here rather than in a later incident.
+--
+--   * There is still NO UPDATE and NO DELETE policy for anybody. A vendor
+--     cannot edit or remove a row once written, theirs included. 080's
+--     append-only rule is untouched by this file.
+--
+-- =====================================================================
+-- ORDERING AGAINST THE CODE. THIS ONE RUNS THE OPPOSITE WAY TO USUAL.
+-- =====================================================================
+--
+-- The usual rule in this project is: apply the migration, then deploy the
+-- code that depends on it. That rule exists because code deployed against
+-- a missing column or policy fails loudly for users.
+--
+-- HERE THE CODE IS SAFE TO DEPLOY FIRST, AND IT ALREADY IS. The portal
+-- emitter ships in the same commit as this file. If it runs before this
+-- migration is applied, the INSERT is denied by deny-by-default, and
+-- lib/milestone-events.ts catches it, logs at ERROR, and returns void.
+-- The bid submission itself is completely unaffected - the emitter runs
+-- after the response row is already written and is fire-and-forget by
+-- construction.
+--
+-- So the window between deploying and applying costs exactly one thing:
+-- portal bids submitted in that window record no milestone, and each one
+-- logs
+--
+--     [milestone] insert failed (the action itself succeeded)
+--
+-- with code 42501. Those breadcrumbs are lost, not recoverable, and not
+-- worth a backfill. Keep the window short; nothing worse happens in it.
+--
+-- THE REVERSE ORDERING - applying this before deploying the code - is
+-- also safe and is strictly better if you want a quiet log. It grants a
+-- write that nothing yet performs, for as long as the gap lasts. That is
+-- the state 080 declined to ship permanently, and it is fine as a
+-- transient.
+--
+-- =====================================================================
+-- PRE-FLIGHT CAPTURE. RUN THESE FOUR FIRST. READ ONLY.
+-- =====================================================================
+--
+-- P1. THE ONE THAT CAN STOP THIS MIGRATION. Confirm the INSERT policy set
+--     on milestone_events is exactly what this file believes: ONE policy,
+--     the agency one, and no vendor policy already present under any name.
+--
+--       SELECT policyname, cmd, roles, pg_get_expr(polwithcheck, polrelid) AS with_check
+--       FROM pg_policies pol
+--       JOIN pg_policy  p ON p.polname = pol.policyname
+--       JOIN pg_class   c ON c.oid = p.polrelid AND c.relname = pol.tablename
+--       WHERE pol.schemaname = 'public'
+--         AND pol.tablename  = 'milestone_events'
+--       ORDER BY pol.cmd, pol.policyname;
+--
+--     EXPECTED: exactly 3 rows - two SELECT ("Members read own company
+--     milestone events", "Counterparty reads whitelisted milestone
+--     events") and one INSERT ("Members insert own company milestone
+--     events"). If an INSERT policy already exists that this file does not
+--     know about, STOP: something applied a vendor grant out of band and
+--     it must be read before this file replaces the policy set.
+--
+-- P2. Confirm the helper this policy depends on is present and returns
+--     SETOF uuid, which is why it is called IN (SELECT ...).
+--
+--       SELECT p.proname,
+--              pg_get_function_result(p.oid) AS returns,
+--              p.prosecdef                   AS security_definer,
+--              p.proconfig                   AS config
+--       FROM pg_proc p
+--       JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname = 'public'
+--         AND p.proname IN ('current_user_org_ids', 'vendor_visible_event_types')
+--       ORDER BY p.proname;
+--
+--     EXPECTED: 2 rows. current_user_org_ids -> "SETOF uuid", security
+--     definer true, config includes search_path.
+--     vendor_visible_event_types -> "text[]", security definer false.
+--
+-- P3. Bounds the one cost named above: how many portal bids would record
+--     nothing because their inbox row has no partnership link.
+--
+--       SELECT count(*) AS portal_responses_with_no_partnership
+--       FROM public.partner_rfp_responses r
+--       JOIN public.partner_rfp_inbox i ON i.id = r.inbox_item_id
+--       WHERE r.inbox_item_id IS NOT NULL
+--         AND i.partnership_id IS NULL;
+--
+--     EXPECTED: 0 or small. This is not a gate - it does not stop the
+--     migration and it costs a breadcrumb, not a bid. If it is large,
+--     the application-side fallback (partnerships looked up by
+--     lead_org_id + vendor_org_id) is what will carry those rows, and it
+--     is worth reading that block in the route before applying.
+--
+-- P4. How many vendor-side rows exist already. These came from the guest
+--     path, which needs no policy, and this migration does not touch them.
+--
+--       SELECT actor_side,
+--              count(*)                          AS rows,
+--              count(*) FILTER (WHERE actor_id IS NULL) AS guest_rows
+--       FROM public.milestone_events
+--       GROUP BY actor_side
+--       ORDER BY actor_side;
+--
+--     EXPECTED: an 'agency' row, and a 'vendor' row whose count equals
+--     its guest_rows count exactly - every vendor row today is a guest
+--     row, because the portal emitter has never been able to write one.
+--     If vendor rows exist with a non-null actor_id, something already
+--     wrote through a path this file does not know about. STOP and read
+--     it.
+--
+-- =====================================================================
+
+
+BEGIN;
+
+
+-- ---------------------------------------------------------------------
+-- 1. The vendor-emittable whitelist.
+--
+-- A companion to vendor_visible_event_types(), and deliberately a
+-- SEPARATE list rather than a filter over it. Visible and emittable are
+-- different questions with different answers: a vendor may READ
+-- 'bid.award' and 'payment.mark_paid' - both are on the visible list,
+-- because they are facts about that vendor - and may never WRITE either,
+-- because they are things the agency did.
+--
+-- The seven below are transcribed without addition from the block
+-- 080_milestone_events.sql:189-196 already labels "Vendor side, where the
+-- lead agency is the counterparty". 080 made this distinction in a
+-- comment; this function makes it enforceable.
+--
+-- A FUNCTION and not a column, for the same reason 080 gives: a column
+-- can be set by whatever performs the INSERT; a function is a constant
+-- only a migration can change.
+--
+-- IMMUTABLE, and search_path pinned to pg_catalog, pg_temp - identical
+-- hardening to vendor_visible_event_types(), because a policy calls it.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.vendor_emittable_event_types()
+RETURNS text[]
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT ARRAY[
+    'bid.submit',
+    'bid.revise',
+    'rfp.view',
+    'invitation.accept',
+    'invitation.decline',
+    'nda.acknowledge',
+    'status_update.post'
+  ]::text[];
+$$;
+
+COMMENT ON FUNCTION public.vendor_emittable_event_types() IS
+  'Explicit whitelist of milestone_events.event_type values a VENDOR may write. '
+  'A strict subset of vendor_visible_event_types(): a vendor may read an agency act '
+  'and may never author one. Fails closed. Changing it is a migration, not an INSERT.';
+
+REVOKE EXECUTE ON FUNCTION public.vendor_emittable_event_types() FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.vendor_emittable_event_types() TO authenticated;
+
+
+-- ---------------------------------------------------------------------
+-- 2. The policy.
+--
+-- IF EXISTS on the DROP, unlike 079's deliberate bare DROPs: this policy
+-- has never existed, so the name not being there is the expected state
+-- rather than a signal that the file's picture of the database is wrong.
+-- P1 above is what checks the picture.
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "Vendors insert own company milestone events" ON public.milestone_events;
+
+CREATE POLICY "Vendors insert own company milestone events"
+  ON public.milestone_events AS PERMISSIVE
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    actor_side = 'vendor'
+    -- The vendor writes their own name. NOT `(actor_id IS NULL OR ...)`:
+    -- a null actor is the guest shape and the guest path does not come
+    -- through here. See the header.
+    AND actor_id = auth.uid()
+    -- lib/milestone-events.ts' actor_email rule, made structural.
+    AND actor_email IS NULL
+    -- The acting company. NOT org_id - on a vendor row that names the agency.
+    AND vendor_org_id IN (SELECT public.current_user_org_ids())
+    -- A vendor may author only vendor acts. text[], so = ANY is correct here.
+    AND event_type = ANY (public.vendor_emittable_event_types())
+    -- Pins BOTH the partnership and org_id. Do not simplify - see the header.
+    AND partnership_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.partnerships p
+      WHERE p.id            = milestone_events.partnership_id
+        AND p.vendor_org_id = milestone_events.vendor_org_id
+        AND p.lead_org_id   = milestone_events.org_id
+    )
+  );
+
+
+COMMIT;
+
+
+-- =====================================================================
+-- VERIFICATION. RUN AFTER APPLYING. READ ONLY EXCEPT V5 AND V6, WHICH
+-- ARE WRITES AND ARE THE ONLY TWO THAT PROVE THE POLICY.
+-- =====================================================================
+--
+-- V1. The function exists and is hardened like every other helper here.
+--
+--       SELECT p.proname,
+--              pg_get_function_result(p.oid) AS returns,
+--              p.provolatile                 AS volatility,
+--              p.proconfig                   AS config,
+--              array_length(public.vendor_emittable_event_types(), 1) AS type_count
+--       FROM pg_proc p
+--       JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname = 'public' AND p.proname = 'vendor_emittable_event_types';
+--
+--     EXPECTED: 1 row. returns "text[]", volatility 'i' (immutable),
+--     config {"search_path=pg_catalog, pg_temp"}, type_count 7.
+--
+-- V2. The emittable list is a strict SUBSET of the visible one. If this
+--     is not empty, a vendor can write an event type the counterparty
+--     read policy will then hide from the agency - a row nobody can see.
+--
+--       SELECT unnest(public.vendor_emittable_event_types())
+--       EXCEPT
+--       SELECT unnest(public.vendor_visible_event_types());
+--
+--     EXPECTED: 0 rows.
+--
+-- V3. Four policies on milestone_events now, and the agency INSERT policy
+--     is untouched.
+--
+--       SELECT policyname, cmd, roles
+--       FROM pg_policies
+--       WHERE schemaname = 'public' AND tablename = 'milestone_events'
+--       ORDER BY cmd, policyname;
+--
+--     EXPECTED: 4 rows - two SELECT, two INSERT, all {authenticated}.
+--     Still NO UPDATE and NO DELETE row, for anybody.
+--
+-- V4. The two INSERT policies are disjoint on actor_side, so no caller
+--     can satisfy both and no row has two justifications.
+--
+--       SELECT pol.policyname, pg_get_expr(p.polwithcheck, p.polrelid) AS with_check
+--       FROM pg_policy p
+--       JOIN pg_class  c   ON c.oid = p.polrelid
+--       JOIN pg_policies pol ON pol.policyname = p.polname AND pol.tablename = c.relname
+--       WHERE c.relname = 'milestone_events' AND p.polcmd = 'a'
+--       ORDER BY pol.policyname;
+--
+--     EXPECTED: 2 rows. One with_check containing actor_side = 'agency',
+--     the other actor_side = 'vendor'. Read both; they must not overlap.
+--
+-- V5. THE LEGITIMATE PATH WORKS. A WRITE. THIS IS THE ONE THAT CATCHES AN
+--     OVER-TIGHT POLICY, and an over-tight policy here is silent - the
+--     emitter swallows the denial and the feed is simply empty.
+--
+--     Run AS a vendor account that has at least one partnership, from
+--     the Supabase SQL Editor with that user's session, or from the
+--     vendor portal by submitting a real bid and then reading V7.
+--
+--       BEGIN;
+--       INSERT INTO public.milestone_events
+--         (org_id, vendor_org_id, partnership_id, actor_id, actor_email,
+--          actor_side, event_type, subject_type, subject_id, payload)
+--       SELECT p.lead_org_id, p.vendor_org_id, p.id, auth.uid(), NULL,
+--              'vendor', 'bid.submit', 'bid', gen_random_uuid(), '{}'::jsonb
+--       FROM public.partnerships p
+--       WHERE p.vendor_org_id IN (SELECT public.current_user_org_ids())
+--       LIMIT 1;
+--       -- EXPECTED: INSERT 0 1.
+--       ROLLBACK;
+--
+-- V6. THE INJECTION IS CLOSED. A WRITE, same session. Same row as V5 but
+--     with org_id pointed at an agency the caller has no partnership
+--     with. This is the attack the EXISTS exists for.
+--
+--       BEGIN;
+--       INSERT INTO public.milestone_events
+--         (org_id, vendor_org_id, partnership_id, actor_id, actor_email,
+--          actor_side, event_type, subject_type, subject_id, payload)
+--       SELECT (SELECT o.id FROM public.organizations o
+--                WHERE o.is_lead_agency
+--                  AND o.id <> p.lead_org_id
+--                LIMIT 1),
+--              p.vendor_org_id, p.id, auth.uid(), NULL,
+--              'vendor', 'bid.submit', 'bid', gen_random_uuid(), '{}'::jsonb
+--       FROM public.partnerships p
+--       WHERE p.vendor_org_id IN (SELECT public.current_user_org_ids())
+--       LIMIT 1;
+--       -- EXPECTED: ERROR 42501, new row violates row-level security policy.
+--       ROLLBACK;
+--
+--     If this INSERTS instead of erroring, the EXISTS was weakened. Roll
+--     back with the down file and do not deploy the portal emitter.
+--
+--     NOTE: if the caller's session cannot SELECT any other organization,
+--     the sub-select returns NULL, org_id is NULL, and the insert fails
+--     on the NOT NULL constraint instead - a pass for the wrong reason.
+--     Substitute a literal organization id read from a service-role
+--     session to make this test mean what it should.
+--
+-- V7. After a real portal bid submission, the row is there and is shaped
+--     the way the policy requires.
+--
+--       SELECT event_type, actor_side, actor_id IS NOT NULL AS has_actor,
+--              actor_email IS NULL AS email_is_null,
+--              partnership_id IS NOT NULL AS has_partnership,
+--              subject_type, created_at
+--       FROM public.milestone_events
+--       WHERE actor_side = 'vendor' AND actor_id IS NOT NULL
+--       ORDER BY created_at DESC
+--       LIMIT 5;
+--
+--     EXPECTED: event_type 'bid.submit', has_actor true, email_is_null
+--     true, has_partnership true, subject_type 'bid'.
+--
+-- V8. The agency sees it. Sign in as the lead agency on that partnership
+--     and open /agency/dashboard. Recent Activity shows a line reading
+--     "<vendor org name> submitted a bid on <scope>". The actor renders
+--     as a counterparty, never as a teammate and never as "system".
+--
+-- V9. The guest path is unaffected. Submit a magic-link bid as before and
+--     confirm a second vendor-side row appears with actor_id NULL and
+--     actor_email set - written by the service role, not by this policy,
+--     and still working.
+-- =====================================================================

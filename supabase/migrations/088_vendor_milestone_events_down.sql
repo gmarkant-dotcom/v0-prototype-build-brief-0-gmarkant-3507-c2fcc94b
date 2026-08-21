@@ -1,0 +1,132 @@
+-- =====================================================================
+-- Migration 088 DOWN. Reverses 088_vendor_milestone_events.sql.
+--
+-- After this file runs, NO vendor can write a milestone_events row
+-- through a session client, and the portal bid.submit emitter goes
+-- silent. Read WHAT YOU ARE TURNING OFF below before running it.
+--
+-- =====================================================================
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN on LINE 77
+-- and an explicit COMMIT on LINE 92. Those are the only executable
+-- occurrences.
+-- TO DRY RUN: change the COMMIT; on line 92 to ROLLBACK; and run the
+-- whole file. Verify before trusting:
+--   grep -n '^BEGIN;$'  -> exactly one hit, line 77
+--   grep -n '^COMMIT;$' -> exactly one hit, line 92
+--
+-- =====================================================================
+-- WHAT YOU ARE TURNING OFF
+-- =====================================================================
+--
+-- This is the safe direction. 088 GRANTED a write that did not exist
+-- before; removing it restores deny-by-default, which is where
+-- milestone_events sat for its whole life until 088. Nothing is exposed
+-- by running this file. The cost is entirely in lost breadcrumbs.
+--
+-- Concretely, after this runs:
+--
+--   * app/api/partner/rfps/[id]/response/route.ts still calls
+--     recordMilestone() on every first bid submission. That call now
+--     fails with 42501, lib/milestone-events.ts catches it, logs
+--     "[milestone] insert failed (the action itself succeeded)", and
+--     returns void. THE BID SUBMISSION IS UNAFFECTED. The emitter is
+--     fire-and-forget and runs after the response row is written.
+--
+--   * So you get a clean rollback with a noisy log, not an outage. If the
+--     log noise matters more than the rollback, revert the application
+--     commit too - but you do not have to, and you should not have to
+--     rush it.
+--
+--   * The GUEST bid path is COMPLETELY UNAFFECTED and keeps writing
+--     vendor-side rows. app/api/rfp/guest/[token]/route.ts is
+--     service-role and RLS is not enforced for the service key, so it
+--     never consulted this policy. Vendor-side rows will keep appearing
+--     with actor_id NULL. That is correct, not a leftover.
+--
+--   * Rows already written are KEPT. milestone_events is append-only with
+--     no DELETE policy for anybody, and this file does not add one. A
+--     breadcrumb that was true when it was written stays true.
+--
+-- =====================================================================
+-- PARTIAL ROLLBACK: the policy is refusing a legitimate write.
+-- =====================================================================
+--
+-- Symptom: portal bids submit fine but no milestone appears, and the
+-- function log shows 42501 on every one.
+--
+-- DO NOT run this whole file for that. It removes the grant entirely and
+-- guarantees the symptom. Diagnose first - the likely causes, in order:
+--
+--   1. The bid's inbox row has no partnership_id and the route's fallback
+--      lookup also found nothing, so partnership_id was NULL and the
+--      `partnership_id IS NOT NULL` clause refused it. Check with
+--      PRE-FLIGHT P3 in the up file.
+--   2. org_id does not equal that partnership's lead_org_id, so the
+--      EXISTS found no row. This means the inbox row and the partnership
+--      disagree about who the lead agency is, which is a data problem
+--      worth finding rather than a policy to loosen.
+--   3. actor_email was non-null. Only possible if something other than
+--      lib/milestone-events.ts performed the write.
+--
+-- Loosening the policy to make the symptom go away re-opens the feed
+-- injection the EXISTS was written to close. Fix the data.
+--
+-- =====================================================================
+
+
+BEGIN;
+
+
+-- 1. The policy. IF EXISTS so a partial application is still reversible.
+DROP POLICY IF EXISTS "Vendors insert own company milestone events" ON public.milestone_events;
+
+-- 2. The whitelist function.
+--
+--    DROP rather than leave it: an unreferenced whitelist function is a
+--    thing a later policy might call, believing it was reviewed against a
+--    real caller. It was not - this file is the statement that it never
+--    shipped. vendor_visible_event_types() is 080's and is NOT touched.
+DROP FUNCTION IF EXISTS public.vendor_emittable_event_types();
+
+
+COMMIT;
+
+
+-- =====================================================================
+-- VERIFICATION. RUN AFTER APPLYING. READ ONLY.
+-- =====================================================================
+--
+-- D1. Back to three policies, and the agency INSERT policy survives.
+--
+--       SELECT policyname, cmd, roles
+--       FROM pg_policies
+--       WHERE schemaname = 'public' AND tablename = 'milestone_events'
+--       ORDER BY cmd, policyname;
+--
+--     EXPECTED: 3 rows - two SELECT, one INSERT ("Members insert own
+--     company milestone events"). Still no UPDATE and no DELETE row.
+--
+-- D2. The function is gone and 080's is not.
+--
+--       SELECT p.proname
+--       FROM pg_proc p
+--       JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname = 'public'
+--         AND p.proname IN ('vendor_emittable_event_types',
+--                           'vendor_visible_event_types')
+--       ORDER BY p.proname;
+--
+--     EXPECTED: exactly 1 row, 'vendor_visible_event_types'.
+--
+-- D3. Existing rows are untouched, guest rows included.
+--
+--       SELECT actor_side, count(*) AS rows,
+--              count(*) FILTER (WHERE actor_id IS NULL) AS guest_rows
+--       FROM public.milestone_events
+--       GROUP BY actor_side
+--       ORDER BY actor_side;
+--
+--     EXPECTED: the same counts as before this file ran. Any vendor rows
+--     with a non-null actor_id are the ones the portal emitter wrote
+--     while 088 was applied, and they stay.
+-- =====================================================================

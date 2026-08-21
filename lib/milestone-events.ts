@@ -99,12 +99,22 @@ export type MilestoneEvent = {
    * Which side of the relationship acted. Defaults to "agency", which every emitter written
    * before the vendor side existed relied on and none of them pass.
    *
-   * A "vendor" row can only be written by a client RLS does not apply to. 080 ships exactly
-   * one INSERT policy - `actor_side = 'agency' AND org_id IN (current_user_org_ids())` - so a
-   * session client is refused twice over on a vendor row: the side is wrong, and `org_id` on
-   * a vendor-side row names the AGENCY, which is not one of the vendor's organizations.
-   * That is not a defect in the policy. On a vendor row the acting company is carried by
-   * `vendorOrgId`, and `orgId` stays the agency so the agency's own SELECT policy can find it.
+   * TWO WRITE PATHS REACH A "vendor" ROW, AND THEY ARE CONSTRAINED DIFFERENTLY.
+   *
+   * A service-role client (the magic-link guest path) is not subject to RLS at all; what
+   * constrains it is the token check the route already performed, which no policy could
+   * express. A session client (the authenticated portal) goes through migration 088's
+   * "Vendors insert own company milestone events", which requires `actor_side = 'vendor'`,
+   * `actor_id = auth.uid()`, `actor_email IS NULL`, a `vendorOrgId` the caller is a member
+   * of, an event type on `vendor_emittable_event_types()`, and a `partnershipId` whose row
+   * ties that vendor to the `orgId` being written.
+   *
+   * Note what `orgId` is NOT doing on a vendor row: carrying the membership test. It names
+   * the AGENCY, because it is the column the agency's own SELECT policy reads and the whole
+   * point of a vendor-side event is that it lands on the agency's feed. The acting company
+   * is carried by `vendorOrgId`. 080's agency-only INSERT policy therefore refuses a vendor
+   * row twice over - wrong side, and an `org_id` that is not one of the vendor's
+   * organizations - and that is correct rather than a gap.
    */
   actorSide?: "agency" | "vendor"
   subjectType: MilestoneSubjectType
@@ -169,9 +179,9 @@ function toRow(event: MilestoneEvent & { orgId: OrgId }): MilestoneRow {
     actor_id: event.actorId,
     actor_email: resolveActorEmail(event),
     // Defaults to the agency, because every emitter written before the vendor side existed
-    // omits it. A "vendor" row reaches the database only through a service-role client - see
-    // the field's doc on MilestoneEvent for why RLS refuses it on a session client, and why
-    // that refusal is correct rather than a gap to be widened.
+    // omits it. A "vendor" row reaches the database either through a service-role client
+    // (the guest path) or through migration 088's vendor INSERT policy (the portal path) -
+    // see the field's doc on MilestoneEvent for what each one constrains.
     actor_side: event.actorSide ?? "agency",
     event_type: event.eventType,
     subject_type: event.subjectType,
