@@ -1,0 +1,164 @@
+-- =====================================================================
+-- Migration 091 ROLLBACK: 091_profiles_column_guard_down.sql
+--
+--   DROP  trigger profiles_authority_columns_guard ON public.profiles
+--   DROP  public.profiles_guard_authority_columns()
+--
+-- THAT IS THE WHOLE FILE. Two statements.
+--
+-- ORDER MATTERS AND IT IS THE ORDER ABOVE: dropping the function while
+-- the trigger still points at it fails on the dependency, and a rollback
+-- that stops halfway is worse than one that does not start.
+--
+-- =====================================================================
+-- WHAT THIS DOES NOT HAVE TO DO, AND WHY THAT IS THE POINT
+-- =====================================================================
+--
+-- 091 ADDED A SECOND TRIGGER RATHER THAN EXTENDING 090's, so this file
+-- DOES NOT RESTORE ANYBODY ELSE'S FUNCTION BODY. It drops only what 091
+-- created.
+--
+-- Had 091 extended profiles_guard_active_org() instead, this file would
+-- have had to CREATE OR REPLACE that function with 090's body VERBATIM,
+-- and 090's own down file already records why that class of restore is
+-- dangerous (090_active_org_down.sql:113): "a rollback that omits a
+-- clause does not restore 089 - it invents a third version."
+--
+-- 090's profiles_active_org_guard AND its function are UNTOUCHED by 091
+-- and are UNTOUCHED by this file. After running this, that trigger is
+-- still there and still enforcing its own rule. V2 below asserts it.
+--
+-- =====================================================================
+-- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
+-- =====================================================================
+--
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 98
+-- and an explicit COMMIT; on LINE 108. Those are the only occurrences of
+-- either word, executable or otherwise - this file defines no plpgsql
+-- body, so there is no third hit the way there is in 091 and 090.
+--
+--     grep -n -i '^begin\|^commit\|^rollback' \
+--       supabase/migrations/091_profiles_column_guard_down.sql
+--     -- EXPECTED: exactly 2 hits.  98 BEGIN;   108 COMMIT;
+--
+-- TO DRY RUN: change the COMMIT; on line 108 to ROLLBACK;.
+--
+-- Do NOT verify with grep -n '^BEGIN;$'. That anchored form has produced
+-- false negatives in this repository.
+--
+-- "Success. No rows returned" IS THE IDENTICAL MESSAGE for this file dry
+-- run, this file applied, and this file pasted into the wrong project's
+-- tab. The VERIFICATION block at the foot is what distinguishes them.
+--
+-- =====================================================================
+-- WHAT ROLLING BACK COSTS
+-- =====================================================================
+--
+-- IT DESTROYS NO DATA. 091 created no column and wrote no row, so there
+-- is nothing to capture first and nothing to lose. This is the cheapest
+-- rollback in the migration set.
+--
+-- WHAT YOU GIVE UP, STATED PLAINLY: from the moment this commits,
+-- profiles.is_paid, is_admin, demo_access, email and linked_agency_id
+-- are AGAIN writable by any authenticated user against their own row,
+-- through a single PostgREST PATCH. "Users can update own profile" is
+-- table-wide, RLS has no column granularity, and no other mechanism in
+-- the database examines which columns moved. is_paid is the paid
+-- entitlement that ten server gates and the whole agency layout read;
+-- is_admin is the admin panel and a bypass in every entitlement
+-- function.
+--
+-- SO: ROLL BACK IF 091 IS BREAKING A LEGITIMATE WRITE, NOT AS TIDYING.
+-- If it is breaking one, the useful thing to capture before rolling back
+-- is WHICH writer and WHICH column, because that is the fact the header
+-- of 091 got wrong and the fix is one line in the authority set rather
+-- than the removal of the guard.
+--
+-- NO CODE CHANGE ACCOMPANIES THIS. 091 changed no route, no library and
+-- no policy, so there is nothing in git to revert alongside it. That is
+-- the same property that makes 091 independent of any deploy in either
+-- direction.
+--
+-- =====================================================================
+-- THE anon TRAP. READ THIS BEFORE RECREATING ANYTHING LATER.
+-- =====================================================================
+--
+-- THIS FILE DROPS public.profiles_guard_authority_columns(). A stock
+-- Supabase project grants anon EXECUTE on functions in public by DEFAULT
+-- PRIVILEGE, from both postgres and supabase_admin. CREATE OR REPLACE
+-- preserves a function's ACL; DROP THEN CREATE DOES NOT - the recreated
+-- function picks up that default and anon gets EXECUTE back.
+--
+-- IF THIS FUNCTION IS EVER RECREATED - by reapplying 091 or by any later
+-- file - THE THREE REVOKE STATEMENTS IN 091 SECTION 3 MUST COME WITH IT.
+-- This is the mistake 088 made.
+-- =====================================================================
+
+
+BEGIN;
+
+
+-- ---------------------------------------------------------------------
+-- Trigger first, then its function. See the ORDER note in the header.
+-- ---------------------------------------------------------------------
+DROP TRIGGER IF EXISTS profiles_authority_columns_guard ON public.profiles;
+
+DROP FUNCTION IF EXISTS public.profiles_guard_authority_columns();
+
+COMMIT;
+
+
+-- =====================================================================
+-- VERIFICATION. RUN AFTER ROLLING BACK. READ ONLY.
+-- =====================================================================
+--
+-- V1. 091 IS GONE.
+--
+--       SELECT p.proname FROM pg_proc p
+--       JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname = 'public'
+--         AND p.proname = 'profiles_guard_authority_columns';
+--       -- EXPECTED: 0 rows.
+--
+-- V2. 090 SURVIVED, AND SO DID THE WEBHOOK. THE CHECK THAT MATTERS:
+--     this file must not have taken the sibling guard with it.
+--
+--       SELECT t.tgname, t.tgenabled, p.proname
+--       FROM pg_trigger t
+--       JOIN pg_class c ON c.oid = t.tgrelid
+--       JOIN pg_proc  p ON p.oid = t.tgfoid
+--       WHERE c.relname = 'profiles' AND NOT t.tgisinternal
+--       ORDER BY t.tgname;
+--       -- EXPECTED: exactly 2 rows.
+--       --   notify-new-user
+--       --   profiles_active_org_guard   tgenabled = O,
+--       --                               proname = profiles_guard_active_org
+--       -- profiles_authority_columns_guard must NOT appear.
+--       -- profiles_active_org_guard MISSING means this file dropped
+--       -- 090's guard, which it has no statement to do - reapply 090
+--       -- section 2 immediately.
+--
+-- V3. THE POLICY IS STILL THE ONE NOBODY TOUCHED.
+--
+--       SELECT policyname, cmd, roles, qual, with_check FROM pg_policies
+--       WHERE schemaname='public' AND tablename='profiles' AND cmd='UPDATE';
+--       -- EXPECTED: exactly 1 row, "Users can update own profile",
+--       -- UPDATE, {public}, (auth.uid() = id), with_check NULL.
+--       -- Unchanged by 091 and unchanged by this file.
+--
+--       SELECT count(*) FROM pg_policies WHERE schemaname = 'public';
+--       -- EXPECTED: 117, unchanged. Neither file touches a policy.
+--
+-- V4. THE HOLE IS BACK, CONFIRMED RATHER THAN ASSUMED. A WRITE.
+--     RUN IT, THEN LET IT ROLL BACK.
+--
+--       BEGIN;
+--         UPDATE public.profiles
+--            SET is_paid = NOT is_paid
+--          WHERE id = (SELECT id FROM public.profiles LIMIT 1);
+--       ROLLBACK;
+--       -- EXPECTED: succeeds. It succeeded before 091 too - this runs as
+--       -- the SQL Editor with no auth.uid(), which 091 exempted anyway.
+--       -- To confirm the SESSION-CLIENT hole specifically is back, run
+--       -- T4 from docs/091-preapply-test.sql on its own: with 091 rolled
+--       -- back it will SUCCEED where it previously raised LG007.
