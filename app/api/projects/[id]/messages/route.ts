@@ -43,6 +43,11 @@ export async function GET(
     }
     console.log('[api] start', { route, method: 'GET', userId: user.id, role: profile?.role ?? null, acting })
 
+    // The vendor's own assignment on this project, captured by the gate below and used by
+    // the message query. Null while acting as an agency, which is correct: an agency reads the
+    // whole project's messages by design.
+    let vendorAssignmentId: string | null = null
+
     if (acting === 'agency') {
       const { data: project } = await supabase
         .from('projects')
@@ -74,6 +79,9 @@ export async function GET(
       if (!assignment) {
         return NextResponse.json({ error: 'Not assigned to this project' }, { status: 403 })
       }
+      // THE ASSIGNMENT THIS GATE PROVED IS NOW USED, NOT DISCARDED. See the message query
+      // below for why that matters.
+      vendorAssignmentId = (assignment.id as string | null) ?? null
       if (assignmentId) {
         const { data: scopedJoin } = await supabase
           .from('project_assignments')
@@ -104,6 +112,25 @@ export async function GET(
 
     if (assignmentId) {
       query = query.eq('assignment_id', assignmentId)
+    } else if (acting === 'partner' && vendorAssignmentId) {
+      // READ-SCOPE CLASS, AGENCY-ARM-INTO-VENDOR-BRANCH. `project_messages` carries both an
+      // agency SELECT ("Agencies can view messages for their projects", keyed on
+      // projects.org_id) and a vendor SELECT ("Partners can view messages for their
+      // assignments", keyed on project_assignments.id). Permissive policies OR together, so
+      // an unqualified `.eq('project_id', projectId)` returns the union of both arms.
+      //
+      // This handler branches on actingRole() correctly and the partner branch PROVED an
+      // assignment above - then threw the id away and filtered on the project instead. For an
+      // ordinary vendor that is invisible, because the vendor arm already requires
+      // `pa.id = project_messages.assignment_id` and the gate above is `.single()`, so the
+      // rows RLS returns are exactly the rows this filter now names: no set changes. For a
+      // caller who is BOTH the lead agency of the project and an assigned vendor on it, the
+      // agency arm ORs in and the vendor portal renders every message on the project,
+      // including other vendors' - which is a portal error, not an access one. They can still
+      // read all of it by switching to the agency portal, which is where it belongs.
+      //
+      // RLS RELIANCE IS KEPT. The policy still decides what may be seen; this decides where.
+      query = query.eq('assignment_id', vendorAssignmentId)
     }
 
     const { data: messages, error } = await query
