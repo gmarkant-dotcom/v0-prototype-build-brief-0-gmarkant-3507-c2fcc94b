@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { normalizeCompanyName } from "@/lib/company-identity"
+import { companyNameForSignup, normalizeCompanyName } from "@/lib/company-identity"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -133,6 +133,20 @@ function SignUpContent() {
       return
     }
 
+    // WHITESPACE DEFEATS HTML `required`. A single space in the company field satisfies the
+    // browser and then normalises to null, which is the exact input that sends
+    // handle_new_user() down its fallback chain to the email local part - the mechanism
+    // behind the live organization named "icloud". Checking the NORMALISED value is what
+    // makes the attribute mean what it looks like it means.
+    if (!normalizeCompanyName(companyName)) {
+      setError("Enter your company name")
+      return
+    }
+    if (!normalizeCompanyName(fullName)) {
+      setError("Enter your full name")
+      return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -170,7 +184,24 @@ function SignUpContent() {
           // which is why one live organization's mirror is one byte longer than its name.
           // Normalising at the source closes it for every future signup without touching
           // the trigger. The SQL asymmetry itself is reported rather than migrated.
-          company_name: normalizeCompanyName(companyName) ?? "",
+          // NEVER "". An empty company_name is what sends handle_new_user() (079 PHASE 12)
+          // down its chain to the EMAIL LOCAL PART, and that step is a live defect: there
+          // is an organization in production named "icloud" and three named "71", "63" and
+          // "64". companyNameForSignup() is the same chain with the email step removed and
+          // 'Untitled organization' kept as the last resort - a name that reads as unset,
+          // which its owner will rename, rather than one that reads as an answer, which
+          // nobody ever does.
+          //
+          // It also still TRIMS, through the same normalizeCompanyName() this line used
+          // before. That closes the Caro trailing-space drift: 079 writes organizations.name
+          // through NULLIF(btrim(...), '') and profiles.company_name as a bare COALESCE with
+          // no btrim, so an untrimmed value survived in exactly one of the two columns.
+          //
+          // IT IS NOT A BOUNDARY, and the report says so. This call is made client-side with
+          // the anon key, so a crafted request can send no metadata at all and land on the
+          // trigger's email branch regardless. Only the trigger closes that. This closes
+          // every account created through the product, which is where the live rows came from.
+          company_name: companyNameForSignup({ companyName, fullName }),
           company_linkedin_url: companyLinkedin,
           role: (hasRfpInviteContext || hasPartnershipInviteContext) ? 'partner' : role,
           terms_accepted_at: new Date().toISOString(),

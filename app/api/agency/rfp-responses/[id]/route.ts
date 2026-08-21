@@ -895,7 +895,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
               recipientName: partnerRecipient,
               body: `${agencyName} has reviewed your bid for ${scopeName || "this scope"} and left feedback for your consideration.\n\nLog in to your Ligament vendor portal to view the feedback and update your submission if needed.`,
               ctaText: "View Feedback",
-              ctaUrl: `${baseUrl}/partner/rfps/${existing.inbox_item_id}`,
+              /**
+               * /partner/rfps/null WAS THE COMMON SHAPE HERE, NOT AN EDGE CASE.
+               *
+               * `existing.inbox_item_id` is NULL on every guest / magic-link bid - eight
+               * response rows carry a null one - and interpolating it produced the literal
+               * string "/partner/rfps/null", a route that resolves to nothing. The block
+               * twenty lines above already knows this: it is why `guest` is resolved at all.
+               *
+               * WHERE A GUEST WITH NO INBOX ROW SHOULD ACTUALLY LAND IS A PRODUCT QUESTION
+               * AND IT IS NOT ANSWERED HERE. Sending them to the unparameterised list is the
+               * SAFE half, and it is not invented: the decline mail on this same route
+               * (:1053) and the award mail (:1187) both link exactly this way, so a guest
+               * following this link now gets what the other two already give them. It is
+               * reported rather than guessed - see docs/089-invitation-session-report.md.
+               */
+              ctaUrl: existing.inbox_item_id
+                ? `${baseUrl}/partner/rfps/${existing.inbox_item_id}`
+                : `${baseUrl}/partner/rfps`,
             }),
           })
         } catch (emailErr) {

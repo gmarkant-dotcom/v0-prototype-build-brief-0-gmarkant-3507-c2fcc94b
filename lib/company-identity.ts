@@ -132,6 +132,124 @@ export function normalizeCompanyName(value: unknown): string | null {
 }
 
 /**
+ * =====================================================================
+ * THE SIGNUP DERIVATION, AND THE LIVE DEFECT IT CLOSES
+ * =====================================================================
+ *
+ * WHAT IS WRONG TODAY. handle_new_user() (migration 079 PHASE 12) fills organizations.name
+ * from a fallback chain: company_name, then full_name, then THE EMAIL LOCAL PART, then
+ * 'Untitled organization'. That third step is a live first-impression defect - there is an
+ * organization in production literally named "icloud", and three more named "71", "63" and
+ * "64" from plus-addressed accounts. A person's mail provider is not their company, and it
+ * is the name every counterparty reads, because organizations.name is what all thirteen
+ * embeds in lib/org-contact.ts resolve.
+ *
+ * THE TRIGGER IS NOT FIXED HERE AND MUST NOT BE. It is a SECURITY DEFINER function this
+ * repository cannot reproduce, and a migration rewriting it would be guessing at a body
+ * nobody in this session can read. The fix is at the writer: keep the metadata this form
+ * sends from ever being empty, and the trigger never reaches its email branch.
+ *
+ * WHAT THIS DOES NOT CLOSE, STATED PLAINLY RATHER THAN IMPLIED. `supabase.auth.signUp` is
+ * called client-side with the anon key, so the form is not a boundary - a crafted request
+ * can send no metadata at all and land straight on the trigger's email branch. Only the
+ * trigger can close that. What this DOES close is every account created through the product,
+ * which is where the live examples came from.
+ *
+ * WHY IT LIVES IN THIS MODULE. There is exactly one company-name normaliser in this
+ * codebase and it is normalizeCompanyName() above. A second one written beside the form
+ * would drift from it the first time either was edited, and the drift would be invisible:
+ * two functions that agree today, one of them trimming and one of them not, is precisely
+ * the shape of the 079 PHASE 12 asymmetry that produced the Caro trailing-space row.
+ */
+
+/**
+ * Mail providers whose name is never a company name.
+ *
+ * DELIBERATELY NOT EXHAUSTIVE, AND DELIBERATELY MISSING SOME OBVIOUS ONES. Every entry here
+ * is a token that is not plausibly a real company somebody would type. `proton`, `mail`,
+ * `me`, `hey`, `fastmail`, `zoho` and `pm` are ALL free mail providers and are ALL absent,
+ * because each is a name a real business could carry and a false positive here silently
+ * replaces a customer's own company name with something else. The cost of missing a
+ * provider is one badly named organization the owner can rename; the cost of catching a
+ * real company is renaming it for them without asking.
+ */
+const FREE_MAIL_PROVIDER_TOKENS = new Set([
+  "gmail",
+  "googlemail",
+  "icloud",
+  "hotmail",
+  "outlook",
+  "yahoo",
+  "ymail",
+  "rocketmail",
+  "aol",
+  "msn",
+  "gmx",
+  "yandex",
+  "comcast",
+  "sbcglobal",
+  "btinternet",
+  "verizon",
+])
+
+/**
+ * Is this string just a mail provider's name?
+ *
+ * Exact single-token match after normalising. "Gmail" is true; "Gmail Marketing Ltd" is
+ * false, because that is a company whose name happens to contain a provider.
+ */
+export function isFreeEmailProviderName(value: unknown): boolean {
+  const normalized = normalizeCompanyName(value)
+  if (!normalized) return false
+  return FREE_MAIL_PROVIDER_TOKENS.has(normalized.toLowerCase())
+}
+
+/** Does this look like somebody typed their email address into a name field? */
+export function looksLikeEmailAddress(value: unknown): boolean {
+  const normalized = normalizeCompanyName(value)
+  if (!normalized) return false
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+}
+
+/**
+ * The last resort, and it is the trigger's own. handle_new_user() ends its chain with this
+ * exact string, so sending it produces the same organizations.name the database would have
+ * chosen - the difference being that this way profiles.company_name carries the SAME value
+ * instead of an empty string, and the two columns agree from the first row.
+ */
+export const UNNAMED_ORGANIZATION = "Untitled organization"
+
+/**
+ * What to put in `raw_user_meta_data.company_name` at signup.
+ *
+ * NEVER RETURNS AN EMPTY STRING, and that is the entire point: an empty company_name is
+ * what sends handle_new_user() down its fallback chain to the email local part. A non-empty
+ * value stops it at the first step.
+ *
+ * The chain here is the trigger's own chain with the email step REMOVED and the last resort
+ * kept:
+ *
+ *   1. the typed company name, unless it is bare provider name
+ *   2. the typed full name, unless it is a provider name or an email address - both of
+ *      which mean the person put something in the wrong field, not that their company is
+ *      called that
+ *   3. 'Untitled organization'
+ *
+ * Step 3 is honest and it is recoverable: an organization named "Untitled organization"
+ * reads as unset and its owner can rename it through saveCompanyIdentity(). An organization
+ * named "icloud" reads as a real answer and nobody ever thinks to change it.
+ */
+export function companyNameForSignup(input: { companyName: unknown; fullName: unknown }): string {
+  const typed = normalizeCompanyName(input.companyName)
+  if (typed && !isFreeEmailProviderName(typed)) return typed
+
+  const person = normalizeCompanyName(input.fullName)
+  if (person && !isFreeEmailProviderName(person) && !looksLikeEmailAddress(person)) return person
+
+  return UNNAMED_ORGANIZATION
+}
+
+/**
  * Resolve, write the authority, write the mirror. The only supported way to change a
  * company name.
  *
