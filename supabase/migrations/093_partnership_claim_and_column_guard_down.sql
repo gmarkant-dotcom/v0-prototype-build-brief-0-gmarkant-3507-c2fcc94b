@@ -20,13 +20,21 @@
 --      unclaimed ghost partnership at that domain. This is OPEN-092-8,
 --      restored.
 --
---   2. LETS THE VENDOR WRITE EVERY COLUMN AGAIN. nda_confirmed_at,
---      msa_confirmed_at, partnership_notes (including the {blacklisted}
---      flag), reliability_summary, partner_email and the four 068 contact
---      columns all become vendor-writable. A vendor can self-confirm
---      their own NDA and MSA, un-blacklist themselves, and rewrite the
---      cached AI narrative about their own delivery performance that the
---      lead agency reads. This is OPEN-092-9, restored.
+--   2. LETS THE VENDOR WRITE EVERY GUARDED COLUMN AGAIN. Thirteen of the
+--      live twenty-four: id, invitation_message, invited_at, created_at,
+--      partner_email, nda_confirmed_at, nda_confirmed_by,
+--      partnership_notes, msa_confirmed_at, msa_confirmed_by,
+--      invitation_sent_at, reliability_summary and
+--      reliability_summary_generated_at. A vendor can self-confirm their
+--      own NDA and MSA, un-blacklist themselves, rewrite the cached AI
+--      narrative about their own delivery performance that the lead agency
+--      reads, and rewrite the pre-claim identifier the claim policy keys
+--      on. This is OPEN-092-9, restored.
+--
+--      NOT contact_name, company_name, phone or website. 093 leaves those
+--      four PERMITTED by ruling - see OPEN-093-1 in 093's header - so they
+--      are vendor-writable before this file runs and after it. Running
+--      this changes nothing about them.
 --
 -- 087 IS NOT UNDONE. lead_org_id stays immutable and vendor_org_id stays
 -- pinned in both directions: those four refusals are reproduced below
@@ -43,13 +51,13 @@
 -- has drifted - which is the correct outcome and the same reasoning 093
 -- gives for using ALTER over DROP-then-CREATE.
 --
--- TRANSACTION CONTROL. Explicit BEGIN; on LINE 56 and explicit COMMIT;
--- on LINE 151. Verify with:
+-- TRANSACTION CONTROL. Explicit BEGIN; on LINE 64 and explicit COMMIT;
+-- on LINE 161. Verify with:
 --
 --     grep -n -i '^begin\|^commit\|^rollback' \
 --       supabase/migrations/093_partnership_claim_and_column_guard_down.sql
 --
--- Three hits: 56 BEGIN;, 87 BEGIN (plpgsql, no semicolon), 151 COMMIT;.
+-- Three hits: 64 BEGIN;, 95 BEGIN (plpgsql, no semicolon), 161 COMMIT;.
 -- =====================================================================
 
 
@@ -146,7 +154,9 @@ COMMENT ON FUNCTION public.partnerships_guard_identity_columns() IS
   'an RLS update that matches no row returns HTTP 200 with no error and this project has '
   'lost real behaviour to exactly that five times. 093''s vendor-side column permit list '
   'has been REMOVED from this function by 093''s down file: every column on this table '
-  'except lead_org_id and vendor_org_id is vendor-writable again.';
+  'except lead_org_id and vendor_org_id is vendor-writable again, including '
+  'nda_confirmed_at, msa_confirmed_at, partnership_notes, reliability_summary and '
+  'partner_email.';
 
 COMMIT;
 

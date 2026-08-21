@@ -12,16 +12,36 @@
 -- >>> OPPOSITE OF WHAT 092'S HEADER COULD SAY ABOUT ITSELF. 092's permit
 -- >>> list guarded ONE COLUMN THAT DID NOT EXIST until line 1 of its own
 -- >>> transaction, so no write that worked that morning could move it.
--- >>> 093'S PERMIT LIST GUARDS TWENTY-SIX COLUMNS THAT ALL EXIST TODAY,
--- >>> five of which are written by live vendor sessions every day.
+-- >>> 093 GUARDS FIFTEEN OF THE TWENTY-FOUR LIVE COLUMNS AND ALL
+-- >>> TWENTY-FOUR EXIST TODAY, five of them written by live vendor
+-- >>> sessions every day.
 -- >>>
 -- >>> A DENY LIST CAN ONLY BE TOO SMALL IN ONE DIRECTION - it can miss a
 -- >>> column that ought to be guarded, which is a hole you can close
 -- >>> later. A PERMIT LIST CAN BE TOO SMALL IN THE OTHER DIRECTION TOO: a
 -- >>> column a vendor session legitimately writes, left off the list, is
 -- >>> A WRITE THAT STARTS RAISING LG009 THE MOMENT THE MIGRATION IS
--- >>> APPLIED. T1 to T5 exist for exactly that, and a FAIL in that block
--- >>> is more urgent than a FAIL anywhere else in this file.
+-- >>> APPLIED. T1 to T5 and T17 exist for exactly that, and a FAIL in
+-- >>> those is more urgent than a FAIL anywhere else in this file.
+--
+-- WHAT THE 19 ASSERTIONS COVER, and why there are 19 rather than 15:
+--
+--   T1-T5    the permitted writes. FAIL = 093 breaks a live vendor action.
+--   T6-T10   the refusals that make the migration worth doing.
+--   T11      087 still speaks first, with its own 42501.
+--   T12      the agency side is unaffected. EXIT 3.
+--   T13-T14  HOLE 1: the predicate, and the wildcard closed behaviourally.
+--   T15      HOLE 1 the other way: a legitimate claim is still admitted.
+--   T16      the negative control - an already-claimed row is not claimable.
+--   T17      the four ghost-contact columns are PERMITTED, by ruling.
+--   T18      the MSA half of the self-confirm pair.
+--   T19      the remaining seven guarded columns, one statement each.
+--
+-- T16 to T19 were added after the first run. T15 and T16 exist as a pair
+-- because the first version of T15 borrowed an ALREADY-CLAIMED subject:
+-- a claim needs vendor_org_id IS NULL, so zero rows matched, and CORRECT
+-- BEHAVIOUR WAS REPORTED AS A MIGRATION FAILURE. T15 now selects its own
+-- claimable subject and T16 tests the already-claimed case ON PURPOSE.
 --
 -- =====================================================================
 -- HOW TO RUN IT
@@ -64,18 +84,18 @@
 --
 --     ERROR:  P0001
 --     =====================================================
---     SAFE TO APPLY 093.  All 15 assertions passed.
+--     SAFE TO APPLY 093.  All 19 assertions passed.
 --     =====================================================
---     assertions run  : 15   (expected 15)
---     PASS            : 15   (expected 15)
+--     assertions run  : 19   (expected 19)
+--     PASS            : 19   (expected 19)
 --     FAIL            : 0    (expected 0)
 --     INCONCLUSIVE    : 0    (expected 0)
---     verdicts logged : 15   (must equal assertions run: OK)
+--     verdicts logged : 19   (must equal assertions run: OK)
 --
 --     VERDICT         : SAFE TO APPLY 093.
 --     -----------------------------------------------------
 --       T1  vendor accepts invitation     PASS      (1 row written)
---       ... fourteen more ...
+--       ... eighteen more ...
 --     =====================================================
 --     This error IS the result. The transaction is rolled back with it.
 --
@@ -105,9 +125,10 @@
 -- whether 093 has been applied or not.
 --
 -- >>> IT WRITES TO REAL ROWS. SAID PLAINLY BECAUSE IT IS TRUE. This test
--- >>> mutates a live partnership (status, notes, timestamps) and a live
--- >>> profiles.email, because the guard can only be exercised against a
--- >>> row it is protecting. Every one of those writes is inside the
+-- >>> mutates a live partnership (status, notes, contact details,
+-- >>> timestamps), a live profiles.email (T14 only), and CLAIMS A REAL
+-- >>> UNCLAIMED PARTNERSHIP (T15), because the guard and the claim policy
+-- >>> can only be exercised against rows they govern. Every one of those writes is inside the
 -- >>> transaction and every one is undone by the abort. If the batch is
 -- >>> run in PIECES rather than as one paste, the transaction may commit
 -- >>> and those writes become real. RUN IT AS ONE PASTE.
@@ -157,16 +178,32 @@
 -- true);` and every `RESET ROLE;` with `PERFORM set_config('role',
 -- 'none', true);`. They are equivalent - `role` is an ordinary GUC.
 --
--- THE SUBJECT. A partnership that has a linked vendor organization, a
--- real member of that vendor organization, and whose lead organization
--- that member does NOT belong to. That last condition is what keeps the
--- subject on the vendor side of EXIT 3; without it every refusal
--- assertion would pass for the wrong reason.
+-- THE SUBJECTS. THREE, NOT ONE, AND THEY ARE NOT INTERCHANGEABLE.
+--
+--   1. T1-T14, T16-T19: a partnership that HAS a linked vendor
+--      organization, a real member of that organization, and whose lead
+--      organization that member does NOT belong to. The last condition
+--      keeps the subject on the vendor side of EXIT 3; without it every
+--      refusal assertion would pass for the wrong reason.
+--
+--   2. T15: a CLAIMABLE partnership - vendor_org_id IS NULL - together
+--      with the real profile whose lower(btrim(email)) equals the row's
+--      lower(btrim(partner_email)), and that profile's organization. A
+--      claim cannot be tested against a claimed row, which is the bug this
+--      revision fixes.
+--
+--   3. T16: an ALREADY-CLAIMED partnership belonging to a THIRD
+--      organization, so neither the claim policy nor the vendor status
+--      policy can admit it and zero rows is the only correct answer.
+--
+-- Each is selected independently at the top of the DO block and each
+-- reports INCONCLUSIVE, never PASS, when it cannot be found. An assertion
+-- with no subject has proved nothing.
 --
 -- =====================================================================
 -- TWO NUMBERS MOVE TOGETHER when you add or move an assertion, and both
--- are in this file: the `expected 15` literals in the report, and the
--- `v_ran = 15 AND v_pass = 15` condition in the verdict. The self-check
+-- are in this file: the `expected 19` literals in the report, and the
+-- `v_ran = 19 AND v_pass = 19` condition in the verdict. The self-check
 -- at the foot compares v_ran against v_logged - two counters incremented
 -- in different places - so it catches an assertion that ran without
 -- reporting, which no eyeball review reliably does.
@@ -209,7 +246,11 @@ DECLARE
     'accepted_at',
     'updated_at',
     'payment_terms_requests',
-    'vendor_org_id'
+    'vendor_org_id',
+    'contact_name',
+    'company_name',
+    'phone',
+    'website'
   ];
   v_permitted text[];
   v_old_rest  jsonb;
@@ -274,7 +315,7 @@ BEGIN
   RAISE EXCEPTION 'That is not a field you can change on this partnership.'
     USING ERRCODE = 'LG009',
           DETAIL  = format(
-            'partnerships.%s may not be written by the vendor on the partnership. Migration 093 guards every column on this table except %s, which are the only ones a vendor session legitimately writes, plus profile_status on the claim transition. The lead agency, the service role, a database function and a migration may all write the rest.',
+            'partnerships.%s may not be written by the vendor on the partnership. Migration 093 guards every column on this table except %s, plus profile_status on the claim transition. The lead agency, the service role, a database function and a migration may all write the rest.',
             array_to_string(v_moved, ', partnerships.'),
             array_to_string(v_permitted, ', ')
           );
@@ -296,6 +337,10 @@ DECLARE
   v_agency_uid   uuid;
   v_ghost        uuid;
   v_ghost_email  text;
+  v_ghost_uid    uuid;
+  v_ghost_org    uuid;
+  v_ghost_claims text;
+  v_claimed_other uuid;
   v_claims       text;
   v_agency_claims text;
   v_rows         integer;
@@ -343,15 +388,75 @@ BEGIN
   ORDER BY m.user_id
   LIMIT 1;
 
-  -- A live ghost row, for T15. Not created here: inserting one would have
+  -- ===================================================================
+  -- T15'S OWN SUBJECT. A CLAIMABLE ROW, SELECTED BY THE CONDITIONS A CLAIM
+  -- ACTUALLY REQUIRES.
+  --
+  -- >>> THE PREVIOUS VERSION OF THIS TEST REUSED THE T1-T12 SUBJECT, WHICH
+  -- >>> HAS A vendor_org_id. A claim requires `vendor_org_id IS NULL`, so
+  -- >>> the policy admitted nothing, zero rows matched, and CORRECT
+  -- >>> BEHAVIOUR WAS REPORTED AS A FAILURE OF THE MIGRATION. The subject
+  -- >>> was wrong, not the predicate.
+  --
+  -- Four conditions, each of them load-bearing:
+  --
+  --   1. `vendor_org_id IS NULL` - the claim policy's own first term. A row
+  --      that is already claimed cannot be claimed, which is the point of
+  --      T16 and the reason it is a separate assertion.
+  --   2. A profile whose `lower(btrim(email))` EQUALS `lower(btrim(
+  --      partner_email))` - the new predicate, spelled the same way. Note
+  --      this selects on the FIXED comparison: if the subject exists, the
+  --      claim must succeed, and if it does not, T15 says INCONCLUSIVE
+  --      rather than passing.
+  --   3. That profile must be in an organization, because the claim WRITES
+  --      `vendor_org_id` and both the policy's WITH CHECK and 087's
+  --      org_has_member_with_email() test it.
+  --   4. That profile must NOT be a member of the row's lead organization.
+  --      Without this the write would leave at EXIT 3 - as the lead agency -
+  --      and T15 would pass while proving nothing about the vendor-side
+  --      permit list or the claim-transition widening.
+  --
+  -- AND `pr.id <> v_uid`, which is about T14 rather than about claims: T14
+  -- sets the T1-T12 subject's profiles.email to '%'. If T15 impersonated
+  -- that same user, its subject would stop matching by the time it ran, and
+  -- the failure would look like a defect in 093.
+  --
+  -- Nothing is INSERTED to manufacture this. A row created here would have
   -- to dodge 084's UNIQUE (lead_org_id, lower(partner_email)) index, and a
-  -- test that manufactures its own subject proves less than one that uses
-  -- a real row.
-  SELECT p.id, p.partner_email INTO v_ghost, v_ghost_email
+  -- test that builds its own subject proves less than one that uses a real
+  -- row. Live count on 2026-08-21: 27 partnerships with vendor_org_id IS
+  -- NULL, at least four addressed to a real profile.
+  SELECT p.id, p.partner_email, pr.id, m.org_id
+    INTO v_ghost, v_ghost_email, v_ghost_uid, v_ghost_org
   FROM public.partnerships p
+  JOIN public.profiles pr
+    ON pr.email IS NOT NULL
+   AND lower(btrim(pr.email)) = lower(btrim(p.partner_email))
+  JOIN public.org_members m
+    ON m.user_id = pr.id
   WHERE p.vendor_org_id IS NULL
     AND p.partner_email IS NOT NULL
     AND btrim(p.partner_email) <> ''
+    AND pr.id <> v_uid
+    AND NOT EXISTS (
+      SELECT 1 FROM public.org_members m2
+      WHERE m2.user_id = pr.id AND m2.org_id = p.lead_org_id
+    )
+  ORDER BY p.id
+  LIMIT 1;
+
+  IF v_ghost_uid IS NOT NULL THEN
+    v_ghost_claims := json_build_object('sub', v_ghost_uid::text, 'role', 'authenticated')::text;
+  END IF;
+
+  -- T16'S SUBJECT. An ALREADY-CLAIMED partnership belonging to somebody
+  -- else, so that neither the claim policy (needs NULL) nor the vendor
+  -- status policy (needs the caller's own org) can admit it. Zero rows is
+  -- the correct answer and T16 asserts exactly that.
+  SELECT p.id INTO v_claimed_other
+  FROM public.partnerships p
+  WHERE p.vendor_org_id IS NOT NULL
+    AND p.vendor_org_id <> v_org
   ORDER BY p.id
   LIMIT 1;
 
@@ -365,7 +470,7 @@ BEGIN
 
   RAISE NOTICE '=====================================================';
   RAISE NOTICE '093 PRE-APPLY TEST';
-  RAISE NOTICE 'vendor permit list : status, accepted_at, updated_at, payment_terms_requests, vendor_org_id';
+  RAISE NOTICE 'vendor permit list : status, accepted_at, updated_at, payment_terms_requests, vendor_org_id, contact_name, company_name, phone, website';
   RAISE NOTICE 'subject user id    : %', v_uid;
   RAISE NOTICE 'subject vendor org : %', v_org;
   RAISE NOTICE 'subject lead org   : %', v_lead;
@@ -512,21 +617,38 @@ BEGIN
     PERFORM set_config('request.jwt.claims',    v_claims,    true);
     PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
     SET LOCAL ROLE authenticated;
+    -- ALL TWENTY-FOUR LIVE COLUMNS, self-assigned except `status`. This is
+    -- the literal shape of a read-modify-write PATCH and it is the strongest
+    -- form of this assertion.
+    --
+    -- IT USED TO NAME pool_status AND THAT COLUMN DOES NOT EXIST ON THIS
+    -- TABLE. The assertion died with 42703 undefined_column and was reported
+    -- as a FAIL of the migration, which it was not. Migration 061 adds
+    -- pool_status to rfp_magic_tokens, not to partnerships; the original
+    -- inventory read its ADD COLUMN lines without checking which of that
+    -- file's two ALTER TABLE statements they belonged to. The column list
+    -- below is the LIVE one, queried 2026-08-21.
     UPDATE public.partnerships p
        SET status                           = 'active',
-           nda_confirmed_at                 = p.nda_confirmed_at,
-           nda_confirmed_by                 = p.nda_confirmed_by,
-           msa_confirmed_at                 = p.msa_confirmed_at,
-           msa_confirmed_by                 = p.msa_confirmed_by,
-           partnership_notes                = p.partnership_notes,
-           reliability_summary              = p.reliability_summary,
-           reliability_summary_generated_at = p.reliability_summary_generated_at,
-           partner_email                    = p.partner_email,
-           profile_status                   = p.profile_status,
-           pool_status                      = p.pool_status,
+           id                               = p.id,
+           lead_org_id                      = p.lead_org_id,
+           vendor_org_id                    = p.vendor_org_id,
            invitation_message               = p.invitation_message,
            invited_at                       = p.invited_at,
+           accepted_at                      = p.accepted_at,
+           created_at                       = p.created_at,
+           updated_at                       = p.updated_at,
+           partner_email                    = p.partner_email,
+           nda_confirmed_at                 = p.nda_confirmed_at,
+           nda_confirmed_by                 = p.nda_confirmed_by,
+           partnership_notes                = p.partnership_notes,
+           msa_confirmed_at                 = p.msa_confirmed_at,
+           msa_confirmed_by                 = p.msa_confirmed_by,
+           payment_terms_requests           = p.payment_terms_requests,
+           profile_status                   = p.profile_status,
            invitation_sent_at               = p.invitation_sent_at,
+           reliability_summary              = p.reliability_summary,
+           reliability_summary_generated_at = p.reliability_summary_generated_at,
            contact_name                     = p.contact_name,
            company_name                     = p.company_name,
            phone                            = p.phone,
@@ -939,29 +1061,35 @@ BEGIN
   END;
 
   -- T15. >>> THE OTHER DIRECTION, AND THE ONE THAT BREAKS PRODUCTION. <<<
-  -- A LEGITIMATE claim must still be admitted. The subject's email is set
-  -- to a real ghost row's partner_email and they claim that one row,
-  -- writing profile_status alongside vendor_org_id exactly as W4 does -
-  -- which also exercises the conditional half of the permit list from the
-  -- permitted side. PASS = 1 row.
+  --
+  -- A LEGITIMATE claim must still be admitted. The subject is the claimable
+  -- pair selected at the top of this block: an unclaimed partnership and the
+  -- real profile whose email equals its partner_email under the new
+  -- comparison. That profile is impersonated DIRECTLY, so this assertion
+  -- writes no profiles.email at all - the previous version borrowed the
+  -- T1-T12 subject and rewrote their email to force a match, which was both
+  -- more invasive and, as it turned out, aimed at an already-claimed row.
+  --
+  -- The write is W4's exact shape - vendor_org_id, profile_status and
+  -- updated_at in one statement - so it also exercises the conditional half
+  -- of the permit list from the PERMITTED side. PASS = 1 row.
+  --
+  -- NO SUBJECT MEANS INCONCLUSIVE, NEVER PASS. An assertion that could not
+  -- find something to assert against has proved nothing, and saying so is
+  -- the whole reason INCONCLUSIVE is a separate outcome from PASS.
   v_ran := v_ran + 1;
   IF v_ghost IS NULL THEN
     v_logged := v_logged + 1;
-    v_lines := v_lines || E'\n  ' || rpad('T15 legitimate claim still works', 40) || rpad('INCONCLUSIVE', 14) || 'no unclaimed partnership with a partner_email exists. THE CLAIM PATH WAS NEVER EXERCISED - this run does NOT show 093 leaves it working.';
+    v_lines := v_lines || E'\n  ' || rpad('T15 legitimate claim still works', 40) || rpad('INCONCLUSIVE', 14) || 'no claimable subject: no partnership with vendor_org_id IS NULL whose partner_email matches a profile in an organization that is not the lead. THE CLAIM PATH WAS NEVER EXERCISED - this run does NOT show 093 leaves it working.';
     v_inconc := v_inconc + 1;
   ELSE
     BEGIN
       RESET ROLE;
-      -- Same reason as T14: clear the claims so 091's guard exempts this
-      -- write as an unauthenticated one.
-      PERFORM set_config('request.jwt.claims',    '', true);
-      PERFORM set_config('request.jwt.claim.sub', '', true);
-      UPDATE public.profiles SET email = v_ghost_email WHERE id = v_uid;
-      PERFORM set_config('request.jwt.claims',    v_claims,    true);
-      PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+      PERFORM set_config('request.jwt.claims',    v_ghost_claims,    true);
+      PERFORM set_config('request.jwt.claim.sub', v_ghost_uid::text, true);
       SET LOCAL ROLE authenticated;
       UPDATE public.partnerships
-         SET vendor_org_id = v_org, profile_status = 'active', updated_at = now()
+         SET vendor_org_id = v_ghost_org, profile_status = 'active', updated_at = now()
        WHERE id = v_ghost;
       GET DIAGNOSTICS v_rows = ROW_COUNT;
       RESET ROLE;
@@ -983,7 +1111,7 @@ BEGIN
       WHEN sqlstate '23514' THEN
         RESET ROLE;
         v_logged := v_logged + 1;
-        v_lines := v_lines || E'\n  ' || rpad('T15 legitimate claim still works', 40) || rpad('INCONCLUSIVE', 14) || '087''s org_has_member_with_email refused. The subject is not reachable at that email through org_members, so this says nothing about 093.';
+        v_lines := v_lines || E'\n  ' || rpad('T15 legitimate claim still works', 40) || rpad('INCONCLUSIVE', 14) || '087''s org_has_member_with_email refused: the chosen organization has no member whose email matches partner_email. Says nothing about 093.';
         v_inconc := v_inconc + 1;
       WHEN insufficient_privilege THEN
         RESET ROLE;
@@ -998,9 +1126,244 @@ BEGIN
     END;
   END IF;
 
+  -- T16. THE NEGATIVE CONTROL THAT PAIRS WITH T15.
+  --
+  -- An ALREADY-CLAIMED partnership must not be claimable. This is what T15
+  -- was accidentally testing when it borrowed a subject that had a
+  -- vendor_org_id, and it is worth testing on purpose: it is the term that
+  -- makes the claim policy a CLAIM policy rather than a general write.
+  --
+  -- THE SUBJECT BELONGS TO A THIRD ORGANIZATION, not the caller's, so both
+  -- routes in are closed and zero is the only correct answer:
+  --   * "Partners can claim partnership by email" needs vendor_org_id IS
+  --     NULL, and it is not.
+  --   * "Partners can update partnership status" needs vendor_org_id to be
+  --     one of the caller's own organizations, and it is somebody else's.
+  -- Aiming this at a row the caller ALREADY OWNS would match through the
+  -- second policy and report a failure that is not one - which is exactly
+  -- the mistake this pair of assertions exists to correct.
+  --
+  -- The caller's profile email is '%' by now, courtesy of T14. That is
+  -- irrelevant here and deliberately so: an already-claimed row fails the
+  -- FIRST term of the claim policy, so the email comparison is never
+  -- reached.
+  v_ran := v_ran + 1;
+  IF v_claimed_other IS NULL THEN
+    v_logged := v_logged + 1;
+    v_lines := v_lines || E'\n  ' || rpad('T16 claimed row is not claimable', 40) || rpad('INCONCLUSIVE', 14) || 'no partnership is claimed by an organization other than the subject''s. The negative control was never exercised.';
+    v_inconc := v_inconc + 1;
+  ELSE
+    BEGIN
+      RESET ROLE;
+      PERFORM set_config('request.jwt.claims',    v_claims,    true);
+      PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+      SET LOCAL ROLE authenticated;
+      UPDATE public.partnerships SET vendor_org_id = v_org WHERE id = v_claimed_other;
+      GET DIAGNOSTICS v_rows = ROW_COUNT;
+      RESET ROLE;
+      IF v_rows = 0 THEN
+        v_logged := v_logged + 1;
+        v_lines := v_lines || E'\n  ' || rpad('T16 claimed row is not claimable', 40) || rpad('PASS', 14) || '(0 rows matched)';
+        v_pass := v_pass + 1;
+      ELSE
+        v_logged := v_logged + 1;
+        v_lines := v_lines || E'\n  ' || rpad('T16 claimed row is not claimable', 40) || rpad('FAIL', 14) || format('RE-CLAIMED %s ALREADY-CLAIMED ROW(S). A claim is supposed to require vendor_org_id IS NULL.', v_rows);
+        v_fail := v_fail + 1;
+      END IF;
+    EXCEPTION
+      WHEN insufficient_privilege THEN
+        RESET ROLE;
+        -- 087 refusing a repoint is NOT a pass. It would mean a POLICY
+        -- admitted an already-claimed row and only the trigger stopped the
+        -- write. The row set should have been empty before any trigger ran.
+        IF SQLERRM LIKE '%repointed once set%' THEN
+          v_logged := v_logged + 1;
+          v_lines := v_lines || E'\n  ' || rpad('T16 claimed row is not claimable', 40) || rpad('FAIL', 14) || '087 stopped a repoint, which means the POLICY admitted an already-claimed row. The write was blocked but the claim predicate is wrong.';
+          v_fail := v_fail + 1;
+        ELSE
+          v_logged := v_logged + 1;
+          v_lines := v_lines || E'\n  ' || rpad('T16 claimed row is not claimable', 40) || rpad('INCONCLUSIVE', 14) || format('42501: %s', SQLERRM);
+          v_inconc := v_inconc + 1;
+        END IF;
+      WHEN OTHERS THEN
+        RESET ROLE;
+        v_logged := v_logged + 1;
+        v_lines := v_lines || E'\n  ' || rpad('T16 claimed row is not claimable', 40) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
+        v_fail := v_fail + 1;
+    END;
+  END IF;
+
+  -- ===================================================================
+  -- T17 - T19. THE RECONCILIATION AGAINST THE LIVE TABLE, ASSERTED.
+  --
+  -- After this block every one of the 24 live columns has been exercised by
+  -- some assertion in this file, on the side THE RECONCILIATION claims for
+  -- it. A disposition nobody tested is a guess.
+  -- ===================================================================
+
+  -- T17. THE FOUR GHOST-CONTACT COLUMNS ARE PERMITTED, BY RULING.
+  --
+  -- contact_name, company_name, phone and website are on the permit list and
+  -- have NO vendor-session writer at all. They are there because "ghost
+  -- contact details not editable post-import" is a PARKED PRODUCT ITEM, so
+  -- guarding them would settle a product question inside a migration.
+  --
+  -- >>> THIS IS THE ASSERTION THAT FLIPS IF GREG RULES THE OTHER WAY. If the
+  -- >>> answer to OPEN-093-1 is "the agency edits them", delete the four
+  -- >>> names from v_vendor_permitted in 093 and change this block to expect
+  -- >>> LG009. Nothing else in either file moves.
+  --
+  -- PASS = the write SUCCEEDS, which is what proves 093 forecloses nothing.
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+    UPDATE public.partnerships
+       SET contact_name = '093 test contact',
+           company_name = '093 test company',
+           phone        = '093-000-0000',
+           website      = 'https://example.invalid/093'
+     WHERE id = v_pship;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+    IF v_rows = 1 THEN
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('PASS', 14) || '(1 row, OPEN-093-1 left open)';
+      v_pass := v_pass + 1;
+    ELSE
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
+      v_fail := v_fail + 1;
+    END IF;
+  EXCEPTION
+    WHEN sqlstate 'LG009' THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('FAIL', 14) || 'LG009. The four contact columns are GUARDED, which forecloses the parked product item inside a migration. Put them back on v_vendor_permitted, or get the ruling first.';
+      v_fail := v_fail + 1;
+    WHEN insufficient_privilege THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('INCONCLUSIVE', 14) || '42501. See the header on SET LOCAL ROLE.';
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
+
+  -- T18. THE MSA HALF OF THE PAIR. T6 covers nda_confirmed_at. The header
+  -- names the MSA columns among the four that make this migration worth
+  -- doing, and until now nothing exercised them.
+  v_ran := v_ran + 1;
+  BEGIN
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+    UPDATE public.partnerships SET msa_confirmed_at = now() WHERE id = v_pship;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+    v_logged := v_logged + 1;
+    v_lines := v_lines || E'\n  ' || rpad('T18 vendor self-confirms MSA', 40) || rpad('FAIL', 14) || format('NO ERROR - wrote %s row(s). A vendor can still confirm its own MSA.', v_rows);
+    v_fail := v_fail + 1;
+  EXCEPTION
+    WHEN sqlstate 'LG009' THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T18 vendor self-confirms MSA', 40) || rpad('PASS', 14) || '(LG009, refused)';
+      v_pass := v_pass + 1;
+    WHEN insufficient_privilege THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T18 vendor self-confirms MSA', 40) || rpad('INCONCLUSIVE', 14) || '42501. See the header on SET LOCAL ROLE.';
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T18 vendor self-confirms MSA', 40) || rpad('FAIL', 14) || format('refused with %s, expected LG009: %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
+
+  -- T19. THE REST OF THE GUARDED SET, ONE COLUMN AT A TIME.
+  --
+  -- T6-T10, T11 and T18 cover the guarded columns that matter most. These
+  -- seven are the remainder, and they are here because THE RECONCILIATION in
+  -- 093's header calls them GUARDED-BY-093 and an untested claim in a header
+  -- is a guess.
+  --
+  -- ONE ASSERTION, SEVEN STATEMENTS. Each column is moved on its own, in its
+  -- own subtransaction, so a column that slips through is NAMED rather than
+  -- masked by its neighbours. A single statement moving all seven would
+  -- raise on the first difference and prove nothing about the other six.
+  --
+  -- Every value is chosen to be genuinely DIFFERENT from what is in the row.
+  -- A write that does not move the value leaves at EXIT 1 and would be
+  -- counted as a refusal it never was.
+  --
+  -- `id` is deliberately absent. It is guarded by the permit list like
+  -- everything else, and changing a primary key that four foreign keys point
+  -- at is a pathological write no caller makes.
+  -- `lead_org_id` is absent because it is T11, and it belongs to 087.
+  v_ran := v_ran + 1;
+  DECLARE
+    v_cols text[] := ARRAY[
+      'created_at', 'invitation_message', 'invited_at', 'invitation_sent_at',
+      'nda_confirmed_by', 'msa_confirmed_by', 'reliability_summary_generated_at'
+    ];
+    v_vals text[] := ARRAY[
+      '''1999-01-01T00:00:00Z''::timestamptz',
+      '''093 sweep''::text',
+      '''1999-01-01T00:00:00Z''::timestamptz',
+      '''1999-01-01T00:00:00Z''::timestamptz',
+      quote_literal(v_uid::text) || '::uuid',
+      quote_literal(v_uid::text) || '::uuid',
+      '''1999-01-01T00:00:00Z''::timestamptz'
+    ];
+    v_i       integer;
+    v_refused integer := 0;
+    v_leaked  text := '';
+  BEGIN
+    FOR v_i IN 1 .. array_length(v_cols, 1) LOOP
+      BEGIN
+        RESET ROLE;
+        PERFORM set_config('request.jwt.claims',    v_claims,    true);
+        PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+        SET LOCAL ROLE authenticated;
+        EXECUTE format('UPDATE public.partnerships SET %I = %s WHERE id = $1',
+                       v_cols[v_i], v_vals[v_i])
+          USING v_pship;
+        RESET ROLE;
+        -- No error means the guard ADMITTED it. Name it.
+        v_leaked := v_leaked || CASE WHEN v_leaked = '' THEN '' ELSE ', ' END || v_cols[v_i];
+      EXCEPTION
+        WHEN sqlstate 'LG009' THEN
+          RESET ROLE;
+          v_refused := v_refused + 1;
+        WHEN OTHERS THEN
+          RESET ROLE;
+          v_leaked := v_leaked || CASE WHEN v_leaked = '' THEN '' ELSE ', ' END
+                   || format('%s(%s)', v_cols[v_i], SQLSTATE);
+      END;
+    END LOOP;
+    RESET ROLE;
+    IF v_refused = array_length(v_cols, 1) THEN
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T19 remaining guarded columns', 40) || rpad('PASS', 14) || format('(all %s refused with LG009)', v_refused);
+      v_pass := v_pass + 1;
+    ELSE
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T19 remaining guarded columns', 40) || rpad('FAIL', 14) || format('%s of %s refused. NOT REFUSED: %s', v_refused, array_length(v_cols, 1), v_leaked);
+      v_fail := v_fail + 1;
+    END IF;
+  END;
+
   RESET ROLE;
 
-  IF v_fail = 0 AND v_inconc = 0 AND v_ran = 15 AND v_pass = 15 THEN
+  IF v_fail = 0 AND v_inconc = 0 AND v_ran = 19 AND v_pass = 19 THEN
     v_verdict_text := 'SAFE TO APPLY 093.';
     v_headline     := format('SAFE TO APPLY 093.  All %s assertions passed.', v_pass);
   ELSIF v_inconc > 0 AND v_fail = 0 THEN
@@ -1029,7 +1392,7 @@ BEGIN
   -- ORDER IS LOAD-BEARING: HEADLINE, THEN TALLY, THEN THE PER-ASSERTION
   -- LINES. A client that truncates a long error message truncates the
   -- END of it, so the verdict and the counts must be at the TOP where
-  -- they survive. The 15 detail lines are the part that can afford to be
+  -- they survive. The 19 detail lines are the part that can afford to be
   -- cut off - if they are, the tally still says how many failed and the
   -- headline still says whether to apply.
   -- =================================================================
@@ -1038,8 +1401,8 @@ BEGIN
     || E'=====================================================\n'
     || v_headline || E'\n'
     || E'=====================================================\n'
-    || format(E'assertions run  : %s   (expected 15)\n', v_ran)
-    || format(E'PASS            : %s   (expected 15)\n', v_pass)
+    || format(E'assertions run  : %s   (expected 19)\n', v_ran)
+    || format(E'PASS            : %s   (expected 19)\n', v_pass)
     || format(E'FAIL            : %s   (expected 0)\n',  v_fail)
     || format(E'INCONCLUSIVE    : %s   (expected 0)\n',  v_inconc)
     -- THE SELF-CHECK, IN THE OUTPUT RATHER THAN INFERRED FROM IT. v_ran is
@@ -1051,9 +1414,16 @@ BEGIN
     || format(E'verdicts logged : %s   (must equal assertions run: %s)\n',
               v_logged, CASE WHEN v_logged = v_ran THEN 'OK' ELSE 'MISMATCH' END)
     || E'\n'
-    || 'PERMIT LIST     : status, accepted_at, updated_at, payment_terms_requests, vendor_org_id' || E'\n'
+    || 'PERMIT LIST     : status, accepted_at, updated_at, payment_terms_requests, vendor_org_id,' || E'\n'
+    || '                  contact_name, company_name, phone, website' || E'\n'
     || '                  (+ profile_status on the claim transition only)' || E'\n'
-    || format(E'SUBJECT         : user %s, vendor org %s, partnership %s\n', v_uid, v_org, v_pship)
+    || '                  contact_name/company_name/phone/website are permitted BY RULING,' || E'\n'
+    || '                  not by writer evidence - see OPEN-093-1 in 093''s header.' || E'\n'
+    || format(E'SUBJECT (T1-T14, T16-T19) : user %s, vendor org %s, partnership %s\n', v_uid, v_org, v_pship)
+    || format(E'SUBJECT (T15 claim)       : %s  partnership %s, claimer %s, into org %s\n',
+              CASE WHEN v_ghost IS NULL THEN 'NONE FOUND' ELSE coalesce(v_ghost_email, '?') END,
+              coalesce(v_ghost::text, '-'), coalesce(v_ghost_uid::text, '-'), coalesce(v_ghost_org::text, '-'))
+    || format(E'SUBJECT (T16 negative)    : partnership %s\n', coalesce(v_claimed_other::text, 'NONE FOUND'))
     || 'VERDICT         : ' || v_verdict_text || E'\n'
     || E'-----------------------------------------------------'
     || v_lines
