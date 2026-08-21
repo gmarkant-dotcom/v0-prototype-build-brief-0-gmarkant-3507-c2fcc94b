@@ -184,9 +184,13 @@ const ALLOWED = [
   },
   {
     file: "app/agency/settings/team/page.tsx",
-    // 160 and 166 since the two 086 banners were deleted and the file header rewritten to
-    // say why. Same two reads, same reason; only the line numbers moved.
-    lines: [160, 166],
+    // 268 and 274 since the invitation surface landed above them (migration 089's team-page
+    // half: the invite form, the pending list and the loadInvitations callback). SAME TWO
+    // READS, SAME REASON, SAME CODE - only the line numbers moved, which is the third time
+    // this entry has been renumbered and the reason it is worth saying so each time. The
+    // scoping is deliberately KEPT: any profiles read added to this file on a line other
+    // than these two is still a real finding.
+    lines: [268, 274],
     why:
       "The team roster. Both flagged reads are .in(\"id\", userIds) against profiles where " +
       "userIds comes from org_members.user_id one statement earlier - real user ids, by " +
@@ -254,17 +258,9 @@ const KNOWN_OPEN = [
   { file: "app/api/agency/projects/[projectId]/status-updates/route.ts", count: 1 },
   { file: "app/api/agency/rfp-responses/route.ts", count: 1 },
   { file: "app/api/partner/network/[agencyId]/route.ts", count: 1 },
-  { file: "app/api/partner/payments/route.ts", count: 1 },
-  { file: "app/api/partner/projects/[projectId]/active-engagement/route.ts", count: 1 },
-  { file: "app/api/partner/projects/route.ts", count: 1 },
-  { file: "app/api/partner/rfps/[id]/route.ts", count: 1 },
-  { file: "app/api/partner/rfps/route.ts", count: 1 },
-  { file: "app/api/partnerships/route.ts", count: 4 },
   { file: "app/api/projects/[id]/assignments/route.ts", count: 2 },
   { file: "app/api/projects/[id]/partner/route.ts", count: 1 },
   { file: "app/api/rfp/guest/[token]/route.ts", count: 2 },
-  { file: "app/partner/profile/page.tsx", count: 1 },
-  { file: "lib/magic-token-attach.ts", count: 1 },
 ]
 
 function isAllowed(file, line) {
@@ -367,14 +363,14 @@ const KNOWN_OPEN_MIRROR = [
   },
   {
     file: "app/api/agency/bids/[responseId]/ai-score/route.ts",
-    count: 4,
+    count: 2,
     tiers: "PARAM",
     why:
       "loadVendorTrackRecord's own parameters. agencyId is passed user.id by the route at :240 - an INDIRECT defect the matcher cannot prove from this file.",
   },
   {
     file: "app/api/agency/broadcast-rfp/route.ts",
-    count: 4,
+    count: 2,
     tiers: "PARAM/PROFILE",
     why:
       "existingProfile.id filtered against and written into vendor_org_id for a manually typed recipient, plus the partnerId local. Needs a counterparty user-to-organization resolver.",
@@ -408,13 +404,6 @@ const KNOWN_OPEN_MIRROR = [
       "same [partnerId] route param, two sites - FALSE POSITIVE by the same establishment.",
   },
   {
-    file: "app/api/partner/network/[agencyId]/route.ts",
-    count: 3,
-    tiers: "PARAM",
-    why:
-      "the [agencyId] route param, a profiles id, matched against lead_org_id.",
-  },
-  {
     file: "app/api/partner/projects/[projectId]/active-engagement/route.ts",
     count: 2,
     tiers: "PARAM",
@@ -430,7 +419,7 @@ const KNOWN_OPEN_MIRROR = [
   },
   {
     file: "app/api/partnerships/route.ts",
-    count: 2,
+    count: 1,
     tiers: "PROFILE",
     why:
       "partner.id, a counterparty profiles id, filtered against and then written into vendor_org_id.",
@@ -478,46 +467,11 @@ const KNOWN_OPEN_MIRROR = [
       "resolvePartnershipForAward's agencyId and partnerIdForResolution parameters, ten sites including four writes. app/api/agency/rfp-responses/[id]/route.ts passes user.id as agencyId - an INDIRECT defect.",
   },
   {
-    file: "lib/bid-analysis-context.ts",
-    count: 7,
-    tiers: "PARAM",
-    why:
-      "loadBidAnalysisContext / resolveResponseScope agencyId parameter, seven sites. Three routes pass user.id into it.",
-  },
-  {
-    file: "lib/bid-summary-generation.ts",
-    count: 1,
-    tiers: "PARAM",
-    why:
-      "generateAndSaveBidSummary agencyId parameter. One caller passes user.id.",
-  },
-  {
-    file: "lib/clients-server.ts",
-    count: 1,
-    tiers: "PARAM",
-    why:
-      "reconcileProjectClientFields agencyId parameter. Two callers pass user.id.",
-  },
-  {
-    file: "lib/delivery-review.ts",
-    count: 1,
-    tiers: "PARAM",
-    why:
-      "loadBidDeltaComparison agencyId parameter.",
-  },
-  {
     file: "lib/entitlements.ts",
     count: 1,
     tiers: "SESSION",
     why:
       "agencyEntitlementId returns best?.org_id ?? userId. Deliberate and documented for quota accounting, where failing would take the AI surface down. Recorded because it is the one remaining place a user id can reach a caller expecting an organization id. resolveCallerWriteOrgId is the write-path alternative and returns null.",
-  },
-  {
-    file: "lib/library-documents.ts",
-    count: 4,
-    tiers: "PARAM",
-    why:
-      "fetchScopedLibraryDocuments agencyId parameter, four sites. Two routes pass user.id.",
   },
   {
     file: "lib/magic-token-attach.ts",
@@ -541,25 +495,11 @@ const KNOWN_OPEN_MIRROR = [
       "markPartnershipInvited agencyId and partnerId parameters, including an INSERT of both. resend-invitation passes user.id as agencyId.",
   },
   {
-    file: "lib/rfp-evaluation-criteria-server.ts",
-    count: 3,
-    tiers: "PARAM",
-    why:
-      "resolveRfpRubricForResponse agencyId parameter. One route passes user.id.",
-  },
-  {
     file: "lib/usage-tracking.ts",
     count: 4,
     tiers: "PARAM",
     why:
       "getOrCreateMonthlyUsage / getActiveProjectsCount agencyId parameter, including the usage_tracking INSERT. Callers pass agencyEntitlementId(), which is correct except on its fallback.",
-  },
-  {
-    file: "lib/vouch-counts.ts",
-    count: 1,
-    tiers: "PARAM",
-    why:
-      "fetchVouchCount partnerId parameter. app/partner/profile/page.tsx passes user.id.",
   },
 ]
 
