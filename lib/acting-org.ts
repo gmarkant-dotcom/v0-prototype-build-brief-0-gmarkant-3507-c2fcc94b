@@ -51,13 +51,29 @@
  * appear in that set is discarded, logged, and the request FAILS CLOSED. A stored value
  * can never grant anything. At worst it is ignored.
  *
- * `profiles.active_org_id` DOES NOT EXIST YET. It is not created in this pass, because
- * which organization a dual-role account acts as is one of the open rulings (see
- * docs/m1-phase0-discovery.md, calls 4, 7 and 8) and call 8 can delete the question
- * outright. The read below is guarded for PostgREST 42703 (undefined_column) and returns
- * null when the column is absent, exactly as this codebase already does for migration 074's
- * response_deadline. So this module is correct before the column exists and correct after,
- * and the column can be added without touching this file.
+ * `profiles.active_org_id` EXISTS AS OF MIGRATION 090. Until then it did not, and the read
+ * below carried a guard for PostgREST 42703 (undefined_column) that returned null when the
+ * column was absent. THAT GUARD IS GONE, deliberately: with the column present, a 42703 is
+ * no longer an expected state - it would mean the column had been dropped underneath a
+ * running deployment, and swallowing that would turn a schema regression into a silent
+ * "nobody has a preference", which reads as ambiguity rather than as the fault it is.
+ *
+ * THE COLUMN BEING POPULATED CHANGES NOTHING ABOUT HOW IT IS TREATED. Two writers set it -
+ * `set_active_org(uuid)`, which the sidebar switcher calls, and `accept_org_invitation()`,
+ * which initializes it ONLY IF IT IS NULL - and both validate membership before writing.
+ * NEITHER OF THOSE IS THE REASON THE VALUE IS SAFE TO USE HERE. The reason is the check
+ * below, on every call, every time.
+ *
+ * THE STALE-HINT HOLE, WHICH IS WHY THAT CHECK CANNOT BE DROPPED. REMOVING SOMEBODY FROM
+ * `org_members` DOES NOT NULL THEIR `active_org_id`. There is no trigger on that deletion
+ * and there deliberately is not one: a database that kept the column consistent would
+ * invite the next reader to trust it, and this module would stop checking. So a removed
+ * member keeps a pointer at an organization they can no longer access, indefinitely, and
+ * that is a NORMAL state rather than a corrupt one. It is caught here, at read time, and
+ * refused as "preference-refused". DO NOT REMOVE THE MEMBERSHIP CHECK BELOW ON THE GROUNDS
+ * THAT THE COLUMN IS NOW WRITTEN BY VALIDATING FUNCTIONS. What those functions validate is
+ * the moment of writing; this validates the moment of use, and only the second one is the
+ * one that decides whose data gets written.
  *
  * ---------------------------------------------------------------------------
  * WHY THIS IS A NO-OP TODAY, ARGUED RATHER THAN ASSERTED.
@@ -103,7 +119,9 @@ export type ActingOrgLookupClient = {
  *   "sole-membership"    exactly one membership, and it was used. The path every live
  *                        account takes today.
  *   "stored-preference"  more than one membership, and the stored preference named one of
- *                        them. Unreachable until profiles.active_org_id exists.
+ *                        them - which is to say, the caller's own explicit choice was
+ *                        honoured. Reachable as of migration 090; before it, the column
+ *                        did not exist and this branch could never be taken.
  *   "no-membership"      the caller belongs to no organization. Should be unreachable
  *                        post-079; if it happens, the backfill or the signup trigger is
  *                        not doing its job.
@@ -166,8 +184,14 @@ async function loadMemberOrgIds(
  * before it is used, in resolveActingOrgId() below, and discarded if it is not in it.
  * Nothing else in this module or anywhere else may consume it directly.
  *
- * Guarded for 42703 because `profiles.active_org_id` does not exist yet. An absent column
- * is a null preference, not an error and not a lockout.
+ * THE 42703 GUARD THAT USED TO BE HERE IS GONE. `profiles.active_org_id` exists as of
+ * migration 090, so an undefined_column is no longer the expected state it was written
+ * for - it is a schema regression, and it is now logged like every other error rather
+ * than passed over in silence.
+ *
+ * EVERY FAILURE STILL RETURNS NULL, and null still means "no usable preference", which
+ * resolveActingOrgId() turns into an "ambiguous" refusal for anyone with more than one
+ * membership. A lookup that cannot answer must never resolve to an organization.
  */
 async function loadStoredActingOrgId(
   userId: string,
@@ -180,14 +204,11 @@ async function loadStoredActingOrgId(
     .maybeSingle()
 
   if (error) {
-    // 42703 undefined_column: the column has not been added yet. Expected, not a fault.
-    if (error.code !== "42703") {
-      console.error("[acting-org] stored preference lookup failed, treating as unset", {
-        userId,
-        code: error.code,
-        message: error.message,
-      })
-    }
+    console.error("[acting-org] stored preference lookup failed, treating as unset", {
+      userId,
+      code: error.code,
+      message: error.message,
+    })
     return null
   }
   const value = (data as { active_org_id?: string | null } | null)?.active_org_id
