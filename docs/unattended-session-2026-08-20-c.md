@@ -1,5 +1,21 @@
 # Unattended session 2026-08-20 (c)
 
+> ## ADDENDUM, same day: two follow-ups applied after review
+>
+> **1. The guest display regression is fixed** (`3dfe0a1`). `guestDisplayName()`'s chain is now
+> organization name, then `partner_display_name`, then domain, then "A guest". The collision
+> line carries the typed name again. Section 5's "visible consequence" below described the
+> regression; it no longer ships. **25 feed checks, all passing** - see ACCEPTANCE.
+>
+> **2. The vendor-side policy was approved, authored and shipped with the portal emitter**
+> (`981016b`). Migration **088**, authored not applied, in the same commit as
+> `app/api/partner/rfps/[id]/response/route.ts`'s `bid.submit`. **Section 5b below is
+> superseded** - it presented three options; option A was taken, with two clauses added beyond
+> it. See the new section 11.
+>
+> Everything else in this report stands as written.
+
+
 Seven commits from `3c76d29`. Four new emitters, one enforcement rule, two gate corrections,
 one retirement. Three items reported without code. One item declined with reasons.
 
@@ -185,7 +201,7 @@ no policy `TO authenticated` could ever serve them, and granting `anon` an INSER
 forgeable by anyone holding the anon key. The token check this route already performed is a
 stronger constraint than any RLS predicate can express.
 
-### 5b. The portal path - NOT WRITTEN. NEEDS A RULING.
+### 5b. The portal path - SUPERSEDED. Option A was approved and shipped; see section 11.
 
 080 ships exactly one INSERT policy (`:373-381`):
 
@@ -490,6 +506,163 @@ manufacture one.
 
 ---
 
+## 11. The vendor INSERT policy and the portal emitter - SHIPPED
+
+Commit `981016b`. Migration and consumer in one commit, which is what
+`080_milestone_events.sql:366-372` said would happen.
+
+### The migration, for the dry run
+
+| | File | Lines | `BEGIN;` | `COMMIT;` |
+|---|---|---|---|---|
+| up | `supabase/migrations/088_vendor_milestone_events.sql` | **592** | **374** | **463** |
+| down | `supabase/migrations/088_vendor_milestone_events_down.sql` | **132** | **77** | **92** |
+
+Verified by `grep -n '^BEGIN;$'` / `grep -n '^COMMIT;$'` after writing: **exactly one
+executable hit each, in both files**, at those lines. Every other appearance of either word is
+inside a comment block, including the `BEGIN;`/`ROLLBACK;` pairs in verification queries V5 and
+V6, which are commented out. **AUTHORED, NOT APPLIED** - no statement was executed against any
+database.
+
+Four pre-flight queries (P1 can stop the migration outright), nine verification queries of
+which **V5 and V6 are writes** and are the only two that prove the policy rather than describe
+it, and a down file whose partial-rollback section names the three likely causes of a
+legitimate write being refused, so the reflex is to fix the data rather than loosen the
+predicate.
+
+### The policy
+
+```sql
+CREATE POLICY "Vendors insert own company milestone events"
+  ON public.milestone_events AS PERMISSIVE
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    actor_side = 'vendor'
+    AND actor_id = auth.uid()
+    AND actor_email IS NULL
+    AND vendor_org_id IN (SELECT public.current_user_org_ids())
+    AND event_type = ANY (public.vendor_emittable_event_types())
+    AND partnership_id IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM public.partnerships p
+      WHERE p.id            = milestone_events.partnership_id
+        AND p.vendor_org_id = milestone_events.vendor_org_id
+        AND p.lead_org_id   = milestone_events.org_id
+    )
+  );
+```
+
+**Your correction is load-bearing and the file states it at length.** `org_id` on a
+vendor-side row names the **agency** - it is the column the agency's own SELECT policy reads,
+which is the entire reason a vendor-side event exists. Keying the membership test on it would
+deny every legitimate write. The test keys on `vendor_org_id`, spelled `IN (SELECT ...)`
+because `current_user_org_ids()` RETURNS SETOF uuid and `= ANY` on it raises 42809.
+
+`actor_id = auth.uid()`, **not** the null-permitting disjunct my earlier draft proposed. On the
+vendor side a null actor is the guest shape and renders through `guestDisplayName()`, so
+permitting it would let a logged-in vendor file their own act as an anonymous one.
+
+### Two clauses beyond what you specified, both argued in the file
+
+- **`actor_email IS NULL`** — the writer's own rule (`resolveActorEmail`, commit `37f135d`)
+  made structural. A rule that holds in one module is worth nothing against a caller that does
+  not use that module.
+- **`event_type = ANY (public.vendor_emittable_event_types())`** — a new companion function to
+  080's `vendor_visible_event_types()`, transcribing without addition the seven types
+  `080:189-196` **already labels "Vendor side" in a comment**: `bid.submit`, `bid.revise`,
+  `rfp.view`, `invitation.accept`, `invitation.decline`, `nda.acknowledge`,
+  `status_update.post`. Visible and emittable are different questions. Without this clause a
+  vendor could write `bid.award` or `payment.mark_paid` — agency acts, both on the *visible*
+  whitelist because a vendor may **read** them — onto the agency's own feed, attributed to
+  themselves. `= ANY` is correct here and not a contradiction of the rule above: this function
+  returns `text[]`, a real array, exactly as `vendor_visible_event_types()` does for 080's
+  counterparty SELECT policy. The `IN (SELECT ...)` rule is about SETOF-returning functions.
+
+### What a vendor can write that they could not before
+
+Exactly one thing: a `milestone_events` row where **all** of these hold at once —
+
+```
+actor_side     = 'vendor'
+actor_id       = their own auth.uid()
+actor_email    IS NULL
+vendor_org_id  = an organization they are a member of
+event_type     = one of the seven emittable types
+partnership_id = a partnership whose vendor side is that same organization
+org_id         = that same partnership's lead_org_id, and nothing else
+```
+
+with `payload`, `subject_type`, `subject_id` and `created_at` free.
+
+### Can they name a partnership they are not part of? No.
+
+The `EXISTS` requires a real `partnerships` row whose `vendor_org_id` equals the event's, and
+the membership test requires that to be one of the caller's own organizations.
+
+- A partnership they are not the vendor on → fails the join, and separately fails
+  `partnerships`' own SELECT policy.
+- A partnership id that does not exist → fails the `EXISTS`.
+- A partnership where they are the **lead** rather than the vendor → fails the join too, which
+  is right: this is the vendor grant, and an agency writing about itself uses the agency policy.
+
+**And they cannot reach an agency they have no relationship with.** That is the second job the
+`EXISTS` does, and it is the one that is easy to miss: nothing else in the policy constrains
+`org_id` at all. Without `p.lead_org_id = milestone_events.org_id`, a vendor could pass every
+other clause with their own `vendor_org_id` while naming **any** agency in `org_id` — and
+`org_id` is what the agency's SELECT policy reads. The result would be a line the vendor
+composed on an arbitrary agency's dashboard, with a payload the vendor also composed, since
+`lib/activity-feed.ts` renders `payload.scope_item_name` straight into the line text. **That is
+feed injection, and the `EXISTS` is the only thing preventing it.** The file says "do not
+simplify this EXISTS" at the clause.
+
+Both join conditions are written out rather than leaning on `partnerships`' own RLS. That RLS
+would filter the subquery today — a policy subquery runs as the invoking user — but a predicate
+whose correctness depends on another table's policy set widens silently the day someone adds a
+broader SELECT policy there.
+
+### What is still free, accepted rather than overlooked
+
+`payload` (a crafted `scope_item_name` renders into their own line, bounded to agencies they
+already partner with, already attributed to them); `subject_id` (points a row at a response
+that is not theirs — a mis-grouped line, not a disclosure, since `subject_id` is a grouping and
+dedupe key and never an authorisation key); and `created_at` (backdating changes feed ordering
+and nothing else). **No UPDATE and no DELETE policy for anybody, still** — 080's append-only
+rule is untouched.
+
+### The portal emitter
+
+`app/api/partner/rfps/[id]/response/route.ts`, a **session** client, gated on
+`nextVersion === 1` so it fires on the first submitted transition only — version rows are
+written only inside the `status === "submitted"` branch, so no prior version means no prior
+submit. `bid.revise` is in the emittable whitelist and is deliberately not written, matching
+the guest path.
+
+`partnership_id` is resolved by an **independent read** — the inbox link first, then the
+`(lead_org_id, vendor_org_id)` pair for rows that predate it — so neither the acting query nor
+the notification query changed. No `actorEmail` is passed. The payload takes
+`inboxDetail.scope_item_name` rather than the already-defaulted `scopeItemName`, because
+`"Scope item"` is a display placeholder and must not be persisted where a null belongs.
+
+### The ordering constraint runs the opposite way to the usual one
+
+The usual rule is apply-then-deploy, because code deployed against a missing column fails
+loudly for users. **Here the code is safe to deploy first.** If the emitter runs before 088 is
+applied, the insert is denied by deny-by-default with 42501, `lib/milestone-events.ts` catches
+it, logs `[milestone] insert failed (the action itself succeeded)` and returns void. The bid is
+already written and the emitter is fire-and-forget. **The window costs lost breadcrumbs and
+nothing else.** Applying before deploying is also safe and quieter — it grants a write nothing
+yet performs, which is fine as a transient.
+
+### One gate note
+
+`policy-audit:guard` reads a point-in-time `pg_policies` snapshot, **not** the migrations
+directory, so it cannot see 088 and did not move. That is the limitation already reported as
+item (a) of the severity ranking, surfacing exactly where it was predicted to.
+
+---
+
 ## ACCEPTANCE
 
 ### One line per new emitter - what a vendor reading that row would see
@@ -499,7 +672,7 @@ manufacture one.
 | `bid.shortlist` | *"Dana Whitfield shortlisted a bid on Key Art"* - the scope title, and **no indication of how many other vendors were shortlisted.** |
 | `bid.meeting_request` | *"Dana Whitfield requested a meeting about Key Art"* - the scope title, and **nothing about who else was asked to meet.** |
 | `payment.mark_paid` | *"Dana Whitfield marked a payment milestone paid for Northwind Studio"* - plus **their own** amount, currency and payment date, and **no project-level total of any kind.** |
-| `bid.submit` (vendor-side) | This one is read by the **agency**, not the vendor: *"Northwind Studio (via link) submitted a bid on Key Art"*, or *"A guest at northwind.com submitted a bid on Key Art"* where no organization resolves. The vendor's raw address never enters the line. Payload carries only the scope title - nothing about the other recipients of the same broadcast, and no figure from the bid. |
+| `bid.submit` (vendor-side, **both paths**) | This one is read by the **agency**, not the vendor: *"Northwind Studio (via link) submitted a bid on Key Art"*, or *"Sam Rivera (via link) submitted a bid on Key Art"* where no organization resolves but the vendor gave a name, or *"A guest at northwind.com ..."* where neither does. The vendor's raw address never enters the line, and an address typed into the name field falls through to the domain. Payload carries only the scope title - nothing about the other recipients of the same broadcast, and no figure from the bid. |
 
 ### Each emitter fires only once, on the transition - confirmed
 
@@ -508,18 +681,22 @@ manufacture one.
 | `bid.shortlist` | `isShortlisting` = `existing.status !== "shortlisted" && nextStatus === "shortlisted"` | `existing.status` is the **prior** value, read at `:149-154` before the update. Same boolean stamps `shortlisted_at` |
 | `bid.meeting_request` | `isRequestingMeeting`, same shape | Same. Mutually exclusive with the above - `nextStatus` holds one value - so **at most one row per request** |
 | `payment.mark_paid` | `isMarkingPaid` = `!wasPaid && updates.status === "paid"` | `wasPaid` comes from the pre-read widened in `d0cdbc4`. Before that commit the route **could not tell a transition from a repeat**, which is why the widening shipped first and alone |
-| `bid.submit` | the first-submission branch | `:416` returns 409 for a token already marked submitted, and the edit branch returns at `:599` before reaching the emit. **One per token** |
+| `bid.submit` (guest) | the first-submission branch | `:416` returns 409 for a token already marked submitted, and the edit branch returns at `:599` before reaching the emit. **One per token** |
+| `bid.submit` (portal) | `nextVersion === 1` | Version rows are written only inside the `status === "submitted"` branch, so no prior version row means no prior submit. **One per response.** The single way it could double-fire is a previously failed version insert, which logs loudly - and the feed absorbs it anyway, since both rows carry the dedupe key `bid:<response_id>` and `mergeActivityEntries` keeps one |
 
-**And none of them can change the action they observe.** All four are placed after their write
-has already succeeded; `recordMilestone()` catches everything and returns void; the two extra
-reads in the guest emitter are inside their own try/catch; the partnership lookup in `3a` is
-non-fatal and runs only on the transition.
+**And none of them can change the action they observe.** All five are placed after their write
+has already succeeded; `recordMilestone()` catches everything and returns void; the extra reads
+in both `bid.submit` emitters sit inside their own try/catch; the partnership lookup in `3a` is
+non-fatal and runs only on the transition. The portal emitter is the strongest case: if
+migration 088 is not applied its insert is refused outright by RLS, and the bid submission is
+still completely unaffected.
 
 ### The feed still renders `bid.decline` and the four derived sources
 
 **Executed against the compiled module** (`npx tsx`, importing `lib/activity-feed.ts` directly
 and calling `groupMilestoneRows` / `mapMilestoneGroup` / `milestoneDedupeKey` /
-`mergeActivityEntries`). **17 checks, all passed:**
+`mergeActivityEntries` / `guestDisplayName`). **25 checks, all passed** - the original 17 plus
+eight covering the repaired precedence chain:
 
 ```
 PASS  bid.decline text                      "declined a bid on Key Art"
@@ -531,20 +708,32 @@ PASS  bid.meeting_request text              "requested a meeting about Key Art"
 PASS  payment.mark_paid text                "marked a payment milestone paid for Northwind Studio"
 PASS  bid.submit text                       "submitted a bid on Key Art"
 PASS  bid.submit actor (org resolves)       {"kind":"guest","name":"Northwind Studio (via link)", ...}
-PASS  bid.submit actor (no org)             {"kind":"guest","name":"A guest at northwind.com", ...}
+PASS  bid.submit actor (no org, typed name)  {"kind":"guest","name":"Sam Rivera (via link)", ...}
+PASS  chain: organization name wins over everything    "Northwind Studio (via link)"
+PASS  chain: typed name beats the domain               "Sam Rivera (via link)"
+PASS  chain: domain when there is no typed name        "A guest at northwind.com"
+PASS  chain: blank typed name falls through            "A guest at northwind.com"
+PASS  chain: an ADDRESS typed into the name field never reaches the line
+                                                       "A guest at northwind.com"
+PASS  chain: nothing at all                            "A guest"
+PASS  bid.submit actor (no org, no typed name) still degrades to the domain
 PASS  bid.submit dedupeKey                  "bid:resp-1"
 PASS  four derived sources alone all survive, newest first
 PASS  merged ids: bid.submit REPLACES the derived bid; decline and the other three derived all kept
 PASS  nothing derived was lost except the replaced bid
 PASS  the surviving bid line is the milestone, not the derived one
 PASS  exactly one 'submitted a bid' line survives
+PASS  THE REGRESSION: the surviving collision line carries the TYPED NAME, not the domain
+                                    {"kind":"guest","name":"Sam Rivera (via link)", ...}
 PASS  UNION_REPLACING_EVENT_TYPES unchanged
 ```
 
 `bid.decline` renders unchanged and still keys to `null`, so it cannot collide with anything.
 All four derived sources survive a merge among themselves. In a merge that includes the new
 vendor-side `bid.submit`, **the derived bid item is replaced and the other three derived items
-are untouched** - the designed collision, occurring for the first time, and occurring correctly.
+are untouched** - the designed collision, occurring for the first time, and occurring correctly
+- **and the surviving line now carries the vendor's typed name**, which is what the derived line
+it replaced carried. The regression named in section 5 is closed.
 
 ### The eight gates against the baseline
 
@@ -566,23 +755,30 @@ or known-open count was edited.**
 | `37f135d` | feat: enforce the actor_email rule in the writer - populated only when actor_id is null |
 | `efea788` | feat: emit bid.submit on the guest bid path - the first vendor-side milestone |
 | `16962aa` | chore: retire the role backfill and the 056 trigger fix, which today proved dead |
+| `5f7ffde` | docs: unattended session 2026-08-20 (c) |
+| `3dfe0a1` | fix: put the self-declared name back in the guest precedence chain |
+| `981016b` | feat: author the vendor INSERT policy and ship the portal bid.submit emitter |
 
-Seven commits, one per numbered item, each revertable alone. **Not pushed.**
+Ten commits, one per numbered item, each revertable alone. **Not pushed.**
 
 ---
 
 ## What is waiting on you
 
-1. **The portal vendor emitter (5b).** Option A, B or C. My recommendation is A with
-   `actor_id = auth.uid()`. Until then, guest bids attribute and portal bids do not.
+1. **DRY-RUN AND APPLY MIGRATION 088.** Up: 592 lines, `BEGIN;` 374, `COMMIT;` 463. Down: 132
+   lines, `BEGIN;` 77, `COMMIT;` 92. Four pre-flight queries first - **P1 can stop it**. The
+   portal emitter is already deployed and is harmless until you apply: it logs 42501 and the
+   bid is unaffected. **V5 and V6 are the two writes that prove the policy** rather than
+   describe it; V6 in particular is the feed-injection test, and if it inserts instead of
+   erroring, roll back and do not trust the emitter.
 2. **The guest feedback URL (9).** Option A is one line and removes a 500 from a live email.
+   Still unwritten.
 3. **The `organizations` discoverable policy (8).** Predicate A, B or C. C is the only one that
    survives colleague invitations, and it is a feature rather than a policy.
 4. **`payment.mark_paid` is declared `"owner"` and its route has no capability check at all.**
    Found while doing item 2, out of that item's scope.
-5. **The guest bid identity change (5).** New guest bids now read *"A guest at northwind.com"*
-   on the agency dashboard where the vendor organization does not resolve, instead of the
-   self-declared `partner_display_name`. Ruled behaviour, but visible today.
+5. **`bid.revise` is unwritten on both bid paths.** It is in the emittable whitelist 088
+   installs, and both routes have the exact branch it belongs in. Deliberately left, twice.
 6. **`react/no-unescaped-entities` (10).** ~1 h, 16% of the lint baseline, and it touches
    privacy and terms - do it where you can see the diff.
-7. **The migration log stops at 078.** 079, 080, 082 and 087 have no row in it.
+7. **The migration log stops at 078.** 079, 080, 082, 087 and now 088 have no row in it.
