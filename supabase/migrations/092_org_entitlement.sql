@@ -9,6 +9,10 @@
 --   NEW   public.organizations_guard_entitlement()  -> trigger
 --   NEW   trigger organizations_entitlement_guard   BEFORE UPDATE ON organizations
 --
+--   ALSO: one COMMENT ON TABLE public.profiles. No data, no schema, and
+--   the only statement in this file that names that table - see section 6
+--   for why it lives here.
+--
 --   POLICIES ADDED: NONE. DROPPED: NONE. Count stays at 117.
 --   092 ADDS A TRIGGER, NOT A POLICY. If the count moves, something
 --   other than this file moved it.
@@ -57,11 +61,11 @@
 --      organization with a SESSION client. Every company rename in the
 --      product goes through it. It must still work. T1 proves it.
 --
--- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 428
--- and an explicit COMMIT; on LINE 783. Those are the only EXECUTABLE
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 432
+-- and an explicit COMMIT; on LINE 845. Those are the only EXECUTABLE
 -- occurrences of either word.
 --
--- TO DRY RUN: change the COMMIT; on line 783 to ROLLBACK; and run the
+-- TO DRY RUN: change the COMMIT; on line 845 to ROLLBACK; and run the
 -- whole file. Every statement executes, every error surfaces, nothing
 -- persists. Verify the line numbers before trusting them, with:
 --
@@ -69,13 +73,13 @@
 --       supabase/migrations/092_org_entitlement.sql
 --
 -- THAT GREP RETURNS FOUR HITS, AND FOUR IS CORRECT:
---     428  BEGIN;    <- executable. The transaction.
---     513  BEGIN     <- plpgsql, the backfill assertion block's body.
+--     432  BEGIN;    <- executable. The transaction.
+--     517  BEGIN     <- plpgsql, the backfill assertion block's body.
 --                       No semicolon; matched by the case-insensitive
 --                       form only, not a transaction statement.
---     654  BEGIN     <- plpgsql, organizations_guard_entitlement's body.
+--     658  BEGIN     <- plpgsql, organizations_guard_entitlement's body.
 --                       Same. No semicolon.
---     783  COMMIT;   <- executable. The one to swap for ROLLBACK;.
+--     845  COMMIT;   <- executable. The one to swap for ROLLBACK;.
 -- Exactly one line ends in `BEGIN;` and exactly one in `COMMIT;`.
 -- If your grep shows a different set, this is not the file that was read.
 --
@@ -779,6 +783,64 @@ CREATE TRIGGER organizations_entitlement_guard
 REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM anon;
 REVOKE EXECUTE ON FUNCTION public.organizations_guard_entitlement() FROM authenticated;
+
+
+-- ---------------------------------------------------------------------
+-- 6. ONE COMMENT ON public.profiles. THE ONLY STATEMENT IN THIS FILE THAT
+--    TOUCHES THAT TABLE, AND IT WRITES NO DATA AND NO SCHEMA.
+--
+-- WHY IT IS IN THIS FILE AND NOT ITS OWN. 092 is the migration that makes
+-- this repository's THIRD guard trigger, and the second table to carry
+-- one. That is the moment the pattern stops being two ad-hoc triggers and
+-- starts being a convention somebody will copy - so it is the moment to
+-- write down the one thing about it that is easy to break by accident and
+-- impossible to see afterwards.
+--
+-- IT DESTROYS NOTHING. public.profiles carries no table comment today -
+-- grep for COMMENT ON TABLE public.profiles across every migration returns
+-- nothing - so this sets one rather than replacing one. If that ever stops
+-- being true, MERGE, do not overwrite: COMMENT ON replaces wholesale and
+-- there is no append.
+--
+-- WHAT IT RECORDS, and why it matters:
+--
+--   profiles carries TWO BEFORE UPDATE triggers, from 090 and 091.
+--   POSTGRESQL FIRES THEM IN ALPHABETICAL ORDER BY TRIGGER NAME:
+--     profiles_active_org_guard        (090)  'a' sorts first
+--     profiles_authority_columns_guard (091)  'u' sorts second
+--
+--   >>> THE ORDERING IS NOT WHAT MAKES THAT SAFE, AND BELIEVING IT IS, IS
+--   >>> THE MISTAKE THIS COMMENT EXISTS TO PREVENT.
+--
+--   What makes it safe is that EACH GUARD EARLY-RETURNS WHEN ITS OWN
+--   COLUMNS HAVE NOT MOVED, and neither modifies NEW. Each either returns
+--   NEW untouched or RAISEs. So the pair COMMUTES: run them in either
+--   order and the outcome is identical, because at most one of them has
+--   anything to say about any given UPDATE.
+--
+--   THAT IS WHY RENAMING ONE IS SAFE, AND ALSO WHY NOBODY SHOULD HAVE TO
+--   CHECK. A future third trigger that MUTATES NEW would break the
+--   property, and it would break it silently, in an order determined by
+--   how somebody happened to spell its name.
+--
+-- 092's own trigger is on organizations, not profiles, and is the only
+-- trigger on that table - so it has no ordering question of its own. The
+-- same reasoning is stated in its section 4 for whoever adds the second.
+-- ---------------------------------------------------------------------
+COMMENT ON TABLE public.profiles IS
+  'One row per account. CARRIES TWO BEFORE UPDATE GUARD TRIGGERS, and PostgreSQL fires '
+  'BEFORE triggers in ALPHABETICAL ORDER BY TRIGGER NAME: profiles_active_org_guard (090, '
+  'active_org_id must name an organization this profile belongs to) runs first, then '
+  'profiles_authority_columns_guard (091, the authority set is_paid/is_admin/demo_access/'
+  'email/linked_agency_id may not be written by a caller with an end-user session). '
+  'THE ORDER IS NOT WHAT MAKES THE PAIR SAFE. Each guard EARLY-RETURNS when its own '
+  'columns have not moved, and NEITHER MODIFIES NEW - each returns NEW unchanged or '
+  'RAISEs - so at most one of them has anything to say about any given UPDATE and the two '
+  'commute. Renaming either is therefore safe. A future trigger on this table that '
+  'MUTATES NEW would destroy that property silently, in an order decided by its spelling. '
+  'profiles.is_paid is VESTIGIAL as of migration 092: entitlement is organizations.is_paid '
+  'now, and a later migration drops this column together with its entry in 091''s '
+  'authority set. See supabase/migrations/092_org_entitlement.sql.';
 
 COMMIT;
 

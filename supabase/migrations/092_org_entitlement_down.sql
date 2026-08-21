@@ -4,8 +4,9 @@
 --   DROP  trigger organizations_entitlement_guard ON public.organizations
 --   DROP  public.organizations_guard_entitlement()
 --   DROP  COLUMN public.organizations.is_paid
+--   NULL  the COMMENT ON TABLE public.profiles that 092 section 6 set
 --
--- THAT IS THE WHOLE FILE. Three statements.
+-- THAT IS THE WHOLE FILE. Four statements.
 --
 -- ORDER MATTERS AND IT IS THE ORDER ABOVE. Dropping the function while
 -- the trigger still points at it fails on the dependency, and a rollback
@@ -72,16 +73,16 @@
 -- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
 -- =====================================================================
 --
--- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 98
--- and an explicit COMMIT; on LINE 117. Those are the only occurrences of
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 99
+-- and an explicit COMMIT; on LINE 136. Those are the only occurrences of
 -- either word, executable or otherwise - this file defines no plpgsql
 -- body, so there is no third hit the way there is in 092 itself.
 --
 --     grep -n -i '^begin\|^commit\|^rollback' \
 --       supabase/migrations/092_org_entitlement_down.sql
---     -- EXPECTED: exactly 2 hits.  98 BEGIN;   117 COMMIT;
+--     -- EXPECTED: exactly 2 hits.  99 BEGIN;   136 COMMIT;
 --
--- TO DRY RUN: change the COMMIT; on line 117 to ROLLBACK;. A dry run of
+-- TO DRY RUN: change the COMMIT; on line 136 to ROLLBACK;. A dry run of
 -- THIS file is worth more than a dry run of most, because the DROP
 -- COLUMN is the statement most likely to fail on a dependency nobody
 -- remembered - a view, an index, a later constraint.
@@ -113,6 +114,24 @@ DROP FUNCTION IF EXISTS public.organizations_guard_entitlement();
 -- than a rollback that stops and tells you what it found.
 ALTER TABLE public.organizations
   DROP COLUMN IF EXISTS is_paid;
+
+-- 4. The profiles table comment 092 section 6 set.
+--
+-- SET TO NULL, NOT REWRITTEN. profiles carried no table comment before 092
+-- - grep every migration for COMMENT ON TABLE public.profiles - so NULL is
+-- the state this restores, and it is the state that was actually there.
+-- Writing a "corrected" replacement would be inventing a third version,
+-- which is the failure 090's own down file names at :113.
+--
+-- WHAT IS LOST BY CLEARING IT: the note that profiles carries two BEFORE
+-- UPDATE guards, that PostgreSQL fires them alphabetically, and that what
+-- makes the pair safe is each one early-returning rather than the order.
+-- ALL THREE FACTS REMAIN TRUE AFTER THIS ROLLBACK - 090's and 091's
+-- triggers are untouched by this file - so if you are rolling back for any
+-- reason other than removing 092 entirely, consider leaving this statement
+-- out. It is the one line in this file that costs documentation rather
+-- than restoring state.
+COMMENT ON TABLE public.profiles IS NULL;
 
 COMMIT;
 

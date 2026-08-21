@@ -24,9 +24,41 @@
  * Greg's ruling BEFORE this is switched on. Nothing here is blocked on that ruling: the code
  * path is complete, tested by type and build, and inert.
  *
- * To turn it on: set BROADCAST_CUES_PARTNERSHIP=true in Vercel (Production and Preview) and
- * redeploy. To turn it off again: unset it. No migration is coupled to it, and no already
- * written row is undone by unsetting it - see the report's revert section.
+ * =========================================================================
+ * TO TURN IT ON: SET BROADCAST_CUES_PARTNERSHIP=true IN VERCEL, **PRODUCTION
+ * SCOPE ONLY**. NEVER PREVIEW. NEVER DEVELOPMENT.
+ * =========================================================================
+ *
+ * THIS LINE USED TO SAY "(Production and Preview)". THAT IS NOW WRONG AND IT IS
+ * DANGEROUS, and the reason changed under it rather than being got wrong at the time.
+ * IT IS THE IDENTICAL EXPOSURE COLLEAGUE_INVITATIONS WAS CORRECTED FOR, on the identical
+ * two facts - the correction was made there and not here, which is the only reason this
+ * line survived.
+ *
+ * TWO FACTS THAT ONLY BECAME TRUE TOGETHER ON 2026-08-20:
+ *
+ *   1. BRANCHES NOW BUILD VERCEL PREVIEW DEPLOYMENTS. Any pushed branch gets a live,
+ *      publicly reachable URL running that branch's code.
+ *   2. SUPABASE_SERVICE_ROLE_KEY IS SCOPED TO PREVIEW. A preview deployment therefore
+ *      holds a credential that BYPASSES ROW LEVEL SECURITY ENTIRELY against the LIVE
+ *      PRODUCTION DATABASE. There is no separate preview database.
+ *
+ * Put those together and a Preview-scoped flag means: THE NEXT BROADCAST FROM ANY PUSHED
+ * BRANCH WRITES PENDING partnerships ROWS AGAINST PRODUCTION DATA - including from work in
+ * progress, and including from a branch nobody is watching.
+ *
+ * AND THE ROWS ARE THE EXPOSURE, NOT JUST THE WRITE. current_user_counterparty_org_ids()
+ * admits partnerships AT ANY STATUS in BOTH DIRECTIONS, so each row makes both companies'
+ * entire profiles rows readable to the other - default_terms, business_criteria,
+ * default_nda_url and all - as described at the top of this comment. Unsetting the flag
+ * afterwards does not delete a single row, so the exposure outlives the mistake exactly
+ * the way an accepted org_members row does.
+ *
+ * PRODUCTION SCOPE ONLY. Not "Production and Preview". Not "All Environments", which is
+ * the Vercel default and is the same mistake with a friendlier name.
+ *
+ * To turn it off again: unset it. No migration is coupled to it, and no already written
+ * row is undone by unsetting it - see the report's revert section.
  */
 export function broadcastCuesPartnership(): boolean {
   return process.env.BROADCAST_CUES_PARTNERSHIP === "true"
