@@ -1,0 +1,245 @@
+-- =====================================================================
+-- Migration 089 DOWN. Reverses 089_org_invitation_lifecycle.sql.
+--
+-- After this file runs, colleague invitations cannot be created,
+-- accepted, declined or revoked by anybody, and an invitee cannot see
+-- the invitation addressed to them. org_invitations returns to what
+-- migration 086 shipped: RLS on, one SELECT policy for org admins, and
+-- no write authority of any kind.
+--
+-- =====================================================================
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 127
+-- and an explicit COMMIT; on LINE 177. Those are the only EXECUTABLE
+-- occurrences of either word, and this file contains no plpgsql, so the
+-- grep returns exactly two hits:
+--
+--     grep -n -i '^begin\|^commit\|^rollback' \
+--       supabase/migrations/089_org_invitation_lifecycle_down.sql
+--     -- EXPECTED: 127 BEGIN;   177 COMMIT;
+--
+-- TO DRY RUN: change the COMMIT; on line 177 to ROLLBACK;.
+--
+-- Do NOT verify with grep -n '^BEGIN;$'. That anchored form has produced
+-- false negatives in this repository.
+--
+-- =====================================================================
+-- IT DROPS THREE POLICIES, NOT FOUR. READ THIS BEFORE COUNTING.
+-- =====================================================================
+--
+-- After 089 there are FOUR policies on public.org_invitations. This file
+-- drops THREE of them, and leaves the fourth alone:
+--
+--   DROPPED  "Invitees read their own invitation"     SELECT   (089)
+--   DROPPED  "Org admins create invitations"          INSERT   (089)
+--   DROPPED  "Org admins manage their invitations"    UPDATE   (089)
+--   KEPT     "Org admins read their invitations"      SELECT   (086)
+--
+-- The fourth belongs to migration 086, not to 089. A down file for 089
+-- that removed it would silently roll back part of 086 as well, and the
+-- next person to check would find a table with zero policies and no file
+-- that admits to having taken the last one away.
+--
+-- POLICY COUNT: 117 -> 114 in schema public. org_invitations 4 -> 1.
+--
+-- =====================================================================
+-- DROPPING THESE FUNCTIONS RE-GRANTS anon. THIS IS THE TRAP.
+-- =====================================================================
+--
+-- CREATE OR REPLACE preserves a function's ACL. DROP FUNCTION followed
+-- by CREATE FUNCTION does NOT - the new function is created fresh, and a
+-- stock Supabase project carries ALTER DEFAULT PRIVILEGES granting anon
+-- EXECUTE on functions in schema public from BOTH postgres and
+-- supabase_admin. The SQL Editor runs as postgres.
+--
+-- So the moment any of these three is recreated after this file has
+-- dropped it - by re-running 089, or by a later migration - anon holds
+-- EXECUTE on it again, and REVOKE ... FROM PUBLIC will not take it away
+-- because it is a DIRECT grant, not a PUBLIC one.
+--
+-- ANY FILE THAT RECREATES THESE MUST CARRY THE THREE REVOKE ... FROM
+-- anon LINES FORWARD. 089 section 8 has them. This is how 087 got it
+-- right and how 088 got it wrong.
+--
+-- =====================================================================
+-- IF ONE PART OF 089 MISBEHAVED, PREFER A PARTIAL ROLLBACK.
+-- They are listed first for that reason.
+-- =====================================================================
+--
+-- PARTIAL A: the invitee read policy is showing somebody a row it
+-- should not, or is failing to show one it should.
+-- Leaves accept, decline and the admin side working. Note that the
+-- landing page renders nothing after this - the invitee genuinely
+-- cannot see their own row - but the RPCs still work, because they are
+-- SECURITY DEFINER and do not depend on this policy.
+--
+--   DROP POLICY IF EXISTS "Invitees read their own invitation" ON public.org_invitations;
+--
+-- PARTIAL B: the INSERT policy is refusing a legitimate invite. Symptom:
+-- 42501 "new row violates row-level security policy for table
+-- org_invitations", HTTP 403, from the team page's invite form by an
+-- account that really is an owner or admin. FIRST confirm the caller's
+-- actual org_members.role before rolling anything back - the policy
+-- reads current_user_admin_org_ids(), which is real, while
+-- lib/capabilities.ts orgRoleFor() returns "owner" for everyone and will
+-- happily have shown the button to a plain member.
+--
+--   DROP POLICY IF EXISTS "Org admins create invitations" ON public.org_invitations;
+--
+-- PARTIAL C: accept is wedging or writing the wrong membership. This is
+-- the one to reach for fastest, because it is the only path that writes
+-- org_members. Dropping the function makes every accept return PostgREST
+-- PGRST202 (function not found, HTTP 404) - loud, and harmless.
+--
+--   DROP FUNCTION IF EXISTS public.accept_org_invitation(text);
+--
+-- BEFORE RUNNING ANY OF THEM, CAPTURE THE FAILING CASE: the exact row,
+-- the caller's user id, their real org_members.role, and the SQLSTATE.
+-- A rollback with no captured case cannot be turned into a corrected 090.
+--
+-- =====================================================================
+-- WHAT THIS FILE CANNOT UNDO
+-- =====================================================================
+--
+-- ANY org_members ROW accept_org_invitation() ALREADY WROTE STAYS. This
+-- file does not delete memberships, deliberately: a colleague who
+-- genuinely joined is now doing work under that organization, and
+-- removing their membership because the invitation machinery is being
+-- rolled back would revoke a real person's access to real records with
+-- no way to tell which rows were theirs.
+--
+--   Find them first, before deciding:
+--     SELECT m.org_id, m.user_id, m.role, m.created_at, i.email, i.accepted_at
+--     FROM public.org_members m
+--     JOIN public.org_invitations i
+--       ON i.org_id = m.org_id AND i.accepted_by = m.user_id
+--     WHERE i.status = 'accepted';
+--
+--   If that returns rows, an organization in this database has more than
+--   one member and lib/capabilities.ts orgRoleFor() is now wrong for it.
+--   Remove them by hand, as postgres, only if you mean to.
+--
+-- ANY ROW WITH status = 'declined' will VIOLATE the restored CHECK. The
+-- restore below will FAIL with 23514 rather than corrupt anything, which
+-- is the safe direction. Section 4 tells you what to do about it.
+-- =====================================================================
+
+
+BEGIN;
+
+-- 1. The three policies 089 added. 086's is untouched - see the header.
+DROP POLICY IF EXISTS "Invitees read their own invitation"   ON public.org_invitations;
+DROP POLICY IF EXISTS "Org admins create invitations"        ON public.org_invitations;
+DROP POLICY IF EXISTS "Org admins manage their invitations"  ON public.org_invitations;
+
+-- 2. The two lifecycle functions.
+--
+--    Deliberately NOT "DROP ... CASCADE". Neither is referenced by a
+--    policy today, but if a later migration has started using one, a
+--    plain DROP fails with a dependency error and tells you what depends
+--    on it. CASCADE would silently drop that dependent, which on this
+--    schema means silently dropping a policy.
+DROP FUNCTION IF EXISTS public.accept_org_invitation(text);
+DROP FUNCTION IF EXISTS public.decline_org_invitation(text);
+
+-- 3. The email helper, LAST, after the policy that calls it is gone.
+--
+--    ORDER MATTERS HERE. "Invitees read their own invitation" calls
+--    current_user_email(), so dropping this before section 1 fails with
+--    a dependency error. It is third for that reason and not by habit.
+DROP FUNCTION IF EXISTS public.current_user_email();
+
+-- 4. The status CHECK, restored to what migration 086 created.
+--
+--    IF THIS FAILS WITH 23514, some row carries status = 'declined' and
+--    the restored constraint will not admit it. That is the correct
+--    failure: it means a real person declined a real invitation and this
+--    file is about to make that unrepresentable.
+--
+--    Decide, do not guess. Either keep 089's constraint (abandon this
+--    step and leave the wider CHECK in place - it costs nothing, since
+--    nothing writes 'declined' once the functions are dropped), or map
+--    those rows deliberately:
+--
+--      SELECT id, org_id, email, updated_at FROM public.org_invitations
+--       WHERE status = 'declined';
+--
+--      UPDATE public.org_invitations SET status = 'revoked'
+--       WHERE status = 'declined';   -- LOSES the invitee/admin
+--                                    -- distinction. That is the whole
+--                                    -- reason 089 added 'declined'.
+ALTER TABLE public.org_invitations
+  DROP CONSTRAINT org_invitations_status_check;
+
+ALTER TABLE public.org_invitations
+  ADD CONSTRAINT org_invitations_status_check
+  CHECK (status IN ('pending', 'accepted', 'revoked', 'expired'));
+
+COMMIT;
+
+
+-- =====================================================================
+-- VERIFICATION AFTER ROLLING BACK. EXPECTED VALUES STATED.
+-- =====================================================================
+--
+-- D1. The three functions are gone.
+--
+--       SELECT count(*) FROM pg_proc p
+--       JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname = 'public'
+--         AND p.proname IN ('current_user_email',
+--                           'accept_org_invitation',
+--                           'decline_org_invitation');
+--       -- EXPECTED: 0
+--
+-- D2. One policy on org_invitations, and it is 086's.
+--
+--       SELECT policyname, cmd, roles, qual
+--       FROM pg_policies
+--       WHERE schemaname = 'public' AND tablename = 'org_invitations';
+--
+--     EXPECTED: exactly 1 row, "Org admins read their invitations",
+--     SELECT, {authenticated}, qual mentioning current_user_admin_org_ids.
+--     If this returns 0 rows, 086's policy was dropped too and the table
+--     is now unreadable by anyone. Recreate it from
+--     086_member_identity_and_invitations.sql.
+--
+-- D3. The total policy count is back to 114.
+--
+--       SELECT count(*) FROM pg_policies WHERE schemaname = 'public';
+--       -- EXPECTED: 114
+--
+-- D4. The CHECK no longer admits 'declined'.
+--
+--       SELECT pg_get_constraintdef(oid) LIKE '%declined%' AS has_declined
+--       FROM pg_constraint
+--       WHERE conrelid = 'public.org_invitations'::regclass
+--         AND conname = 'org_invitations_status_check';
+--       -- EXPECTED: f
+--
+-- D5. The six pre-existing current_user_* helpers survived. This file
+--     drops one function matching that LIKE pattern and must not have
+--     touched the others.
+--
+--       SELECT p.proname, md5(pg_get_functiondef(p.oid))
+--       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname = 'public' AND p.proname LIKE 'current\_user\_%'
+--       ORDER BY p.proname;
+--
+--     EXPECTED: 6 rows, hashes byte-identical to 089's P5 capture.
+--
+-- D6. Deny-by-default is back. A WRITE, run from a real authenticated
+--     application session as an org ADMIN - not as postgres.
+--
+--       INSERT INTO public.org_invitations (org_id, email, token, expires_at)
+--       VALUES ('<an org you administer>', 'x@example.com',
+--               'down-089-verification', now() + interval '1 day');
+--
+--     EXPECTED: ERROR 42501, "new row violates row-level security policy
+--     for table org_invitations". If it SUCCEEDS, the INSERT policy did
+--     not drop and D2 is lying to you - re-run D2.
+--
+-- D7. Check nothing was left half-joined. See "WHAT THIS FILE CANNOT
+--     UNDO" in the header and run the query there. If it returns rows,
+--     this database has a multi-member organization and the code is
+--     calibrated on that being impossible.
+-- =====================================================================
