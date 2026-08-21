@@ -59,10 +59,33 @@ export async function DELETE(
     // 079: an organization column is not a user id. Scope by membership.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
-    const { error } = await supabase.from("agency_library_documents").delete().eq("id", id).in("org_id", callerOrgIds)
+    // .select() IS NOT DECORATION. PostgREST does not report a zero-row delete as an
+    // error, so without it this returned `{ success: true }` for a document that was
+    // already gone, for a fabricated id, and for another organization's document - which
+    // `.in("org_id", callerOrgIds)` and the RLS policy both filter out. The interface
+    // removes the row on that success and it comes back on the next load.
+    //
+    // UNLIKE public.partnerships, THIS TABLE CAN ACTUALLY BE DELETED FROM. "Agency manages
+    // own library documents" (079:1121) is FOR ALL, so DELETE is covered for the caller's
+    // own organization. The happy path was and remains correct; what was missing was the
+    // ability to tell it apart from the empty one.
+    const { data: deletedRows, error } = await supabase
+      .from("agency_library_documents")
+      .delete()
+      .eq("id", id)
+      .in("org_id", callerOrgIds)
+      .select("id")
 
     if (error) {
       return NextResponse.json({ error: "Delete failed" }, { status: 500 })
+    }
+    if (!Array.isArray(deletedRows) || deletedRows.length === 0) {
+      console.error("[agency/library-documents] DELETE matched no row", {
+        id,
+        reason:
+          "the document does not exist, or it belongs to another organization - both are filtered by .in(org_id, callerOrgIds) and by the FOR ALL policy",
+      })
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
     return NextResponse.json({ success: true })
   } catch (e) {
