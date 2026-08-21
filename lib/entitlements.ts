@@ -78,10 +78,19 @@ import { actingRole, canActAs } from "./acting-role"
  * (`as unknown as OrgId`) rather than implicit.
  *
  * DELIBERATELY NOT BRANDED: `agencyEntitlementId()`. It returns the USER ID unchanged when
- * membership does not resolve, which is the correct failure for a usage row and a foreign
- * key violation for anything else. Leaving its return type a bare `string` is what stops it
- * being handed to a write - the compiler now rejects exactly the substitution that this
- * whole pass exists to close.
+ * the acting organization does not resolve, and that value is a foreign key violation
+ * against organizations(id) for every account created after 079 - INCLUDING against
+ * usage_tracking, whose org_id 079 made NOT NULL with an FK. (An earlier version of this
+ * comment called it "the correct failure for a usage row". It is not; see that function's
+ * own header.) Leaving its return type a bare `string` is what stops it being handed to a
+ * write.
+ *
+ * THAT PROTECTION IS NARROWER THAN IT READS, and the three exceptions are named in
+ * agencyEntitlementId's header rather than left to be discovered: the brand only rejects a
+ * parameter that is ITSELF typed `OrgId`, and three call sites pass the value into plain
+ * `string` parameters that reach a write or a scoping predicate. The compiler rejects the
+ * substitution wherever the destination is branded, which is most of the surface and not
+ * all of it.
  */
 export type OrgId = string & { readonly __brand: "OrgId" }
 
@@ -217,40 +226,102 @@ export function orgIdFromColumn(value: unknown): OrgId | null {
 /**
  * The identity that entitlement and quota are keyed to.
  *
- * Returns the organization whose quota this caller spends. Where a user belongs to more
- * than one organization - already true of the dual-role accounts in production - the
- * one they OWN wins, then the one they administer, then the first by membership. That is
- * a deterministic rule rather than a correct one: "which organization is this AI analysis
- * being charged to" is a real product question that a portal switcher will eventually
- * have to answer explicitly. Deterministic beats arbitrary until it does.
+ * Returns the organization whose quota this caller spends.
  *
- * Returns the user id unchanged when membership cannot be resolved. That is the pre-079
- * answer and it is deliberate: every organization 079 backfilled carries an id equal to
- * its founding user's id, so the fallback is correct for all sixteen live accounts and
- * merely wrong-and-harmless for an organization created later, which would get a fresh
- * usage_tracking row rather than an error. Failing the request instead would take the
- * whole AI surface down on a transient lookup failure.
+ * ---------------------------------------------------------------------------
+ * THE RANKING IS GONE. THIS NOW RESOLVES THE ACTING ORGANIZATION.
+ *
+ * It used to sort the caller's memberships owner, then admin, then member, and take the
+ * first. Its own comment called that "deterministic rather than correct", which was true
+ * and was only survivable because the sort never had two rows to work with.
+ *
+ * IT BECOMES A SILENT MISATTRIBUTION THE HOUR COLLEAGUE INVITATIONS SHIP, and it is the
+ * exact inverse of the billing ruling. B owns their own auto-created organization (role
+ * `owner`) and is a `member` of the paying company A. The ranking puts owner first, so
+ * every AI analysis and every project B creates WHILE ACTING FOR A is metered against B's
+ * own one-person organization. resolveCallerWriteOrgId() was migrated off this ranking at
+ * 090 for the same reason; the quota path was not, and this closes that gap.
+ *
+ * ---------------------------------------------------------------------------
+ * THE FALLBACK IS DELIBERATELY PRESERVED, AND THAT IS WHAT MAKES THIS SAFE TO SHIP.
+ *
+ * resolveActingOrgId() FAILS CLOSED - it returns null rather than guessing. This function
+ * must not, and does not: `?? userId` keeps every one of the old fail-open branches
+ * exactly as it found them. Branch by branch, against the code this replaces:
+ *
+ *   lookup error         -> null -> userId.  IDENTICAL to before, and now LOGGED, which
+ *                           it already was.
+ *   no membership        -> null -> userId.  IDENTICAL, and now logged, which it was NOT.
+ *   exactly 1 membership -> that organization. IDENTICAL - a one-element list sorts to
+ *                           itself. THIS IS EVERY ACCOUNT THAT EXISTS TODAY.
+ *   >1, preference set   -> the ACTING organization. THE FIX.
+ *   >1, no preference    -> null -> userId. DIFFERS: the ranking used to return the owned
+ *                           organization. Near-unreachable after 090, because
+ *                           accept_org_invitation initialises active_org_id when it is
+ *                           null, so a colleague has a preference from the moment they
+ *                           accept. See the report's OPEN list.
+ *   >1, stale preference -> null -> userId. DIFFERS, same way, and needs three historical
+ *                           memberships to reach at all.
+ *
+ * SO: NO PATH THAT WORKS TODAY STOPS WORKING. The three branches that differ all require
+ * more than one membership, and nothing in this product has ever created a second one -
+ * 079 PHASE 2 inserts one per profile, PHASE 12's trigger inserts one per signup, and
+ * accept_org_invitation is gated behind COLLEAGUE_INVITATIONS, which is off everywhere.
+ * This is a provable no-op against the live database and becomes live behaviour on
+ * exactly the day the flag flips, which is the day the bug it fixes becomes live too.
+ *
+ * The query count is unchanged for every account that exists: resolveActingOrgId reads the
+ * stored preference ONLY when there is more than one membership to choose between.
+ *
+ * ---------------------------------------------------------------------------
+ * THE RETURN TYPE STAYS A BARE `string`. DO NOT BRAND IT.
+ *
+ * `resolution.orgId` is an `OrgId`, but `?? userId` widens it back to `string` and that is
+ * the point - see the OrgId comment above. An unbranded return is what stops this value
+ * being handed to a parameter typed `OrgId`, because the fallback CAN be a user id and a
+ * user id raises 23503 against organizations(id).
+ *
+ * THAT PROTECTION IS NARROWER THAN THE OrgId COMMENT CLAIMS, and it is worth knowing
+ * which three call sites it does not reach. The brand only rejects a parameter that is
+ * ITSELF typed `OrgId`; three callers pass this value into plain `string` parameters and
+ * from there into a write or a scoping predicate:
+ *   app/api/agency/email-scan/import/route.ts:168  -> importContact(), writes the pool
+ *   app/api/agency/email-scan/run/route.ts:341     -> enrichWithLigamentData(), and the
+ *                                                     service client bypasses RLS, so that
+ *                                                     argument IS the whole scoping
+ *   app/api/partner/partnerships/claim/route.ts:43 -> partnerships.vendor_org_id, which
+ *                                                     REFERENCES organizations(id)
+ * All three get a BETTER value after this change in the branch that differs, because the
+ * acting organization is the right answer for all three. None of them gets a worse one:
+ * the fallback they receive in every other branch is the same `userId` they got before.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT THE FALLBACK ACTUALLY DOES, CORRECTED. The comment that stood here said the
+ * fallback was "merely wrong-and-harmless for an organization created later, which would
+ * get a fresh usage_tracking row rather than an error". THAT IS WRONG, and it has been
+ * wrong since 079:
+ *
+ *   079 made usage_tracking.org_id NOT NULL (079:983) and added
+ *   usage_tracking_org_id_org_fkey -> organizations(id) ON DELETE CASCADE in the PHASE 7
+ *   repoint loop. So a `userId` that is not also an organizations.id does NOT open a fresh
+ *   row - the upsert in getOrCreateMonthlyUsage() raises 23503, that function turns it
+ *   into `throw new Error(...)` at lib/usage-tracking.ts:102, and the AI or project-create
+ *   request 500s.
+ *
+ *   The fallback is therefore accidentally CORRECT for the sixteen accounts 079 backfilled
+ *   with organizations.id = profiles.id, and a 500 for anybody else. It was written before
+ *   that foreign key existed and was never revised.
+ *
+ * The fallback is kept anyway, and for the reason the old comment gave last rather than
+ * first: failing the request instead would take the whole AI surface down on a transient
+ * org_members lookup failure, for every account, including the sixteen for which the
+ * fallback works.
  */
 export async function agencyEntitlementId(userId: string, client: OrgLookupClient): Promise<string> {
   if (!userId) return userId
-  const { data, error } = await client
-    .from("org_members")
-    .select("org_id, role")
-    .eq("user_id", userId)
-  if (error || !data || (data as unknown[]).length === 0) {
-    if (error) {
-      console.error("[entitlements] agencyEntitlementId falling back to user id", {
-        userId,
-        code: error.code,
-        message: error.message,
-      })
-    }
-    return userId
-  }
-  const rows = data as Array<{ org_id?: string | null; role?: string | null }>
-  const rank = (r?: string | null) => (r === "owner" ? 0 : r === "admin" ? 1 : 2)
-  const best = [...rows].sort((a, b) => rank(a.role) - rank(b.role))[0]
-  return best?.org_id ?? userId
+  const { resolveActingOrgId } = await import("@/lib/acting-org")
+  const resolution = await resolveActingOrgId(userId, client)
+  return resolution.orgId ?? userId
 }
 
 /**
@@ -262,14 +333,20 @@ export async function agencyEntitlementId(userId: string, client: OrgLookupClien
  *   - resolveCallerOrgIds() returns a SET. It is exactly right for a read, where
  *     `.in(col, ids)` is the whole answer, and useless for a column that takes one
  *     value. Taking `[0]` of it is an unordered pick dressed up as a decision.
- *   - agencyEntitlementId() returns one id with the right ranking, and then falls back
- *     to returning `userId` unchanged when membership does not resolve. That fallback is
- *     deliberate and correct where it is used - a quota lookup that fails should open a
- *     fresh usage row, not take the AI surface down - but `userId` is PRECISELY the value
- *     that raises 23503 against organizations(id) for any account created after 079. Its
- *     failure direction is right for accounting and wrong for a foreign key.
+ *   - agencyEntitlementId() resolves the same acting organization this function does, and
+ *     then falls back to returning `userId` unchanged when that resolution refuses. That
+ *     fallback is deliberate where it is used - a transient org_members lookup failure
+ *     must not take the whole AI surface down - but `userId` is PRECISELY the value that
+ *     raises 23503 against organizations(id) for any account created after 079. Its
+ *     failure direction is tolerable for accounting and wrong for a foreign key.
  *
- * So: same ranking, opposite failure. Returns null rather than a value, and every caller
+ *     NOT, AS THIS COMMENT USED TO SAY, because "a quota lookup that fails should open a
+ *     fresh usage row". It does not open one. usage_tracking.org_id is NOT NULL with an FK
+ *     to organizations(id) as of 079, so the fallback raises 23503 there too and the route
+ *     500s. See agencyEntitlementId's own header, where the same stale claim is corrected
+ *     at length.
+ *
+ * So: same resolution, opposite failure. Returns null rather than a value, and every caller
  * must treat null as "fail the request". Writing a guess here is the exact defect this
  * whole pass exists to close - a value that is accidentally correct for the sixteen
  * accounts that exist and silently wrong for the seventeenth.
