@@ -319,7 +319,9 @@ export async function GET() {
         : null
       if (orgName) return { kind: "counterparty", name: orgName }
       const email = (partnership?.partner_email as string | null | undefined) || null
-      if (email) return { kind: "guest", name: guestDisplayName(null, email), email }
+      // No self-declared name on this path: a partnership row carries no bid, so there is
+      // nothing the vendor typed to prefer over the domain.
+      if (email) return { kind: "guest", name: guestDisplayName(null, null, email), email }
       return { kind: "counterparty", name: "A vendor" }
     }
 
@@ -622,7 +624,9 @@ export async function GET() {
       const actor: AgencyActivityActor = orgName
         ? { kind: "counterparty", name: orgName }
         : email
-          ? { kind: "guest", name: guestDisplayName(null, email), email }
+          // Same as above: an inbox row is a broadcast recipient, not a submitted bid, so
+          // there is no self-declared name to reach for.
+          ? { kind: "guest", name: guestDisplayName(null, null, email), email }
           : { kind: "counterparty", name: "A vendor" }
       entries.push({
         dedupeKey: `rfp_inbox:${row.id}`,
@@ -668,10 +672,18 @@ export async function GET() {
     // exists on the bid.award payload - the payload is counterparty-readable and is not the
     // source of truth for anything rendered here.
     const projectIdByResponseId = new Map<string, string>()
+    // The name the vendor typed into the guest bid form, for the actor resolver's guest
+    // branch. Already selected at :146 for source 2, which has rendered it verbatim since
+    // before milestones existed - so this is the SAME name on the same line, not a new
+    // disclosure. Without it the vendor-side bid.submit milestone wins the merge against
+    // source 2 and downgrades a real name to "A guest at northwind.com".
+    const displayNameByResponseId = new Map<string, string>()
     for (const r of responses) {
       const inbox = r.inbox_item_id ? inboxById.get(r.inbox_item_id as string) : null
       const projectId = inbox?.project_id as string | undefined
       if (projectId) projectIdByResponseId.set(r.id as string, projectId)
+      const declared = (r.partner_display_name as string | null)?.trim() || ""
+      if (declared) displayNameByResponseId.set(r.id as string, declared)
     }
 
     const unknownEventTypes = new Set<string>()
@@ -704,9 +716,23 @@ export async function GET() {
           }
           const orgName = row.vendor_org_id ? partnerNameById.get(row.vendor_org_id) || null : null
           if (row.actor_id) return { kind: "counterparty", name: orgName || "A vendor" }
-          // No account: a guest / magic-link actor. Organization name, then domain, then
-          // "A guest"; the address rides along for a hover and never enters the line.
-          return { kind: "guest", name: guestDisplayName(orgName, row.actor_email), email: row.actor_email ?? null }
+          // No account: a guest / magic-link actor. Organization name, then the name they
+          // gave themselves on the bid, then domain, then "A guest"; the address rides along
+          // for a hover and never enters the line.
+          //
+          // The self-declared name is keyed on the RESPONSE id, which is what `subject_id`
+          // holds for `subject_type: "bid"` - the same id source 2 keys on, which is why the
+          // two agree after the merge collapses them. Other subject types have no bid behind
+          // them and correctly get null.
+          const declaredName =
+            row.subject_type === "bid" && row.subject_id
+              ? displayNameByResponseId.get(row.subject_id) || null
+              : null
+          return {
+            kind: "guest",
+            name: guestDisplayName(orgName, declaredName, row.actor_email),
+            email: row.actor_email ?? null,
+          }
         },
         counterpartyName: (row) => (row.vendor_org_id ? partnerNameById.get(row.vendor_org_id) || null : null),
         projectId: (row) => {

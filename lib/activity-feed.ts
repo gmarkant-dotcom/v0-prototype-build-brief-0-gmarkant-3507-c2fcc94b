@@ -596,13 +596,42 @@ export function emailDomain(email: string | null | undefined): string | null {
 
 /**
  * The display name for an actor with no account, in the precedence design section 5 sets:
- * the vendor organization name, then the domain, then "A guest".
+ * the vendor organization name, then the name they gave themselves, then the domain, then
+ * "A guest". The parameter order is the precedence order, deliberately - this function is
+ * the whole identity rule for an actor with no account, and a signature that reads in a
+ * different order to the chain is a signature that gets called wrong.
  *
- * "(via link)" on the resolved-organization case is not decoration. It distinguishes an
- * unauthenticated actor from a portal user, which is real information a colleague wants.
+ * WHY THE SELF-DECLARED NAME IS IN THE CHAIN AT ALL. `partner_rfp_responses
+ * .partner_display_name` is what the vendor typed into the guest bid form. The derived
+ * "submitted a bid" line has rendered it verbatim since long before milestones existed, so
+ * it is not new information on this surface. It earns its place between the organization and
+ * the domain because it is more specific than a domain and less authoritative than an
+ * organization record: it is a claim the vendor made about themselves, not something the
+ * product verified.
+ *
+ * "(via link)" is not decoration, and it is on BOTH named cases rather than only the
+ * organization one. It distinguishes an unauthenticated actor from a portal user, which is
+ * real information a colleague wants - and the self-declared name is precisely the case
+ * where that is not otherwise visible, because a bare typed name looks exactly like a
+ * teammate's or a portal vendor's. "A guest at acme.com" says it for itself and needs no
+ * suffix.
+ *
+ * THE ONE THING THE SELF-DECLARED NAME IS NOT ALLOWED TO BE. An address. This chain exists
+ * because design section 5 ruled that a raw email address never appears in a feed line, on
+ * either side - the local part is the part that identifies a person, and a five-word line is
+ * the worst place to put one. A free-text field is exactly where an address arrives, so a
+ * value containing "@" is skipped and the chain falls through to the domain, which is the
+ * safe rendering of the same information. This does not reject the value anywhere else; the
+ * bid form and the derived line are unchanged.
  */
-export function guestDisplayName(orgName: string | null, email: string | null | undefined): string {
+export function guestDisplayName(
+  orgName: string | null,
+  selfDeclaredName: string | null | undefined,
+  email: string | null | undefined
+): string {
   if (orgName && orgName.trim()) return `${orgName.trim()} (via link)`
+  const declared = selfDeclaredName?.trim() || ""
+  if (declared && !declared.includes("@")) return `${declared} (via link)`
   const domain = emailDomain(email)
   if (domain) return `A guest at ${domain}`
   return "A guest"
