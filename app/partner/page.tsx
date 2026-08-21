@@ -655,14 +655,20 @@ export default function PartnerDashboardPage() {
               <div className="font-display font-bold text-3xl text-vendor-foreground">{funnel?.openRfps ?? 0}</div>
               <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mt-1">Open RFPs</div>
             </Link>
-            <Link href="/partner/rfps" className="bg-vendor-surface rounded-xl border border-vendor-border p-5 text-center hover:border-vendor-foreground/30 transition-colors">
+            {/* PHASE 4: repointed from /partner/rfps to /partner/bids. Before the split these
+                three tiles all landed on the same combined page, so where they pointed did
+                not distinguish anything. Now stage 01 and stage 02 are separate pages and a
+                bid count has a correct destination, which is stage 02. */}
+            <Link href="/partner/bids" className="bg-vendor-surface rounded-xl border border-vendor-border p-5 text-center hover:border-vendor-foreground/30 transition-colors">
               <div className="font-display font-bold text-3xl text-vendor-foreground">{funnel?.bidsSubmitted ?? 0}</div>
               <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mt-1">Bids Submitted</div>
               {bidsBreakdownParts.length > 0 && (
                 <div className="text-2xs text-vendor-muted/70 mt-1 truncate">{bidsBreakdownParts.join(" · ")}</div>
               )}
             </Link>
-            <Link href="/partner/rfps" className="bg-vendor-surface rounded-xl border border-vendor-border p-5 text-center hover:border-vendor-foreground/30 transition-colors">
+            {/* Win rate is computed over awarded and declined bids, which is exactly the
+                History view. Stage 02. */}
+            <Link href="/partner/bids" className="bg-vendor-surface rounded-xl border border-vendor-border p-5 text-center hover:border-vendor-foreground/30 transition-colors">
               <div className="font-display font-bold text-3xl text-vendor-foreground">
                 {funnel?.winRate.rate != null ? `${Math.round(funnel.winRate.rate * 100)}%` : "-"}
               </div>

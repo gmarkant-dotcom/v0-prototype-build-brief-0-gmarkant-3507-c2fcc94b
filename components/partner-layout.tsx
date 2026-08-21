@@ -34,9 +34,18 @@ const navGroups: NavItem[][] = [
   ],
   [
     { number: "00", title: "Agency Network", href: "/partner/network", tooltip: "Your agency partnerships, pending invitations, and discover new agencies" },
-    { number: "01", title: "Open RFPs & Bids", href: "/partner/rfps", tooltip: "Active RFP invitations, submit bids, and track your bid history" },
-    { number: "02", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your lead agencies" },
-    { number: "03", title: "Delivery & Projects", href: "/partner/projects", tooltip: "Your active project engagements, status updates, and delivery performance" },
+    // THE SPLIT. "Open RFPs & Bids" was one item covering two stages, and it was the only
+    // thing breaking the 1:1 with the lead agency nav. 01 and 02 below are now the two halves
+    // it contained, numbered to match agency 01 RFP Broadcast and 02 Bid Management, and 03
+    // and 04 renumbered to match 03 Onboarding and 04 Delivery Performance.
+    //
+    // /partner/rfps IS UNCHANGED AS A URL. It is the call to action in five vendor emails and
+    // the auth callback default; splitting the nav added /partner/bids beside it rather than
+    // renaming it. See app/partner/rfps/page.tsx for the enumerated list.
+    { number: "01", title: "Open RFPs", href: "/partner/rfps", tooltip: "RFP invitations sent to you by lead agencies, and the bid form for each" },
+    { number: "02", title: "My Bids", href: "/partner/bids", tooltip: "Bids you have submitted, and the history of every outcome including awarded and declined" },
+    { number: "03", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your lead agencies" },
+    { number: "04", title: "Delivery & Projects", href: "/partner/projects", tooltip: "Your active project engagements, status updates, and delivery performance" },
   ],
   [
     { icon: "◎", title: "Legal & Compliance", href: "/partner/legal", tooltip: "Business designations, insurance coverage, and legal entity information" },
