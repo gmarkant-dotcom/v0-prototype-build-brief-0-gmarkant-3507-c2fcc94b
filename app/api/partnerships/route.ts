@@ -1349,13 +1349,60 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Only the agency can delete this partnership' }, { status: 403 })
     }
 
-    // Delete the partnership
-    const { error: deleteError } = await supabase
+    // =================================================================
+    // THE DELETE. .select() IS NOT DECORATION - IT IS THE WHOLE FIX.
+    //
+    // THIS ROUTE HAS NEVER DELETED A PARTNERSHIP. NOT FOR ANYBODY. It reported
+    // `{ success: true }` and logged `[api] success` every time.
+    //
+    // WHY: public.partnerships HAS NO DELETE POLICY. Not a narrow one - none at all.
+    // Its complete policy set is three INSERTs, three SELECTs and three UPDATEs
+    // (079:1465-1494, with 087 replacing the INSERT). RLS is enabled on the table, and
+    // POSTGRES DENIES BY DEFAULT, so the DELETE below matches zero rows for every caller,
+    // including the lead agency that owns the row. Verified by grep over every migration
+    // in the repository and against docs/schema-snapshot-2026-08-13.md, which lists four
+    // DELETE policies in the whole schema and none of them on this table.
+    //
+    // AND POSTGREST DOES NOT REPORT A ZERO-ROW DELETE AS AN ERROR. So `deleteError` was
+    // null, the throw never fired, and the route said it had done the thing. That is the
+    // same silent-success shape as app/api/admin/grant-agency-access - and worse, because
+    // that one at least worked on the admin's own row.
+    //
+    // THE OWNERSHIP CHECK ABOVE IS REAL AND IS NOT WHAT WAS BROKEN. It correctly refuses a
+    // partnership the caller does not own. It simply never had anything to protect,
+    // because the write behind it could not land either way.
+    //
+    // >>> THIS FIX MAKES THE ROUTE HONEST. IT DOES NOT MAKE THE DELETE WORK. Removing a
+    // >>> partnership from the interface still needs a DELETE policy on public.partnerships,
+    // >>> and adding one is a POLICY WIDENING and a product decision - who may remove a
+    // >>> partnership, and whether "remove" should be a status change rather than a delete
+    // >>> given how much references these rows. It is raised as an OPEN item in
+    // >>> docs/092-session-report.md with the query that settles it. NOT DONE HERE.
+    // =================================================================
+    const { data: deletedRows, error: deleteError } = await supabase
       .from('partnerships')
       .delete()
       .eq('id', partnershipId)
+      .select('id')
 
     if (deleteError) throw deleteError
+
+    if (!Array.isArray(deletedRows) || deletedRows.length === 0) {
+      console.error('[api] failure', {
+        route,
+        method: 'DELETE',
+        code: 500,
+        userId: user.id,
+        partnershipId,
+        message: 'partnerships delete matched no row',
+        reason:
+          'public.partnerships has no DELETE policy - its policy set is INSERT/SELECT/UPDATE only - so RLS denies the delete by default for every caller. The ownership check above passed, so this is not an authorization refusal.',
+      })
+      return NextResponse.json(
+        { error: 'Partnerships cannot be removed yet. Nothing has been changed.' },
+        { status: 501 }
+      )
+    }
 
     console.log('[api] success', { route, method: 'DELETE', userId: user.id, role: null, recordId: partnershipId })
     return NextResponse.json({ success: true })
