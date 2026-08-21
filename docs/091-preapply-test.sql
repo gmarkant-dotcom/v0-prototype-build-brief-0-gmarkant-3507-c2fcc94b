@@ -214,8 +214,62 @@ BEGIN;
 -- ROLLBACK at the foot of this file removes the table along with
 -- everything else. Nothing persists either way; this spelling just does
 -- not lie about the reason.
+--
 -- =====================================================================
-CREATE TEMP TABLE _lg091_results (
+-- EVERY REFERENCE TO THIS TABLE IS WRITTEN pg_temp._lg091_results,
+-- INCLUDING THIS CREATE. DO NOT "SIMPLIFY" THE QUALIFIER AWAY.
+-- =====================================================================
+--
+-- The unqualified spelling shipped first and a real run in the Supabase
+-- SQL Editor returned, on the first INSERT:
+--
+--     ERROR: 42P01: relation "_lg091_results" does not exist
+--
+-- The table had been created. It was the NAME that did not resolve.
+--
+-- THE DISTINCTION THAT MATTERS, AND IT IS THE WHOLE REASON THIS LOOKS
+-- REDUNDANT. `pg_temp` behaves differently in the two places it can
+-- appear:
+--
+--   AS A search_path ENTRY it is unreliable. PostgreSQL resolves the
+--   literal `pg_temp` to the session's real temp schema - pg_temp_N -
+--   when it RECOMPUTES the path. If the session had no temp namespace at
+--   that moment, the entry resolves to nothing and silently drops off,
+--   and every unqualified relation name stops finding the temp schema.
+--   Nothing warns. You get 42P01 on a table you just created.
+--
+--   AS A QUALIFIER it is reliable. `pg_temp.x` is resolved at USE time,
+--   against this session's temp namespace, every time. It does not
+--   depend on any search_path, on who set one, or on when.
+--
+-- So the qualifier is not belt-and-braces around the same mechanism. It
+-- is a DIFFERENT mechanism, and it is the one that holds.
+--
+-- WHERE THE BAD search_path CAME FROM IS NOT IN THIS FILE, and that was
+-- checked rather than assumed: the only `SET search_path` here is the
+-- one on profiles_guard_authority_columns() below, which is a FUNCTION
+-- ATTRIBUTE copied byte-identically from migration 091 - it applies
+-- while that function runs and to nothing else, and that function never
+-- touches this table. It must stay exactly as it is or this file stops
+-- testing the real migration. The path that failed belongs to the
+-- executing client's own session or wrapper.
+--
+-- IF IT FAILS AGAIN, THE NEW ERROR NAMES THE CAUSE. Qualification turns
+-- one ambiguous error into three that can be told apart:
+--
+--   3F000  schema "pg_temp" does not exist
+--          -> this session has NO temp namespace, so the CREATE above ran
+--             somewhere else. The client is splitting the batch across
+--             connections and no in-file change can fix it.
+--   42P01  relation "pg_temp._lg091_results" does not exist
+--          -> the temp schema is there and the table is not: the CREATE
+--             did not run, or was rolled back before the reference.
+--   42501  permission denied for schema pg_temp_N
+--          -> a role change is still in effect at that statement.
+--
+-- =====================================================================
+-- =====================================================================
+CREATE TEMP TABLE pg_temp._lg091_results (
   seq     integer GENERATED ALWAYS AS IDENTITY,
   test    text,
   verdict text,
@@ -363,18 +417,18 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T1  settings-shaped save          PASS   (1 row written)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T1  settings-shaped save', 'PASS', '(1 row written)');
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T1  settings-shaped save          FAIL   <- matched % rows, expected 1. A zero-row write is not a success.', v_rows;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T1  settings-shaped save', 'FAIL', format('matched %s rows, expected 1. A zero-row write is not a success.', v_rows));
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T1  settings-shaped save          FAIL   <- % %  DO NOT APPLY 091.', SQLSTATE, SQLERRM;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T1  settings-shaped save', 'FAIL', format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM));
     v_fail := v_fail + 1;
   END;
@@ -400,18 +454,18 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T2  portal switch (active_role)   PASS   (1 row written)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T2  portal switch (active_role)', 'PASS', '(1 row written)');
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T2  portal switch (active_role)   FAIL   <- matched % rows, expected 1.', v_rows;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T2  portal switch (active_role)', 'FAIL', format('matched %s rows, expected 1.', v_rows));
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T2  portal switch (active_role)   FAIL   <- % %  DO NOT APPLY 091.', SQLSTATE, SQLERRM;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T2  portal switch (active_role)', 'FAIL', format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM));
     v_fail := v_fail + 1;
   END;
@@ -436,18 +490,18 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T3  self-grant secondary_role     PASS   (1 row written)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T3  self-grant secondary_role', 'PASS', '(1 row written)');
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T3  self-grant secondary_role     FAIL   <- matched % rows, expected 1.', v_rows;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T3  self-grant secondary_role', 'FAIL', format('matched %s rows, expected 1.', v_rows));
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T3  self-grant secondary_role     FAIL   <- % %  DO NOT APPLY 091.', SQLSTATE, SQLERRM;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T3  self-grant secondary_role', 'FAIL', format('%s %s  DO NOT APPLY 091.', SQLSTATE, SQLERRM));
     v_fail := v_fail + 1;
   END;
@@ -469,23 +523,23 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4a self-grant is_paid            FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T4a self-grant is_paid', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4a self-grant is_paid            PASS   (refused, LG007)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4a self-grant is_paid', 'PASS', '(refused, LG007)');
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4a self-grant is_paid            INCONCLUSIVE  42501: authenticated holds no UPDATE on profiles. See the header.';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4a self-grant is_paid', 'INCONCLUSIVE', '42501: authenticated holds no UPDATE on profiles. See the header.');
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4a self-grant is_paid            FAIL   <- refused, but with the WRONG error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4a self-grant is_paid', 'FAIL', format('refused, but with the WRONG error: %s %s', SQLSTATE, SQLERRM));
       v_fail := v_fail + 1;
   END;
@@ -504,23 +558,23 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4b self-grant is_admin           FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T4b self-grant is_admin', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4b self-grant is_admin           PASS   (refused, LG007)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4b self-grant is_admin', 'PASS', '(refused, LG007)');
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4b self-grant is_admin           INCONCLUSIVE  42501, see T4a.';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4b self-grant is_admin', 'INCONCLUSIVE', '42501, see T4a.');
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4b self-grant is_admin           FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4b self-grant is_admin', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
       v_fail := v_fail + 1;
   END;
@@ -538,23 +592,23 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4c self-grant demo_access        FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T4c self-grant demo_access', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4c self-grant demo_access        PASS   (refused, LG007)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4c self-grant demo_access', 'PASS', '(refused, LG007)');
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4c self-grant demo_access        INCONCLUSIVE  42501, see T4a.';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4c self-grant demo_access', 'INCONCLUSIVE', '42501, see T4a.');
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4c self-grant demo_access        FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4c self-grant demo_access', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
       v_fail := v_fail + 1;
   END;
@@ -574,23 +628,23 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4d rewrite email                 FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T4d rewrite email', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4d rewrite email                 PASS   (refused, LG007)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4d rewrite email', 'PASS', '(refused, LG007)');
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4d rewrite email                 INCONCLUSIVE  42501, see T4a.';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4d rewrite email', 'INCONCLUSIVE', '42501, see T4a.');
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4d rewrite email                 FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4d rewrite email', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
       v_fail := v_fail + 1;
   END;
@@ -608,23 +662,23 @@ BEGIN
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
     RAISE NOTICE 'T4e claim linked_agency_id        FAIL   <- SUCCEEDED, % row(s). The guard is not biting.', v_rows;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T4e claim linked_agency_id', 'FAIL', format('SUCCEEDED, %s row(s). The guard is not biting.', v_rows));
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG007' THEN
       RAISE NOTICE 'T4e claim linked_agency_id        PASS   (refused, LG007)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4e claim linked_agency_id', 'PASS', '(refused, LG007)');
       v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RAISE NOTICE 'T4e claim linked_agency_id        INCONCLUSIVE  42501, see T4a.';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4e claim linked_agency_id', 'INCONCLUSIVE', '42501, see T4a.');
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T4e claim linked_agency_id        FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T4e claim linked_agency_id', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
       v_fail := v_fail + 1;
   END;
@@ -660,18 +714,18 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T5  no-op write, all five back    PASS   (early return, 1 row)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T5  no-op write, all five back', 'PASS', '(early return, 1 row)');
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T5  no-op write, all five back    FAIL   <- matched % rows, expected 1.', v_rows;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T5  no-op write, all five back', 'FAIL', format('matched %s rows, expected 1.', v_rows));
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T5  no-op write, all five back    FAIL   <- % %  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T5  no-op write, all five back', 'FAIL', format('%s %s  The early return is wrong. DO NOT APPLY.', SQLSTATE, SQLERRM));
     v_fail := v_fail + 1;
   END;
@@ -700,18 +754,18 @@ BEGIN
 
     IF v_rows = 1 THEN
       RAISE NOTICE 'T6  no-session write is exempt    PASS   (1 row written)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T6  no-session write is exempt', 'PASS', '(1 row written)');
       v_pass := v_pass + 1;
     ELSE
       RAISE NOTICE 'T6  no-session write is exempt    FAIL   <- matched % rows, expected 1.', v_rows;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T6  no-session write is exempt', 'FAIL', format('matched %s rows, expected 1.', v_rows));
       v_fail := v_fail + 1;
     END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'T6  no-session write is exempt    FAIL   <- % %  091 WOULD BLOCK MIGRATIONS. DO NOT APPLY.', SQLSTATE, SQLERRM;
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T6  no-session write is exempt', 'FAIL', format('%s %s  091 WOULD BLOCK MIGRATIONS. DO NOT APPLY.', SQLSTATE, SQLERRM));
     v_fail := v_fail + 1;
   END;
@@ -729,18 +783,18 @@ BEGIN
        SET active_org_id = '00000000-0000-0000-0000-000000000000'
      WHERE id = v_uid;
     RAISE NOTICE 'T7  090 guard still bites         FAIL   <- SUCCEEDED. 090s trigger is not firing.';
-    INSERT INTO _lg091_results (test, verdict, detail) VALUES
+    INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
       ('T7  090 guard still bites', 'FAIL', 'SUCCEEDED. 090s trigger is not firing.');
     v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG005' THEN
       RAISE NOTICE 'T7  090 guard still bites         PASS   (refused, LG005 - 090s code, not 091s)';
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T7  090 guard still bites', 'PASS', '(refused, LG005 - 090s code, not 091s)');
       v_pass := v_pass + 1;
     WHEN OTHERS THEN
       RAISE NOTICE 'T7  090 guard still bites         FAIL   <- wrong error: % %', SQLSTATE, SQLERRM;
-      INSERT INTO _lg091_results (test, verdict, detail) VALUES
+      INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
         ('T7  090 guard still bites', 'FAIL', format('wrong error: %s %s', SQLSTATE, SQLERRM));
       v_fail := v_fail + 1;
   END;
@@ -774,15 +828,15 @@ BEGIN
   END IF;
 
   -- THE TALLY, AS ROWS. Five of them, matching the five notices above.
-  INSERT INTO _lg091_results (test, verdict, detail) VALUES
+  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
     ('TALLY  assertions run', v_ran::text,    'expected 11');
-  INSERT INTO _lg091_results (test, verdict, detail) VALUES
+  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
     ('TALLY  PASS',           v_pass::text,   'expected 11');
-  INSERT INTO _lg091_results (test, verdict, detail) VALUES
+  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
     ('TALLY  FAIL',           v_fail::text,   'expected 0');
-  INSERT INTO _lg091_results (test, verdict, detail) VALUES
+  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
     ('TALLY  INCONCLUSIVE',   v_inconc::text, 'expected 0');
-  INSERT INTO _lg091_results (test, verdict, detail) VALUES
+  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
     ('VERDICT',               v_verdict,      v_verdict_text);
 
   -- THE SELF-CHECK. It catches the one thing this reporting change could
@@ -791,8 +845,8 @@ BEGIN
   -- assertion ran and did not log, the two numbers disagree HERE, in the
   -- output, rather than showing up as a silently shorter grid that looks
   -- fine unless you happen to know how many rows to expect.
-  SELECT count(*) INTO v_rows_logged FROM _lg091_results;
-  INSERT INTO _lg091_results (test, verdict, detail) VALUES
+  SELECT count(*) INTO v_rows_logged FROM pg_temp._lg091_results;
+  INSERT INTO pg_temp._lg091_results (test, verdict, detail) VALUES
     ('ROW COUNT CHECK',
      CASE WHEN v_rows_logged = v_ran + 5 THEN 'OK' ELSE 'MISMATCH' END,
      format('%s rows logged before this one; expected %s, being %s assertions plus 5 tally rows. With this row the grid is %s rows. MISMATCH means an assertion ran but logged nothing - a report site was missed, and the grid is incomplete.',
@@ -811,7 +865,7 @@ $test$;
 -- check. Any other number is itself a finding - see the header.
 -- =====================================================================
 SELECT seq, test, verdict, detail
-FROM _lg091_results
+FROM pg_temp._lg091_results
 ORDER BY seq;
 
 
