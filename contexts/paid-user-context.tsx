@@ -9,13 +9,38 @@ import { UpgradeRequiredModal } from "@/components/upgrade-required-modal"
 
 type UserRole = 'agency' | 'partner' | null
 
+/**
+ * The caller's role IN THEIR ACTING ORGANIZATION. Not `profiles.role`, which names the
+ * portal. These two have nothing to do with each other and conflating them is how a
+ * "member" would end up with billing rights.
+ */
+type OrgRole = 'owner' | 'admin' | 'member' | null
+
 type PaidUserContextType = {
+  /**
+   * 092: THE ACTING ORGANIZATION'S ENTITLEMENT, not this person's profile flag.
+   * The name is kept because eight components and the gate read it, and "is the thing
+   * behind me paid" is what it has always meant.
+   */
   isPaid: boolean
   isAdmin: boolean
   isLoading: boolean
   isDemo: boolean
   hasDemoAccess: boolean
   role: UserRole
+  /**
+   * 092: WHO MAY DO SOMETHING ABOUT A LAPSE. Owner and admin manage billing; a plain
+   * member uses the product without billing rights, and must not be shown copy implying
+   * they can fix it. Null when it could not be resolved, which is treated as "member" by
+   * every consumer - the conservative direction.
+   */
+  orgRole: OrgRole
+  /**
+   * 092: WHY isPaid CAME OUT FALSE. Carried so the wall can tell a lapsed subscription
+   * apart from an unresolved organization, which are different problems with different
+   * copy and different fixes. Mirrors EntitlementReason in lib/entitlements.ts.
+   */
+  entitlementReason: string | null
   linkedAgencyId: string | null
   checkFeatureAccess: (featureName?: string) => boolean
   showInvitationRequest: () => void // For partners to request agency invitation
@@ -28,6 +53,8 @@ const PaidUserContext = createContext<PaidUserContextType>({
   isDemo: false,
   hasDemoAccess: false,
   role: null,
+  orgRole: null,
+  entitlementReason: null,
   linkedAgencyId: null,
   checkFeatureAccess: () => false,
   showInvitationRequest: () => {},
@@ -58,6 +85,8 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<UserRole>(null)
   const [activeRole, setActiveRole] = useState<UserRole>(null)
   const [linkedAgencyId, setLinkedAgencyId] = useState<string | null>(null)
+  const [orgRole, setOrgRole] = useState<OrgRole>(null)
+  const [entitlementReason, setEntitlementReason] = useState<string | null>(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [upgradeFeatureName, setUpgradeFeatureName] = useState<string | undefined>(undefined)
@@ -72,6 +101,8 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
       setIsAdmin(true)
       setRole('agency') // Default to agency in demo
       setActiveRole('agency')
+      setOrgRole('owner')
+      setEntitlementReason('demo-deployment')
       setIsLoading(false)
       return
     }
@@ -102,20 +133,91 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
         }
 
         if (user) {
+          // 092: is_paid IS GONE FROM THIS SELECT. It is the vestigial profiles column now;
+          // entitlement is a fact about the ACTING ORGANIZATION and is resolved below.
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .select('is_paid, is_admin, role, active_role, linked_agency_id, demo_access')
+            .select('is_admin, role, active_role, linked_agency_id, demo_access')
             .eq('id', user.id)
             .single()
 
           if (profileError) console.error("[PaidUserContext] profiles query error:", profileError)
-          console.log("[PaidUserContext] profile fetched:", { is_paid: profile?.is_paid, is_admin: profile?.is_admin, role: profile?.role, userId: user.id.slice(0,8) })
-          setIsPaid(profile?.is_paid === true)
+
           setIsAdmin(profile?.is_admin || false)
           setHasDemoAccess(profile?.demo_access || false)
           setRole(profile?.role as UserRole || null)
           setActiveRole((profile?.active_role as UserRole) || null)
           setLinkedAgencyId(profile?.linked_agency_id || null)
+
+          // ===============================================================
+          // 092: THE ENTITLEMENT READ, THROUGH THE ONE CHOKE POINT.
+          //
+          // resolveAgencyEntitlement() is the SAME function every server-side gate calls,
+          // called here with the browser client. That is deliberate and it is the property
+          // worth protecting: if this page ever answered "is my company paid" its own way,
+          // the wall a user sees and the 403 a route returns could disagree, and the
+          // support conversation that follows has no ground truth.
+          //
+          // NO FALLBACK, exactly as on the server. An unresolved organization is NOT
+          // entitled, with a reason that says so.
+          // ===============================================================
+          const { resolveAgencyEntitlement } = await import('@/lib/entitlements')
+          const { actingRole } = await import('@/lib/acting-role')
+
+          // ===============================================================
+          // THE VENDOR SIDE IS SKIPPED ENTIRELY, AND THIS IS WHERE 092's LOCKOUT IS
+          // STOPPED FROM REACHING SIDEWAYS.
+          //
+          // THIS PROVIDER IS MOUNTED IN BOTH PORTALS - components/agency-layout.tsx AND
+          // components/partner-layout.tsx. Only the agency layout mounts
+          // AgencySubscriptionGate, so a vendor is never gated on this answer. Resolving it
+          // for them anyway would cost every vendor two extra queries on every route change
+          // AND write "[entitlements] ... refusing" lines into the logs for people who were
+          // never refused anything - noise that is worse than useless, because the next
+          // person to read those logs will believe vendors are being locked out.
+          //
+          // VENDOR ORGANIZATIONS HAVE NO ENTITLEMENT CONCEPT. Vendor access is free by the
+          // pricing copy, and organizations.is_paid defaults to false, so reading it for a
+          // vendor organization would answer "not entitled" about a question nobody asked.
+          //
+          // actingRole() AND NOT canActAs(), DELIBERATELY. actingRole lets active_role
+          // decide and consults `role` only when active_role is unset, so an account with
+          // role='partner' and active_role='agency' - which IS gated on the agency side -
+          // still gets a real entitlement answer. The permissive canActAs() form that
+          // checkFeatureAccess uses below would have skipped the read for that account and
+          // walled it. Same predicate, same reasoning, as canUploadFiles() on the server.
+          // ===============================================================
+          if (actingRole(profile) === 'partner') {
+            setIsPaid(false)
+            setEntitlementReason('vendor-free')
+            setOrgRole(null)
+            return
+          }
+
+          const decision = await resolveAgencyEntitlement(profile, user.id, supabase)
+          setIsPaid(decision.entitled)
+          setEntitlementReason(decision.reason)
+
+          // WHO MAY DO SOMETHING ABOUT IT. Read for the acting organization only, so a
+          // person who owns company A and is a plain member of lapsed company B gets
+          // "member" while acting for B - which is the correct answer and the one the wall
+          // needs. Skipped entirely when entitled, because nothing reads it then.
+          if (!decision.entitled && decision.orgId) {
+            const { data: membership } = await supabase
+              .from('org_members')
+              .select('role')
+              .eq('user_id', user.id)
+              .eq('org_id', decision.orgId)
+              .maybeSingle()
+            const memberRole = (membership as { role?: string | null } | null)?.role
+            setOrgRole(
+              memberRole === 'owner' || memberRole === 'admin' || memberRole === 'member'
+                ? memberRole
+                : null
+            )
+          } else {
+            setOrgRole(null)
+          }
         }
       } finally {
         if (!settled) {
@@ -174,6 +276,8 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
       isDemo,
       hasDemoAccess,
       role,
+      orgRole,
+      entitlementReason,
       linkedAgencyId,
       checkFeatureAccess,
       showInvitationRequest,
