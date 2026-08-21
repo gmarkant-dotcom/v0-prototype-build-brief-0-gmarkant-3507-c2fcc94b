@@ -454,6 +454,61 @@ export function canUploadFiles(profile: EntitlementProfile): boolean {
 }
 
 /**
+ * May this caller upload a file on the VENDOR side?
+ *
+ * THE ONE DEFINITION OF THE EXPRESSION THAT WAS INLINED IN TWO VENDOR UPLOAD ROUTES -
+ * app/api/partner/documents/upload/route.ts and app/api/partner/rfp-bid/upload/route.ts.
+ * Both spelled it out by hand, identically, and both carried the same paragraph explaining
+ * why they were not calling canUploadFiles(). That paragraph was right, which is why this
+ * function exists instead of a swap.
+ *
+ * WHY NOT canUploadFiles(). It is STRICTER, on one axis, and the difference is reachable:
+ * canUploadFiles() asks actingRole(profile) === "partner", where active_role decides and
+ * `role` is consulted only when active_role is unset. This asks canActAs(profile,
+ * "partner"), where EITHER column naming 'partner' is enough. For an account with
+ * role='partner' and active_role='agency' and is_paid=false, canUploadFiles() returns
+ * false and these two routes returned true. Swapping them would have 403'd that account
+ * with no billing reason to.
+ *
+ * BEHAVIOUR IS OTHERWISE IDENTICAL TO THE EXPRESSION THIS REPLACES, term by term:
+ *
+ *   `process.env.NEXT_PUBLIC_IS_DEMO === "true"`  ->  isDemoDeployment(), which is that
+ *      expression and nothing else. And it is FIRST here as it was first there, so a demo
+ *      deployment with no profile row still returns true rather than tripping the null
+ *      guard below.
+ *   `profile?.role === "partner" || profile?.active_role === "partner"`
+ *      ->  canActAs(profile, "partner"), which is `normalize(role) === "partner" ||
+ *      normalize(active_role) === "partner"`.
+ *   `profile?.is_admin`  ->  `profile.is_admin === true`. Identical for a boolean-or-null
+ *      column: null is falsy and is not === true.
+ *   `profile?.is_paid`   ->  `profile.is_paid === true`. Same.
+ *   `profile` undefined  ->  the inline chain evaluated to undefined, which `if (!canUpload)`
+ *      treated as a refusal. `if (!profile) return false` is that refusal, explicitly.
+ *
+ * THE ONE NON-IDENTITY, STATED RATHER THAN GLOSSED: canActAs() runs its inputs through
+ * normalize(), which trims and lower-cases; the raw comparisons did not. So ' Partner '
+ * would satisfy this and did not satisfy the inline form. That is a widening, in the
+ * permissive direction, on a vendor-only route that gates again immediately afterwards -
+ * and it cannot fire on any row that exists: every writer of role and active_role in the
+ * repository writes the exact literal 'agency' or 'partner' (079 PHASE 12's CASE
+ * expression, switch-role's and active-role's strict validation, the auth callback), and
+ * all 18 live accounts were confirmed to carry a role matching their signup choice. The
+ * query that settles it is in docs/091-session-report.md.
+ *
+ * THE VENDOR SIDE UPLOADS FREE and the `is_paid` term still decides nothing here - a paid
+ * agency clears this line and is turned away by the "Vendors only" check underneath it in
+ * both routes. The term is kept because removing it would be a behaviour change dressed up
+ * as a cleanup, and because 079 makes the vendor's own company an organization: if
+ * vendor-side billing ever exists, its entitlement is read HERE, once, instead of in two
+ * routes that have already drifted apart once.
+ */
+export function canUploadVendorFiles(profile: EntitlementProfile): boolean {
+  if (isDemoDeployment()) return true
+  if (!profile) return false
+  return canActAs(profile, "partner") || profile.is_admin === true || profile.is_paid === true
+}
+
+/**
  * Portal-entitlement pair for the two routes that gate on "agency portal AND paid":
  * /api/agency/msa/ai-schedule and /api/agency/payment-synthesis.
  *
@@ -463,6 +518,38 @@ export function canUploadFiles(profile: EntitlementProfile): boolean {
  * changes, from `role === 'agency' && (is_paid || is_admin)` to a plain entitlement test,
  * which is what the ruling asks for and what stops migration 078's role correction from
  * locking a paying dual-role account out of its own agency tools.
+ *
+ * ---------------------------------------------------------------------------
+ * IT HAS ZERO CALLERS. MEASURED, AND DELIBERATELY NOT DELETED.
+ *
+ * Grepped by name across EVERY file type in the repository - .ts, .tsx, .sql, .md, .json,
+ * everything outside .git, node_modules and .next. Two hits: this definition, and one row
+ * in a documentation table at docs/m1-prework-report.md:479. No alternate spelling, no
+ * case variant. AND NO NAMESPACE IMPORT OF THIS MODULE EXISTS ANYWHERE, so there is no
+ * `entitlements.canUseAgencyPortalAi` property-access path a name grep would miss. It is
+ * genuinely uncalled, not apparently uncalled.
+ *
+ * WHY IT STAYS. Twice in this codebase's history, "dead" code has turned out to be live
+ * through a redirect or a default, so the bar for deleting is higher than a grep. Two
+ * reasons beyond that, and the second is the load-bearing one:
+ *
+ *   1. It is an EXPORT. Removing it is a change to this module's public surface, made in a
+ *      pass whose subject is a migration.
+ *
+ *   2. ADOPTING IT AT THE TWO ROUTES IT NAMES IS NOT FREE, and that is the thing to know
+ *      before somebody "finishes the job". app/api/agency/msa/ai-schedule/route.ts:78 and
+ *      app/api/agency/payment-synthesis/route.ts:69 each run the two halves as two
+ *      statements returning TWO DIFFERENT REFUSALS - "Subscription required for AI
+ *      features" and "Agency only". Collapsing them into this one boolean would tell a
+ *      caller who is entitled but in the wrong portal that they need a subscription, which
+ *      is a copy regression and a support ticket. Adoption needs the messages resolved
+ *      first, and that is a product decision.
+ *
+ * RECOMMENDATION: leave it until entitlement moves onto the organization. At that point
+ * hasAgencyEntitlement() stops being answerable from a profile row and this composition is
+ * the natural single place to make the portal-plus-entitlement pair async. If that design
+ * lands without using it, delete it in the same change - with the two messages resolved.
+ * Recorded in docs/091-session-report.md.
  */
 export function canUseAgencyPortalAi(profile: EntitlementProfile): boolean {
   return canActAs(profile, "agency") && hasAgencyEntitlement(profile)

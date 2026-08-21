@@ -1,4 +1,4 @@
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, canUploadVendorFiles } from "@/lib/entitlements"
 import { put } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
@@ -31,16 +31,16 @@ export async function POST(request: NextRequest) {
       .single()
     console.log("[api] start", { route, method: "POST", userId: user.id, role: profile?.role ?? null })
 
-    // Left as-is deliberately. This is a vendor-only route and the vendor side uploads
-    // free, so the `|| profile?.is_paid` clause below never decides anything the "Vendors
-    // only" check underneath does not already decide - a paid agency clears this line and
-    // is turned away by the next one. Rewriting it through lib/entitlements.ts would change
-    // behaviour for a role='partner' / active_role='agency' account with no billing reason
-    // to. 079: the vendor's own company becomes an organization; if vendor-side billing
-    // ever exists, its entitlement is read here.
-    const isDemoMode = process.env.NEXT_PUBLIC_IS_DEMO === "true"
-    const isPartner = profile?.role === "partner" || profile?.active_role === "partner"
-    const canUpload = isDemoMode || isPartner || profile?.is_admin || profile?.is_paid
+    // ONE DEFINITION, in lib/entitlements.ts. This expression was inlined here and in the
+    // other vendor upload route, identically, and the paragraph that used to stand here
+    // explained why it was NOT canUploadFiles(): that function asks
+    // actingRole(profile) === "partner", where active_role decides, and would 403 an
+    // account with role='partner' / active_role='agency' / is_paid=false that this route
+    // has always let through. That reasoning is preserved and canUploadVendorFiles() keeps
+    // the permissive canActAs() form, term for term. See its header for the proof, and for
+    // the single non-identity (canActAs normalizes case and whitespace; the raw comparison
+    // did not) and why no live row can reach it.
+    const canUpload = canUploadVendorFiles(profile)
 
     if (!canUpload) {
       return NextResponse.json({ error: "Upgrade to upload files" }, { status: 403 })
