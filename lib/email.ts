@@ -170,6 +170,70 @@ export function buildVendorInvitationEmail(opts: {
   }
 }
 
+/**
+ * COLLEAGUE invitation - somebody being invited into their own company's Ligament account.
+ *
+ * NOT buildVendorInvitationEmail() above, which invites another COMPANY to bid on a brief
+ * and points at /rfp/respond/<token>. These two are one word apart and nothing else apart,
+ * so the distinction is stated here rather than left to the reader.
+ *
+ * TWO CALL-TO-ACTION SHAPES, chosen by the caller from hasLigamentAccount(), exactly as
+ * app/api/partnerships/route.ts:590-591 already does for the vendor path:
+ *
+ *   HAS AN ACCOUNT      -> /join/<token>. Middleware bounces them to
+ *                          /auth/login?next=/join/<token> if the session has lapsed, and
+ *                          `next` is in the passthrough list, so they land back here.
+ *   HAS NO ACCOUNT      -> /auth/sign-up carrying email and next=/join/<token>, so the
+ *                          address is pre-filled and the invitation is waiting after signup.
+ *
+ * The token is NOT rendered as text anywhere in the body. It is a bearer credential and it
+ * belongs in the href and nowhere else - the same rule the magic-link route states at :439.
+ */
+export function buildColleagueInvitationEmail(opts: {
+  /** The company doing the inviting. */
+  orgName: string
+  /** Who sent it, for the body. May be absent - never guessed from an email address. */
+  inviterName?: string | null
+  /** The invitee's address, used only to prefill signup. */
+  inviteeEmail: string
+  /** Role label as the invitee will hold it: "Owner", "Admin", "Member". */
+  roleLabel: string
+  token: string
+  /** True when this address already has a Ligament login. Picks the call to action. */
+  hasAccount: boolean
+  /** How many days the invitation is good for. Stated in the body, never assumed. */
+  expiresInDays: number
+}): EmailPayload {
+  const base = siteBaseUrl()
+  const landing = `${base}/join/${encodeURIComponent(opts.token)}`
+  const ctaUrl = opts.hasAccount
+    ? landing
+    : `${base}/auth/sign-up?email=${encodeURIComponent(opts.inviteeEmail)}&next=${encodeURIComponent(`/join/${opts.token}`)}`
+  const ctaText = opts.hasAccount ? "View Invitation" : "Create Your Account"
+
+  const inviter = resolveGreetingName(opts.inviterName)
+  const subject = `You have been invited to join ${opts.orgName} on Ligament`
+  const openedBy = inviter === "there" ? `Someone at ${opts.orgName}` : `${inviter} at ${opts.orgName}`
+
+  const body = opts.hasAccount
+    ? `${openedBy} has invited you to join their team on Ligament as ${opts.roleLabel.toLowerCase()}.
+
+Sign in and accept to get access to their projects, briefs and vendors. Your own account stays exactly as it is.
+
+This invitation expires in ${opts.expiresInDays} days. If you were not expecting it, you can decline, and nothing is shared with them either way.`
+    : `${openedBy} has invited you to join their team on Ligament as ${opts.roleLabel.toLowerCase()}.
+
+Create your account and the invitation will be waiting. It takes a minute.
+
+This invitation expires in ${opts.expiresInDays} days. If you were not expecting it, you can ignore this email.`
+
+  return {
+    subject,
+    html: buildBrandedEmailHtml({ title: subject, recipientName: "there", body, ctaText, ctaUrl }),
+    text: buildBrandedEmailText({ title: subject, recipientName: "there", body, ctaText, ctaUrl }),
+  }
+}
+
 export function buildVendorConfirmationEmail(opts: {
   vendorName?: string
   vendorEmail: string
