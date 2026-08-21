@@ -64,14 +64,46 @@ export function broadcastCuesPartnership(): boolean {
  * been run and verified in the Supabase SQL Editor hands the first colleague who accepts
  * an account that reads everything and writes nothing, with no error that explains why.
  *
- * ORDER, STATED SO IT IS NOT INFERRED:
+ * ORDER, STATED SO IT IS NOT INFERRED. THERE ARE NOW FIVE STEPS, NOT FOUR.
  *   1. apply 089            - DONE. Safe on its own, nothing called it.
  *   2. push feat/m1-invitations - DONE. Safe with the flag off, the surface is
  *                                unreachable.
- *   3. apply 090            - profiles.active_org_id, set_active_org(), the replaced
- *                             accept_org_invitation(). Then deploy the switcher and the
- *                             lib/acting-org.ts commit that drops its 42703 guard.
- *   4. THEN set COLLEAGUE_INVITATIONS=true in Vercel and redeploy
+ *   3. apply 090            - DONE, applied and verified. profiles.active_org_id,
+ *                             set_active_org(), the replaced accept_org_invitation(),
+ *                             plus the switcher and the lib/acting-org.ts commit that
+ *                             drops its 42703 guard.
+ *   4. APPLY AN ENTITLEMENTS MIGRATION. **THIS STEP IS NEW AND 090 DID NOT COVER IT.**
+ *                             090 fixed which organization a colleague WRITES to. It did
+ *                             nothing about which organization is ENTITLED, and those are
+ *                             different questions with different answers.
+ *
+ *                             hasAgencyEntitlement() reads profiles.is_paid ON THE
+ *                             CALLER'S OWN ROW. A colleague of a paying company does not
+ *                             carry that flag, so the first thing they see after accepting
+ *                             is "Active subscription required" at
+ *                             app/api/projects/route.ts:552 - and, through
+ *                             contexts/paid-user-context.tsx and AgencySubscriptionGate,
+ *                             a full-page restriction notice over the whole agency portal.
+ *
+ *                             That is OPEN-1 of docs/090-active-org-report.md. It is
+ *                             designed in docs/092-entitlements-design.md and BLOCKED ON A
+ *                             PRODUCT RULING Greg has not made - flat company plan or
+ *                             metered seats. It is not authored, so this step cannot be
+ *                             done yet.
+ *
+ *                             091 (docs/091-guard-shape.md) is a PREREQUISITE OF THAT
+ *                             WORK, not a substitute for it: it stops profiles.is_paid
+ *                             being self-grantable from a browser, which is what makes it
+ *                             safe to leave the column in place while entitlement moves.
+ *                             091 is AUTHORED AND NOT APPLIED.
+ *
+ *   5. THEN set COLLEAGUE_INVITATIONS=true in Vercel, PRODUCTION SCOPE ONLY - see the
+ *                             scope warning at the foot of this comment - and redeploy.
+ *
+ * SO: 090 ALONE IS NO LONGER SUFFICIENT TO FLIP THIS FLAG, and this comment used to imply
+ * it was. Flipping it after step 3 gives a colleague an account that WRITES to the right
+ * organization and is REFUSED by every paid gate in the product - which is a different
+ * broken state from the one 090 fixed, not the absence of one.
  *
  * HOW TO CHECK STEP 3 ACTUALLY HAPPENED, rather than assuming it:
  *
@@ -118,9 +150,33 @@ export function broadcastCuesPartnership(): boolean {
  * A flag should make a surface unreachable going forward. It must never strand something
  * already in flight, from either side.
  *
- * To turn it on: set COLLEAGUE_INVITATIONS=true in Vercel (Production and Preview) and
- * redeploy. To turn it off: unset it. No already accepted membership is undone by
- * unsetting it - org_members rows are real and stay.
+ * =========================================================================
+ * TO TURN IT ON: SET COLLEAGUE_INVITATIONS=true IN VERCEL, **PRODUCTION
+ * SCOPE ONLY**. NEVER PREVIEW. NEVER DEVELOPMENT.
+ * =========================================================================
+ *
+ * THIS LINE USED TO SAY "(Production and Preview)". THAT IS NOW WRONG AND IT IS
+ * DANGEROUS, and the reason changed under it rather than being got wrong at the time.
+ *
+ * TWO FACTS THAT ONLY BECAME TRUE TOGETHER ON 2026-08-20:
+ *
+ *   1. BRANCHES NOW BUILD VERCEL PREVIEW DEPLOYMENTS. Any pushed branch gets a live,
+ *      publicly reachable URL running that branch's code.
+ *   2. SUPABASE_SERVICE_ROLE_KEY IS SCOPED TO PREVIEW. A preview deployment therefore
+ *      holds a credential that BYPASSES ROW LEVEL SECURITY ENTIRELY against the LIVE
+ *      PRODUCTION DATABASE. There is no separate preview database.
+ *
+ * Put those together and a Preview-scoped flag means: THE INVITATION SURFACE GOES LIVE
+ * AGAINST PRODUCTION DATA FROM EVERY PUSHED BRANCH, including work in progress, including
+ * a branch whose migration has not been applied, and including one nobody is watching.
+ * accept_org_invitation() writes org_members rows, and org_members rows are real and
+ * permanent - unsetting the flag afterwards does not remove a single one.
+ *
+ * PRODUCTION SCOPE ONLY. Not "Production and Preview". Not "All Environments", which is
+ * the Vercel default and is the same mistake with a friendlier name.
+ *
+ * To turn it off: unset it. No already accepted membership is undone by unsetting it -
+ * org_members rows are real and stay.
  */
 export function colleagueInvitationsEnabled(): boolean {
   return process.env.COLLEAGUE_INVITATIONS === "true"
