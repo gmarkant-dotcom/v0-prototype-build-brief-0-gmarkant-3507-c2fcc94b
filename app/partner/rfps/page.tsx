@@ -13,6 +13,13 @@ import {
   Building2, FileText, AlertTriangle, Clock, Loader2,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { usePaidUser } from "@/contexts/paid-user-context"
+import {
+  VENDOR_RFPS_EMPTY,
+  VENDOR_BIDS_OPEN_EMPTY,
+  VENDOR_BIDS_HISTORY_EMPTY,
+  vendorInboxEmptyDetail,
+} from "@/lib/vendor-empty-copy"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -249,12 +256,15 @@ function BidRow({ bid, showOutcome }: { bid: PartnerBidRow; showOutcome: boolean
   return <div className="flex items-start gap-4 p-4 rounded-xl border border-vendor-border bg-vendor-surface">{content}</div>
 }
 
-function BidsList({ bids, showOutcome, emptyMessage }: { bids: PartnerBidRow[]; showOutcome: boolean; emptyMessage: string }) {
+function BidsList({ bids, showOutcome, emptyMessage, emptyDetail }: { bids: PartnerBidRow[]; showOutcome: boolean; emptyMessage: string; emptyDetail?: string | null }) {
   if (bids.length === 0) {
     return (
       <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
         <div className="font-display font-bold text-xl text-vendor-foreground mb-2">No bids yet</div>
         <p className="text-vendor-muted-strong">{emptyMessage}</p>
+        {/* Only rendered for an account that actually has a lead agency side. See
+            lib/vendor-empty-copy.ts for why it is conditional rather than unconditional. */}
+        {emptyDetail && <p className="text-vendor-muted-strong mt-3 max-w-lg mx-auto">{emptyDetail}</p>}
       </div>
     )
   }
@@ -459,6 +469,13 @@ function PartnerRFPsContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inviteToken])
 
+  // WHY THE SIGNUP ROLE IS READ ON A VENDOR PAGE. `role` is the role chosen at signup and it
+  // never changes; anyone rendering this page is acting as a partner. So `role === "agency"`
+  // here means "this account also runs a lead agency", which is exactly the population whose
+  // vendor list stopped showing their own outbound broadcasts. See lib/vendor-empty-copy.ts.
+  const { role: signupRole } = usePaidUser()
+  const emptyDetail = vendorInboxEmptyDetail(signupRole)
+
   const { data, isLoading, error } = useFetch<{ rfps: PartnerInboxRow[] }>("/api/partner/rfps")
   const allRows: PartnerInboxRow[] = data?.rfps ?? []
 
@@ -600,14 +617,29 @@ function PartnerRFPsContent() {
                 Failed to load RFPs. Please refresh.
               </div>
             )}
+            {/*
+              THE HONEST EMPTY STATE, 086 PRECEDENT.
+
+              A vendor who has received nothing and a vendor whose rows were wrongly filtered
+              see the same screen. This one says which question was asked - "RFPs sent TO
+              you" - and, for an account that also runs a lead agency, where the other answer
+              is. That second line is conditional on the caller actually having an agency
+              side, because saying it to a vendor-only account would be false.
+
+              The search case stays separate and unchanged: "no results for this search" is
+              already an honest and different statement from "you have received none".
+            */}
             {!isLoading && !error && groups.length === 0 && (
               <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
                 <div className="font-display font-bold text-xl text-vendor-foreground mb-2">
-                  {search ? "No results" : "No RFPs yet"}
+                  {search ? "No results" : VENDOR_RFPS_EMPTY.title}
                 </div>
                 <p className="text-vendor-muted-strong">
-                  {search ? "Try a different search term." : "When a lead agency broadcasts an RFP to you, it will appear here."}
+                  {search ? "Try a different search term." : VENDOR_RFPS_EMPTY.body}
                 </p>
+                {!search && emptyDetail && (
+                  <p className="text-vendor-muted-strong mt-3 max-w-lg mx-auto">{emptyDetail}</p>
+                )}
               </div>
             )}
             {!isLoading && groups.length > 0 && groupBy !== "status" && (
@@ -646,7 +678,8 @@ function PartnerRFPsContent() {
               <BidsList
                 bids={myBids}
                 showOutcome={false}
-                emptyMessage="Bids you submit will appear here until the agency makes a decision."
+                emptyMessage={VENDOR_BIDS_OPEN_EMPTY}
+                emptyDetail={emptyDetail}
               />
             )}
           </>
@@ -666,7 +699,7 @@ function PartnerRFPsContent() {
               </div>
             )}
             {!bidsLoading && !bidsError && (
-              <BidsList bids={allBids} showOutcome emptyMessage="Every bid you've ever submitted will appear here." />
+              <BidsList bids={allBids} showOutcome emptyMessage={VENDOR_BIDS_HISTORY_EMPTY} emptyDetail={emptyDetail} />
             )}
           </>
         )}

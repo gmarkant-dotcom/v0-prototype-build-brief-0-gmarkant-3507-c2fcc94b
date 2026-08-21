@@ -22,6 +22,8 @@ import { createClient } from "@/lib/supabase/client"
 import { useSectionCollapse, useCappedList } from "@/lib/dashboard-section-state"
 import { DashboardShowMoreToggle } from "@/components/dashboard-show-more"
 import { HelpTerm } from "@/components/help-term"
+import { usePaidUser } from "@/contexts/paid-user-context"
+import { VENDOR_DASHBOARD_QUEUE_EMPTY, vendorInboxEmptyDetail } from "@/lib/vendor-empty-copy"
 import {
   AlertTriangle,
   Clock,
@@ -150,6 +152,12 @@ function SectionSkeleton({ className }: { className?: string }) {
 export default function PartnerDashboardPage() {
   const isDemo = isDemoMode()
   const { connections, acceptInvitation, declineInvitation } = useLeadAgencyFilter()
+
+  // `role` is the SIGNUP role and never changes; anyone on this page is acting as a partner.
+  // So `role === "agency"` means this account also runs a lead agency - the only population
+  // for whom the extra empty-state sentence is true. See lib/vendor-empty-copy.ts.
+  const { role: signupRole } = usePaidUser()
+  const vendorEmptyDetail = vendorInboxEmptyDetail(signupRole)
 
   const { data: dashboardData, isLoading: dashboardLoading } = useFetch<DashboardData>(
     isDemo ? "" : "/api/partner/dashboard"
@@ -461,9 +469,12 @@ export default function PartnerDashboardPage() {
             <Briefcase className="w-12 h-12 mx-auto mb-4 text-vendor-muted/50" aria-hidden />
             <h3 className="font-display font-bold text-xl text-vendor-foreground mb-2">Welcome to Ligament</h3>
             <p className="text-vendor-muted-strong">
-              You don&apos;t have any open requests or active projects yet. Open RFPs from your lead agencies
-              will appear here as soon as they send them.
+              You do not have any open requests or active projects yet. RFPs sent to your company by the
+              agencies you work with will appear here as soon as they arrive.
             </p>
+            {vendorEmptyDetail && (
+              <p className="text-vendor-muted-strong mt-3">{vendorEmptyDetail}</p>
+            )}
             <Button asChild variant="outline" className="mt-6 border-vendor-foreground/30 text-vendor-foreground hover:bg-vendor-foreground/5">
               <Link href="/partner/rfps">Go to open RFPs</Link>
             </Button>
@@ -503,9 +514,12 @@ export default function PartnerDashboardPage() {
               <SectionSkeleton className="h-16" />
             </div>
           ) : needsResponseItems.length === 0 && onboardingPending.length === 0 ? (
-            <p className="text-sm text-vendor-muted py-2">
-              No open requests right now - agencies you work with will appear here when they send RFPs.
-            </p>
+            <div className="py-2 space-y-2">
+              <p className="text-sm text-vendor-muted">{VENDOR_DASHBOARD_QUEUE_EMPTY}</p>
+              {/* Conditional on the caller actually having a lead agency side - see
+                  lib/vendor-empty-copy.ts and the 086 roster precedent it cites. */}
+              {vendorEmptyDetail && <p className="text-sm text-vendor-muted">{vendorEmptyDetail}</p>}
+            </div>
           ) : (
             <div className="space-y-2">
               {visibleQueueRows.map((row) => {
