@@ -13,8 +13,28 @@ interface UpgradeRequiredModalProps {
 export function UpgradeRequiredModal({ isOpen, onClose, featureName }: UpgradeRequiredModalProps) {
   if (!isOpen) return null
 
+  /**
+   * z-[60] AND NOT z-50, BECAUSE A REFUSAL THAT PAINTS BEHIND THE THING THAT RAISED IT
+   * IS A DEAD BUTTON.
+   *
+   * This element is in-tree: PaidUserProvider renders it as a sibling after {children}.
+   * Every Radix dialog instead portals its overlay and content to the end of <body>
+   * (components/ui/dialog.tsx:41), and both layers were z-50. Equal z-index in the same
+   * stacking context is settled by DOM order, and a node appended to <body> comes after
+   * this provider's subtree - so a refusal raised from inside a dialog rendered UNDER the
+   * dialog's own bg-black/80 overlay. checkFeatureAccess() returned false, the caller
+   * returned early, and the user saw nothing happen at all. NewProjectDialog is the
+   * demonstrable case; see docs/refusals-and-notifications-report.md for the full caller
+   * census.
+   *
+   * Raising it is strictly an improvement in both directions: this modal previously either
+   * rendered alone (nothing above it to beat) or rendered invisibly. It stays BELOW the
+   * toast viewport (z-[100]) and the alert-dialog layer (z-[550]) deliberately - no
+   * paid-feature gate is raised from inside either, and a premium wall that covers a
+   * destructive-action confirmation would be a worse bug than the one being fixed.
+   */
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={onClose}>
       <div 
         className="w-full max-w-md bg-background/95 backdrop-blur-xl border border-border/30 rounded-xl p-6"
         onClick={e => e.stopPropagation()}
