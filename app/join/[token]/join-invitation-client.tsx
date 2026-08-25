@@ -95,7 +95,20 @@ type LoadedInvitation = {
 }
 
 type Outcome =
-  | { kind: "accepted"; orgName: string | null; role: string | null; alreadyMember: boolean; membershipCount: number | null }
+  | {
+      kind: "accepted"
+      orgId: string | null
+      orgName: string | null
+      role: string | null
+      alreadyMember: boolean
+      membershipCount: number | null
+      /**
+       * The organization this account will actually write to, as resolveActingOrgId()
+       * answers it server-side. Null means it could not be resolved and writes WILL be
+       * refused. Equal to orgId means they are acting for the organization just joined.
+       */
+      actingOrgId: string | null
+    }
   | { kind: "declined"; orgName: string | null }
 
 export default function JoinInvitationClient() {
@@ -207,10 +220,12 @@ export default function JoinInvitationClient() {
         if (action === "accept") {
           setOutcome({
             kind: "accepted",
+            orgId: typeof body.orgId === "string" ? body.orgId : null,
             orgName: typeof body.orgName === "string" ? body.orgName : null,
             role: typeof body.role === "string" ? body.role : null,
             alreadyMember: body.alreadyMember === true,
             membershipCount: typeof body.membershipCount === "number" ? body.membershipCount : null,
+            actingOrgId: typeof body.actingOrgId === "string" ? body.actingOrgId : null,
           })
         } else {
           setOutcome({
@@ -252,26 +267,77 @@ export default function JoinInvitationClient() {
         </p>
 
         {/*
-          THE MULTI-ORGANIZATION WARNING. Said in the interface rather than left to be
-          discovered, per the 086 precedent.
+          THE MULTI-ORGANIZATION NOTE, AND WHY IT IS THREE BRANCHES RATHER THAN ONE.
 
-          resolveActingOrgId() (lib/acting-org.ts:205) FAILS CLOSED with reason "ambiguous"
-          when a caller belongs to more than one organization and nothing says which one they
-          are acting as. The tie-breaker it looks for, profiles.active_org_id, DOES NOT EXIST
-          as a column - lib/acting-org.ts:169 guards a 42703 for exactly that reason. Until a
-          switcher ships, this person cannot write.
+          WHAT USED TO BE HERE, AND WHY IT WAS WRONG. A single amber warning fired on
+          `membershipCount > 1` and told the accepter that Ligament could not tell which
+          organization they were working as, that creating and editing records would be
+          refused, and to contact support. That copy was written during the 089 session,
+          when profiles.active_org_id did not exist as a column and the claim was true.
+          Migration 090 added the column, made accept_org_invitation() initialize it to the
+          inviting organization when it is NULL, and shipped the switcher - and nobody made
+          the message conditional on any of it. Because EVERY accepter has at least their own
+          signup organization, `membershipCount > 1` is true for every accept there has ever
+          been, so all three claims were being shown to everybody and all three were false.
 
-          It is stated plainly and without a migration number, which is the half of the old
-          086 roster banner that was worth keeping.
+          A MEMBERSHIP COUNT CANNOT ANSWER THIS. Belonging to two organizations is the
+          ordinary state now; it is not what refuses a write. The route therefore reports
+          `actingOrgId` from resolveActingOrgId() - the same module every acting-org write
+          path consults - and the three states it can be in are genuinely different things
+          to say:
+
+            acting == the org just joined   the normal accept. Nothing is wrong, and this
+                                            is information, not a warning.
+            acting == some other org        they had already chosen an organization, and
+                                            090's set-if-null deliberately did not overrule
+                                            it. Records would be filed somewhere other than
+                                            where they think.
+            acting == null                  "ambiguous" or "preference-refused". This is the
+                                            state the old copy described, and it is the only
+                                            one that earns the amber and the warning.
+
+          The switcher this points at renders in the sidebar account menu of both portals
+          (agency-layout.tsx:719, partner-layout.tsx:234) and it renders exactly when a
+          caller has two or more memberships, which is exactly when this note renders. So
+          the control it names is always there when it is named.
         */}
         {outcome.membershipCount !== null && outcome.membershipCount > 1 && (
-          <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
-            <p className="text-sm text-foreground">
-              Your account now belongs to more than one organization, and Ligament cannot yet
-              tell which one you are working as. Until you can switch between them, creating
-              and editing records will be refused. Contact support and we will sort it out.
-            </p>
-          </div>
+          outcome.actingOrgId === null ? (
+            <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+              <p className="text-sm text-foreground">
+                Your account now belongs to more than one organization and none of them is
+                selected, so creating and editing records will be refused. Choose the one you
+                want to work in from the account menu in the sidebar.
+              </p>
+            </div>
+          ) : outcome.orgId === null ? (
+            /* The RPC did not name the organization it just joined us to, so there is
+               nothing to compare the acting organization against. Say only the part that
+               is true either way rather than guessing which one they are working as. */
+            <div className="mb-6 rounded-lg border border-border/30 bg-white/5 p-4">
+              <p className="text-sm text-foreground">
+                Your account now belongs to more than one organization. You can choose which
+                one you are working in from the account menu in the sidebar.
+              </p>
+            </div>
+          ) : outcome.actingOrgId === outcome.orgId ? (
+            <div className="mb-6 rounded-lg border border-border/30 bg-white/5 p-4">
+              <p className="text-sm text-foreground">
+                Your account now belongs to more than one organization. You are working as
+                {" "}{where}, so anything you create will be filed there. You can change
+                organization from the account menu in the sidebar.
+              </p>
+            </div>
+          ) : (
+            <div className="mb-6 rounded-lg border border-border/30 bg-white/5 p-4">
+              <p className="text-sm text-foreground">
+                Your account now belongs to more than one organization. You are still working
+                as the one you had already selected, so anything you create will be filed
+                there rather than in {where}. You can change organization from the account
+                menu in the sidebar.
+              </p>
+            </div>
+          )
         )}
 
         <div className="flex justify-center">

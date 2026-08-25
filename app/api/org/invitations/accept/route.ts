@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { invitationRpcFailure } from "@/lib/org-invitations"
+import { resolveActingOrgId } from "@/lib/acting-org"
 
 /**
  * POST /api/org/invitations/accept - the invitee joins the organization.
@@ -88,43 +89,37 @@ export async function POST(request: NextRequest) {
     }
 
     // ------------------------------------------------------------------
-    // HOW MANY ORGANIZATIONS DOES THIS PERSON NOW BELONG TO?
+    // WHICH ORGANIZATION IS THIS PERSON ACTING FOR, NOW THAT THEY HAVE JOINED?
     //
-    // Asked because the answer changes what they can do, and because nothing else in the
-    // product asks it yet. Every account in this database has belonged to exactly one
-    // organization for its whole life. Accepting an invitation is the first thing that can
-    // make that two - and resolveActingOrgId() FAILS CLOSED on more than one membership
-    // with reason "ambiguous", because the tie-breaker it would need,
-    // profiles.active_org_id, DOES NOT EXIST as a column (lib/acting-org.ts:169).
+    // Asked through resolveActingOrgId() rather than by counting org_members here, because
+    // the count on its own cannot answer the question the confirmation screen needs to ask.
+    // Belonging to two organizations is NOT the thing that refuses a write - migration 090
+    // added profiles.active_org_id and accept_org_invitation() initializes it to the
+    // inviting organization WHEN IT IS NULL, so the ordinary accept resolves cleanly to
+    // "stored-preference" and the accepter can write immediately.
     //
-    // So a colleague who accepts can be left unable to write anywhere until an
-    // acting-organization switcher ships. That is a real consequence of this feature and it
-    // is surfaced to the caller here rather than discovered by a confused user - see the
-    // session report, where it is the first open item.
+    // The state that DOES refuse is narrower: more than one membership AND no usable
+    // preference ("ambiguous"), or a preference naming an organization they are not a
+    // member of ("preference-refused"). Only that deserves a warning, and only the resolver
+    // can tell the two apart. Counting memberships here and warning on count > 1 is what
+    // this route used to do, and it made the confirmation banner false for every accept.
     //
-    // A failure to count is not a failure to accept. The membership is already committed.
+    // ONE SOURCE FOR THE ANSWER. resolveActingOrgId() is the module every acting-org write
+    // path already consults; asking it here means the screen reports what the product will
+    // actually do rather than a second guess at it.
+    //
+    // A failure to resolve is not a failure to accept. The membership is already committed,
+    // which is why nothing below this line can return an error.
     // ------------------------------------------------------------------
-    let membershipCount: number | null = null
-    const { data: memberships, error: countErr } = await supabase
-      .from("org_members")
-      .select("org_id")
-      .eq("user_id", user.id)
-    if (countErr) {
-      console.error("[api] POST /org/invitations/accept membership count failed", {
+    const acting = await resolveActingOrgId(user.id, supabase)
+    const membershipCount = acting.memberOrgIds.length
+    if (membershipCount > 1 && !acting.orgId) {
+      console.warn("[api] POST /org/invitations/accept left the accepter unable to write", {
         route,
-        code: countErr.code,
-        message: countErr.message,
+        userId: user.id,
+        membershipCount,
+        reason: acting.reason,
       })
-    } else {
-      membershipCount = (memberships ?? []).length
-      if (membershipCount > 1) {
-        console.warn("[api] POST /org/invitations/accept produced a multi-org account", {
-          route,
-          userId: user.id,
-          membershipCount,
-          note: "resolveActingOrgId() now returns ambiguous for this user - profiles.active_org_id does not exist",
-        })
-      }
     }
 
     return NextResponse.json(
@@ -134,6 +129,9 @@ export async function POST(request: NextRequest) {
         role: result.role ?? null,
         alreadyMember: result.already_member === true,
         membershipCount,
+        // Null means the caller may not write - see ActingOrgReason. Non-null and equal to
+        // orgId means they are acting for the organization they just joined.
+        actingOrgId: acting.orgId,
       },
       { status: 200, headers: noStoreHeaders }
     )
