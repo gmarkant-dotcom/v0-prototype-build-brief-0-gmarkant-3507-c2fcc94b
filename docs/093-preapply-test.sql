@@ -21,27 +21,39 @@
 -- >>> later. A PERMIT LIST CAN BE TOO SMALL IN THE OTHER DIRECTION TOO: a
 -- >>> column a vendor session legitimately writes, left off the list, is
 -- >>> A WRITE THAT STARTS RAISING LG009 THE MOMENT THE MIGRATION IS
--- >>> APPLIED. T1 to T5 and T17 exist for exactly that, and a FAIL in
+-- >>> APPLIED. T1 to T5 and T12 exist for exactly that, and a FAIL in
 -- >>> those is more urgent than a FAIL anywhere else in this file.
 --
--- WHAT THE 19 ASSERTIONS COVER, and why there are 19 rather than 15:
+-- WHAT THE 20 ASSERTIONS COVER:
 --
 --   T1-T5    the permitted writes. FAIL = 093 breaks a live vendor action.
 --   T6-T10   the refusals that make the migration worth doing.
 --   T11      087 still speaks first, with its own 42501.
---   T12      the agency side is unaffected. EXIT 3.
+--   T12      the agency side is unaffected. EXIT 3. Also the agency-side
+--            control for RULED-093-1 - read its own text for what that
+--            does and does not demonstrate.
 --   T13-T14  HOLE 1: the predicate, and the wildcard closed behaviourally.
 --   T15      HOLE 1 the other way: a legitimate claim is still admitted.
 --   T16      the negative control - an already-claimed row is not claimable.
---   T17      the four ghost-contact columns are PERMITTED, by ruling.
+--   T17      the four ghost-contact columns are REFUSED, per RULED-093-1.
 --   T18      the MSA half of the self-confirm pair.
 --   T19      the remaining seven guarded columns, one statement each.
+--   T20      a guarded column CLEARED TO NULL is still refused - the
+--            evidence for the jsonb-subtraction claim the whole permit
+--            list rests on.
 --
--- T16 to T19 were added after the first run. T15 and T16 exist as a pair
--- because the first version of T15 borrowed an ALREADY-CLAIMED subject:
--- a claim needs vendor_org_id IS NULL, so zero rows matched, and CORRECT
--- BEHAVIOUR WAS REPORTED AS A MIGRATION FAILURE. T15 now selects its own
--- claimable subject and T16 tests the already-claimed case ON PURPOSE.
+-- HOW THIS GREW. T16-T19 were added after the first run, which returned DO
+-- NOT APPLY on two assertions that were both TEST bugs. T15 and T16 exist as
+-- a pair because the first T15 borrowed an ALREADY-CLAIMED subject: a claim
+-- needs vendor_org_id IS NULL, so zero rows matched and CORRECT BEHAVIOUR
+-- WAS REPORTED AS A MIGRATION FAILURE. T15 now selects its own claimable
+-- subject; T16 tests the already-claimed case ON PURPOSE.
+--
+-- T17 was FLIPPED on 2026-08-25 from "these four are permitted" to "these
+-- four are refused" when Greg ruled RULED-093-1. T20 was added in the same
+-- pass, because that ruling is the first time a name has been REMOVED from
+-- the permit list and nothing until then had tested the value -> NULL
+-- direction that removal depends on.
 --
 -- =====================================================================
 -- HOW TO RUN IT
@@ -84,18 +96,18 @@
 --
 --     ERROR:  P0001
 --     =====================================================
---     SAFE TO APPLY 093.  All 19 assertions passed.
+--     SAFE TO APPLY 093.  All 20 assertions passed.
 --     =====================================================
---     assertions run  : 19   (expected 19)
---     PASS            : 19   (expected 19)
+--     assertions run  : 20   (expected 20)
+--     PASS            : 20   (expected 20)
 --     FAIL            : 0    (expected 0)
 --     INCONCLUSIVE    : 0    (expected 0)
---     verdicts logged : 19   (must equal assertions run: OK)
+--     verdicts logged : 20   (must equal assertions run: OK)
 --
 --     VERDICT         : SAFE TO APPLY 093.
 --     -----------------------------------------------------
 --       T1  vendor accepts invitation     PASS      (1 row written)
---       ... eighteen more ...
+--       ... nineteen more ...
 --     =====================================================
 --     This error IS the result. The transaction is rolled back with it.
 --
@@ -202,8 +214,8 @@
 --
 -- =====================================================================
 -- TWO NUMBERS MOVE TOGETHER when you add or move an assertion, and both
--- are in this file: the `expected 19` literals in the report, and the
--- `v_ran = 19 AND v_pass = 19` condition in the verdict. The self-check
+-- are in this file: the `expected 20` literals in the report, and the
+-- `v_ran = 20 AND v_pass = 20` condition in the verdict. The self-check
 -- at the foot compares v_ran against v_logged - two counters incremented
 -- in different places - so it catches an assertion that ran without
 -- reporting, which no eyeball review reliably does.
@@ -246,11 +258,7 @@ DECLARE
     'accepted_at',
     'updated_at',
     'payment_terms_requests',
-    'vendor_org_id',
-    'contact_name',
-    'company_name',
-    'phone',
-    'website'
+    'vendor_org_id'
   ];
   v_permitted text[];
   v_old_rest  jsonb;
@@ -470,7 +478,7 @@ BEGIN
 
   RAISE NOTICE '=====================================================';
   RAISE NOTICE '093 PRE-APPLY TEST';
-  RAISE NOTICE 'vendor permit list : status, accepted_at, updated_at, payment_terms_requests, vendor_org_id, contact_name, company_name, phone, website';
+  RAISE NOTICE 'vendor permit list : status, accepted_at, updated_at, payment_terms_requests, vendor_org_id';
   RAISE NOTICE 'subject user id    : %', v_uid;
   RAISE NOTICE 'subject vendor org : %', v_org;
   RAISE NOTICE 'subject lead org   : %', v_lead;
@@ -926,13 +934,35 @@ BEGIN
 
   -- ===================================================================
   -- T12. THE AGENCY SIDE IS UNAFFECTED. EXIT 3.
+  --
   -- The lead agency writing nda_confirmed_at is the LEGITIMATE writer
   -- (app/api/partnerships/route.ts:849). PASS = it still succeeds.
+  --
+  -- EXTENDED 2026-08-25 to write the four ghost-contact columns in the same
+  -- statement, now that RULED-093-1 guards them from the vendor. It is the
+  -- agency-side control for T17.
+  --
+  -- >>> BE PRECISE ABOUT WHAT THIS PROVES, BECAUSE IT IS LESS THAN IT LOOKS.
+  -- >>> An agency session returns at EXIT 3, which is ABOVE the permit list
+  -- >>> and does not consult it. So a PASS here demonstrates THAT EXIT 3
+  -- >>> FIRES FOR THE LEAD AGENCY - and nothing whatever about whether those
+  -- >>> four columns are on any list. The same PASS would appear if the
+  -- >>> permit list were empty, or held all 24 names.
+  -- >>>
+  -- >>> That is exactly why it is worth asserting. The RULED-093-1 reasoning
+  -- >>> turns on "guarding forecloses nothing, because the agency exits above
+  -- >>> the list". THIS ASSERTION IS THE EVIDENCE FOR THAT CLAUSE. If it ever
+  -- >>> fails, the ruling's premise is false and the four columns would have
+  -- >>> to be reconsidered - not because the vendor lost something, but
+  -- >>> because the AGENCY did.
+  -- >>>
+  -- >>> The claim "the vendor cannot write them" is T17's to make, and only
+  -- >>> T17's.
   -- ===================================================================
   v_ran := v_ran + 1;
   IF v_agency_uid IS NULL THEN
     v_logged := v_logged + 1;
-    v_lines := v_lines || E'\n  ' || rpad('T12 lead agency confirms NDA', 40) || rpad('INCONCLUSIVE', 14) || 'the lead organization has no org_members row. Exit 3 was never exercised.';
+    v_lines := v_lines || E'\n  ' || rpad('T12 agency writes guarded cols', 40) || rpad('INCONCLUSIVE', 14) || 'the lead organization has no org_members row. Exit 3 was never exercised.';
     v_inconc := v_inconc + 1;
   ELSE
     BEGIN
@@ -940,33 +970,42 @@ BEGIN
       PERFORM set_config('request.jwt.claims',    v_agency_claims,    true);
       PERFORM set_config('request.jwt.claim.sub', v_agency_uid::text, true);
       SET LOCAL ROLE authenticated;
-      UPDATE public.partnerships SET nda_confirmed_at = now(), nda_confirmed_by = v_agency_uid WHERE id = v_pship;
+      UPDATE public.partnerships
+         SET nda_confirmed_at = now(),
+             nda_confirmed_by = v_agency_uid,
+             -- The four RULED-093-1 columns. Distinct values, so they really
+             -- move and the write cannot pass by leaving at EXIT 1.
+             contact_name     = 'T12 agency-written contact',
+             company_name     = 'T12 agency-written company',
+             phone            = '093-111-1111',
+             website          = 'https://example.invalid/t12'
+       WHERE id = v_pship;
       GET DIAGNOSTICS v_rows = ROW_COUNT;
       RESET ROLE;
       IF v_rows = 1 THEN
         v_logged := v_logged + 1;
-        v_lines := v_lines || E'\n  ' || rpad('T12 lead agency confirms NDA', 40) || rpad('PASS', 14) || '(1 row, exit 3)';
+        v_lines := v_lines || E'\n  ' || rpad('T12 agency writes guarded cols', 40) || rpad('PASS', 14) || '(1 row; proves EXIT 3 fires, not that the cols are permitted)';
         v_pass := v_pass + 1;
       ELSE
         v_logged := v_logged + 1;
-        v_lines := v_lines || E'\n  ' || rpad('T12 lead agency confirms NDA', 40) || rpad('FAIL', 14) || format('matched %s rows, expected 1. 093 BREAKS NDA CONFIRMATION.', v_rows);
+        v_lines := v_lines || E'\n  ' || rpad('T12 agency writes guarded cols', 40) || rpad('FAIL', 14) || format('matched %s rows, expected 1. 093 BREAKS NDA CONFIRMATION and the agency-side control for RULED-093-1 is unproved.', v_rows);
         v_fail := v_fail + 1;
       END IF;
     EXCEPTION
       WHEN sqlstate 'LG009' THEN
         RESET ROLE;
         v_logged := v_logged + 1;
-        v_lines := v_lines || E'\n  ' || rpad('T12 lead agency confirms NDA', 40) || rpad('FAIL', 14) || 'LG009 AT THE AGENCY. Exit 3 is not working and 093 breaks every NDA and MSA confirmation. DO NOT APPLY.';
+        v_lines := v_lines || E'\n  ' || rpad('T12 agency writes guarded cols', 40) || rpad('FAIL', 14) || 'LG009 AT THE AGENCY. EXIT 3 IS NOT FIRING. 093 breaks every NDA and MSA confirmation, AND RULED-093-1''s premise - that guarding the contact columns forecloses nothing because the agency exits above the list - IS FALSE. DO NOT APPLY.';
         v_fail := v_fail + 1;
       WHEN insufficient_privilege THEN
         RESET ROLE;
         v_logged := v_logged + 1;
-        v_lines := v_lines || E'\n  ' || rpad('T12 lead agency confirms NDA', 40) || rpad('INCONCLUSIVE', 14) || '42501. See the header on SET LOCAL ROLE.';
+        v_lines := v_lines || E'\n  ' || rpad('T12 agency writes guarded cols', 40) || rpad('INCONCLUSIVE', 14) || '42501. See the header on SET LOCAL ROLE.';
         v_inconc := v_inconc + 1;
       WHEN OTHERS THEN
         RESET ROLE;
         v_logged := v_logged + 1;
-        v_lines := v_lines || E'\n  ' || rpad('T12 lead agency confirms NDA', 40) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
+        v_lines := v_lines || E'\n  ' || rpad('T12 agency writes guarded cols', 40) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
         v_fail := v_fail + 1;
     END;
   END IF;
@@ -1201,19 +1240,29 @@ BEGIN
   -- it. A disposition nobody tested is a guess.
   -- ===================================================================
 
-  -- T17. THE FOUR GHOST-CONTACT COLUMNS ARE PERMITTED, BY RULING.
+  -- T17. THE FOUR GHOST-CONTACT COLUMNS ARE REFUSED. RULED-093-1.
   --
-  -- contact_name, company_name, phone and website are on the permit list and
-  -- have NO vendor-session writer at all. They are there because "ghost
-  -- contact details not editable post-import" is a PARKED PRODUCT ITEM, so
-  -- guarding them would settle a product question inside a migration.
+  -- contact_name, company_name, phone and website. They were briefly left on
+  -- the permit list while the question was open; Greg ruled on 2026-08-25
+  -- that a vendor may not write them, and this assertion is the flip.
   --
-  -- >>> THIS IS THE ASSERTION THAT FLIPS IF GREG RULES THE OTHER WAY. If the
-  -- >>> answer to OPEN-093-1 is "the agency edits them", delete the four
-  -- >>> names from v_vendor_permitted in 093 and change this block to expect
-  -- >>> LG009. Nothing else in either file moves.
+  -- WHY IT MATTERS, in one line each: contact_name is rendered by
+  -- app/api/agency/pool/[partnerId]/route.ts:239 as the fallback for a
+  -- missing full_name, so a vendor writing it RENAMES ITSELF inside the
+  -- agency's own pool record; and `website` puts a VENDOR-CONTROLLED URL
+  -- inside a trusted agency surface.
   --
-  -- PASS = the write SUCCEEDS, which is what proves 093 forecloses nothing.
+  -- ONE STATEMENT, FOUR COLUMNS. That is deliberate and it is the weaker
+  -- form: the guard raises on the FIRST difference it finds, so a PASS here
+  -- proves at least one of the four is guarded, not all four. T19's sweep is
+  -- the per-column shape and this is not it. The four were added to and
+  -- removed from v_vendor_permitted as a block, by one ruling, so they are
+  -- asserted as a block - but if that ever stops being true, split this.
+  --
+  -- IT MUST BE LG009 SPECIFICALLY. A write that fails with some other code
+  -- has not been refused by this guard; it has hit a constraint, a missing
+  -- grant, or a bug, and reporting that as a pass would be reporting a
+  -- different defect wearing the same result. Same shape as T6-T10.
   v_ran := v_ran + 1;
   BEGIN
     RESET ROLE;
@@ -1228,30 +1277,24 @@ BEGIN
      WHERE id = v_pship;
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
-    IF v_rows = 1 THEN
-      v_logged := v_logged + 1;
-      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('PASS', 14) || '(1 row, OPEN-093-1 left open)';
-      v_pass := v_pass + 1;
-    ELSE
-      v_logged := v_logged + 1;
-      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('FAIL', 14) || format('matched %s rows, expected 1.', v_rows);
-      v_fail := v_fail + 1;
-    END IF;
+    v_logged := v_logged + 1;
+    v_lines := v_lines || E'\n  ' || rpad('T17 vendor rewrites contact cols', 40) || rpad('FAIL', 14) || format('NO ERROR - wrote %s row(s). The vendor can still rename itself inside the agency''s pool record. RULED-093-1 is not in force.', v_rows);
+    v_fail := v_fail + 1;
   EXCEPTION
     WHEN sqlstate 'LG009' THEN
       RESET ROLE;
       v_logged := v_logged + 1;
-      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('FAIL', 14) || 'LG009. The four contact columns are GUARDED, which forecloses the parked product item inside a migration. Put them back on v_vendor_permitted, or get the ruling first.';
-      v_fail := v_fail + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T17 vendor rewrites contact cols', 40) || rpad('PASS', 14) || '(LG009, refused)';
+      v_pass := v_pass + 1;
     WHEN insufficient_privilege THEN
       RESET ROLE;
       v_logged := v_logged + 1;
-      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('INCONCLUSIVE', 14) || '42501. See the header on SET LOCAL ROLE.';
+      v_lines := v_lines || E'\n  ' || rpad('T17 vendor rewrites contact cols', 40) || rpad('INCONCLUSIVE', 14) || '42501. See the header on SET LOCAL ROLE.';
       v_inconc := v_inconc + 1;
     WHEN OTHERS THEN
       RESET ROLE;
       v_logged := v_logged + 1;
-      v_lines := v_lines || E'\n  ' || rpad('T17 ghost-contact cols permitted', 40) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
+      v_lines := v_lines || E'\n  ' || rpad('T17 vendor rewrites contact cols', 40) || rpad('FAIL', 14) || format('refused with %s, expected LG009: %s', SQLSTATE, SQLERRM);
       v_fail := v_fail + 1;
   END;
 
@@ -1361,9 +1404,81 @@ BEGIN
     END IF;
   END;
 
+  -- T20. >>> THE JSONB-SUBTRACTION CLAIM, PROVED AGAINST A REAL ROW. <<<
+  --
+  -- The whole guard rests on one property: taking a name OFF
+  -- v_vendor_permitted makes that column guarded, by omission, with no other
+  -- edit. WHY REMOVAL IS SYMMETRIC WITH ADDITION in 093's header argues that
+  -- from the documented semantics of to_jsonb() and `jsonb - text[]`. This
+  -- assertion is the part that argument cannot supply: EVIDENCE.
+  --
+  -- The case worth proving is value -> NULL, and here is why it is the one:
+  --
+  --   IF to_jsonb() OMITTED null-valued keys - which it does not, but the
+  --   whole design would fail silently if it did - then clearing a guarded
+  --   column would DELETE its key from v_new_rest while leaving it in
+  --   v_old_rest. Whether the two objects still compared unequal would then
+  --   depend on key presence rather than on value, and a reader would have
+  --   no way to tell from a green run which of the two mechanisms had
+  --   carried it. Every OTHER assertion in this file moves a column from one
+  --   non-null value to another, so not one of them touches this.
+  --
+  -- T12 has just written nda_confirmed_at = now(), so it is reliably NOT
+  -- NULL when this runs. Clearing it is therefore a genuine value -> NULL
+  -- move, and it is a guarded column, so the correct answer is LG009.
+  --
+  -- A "NO ERROR" HERE IS THE SERIOUS OUTCOME. It would mean a vendor can
+  -- CLEAR any guarded column - erase the agency's NDA confirmation, blank
+  -- the notes, delete the reliability narrative - while every
+  -- value-to-value assertion in this file still passed. That is a hole that
+  -- reads as closed.
+  v_ran := v_ran + 1;
+  BEGIN
+    -- ESTABLISH THE PRECONDITION RATHER THAN INHERITING IT. T12 leaves
+    -- nda_confirmed_at non-null, but T12 can be INCONCLUSIVE when the lead
+    -- organization has no member, and then this column could be NULL and the
+    -- clear below would be a NULL -> NULL no-op. That leaves at EXIT 1 with
+    -- no error, which this assertion would report as a FAIL it is not.
+    --
+    -- CLEAR THE CLAIMS FIRST. EXIT 2 tests auth.uid(), which reads a GUC, NOT
+    -- the database role - and set_config(..., true) is local to the
+    -- TRANSACTION. A postgres-role write with a previous test's `sub` still
+    -- set is treated as that user and would be refused with LG009 here.
+    RESET ROLE;
+    PERFORM set_config('request.jwt.claims',    '', true);
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    UPDATE public.partnerships SET nda_confirmed_at = now() WHERE id = v_pship;
+
+    PERFORM set_config('request.jwt.claims',    v_claims,    true);
+    PERFORM set_config('request.jwt.claim.sub', v_uid::text, true);
+    SET LOCAL ROLE authenticated;
+    UPDATE public.partnerships SET nda_confirmed_at = NULL WHERE id = v_pship;
+    GET DIAGNOSTICS v_rows = ROW_COUNT;
+    RESET ROLE;
+    v_logged := v_logged + 1;
+    v_lines := v_lines || E'\n  ' || rpad('T20 guarded col cleared to NULL', 40) || rpad('FAIL', 14) || format('NO ERROR - cleared %s row(s). A vendor can BLANK any guarded column. to_jsonb() is not emitting null-valued keys and the permit list is only half working. DO NOT APPLY.', v_rows);
+    v_fail := v_fail + 1;
+  EXCEPTION
+    WHEN sqlstate 'LG009' THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T20 guarded col cleared to NULL', 40) || rpad('PASS', 14) || '(LG009; value -> NULL is detected, so removal from the permit list is symmetric)';
+      v_pass := v_pass + 1;
+    WHEN insufficient_privilege THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T20 guarded col cleared to NULL', 40) || rpad('INCONCLUSIVE', 14) || '42501. See the header on SET LOCAL ROLE.';
+      v_inconc := v_inconc + 1;
+    WHEN OTHERS THEN
+      RESET ROLE;
+      v_logged := v_logged + 1;
+      v_lines := v_lines || E'\n  ' || rpad('T20 guarded col cleared to NULL', 40) || rpad('FAIL', 14) || format('refused with %s, expected LG009: %s', SQLSTATE, SQLERRM);
+      v_fail := v_fail + 1;
+  END;
+
   RESET ROLE;
 
-  IF v_fail = 0 AND v_inconc = 0 AND v_ran = 19 AND v_pass = 19 THEN
+  IF v_fail = 0 AND v_inconc = 0 AND v_ran = 20 AND v_pass = 20 THEN
     v_verdict_text := 'SAFE TO APPLY 093.';
     v_headline     := format('SAFE TO APPLY 093.  All %s assertions passed.', v_pass);
   ELSIF v_inconc > 0 AND v_fail = 0 THEN
@@ -1392,7 +1507,7 @@ BEGIN
   -- ORDER IS LOAD-BEARING: HEADLINE, THEN TALLY, THEN THE PER-ASSERTION
   -- LINES. A client that truncates a long error message truncates the
   -- END of it, so the verdict and the counts must be at the TOP where
-  -- they survive. The 19 detail lines are the part that can afford to be
+  -- they survive. The 20 detail lines are the part that can afford to be
   -- cut off - if they are, the tally still says how many failed and the
   -- headline still says whether to apply.
   -- =================================================================
@@ -1401,8 +1516,8 @@ BEGIN
     || E'=====================================================\n'
     || v_headline || E'\n'
     || E'=====================================================\n'
-    || format(E'assertions run  : %s   (expected 19)\n', v_ran)
-    || format(E'PASS            : %s   (expected 19)\n', v_pass)
+    || format(E'assertions run  : %s   (expected 20)\n', v_ran)
+    || format(E'PASS            : %s   (expected 20)\n', v_pass)
     || format(E'FAIL            : %s   (expected 0)\n',  v_fail)
     || format(E'INCONCLUSIVE    : %s   (expected 0)\n',  v_inconc)
     -- THE SELF-CHECK, IN THE OUTPUT RATHER THAN INFERRED FROM IT. v_ran is
@@ -1414,11 +1529,9 @@ BEGIN
     || format(E'verdicts logged : %s   (must equal assertions run: %s)\n',
               v_logged, CASE WHEN v_logged = v_ran THEN 'OK' ELSE 'MISMATCH' END)
     || E'\n'
-    || 'PERMIT LIST     : status, accepted_at, updated_at, payment_terms_requests, vendor_org_id,' || E'\n'
-    || '                  contact_name, company_name, phone, website' || E'\n'
+    || 'PERMIT LIST     : status, accepted_at, updated_at, payment_terms_requests, vendor_org_id' || E'\n'
     || '                  (+ profile_status on the claim transition only)' || E'\n'
-    || '                  contact_name/company_name/phone/website are permitted BY RULING,' || E'\n'
-    || '                  not by writer evidence - see OPEN-093-1 in 093''s header.' || E'\n'
+    || '                  5 permitted + 1 conditional + 17 guarded + 1 pinned by 087 = 24' || E'\n'
     || format(E'SUBJECT (T1-T14, T16-T19) : user %s, vendor org %s, partnership %s\n', v_uid, v_org, v_pship)
     || format(E'SUBJECT (T15 claim)       : %s  partnership %s, claimer %s, into org %s\n',
               CASE WHEN v_ghost IS NULL THEN 'NONE FOUND' ELSE coalesce(v_ghost_email, '?') END,

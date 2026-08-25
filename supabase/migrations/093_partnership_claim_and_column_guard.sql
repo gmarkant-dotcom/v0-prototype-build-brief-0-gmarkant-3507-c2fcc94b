@@ -10,13 +10,19 @@
 --            VENDOR-SIDE COLUMN PERMIT LIST is added below them.
 --
 --   >>> THE NEW HALF IS A PERMIT LIST, NOT A DENY LIST, FOLLOWING 092.
---   >>> A caller acting as the VENDOR on a partnership may change
---   >>> status, accepted_at, updated_at, payment_terms_requests and
---   >>> vendor_org_id, plus profile_status on the claim transition only,
---   >>> plus contact_name, company_name, phone and website which are left
---   >>> permitted BY RULING and not by writer evidence - see OPEN-093-1.
---   >>> EVERY OTHER COLUMN IS REFUSED WITH LG009 - INCLUDING COLUMNS
---   >>> THAT DO NOT EXIST YET. See THE SHAPE and THE RECONCILIATION below.
+--   >>> A caller acting as the VENDOR on a partnership may change exactly
+--   >>> five columns - status, accepted_at, updated_at,
+--   >>> payment_terms_requests and vendor_org_id - plus profile_status on
+--   >>> the claim transition only. EVERY OTHER COLUMN IS REFUSED WITH
+--   >>> LG009, INCLUDING COLUMNS THAT DO NOT EXIST YET. See THE SHAPE and
+--   >>> THE RECONCILIATION below.
+--
+--   >>> contact_name, company_name, phone and website ARE GUARDED. They
+--   >>> were briefly left permitted while the question was open; Greg
+--   >>> ruled on 2026-08-25 and RULED-093-1 records the reasoning. The
+--   >>> lead-agency path exits ABOVE the permit list, so guarding them
+--   >>> forecloses nothing about the parked "agency edits ghost contact
+--   >>> details" item.
 --
 --   >>> THE GUARDED SET IS RECONCILED AGAINST THE LIVE TABLE, 24 columns
 --   >>> queried 2026-08-21, NOT against the migration files. The first
@@ -59,7 +65,7 @@
 -- >>> 092's HEADER COULD ARGUE ITS RISK WAS SMALL BECAUSE ITS PERMIT
 -- >>> LIST GUARDED A COLUMN THAT DID NOT EXIST UNTIL LINE 1 OF ITS OWN
 -- >>> TRANSACTION. THAT ARGUMENT IS NOT AVAILABLE HERE AND MUST NOT BE
--- >>> BORROWED. THIS FILE GUARDS FIFTEEN OF THE TWENTY-FOUR LIVE
+-- >>> BORROWED. THIS FILE GUARDS NINETEEN OF THE TWENTY-FOUR LIVE
 -- >>> COLUMNS, ALL TWENTY-FOUR EXIST TODAY, AND FIVE OF THEM ARE
 -- >>> WRITTEN BY LIVE VENDOR SESSIONS EVERY DAY. The risk is the
 -- >>> OPPOSITE direction from a hole: a column a vendor legitimately
@@ -70,10 +76,10 @@
 -- >>> than as a group.
 --
 -- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE
--- 555 and an explicit COMMIT; on LINE 809. Those are the
+-- 612 and an explicit COMMIT; on LINE 860. Those are the
 -- only EXECUTABLE occurrences of either word.
 --
--- TO DRY RUN: change the COMMIT; on line 809 to ROLLBACK; and run
+-- TO DRY RUN: change the COMMIT; on line 860 to ROLLBACK; and run
 -- the whole file. Every statement executes, every error surfaces,
 -- nothing persists. Verify the line numbers before trusting them, with:
 --
@@ -81,12 +87,12 @@
 --       supabase/migrations/093_partnership_claim_and_column_guard.sql
 --
 -- THAT GREP RETURNS THREE HITS, AND THREE IS CORRECT:
---     555  BEGIN;    <- executable. The transaction.
---     645  BEGIN     <- plpgsql, partnerships_guard_identity_columns's
+--     612  BEGIN;    <- executable. The transaction.
+--     695  BEGIN     <- plpgsql, partnerships_guard_identity_columns's
 --                       body. No semicolon; matched by the
 --                       case-insensitive form only, not a transaction
 --                       statement.
---     809  COMMIT;   <- executable. Change this one to ROLLBACK; to dry
+--     860  COMMIT;   <- executable. Change this one to ROLLBACK; to dry
 --                       run.
 --
 -- There is no ROLLBACK in this file. The DOWN file has its own.
@@ -378,15 +384,35 @@
 --                                                       authors its own
 --                                                       delivery record.
 --   reliability_summary_generated_at  GUARDED-BY-093    same
---   contact_name                      PERMITTED-093     >>> BY RULING, NOT BY
---   company_name                      PERMITTED-093     >>> WRITER EVIDENCE.
---   phone                             PERMITTED-093     >>> See OPEN-093-1.
---   website                           PERMITTED-093     >>> DELIBERATELY LEFT
---                                                       >>> UNGUARDED.
+--   contact_name                      GUARDED-BY-093    RULED 2026-08-25.
+--   company_name                      GUARDED-BY-093    No vendor writer, and
+--   phone                             GUARDED-BY-093    permitting would let a
+--   website                           GUARDED-BY-093    vendor rename itself
+--                                                       inside the agency's own
+--                                                       pool record and put a
+--                                                       vendor-controlled URL
+--                                                       in a trusted agency
+--                                                       surface. See RULED-093-1.
 --   ANY COLUMN ADDED AFTER THIS       GUARDED-BY-093    refused from the
 --                                                       moment it exists, with
 --                                                       no edit to the
 --                                                       function
+--
+--   FINAL COUNTS AGAINST THE LIVE 24:
+--     PERMITTED-093        5   status, accepted_at, updated_at,
+--                              payment_terms_requests, vendor_org_id
+--     PERMITTED ON THE
+--     CLAIM TRANSITION     1   profile_status  (guarded at every other time)
+--     GUARDED-BY-093      17   everything else except lead_org_id
+--     GUARDED-BY-087       1   lead_org_id
+--                        ----
+--                          24   5 + 1 + 17 + 1 = 24. No column is unaccounted
+--                               for, and none is counted twice: profile_status
+--                               is listed once, on the conditional line.
+--
+--   vendor_org_id is counted under PERMITTED-093 and is ALSO constrained by
+--   087. That is the one row in this table that carries two dispositions,
+--   and it is deliberate - see THE ONE THAT READS LIKE A CONTRADICTION.
 --
 -- ---------------------------------------------------------------------
 -- THE ONE THAT READS LIKE A CONTRADICTION: vendor_org_id
@@ -441,96 +467,127 @@
 -- different claims and only the second one is this.
 --
 -- ---------------------------------------------------------------------
--- OPEN-093-1. THE FOUR GHOST-CONTACT COLUMNS ARE GREG'S RULING, NOT MINE.
+-- RULED-093-1. THE FOUR GHOST-CONTACT COLUMNS ARE GUARDED. Greg, 2026-08-25.
 --
 --   contact_name, company_name, phone, website  (migration 068:9-12)
 --
 -- These hold the imported contact details of a ghost vendor - a row created
--- for somebody who has no Ligament account yet. "Ghost contact details not
--- editable post-import" IS A PARKED PRODUCT ITEM, which means it is live
--- that they may need to BECOME editable.
+-- for somebody who has no Ligament account yet. They were left PERMITTED in
+-- the first draft of this file, on the reasoning that "ghost contact details
+-- not editable post-import" is a parked product item and a migration is the
+-- wrong place to foreclose one. THAT REASONING WAS WRONG ON ITS OWN TERMS,
+-- and the ruling says why:
 --
--- >>> GUARDING THEM WOULD FORECLOSE THAT INSIDE A MIGRATION, WHICH IS THE
--- >>> WRONG PLACE TO SETTLE A PRODUCT QUESTION. THEY ARE PERMITTED. This is
--- >>> a deliberate decision to leave a door open, not an omission.
+--   1. GUARDING FORECLOSES NOTHING. The parked item is about the AGENCY
+--      being able to edit these details, and the agency never reaches the
+--      permit list: an agency session returns at EXIT 3, above it. So the
+--      parked item is untouched either way, and the whole basis for leaving
+--      them permitted evaporates.
 --
--- WHAT THE CODE SHOWS TODAY, which is why the ruling is genuinely open:
+--   2. THE COST IS ASYMMETRIC. Guarding now is one permit-list removal and
+--      one assertion flip. Guarding later is a second migration against
+--      partnerships, a second pre-apply cycle, and a second window in which
+--      the hole is open. Nothing about the parked item is made harder by
+--      doing it now.
 --
---   * NOTHING EDITS THEM POST-IMPORT AT ALL. lib/server/partner-pool-import.ts
+--   3. PERMITTING HAS A REAL COST, not merely a theoretical one. A vendor
+--      could rename ITSELF inside the agency's own pool record, without the
+--      agency knowing: app/api/agency/pool/[partnerId]/route.ts:239 renders
+--      partnerships.contact_name as the fallback for a missing full_name, so
+--      the agency's own view of who it is dealing with becomes
+--      vendor-controlled. And `website` puts a VENDOR-CONTROLLED URL inside a
+--      TRUSTED AGENCY SURFACE, which is a different and worse class of thing
+--      than a wrong name.
+--
+-- WHAT THE CODE SHOWS, unchanged from the first draft and still the reason
+-- this needed a ruling rather than a lookup:
+--
+--   * NOTHING EDITS THEM POST-IMPORT TODAY. lib/server/partner-pool-import.ts
 --     :277-280 writes each one ONLY when the existing value is blank
 --     (`if (!existing.contact_name && row.contactName)`). The parked item is
 --     already implemented, in application code, as "fill blanks, never
 --     overwrite".
 --   * lib/award-partnership-resolution.ts:216 writes contact_name on the
 --     award path. Service role.
---   * Both are service-role callers and would exit at EXIT 2 regardless of
---     what the permit list said. NEITHER OF THEM DECIDES THIS.
---   * There is NO session-client writer of any of the four, on either side.
+--   * Both are service-role callers and pass at EXIT 2, above the permit
+--     list. Guarding does not touch them.
+--   * There is still NO session-client writer of any of the four, on either
+--     side. Guarding breaks nothing that exists.
 --
--- So there is no writer evidence pointing either way, which is exactly the
--- case the asymmetry rule covers.
+-- ASSERTION T17 IN docs/093-preapply-test.sql PROVES THEY ARE REFUSED, with
+-- LG009 specifically. T12 covers the agency side - read its own text for
+-- what that does and does not demonstrate.
 --
--- WHAT EACH DISPOSITION COSTS, so the ruling can be made against real
--- consequences:
+-- =====================================================================
+-- WHY REMOVAL IS SYMMETRIC WITH ADDITION, AND WHERE IT IS NOT
+-- =====================================================================
 --
---   PERMIT (what this file does).
---     COST: a vendor who has CLAIMED a ghost row can rewrite the contact
---     details the agency imported for them - the name, company, phone and
---     website the agency's pool page renders at
---     app/api/agency/pool/[partnerId]/route.ts:239, where contact_name is
---     the fallback for a missing full_name. That is a display-integrity
---     problem INSIDE an existing relationship, not a cross-tenant one: the
---     row is already theirs and the agency already deals with them.
---     IT IS ALSO THE STATUS QUO. Today's policy restricts no column, so a
---     claimed vendor can already do this. Permitting changes nothing that
---     is true this morning.
---     BUYS: if the parked item ships as "the vendor corrects their own
---     details", it needs no migration.
+-- Taking a name OFF v_vendor_permitted is supposed to make that column
+-- guarded, by omission, with no other edit. That is a claim about jsonb
+-- subtraction, not an intention, so here is the mechanism spelled out. It
+-- matters because a column that is silently NOT guarded after being removed
+-- is a hole that reads as closed.
 --
---   GUARD (one line: delete the four from v_vendor_permitted).
---     COST: if the parked item ships as "the vendor corrects their own
---     details", that feature arrives blocked by a database trigger, and the
---     symptom is LG009 from a save button with no obvious cause.
---     BUYS: closes the display-integrity hole above.
---     FREE IF THE ANSWER IS "THE AGENCY EDITS THEM": an agency session
---     leaves at EXIT 3 before the permit list is consulted, so guarding
---     costs the agency path nothing at all.
+--   `to_jsonb(OLD)` ON A RECORD EMITS EVERY ATTRIBUTE, INCLUDING NULL ONES.
+--   A SQL NULL becomes the JSON value `null`; the key is PRESENT with a null
+--   value, not absent. The canonical documentation example is
+--   `to_jsonb(row(1,'foo',null))` -> `{"f1":1,"f2":"foo","f3":null}`, and the
+--   existence of jsonb_strip_nulls() is the other half of the proof: a
+--   function whose whole job is removing null-valued keys would have nothing
+--   to do if they were never emitted.
 --
--- THE QUESTION THAT SETTLES IT, and it is a product question, not a query:
--- WHEN GHOST CONTACT DETAILS BECOME EDITABLE, WHO EDITS THEM - THE AGENCY
--- THAT IMPORTED THEM, OR THE VENDOR THEY DESCRIBE?
---   "The agency"  -> guard all four. Costs nothing.
---   "The vendor"  -> leave them permitted. This file is already correct.
---   "Both"        -> leave them permitted.
+--   `jsonb - text[]` deletes the named keys if present and is a no-op for a
+--   name that is not a key. So a name removed from the array simply stops
+--   being deleted, and the key returns to BOTH v_old_rest and v_new_rest.
 --
--- Assertion T17 in docs/093-preapply-test.sql proves they are writable, so
--- if the ruling later goes the other way the test tells you which assertion
--- has to flip.
+--   jsonb equality is structural over the canonicalized binary form. Key
+--   ORDER is not significant, so the comparison cannot be perturbed by the
+--   order columns happen to be emitted in.
 --
--- THE VENDOR-SIDE WRITERS, W1 TO W5. Every session-client write to this
--- table by a caller who is not the lead agency. Found by grep for
--- `from("partnerships")` followed by `.update(` across app/ and lib/.
+-- THE THREE NULL CASES, WHICH ARE THE ONES WORTH CHECKING:
 --
---   W1  app/api/partnerships/route.ts:1029
---       accept an invitation: { status: 'active', accepted_at }
---   W2  app/api/partnerships/route.ts:1179
---       decline an invitation: { status: 'terminated', updated_at }
---   W3  app/partner/projects/page.tsx:366
---       request payment terms: { payment_terms_requests }
---   W4  app/auth/callback/route.ts:183
---       claim on login: { vendor_org_id, profile_status, updated_at }
---   W5  app/api/partnerships/route.ts:285
---       claim: { vendor_org_id }
+--   NULL -> value   `null` vs `"x"`. Two different jsonb scalars. DETECTED.
+--   value -> NULL   `"x"` vs `null`. Same, in reverse.            DETECTED.
+--   NULL -> NULL    `null` vs `null`. Equal.                  NOT detected,
+--                   which is correct: nothing moved.
 --
--- ALL FIVE PASS. W1, W2 and W3 move only permitted columns and leave at
--- exit 1. W4 and W5 move vendor_org_id on the claim transition, which
--- adds profile_status to the list for that write only.
+-- So the equality test at EXIT 1 is exactly as sensitive for a column that
+-- is NULL as for one that is not, and removal IS symmetric with addition
+-- for it. The same holds for the v_moved diagnostic below: because every
+-- key is present on both sides, `v_new_rest -> k` never returns SQL NULL,
+-- and `IS DISTINCT FROM` degenerates to `<>` while remaining correct if a
+-- future column somehow is absent.
 --
--- SERVICE-ROLE WRITERS ARE EXEMPT AT EXIT 2, NOT PERMITTED. They are
--- lib/partnership-award-claim.ts, lib/server/partner-pool-import.ts:282,
--- app/api/agency/email-scan/import/route.ts:106 and
--- app/api/rfp/guest/[token]/route.ts:89. They still pass through 087's
--- four refusals above, which have no exemption and never had one.
+-- >>> VERIFIED BY READING THE DOCUMENTED SEMANTICS, NOT BY EXECUTION. This
+-- >>> session has no database. Assertion T20 in the pre-apply test exercises
+-- >>> the value -> NULL direction against a real row, so the claim is proved
+-- >>> empirically on Greg's run rather than resting on this comment.
+--
+-- WHERE IT IS **NOT** SYMMETRIC, and this is the part worth carrying
+-- forward:
+--
+--   THE DIRECTION OF DANGER FLIPS. A name ADDED in error permits a column
+--   nobody meant to permit - a hole, silent, and it looks exactly like a
+--   correct file. A name REMOVED in error refuses a column something
+--   legitimately writes - a breakage, loud, and it surfaces the first time
+--   that writer runs. The second is worse to ship and far easier to notice,
+--   which is why the test's permitted-direction assertions (T1-T5) are the
+--   most urgent ones in the file.
+--
+--   THE COST OF EXIT 1 MOVES. With four fewer permitted columns, a write
+--   that touches one of them no longer leaves at EXIT 1; it falls through to
+--   EXIT 2, which calls auth.uid(), and possibly EXIT 3, which issues a
+--   query. Adding a column to the list can only make the guard cheaper;
+--   removing one can only make it dearer. In practice this costs nothing
+--   today, because the only writers of these four are service-role callers
+--   that stop at EXIT 2 without a query.
+--
+--   A MISSPELLED NAME BEHAVES DIFFERENTLY IN EACH DIRECTION. Adding a name
+--   that is not a column is a silent no-op that permits nothing. Removing a
+--   name that is not on the list is also a silent no-op. But FORGETTING to
+--   remove one leaves a column permitted, and there is no error either way -
+--   which is why THE RECONCILIATION above is a table of all 24 columns with
+--   a stated final count, rather than a diff.
 --
 -- =====================================================================
 -- ORDERING AGAINST THE CODE
@@ -616,27 +673,20 @@ DECLARE
   -- Reconciled against the LIVE 24-column table on 2026-08-21, not against
   -- the migration files - see THE RECONCILIATION in this file's header.
   --
-  -- The first five are here because a named vendor-session writer needs
-  -- them: W1, W2, W3, W4, W5 in the header.
+  -- FIVE ENTRIES, EACH WITH A NAMED VENDOR-SESSION WRITER: W1, W2, W3, W4
+  -- and W5 in the header. Nothing is on this list without one.
   --
-  -- THE LAST FOUR ARE HERE BY RULING AND HAVE NO WRITER AT ALL. They are the
-  -- imported ghost-contact columns, and "ghost contact details not editable
-  -- post-import" is a PARKED PRODUCT ITEM - so guarding them would settle a
-  -- product question inside a migration. Under a permit list, leaving a
-  -- column unguarded MEANS naming it here; there is no third state. See
-  -- OPEN-093-1 for what each disposition costs and the one question that
-  -- settles it. DELETING THESE FOUR LINES IS THE WHOLE OF THE OTHER
-  -- DISPOSITION, and assertion T17 is the one that flips.
+  -- contact_name, company_name, phone and website WERE briefly here, left
+  -- permitted while OPEN-093-1 was open. GREG RULED ON 2026-08-25: guard
+  -- them. They are gone from this array and are therefore guarded by
+  -- omission - see WHY REMOVAL IS SYMMETRIC WITH ADDITION in the header for
+  -- why that is a fact about jsonb subtraction and not a hope.
   v_vendor_permitted CONSTANT text[] := ARRAY[
     'status',
     'accepted_at',
     'updated_at',
     'payment_terms_requests',
-    'vendor_org_id',
-    'contact_name',
-    'company_name',
-    'phone',
-    'website'
+    'vendor_org_id'
   ];
   v_permitted text[];
   v_old_rest  jsonb;
@@ -778,16 +828,17 @@ COMMENT ON FUNCTION public.partnerships_guard_identity_columns() IS
   'written NULL -> value, is never cleared or repointed, and the value written must be the '
   'organization of the person the row is addressed to. It has NO exemption and applies to '
   'the service role too. HALF TWO, from migration 093: a VENDOR-SIDE COLUMN PERMIT LIST. A '
-  'caller with an end-user session who is not a member of lead_org_id may change only '
-  'status, accepted_at, updated_at, payment_terms_requests, vendor_org_id, contact_name, '
-  'company_name, phone and website, plus profile_status on the claim transition; every other '
-  'column - id, invitation_message, invited_at, created_at, partner_email, nda_confirmed_at, '
-  'nda_confirmed_by, partnership_notes, msa_confirmed_at, msa_confirmed_by, '
-  'invitation_sent_at, reliability_summary, reliability_summary_generated_at, AND ANY COLUMN '
-  'ADDED LATER - is refused with LG009. THE FOUR CONTACT COLUMNS ARE PERMITTED BY RULING AND '
-  'NOT BY WRITER EVIDENCE: nothing edits them post-import today, and whether they become '
-  'editable by the agency or by the vendor is an open product question, so a migration is the '
-  'wrong place to foreclose it - see OPEN-093-1 in 093''s header. vendor_org_id is on this '
+  'caller with an end-user session who is not a member of lead_org_id may change only five '
+  'columns - status, accepted_at, updated_at, payment_terms_requests and vendor_org_id - '
+  'plus profile_status on the claim transition; every other column - id, invitation_message, '
+  'invited_at, created_at, partner_email, nda_confirmed_at, nda_confirmed_by, '
+  'partnership_notes, msa_confirmed_at, msa_confirmed_by, invitation_sent_at, '
+  'reliability_summary, reliability_summary_generated_at, contact_name, company_name, phone, '
+  'website, AND ANY COLUMN ADDED LATER - is refused with LG009. The four contact columns are '
+  'guarded per Greg''s ruling of 2026-08-25 (RULED-093-1): guarding forecloses nothing, '
+  'because the lead agency exits above this list, and permitting would let a vendor rename '
+  'itself inside the agency''s own pool record and put a vendor-controlled URL in a trusted '
+  'agency surface. vendor_org_id is on this '
   'list AND is the column half one constrains hardest; that is not a contradiction, it is the '
   'claim path, and half one runs first. The list lives in v_vendor_permitted and nowhere '
   'else; the comparison is to_jsonb(NEW) - permitted against to_jsonb(OLD) - permitted, so a '
