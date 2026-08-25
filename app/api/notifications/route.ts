@@ -1,11 +1,22 @@
-// TODO: GET and PATCH here have zero callers anywhere in the codebase (verified via
-// repo-wide search for "/api/notifications" - no fetch/useFetch call sites in app/,
-// components/, lib/, or hooks/). The write side (lib/notifications.ts's
-// createNotification()) is still actively called from app/api/partnerships/route.ts
-// and app/api/projects/[id]/onboarding-packages/route.ts, so the notifications table
-// is being populated with no UI ever reading it back. Removal candidate once a product
-// decision is made on whether to build the read-side UI or drop the feature - do not
-// delete without re-checking the write side first.
+// THIS ROUTE NOW HAS A CONSUMER, AND IT IS IN A LAYOUT. 2026-08-25.
+//
+// It carried a TODO recording that GET and PATCH had zero callers anywhere while sixteen
+// write sites kept filling the table. components/notification-bell.tsx is that consumer:
+// GET behind SWR for the list and the unread badge, PATCH { markAllRead: true } behind the
+// "Mark all read" control. It is mounted in components/agency-layout.tsx and
+// components/partner-layout.tsx, so EVERY authenticated page in BOTH portals issues this
+// GET. That is the blast radius to hold in mind before changing anything below:
+//
+//   - THE user_id FILTER IS NOT DECORATION AND IT IS NOT REDUNDANT WITH RLS. Every query
+//     here scopes explicitly to the caller. Removing one on the grounds that "the policy
+//     already does that" is the exact shape that made the vendor RFP inbox hand an agency's
+//     own outbound rows to the vendor portal.
+//   - ZERO ROWS MUST STAY AN EMPTY ARRAY. The bell distinguishes "nothing has been sent to
+//     you" from "this could not be loaded" and says different things for each. Returning an
+//     error for an empty inbox would make every new account's bell claim a failure.
+//
+// Deliberately unchanged here: nothing about the queries, the shape, or the headers. The
+// consumer was built to fit this route, not the other way round.
 import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/api-auth"
 import { NextResponse } from "next/server"

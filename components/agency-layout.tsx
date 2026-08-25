@@ -18,6 +18,7 @@ import { RoleToggle } from "@/components/role-toggle"
 import { NewProjectDialog } from "@/components/new-project-dialog"
 import { NewClientDialog } from "@/components/new-client-dialog"
 import { OrganizationSwitcher } from "@/components/organization-switcher"
+import { NotificationBell } from "@/components/notification-bell"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -497,9 +498,16 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
       <aside className="fixed left-0 top-0 bottom-0 w-[260px] glass border-r border-border z-20 flex flex-col">
         {/* Logo */}
         <div className="p-6 border-b border-border">
-          <Link href="/">
-            <LigamentLogo size="md" variant="primary" />
-          </Link>
+          {/* THE ONLY STRUCTURAL CHANGE THIS LAYOUT TAKES FOR THE BELL: the logo gains a row
+              to sit in. Nothing about how this layout fetches or renders changes - the bell
+              is self-contained and does its own SWR read, inheriting SWRProvider's
+              configuration. See components/notification-bell.tsx. */}
+          <div className="flex items-start justify-between gap-3">
+            <Link href="/">
+              <LigamentLogo size="md" variant="primary" />
+            </Link>
+            <NotificationBell variant="agency" />
+          </div>
           <div className="mt-2 font-mono text-2xs text-accent bg-accent/10 px-2 py-1 rounded inline-block">
             Lead Agency
           </div>

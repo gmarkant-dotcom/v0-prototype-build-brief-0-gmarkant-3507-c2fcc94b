@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { isDemoMode } from "@/lib/demo-data"
 import { Settings, LogOut, User, ChevronDown, Globe, ArrowUpRight } from "lucide-react"
 import { LigamentLogo } from "./ligament-logo"
+import { NotificationBell } from "@/components/notification-bell"
 import { PaidUserProvider } from "@/contexts/paid-user-context"
 import { LeadAgencyFilterProvider } from "@/contexts/lead-agency-filter-context"
 import { RoleToggle } from "./role-toggle"
@@ -193,6 +194,10 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
             </div>
             
             <div className="flex items-center gap-4">
+              {/* Pure insertion. The bell reads /api/notifications on its own through SWR;
+                  nothing about how this header fetches or renders changes. See
+                  components/notification-bell.tsx. */}
+              <NotificationBell variant="vendor" />
               {isDemo && (
                 <Link 
                   href="/agency" 
