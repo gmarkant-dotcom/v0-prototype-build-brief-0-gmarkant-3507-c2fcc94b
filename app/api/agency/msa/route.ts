@@ -1,4 +1,5 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -165,9 +166,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "partnership_id is required" }, { status: 400, headers: noStore })
     }
 
+    // vendor_org_id is selected for the msa.create breadcrumb below.
     const { data: ship, error: shipErr } = await supabase
       .from("partnerships")
-      .select("id")
+      .select("id, vendor_org_id")
       .eq("id", partnership_id)
       .in("lead_org_id", callerOrgIds)
       .maybeSingle()
@@ -189,6 +191,26 @@ export async function POST(req: Request) {
       console.error("[api/agency/msa] POST insert", error)
       return NextResponse.json({ error: error.message }, { status: 500, headers: noStore })
     }
+
+    // msa.create - the agreement RECORD now exists. Not the same act as `msa.confirm`
+    // (app/api/partnerships/route.ts:997), which is the agency confirming a signed MSA and
+    // is already emitted and already vendor-visible. This one is agency-internal: a pending
+    // shell was created.
+    //
+    // PAYLOAD: EMPTY. There is nothing about a freshly created, status-'pending' agreement
+    // that a feed line needs and that is not either derivable from the vendor name or
+    // private - no document_url, which is a capability, and no status, which is 'pending' by
+    // construction here.
+    await recordMilestone(supabase, {
+      eventType: "msa.create",
+      orgId: orgIdFromColumn(writeOrgId),
+      actorId: user.id,
+      vendorOrgId: orgIdFromColumn((ship as { vendor_org_id?: string | null } | null)?.vendor_org_id),
+      partnershipId: null,
+      subjectType: "msa",
+      subjectId: (row?.id as string | null) ?? null,
+      payload: {},
+    })
 
     return NextResponse.json({ agreement: row }, { headers: noStore })
   } catch (e) {

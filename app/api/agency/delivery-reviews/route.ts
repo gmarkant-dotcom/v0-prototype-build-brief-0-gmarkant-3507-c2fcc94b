@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { recordMilestone } from "@/lib/milestone-events"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { loadBidDeltaComparison } from "@/lib/delivery-review"
 import { checkUsageLimit, incrementAiAnalysis } from "@/lib/usage-tracking"
-import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 45
@@ -161,7 +162,9 @@ export async function POST(req: Request) {
     // belong to this agency before writing anything keyed to them.
     const [{ data: project }, { data: partnership }] = await Promise.all([
       supabase.from("projects").select("id").eq("id", projectId).in("org_id", callerOrgIds).maybeSingle(),
-      supabase.from("partnerships").select("id").eq("id", partnershipId).in("lead_org_id", callerOrgIds).maybeSingle(),
+      // vendor_org_id is selected for the delivery.review_complete breadcrumb below. It is
+      // on the agency's own partnership row, already scoped by lead_org_id.
+      supabase.from("partnerships").select("id, vendor_org_id").eq("id", partnershipId).in("lead_org_id", callerOrgIds).maybeSingle(),
     ])
     if (!project) return NextResponse.json({ error: "Project not found" }, { status: 404 })
     if (!partnership) return NextResponse.json({ error: "Partnership not found" }, { status: 404 })
@@ -336,6 +339,40 @@ export async function POST(req: Request) {
     if (finalUpdateErr) {
       console.error("[api] failure", { route, method: "POST", message: finalUpdateErr.message })
       return NextResponse.json({ error: "Failed to save delivery review" }, { status: 500 })
+    }
+
+    // delivery.review_complete - ON COMPLETION ONLY.
+    //
+    // Same rule as bid.score and for the same reason: this handler is a save button and a
+    // draft save is not a milestone. `status` here is the REQUESTED status; a re-save of an
+    // already-complete review will emit again, which is a known and accepted duplicate -
+    // telling a transition from a re-save needs the prior status, and the upsert above has
+    // already overwritten it by this point. Recorded as OPEN-EMIT-1 rather than papered
+    // over: the fix is to read the row before the upsert, which is a change to the handler's
+    // query plan and not to a breadcrumb.
+    //
+    // >>> NO SCORES IN THE PAYLOAD. Not the composite, not the per-criterion deltas, not the
+    // AI delta summary, not the client feedback. A delivery review is the agency's private
+    // assessment of one vendor's performance, and migration 073 exists precisely because
+    // that assessment is not automatically the vendor's to read. The payload is EMPTY and
+    // the predicate names the vendor from vendorOrgId, which the feed resolves at render
+    // time through the counterparty lookup.
+    //
+    // partnershipId IS DELIBERATELY NULL even though a partnership is obviously involved.
+    // It is the column counterparty visibility keys on, and this row must never become
+    // vendor-readable - 073 spent a whole migration making delivery reviews private by
+    // default and a whitelisted breadcrumb would hand back the fact of the review.
+    if (status === "complete") {
+      await recordMilestone(supabase, {
+        eventType: "delivery.review_complete",
+        orgId: orgIdFromColumn(writeOrgId),
+        actorId: userId,
+        vendorOrgId: orgIdFromColumn((partnership as { vendor_org_id?: string | null } | null)?.vendor_org_id),
+        partnershipId: null,
+        subjectType: "partnership",
+        subjectId: partnershipId,
+        payload: {},
+      })
     }
 
     return NextResponse.json({ review: updatedReview, scores: allScores || [], comparison })

@@ -3,7 +3,8 @@ import { requireAgencyRole } from "@/lib/api-auth"
 import { isMissingClientsTable, normalizeClientNameForMatch } from "@/lib/clients"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 export const dynamic = "force-dynamic"
 
 /**
@@ -128,6 +129,25 @@ export async function POST(request: NextRequest) {
       console.error("[api] failure", { route, method: "POST", message: error.message, code: error.code })
       return NextResponse.json({ error: "Failed to create client profile" }, { status: 500 })
     }
+
+    // client.create - AFTER the row exists, and non-fatal.
+    //
+    // PAYLOAD CARRIES THE CLIENT NAME AND NOTHING ELSE. Not the notes, not the default
+    // business criteria, not the evaluation rubric - those are the agency's commercial
+    // positions and a feed line does not need them to say what happened.
+    //
+    // THE NAME IS SAFE HERE ONLY BECAUSE THIS TYPE IS NOT VENDOR-VISIBLE. `client.create`
+    // is absent from vendor_visible_event_types() (migration 080), so the counterparty
+    // SELECT policy cannot return this row and no vendor ever learns who the agency's end
+    // client is. See the note on `client_name` in lib/activity-feed.ts payloadString().
+    await recordMilestone(supabase, {
+      eventType: "client.create",
+      orgId: orgIdFromColumn(writeOrgId),
+      actorId: user.id,
+      subjectType: "client",
+      subjectId: (created?.id as string | null) ?? null,
+      payload: { client_name: (created?.name as string | null) ?? null },
+    })
 
     return NextResponse.json({ client: created })
   } catch (e) {

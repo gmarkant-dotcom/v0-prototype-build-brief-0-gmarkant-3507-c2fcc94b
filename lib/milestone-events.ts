@@ -73,6 +73,10 @@ export type MilestoneSubjectType =
   | "rfp_inbox"
   | "msa"
   | "payment_milestone"
+  // Added 2026-08-25 with the client.* emitters. The subject of a client document event is
+  // the CLIENT, not the document: the document row can be deleted and the breadcrumb has to
+  // outlive it, and the feed's link target is the client profile either way.
+  | "client"
 
 export type MilestoneEvent = {
   /**

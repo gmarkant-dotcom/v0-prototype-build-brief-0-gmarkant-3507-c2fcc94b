@@ -137,24 +137,24 @@ business seeing that a project exists before they are invited to bid on it.
 | 22 | **`nda.acknowledge`** | V | E | **NEW** `app/api/partner/rfps/[id]/nda-notify/route.ts:120` | yes | — |
 | 23 | `status_update.post` | V | E | `app/api/partner/projects/[projectId]/status-update/route.ts:308` | yes | — |
 | 24 | **`project.create`** | | | **NEW** `app/api/projects/route.ts:634` | yes | — |
-| 25 | `vendor.add` | | | **none** | **none** | RENDERER + a wording |
+| 25 | `vendor.add` | | | **NEW 08-25** `app/api/agency/pool/add-partner/route.ts:76` | **NEW** | — |
 | 26 | `vendor.remove` | | | **none** | **none** | RENDERER + a wording, and a RULING — see §4 |
 | 27 | `vendor.blacklist` | | | **none** | **none** | RENDERER + a wording, and a RULING — see §4 |
-| 28 | `client.create` | | | **none** | **none** | RENDERER + a wording |
+| 28 | `client.create` | | | **NEW 08-25** `app/api/agency/clients/route.ts:144` | **NEW** | — |
 | 29 | `client.edit` | | | **none** | **none** | RENDERER + a wording, and a RULING — see §4 |
-| 30 | `client.document_add` | | | **none** | **none** | RENDERER + a wording |
-| 31 | `client.document_remove` | | | **none** | **none** | RENDERER + a wording |
-| 32 | `project.client_change` | | | **none** | **none** | RENDERER + a wording |
-| 33 | `rfp.brief_upload` | | | **none** | **none** | RENDERER + a wording |
+| 30 | `client.document_add` | | | **NEW 08-25** `app/api/agency/library-documents/route.ts:156` | **NEW** | — |
+| 31 | `client.document_remove` | | | **NEW 08-25** `app/api/agency/library-documents/[id]/route.ts:134` | **NEW** | — |
+| 32 | `project.client_change` | | | **none** | **NEW 08-25** | **NO LIVE WRITE SITE** — see §7 |
+| 33 | `rfp.brief_upload` | | | **none** | **NEW 08-25** | **NO LIVE WRITE SITE** — see §7 |
 | 34 | `rfp.generate` | | | **none** | **none** | RENDERER + a wording, and a RULING — see §4 |
 | 35 | `rfp.regenerate` | | | **none** | **none** | RENDERER + a wording, and a RULING — see §4 |
-| 36 | `rfp.scope_allocate` | | | **none** | **none** | RENDERER + a wording |
+| 36 | `rfp.scope_allocate` | | | **none** | **NEW 08-25** | **NO LIVE WRITE SITE** — see §7 |
 | 37 | `bid.analyze` | | | **none** | **none** | RENDERER + a wording, and a RULING — see §4 |
 | 38 | `bid.analyze_retry` | | | **none** | **none** | RENDERER + a wording, and a RULING — see §4 |
-| 39 | `bid.score` | | | **none** | **none** | RENDERER + a wording |
-| 40 | `delivery.review_complete` | | | **none** | **none** | RENDERER + a wording |
-| 41 | `msa.create` | | | **none** | **none** | RENDERER + a wording |
-| 42 | `msa.milestones_set` | | | **none** | **none** | RENDERER + a wording |
+| 39 | `bid.score` | | | **NEW 08-25** `app/api/agency/bids/[responseId]/evaluation/route.ts:426` | **NEW** | — |
+| 40 | `delivery.review_complete` | | | **NEW 08-25** `app/api/agency/delivery-reviews/route.ts:367` | **NEW** | — |
+| 41 | `msa.create` | | | **NEW 08-25** `app/api/agency/msa/route.ts:205` | **NEW** | — |
+| 42 | `msa.milestones_set` | | | **NEW 08-25** `app/api/agency/msa/milestones/route.ts:556` | **NEW** | — |
 
 **Not one of the eighteen is blocked by a POLICY.** 080's agency INSERT policy
 asks only that `org_id` is one of the caller's organizations, which every one of
@@ -184,9 +184,65 @@ Six of the eighteen need more than a wording. Each is one question.
    is the analysis the milestone, or is only the human decision that follows it
    the milestone?*
 
-**The other twelve need only a wording**, which is a smaller decision but still
+**The other eleven need only a wording**, which is a smaller decision but still
 a decision: the feed's voice is a product surface and eighteen lines written by
 an agent overnight is not how it should acquire one.
+
+> **ARITHMETIC CORRECTION, 2026-08-25.** This section said "six" and "twelve".
+> Counting the table above: **seven** types need a ruling (26, 27, 29, 34, 35,
+> 37, 38) and **eleven** need only a wording (25, 28, 30, 31, 32, 33, 36, 39,
+> 40, 41, 42). 7 + 11 = 18, which is right; 6 + 12 = 18, which is also right and
+> is not what the table says. The four numbered questions above cover seven
+> types between them, which is where "six" most likely came from. The table is
+> the record; this prose was wrong.
+
+---
+
+## 7. WHAT SHIPPED 2026-08-25, AND THE THREE THAT COULD NOT
+
+**Eight of the eleven wording-only gaps now have an emitter, a renderer entry
+and a live write site.** All eight are AGENCY-INTERNAL: none is on
+`vendor_visible_event_types()`, so none needed a migration, and none is visible
+to any counterparty.
+
+| Type | Predicate | Payload |
+|---|---|---|
+| `vendor.add` | added {vendor} to the vendor pool | *(empty)* |
+| `client.create` | added the client {client} | `client_name` |
+| `client.document_add` | added a document to {client} | `client_name` |
+| `client.document_remove` | removed a document from {client} | `client_name` |
+| `bid.score` | scored a bid on {scope} | `scope_item_name` |
+| `delivery.review_complete` | completed the delivery review for {vendor} | *(empty)* |
+| `msa.create` | created the MSA with {vendor} | *(empty)* |
+| `msa.milestones_set` | set the payment schedule for {vendor} | *(empty)* |
+
+**Payload discipline held.** Five payloads are empty. No composite score, no
+delivery score, no AI summary, no client feedback, no milestone amount, no
+document label, no blob url, no email address, no count of anything. The two
+names that ARE carried are safe only because these types are off the vendor
+whitelist, and `lib/activity-feed.ts` `payloadString()` now says so at the one
+place a payload is read.
+
+`bid.score` and `delivery.review_complete` emit **on completion only**, never on
+a draft save - both handlers are save buttons and an unconditional emitter would
+put one feed line per autosave.
+
+### THE THREE THAT COULD NOT SHIP, AND WHY
+
+**This survey counted "needs a wording" and never checked that a live
+server-side write site exists.** Three of the eleven have no place to emit from,
+for three different reasons. Their RENDERER entries shipped anyway, so if a site
+is ever built the line is already written and no row can be silently dropped.
+
+| Type | Why not |
+|---|---|
+| `project.client_change` | The only server route that changes a project's client is `PATCH /api/projects/[id]`, and **CLAUDE.md records that route's session auth as broken and unused by the frontend** (backlog P6). The live path is a browser Supabase write from `app/agency/projects/[id]/page.tsx`. An emitter on the dead route would never fire. |
+| `rfp.brief_upload` | There is no route that persists "a brief was uploaded for this project". The file goes through the generic `/api/upload`, which has no RFP context, and `/api/ai/master-brief` performs no write at all. The act exists in the wizard's client state and nowhere else. |
+| `rfp.scope_allocate` | There is no separate allocation step. Scope items are part of the broadcast payload and reach the database only when `rfp.broadcast` fires, which already has its own emitter. Emitting both would put two lines on one act. |
+
+**None of these is a wording problem and none is a policy problem.** Each needs
+a decision about WHERE the act happens, which is smaller than the four rulings
+in §4 but is still not an agent's to make.
 
 ---
 

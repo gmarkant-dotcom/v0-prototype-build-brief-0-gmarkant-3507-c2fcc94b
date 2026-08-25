@@ -461,6 +461,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Project not found" }, { status: 404, headers: noStore })
     }
 
+    // THE ACTING ORGANIZATION FOR THE BREADCRUMB, resolved from the PROJECT rather than from
+    // the caller. Read AFTER assertProjectOwned() has already established that this project
+    // belongs to one of the caller's organizations, so the value is provably one of theirs -
+    // the same derivation the PATCH half of this file makes at :606, and the same reason:
+    // milestone_events.org_id must be the organization the record belongs to, not whichever
+    // membership a write resolver happened to pick.
+    const { data: milestoneProjectRow } = await supabase
+      .from("projects")
+      .select("org_id")
+      .eq("id", project_id)
+      .in("org_id", callerOrgIds)
+      .maybeSingle()
+    const milestoneOrgId = (milestoneProjectRow?.org_id as string | null) ?? null
+
     if (response_id) {
       const { data: resp, error: rErr } = await supabase
         .from("partner_rfp_responses")
@@ -482,16 +496,20 @@ export async function POST(req: Request) {
       }
     }
 
+    // vendor_org_id is selected for the msa.milestones_set breadcrumb below, and the row is
+    // kept rather than discarded so the emitter does not have to read it again.
+    let milestoneVendorOrgId: string | null = null
     if (partnership_id) {
       const { data: ship } = await supabase
         .from("partnerships")
-        .select("id")
+        .select("id, vendor_org_id")
         .eq("id", partnership_id)
         .in("lead_org_id", callerOrgIds)
         .maybeSingle()
       if (!ship) {
         return NextResponse.json({ error: "Invalid partnership" }, { status: 400, headers: noStore })
       }
+      milestoneVendorOrgId = (ship as { vendor_org_id?: string | null }).vendor_org_id ?? null
     }
 
     const { data: row, error } = await supabase
@@ -513,6 +531,37 @@ export async function POST(req: Request) {
     if (error) {
       console.error("[api/agency/msa/milestones] POST", error)
       return NextResponse.json({ error: error.message }, { status: 500, headers: noStore })
+    }
+
+    // msa.milestones_set - a payment milestone was added to the schedule.
+    //
+    // ONE LINE PER MILESTONE, and the feed's own grouping is what turns a schedule entered
+    // in one sitting into one line. That is why the predicate reads "set the payment
+    // schedule for <vendor>" rather than naming an individual milestone: three rows written
+    // in a row group into one item, and a per-milestone title would make three lines that
+    // each looked like a separate act.
+    //
+    // >>> NO AMOUNT, NO TITLE, NO DUE DATE IN THE PAYLOAD. The amount is THE commercial
+    // term of the engagement. `payment.mark_paid` at :684 already carries the worked
+    // example of what not to do here - its own comment records that a total in a payload is
+    // a cross-vendor leak the moment the type is whitelisted. This one is not whitelisted
+    // and still carries nothing, because "not whitelisted today" is a property of a
+    // migration file and not of this payload.
+    //
+    // ONLY EMITTED WHEN THE MILESTONE IS TIED TO A VENDOR. A project-level milestone with no
+    // partnership_id has no counterparty to name, and "set the payment schedule for a
+    // vendor" would be a line about nobody.
+    if (milestoneVendorOrgId) {
+      await recordMilestone(supabase, {
+        eventType: "msa.milestones_set",
+        orgId: orgIdFromColumn(milestoneOrgId),
+        actorId: user.id,
+        vendorOrgId: orgIdFromColumn(milestoneVendorOrgId),
+        partnershipId: null,
+        subjectType: "payment_milestone",
+        subjectId: (row?.id as string | null) ?? null,
+        payload: {},
+      })
     }
 
     return NextResponse.json({ milestone: row }, { headers: noStore })

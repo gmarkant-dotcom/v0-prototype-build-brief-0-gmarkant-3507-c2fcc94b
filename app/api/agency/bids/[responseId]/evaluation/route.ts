@@ -1,4 +1,5 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
@@ -141,9 +142,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
     const status = typeof body?.status === "string" && ALLOWED_STATUS.has(body.status) ? body.status : "draft"
     const scoresInput: ScoreInput[] = Array.isArray(body?.scores) ? body.scores : []
 
+    // vendor_org_id and inbox_item_id are selected for the bid.score breadcrumb below.
+    // Both are on the agency's own row, already scoped by .in("lead_org_id", callerOrgIds).
     const { data: response, error: responseErr } = await supabase
       .from("partner_rfp_responses")
-      .select("id")
+      .select("id, inbox_item_id, vendor_org_id")
       .eq("id", responseId)
       .in("lead_org_id", callerOrgIds)
       .maybeSingle()
@@ -386,6 +389,49 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
       .eq("id", responseId)
     if (responseUpdateErr) {
       console.error("[api] failure", { route, method: "PUT", message: responseUpdateErr.message, code: "sync_response_composite" })
+    }
+
+    // bid.score - ON COMPLETION ONLY, NEVER ON A DRAFT SAVE.
+    //
+    // This handler is a save button. It runs on every keystroke-batch the evaluation panel
+    // sends, and an emitter here without the status test would put one feed line on the
+    // agency's dashboard per autosave. "The transition, not the requested status" is the
+    // same rule payment.mark_paid already follows at
+    // app/api/agency/msa/milestones/route.ts:632.
+    //
+    // >>> THE COMPOSITE SCORE IS NOT IN THE PAYLOAD, AND THAT IS THE POINT.
+    // A score is the agency's private assessment of one vendor. The payload carries the
+    // SCOPE ITEM - a title the vendor was sent in the RFP itself - and nothing else. The
+    // predicate reads "scored a bid on <scope>", which says an act happened without
+    // publishing its content.
+    //
+    // partnershipId IS DELIBERATELY NULL. Counterparty visibility on milestone_events keys
+    // on partnership_id AND the whitelist (migration 080). This type is not on the
+    // whitelist, so the row is unreachable today - and leaving partnership_id null means it
+    // stays unreachable EVEN IF somebody later whitelists the type by mistake. Two
+    // independent reasons a vendor cannot read this, rather than one.
+    if (status === "complete") {
+      const inboxItemId = (response.inbox_item_id as string | null) ?? null
+      let scopeItemName: string | null = null
+      if (inboxItemId) {
+        const { data: inboxRow } = await supabase
+          .from("partner_rfp_inbox")
+          .select("scope_item_name")
+          .eq("id", inboxItemId)
+          .in("lead_org_id", callerOrgIds)
+          .maybeSingle()
+        scopeItemName = (inboxRow?.scope_item_name as string | null) ?? null
+      }
+      await recordMilestone(supabase, {
+        eventType: "bid.score",
+        orgId: orgIdFromColumn(writeOrgId),
+        actorId: userId,
+        vendorOrgId: orgIdFromColumn(response.vendor_org_id),
+        partnershipId: null,
+        subjectType: "bid",
+        subjectId: responseId,
+        payload: { scope_item_name: scopeItemName },
+      })
     }
 
     return NextResponse.json({

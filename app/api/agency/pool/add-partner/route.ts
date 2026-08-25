@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { importPartnerRows } from "@/lib/server/partner-pool-import"
-import { resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
 
@@ -54,6 +55,31 @@ export async function POST(request: NextRequest) {
   if (result.outcome === "duplicate") {
     return NextResponse.json({ error: "This email is already in your pool" }, { status: 409 })
   }
+
+  // vendor.add - THE MANUAL ADD, AND ONLY WHEN A ROW WAS ACTUALLY ADDED.
+  //
+  // Placed after every non-success outcome has already returned, so a duplicate, a self-add
+  // and an invalid contact emit nothing. `vendor.invite` is a different act with its own
+  // emitter (app/api/partnerships/route.ts:624): this one is "a contact now exists in the
+  // pool", which is what the Discovered state means.
+  //
+  // PAYLOAD: NOTHING. The pool row's contact details belong to the agency and to the person
+  // named, and a feed line does not need them to be useful - the line reads "added a vendor
+  // to the vendor pool", and the vendor's own name is not resolvable here anyway because a
+  // ghost row has no organization yet. An email address in a payload would be the
+  // recipient_count mistake in a different costume.
+  //
+  // vendorOrgId and partnershipId are deliberately absent for the same reason: the row this
+  // creates is a GHOST, with vendor_org_id NULL by construction, so there is no counterparty
+  // organization to name and no partnership a counterparty could read through.
+  await recordMilestone(auth.supabase, {
+    eventType: "vendor.add",
+    orgId: orgIdFromColumn(agencyOrgId),
+    actorId: auth.user.id,
+    subjectType: "partnership",
+    subjectId: null,
+    payload: {},
+  })
 
   return NextResponse.json({ added: true, flag: result.flag ?? null })
 }

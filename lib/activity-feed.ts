@@ -315,15 +315,39 @@ export function groupMilestoneRows(
 // =====================================================================
 
 /**
- * The one and only place a payload is read, and it reads ONE key.
+ * The one and only place a payload is read, and it reads a NAMED, CLOSED SET of keys.
  *
  * See the file header. The payload of a whitelisted event type is counterparty-readable in
- * full, so nothing in it may be handed to the client wholesale. `scope_item_name` is a
- * title the vendor was already sent in the RFP itself; it is named here explicitly rather
- * than reached for generically, so that adding a payload field to an emitter can never
- * silently widen what the feed returns.
+ * full, so nothing in it may be handed to the client wholesale. Each key is named here
+ * explicitly rather than reached for generically, so that adding a payload field to an
+ * emitter can never silently widen what the feed returns. WIDENING THIS UNION IS THE
+ * DECISION; the emitter writing the field is not.
+ *
+ *   `scope_item_name`  a title the vendor was already sent in the RFP itself.
+ *
+ *   `client_name`      THE AGENCY'S END CLIENT, added 2026-08-25 for the four client.*
+ *                      predicates. This is the one key here that a vendor must NEVER see:
+ *                      who an agency's end client is, is the agency's commercial
+ *                      information and is not in any RFP.
+ *
+ *                      IT IS SAFE ONLY BECAUSE OF WHERE IT IS WRITTEN, NOT BECAUSE OF
+ *                      ANYTHING THIS FUNCTION DOES. The four types that carry it -
+ *                      client.create, client.document_add, client.document_remove and
+ *                      project.client_change - are absent from
+ *                      `vendor_visible_event_types()` (migration 080), so the counterparty
+ *                      SELECT policy on milestone_events cannot return those rows at all.
+ *                      The vendor never receives the row, so it never receives the field.
+ *
+ *                      >>> THAT IS A COUPLING WORTH SAYING OUT LOUD: putting any client.*
+ *                      >>> type on the vendor whitelist would expose this field, and the
+ *                      >>> migration that did it would look like a visibility change and
+ *                      >>> would in fact also be a disclosure. If that is ever proposed,
+ *                      >>> the field has to come out of the payload first.
  */
-function payloadString(payload: Record<string, unknown> | null, key: "scope_item_name"): string | null {
+function payloadString(
+  payload: Record<string, unknown> | null,
+  key: "scope_item_name" | "client_name"
+): string | null {
   const value = payload?.[key]
   return typeof value === "string" && value.trim() ? value.trim() : null
 }
@@ -341,6 +365,8 @@ type PredicateInput = {
   recipientCount: number
   /** True when the counts are floors - render "N+". Section 1.6. */
   countIsPartial: boolean
+  /** End-client name, read from the payload. Only the client.* predicates use it. */
+  client: string | null
 }
 
 function scopeOf(input: PredicateInput): string {
@@ -349,6 +375,25 @@ function scopeOf(input: PredicateInput): string {
 
 function vendorOf(input: PredicateInput): string {
   return input.vendor || "a vendor"
+}
+
+/**
+ * The END CLIENT's name, for the four client-scoped predicates added 2026-08-25.
+ *
+ * IT COMES FROM THE PAYLOAD, not from a lookup, and that is the difference between it and
+ * `vendorOf`. A vendor is a counterparty ORGANIZATION and the feed resolves its current
+ * name through ctx.counterpartyName(). A client is a row on `clients` that only the
+ * agency can read, so there is no counterparty to resolve and no second feed that would
+ * need a different answer. The name is stamped at emit time.
+ *
+ * THAT MAKES IT A SNAPSHOT, with everything that implies - rename the client and old feed
+ * lines keep the old name. That is the same trade `partner_rfp_inbox.agency_company_name`
+ * made and the same one docs/inbox-name-backfill.sql is about. It is the right trade HERE
+ * for the reason it was the wrong one there: a feed line is a record of what happened at a
+ * moment, it is never grouped or counted by this string, and nothing joins on it.
+ */
+function clientOf(input: PredicateInput): string {
+  return input.client || "a client"
 }
 
 /**
@@ -397,6 +442,38 @@ const MILESTONE_PREDICATES: Record<string, (i: PredicateInput) => string> = {
   "msa.confirm": (i) => `confirmed the MSA with ${vendorOf(i)}`,
   "status_update.resolve": (i) => `resolved a status update on ${i.project || "a project"}`,
   "payment.mark_paid": (i) => `marked a payment milestone paid for ${vendorOf(i)}`,
+
+  // ── Agency-internal. Added 2026-08-25 with their emitters. ───────────────
+  //
+  // ELEVEN TYPES, ALL AGENCY-INTERNAL, AND NONE ON `vendor_visible_event_types()`.
+  // That is the whole reason they could ship without a migration: 080's agency INSERT
+  // policy constrains `actor_side`, `org_id` and `actor_id` and says NOTHING about
+  // `event_type` (deliberately - 080's own comment explains that the visibility rule is
+  // what has to fail closed, and it does, in the whitelist). So these rows write today,
+  // land on the agency's own feed, and are invisible to every counterparty because the
+  // counterparty SELECT policy requires membership of that whitelist.
+  //
+  // WHAT THAT MEANS FOR THE COPY: there is ONE predicate per type and it is shared by
+  // both feeds - what differs between them is the ACTOR, resolved per feed by
+  // ctx.actor(row). For these eleven the vendor feed renders NOTHING AT ALL, because the
+  // row never reaches it. Putting any of them in front of a vendor is a migration against
+  // 080 plus a visibility ruling, and neither is in scope here.
+  //
+  // VOICE: lower-case verb phrase, past tense, no trailing period, no actor - the feed
+  // prepends that. Same helpers as every line above, so an absent name degrades to "a
+  // client" rather than to an empty string.
+  "vendor.add": (i) => `added ${vendorOf(i)} to the vendor pool`,
+  "client.create": (i) => `added the client ${clientOf(i)}`,
+  "client.document_add": (i) => `added a document to ${clientOf(i)}`,
+  "client.document_remove": (i) => `removed a document from ${clientOf(i)}`,
+  "project.client_change": (i) => `changed the client on ${i.project || "a project"}`,
+  "rfp.brief_upload": (i) => `uploaded a brief for ${i.project || "a project"}`,
+  "rfp.scope_allocate": (i) => `allocated the scope for ${i.project || "a project"}`,
+  "bid.score": (i) => `scored a bid on ${scopeOf(i)}`,
+  "delivery.review_complete": (i) => `completed the delivery review for ${vendorOf(i)}`,
+  "msa.create": (i) => `created the MSA with ${vendorOf(i)}`,
+  "msa.milestones_set": (i) => `set the payment schedule for ${vendorOf(i)}`,
+
   // ── Vendor side. No emitter and no INSERT policy yet (080 withheld both); these exist
   //    so the vendor feed and the phase-3 retirements inherit copy rather than invent it.
   "bid.submit": (i) => `submitted a bid on ${scopeOf(i)}`,
@@ -450,6 +527,7 @@ export function mapMilestoneGroup<A extends ActivityActor>(
     count: group.count,
     recipientCount: group.vendorCount,
     countIsPartial: group.countIsPartial,
+    client: payloadString(row.payload, "client_name"),
   }
   return {
     id: `milestone:${row.id}`,

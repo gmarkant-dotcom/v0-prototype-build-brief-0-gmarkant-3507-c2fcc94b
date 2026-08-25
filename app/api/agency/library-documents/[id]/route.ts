@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
-import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { resolveCallerOrgIds, orgIdFromColumn } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 
 export const dynamic = "force-dynamic"
 
@@ -79,6 +80,43 @@ export async function DELETE(
     if (error) {
       return NextResponse.json({ error: "Delete failed" }, { status: 500 })
     }
+    // THE PRE-READ FOR THE BREADCRUMB, AND WHY IT IS NOT FOLDED INTO THE DELETE'S OWN
+    // .select().
+    //
+    // The obvious shape is `.select("id, client_id")` on the delete below. IT IS NOT SAFE:
+    // `client_id` arrives with migration 077, this route already carries pre-077 guards for
+    // exactly that reason (see the POST half of this feature), and a PostgREST select naming
+    // an absent column fails the WHOLE statement. That would turn a missing migration into a
+    // BROKEN DELETE - a real capability lost to buy a feed line, which is the wrong trade in
+    // every direction.
+    //
+    // So it is read separately, before the delete, and every failure is swallowed: no row,
+    // no column, no permission, all mean "emit nothing" and the delete proceeds untouched.
+    let removedClientId: string | null = null
+    let removedClientName: string | null = null
+    try {
+      const { data: docRow } = await supabase
+        .from("agency_library_documents")
+        .select("client_id")
+        .eq("id", id)
+        .in("org_id", callerOrgIds)
+        .maybeSingle()
+      removedClientId = (docRow?.client_id as string | null) ?? null
+      if (removedClientId) {
+        const { data: clientRow } = await supabase
+          .from("clients")
+          .select("name")
+          .eq("id", removedClientId)
+          .in("org_id", callerOrgIds)
+          .maybeSingle()
+        removedClientName = (clientRow?.name as string | null) ?? null
+      }
+    } catch {
+      // Pre-077, or the column is gone, or the row is not readable. No breadcrumb, and the
+      // delete below is unaffected. Deliberately silent: this is not a failure of anything
+      // the caller asked for.
+    }
+
     if (!Array.isArray(deletedRows) || deletedRows.length === 0) {
       console.error("[agency/library-documents] DELETE matched no row", {
         id,
@@ -87,6 +125,21 @@ export async function DELETE(
       })
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
+    // client.document_remove - ONLY FOR A CLIENT DOCUMENT, and only after a row was really
+    // deleted. It sits below the zero-row check on purpose: that check exists because
+    // PostgREST does not report a zero-row delete as an error, and a breadcrumb for a
+    // deletion that did not happen is the same lie in a different table.
+    if (removedClientId) {
+      await recordMilestone(supabase, {
+        eventType: "client.document_remove",
+        orgId: orgIdFromColumn(callerOrgIds[0] ?? null),
+        actorId: user.id,
+        subjectType: "client",
+        subjectId: removedClientId,
+        payload: { client_name: removedClientName },
+      })
+    }
+
     return NextResponse.json({ success: true })
   } catch (e) {
     console.error("[agency/library-documents] DELETE", e)

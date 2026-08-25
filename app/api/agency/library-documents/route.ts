@@ -1,4 +1,5 @@
-import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import {
@@ -128,6 +129,37 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error("[agency/library-documents] POST", error)
       return NextResponse.json({ error: error.message || "Insert failed" }, { status: 500 })
+    }
+
+    // client.document_add - ONLY FOR A CLIENT DOCUMENT.
+    //
+    // `clientId` is the discriminator migration 077 added; an agency or template document
+    // has none and gets no line, because "added a document to a client" would be false for
+    // it and there is no client.* event that fits. An agency-library event type does not
+    // exist in the vocabulary and inventing one here would be inventing a capability.
+    //
+    // PAYLOAD: the client's name, resolved by lookup, and nothing about the DOCUMENT - not
+    // its label, not its file name, not its url. A document's label is the agency's own
+    // filing and the feed line does not need it; a blob url in a payload would be a
+    // capability leak wearing a breadcrumb's clothes.
+    //
+    // THE LOOKUP IS GUARDED AND ITS FAILURE IS NOT FATAL. If it returns nothing the
+    // predicate degrades to "a client", which is a worse line and not a wrong one.
+    if (clientId) {
+      const { data: clientRow } = await supabase
+        .from("clients")
+        .select("name")
+        .eq("id", clientId)
+        .in("org_id", [writeOrgId])
+        .maybeSingle()
+      await recordMilestone(supabase, {
+        eventType: "client.document_add",
+        orgId: orgIdFromColumn(writeOrgId),
+        actorId: user.id,
+        subjectType: "client",
+        subjectId: clientId,
+        payload: { client_name: (clientRow?.name as string | null) ?? null },
+      })
     }
 
     return NextResponse.json({ document: row })
