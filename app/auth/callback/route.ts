@@ -84,7 +84,33 @@ async function syncUserProfile(supabase: any, user: any) {
       updatePayload.role = 'partner'
       updatePayload.active_role = 'partner'
     } else if (!existingProfile.role) {
+      // BOTH COLUMNS, TOGETHER. THIS LINE USED TO WRITE `role` ALONE.
+      //
+      // It was the only site in the repository that could make profiles.role and
+      // profiles.active_role disagree. handle_new_user() cannot: it writes both from ONE
+      // variable in ONE insert (079_organizations.sql:1873-1875), so the trigger has never
+      // been able to produce a mismatch and the divergence was never a trigger problem. The
+      // insert branch above cannot either - it writes `role: role, active_role: role`. Every
+      // other writer moves them as a pair. This branch moved one of them.
+      //
+      // IT FIRED IN PRODUCTION. Profile 647261c4, signed up 2026-08-23, carries role
+      // 'partner' with active_role 'agency'. The branch above it is the complete correction
+      // and sets both; this one ran on a profile whose role was missing, set role from the
+      // signup metadata, and left active_role pointing at whatever it already was. The
+      // account then reads as one role to every base-role check and the other to every
+      // acting-role check - actingRole() lets active_role decide, canActAs() accepts either
+      // - which is a divergence no single gate can see.
+      //
+      // WHY THE CORRECTION STAYS RATHER THAN BEING REMOVED. Greg's ruling: it is legitimate
+      // and merely incomplete. Deleting it would leave a vendor signup whose profile row
+      // arrived without a role stuck on the agency side with nothing to correct it.
+      //
+      // INERT FOR EVERY EXISTING ACCOUNT. It is guarded on `!existingProfile.role`, and all
+      // 18 live accounts carry a role matching their signup choice with zero mismatches
+      // (query D4, 2026-08-20). A sign-in by any account that already has a role does not
+      // reach this branch and does not behave one bit differently than it did before.
       updatePayload.role = role
+      updatePayload.active_role = role
     }
     if (metadata.company_linkedin_url) updatePayload.company_linkedin_url = metadata.company_linkedin_url
     // No access flags are written here. This branch previously re-granted is_paid and
