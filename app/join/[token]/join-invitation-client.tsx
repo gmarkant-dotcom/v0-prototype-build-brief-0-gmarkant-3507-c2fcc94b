@@ -340,10 +340,52 @@ export default function JoinInvitationClient() {
           )
         )}
 
+        {/*
+          A PLAIN ANCHOR, NOT next/link, AND THE DIFFERENCE IS THE WHOLE POINT.
+
+          next/link soft-navigates: it swaps the React tree and keeps the JS heap. Everything
+          this page's own accept just invalidated would have survived that - the SWR cache in
+          particular, which lives in the ROOT layout (app/layout.tsx) and is therefore shared
+          by /join and by every portal page, and which is configured with
+          `dedupingInterval: 30000` and `revalidateOnFocus: false`. A key already in that
+          cache is served without revalidation for thirty seconds and is never revalidated on
+          focus, so anything read before the accept keeps being answered from before the
+          accept for exactly the window in which somebody who accepts and acts immediately is
+          acting.
+
+          WHAT THE ACCEPT ACTUALLY CHANGED UNDERNEATH THE CLIENT. A second org_members row,
+          and profiles.active_org_id initialized by 090. Both are inputs to
+          resolveActingOrgId(), which is what resolveAgencyEntitlement() reads to decide
+          whether this account is entitled - and PaidUserContext caches that decision in
+          React state, resolved once on mount. A tree that mounted before the accept holds
+          the answer for the organization this person used to be alone in.
+
+          THAT ANSWER BEING WRONG IS NOT WHAT MAKES IT DANGEROUS. checkFeatureAccess()
+          refuses by opening UpgradeRequiredModal, which is a plain in-tree div at z-50 while
+          every Radix dialog portals to the end of <body> at the same z-50 - so the refusal
+          renders UNDERNEATH whatever dialog asked for it. The user sees a button that does
+          nothing at all. That is reported separately and is not fixed here, because it is a
+          shared modal on every paid-feature gate in both portals; this file's job is to stop
+          handing it stale input.
+
+          A FULL DOCUMENT LOAD DISCARDS ALL OF IT BY CONSTRUCTION - the SWR cache, every
+          context, every resolved entitlement - and rebuilds from the post-accept database.
+          No cache-busting call to get out of date, and nothing to remember to add when the
+          next provider is written.
+
+          THE SESSION IS DELIBERATELY NOT REFRESHED. Nothing about an organization rides in
+          the JWT: every policy resolves membership live through current_user_org_ids(), and
+          resolveActingOrgId() re-reads org_members on every call. A refreshSession() here
+          would be a token call on the sign-in path that fixes nothing, and prohibition 3b's
+          reasoning about app/auth/callback applies to its neighbours too.
+        */}
         <div className="flex justify-center">
-          <Link href="/">
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- The full document
+              load IS the fix; see the block above. next/link is what this rule exists to
+              steer you towards and it is the exact thing that would reintroduce the defect. */}
+          <a href="/">
             <Button>Go to Ligament</Button>
-          </Link>
+          </a>
         </div>
       </Shell>
     )
