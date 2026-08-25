@@ -33,7 +33,19 @@ const navGroups: NavItem[][] = [
     { icon: "◇", title: "Summary Dashboard", href: "/partner", tooltip: "Overview of your bid submissions, active projects, and agency relationships" },
   ],
   [
-    { number: "00", title: "Agency Network", href: "/partner/network", tooltip: "Your agency partnerships, pending invitations, and discover new agencies" },
+    // NO NUMBER, MIRRORING THE LEAD AGENCY SIDE IN THE SAME PASS. A number in either nav
+    // means a stage of the workflow. A roster of counterparties is not a stage: every stage
+    // draws on it and none of them advances through it. The agency portal's "00 Vendor Pool"
+    // is this same item seen from the other end and lost its number too, so both sides now
+    // agree, and the numbered run on each side is a clean 01 to 04.
+    //
+    // IT STAYS IN THIS GROUP. Moving it up beside Summary Dashboard would be the vendor half
+    // of the agency portal's HQ / Workflow split, and that is deliberately NOT attempted
+    // here: this is a horizontal top nav with no section headers, so it has nowhere to put
+    // one, and converting it is scoped separately. The grouping remains owed.
+    //
+    // href IS UNCHANGED. /partner/network is what it was.
+    { icon: "▣", title: "Agency Network", href: "/partner/network", tooltip: "Your agency partnerships, pending invitations, and discover new agencies" },
     // THE SPLIT. "Open RFPs & Bids" was one item covering two stages, and it was the only
     // thing breaking the 1:1 with the lead agency nav. 01 and 02 below are now the two halves
     // it contained, numbered to match agency 01 RFP Broadcast and 02 Bid Management, and 03

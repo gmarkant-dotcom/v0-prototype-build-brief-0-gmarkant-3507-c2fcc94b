@@ -27,17 +27,49 @@ declare global {
   }
 }
 
+/**
+ * THE AGENCY NAV, RESTRUCTURED TO MATCH THE VENDOR SIDE.
+ *
+ * The vendor portal shipped its half on 2026-08-21 - 01 Open RFPs, 02 My Bids, 03 Onboarding,
+ * 04 Delivery & Projects - which left the agency side as the asymmetric one. Two things were
+ * wrong with it and both are about what a NUMBER means.
+ *
+ * A NUMBERED ITEM IS A STAGE OF THE WORKFLOW. Vendor Pool carried "00" and is not a stage:
+ * it is a roster of counterparties that every stage draws on and none of them advances
+ * through. It moves to HQ beside the dashboard and loses the number. The vendor side's
+ * "00 Agency Network" is the same item seen from the other end and loses its number in the
+ * same pass, so both portals now agree that a counterparty roster is not a workflow step.
+ *
+ * SO THE WORKFLOW IS 01 TO 04, WITH NO GAP AT THE FRONT. "BID REQUESTS" described the old
+ * grouping - it was the section that happened to contain the bid stages - and "Workflow" is
+ * what the section actually is now that the roster has left it.
+ *
+ * 00 BUDGETING IS NOT HERE, NOT AS AN ITEM, NOT AS A STUB, NOT AS "COMING SOON". It waits on
+ * a workstream that has not started, and a nav item that names an absent feature is the
+ * dishonesty this codebase spent the week removing.
+ *
+ * "CLIENT PROFILES" IS NOT RENAMED. The rename to "Clients + Projects" is ruled but depends
+ * on a project repository organised by client, which does not exist. Same reason. It is
+ * recorded as owed in the session report rather than shipped early.
+ *
+ * NO URL CHANGES IN THIS RESTRUCTURE. Every href below is byte for byte what it was; labels,
+ * grouping and numbering are the whole of the diff. That is checked item by item in the
+ * report's before/after route table.
+ */
 const navSections = [
   {
-    label: "Overview",
+    label: "HQ",
     items: [
       { icon: "◉", title: "Summary Dashboard", href: "/agency/dashboard", tooltip: "Overview of your active projects, pipeline, and platform activity" },
+      // MOVED HERE FROM THE WORKFLOW SECTION, AND IT KEEPS hasPoolDropdown. The flag is what
+      // routes this item to PoolNavItem, so its hover dropdown, its mobile inline list and
+      // its caption move with it rather than being left behind in the section it came from.
+      { icon: "▣", title: "Vendor Pool", href: "/agency/pool", hasPoolDropdown: true, tooltip: "Manage your vendor network across active vendors, invited contacts, and discovered vendors" },
     ]
   },
   {
-    label: "BID REQUESTS",
+    label: "Workflow",
     items: [
-      { number: "00", title: "Vendor Pool", href: "/agency/pool", hasPoolDropdown: true, tooltip: "Manage your vendor network across active vendors, invited contacts, and discovered vendors" },
       { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Analyze client briefs, build scoped RFPs, and send to your vendor pool or any vendor via Magic Link" },
       { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Compare, evaluate, and score vendor bids with AI-powered analysis and side-by-side cost breakdowns" },
       { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track vendor onboarding across active projects" },
@@ -165,11 +197,15 @@ function PoolNavItem({ pathname }: { pathname: string | null }) {
           : "hover:bg-white/5 border border-transparent"
       )}
     >
+      {/* AN ICON, NOT "00". A number in this sidebar means a stage of the workflow, and a
+          roster of counterparties is not one. The glyph and the text-sm sizing match the
+          other unnumbered items (Summary Dashboard, and the three under Resources) rather
+          than the font-mono numbering of 01 to 04. */}
       <span className={cn(
-        "font-mono text-xs font-medium mt-0.5",
+        "text-sm mt-0.5",
         isActive ? "text-accent" : "text-foreground-muted"
       )}>
-        00
+        ▣
       </span>
       <div className="flex-1 min-w-0">
         <div className={cn(
@@ -230,6 +266,103 @@ function PoolNavItem({ pathname }: { pathname: string | null }) {
             Import from Email
           </Link>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * ONE RENDERER FOR EVERY NAV SECTION, WHICH IS WHAT MAKES THE RESTRUCTURE SAFE.
+ *
+ * The HQ section used to be a HAND-WRITTEN COPY of this markup, sitting above the loop that
+ * rendered the other two, with its own duplicated active-state test and its own duplicated
+ * tooltip string. That is exactly the arrangement in which moving an item between sections
+ * breaks it: Vendor Pool would have had to be re-implemented by hand on arrival, and the
+ * `hasPoolDropdown` branch - the thing that gives it its hover dropdown and its mobile
+ * inline list - only exists in the loop.
+ *
+ * With one renderer, an item behaves the same wherever it is listed, and the only difference
+ * between the sections is which items they contain.
+ *
+ * THE ACTIVE-STATE TEST IS UNCHANGED FROM THE LOOP'S. `pathname === item.href`, plus a
+ * startsWith for every href except "/agency", which is excluded because it is a prefix of
+ * every other agency route and would otherwise light up permanently. Summary Dashboard used
+ * to be tested with a bare equality; startsWith("/agency/dashboard") is a superset of that
+ * and there are no routes beneath it, so the item highlights on exactly the same pathnames
+ * as before. Vendor Pool's own test lives inside PoolNavItem and is untouched, so it keeps
+ * highlighting on /agency/pool and on /agency/pool/<id>.
+ */
+function NavSectionBlock({
+  section,
+  pathname,
+  className,
+}: {
+  section: (typeof navSections)[number]
+  pathname: string | null
+  className?: string
+}) {
+  return (
+    <div className={className ?? "mb-6"}>
+      <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
+        {section.label}
+      </div>
+      <div className="space-y-1">
+        {section.items.map((item) => {
+          if ('hasRfpDropdown' in item && item.hasRfpDropdown) {
+            return <RfpBroadcastNavItem key={item.href} pathname={pathname} />
+          }
+          if ('hasPoolDropdown' in item && item.hasPoolDropdown) {
+            return <PoolNavItem key={item.href} pathname={pathname} />
+          }
+          const isActive = pathname === item.href ||
+            (item.href !== "/agency" && Boolean(pathname?.startsWith(item.href)))
+          const link = (
+            <Link
+              href={item.href}
+              className={cn(
+                "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
+                isActive
+                  ? "bg-accent/10 border border-accent/30"
+                  : "hover:bg-white/5 border border-transparent"
+              )}
+            >
+              {'number' in item ? (
+                <span className={cn(
+                  "font-mono text-xs font-medium mt-0.5",
+                  isActive ? "text-accent" : "text-foreground-muted"
+                )}>
+                  {item.number}
+                </span>
+              ) : (
+                <span className={cn(
+                  "text-sm mt-0.5",
+                  isActive ? "text-accent" : "text-foreground-muted"
+                )}>
+                  {item.icon}
+                </span>
+              )}
+              <div className="flex-1 min-w-0">
+                <div className={cn(
+                  "font-display font-bold text-sm leading-tight",
+                  isActive ? "text-accent" : "text-foreground group-hover:text-white"
+                )}>
+                  {item.title}
+                </div>
+              </div>
+              {isActive && (
+                <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />
+              )}
+            </Link>
+          )
+          return (
+            <Tooltip key={item.href}>
+              <TooltipTrigger asChild>{link}</TooltipTrigger>
+              <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                <p className="text-xs text-foreground-muted">{item.tooltip}</p>
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
       </div>
     </div>
   )
@@ -435,49 +568,11 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             </Tooltip>
           </div>
 
-          {/* Overview Section */}
-          <div className="mb-4">
-            <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
-              Overview
-            </div>
-            <div className="space-y-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    href="/agency/dashboard"
-                    className={cn(
-                      "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
-                      pathname === "/agency/dashboard"
-                        ? "bg-accent/10 border border-accent/30"
-                        : "hover:bg-white/5 border border-transparent"
-                    )}
-                  >
-                    <span className={cn(
-                      "text-sm mt-0.5",
-                      pathname === "/agency/dashboard" ? "text-accent" : "text-foreground-muted"
-                    )}>
-                      ◉
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className={cn(
-                        "font-display font-bold text-sm leading-tight",
-                        pathname === "/agency/dashboard" ? "text-accent" : "text-foreground group-hover:text-white"
-                      )}>
-                        Summary Dashboard
-                      </div>
-                    </div>
-                    {pathname === "/agency/dashboard" && (
-                      <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />
-                    )}
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
-                  <p className="text-xs text-foreground-muted">Overview of your active projects, pipeline, and platform activity</p>
-                </TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
-          
+          {/* HQ SECTION. Rendered from navSections[0] through the same NavSectionBlock the
+              other sections use, where it used to be a hand-written copy of that markup.
+              Keeps its own mb-4 so the spacing above the project selector is unchanged. */}
+          <NavSectionBlock section={navSections[0]} pathname={pathname} className="mb-4" />
+
           {/* Project Selector — hidden; inline selector used on broadcast page */}
           <div className="mb-4 px-3 hidden">
             <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider mb-2">
@@ -603,72 +698,10 @@ function AgencyLayoutInner({ children }: AgencyLayoutProps) {
             )}
           </div>
           
-          {/* Workflow and Resources Sections */}
-          {navSections.filter(s => s.label !== "Overview").map((section) => (
-            <div key={section.label} className="mb-6">
-              <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
-                {section.label}
-              </div>
-              <div className="space-y-1">
-                {section.items.map((item) => {
-                  if ('hasRfpDropdown' in item && item.hasRfpDropdown) {
-                    return <RfpBroadcastNavItem key={item.href} pathname={pathname} />
-                  }
-                  if ('hasPoolDropdown' in item && item.hasPoolDropdown) {
-                    return <PoolNavItem key={item.href} pathname={pathname} />
-                  }
-                  const isActive = pathname === item.href ||
-                    (item.href !== "/agency" && pathname?.startsWith(item.href))
-                  const link = (
-                    <Link
-                      href={item.href}
-                      className={cn(
-                        "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
-                        isActive
-                          ? "bg-accent/10 border border-accent/30"
-                          : "hover:bg-white/5 border border-transparent"
-                      )}
-                    >
-                      {'number' in item ? (
-                        <span className={cn(
-                          "font-mono text-xs font-medium mt-0.5",
-                          isActive ? "text-accent" : "text-foreground-muted"
-                        )}>
-                          {item.number}
-                        </span>
-                      ) : (
-                        <span className={cn(
-                          "text-sm mt-0.5",
-                          isActive ? "text-accent" : "text-foreground-muted"
-                        )}>
-                          {item.icon}
-                        </span>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className={cn(
-                          "font-display font-bold text-sm leading-tight",
-                          isActive ? "text-accent" : "text-foreground group-hover:text-white"
-                        )}>
-                          {item.title}
-                        </div>
-
-                      </div>
-                      {isActive && (
-                        <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />
-                      )}
-                    </Link>
-                  )
-                  return (
-                    <Tooltip key={item.href}>
-                      <TooltipTrigger asChild>{link}</TooltipTrigger>
-                      <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
-                        <p className="text-xs text-foreground-muted">{item.tooltip}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )
-                })}
-              </div>
-            </div>
+          {/* WORKFLOW AND RESOURCES. navSections[0] is excluded because it is rendered
+              above, in its own position relative to the project selector. */}
+          {navSections.slice(1).map((section) => (
+            <NavSectionBlock key={section.label} section={section} pathname={pathname} />
           ))}
         </nav>
         
