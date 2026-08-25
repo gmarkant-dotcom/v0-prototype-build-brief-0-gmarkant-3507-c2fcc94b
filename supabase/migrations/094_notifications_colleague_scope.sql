@@ -1,0 +1,444 @@
+-- =====================================================================
+-- Migration 094: 094_notifications_colleague_scope.sql
+--
+--   CREATE public.current_user_org_member_user_ids()
+--   ALTER  POLICY "Scoped insert notifications" ON public.notifications
+--
+-- TWO STATEMENTS OF SUBSTANCE PLUS THREE GRANT LINES. That is the whole
+-- file. It creates no table, adds no column, writes no row and backfills
+-- nothing.
+--
+-- =====================================================================
+-- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
+-- =====================================================================
+--
+-- >>> THIS FILE WIDENS AN RLS POLICY. It is the only kind of change this
+-- >>> session was permitted to AUTHOR and forbidden to APPLY. Read the
+-- >>> WHAT IT WIDENS section before running it, and run
+-- >>> docs/094-preapply-test.sql first.
+--
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 281
+-- and an explicit COMMIT; on LINE 339. Those are the only EXECUTABLE
+-- lines that begin with either word. Every other occurrence in this file
+-- is inside a comment and has no semicolon at the end of its line.
+--
+-- Do NOT verify with grep -n '^BEGIN;$'. That anchored form has produced
+-- false negatives in this repository and 087 nearly burned a dry run on
+-- exactly that. Use:
+--
+--     grep -n 'BEGIN;' supabase/migrations/094_notifications_colleague_scope.sql
+--     grep -n 'COMMIT;' supabase/migrations/094_notifications_colleague_scope.sql
+--
+-- Exactly one line of each ends in the bare keyword and a semicolon.
+--
+-- THE VERIFICATION BLOCK IS AFTER THE COMMIT, DELIBERATELY, and it is
+-- entirely commented out. A dry run therefore stops at the COMMIT line
+-- and executes none of it. Paste those queries in afterwards, one at a
+-- time.
+--
+-- "Success. No rows returned" IN THE SQL EDITOR PROVES NOTHING ON ITS
+-- OWN. It is the identical message for a dry run that rolled everything
+-- back, for a real apply that committed, and for a correct file pasted
+-- into the wrong project's tab. The VERIFICATION block at the foot is
+-- the only thing that distinguishes them. Run it.
+--
+-- Sequence, no step skipped:
+--   1. Run docs/094-preapply-test.sql. Read the headline line.
+--   2. Dry run THIS file: COMMIT -> ROLLBACK, run, confirm no errors,
+--      put it back.
+--   3. Run for real.
+--   4. Run VERIFICATION. Every query states its expected value.
+--   5. Update the migrations table in LIGAMENT_CONTEXT.md.
+--   6. No code deploy is required. See ORDERING below.
+--
+-- =====================================================================
+-- ORDERING AGAINST THE CODE. THIS FILE IS INDEPENDENT OF THE DEPLOY.
+-- =====================================================================
+--
+-- 092 added a column its branch read, so it had to land before the push.
+-- THIS FILE ADDS NOTHING THE CODE NAMES. No route, component or library
+-- in this repository mentions current_user_org_member_user_ids() or the
+-- policy text, and nothing reads a column that does not already exist.
+--
+--   APPLY IT BEFORE THE CODE, AFTER THE CODE, OR WITH NO CODE AT ALL.
+--
+-- The notification bell shipped on this branch reads
+-- app/api/notifications/route.ts, which is a SELECT scoped to
+-- `user_id = auth.uid()`. This file does not touch SELECT. A colleague's
+-- bell works identically before and after; the difference is whether
+-- anything is ever WRITTEN into it.
+--
+-- =====================================================================
+-- WHY THIS EXISTS, IN ONE PARAGRAPH
+-- =====================================================================
+--
+-- lib/notifications.ts opens with a ruling: an in-app notification goes
+-- to EVERY MEMBER OF THE ORGANIZATION, one rule at all sixteen call
+-- sites. That ruling is defeated at the RLS layer for one specific case
+-- and has been since 079. The live INSERT policy is
+--
+--     user_id = auth.uid()
+--     OR user_id IN (SELECT public.current_user_active_counterparty_user_ids())
+--
+-- and current_user_active_counterparty_user_ids() (079:779-804) uses the
+-- caller's own organizations ONLY to find the organizations on the other
+-- side of an active partnership. It never returns the caller's own
+-- colleagues. So when createOrgNotification() fans out over the CALLER'S
+-- OWN organization, the caller's own row lands on the first arm and
+-- EVERY COLLEAGUE'S ROW IS REFUSED by both. The code already knows: it
+-- retries the batch one row at a time and logs "delivered to some
+-- recipients, refused for others" (lib/notifications.ts:222). Nobody
+-- reads logs.
+--
+-- >>> IT IS AN INSERT PROBLEM, NOT A SELECT PROBLEM, AND THE DIFFERENCE
+-- >>> DECIDES THE WHOLE FIX. A colleague can read their notifications
+-- >>> perfectly well - "Users can view own notifications", USING
+-- >>> (user_id = auth.uid()). There is nothing wrong with their read and
+-- >>> no query change can help them, because THE ROW WAS NEVER WRITTEN.
+-- >>> A query cannot select a row that does not exist. That is why this
+-- >>> is a policy change and not the query change the read-scope class
+-- >>> would otherwise prefer.
+--
+-- WHICH CALL SITES ACTUALLY HIT IT, from the census in
+-- docs/refusals-and-notifications-report.md: the own-organization case is
+-- reached by lib/award-partnership-resolution.ts:103 and :169, which pass
+-- the AGENCY'S OWN org id while running on the agency's session client
+-- during an award. Today the awarding user gets "Partnership Accepted"
+-- and their colleagues get nothing. The other thirteen session-client
+-- sites address a COUNTERPARTY and are unaffected by this file in either
+-- direction; the two guest-token sites run on the service role and never
+-- saw the policy at all.
+--
+-- =====================================================================
+-- WHAT IT WIDENS. READ THIS PARAGRAPH IF YOU READ ONE.
+-- =====================================================================
+--
+-- AFTER THIS FILE, ANY AUTHENTICATED USER MAY INSERT A notifications ROW
+-- ADDRESSED TO ANY COLLEAGUE IN ANY ORGANIZATION THEY BELONG TO. Title,
+-- message and link are attacker-chosen in the sense that they are
+-- caller-chosen. That is the entire cost and it is stated plainly.
+--
+-- THREE REASONS IT IS AN ACCEPTABLE COST:
+--
+--   1. IT IS STRICTLY SMALLER THAN WHAT IS ALREADY LIVE. The same caller
+--      can already write an arbitrary notification to EVERY MEMBER OF
+--      EVERY ACTIVE COUNTERPARTY ORGANIZATION - people at other
+--      companies. This adds people at their own.
+--
+--   2. IT WIDENS WHO MAY BE WRITTEN TO, NOT WHO MAY READ. No SELECT
+--      policy is touched by this file. Nothing becomes visible to anyone
+--      that was not visible before. A notification addressed to one
+--      person is still readable by that person and nobody else.
+--
+--   3. ORGANIZATION MEMBERSHIP IS NOT SELF-SERVICE. A person is in an
+--      organization because they were invited into it and accepted
+--      (089's lifecycle, behind COLLEAGUE_INVITATIONS), or because the
+--      signup trigger made them the owner of their own. Nobody can add
+--      themselves to a company in order to reach its members.
+--
+-- =====================================================================
+-- THE LEAK QUESTION, AND WHY IT LANDS ON THE WRITE SITES RATHER THAN
+-- HERE. THIS IS THE RULING GREG STILL OWES.
+-- =====================================================================
+--
+-- The obvious worry about "let colleagues see the company's
+-- notifications" is that some notifications are addressed to a PERSON
+-- rather than to a COMPANY - an invitation naming one individual, a
+-- mention - and there is NO COLUMN ON notifications THAT TELLS THE TWO
+-- APART. That worry is real and it is written down. It is NOT a reason
+-- to hold this file, for a reason worth being precise about:
+--
+--   THE FAN-OUT IS WHAT WOULD LEAK, NOT THE POLICY. A personal
+--   notification only reaches colleagues if somebody CALLS
+--   createOrgNotification() for it, which writes one row per member by
+--   construction. The policy merely stops that call half-succeeding
+--   today. createNotification() - one row, one named user - already
+--   exists beside it and is the correct entry point for anything
+--   personal, and it needs nothing from this file.
+--
+-- ALL SIXTEEN CURRENT WRITE SITES ARE COMPANY-ADDRESSED. Every title and
+-- message was read one by one; the classification is in
+-- docs/refusals-and-notifications-report.md. Not one of them names an
+-- individual. The one genuinely personal event class in this product -
+-- a colleague invitation - writes NO notification at all: neither
+-- app/api/org/invitations/route.ts, its accept and revoke siblings, nor
+-- lib/org-invitations.ts contains a single notification write.
+--
+-- >>> SO THE RULING GREG OWES IS ABOUT THE FUTURE, NOT THE PRESENT:
+-- >>> ANY NOTIFICATION ADDRESSED TO AN INDIVIDUAL MUST GO THROUGH
+-- >>> createNotification(), NEVER createOrgNotification(). If a personal
+-- >>> class is ever added to the org fan-out instead, this policy stops
+-- >>> being a fix and starts being an amplifier - and no column exists
+-- >>> today that would let a policy catch that for you.
+--
+-- =====================================================================
+-- WHAT THIS FILE DOES NOT FIX, AND DELIBERATELY
+-- =====================================================================
+--
+-- THE PENDING AND TERMINATED COUNTERPARTY GAP STAYS OPEN. The
+-- counterparty arm is ACTIVE-partnership-only, so an invitation
+-- (partnership pending) and a decline (partnership no longer active) are
+-- still refused for every recipient - notifyPartnershipInvitation() and
+-- notifyPartnershipDeclined() write nothing at all today. That is a
+-- PRE-EXISTING gap, it is a different question from this one, and
+-- widening the counterparty arm would hand a stranger a write into your
+-- inbox before you have agreed to work with them. It is left alone on
+-- purpose and recorded as open.
+--
+-- HISTORY IS NOT BACKFILLED. Every notification written before this
+-- lands stays addressed to whichever member satisfied the old policy. A
+-- colleague's bell starts filling from the next event, not from the
+-- archive. Reconstructing "who should also have received this" from
+-- historical rows would mean inventing recipients for rows whose
+-- audience was never recorded, and a fabricated inbox is worse than an
+-- empty one.
+--
+-- =====================================================================
+-- THE POLICY IS ALTERED, NOT DROPPED AND RECREATED. THIS IS DELIBERATE.
+-- =====================================================================
+--
+-- 079's own header records what goes wrong with DROP-then-CREATE against
+-- this database: several live policies exist under names that appear
+-- nowhere in this repository, and a DROP on a name that is not there
+-- SILENTLY NO-OPS. A DROP/CREATE pair would then leave the old predicate
+-- in place beside a new one under a slightly different name, and both
+-- would be permissive, and both would OR together. Nobody would notice.
+--
+-- ALTER POLICY CANNOT NO-OP. If "Scoped insert notifications" is not the
+-- live name on public.notifications, this file RAISES 42704 and the
+-- transaction aborts having changed nothing. That is the desired
+-- behaviour: a loud failure on a wrong assumption, rather than a quiet
+-- half-application.
+--
+-- IT ALSO KEEPS THE POLICY COUNT AT 117. No policy is created or
+-- dropped, so the count that 089-092 have been tracking does not move,
+-- and a change in it after this file would mean something else happened.
+--
+-- =====================================================================
+-- THE FIRST ARM IS KEPT EVEN THOUGH IT IS NOW REDUNDANT
+-- =====================================================================
+--
+-- `user_id = auth.uid()` is implied by the new arm: every user is a
+-- member of at least one organization by construction (079:366 backfilled
+-- an owner row for every profile; the PHASE 12 signup trigger inserts one
+-- for every account since), so the caller is always in their own member
+-- set. Removing it anyway would be a NARROWING dressed as a tidy-up: it
+-- would make "can I write to myself" depend on the org_members invariant
+-- holding, and a person whose membership row is somehow missing would
+-- lose the ability to receive their own notifications. Three arms, one
+-- of them belt and braces.
+--
+-- =====================================================================
+-- THE HELPER FOLLOWS EVERY 079 CONVENTION. NO NEW SHAPE IS INVENTED.
+-- =====================================================================
+--
+--   RETURNS SETOF uuid, so call sites read `IN (SELECT fn())` and never
+--   `= ANY(...)`. The six existing helpers are all this shape and 42809
+--   is what the other spelling produces.
+--
+--   SECURITY DEFINER with SET search_path = public, pg_temp, identical
+--   to all six.
+--
+--   IT CALLS current_user_org_ids() RATHER THAN REDEFINING ITS BODY.
+--   079:761-765 establishes that a nested SECURITY DEFINER call is fine
+--   here - the outer body runs as the owner, who holds EXECUTE on the
+--   inner despite the REVOKE FROM PUBLIC, and auth.uid() still reads the
+--   real caller because SECURITY DEFINER changes the role, not the
+--   session GUC. Two definitions of "my organizations" would be two
+--   definitions that drift.
+--
+--   NO RECURSION RISK. 079:1731 warns that a POLICY ON org_members which
+--   subqueries org_members recurses to 42P17. This is a policy on
+--   public.notifications that calls a function which reads org_members.
+--   Different table, no cycle - and it is the same shape
+--   current_user_active_counterparty_user_ids() already has in this very
+--   policy.
+--
+--   CREATE OR REPLACE, NOT DROP THEN CREATE. House rule. It is a new
+--   name today, so OR REPLACE costs nothing; it matters if this file is
+--   ever re-run.
+--
+-- =====================================================================
+-- GRANTS. EVERY NEW FUNCTION NEEDS AN EXPLICIT REVOKE FROM anon BY NAME.
+-- =====================================================================
+--
+-- REVOKE ... FROM PUBLIC does not remove a grant anon holds in its own
+-- right, and 088's mistake was assuming it did. Both statements are
+-- issued, by name, and then EXECUTE is granted to `authenticated` and to
+-- nobody else.
+--
+-- service_role IS DELIBERATELY NOT GRANTED. It holds EXECUTE by the same
+-- route every other helper does and writing a GRANT here would pretend
+-- this file had set it - 082's precedent.
+--
+-- anon MUST NOT HOLD IT. anon has no auth.uid(), so the function would
+-- return the empty set rather than leaking anything, but a helper whose
+-- whole job is to answer "who is in my company" is not something an
+-- unauthenticated role should be able to call at all.
+-- =====================================================================
+
+
+BEGIN;
+
+
+-- ---------------------------------------------------------------------
+-- 1. THE HELPER. Every user id in every organization the caller belongs
+--    to - the caller included.
+--
+-- The mirror of current_user_active_counterparty_user_ids(): that one
+-- answers "everybody at the companies I work WITH", this one answers
+-- "everybody at the companies I work FOR". Between them they cover every
+-- person the fan-out in lib/notifications.ts can legitimately address.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.current_user_org_member_user_ids()
+RETURNS SETOF uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT m.user_id
+  FROM public.org_members m
+  WHERE m.org_id IN (SELECT public.current_user_org_ids());
+$$;
+
+COMMENT ON FUNCTION public.current_user_org_member_user_ids() IS
+  'Every user id in every organization the caller is a member of, the caller included. '
+  'Written for the notifications INSERT policy, so the "every member of the organization" '
+  'ruling in lib/notifications.ts can actually be carried out for the caller''s OWN '
+  'colleagues. Grants nothing on its own - it names people, it does not expose their rows.';
+
+REVOKE EXECUTE ON FUNCTION public.current_user_org_member_user_ids() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.current_user_org_member_user_ids() FROM anon;
+GRANT  EXECUTE ON FUNCTION public.current_user_org_member_user_ids() TO authenticated;
+
+
+-- ---------------------------------------------------------------------
+-- 2. THE POLICY. One arm added. Nothing removed.
+--
+-- BEFORE (079:1254-1259, live):
+--     user_id = auth.uid()
+--     OR user_id IN (SELECT public.current_user_active_counterparty_user_ids())
+--
+-- AFTER: the same two arms, plus own-organization members.
+--
+-- ALTER, not DROP/CREATE - see the header. WITH CHECK only: this is an
+-- INSERT policy and INSERT policies have no USING clause. Naming one
+-- here would raise, which is a useful reminder that nothing about
+-- READING notifications is being touched.
+-- ---------------------------------------------------------------------
+ALTER POLICY "Scoped insert notifications"
+  ON public.notifications
+  WITH CHECK (
+    user_id = auth.uid()
+    OR user_id IN (SELECT public.current_user_org_member_user_ids())
+    OR user_id IN (SELECT public.current_user_active_counterparty_user_ids())
+  );
+
+
+COMMIT;
+
+
+-- =====================================================================
+-- 3. VERIFICATION. RUN AFTER APPLYING. READ ONLY, ALL OF IT.
+--    EXPECTED VALUES STATED.
+--
+-- These are commented out so they cannot run inside the transaction
+-- above, and so a dry run stops at the COMMIT line and executes none of
+-- them. Paste them into the SQL Editor one at a time, after the COMMIT
+-- has landed.
+-- =====================================================================
+--
+-- V1. THE POLICY PREDICATE IS THE NEW ONE. THE CHECK THAT MATTERS.
+--
+--       SELECT policyname, cmd, permissive, roles, qual, with_check
+--       FROM pg_policies
+--       WHERE schemaname = 'public'
+--         AND tablename  = 'notifications'
+--       ORDER BY policyname;
+--       -- EXPECTED: exactly 3 rows, unchanged in name and count:
+--       --   "Scoped insert notifications"     INSERT  qual NULL
+--       --   "Users can update own notifications"  UPDATE
+--       --   "Users can view own notifications"    SELECT
+--       --
+--       -- The INSERT row's with_check must now contain BOTH
+--       -- current_user_org_member_user_ids AND
+--       -- current_user_active_counterparty_user_ids. If the counterparty
+--       -- helper is MISSING, this file replaced an arm instead of adding
+--       -- one and every cross-company notification has just stopped.
+--       -- ROLL BACK IMMEDIATELY - 094_notifications_colleague_scope_down.sql.
+--       --
+--       -- The SELECT row's qual must still read (user_id = auth.uid())
+--       -- and nothing else. This file does not touch it. If it has
+--       -- changed, something other than this file ran.
+--
+-- V2. THE POLICY COUNT DID NOT MOVE.
+--
+--       SELECT count(*) AS policies FROM pg_policies WHERE schemaname = 'public';
+--       -- EXPECTED: 117, the same number 089-092 left behind. ALTER
+--       -- POLICY creates and drops nothing. 118 means something created
+--       -- a policy; 116 means a DROP landed somewhere it should not have.
+--
+-- V3. THE FUNCTION EXISTS, WITH THE RIGHT SHAPE.
+--
+--       SELECT p.proname,
+--              pg_get_function_result(p.oid)      AS returns,
+--              p.prosecdef                        AS security_definer,
+--              p.proconfig                        AS settings,
+--              l.lanname                          AS language,
+--              p.provolatile                      AS volatility
+--       FROM pg_proc p
+--       JOIN pg_namespace n ON n.oid = p.pronamespace
+--       JOIN pg_language  l ON l.oid = p.prolang
+--       WHERE n.nspname = 'public'
+--         AND p.proname = 'current_user_org_member_user_ids';
+--       -- EXPECTED: exactly 1 row.
+--       --   returns          = SETOF uuid
+--       --   security_definer = true
+--       --   settings         = {"search_path=public, pg_temp"}
+--       --   language         = sql
+--       --   volatility       = s   (STABLE)
+--       -- security_definer false means the function reads org_members as
+--       -- the CALLER, whose only SELECT policy there is self-row-only, so
+--       -- it would silently return just the caller and the fix would look
+--       -- applied while doing nothing.
+--
+-- V4. THE GRANTS. THE ONE THAT CATCHES THE 088 MISTAKE.
+--
+--       SELECT grantee, privilege_type
+--       FROM information_schema.routine_privileges
+--       WHERE routine_schema = 'public'
+--         AND routine_name   = 'current_user_org_member_user_ids'
+--       ORDER BY grantee;
+--       -- EXPECTED: `authenticated` present with EXECUTE. `anon` MUST
+--       -- NOT appear. `PUBLIC` MUST NOT appear. postgres/owner rows are
+--       -- normal.
+--       -- If anon is listed, the REVOKE ... FROM anon did not take and
+--       -- must be re-issued by name.
+--
+-- V5. THE HELPER ANSWERS THE RIGHT QUESTION, ON REAL DATA. READ ONLY.
+--
+--       SELECT o.name AS organization,
+--              count(*) AS members,
+--              array_agg(p.email ORDER BY p.email) AS member_emails
+--       FROM public.org_members m
+--       JOIN public.organizations o ON o.id = m.org_id
+--       JOIN public.profiles p ON p.id = m.user_id
+--       GROUP BY o.name
+--       HAVING count(*) > 1
+--       ORDER BY o.name;
+--       -- EXPECTED AT AUTHORING TIME: at least one row - `markant`, with
+--       -- 2 members. That is the organization the whole change exists
+--       -- for. ZERO ROWS means no organization has a colleague yet, in
+--       -- which case this file is correct but currently inert, and
+--       -- docs/094-preapply-test.sql will have reported T3 and T5 as
+--       -- INCONCLUSIVE rather than PASS.
+--
+-- V6. THE BEHAVIOUR ITSELF, IF YOU WANT TO SEE IT RATHER THAN INFER IT.
+--     Re-run docs/094-preapply-test.sql AFTER applying. It is safe to run
+--     against an applied database - its own section A is CREATE OR
+--     REPLACE plus ALTER POLICY over what is already there, and it rolls
+--     everything back. The headline should still read SAFE TO APPLY, and
+--     T1 (the pre-fix refusal) will flip to INCONCLUSIVE, because the
+--     defect it exists to demonstrate is gone. That flip is the proof.
+-- =====================================================================
