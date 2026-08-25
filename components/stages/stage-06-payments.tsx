@@ -122,9 +122,29 @@ export function Stage06Payments() {
           subtitle="Two-tier contract and payment architecture. LIGAMENT auto-populates MSAs from project parameters and tracks milestone payments."
           aiPowered
         />
+        {/*
+          THIS COPY USED TO PROMISE SOMETHING THIS PAGE CANNOT DELIVER.
+
+          It read "Payment milestones and vendor invoices will appear here once contracts are
+          executed and projects are underway." Nothing will ever appear here: lines 97-99
+          above assign `isDemo ? demo... : []`, and there is no fetch anywhere in this
+          component. Emptiness here does not mean "no data yet", it means the agency-side
+          surface was never built, and the old sentence sent an agency off to execute
+          contracts in the belief that doing so would fill a page that does not read anything.
+
+          COPY ONLY. No fetch is added, the route is not deleted and it is not relinked -
+          those are product decisions and they are Greg's, not this change's. See
+          docs/refusals-and-notifications-report.md.
+
+          THE LAST SENTENCE IS LOAD-BEARING AND IT IS TRUE. Milestones written through
+          /agency/msa land in payment_milestones, and /api/partner/payments reads them for the
+          vendor on every load. So the data is real and the vendor half works; it is only the
+          agency's view of it that is missing. Telling an agency that their milestones vanished
+          would be a second false statement replacing the first.
+        */}
         <EmptyState
-          title="No Payment Activity"
-          description="Payment milestones and vendor invoices will appear here once contracts are executed and projects are underway."
+          title="Not built yet"
+          description="This page does not read any payment data, so nothing will appear here as your projects and contracts progress. Milestones you have already set are visible to your vendors on their side."
           icon="payments"
         />
       </div>

@@ -33,13 +33,16 @@
  * ---------------------------------------------------------------------------
  * WHAT IS DELIBERATELY NOT HERE.
  *
- * NO COPY FOR /agency/payments. Stage06Payments renders an EmptyState reading "Payment
- * milestones and vendor invoices will appear here once contracts are executed and projects
- * are underway", and that sentence is FALSE: components/stages/stage-06-payments.tsx:97-99
- * assign `isDemo ? demo... : []` and there is no fetch anywhere in the component, so nothing
- * will ever appear there in production no matter what the agency does. Rewriting that
- * sentence would be papering over an unbuilt surface with better prose. It is reported
- * instead.
+ * NO COPY FOR /agency/payments, AND STILL NONE AFTER THE 2026-08-25 CORRECTION.
+ * Stage06Payments used to render an EmptyState reading "Payment milestones and vendor
+ * invoices will appear here once contracts are executed and projects are underway", which
+ * was FALSE: components/stages/stage-06-payments.tsx:97-99 assign `isDemo ? demo... : []`
+ * and there is no fetch anywhere in the component, so nothing would ever appear there no
+ * matter what the agency did. That sentence has been replaced in place with one that says
+ * the page is not built. It is deliberately NOT routed through this file: everything here
+ * answers "empty, and here is which kind of empty", and that page is not empty, it is
+ * absent. Giving an unbuilt surface a well-formed empty state from the shared vocabulary is
+ * how it stops looking unbuilt.
  *
  * NO COPY FOR THE AGENCY DASHBOARD'S ATTENTION QUEUE. An empty attention queue is a good
  * state, it already reads as one ("You're all caught up."), and it was ruled out of scope.
