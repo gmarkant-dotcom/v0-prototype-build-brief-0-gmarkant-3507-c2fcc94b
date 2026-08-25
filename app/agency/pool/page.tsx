@@ -42,6 +42,12 @@ import {
 } from "@/lib/business-criteria"
 import { HelpTerm } from "@/components/help-term"
 import { partnershipPoolColumn, partnershipStateLabel } from "@/lib/partnership-state"
+import {
+  anyFilterActive,
+  POOL_NETWORK_EMPTY,
+  POOL_INVITED_EMPTY,
+  POOL_DISCOVERED_EMPTY,
+} from "@/lib/agency-empty-copy"
 
 // Partnership type (Tier 1 - business relationship). Which of the three pool columns a row
 // belongs in is NOT decided here - it is decided once, by partnershipPoolColumn() in
@@ -1584,7 +1590,21 @@ function PartnerPoolPageInner() {
             </p>
             <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
               {filteredNetworkRows.length === 0 ? (
-                  <p className="text-sm text-foreground-muted">No active vendors match your search or filters.</p>
+                  /* Which sentence is true depends on whether anything is narrowing the list.
+                     Six controls can, so the predicate is named rather than inlined - see
+                     lib/agency-empty-copy.ts for why. */
+                  <p className="text-sm text-foreground-muted">
+                    {anyFilterActive(
+                      searchQuery,
+                      selectedClientKey,
+                      selectedType,
+                      selectedStatus,
+                      selectedLegal,
+                      selectedDiscipline
+                    )
+                      ? POOL_NETWORK_EMPTY.filtered
+                      : POOL_NETWORK_EMPTY.empty}
+                  </p>
                 ) : (
                     filteredNetworkRows.map((row) => {
                   if (row.mode === "demo") {
@@ -1859,7 +1879,14 @@ function PartnerPoolPageInner() {
               </p>
               <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
               {filteredInvitedRows.length === 0 ? (
-                <p className="text-sm text-foreground-muted">No invited contacts match your search.</p>
+                /* This list narrows on the search box ONLY - filteredInvitedRows depends on
+                   [invitedRows, searchQuery] and nothing else - so the search box is the
+                   whole predicate here. */
+                <p className="text-sm text-foreground-muted">
+                  {anyFilterActive(searchQuery)
+                    ? POOL_INVITED_EMPTY.filtered
+                    : POOL_INVITED_EMPTY.empty}
+                </p>
               ) : (
                   filteredInvitedRows.map((row) => (
                     <div
@@ -1944,7 +1971,13 @@ function PartnerPoolPageInner() {
               </p>
               <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
               {filteredDiscoveredRows.length === 0 ? (
-                <p className="text-sm text-foreground-muted">No discovered contacts match your search.</p>
+                /* Same as Invited: filteredDiscoveredRows depends on
+                   [discoveredRows, searchQuery] only. */
+                <p className="text-sm text-foreground-muted">
+                  {anyFilterActive(searchQuery)
+                    ? POOL_DISCOVERED_EMPTY.filtered
+                    : POOL_DISCOVERED_EMPTY.empty}
+                </p>
               ) : (
                   filteredDiscoveredRows.map((row) => (
                     <div

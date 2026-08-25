@@ -172,10 +172,21 @@ export default function PartnerMarketplacePage() {
         {loading ? (
           <div className="bg-vendor-surface rounded-xl border border-vendor-border p-8 text-center text-vendor-muted">Loading marketplace...</div>
         ) : filtered.length === 0 ? (
+          /* THE SEARCH CASE WAS BEING TOLD THE MARKETPLACE IS EMPTY.
+             This branch is reached both when no agency has opted in AND when the search box
+             excluded every one that has, and it asserted the first explanation either way.
+             A vendor who typed a company name that is not listed was told that no agency
+             anywhere is discoverable and pointed at a setting on somebody else's account.
+             Same rule as VENDOR_RFPS_EMPTY on /partner/rfps: the search case is its own
+             message and the "nothing exists" case keeps the original one. */
           <div className="bg-vendor-surface rounded-xl border border-vendor-border p-10 text-center">
-            <div className="font-display font-bold text-lg text-vendor-foreground">No discoverable agencies right now</div>
+            <div className="font-display font-bold text-lg text-vendor-foreground">
+              {search.trim() ? "No agencies match your search" : "No discoverable agencies right now"}
+            </div>
             <p className="text-sm text-vendor-muted mt-2">
-              Agencies can opt in to Marketplace visibility from their account settings.
+              {search.trim()
+                ? "Try a different search term. Only agencies that have opted in to Marketplace visibility are listed here."
+                : "Agencies can opt in to Marketplace visibility from their account settings."}
             </p>
           </div>
         ) : (

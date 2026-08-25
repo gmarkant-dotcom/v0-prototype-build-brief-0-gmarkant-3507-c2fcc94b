@@ -8,6 +8,7 @@ import { Loader2, Upload, ExternalLink, Trash2 } from "lucide-react"
 import { isClientScopedDocument } from "@/lib/library-documents"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { cn } from "@/lib/utils"
+import { LIBRARY_CLIENT_DOCS_EMPTY } from "@/lib/agency-empty-copy"
 
 type LibraryRow = {
   id: string
@@ -377,10 +378,21 @@ export function AgencyDocumentLibraryManager() {
           each, and a client's documents are an open set. They list here instead, every row
           carrying a chip naming its client. Agency documents carry NO chip: absence of a chip is
           the agency signal. Renders nothing at all when no client has documents. */}
-      {clientRows.length > 0 && (
-        <BidFormCollapsibleSection
+      {/* THE SECTION NOW RENDERS WHEN IT IS EMPTY, WHICH IT DID NOT BEFORE.
+          It used to be gated on `clientRows.length > 0` and vanish entirely, which is the
+          quietest form of the problem the 086 roster precedent exists to stop: the shelf
+          exists and the feature exists, and an agency with no client documents had no way to
+          learn either. It was also the only part of this page that behaved that way - every
+          named slot in the grids above always renders and says "No document on file." when it
+          is empty. The sort and filter controls stay behind the length check, because a
+          control that can only return what is already on screen is noise. */}
+      <BidFormCollapsibleSection
           title="Client documents"
-          summary={`${clientRows.length} across ${clientFilterOptions.length} client${clientFilterOptions.length === 1 ? "" : "s"}`}
+          summary={
+            clientRows.length > 0
+              ? `${clientRows.length} across ${clientFilterOptions.length} client${clientFilterOptions.length === 1 ? "" : "s"}`
+              : "None yet"
+          }
           open={openSections.client}
           onToggle={() => toggleSection("client")}
           theme="dark"
@@ -390,6 +402,11 @@ export function AgencyDocumentLibraryManager() {
             on that client&apos;s engagements only.
           </p>
 
+          {clientRows.length === 0 && (
+            <p className="text-sm text-foreground-muted">{LIBRARY_CLIENT_DOCS_EMPTY}</p>
+          )}
+
+          {clientRows.length > 0 && (<>
           {/* ITEM 3. Sorting and filtering apply to THIS section only. The slot grids above are
               fixed named slots, not lists, and are deliberately left alone. The filter is driven
               by the clients actually present, so it can never offer an option that returns
@@ -491,8 +508,8 @@ export function AgencyDocumentLibraryManager() {
               </div>
             ))}
           </div>
+          </>)}
         </BidFormCollapsibleSection>
-      )}
     </div>
   )
 }
