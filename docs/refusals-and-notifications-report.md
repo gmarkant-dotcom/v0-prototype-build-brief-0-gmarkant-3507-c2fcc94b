@@ -13,8 +13,9 @@
 | 2 | `/agency/payments` copy corrected, findings established | `f4c6166` |
 | 3 | Endpoint verified, bell shipped in both portals | `ab1a310` |
 | 4 | Mechanism established, (a2) clean, 094 authored + test + down | `9f80138` |
-| 5 | `docs/emitter-rulings-owed.md`, six sentences | this commit |
-| 6 | Six gates re-run, all match baseline | this commit |
+| 5 | `docs/emitter-rulings-owed.md`, six sentences | `2565619` |
+| 6 | Six gates re-run, all match baseline | `2565619` |
+| Fix 3 | Pre-apply test corrected after its first real run; two findings recorded | this commit |
 
 **The one thing that did not go to plan, and it is a good outcome, not a bad one:**
 Phase 4's framing was that "a colleague would see an empty bell while rows exist for
@@ -242,6 +243,14 @@ filters on it**, so an unlisted type is never dropped: it falls through to
 renders `"<label> notification"` rather than a correctly-sized empty row. **The
 `mapMilestoneGroup` lesson applied in the opposite direction: a visible gap is a bug report,
 a silent drop is not.**
+
+**What the bell can actually show today is narrower than eleven, and that is not the bell's
+doing.** The live `type` CHECK refuses three of the eleven declared types outright, and five
+more permitted ones have never produced a row - see §5b. So the panel renders three types in
+practice: `partnership_accepted`, `project_awarded`, `project_assignment`. **The label map was
+left at all eleven anyway.** Narrowing it to what happens to exist today would mean the day a
+missing writer is fixed, its rows arrive unlabelled - which is the failure the fallback exists
+to prevent, reintroduced deliberately.
 
 The map is deliberately **not** imported from `lib/notifications.ts` — that module builds a
 service-role client and pulls in `@supabase/supabase-js`, which would land in the client
@@ -471,6 +480,97 @@ It needs to be kept on purpose from here.
 
 ---
 
+# 5b. What the live `type` CHECK says, and what it does to the bell
+
+**Added 2026-08-25 after the first real run of `docs/094-preapply-test.sql`.**
+
+That run returned **DO NOT APPLY, 3 FAIL and 1 INCONCLUSIVE — and all four were one cause:**
+`23514 notifications_type_check`. The test inserted `'bid_submitted'`, which the live
+constraint does not permit. **The policy logic itself passed:** T1 demonstrated the defect, T4
+proved the widening stops at the caller's own organization, T7 confirmed the `ALTER` extended
+the predicate rather than replacing it, and T8/T9 confirmed helper shape, grants and an
+unchanged policy count of 117. T5 and T6 were **contaminated, not independent** — T3's insert
+never landed, so T6 had no row to read and its zero was correct behaviour. The inserts now use
+`'partnership_accepted'`, which is permitted and already present seven times.
+
+**That is a fixed test. The finding underneath it is not about the test.**
+
+`notifications_type_check` permits **eight** values — `partnership_invitation`,
+`partnership_accepted`, `project_assignment`, `project_accepted`, `project_declined`,
+`new_message`, `document_uploaded`, `project_awarded`. The table contains **three**:
+`partnership_accepted` 7, `project_awarded` 4, `project_assignment` 4.
+
+`lib/notifications.ts` declares **eleven** types. **Three of them are not in the constraint at
+all.**
+
+### This changes how §4's (a2) classification should be read
+
+The classification stands — every one of the sixteen write sites is company-addressed, and
+that was established by reading each title and message, not by inference from what landed. But
+it is now clear **why it was so easy to be clean:** the notification surface is far less
+exercised than sixteen write sites suggests. **Six of the sixteen cannot write at all**, and of
+the ten that can, five permitted types have never produced a row. The bell is being shipped
+over an inbox that has been receiving **three** of eleven declared event types.
+
+**None of this was fixed. No missing writer was implemented and no constraint was altered** —
+both are out of scope here, and the constraint in particular is a schema change that belongs in
+its own numbered migration with its own ruling.
+
+### OPEN-M. Three declared types the table refuses. Six write sites that write nothing.
+
+| Type | Write sites | Consequence |
+|---|---|---|
+| `partnership_declined` | #4 `api/partnerships:1200` | A vendor declining a partnership tells the agency nothing in-app. |
+| `onboarding_deployed` | #8 `onboarding-packages:448`, #9 `onboarding/deploy:176` | A vendor is never told in-app that their kickoff package arrived. |
+| `bid_submitted` | #11 `partner/rfps/[id]/response:429`, #12 `guest/[token]:583`, #13 `guest/[token]:768` | **An agency is never told in-app that a bid landed** — the single most useful notification in the product. |
+
+**The two guest-token sites fail too, and that is worth being explicit about:** they run on the
+service role, but **a CHECK constraint is not RLS** and the service role does not bypass it. My
+§4 table lists those as "service role", which is correct about the policy and says nothing
+about the constraint.
+
+Every one of the six is caught: `createOrgNotification()` logs
+`"org notification insert failed for every recipient"` with the code, and every call site wraps
+it in try/catch. **So six write sites have been failing on every request and the only trace is
+a log line nobody reads** — the same silent-failure class as the invisible refusal in §1.
+
+**Settles it:**
+```sql
+SELECT conname, pg_get_constraintdef(oid)
+FROM pg_constraint
+WHERE conrelid = 'public.notifications'::regclass AND contype = 'c';
+
+SELECT type, count(*) FROM public.notifications GROUP BY type ORDER BY count(*) DESC;
+```
+
+**Greg owes one ruling:** *does the constraint widen to admit the three types the code already
+emits, or does the code stop emitting them?* Widening is a one-line `ALTER TABLE … DROP
+CONSTRAINT … ADD CONSTRAINT …` in a new migration; it is **not** folded into 094, which must
+stay two statements about one policy.
+
+### OPEN-L. Five permitted types with no rows. Three different causes, and the difference matters.
+
+1. **`partnership_invitation`** would tell a vendor company that a lead agency has invited them
+   into its pool — it **is** wired (sites #1 and #2) and it **is** permitted, so its absence is
+   the RLS refusal already recorded as **OPEN-G**: the partnership is still `pending`, so the
+   active-only counterparty arm refuses every recipient.
+2. **`project_accepted`** would tell a lead agency that a vendor accepted an invitation to bid
+   on a named project — wired at site #6 and permitted, so its absence means that path has
+   simply not been exercised in production, not that anything refuses it.
+3. **`project_declined`** would tell a lead agency that a vendor declined the invitation to bid
+   — same site, same helper, same reading.
+4. **`new_message`** would tell the other side of a project that a message was posted to it, and
+   it has **no emitter anywhere**: `grep -rn "new_message" app/ lib/ components/` returns only
+   the type union at `lib/notifications.ts:256`.
+5. **`document_uploaded`** would tell the other side that a document was added to a shared
+   project, and it likewise has **no emitter anywhere** — only `lib/notifications.ts:257`.
+
+**So "five permitted types have never been written" is three findings, not one:** one is
+refused (1), two are unexercised (2, 3), and two were never built (4, 5). **No writer was
+implemented for any of them.**
+
+---
+
 # 6. Gates: Phase 0 baseline against Phase 6
 
 Compared to the numbers taken at the start of this session, **not** to any figure in a
@@ -575,6 +675,8 @@ consulted, and `gmarkant@gmail.com` is `is_admin=true`. Use a fresh signup, or c
 | **OPEN-H** | `notifications` has **no `CREATE TABLE` anywhere in this repo**. Anything built on it is unreproducible from source. Carried from the design doc (R6), unchanged. | `SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='notifications' ORDER BY ordinal_position;` — then reconstruct it as a numbered migration. |
 | **OPEN-I** | Six emitter rulings. | `docs/emitter-rulings-owed.md`, written this session. Six sentences. |
 | **OPEN-J** | `org-id-reads:guard` reports `lib/entitlements.ts` recorded 1, found 0. Pre-existing; the allow-list was not edited because editing it was prohibited. | `pnpm org-id-reads` and lower the `KNOWN_OPEN_MIRROR` entry to 0, or delete it. |
+| **OPEN-L** | Five permitted notification types have never been written: `partnership_invitation` (refused, OPEN-G), `project_accepted` and `project_declined` (wired, unexercised), `new_message` and `document_uploaded` (no emitter anywhere). §5b. | `SELECT type, count(*) FROM public.notifications GROUP BY type;` and `grep -rn "new_message\|document_uploaded" app/ lib/`. |
+| **OPEN-M** | `lib/notifications.ts` declares three types the live CHECK refuses - `partnership_declined`, `onboarding_deployed`, `bid_submitted` - so **six of the sixteen write sites raise 23514 and write nothing**, including the two service-role ones. Greg to rule: widen the constraint, or stop emitting them. §5b. | `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='public.notifications'::regclass AND contype='c';` |
 | **OPEN-K** | Email delivery for notifications. Explicitly deferred — needs the "high priority" ruling. | Not wired. `docs/notifications-design.md` §E has the proposal. |
 
 ---

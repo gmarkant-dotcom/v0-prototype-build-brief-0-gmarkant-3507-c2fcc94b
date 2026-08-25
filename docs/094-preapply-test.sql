@@ -108,6 +108,78 @@
 -- there. See the note on T1 under RE-RUNNING AFTER APPLYING, below.
 --
 -- =====================================================================
+-- THE TABLE'S REAL SHAPE, QUERIED LIVE 2026-08-25. THE FIRST RUN OF THIS
+-- FILE FAILED ON IT, AND THE FINDING IS BIGGER THAN THE TEST.
+-- =====================================================================
+--
+-- The first run returned DO NOT APPLY with 3 FAIL and 1 INCONCLUSIVE, and
+-- ALL FOUR WERE ONE CAUSE: 23514, notifications_type_check. The inserts
+-- below used 'bid_submitted', WHICH THE LIVE CONSTRAINT DOES NOT PERMIT.
+--
+-- >>> THE POLICY LOGIC ITSELF PASSED ON THAT RUN. T1 demonstrated the
+-- >>> defect, T4 proved the widening stops at the caller's own
+-- >>> organization, T7 confirmed the ALTER extended the predicate rather
+-- >>> than replacing it, and T8/T9 confirmed helper shape, grants and an
+-- >>> unchanged policy count of 117. Nothing about 094 was wrong. The
+-- >>> test was writing a row the table refuses.
+--
+-- T5 AND T6 WERE CONTAMINATED, NOT INDEPENDENT FAILURES. T3's insert
+-- never landed, so there was no row for T6 to read and its zero was
+-- correct behaviour rather than a defect. Do not chase them separately.
+--
+-- THE INSERTS NOW USE 'partnership_accepted'. It is permitted, and it is
+-- already present in the table seven times, so it cannot be refused for
+-- any reason this file does not control.
+--
+-- THE COLUMN SHAPE, nine columns:
+--   id         uuid        NOT NULL DEFAULT gen_random_uuid()
+--   user_id    uuid        NOT NULL, FK profiles ON DELETE CASCADE
+--   type       text        NOT NULL   <- the CHECK below
+--   title      text        NOT NULL, NO DEFAULT
+--   message    text        NULL
+--   link       text        NULL
+--   read       boolean     DEFAULT false
+--   data       jsonb       DEFAULT '{}'
+--   created_at timestamptz DEFAULT now()
+--
+-- >>> title IS NOT NULL WITH NO DEFAULT. Every INSERT in this file
+-- >>> supplies one. An insert that omits it is a second 23502 waiting
+-- >>> behind the first, and it would look exactly like a policy refusal
+-- >>> to anyone reading only the tally.
+--
+-- ---------------------------------------------------------------------
+-- WHAT THE CONSTRAINT SAYS ABOUT THE PRODUCT, WHICH IS THE PART THAT
+-- OUTLIVES THIS FILE
+-- ---------------------------------------------------------------------
+--
+-- notifications_type_check PERMITS EXACTLY EIGHT VALUES:
+--
+--   partnership_invitation   partnership_accepted   project_assignment
+--   project_accepted         project_declined       new_message
+--   document_uploaded        project_awarded
+--
+-- THE TABLE CONTAINS THREE:
+--   partnership_accepted 7,  project_awarded 4,  project_assignment 4.
+--
+-- TWO CONSEQUENCES, AND THE SECOND ONE IS NOT ABOUT THIS FILE AT ALL.
+--
+-- (1) FIVE PERMITTED TYPES HAVE NEVER BEEN WRITTEN -
+--     partnership_invitation, project_accepted, project_declined,
+--     new_message, document_uploaded. Three different reasons, set out
+--     as OPEN-L in docs/refusals-and-notifications-report.md.
+--
+-- (2) >>> lib/notifications.ts DECLARES ELEVEN TYPES AND THREE OF THEM
+--     >>> ARE NOT IN THE CONSTRAINT AT ALL: partnership_declined,
+--     >>> onboarding_deployed, bid_submitted. Six of the sixteen write
+--     >>> sites emit those three, and every one of them raises 23514 and
+--     >>> writes NOTHING - including the two guest-token sites, because a
+--     >>> CHECK constraint is not RLS and the service role does not
+--     >>> bypass it. That is how this file found it: it copied a type
+--     >>> straight out of the product's own type union and the table
+--     >>> refused it. Recorded as OPEN-M. NOT FIXED HERE - it is neither
+--     >>> 094's business nor a test's.
+--
+-- =====================================================================
 -- THREE WAYS THIS RUN CAN END, AND ONLY ONE OF THEM IS A VERDICT
 -- =====================================================================
 --
@@ -412,7 +484,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
 
     INSERT INTO public.notifications (user_id, type, title, message)
-    VALUES (v_colleague, 'bid_submitted', '094 test T1', 'pre-fix colleague write');
+    VALUES (v_colleague, 'partnership_accepted', '094 test T1', 'pre-fix colleague write');
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
 
@@ -456,7 +528,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
 
     INSERT INTO public.notifications (user_id, type, title, message)
-    VALUES (v_owner, 'bid_submitted', '094 test T2', 'pre-fix self write');
+    VALUES (v_owner, 'partnership_accepted', '094 test T2', 'pre-fix self write');
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
 
@@ -544,7 +616,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
 
     INSERT INTO public.notifications (user_id, type, title, message)
-    VALUES (v_colleague, 'bid_submitted', '094 test T3', 'post-fix colleague write');
+    VALUES (v_colleague, 'partnership_accepted', '094 test T3', 'post-fix colleague write');
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
 
@@ -586,7 +658,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
 
     INSERT INTO public.notifications (user_id, type, title, message)
-    VALUES (v_stranger, 'bid_submitted', '094 test T4', 'post-fix stranger write');
+    VALUES (v_stranger, 'partnership_accepted', '094 test T4', 'post-fix stranger write');
     GET DIAGNOSTICS v_rows = ROW_COUNT;
     RESET ROLE;
 
@@ -622,7 +694,7 @@ BEGIN
   BEGIN
     RESET ROLE;
     INSERT INTO public.notifications (user_id, type, title, message)
-    VALUES (v_stranger, 'bid_submitted', '094 test T5', 'a stranger''s own notification');
+    VALUES (v_stranger, 'partnership_accepted', '094 test T5', 'a stranger''s own notification');
 
     PERFORM set_config('request.jwt.claims',
                        json_build_object('sub', v_colleague::text, 'role', 'authenticated')::text,
