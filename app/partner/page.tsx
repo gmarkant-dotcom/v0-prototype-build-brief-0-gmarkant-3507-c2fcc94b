@@ -384,11 +384,32 @@ export default function PartnerDashboardPage() {
     </div>
   )
 
-  const needsResponseItems: NeedsResponseItem[] = isDemo ? demoNeedsResponseItems : dashboardData?.needsResponse.items ?? []
-  const expiredCount = isDemo ? demoExpiredUnansweredCount : dashboardData?.needsResponse.expiredCount ?? 0
+  /**
+   * THE OPTIONAL CHAIN GUARDED dashboardData AND NOT needsResponse, AND THAT THREW IN
+   * PRODUCTION. Sentry, 2026-08-25 20:50 UTC, vercel-production:
+   * "TypeError: Cannot read properties of undefined (reading 'items')" on this line.
+   *
+   * `a?.b.c` short-circuits the ENTIRE chain when `a` is nullish, which is the case these
+   * three were written for. It does NOT short-circuit when `a` is an object that merely
+   * lacks `b`: `?.` proceeds, and `.c` is then read off undefined before `?? []` can ever
+   * run. The `??` is not a guard here - it never got the chance to be one.
+   *
+   * WHAT PUT AN OBJECT WITHOUT needsResponse IN THERE. lib/fetcher.ts had no res.ok check,
+   * so a 401/403/500 body - `{ error: "..." }` - arrived as `data`. That is fixed at the
+   * source in the preceding commit, and these three would no longer throw even unchanged.
+   * They are still corrected, because a guard that is only correct because of what some
+   * other file does is not a guard.
+   *
+   * NOT THE ROUTE'S DOING. app/api/partner/dashboard/route.ts:468 always returns
+   * `needsResponse: { items, expiredCount, onboardingPending }`, with empty children when
+   * there are zero rows. There is no sparse response to widen against and nothing about the
+   * route was changed.
+   */
+  const needsResponseItems: NeedsResponseItem[] = isDemo ? demoNeedsResponseItems : dashboardData?.needsResponse?.items ?? []
+  const expiredCount = isDemo ? demoExpiredUnansweredCount : dashboardData?.needsResponse?.expiredCount ?? 0
   const onboardingPending: OnboardingPendingItem[] = isDemo
     ? demoOnboardingPending
-    : dashboardData?.needsResponse.onboardingPending ?? []
+    : dashboardData?.needsResponse?.onboardingPending ?? []
 
   const funnel = isDemo ? demoFunnelMetrics : dashboardData?.funnel
   const reliability = isDemo ? demoReliability : dashboardData?.reliability
