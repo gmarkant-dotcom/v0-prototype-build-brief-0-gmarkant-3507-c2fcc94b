@@ -1,0 +1,438 @@
+-- =====================================================================
+-- Migration 095: 095_notification_types.sql
+--
+--   ALTER TABLE public.notifications
+--     DROP CONSTRAINT notifications_type_check
+--     ADD  CONSTRAINT notifications_type_check CHECK (type IN (<11>))
+--
+-- ONE STATEMENT OF SUBSTANCE. That is the whole file. It creates no
+-- table, adds no column, writes no row, backfills nothing, and touches
+-- no policy, no function and no grant.
+--
+-- >>> THE FULL FILENAME IS 095_notification_types.sql. <<<
+--
+-- Its rollback sibling is 095_notification_types_down.sql. A `095_*.sql`
+-- glob MATCHES THE DOWN FILE FIRST - `_down` sorts before `.sql` on the
+-- character after "types" - and that is not hypothetical: a 094_*.sql
+-- glob matched the down file first this week and the down file was
+-- applied by mistake. EVERY migration in this directory has a _down
+-- sibling that sorts first alphabetically. Open the file you mean by its
+-- whole name and read the first line of it before you run anything.
+--
+-- =====================================================================
+-- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
+-- =====================================================================
+--
+-- >>> THIS FILE WIDENS A LIVE CHECK CONSTRAINT ON A TABLE THAT IS IN
+-- >>> PRODUCTION USE. Read WHAT IT BUYS before running it, and run
+-- >>> docs/095-preapply-test.sql first.
+--
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 292
+-- and an explicit COMMIT; on LINE 341. THOSE TWO ARE THE ONLY EXECUTABLE
+-- LINES IN THE FILE that begin with either word.
+--
+-- Do NOT verify with grep -n '^BEGIN;$'. That anchored form has produced
+-- false negatives in this repository and 087 nearly burned a dry run on
+-- exactly that. Use:
+--
+--     grep -n 'BEGIN;'  supabase/migrations/095_notification_types.sql
+--     grep -n 'COMMIT;' supabase/migrations/095_notification_types.sql
+--
+-- >>> READ THE OUTPUT, DO NOT COUNT IT. Both greps return MORE THAN ONE
+-- >>> LINE and that is correct. The extra hits are this header quoting
+-- >>> itself, and the V4/V5 probes in the commented VERIFICATION block at
+-- >>> the foot, which are real BEGIN;/ROLLBACK; pairs that happen to be
+-- >>> commented out. Every one of those extras is PREFIXED WITH `--`.
+-- >>> The executable pair is the only pair with no comment marker:
+-- >>>
+-- >>>     292:BEGIN;
+-- >>>     341:COMMIT;
+-- >>>
+-- >>> If either of those two line numbers has moved, this header has
+-- >>> been edited without its numbers being re-checked. Trust the grep,
+-- >>> fix the header.
+--
+-- THE VERIFICATION BLOCK IS AFTER THE COMMIT, DELIBERATELY, and it is
+-- entirely commented out. A dry run therefore stops at the COMMIT line
+-- and executes none of it. Paste those queries in afterwards, one at a
+-- time.
+--
+-- "Success. No rows returned" IN THE SQL EDITOR PROVES NOTHING ON ITS
+-- OWN. It is the identical message for a dry run that rolled everything
+-- back, for a real apply that committed, and for a correct file pasted
+-- into the wrong project's tab. The VERIFICATION block at the foot is
+-- the only thing that distinguishes them. Run it.
+--
+-- Sequence, no step skipped:
+--   1. Run docs/095-preapply-test.sql. Read the headline line.
+--   2. Dry run THIS file: COMMIT -> ROLLBACK, run, confirm no errors,
+--      put it back.
+--   3. Run for real.
+--   4. Run VERIFICATION. Every query states its expected value.
+--   5. Update the migrations table in LIGAMENT_CONTEXT.md.
+--   6. No code deploy is required. See ORDERING below.
+--
+-- =====================================================================
+-- ORDERING AGAINST THE CODE. THIS FILE IS INDEPENDENT OF THE DEPLOY.
+-- =====================================================================
+--
+-- THE APPLICATION CODE THAT EMITS THESE THREE TYPES IS ALREADY CORRECT
+-- AND ALREADY DEPLOYED. It has been correct since the types were
+-- declared. lib/notifications.ts declares an eleven-value
+-- `NotificationType` union; the database has been refusing three of them
+-- at the CHECK. This file changes what the DATABASE ACCEPTS. It does not
+-- ask for one line of TypeScript to change, and none is changed with it
+-- beyond a stale COMMENT correction noted at the foot of this header.
+--
+--   APPLY IT BEFORE THE CODE, AFTER THE CODE, OR WITH NO CODE AT ALL.
+--
+-- Nothing in this repository reads the constraint, names it, or branches
+-- on it. The notification bell reads app/api/notifications/route.ts,
+-- a SELECT scoped to `user_id = auth.uid()`, unchanged by this file.
+--
+-- =====================================================================
+-- WHY THIS EXISTS, IN ONE PARAGRAPH
+-- =====================================================================
+--
+-- lib/notifications.ts:265-276 declares ELEVEN notification types. The
+-- live notifications_type_check permits EIGHT. The three it refuses are
+--
+--     partnership_declined    onboarding_deployed    bid_submitted
+--
+-- and every write of those three has raised 23514 and written NOTHING
+-- since the day it was wired. It fails QUIETLY: createOrgNotification()
+-- catches, logs "org notification insert failed for every recipient",
+-- and returns false; every call site wraps that in try/catch and still
+-- returns 200. The only trace is a log line nobody reads.
+--
+-- It was found by accident. docs/094-preapply-test.sql copied a type
+-- straight out of the product's own type union to write a test row, and
+-- the table refused it - three FAILs and one INCONCLUSIVE on that run,
+-- all one cause. The policy logic 094 existed to prove was fine. The
+-- finding was written up as OPEN-M in
+-- docs/refusals-and-notifications-report.md:519-549, which enumerates
+-- the six write sites and ends: "Greg owes one ruling: does the
+-- constraint widen to admit the three types the code already emits, or
+-- does the code stop emitting them?"
+--
+-- >>> GREG RULED: WIDEN THE CONSTRAINT. This file is that ruling.
+--
+-- >>> A CHECK CONSTRAINT IS NOT RLS, AND THE DIFFERENCE DECIDES WHO IS
+-- >>> AFFECTED. The service role bypasses row level security. It does
+-- >>> NOT bypass a CHECK constraint. So the two guest-token write sites,
+-- >>> which run on the service role and never saw the INSERT policy at
+-- >>> all, have been failing on this exactly like the session-client
+-- >>> ones. Anyone reasoning "service role, therefore fine" gets this
+-- >>> wrong, and §4 of the refusals report lists those sites as "service
+-- >>> role", which is correct about the policy and silent about the
+-- >>> constraint.
+--
+-- =====================================================================
+-- WHAT IT BUYS. READ THIS SECTION IF YOU READ ONE.
+-- =====================================================================
+--
+-- >>> NOT ALL SIX WRITE SITES LIGHT UP. ONE STAYS SILENT, BY DESIGN,
+-- >>> AND IT IS NOT A HALF-FAILURE.
+--
+-- Six write sites emit the three types. This file removes the CHECK
+-- barrier from all six. FIVE of them then write; the sixth is refused a
+-- second time, by row level security, which this file does not touch and
+-- must not.
+--
+--   #   SITE                                       TYPE                  AFTER 095
+--   --  -----------------------------------------  --------------------  ---------
+--   4   app/api/partnerships/route.ts:1200         partnership_declined  STILL SILENT
+--   8   .../onboarding-packages/route.ts:452       onboarding_deployed   WRITES
+--   9   .../onboarding/deploy/route.ts:180         onboarding_deployed   WRITES
+--   11  app/api/partner/rfps/[id]/response:429     bid_submitted         WRITES
+--   12  app/api/rfp/guest/[token]/route.ts:583     bid_submitted         WRITES
+--   13  app/api/rfp/guest/[token]/route.ts:768     bid_submitted         WRITES
+--
+-- Site numbers are OPEN-M's, docs/refusals-and-notifications-report.md
+-- :519-525. The line numbers are this branch's and were re-checked
+-- against the working tree, not copied - OPEN-M's table records the
+-- onboarding sites at :448 and :176, four lines earlier than they now
+-- sit.
+--
+-- >>> WHY #4 STAYS SILENT. 094's INSERT policy arm for counterparties is
+-- >>> current_user_active_counterparty_user_ids(), which is ACTIVE-ONLY
+-- >>> (079:779-804). A partnership being DECLINED is not an active one:
+-- >>> it was 'pending' before that handler ran and is 'terminated' after
+-- >>> it, so the agency's user id is in neither arm and the INSERT is
+-- >>> refused in both orderings. The code says so itself, in a comment
+-- >>> already at app/api/partnerships/route.ts:1186-1197. The email on
+-- >>> that path is what actually reaches the agency, and 088's
+-- >>> invitation.decline milestone is a second channel that does land,
+-- >>> because it goes through a different policy with a different
+-- >>> predicate.
+--
+-- >>> SO: DO NOT READ A SILENT partnership_declined AS THIS MIGRATION
+-- >>> HAVING HALF-WORKED. It is the correct and predicted result. If
+-- >>> you want that one too, it is a SECOND policy change on a different
+-- >>> predicate and a separate decision - not a wider CHECK.
+--
+-- ---------------------------------------------------------------------
+-- FOUR, FIVE OR SIX: THE COUNT DEPENDS ON THE UNIT, SO BOTH ARE STATED
+-- ---------------------------------------------------------------------
+--
+-- The ruling that commissioned this file said "FOUR write sites start
+-- working, NOT six". The census above finds FIVE call sites writing.
+-- The gap is a unit, not a disagreement, and it is worth one paragraph
+-- because both numbers will be quoted at this file later:
+--
+--   SIX   CALL SITES emit the three types.        (OPEN-M's unit)
+--   FIVE  CALL SITES start writing after 095.
+--   FOUR  ROUTE FILES start writing after 095 - sites #12 and #13 are
+--         two calls in ONE route, app/api/rfp/guest/[token]/route.ts.
+--   ONE   call site, in one route, stays silent: #4.
+--
+-- Four routes and five call sites are the same fact counted twice. The
+-- number that matters to a person watching a bell is neither: it is
+-- THREE user-visible events, below.
+--
+-- ---------------------------------------------------------------------
+-- WHAT AN AGENCY SEES THAT THEY DID NOT BEFORE
+-- ---------------------------------------------------------------------
+--
+-- >>> AN AGENCY STARTS BEING TOLD IN-APP THAT A BID LANDED. That is the
+-- >>> headline change and it is the single most useful notification in
+-- >>> the product. All three bid_submitted sites are among the five, so
+-- >>> it lands from the authenticated partner flow AND from both guest
+-- >>> magic-link flows.
+--
+-- E2, on Aug 7, was marked CONFIRMED LIVE for fixing "both submission
+-- paths, email + in-app". THE EMAIL HALF WORKED AND WAS THE ONLY HALF
+-- CHECKED. The in-app half has raised 23514 on every submission ever
+-- since. A confirmation that tests one of two channels and reports both
+-- is the failure mode this file exists to close, and it is worth more
+-- than the constraint change: the bell was never checked because a bell
+-- with nothing in it looks exactly like a bell with nothing to say.
+--
+-- A VENDOR starts being told in-app that their onboarding package
+-- arrived - both deploy paths, sites #8 and #9.
+--
+-- =====================================================================
+-- WHAT IT COSTS. THE HONEST VERSION.
+-- =====================================================================
+--
+-- A CHECK constraint on a text column is a SPELLING GATE. It is not
+-- access control and it protects nobody from anybody. Widening it from
+-- eight values to eleven lets three more strings into a column; it grants
+-- no read, no write and no visibility that did not already exist. Who may
+-- write a notifications row, and to whom, is decided entirely by the
+-- "Scoped insert notifications" policy, which this file does not touch.
+--
+-- THE REAL COST IS VOLUME, AND IT IS NOT A DATABASE PROBLEM. See the
+-- roadmap note in docs/notification-types-report.md: the bell has no
+-- filtering, grouping or pagination, and bid_submitted is the highest
+-- frequency event in the product.
+--
+-- WHAT IT DOES NOT DO, so nobody has to check: it does not widen the set
+-- to "any text". The constraint still enumerates, and a garbage type is
+-- still refused with 23514 after this file as before it. That is asserted
+-- explicitly - T7 in docs/095-preapply-test.sql - because a widening that
+-- accepts anything is not a widening, it is a removal.
+--
+-- =====================================================================
+-- VALIDATION IS TRIVIAL AND THE FILE DOES NOT DODGE IT
+-- =====================================================================
+--
+-- ADD CONSTRAINT validates every existing row. The table holds 15 rows
+-- (queried live 2026-08-25 during 094's pre-apply run: partnership_accepted
+-- 7, project_awarded 4, project_assignment 4). All three of those values
+-- are in the eight being kept, so every existing row satisfies the new
+-- constraint by construction and validation cannot fail on current data.
+--
+-- NO `NOT VALID` / `VALIDATE CONSTRAINT` SPLIT. That two-step exists to
+-- avoid holding a lock while scanning a large table. Fifteen rows do not
+-- need it, and NOT VALID would leave a constraint that does not actually
+-- guarantee what it says - the wrong trade at this size.
+--
+-- THE VERIFICATION BLOCK RE-COUNTS THE ROWS rather than trusting this
+-- paragraph. If V2 does not return 15, say so before concluding anything
+-- else: the number above is from a live query on 2026-08-25 and rows may
+-- legitimately have been added since - by design, since five write sites
+-- start adding them the moment this lands.
+--
+-- =====================================================================
+-- THE ELEVEN, AND WHERE EACH ONE COMES FROM
+-- =====================================================================
+--
+-- THE EIGHT ALREADY PERMITTED, queried live and unchanged by this file:
+--   partnership_invitation   partnership_accepted   project_assignment
+--   project_accepted         project_declined       new_message
+--   document_uploaded        project_awarded
+--
+-- THE THREE BEING ADDED:
+--   partnership_declined     onboarding_deployed    bid_submitted
+--
+-- The eleven are lib/notifications.ts:265-276 EXACTLY - same values,
+-- listed here in the union's own order so the two can be diffed by eye.
+-- If that union ever gains a twelfth, this constraint refuses it
+-- silently at runtime and the next person meets 23514 the same way this
+-- one was met. There is no gate that reads a .sql file and none that
+-- compares the two lists.
+--
+-- =====================================================================
+-- ONE COMMENT CORRECTION SHIPS ALONGSIDE, IN A SEPARATE COMMIT
+-- =====================================================================
+--
+-- lib/notifications.ts carried an RLS note that was STALE BY ONE ARM.
+-- It described the INSERT policy as
+--   `user_id = auth.uid() OR user_id IN (current_user_active_counterparty_user_ids())`
+-- and said the own-organization case was "NOT FIXED HERE ... Greg's call".
+-- 094 IS APPLIED AND ADDED A THIRD ARM for own-organization members, so
+-- that was wrong about the live predicate AND wrong about the state of
+-- the decision. Corrected in place: it was :171-179, it is now :171-196.
+-- NOTHING ELSE IN THAT FILE IS TOUCHED - not the eleven-type union, not
+-- any of the sixteen emit sites, not createOrgNotification()'s body.
+-- =====================================================================
+
+
+BEGIN;
+
+
+-- ---------------------------------------------------------------------
+-- THE ONE STATEMENT. Drop the eight-value constraint, add the eleven-
+-- value one under THE SAME NAME.
+--
+-- SAME NAME, DELIBERATELY. notifications_type_check is the name every
+-- error message, every report and OPEN-M's settling query already use.
+-- Renaming it would orphan all of them to buy nothing.
+--
+-- DROP ... IF EXISTS so a re-run is a no-op rather than 42704. The ADD
+-- is not conditional: if a constraint of this name somehow survives the
+-- DROP, the ADD must fail loudly rather than skip.
+--
+-- ONE ALTER TABLE, TWO ACTIONS, NOT TWO STATEMENTS. Both actions take
+-- the same ACCESS EXCLUSIVE lock on the same table in the same
+-- statement, so there is no window in which the table sits unconstrained
+-- and no second lock acquisition to interleave with.
+-- ---------------------------------------------------------------------
+ALTER TABLE public.notifications
+  DROP CONSTRAINT IF EXISTS notifications_type_check,
+  ADD  CONSTRAINT notifications_type_check CHECK (
+    type IN (
+      -- The eight already permitted. Unchanged.
+      'partnership_invitation',
+      'partnership_accepted',
+      'project_assignment',
+      'project_accepted',
+      'project_declined',
+      'new_message',
+      'document_uploaded',
+      'project_awarded',
+      -- The three this migration adds. lib/notifications.ts declared all
+      -- three; the table has refused all three since they were wired.
+      'partnership_declined',   -- site #4  - still RLS-refused, see header
+      'onboarding_deployed',    -- sites #8, #9
+      'bid_submitted'           -- sites #11, #12, #13
+    )
+  );
+
+COMMENT ON CONSTRAINT notifications_type_check ON public.notifications IS
+  'The eleven values of the NotificationType union in lib/notifications.ts:265-276. '
+  'Widened from eight by migration 095 - partnership_declined, onboarding_deployed and '
+  'bid_submitted were declared in the code and refused by this constraint, so six write '
+  'sites raised 23514 and wrote nothing. Keep this list and that union identical: nothing '
+  'checks that they agree, and a mismatch fails silently at runtime.';
+
+
+COMMIT;
+
+
+-- =====================================================================
+-- VERIFICATION. RUN AFTER APPLYING. READ ONLY, ALL OF IT.
+-- EXPECTED VALUES STATED.
+--
+-- These are commented out so they cannot run inside the transaction
+-- above, and so a dry run stops at the COMMIT line and executes none of
+-- them. Paste them into the SQL Editor one at a time, after the COMMIT
+-- has landed.
+-- =====================================================================
+--
+-- V1. THE CONSTRAINT IS THE NEW ONE. THE CHECK THAT MATTERS.
+--
+--       SELECT conname, pg_get_constraintdef(oid)
+--       FROM pg_constraint
+--       WHERE conrelid = 'public.notifications'::regclass
+--         AND contype  = 'c';
+--       -- EXPECTED: exactly 1 row, conname = notifications_type_check.
+--       -- Its definition must contain ALL ELEVEN literals. Read for the
+--       -- three new ones by name - partnership_declined,
+--       -- onboarding_deployed, bid_submitted - and confirm the eight old
+--       -- ones are all still there. A definition holding only the three
+--       -- means the DROP/ADD replaced rather than widened, which would
+--       -- break every notification the product writes today.
+--
+-- V2. THE ROW COUNT. STATE IT IN THE REPORT.
+--
+--       SELECT count(*) AS total_rows FROM public.notifications;
+--       -- EXPECTED: 15, the count taken live on 2026-08-25.
+--       -- A HIGHER number is NOT a failure. Five write sites start
+--       -- writing the moment this lands, and 094 made colleagues
+--       -- addressable, so real rows may have arrived between that count
+--       -- and this run. Report the number you actually see.
+--       -- A LOWER number means rows were deleted - profiles CASCADE
+--       -- deletes notifications - and is worth understanding before
+--       -- concluding anything else.
+--
+-- V3. THE TYPE DISTRIBUTION. WHAT THE WIDENING IS FOR.
+--
+--       SELECT type, count(*) AS n
+--       FROM public.notifications
+--       GROUP BY type
+--       ORDER BY n DESC, type;
+--       -- EXPECTED IMMEDIATELY AFTER APPLYING: exactly 3 rows -
+--       --   partnership_accepted 7, project_awarded 4, project_assignment 4.
+--       -- This file writes no rows, so nothing changes here on apply.
+--       -- COME BACK TO THIS QUERY AFTER THE NEXT BID IS SUBMITTED. A
+--       -- bid_submitted row appearing is the proof the widening did
+--       -- something. Until a bid is submitted, V1 is all the evidence
+--       -- there is, and that is expected.
+--
+-- V4. THE CONSTRAINT STILL CONSTRAINS. A WIDENING THAT ACCEPTS
+--     ANYTHING IS NOT A WIDENING.
+--
+--       BEGIN;
+--       INSERT INTO public.notifications (user_id, type, title)
+--       SELECT id, 'definitely_not_a_real_type', '095 V4 probe'
+--       FROM public.profiles LIMIT 1;
+--       ROLLBACK;
+--       -- EXPECTED: ERROR 23514, violates check constraint
+--       -- "notifications_type_check". THE ERROR IS THE PASS.
+--       -- If this INSERT SUCCEEDS, the constraint was dropped and not
+--       -- replaced. Re-run V1 immediately and re-apply this file.
+--       -- The ROLLBACK is there for the success case; on the expected
+--       -- error the statement has already aborted.
+--
+-- V5. THE THREE NEW TYPES ARE ACTUALLY ACCEPTED.
+--
+--       BEGIN;
+--       INSERT INTO public.notifications (user_id, type, title)
+--       SELECT p.id, t.type, '095 V5 probe'
+--       FROM (SELECT id FROM public.profiles LIMIT 1) p
+--       CROSS JOIN (VALUES ('partnership_declined'),
+--                          ('onboarding_deployed'),
+--                          ('bid_submitted')) AS t(type);
+--       ROLLBACK;
+--       -- EXPECTED: INSERT 0 3, then ROLLBACK. No error.
+--       -- 23514 here means the ADD CONSTRAINT did not take.
+--       -- THE ROLLBACK IS NOT OPTIONAL. These are probe rows addressed
+--       -- to a real person and they would show up in that person's bell.
+--
+-- V6. NOTHING ELSE MOVED. This file touches no policy; the count is
+--     here because it is the cheapest possible confirmation that the
+--     right database was addressed.
+--
+--       SELECT count(*) AS policy_count FROM pg_policies;
+--       -- EXPECTED: 117, unchanged. 094 added no policy - it altered
+--       -- one in place - and this file adds none either.
+--
+-- =====================================================================
+-- IF YOU NEED TO UNDO THIS: 095_notification_types_down.sql.
+-- READ ITS HEADER FIRST. It is NOT a symmetric rollback - restoring the
+-- eight-value constraint FAILS with 23514 if any row of the three new
+-- types has been written in the meantime, and after this file lands
+-- that is the expected state, not an edge case.
+-- =====================================================================

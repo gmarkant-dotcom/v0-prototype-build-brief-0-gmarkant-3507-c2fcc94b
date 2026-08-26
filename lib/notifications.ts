@@ -168,15 +168,31 @@ interface CreateOrgNotificationParams {
 /**
  * Notify every member of an organization. One row per member.
  *
- * RLS NOTE, NOT FIXED HERE. On the session client the insert must satisfy
- * `user_id = auth.uid() OR user_id IN (current_user_active_counterparty_user_ids())`, and
- * that helper is the ACTIVE-only counterparty set. So an invitation or a decline - where
- * the partnership is pending or terminated, not active - is refused by the policy for
- * every recipient. That is true of the live policy today too (it carries the same
- * status='active' condition), so it is a PRE-EXISTING gap and not something this change
- * introduces. It is written up in docs/079-embed-closure-report.md rather than fixed,
- * because fixing it means editing the notifications INSERT policy, which is Greg's call.
- * The service-role call sites (the guest token routes) bypass RLS and are unaffected.
+ * RLS NOTE. THREE ARMS SINCE 094, NOT TWO. On the session client the insert must satisfy
+ *
+ *   user_id = auth.uid()
+ *   OR user_id IN (current_user_org_member_user_ids())          -- added by 094
+ *   OR user_id IN (current_user_active_counterparty_user_ids())
+ *
+ * WHAT 094 CLOSED. The own-organization case. The fan-out below addresses every member of
+ * an organization, and before 094 the caller's own row landed on the first arm while every
+ * COLLEAGUE'S row was refused by both - which is why the retry loop further down logs
+ * "delivered to some recipients, refused for others". 094 added the middle arm and that
+ * case now delivers in full. It is applied.
+ *
+ * WHAT IS STILL OPEN, AND IT IS THE COUNTERPARTY ARM ONLY.
+ * current_user_active_counterparty_user_ids() is the ACTIVE-only counterparty set
+ * (079:779-804). So notifying a counterparty across a partnership that is pending or
+ * terminated - an invitation, or a decline - is still refused for every recipient. That is
+ * a PRE-EXISTING gap, written up in docs/079-embed-closure-report.md and as OPEN-G in
+ * docs/refusals-and-notifications-report.md. Widening it is a separate decision on a
+ * different predicate; 094 deliberately did not touch it.
+ *
+ * SEPARATELY, AND NOT AN RLS MATTER AT ALL: migration 095 widens the notifications_type_check
+ * CHECK constraint to the eleven types this file declares. Before it is applied,
+ * partnership_declined, onboarding_deployed and bid_submitted raise 23514 and write nothing
+ * NO MATTER WHICH CLIENT IS USED - a CHECK constraint is not RLS, so the service-role call
+ * sites (the guest token routes) fail on it too, even though they bypass every policy above.
  */
 export async function createOrgNotification({
   supabase,
