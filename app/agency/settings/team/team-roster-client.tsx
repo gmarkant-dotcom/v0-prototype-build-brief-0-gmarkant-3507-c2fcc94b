@@ -505,8 +505,23 @@ export default function AgencyTeamRosterClient({
                   onChange={(e) => setInviteRole(e.target.value as InvitableRole)}
                   className="h-9 rounded-md border border-border/30 bg-white/5 px-3 text-sm text-foreground"
                 >
+                  {/* bg-background AND NOT bg-card, BECAUSE THIS IS A NATIVE <option>.
+
+                      A native option list is painted by the browser on its OWN popup
+                      surface, which is white - it is not part of this page and inherits
+                      nothing from the dark portal behind it. --card is
+                      rgba(255,255,255,0.07), so 7% white over that white popup is white,
+                      and text-foreground is #FFFFFF: WHITE ON WHITE, unreadable.
+
+                      It has never been seen here because macOS Chrome and Safari render
+                      <option> through native AppKit menus and DISCARD author background
+                      and color entirely. Chrome and Firefox on Windows and Linux honour
+                      both, so the invisible-role bug reaches only the machines nobody
+                      tested on. --background is #0C3535, a flat opaque hex, so the popup
+                      is legible wherever the styling is honoured and falls back to the
+                      native menu wherever it is not. */}
                   {INVITABLE_ROLES.map((r) => (
-                    <option key={r} value={r} className="bg-card text-foreground">
+                    <option key={r} value={r} className="bg-background text-foreground">
                       {ROLE_LABEL[r]}
                     </option>
                   ))}
