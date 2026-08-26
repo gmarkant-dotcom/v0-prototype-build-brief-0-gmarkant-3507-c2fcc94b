@@ -762,6 +762,59 @@ function DashboardSkeleton() {
   )
 }
 
+/**
+ * EVERY VALUE THE FIVE SECTION COMPONENTS ITERATE OR READ, CHECKED ONCE.
+ *
+ * THE DEFECT THIS CLOSES. The guard below used to be `if (!dashboardData) return
+ * <DashboardSkeleton />`, and that is a TRUTHINESS check. An error body - `{ error:
+ * "Unauthorized" }` - is an object, so it passed, and `dashboardData.attention` was then
+ * undefined. AttentionQueue does `for (const r of data.bidsAwaitingReview)` at line 205,
+ * which throws DURING RENDER and takes out the whole dashboard body, not one row.
+ *
+ * IT WAS LATENT, NEVER OBSERVED, and that is worth writing down rather than inferring from
+ * the absence of a Sentry event: it fires only on 401/403/500, and the dashboard renders
+ * correctly the rest of the time. The partner side had the same root cause and produced a
+ * milder, CAUGHT error, which is the only reason that one was seen first.
+ *
+ * ONE CHECK, NOT FIVE COMPONENT GUARDS. There are five sibling consumers - attention,
+ * checklist, funnel, activity, projects - and pushing a guard into each would be five places
+ * to forget when a sixth section is added. This is the single site where the payload crosses
+ * from the page into the components, so it is the single place the shape has to hold.
+ *
+ * IT REACHES ONE LEVEL INTO `attention` AND STOPS THERE, DELIBERATELY. The other four
+ * sections are iterated or read at their top level, so their own key is the right depth.
+ * AttentionQueue is different: it receives `attention` and iterates FOUR SEPARATE ARRAYS
+ * inside it (lines 205, 215, 228, 238), so a present-but-partial `attention` would still
+ * throw. The rule that decides the depth is "every value a component actually iterates or
+ * reads", not "validate the payload exhaustively" - going deeper would put this page in the
+ * business of checking the internals of five components' props.
+ *
+ * Array.isArray rather than a null check, because a null and a non-array both break a
+ * for...of and both are worth catching if a route ever sends one.
+ */
+const DASHBOARD_PAYLOAD_GAP_LOG = "[agency/dashboard] payload arrived without sections the page renders"
+
+function dashboardPayloadGaps(d: DashboardData): string[] {
+  const gaps: string[] = []
+
+  const attention = d.attention
+  if (!attention) {
+    gaps.push("attention")
+  } else {
+    if (!Array.isArray(attention.bidsAwaitingReview)) gaps.push("attention.bidsAwaitingReview")
+    if (!Array.isArray(attention.rfpsClosingSoon)) gaps.push("attention.rfpsClosingSoon")
+    if (!Array.isArray(attention.pendingDeliveryEvaluations)) gaps.push("attention.pendingDeliveryEvaluations")
+    if (!Array.isArray(attention.alerts)) gaps.push("attention.alerts")
+  }
+
+  if (!d.checklist) gaps.push("checklist")
+  if (!d.funnel) gaps.push("funnel")
+  if (!Array.isArray(d.activity)) gaps.push("activity")
+  if (!Array.isArray(d.projects)) gaps.push("projects")
+
+  return gaps
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 function DashboardContent() {
@@ -827,6 +880,35 @@ function DashboardContent() {
         const dashboardData = isDemo ? buildDemoDashboardData() : data
         if (!isDemo && (isLoading || !dashboardData)) return <DashboardSkeleton />
         if (!dashboardData) return <DashboardSkeleton />
+
+        /**
+         * WHAT A GENUINELY PARTIAL 200 DOES NOW, STATED RATHER THAN DISCOVERED LATER.
+         *
+         * It renders the SKELETON, indefinitely, and logs which sections were missing.
+         * There is no path out of it until the payload is whole.
+         *
+         * THAT IS THE LESSER OF THE TWO EVILS AND THE CHOICE IS DELIBERATE. The alternative
+         * was to default the missing sections to empty arrays so the page renders. On THIS
+         * page that would print "Needs your attention (0)" - an all-clear - for a response
+         * that never carried the attention data. A false all-clear on an attention queue is
+         * read as fact and never reported. A skeleton that will not resolve is visibly
+         * unfinished and gets reported within the hour.
+         *
+         * IT IS NOT REACHABLE FROM ANY CURRENT RESPONSE. The route returns one complete
+         * object literal or an error, and as of the fetcher fix an error body no longer
+         * arrives here as data at all. So this branch is a backstop against a FUTURE route
+         * that learns to answer partially - which is exactly when a silent all-clear would
+         * be most expensive and hardest to trace.
+         *
+         * THE console.error IS THE HALF THAT MAKES THE SKELETON DIAGNOSABLE. A hang with no
+         * explanation is the failure mode this codebase has spent the month removing.
+         */
+        const payloadGaps = dashboardPayloadGaps(dashboardData)
+        if (payloadGaps.length > 0) {
+          console.error(DASHBOARD_PAYLOAD_GAP_LOG, { missing: payloadGaps })
+          return <DashboardSkeleton />
+        }
+
         return (
           <div className="space-y-8">
             <GettingStartedChecklist checklist={dashboardData.checklist} />
