@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { Bell, Check } from "lucide-react"
@@ -42,6 +42,34 @@ import { cn, formatDateTime } from "@/lib/utils"
  * The trade is stated plainly: an item that arrives while the tab is open shows up on the
  * next navigation, not within seconds. A bell that is a few minutes stale is the correct
  * price for not adding a portal-wide poll.
+ *
+ * ---------------------------------------------------------------------------
+ * PAGINATION, 2026-08-26. THE TWENTY-FIRST NOTIFICATION USED TO BE UNREACHABLE.
+ *
+ * This component asked for `?limit=20` and the endpoint had no offset or cursor, so the
+ * twenty-first-newest row could not be reached from anywhere in the product. Not "hard to
+ * find" - there was no request that returned it. That got worse the moment 095 turned on
+ * `bid_submitted`, because bids arrive far more often than partnership acceptances.
+ *
+ * A CURSOR, NOT AN OFFSET. Rows arrive at the HEAD of this feed while the panel is open, and
+ * an offset counts from the head: one new notification between page one and page two shifts
+ * every row down a slot, so `offset=20` re-serves row 20 and the page boundary drifts by
+ * exactly as many rows as arrived. A `created_at` cursor is anchored to a row rather than to
+ * a position, so what arrives above it cannot move it.
+ *
+ * A BUTTON, NOT INFINITE SCROLL, and the reason is where this component is mounted. Infinite
+ * scroll fires requests off scroll position inside a 380px box that exists on every page of
+ * both portals - momentum on a trackpad would request two or three pages nobody asked for,
+ * multiplied by every page in the portal. A button is one request per deliberate click, it
+ * cannot fire while the panel is closed, and it is reachable from a keyboard.
+ *
+ * AND THE EXTRA PAGES DO NOT GO THROUGH SWR, DELIBERATELY. Page one stays on the useSWR call
+ * below, unchanged, so the layout-mounted request keeps its 30-second dedupe. Further pages
+ * are plain fetches held in local state. useSWRInfinite was the obvious alternative and was
+ * rejected for this mount point: it re-requests EVERY loaded page on each revalidation, so a
+ * person who had clicked "Load more" four times would issue five requests per revalidation
+ * on every page of the portal. That is the multiplication the paragraph above exists to
+ * prevent, arriving by a different door.
  */
 
 type NotificationRow = {
@@ -57,8 +85,14 @@ type NotificationRow = {
 type NotificationsResponse = {
   notifications?: NotificationRow[]
   unreadCount?: number
+  /** Added with the cursor. Absent on any older cached body, which reads as "no more". */
+  hasMore?: boolean
+  nextCursor?: string | null
   error?: string
 }
+
+/** One page, first and subsequent alike. Also the endpoint's cap is 50, so this fits. */
+const PAGE_SIZE = 20
 
 /**
  * WHAT EACH TYPE IS CALLED, AND WHAT HAPPENS TO A TYPE THAT IS NOT LISTED.
@@ -140,7 +174,18 @@ export function NotificationBell({ variant }: { variant: BellVariant }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   // No fetcher argument and no refreshInterval: both come from SWRProvider. See the header.
-  const { data, error, isLoading, mutate } = useSWR<NotificationsResponse>("/api/notifications?limit=20")
+  const { data, error, isLoading, mutate } = useSWR<NotificationsResponse>(`/api/notifications?limit=${PAGE_SIZE}`)
+
+  /**
+   * Every page after the first, plus the cursor for the page after those.
+   *
+   * `null` means nobody has clicked "Load more" yet, which is NOT the same as "there are no
+   * more" - that distinction is what lets `nextCursor` below fall back to page one's cursor
+   * without an effect. A `cursor` of null inside the object means the pager is finished.
+   */
+  const [more, setMore] = useState<{ rows: NotificationRow[]; cursor: string | null } | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -162,8 +207,84 @@ export function NotificationBell({ variant }: { variant: BellVariant }) {
   // The badge must never render off a body this component could not read, or an unreachable
   // endpoint shows up as "0 unread", which is a claim rather than a silence.
   const failed = Boolean(error) || Boolean(data?.error)
-  const rows = failed ? [] : data?.notifications ?? []
+  /**
+   * Page one and every loaded page after it, deduplicated by id - the house IIFE pattern,
+   * and here it is load-bearing rather than defensive. The endpoint pages with `lte` on
+   * `created_at` precisely so that a row sharing the boundary timestamp is never stepped
+   * over, and the price of never skipping is that the boundary row comes back a second time.
+   * This is where that duplicate is dropped.
+   *
+   * It also absorbs the other overlap: page one revalidates on its own schedule, so a row
+   * that was page one's last item can reappear after new rows push it down.
+   */
+  const rows = useMemo(() => {
+    if (failed) return []
+    // Built inside the callback rather than above it: a `failed ? [] : ...` expression at
+    // component scope is a new array reference on every render, so it would defeat the memo
+    // it is a dependency of.
+    const firstPage = data?.notifications ?? []
+    const seen = new Set<string>()
+    return [...firstPage, ...(more?.rows ?? [])].filter((n) => {
+      if (!n?.id || seen.has(n.id)) return false
+      seen.add(n.id)
+      return true
+    })
+  }, [failed, data?.notifications, more])
+
+  /**
+   * THE BADGE IS THE SERVER'S FULL UNREAD COUNT AND IS NOT DERIVED FROM `rows`.
+   *
+   * `unreadCount` counts every unread row addressed to this user; `rows` holds the pages
+   * that have been loaded. Counting the loaded rows instead would make the badge shrink to
+   * fit the page, which is a smaller number and a wrong one. The two are allowed to
+   * disagree and that disagreement is correct - see docs/bell-pagination-report.md.
+   */
   const unread = failed ? 0 : data?.unreadCount ?? 0
+
+  // No effect and no state sync: before anyone clicks, the cursor is page one's; after,
+  // it is whatever the last loaded page returned. A revalidated page one therefore cannot
+  // rewind a pager that is already running.
+  const nextCursor = failed ? null : more ? more.cursor : data?.nextCursor ?? null
+  const canLoadMore = Boolean(nextCursor) && !failed
+
+  const loadMore = async () => {
+    if (loadingMore || !nextCursor) return
+    setLoadingMore(true)
+    setLoadMoreFailed(false)
+    try {
+      const res = await fetch(
+        `/api/notifications?limit=${PAGE_SIZE}&cursor=${encodeURIComponent(nextCursor)}`,
+        { credentials: "same-origin" }
+      )
+      if (!res.ok) {
+        setLoadMoreFailed(true)
+        return
+      }
+      const body = (await res.json()) as NotificationsResponse
+      if (body.error) {
+        setLoadMoreFailed(true)
+        return
+      }
+      const known = new Set(rows.map((n) => n.id))
+      const fresh = (body.notifications ?? []).filter((n) => n?.id && !known.has(n.id))
+      setMore((prev) => ({
+        rows: [...(prev?.rows ?? []), ...fresh],
+        /**
+         * STOP WHEN A PAGE ADDS NOTHING NEW, whatever `hasMore` says. `hasMore` is
+         * `rows.length === limit` server-side, so it stays true for a page made entirely of
+         * boundary duplicates. Without this the button would sit there loading the same
+         * rows for ever. It costs the tail only in one shape - more than PAGE_SIZE rows
+         * carrying an identical `created_at` for one person - and stopping is the right
+         * failure for that: the alternative is a button that never finishes.
+         */
+        cursor: fresh.length > 0 ? body.nextCursor ?? null : null,
+      }))
+    } catch {
+      setLoadMoreFailed(true)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const markAllRead = async () => {
     if (marking || unread === 0) return
@@ -177,7 +298,14 @@ export function NotificationBell({ variant }: { variant: BellVariant }) {
         credentials: "same-origin",
         body: JSON.stringify({ markAllRead: true }),
       })
-      if (res.ok) await mutate()
+      if (res.ok) {
+        // The PATCH marked EVERY unread row for this user, not just page one's - so the
+        // loaded pages below page one really are read now, and saying so locally is
+        // accurate rather than optimistic. Leaving them alone would show a panel where the
+        // top twenty lose their unread dot and everything under it keeps one.
+        setMore((prev) => (prev ? { ...prev, rows: prev.rows.map((n) => ({ ...n, read: true })) } : prev))
+        await mutate()
+      }
     } catch {
       // Leave the badge as it is. A count that silently zeroes itself on a failed write is
       // worse than one that stays up: the second is wrong for thirty seconds, the first
@@ -380,6 +508,35 @@ export function NotificationBell({ variant }: { variant: BellVariant }) {
                 ))}
               </ul>
             )}
+
+            {/* Below the list and inside the same scroll box, so it sits at the end of the
+                loaded rows rather than pinned over them. Hidden entirely once the feed is
+                exhausted - a permanently disabled control reads as broken. */}
+            {!failed && rows.length > 0 && canLoadMore ? (
+              <div className={cn("px-4 py-3 border-t", isAgency ? "border-border" : "border-black/10")}>
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className={cn(
+                    "w-full font-mono text-2xs uppercase tracking-wider py-1.5 rounded-lg transition-colors disabled:opacity-50",
+                    isAgency
+                      ? "text-foreground-muted hover:text-accent hover:bg-white/5"
+                      : "text-black/50 hover:text-[#0C3535] hover:bg-black/[0.03]"
+                  )}
+                >
+                  {loadingMore ? "Loading..." : "Load more"}
+                </button>
+                {/* Says which request failed. A failed "Load more" must never be mistaken
+                    for the end of the list, which is what a silently vanishing button
+                    would look like. */}
+                {loadMoreFailed ? (
+                  <p className={cn("text-xs mt-2", isAgency ? "text-foreground-muted" : "text-black/60")}>
+                    Older notifications could not be loaded. Try again.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       )}
