@@ -224,12 +224,42 @@ export function NotificationBell({ variant }: { variant: BellVariant }) {
       {open && (
         <div
           className={cn(
-            // z-30, above this layout's own chrome (both portals pin theirs at z-20) and
-            // below every modal layer. A dropdown that covers a dialog is the defect this
-            // week's other fix exists to remove.
+            /**
+             * z-30: above this layout's own chrome (both portals pin theirs at z-20) and
+             * BELOW every modal layer - 60 UpgradeRequiredModal, 100 toast, 550
+             * alert-dialog. A dropdown must lose to all three. If it beat the upgrade modal
+             * it would hide a refusal raised while the bell is open, which is exactly the
+             * defect fixed in 9f65595.
+             *
+             * The agency sidebar is `fixed ... z-20` and <main> is `relative z-10`
+             * (agency-layout.tsx:497 and :838), so the aside's whole subtree already paints
+             * above the page. Layering was never the problem here.
+             */
             "absolute z-30 mt-2 w-[340px] max-w-[calc(100vw-2rem)] rounded-xl border shadow-xl overflow-hidden",
+            /**
+             * bg-popover AND NOT bg-card, BECAUSE --card IS 7% OPAQUE.
+             *
+             * globals.css:12 defines `--card: rgba(255, 255, 255, 0.07)`. On the agency side
+             * this panel was `bg-card`, so the dashboard's attention rows and metric cards
+             * showed straight through it. The vendor branch below was never affected: it is
+             * `bg-white`, a flat opaque literal, which is why the same component rendered
+             * correctly in one portal and illegibly in the other.
+             *
+             * WHY bg-card LOOKED CORRECT WHEN IT WAS WRITTEN. CLAUDE.md prescribes
+             * `bg-card border border-border rounded-xl` for agency surfaces - and that rule
+             * is written for MODALS, every one of which sits on a `bg-black/80
+             * backdrop-blur-sm` overlay. 7% white over an 80% black overlay reads as solid.
+             * A DROPDOWN HAS NO OVERLAY, so the same class is simply see-through. The token
+             * is fine; the assumption baked into the convention is that something else is
+             * darkening what is behind you.
+             *
+             * NOT A NEW CHOICE. components/help-term.tsx:118-124 hit this exact bug and
+             * fixed it the same way, and says so: "bg-card was the bug: --card is only 7%
+             * opaque, effectively see-through." --popover is rgba(4, 20, 20, 0.95), and it
+             * is what every Radix dropdown and popover in this codebase already uses.
+             */
             isAgency
-              ? "left-0 top-full bg-card border-border"
+              ? "left-0 top-full bg-popover border-border"
               : "right-0 top-full bg-white border-black/10"
           )}
         >
