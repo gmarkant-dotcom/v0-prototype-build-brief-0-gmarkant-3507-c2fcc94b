@@ -47,16 +47,26 @@
  * touch. See docs/dashboard-guard-and-panel-report.md for the list.
  *
  * ---------------------------------------------------------------------------
- * THIS IS NOW BYTE-EQUIVALENT TO THE OTHER FETCHER, AND THE TWO ARE STILL SEPARATE.
+ * THIS IS NOW THE ONLY FETCHER. components/swr-provider.tsx IMPORTS IT.
  *
- * components/swr-provider.tsx carries its own inline `fetcher` in SWRConfig, and it has
- * always had the res.ok check this file was missing. Two fetchers, two behaviours, one
- * codebase - which is why the same failure produced a crash on one screen and a false empty
- * state on another depending only on which hook the author happened to reach for.
+ * That provider used to carry its own inline copy in SWRConfig, and that copy had always
+ * had the res.ok check this file was missing. Two fetchers, two behaviours, one codebase -
+ * which is why the same failure produced a crash on one screen and a false empty state on
+ * another depending only on which hook the author happened to reach for.
  *
- * After this change they behave identically, which is the precondition for collapsing them
- * into one. THEY ARE DELIBERATELY NOT COLLAPSED HERE - that is a separate change touching
- * every SWR call site in the app, and it is reported rather than taken.
+ * Before collapsing them the two were re-read in full and diffed property by property, in a
+ * later session than the one that wrote the res.ok fix, because "identical" asserted by the
+ * author an hour after writing is not verification. THE DIFF WAS EMPTY: same res.ok test,
+ * same `new Error("HTTP " + status)` with no status or body attached to it, no headers on
+ * either, no explicit credentials on either (so both take fetch's `same-origin` default),
+ * and both call res.json() unconditionally on an ok response - so both reject identically on
+ * a 204 or an empty body. All ten consumers were then enumerated one by one; every one of
+ * them uses `error` as a boolean and not one reads a property off it, so the Error's shape
+ * is not depended on anywhere.
+ *
+ * THE ONE THING THE COLLAPSE CHANGES is function identity: the inline copy was rebuilt on
+ * every SWRProvider render, this one is a module constant. SWR does not key on the fetcher,
+ * only on the URL, so nothing re-fetches and no cache entry moves.
  *
  * RETRIES. Throwing puts these requests under SWRConfig's `errorRetryCount: 2`, so a failed
  * load is attempted three times in total before `error` settles. That was already true of
