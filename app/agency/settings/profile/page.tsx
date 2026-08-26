@@ -515,7 +515,15 @@ export default function AgencyProfileSettingsPage() {
                   }
                   setPrimaryDiscipline(e.target.value)
                 }}
-                className="w-full h-10 px-3 rounded-md border border-border bg-white/5 text-sm text-foreground"
+                /* bg-background AND NOT bg-white/5. Chromium derives the popup surface from
+                   the control's own background-color, and bg-white/5 is translucent, so it
+                   composites over the browser's WHITE popup surface and comes out white -
+                   under text-foreground (#FFFFFF), an unreadable list. No `color-scheme: dark`
+                   exists anywhere in this repository, so nothing makes that surface dark.
+                   --background is #0C3535, flat and opaque. macOS routes the popup through a
+                   native AppKit menu and discards both values, so on macOS the only change is
+                   the closed control, marginally darker. Same fix as e3ae7d3, one level up. */
+                className="w-full h-10 px-3 rounded-md border border-border bg-background text-sm text-foreground"
               >
                 {allDisciplines.map((d) => (
                   <option key={d} value={d}>
@@ -598,7 +606,8 @@ export default function AgencyProfileSettingsPage() {
             <select
               value={form.payment_terms}
               onChange={(e) => setForm((p) => ({ ...p, payment_terms: e.target.value }))}
-              className="w-full h-10 px-3 rounded-md border border-border bg-white/5 text-sm text-foreground"
+              /* bg-background, for the popup. Same reason as the discipline select above. */
+              className="w-full h-10 px-3 rounded-md border border-border bg-background text-sm text-foreground"
             >
               <option value="net_15">Net 15</option>
               <option value="net_30">Net 30</option>

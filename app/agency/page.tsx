@@ -1613,10 +1613,24 @@ function AgencyRFPContent() {
                         </div>
                         {src === "step00" && briefSource === "step00" && (
                           <div className="mt-2">
+                            {/* bg-background AND NOT bg-white/5, FOR THE POPUP, NOT THE CONTROL.
+                                e3ae7d3 fixed this one level down, on a native <option>. This is
+                                the same defect on the <select> itself: Chromium DERIVES THE POPUP
+                                SURFACE FROM THE CONTROL'S OWN background-color, and bg-white/5 is
+                                rgba(255,255,255,0.05) - translucent, so it composites over the
+                                browser's own popup surface, which is WHITE, giving white. With
+                                text-foreground (#FFFFFF) on top, the open list is white on white.
+                                Nothing on this page saves it: there is no `color-scheme: dark`
+                                anywhere in the repository, so native surfaces stay light.
+                                --background is #0C3535, a flat opaque hex, so the popup is legible
+                                where the styling is honoured. macOS Chrome and Safari route the
+                                popup through a native AppKit menu and discard both values, which
+                                is why this has never been seen here - and why the only thing that
+                                changes on macOS is the CLOSED control, very slightly darker. */}
                             <select
                               value={selectedInterpretationId ?? ""}
                               onChange={(e) => setSelectedInterpretationId(e.target.value || null)}
-                              className="w-full rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/50"
+                              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:border-accent/50"
                             >
                               <option value="">Select an interpretation...</option>
                               {interpretations.map((interp) => (

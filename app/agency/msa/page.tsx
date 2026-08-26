@@ -1145,8 +1145,20 @@ export function AgencyCashFlowContent({ hideProjectHeader = false }: { hideProje
                                 }))
                               }
                             />
+                            {/* bg-background AND NOT bg-white/5, FOR THE POPUP, NOT THE CONTROL.
+                                Chromium derives the popup surface from the control's own
+                                background-color. bg-white/5 is rgba(255,255,255,0.05), so it
+                                composites over the browser's own WHITE popup surface and reads
+                                as white, with text-foreground (#FFFFFF) on top of it. There is
+                                no `color-scheme: dark` anywhere in this repository, so nothing
+                                turns that surface dark. --background is #0C3535, flat and
+                                opaque. macOS routes the popup through a native AppKit menu and
+                                discards both values, so the only macOS-visible change is the
+                                closed control, slightly darker - and note it now sits darker
+                                than the sibling <input> controls in this same row, which keep
+                                bg-white/5. Same defect as e3ae7d3, one level up. */}
                             <select
-                              className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
+                              className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                               value={cf.status}
                               onChange={(e) =>
                                 setNewCashFlow((prev) => ({
@@ -1248,8 +1260,10 @@ export function AgencyCashFlowContent({ hideProjectHeader = false }: { hideProje
                                               />
                                             </td>
                                             <td className="py-2 px-3">
+                                              {/* bg-background, for the popup. Same reason as
+                                                  the cash flow status select above. */}
                                               <select
-                                                className="w-full rounded-lg border border-border bg-white/5 px-2 py-1.5 text-sm text-foreground"
+                                                className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
                                                 value={editingCashFlowDraft.status}
                                                 onChange={(e) =>
                                                   setEditingCashFlowDraft((prev) =>
@@ -1747,8 +1761,12 @@ export function AgencyCashFlowContent({ hideProjectHeader = false }: { hideProje
                                   }))
                                 }
                               />
+                              {/* bg-background, for the popup. Same reason as the cash flow
+                                  status select above. This one has the longest option list of
+                                  the three - one row per awarded scope - so it is the one an
+                                  unreadable popup costs most. */}
                               <select
-                                className="rounded-lg border border-border bg-white/5 px-3 py-2 text-sm text-foreground"
+                                className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                                 value={f.response_id}
                                 onChange={(e) =>
                                   setNewMilestone((prev) => ({
