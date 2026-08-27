@@ -118,6 +118,8 @@ type DashboardActiveProject = {
   name: string
   client: string
   agencyName: string
+  /** Live by end_date (lib/project-liveness), as tagged by /api/partner/projects. */
+  isActive: boolean
 }
 
 type ProfileChecklist = {
@@ -263,7 +265,13 @@ export default function PartnerDashboardPage() {
   useEffect(() => {
     if (isDemo) {
       setFetchedActiveProjects([
-        { id: "demo-project-nwsl", name: "NWSL Creator Content Series", client: "NWSL", agencyName: "Electric Animal" },
+        {
+          id: "demo-project-nwsl",
+          name: "NWSL Creator Content Series",
+          client: "NWSL",
+          agencyName: "Electric Animal",
+          isActive: true,
+        },
       ])
       setActiveProjectsLoading(false)
       return
@@ -293,6 +301,9 @@ export default function PartnerDashboardPage() {
               name: nameRaw || "Project",
               client: clientRaw || "Client TBD",
               agencyName: agencyRaw || "Lead agency",
+              // Absent is_active means an older payload, not a finished project: default
+              // live so a deploy skew cannot silently zero a vendor's tile.
+              isActive: p.is_active !== false,
             })
           }
           setFetchedActiveProjects(mapped)
@@ -472,6 +483,15 @@ export default function PartnerDashboardPage() {
     if (b.shortlisted > 0) bidsBreakdownParts.push(`${b.shortlisted} shortlisted`)
     if (b.meeting_requested > 0) bidsBreakdownParts.push(`${b.meeting_requested} meeting requested`)
   }
+
+  // The tile and the list below it both count LIVE projects; `fetchedActiveProjects`
+  // stays the full awarded set because `showEmptyState` asks a different question -
+  // "has this vendor anything at all" - and a vendor whose only projects have finished
+  // must not be shown the welcome screen.
+  const liveProjects = useMemo(
+    () => fetchedActiveProjects.filter((p) => p.isActive),
+    [fetchedActiveProjects]
+  )
 
   const showEmptyState =
     !isDemo &&
@@ -702,9 +722,9 @@ export default function PartnerDashboardPage() {
             </Link>
             <Link href="/partner/projects" className="bg-vendor-surface rounded-xl border border-vendor-border p-5 text-center hover:border-vendor-foreground/30 transition-colors">
               <div className="font-display font-bold text-3xl text-vendor-foreground">
-                {activeProjectsLoading ? "-" : fetchedActiveProjects.length}
+                {activeProjectsLoading ? "-" : liveProjects.length}
               </div>
-              <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mt-1">Active Engagements</div>
+              <div className="font-mono text-2xs text-vendor-muted uppercase tracking-wider mt-1">Active Projects</div>
             </Link>
           </div>
         )}
@@ -974,11 +994,11 @@ export default function PartnerDashboardPage() {
           </div>
           {activeProjectsLoading && !isDemo ? (
             <SectionSkeleton className="h-16" />
-          ) : fetchedActiveProjects.length === 0 ? (
+          ) : liveProjects.length === 0 ? (
             <p className="text-sm text-vendor-muted py-2">No active projects yet.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {fetchedActiveProjects.map((project) => (
+              {liveProjects.map((project) => (
                 <Link
                   key={project.id}
                   href={`/partner/projects/${encodeURIComponent(project.id)}`}

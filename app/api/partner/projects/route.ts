@@ -4,6 +4,7 @@ import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { claimAwardedGhostPartnershipsByEmail } from "@/lib/partnership-award-claim"
+import { projectActiveByEndDate } from "@/lib/project-liveness"
 
 export const dynamic = "force-dynamic"
 
@@ -209,6 +210,15 @@ export async function GET() {
       budget_proposal: string | null
       scope_item_name: string | null
       awarded_at: string | null
+      /**
+       * Liveness by end_date only (lib/project-liveness). The row set is NOT filtered on
+       * it: "which projects does this vendor have" is one question with one answer, and
+       * /partner/projects and /partner/payments are entitled to every row - filtering here
+       * would hide an unpaid milestone on a project that ended last month. Consumers that
+       * count LIVE work filter on this flag; the vendor dashboard tile is the only one
+       * that does today.
+       */
+      is_active: boolean
     }
 
     const projects: Out[] = []
@@ -244,6 +254,7 @@ export async function GET() {
         budget_proposal: (r.budget_proposal as string | null) ?? null,
         scope_item_name: (ib.scope_item_name ?? "").trim() || null,
         awarded_at: asg?.awarded_at ?? null,
+        is_active: projectActiveByEndDate(proj?.end_date ?? null),
       })
     }
 
@@ -273,6 +284,7 @@ export async function GET() {
         budget_proposal: null,
         scope_item_name: project_name,
         awarded_at: (a.awarded_at as string | null) ?? null,
+        is_active: projectActiveByEndDate(proj?.end_date ?? null),
       })
     }
 

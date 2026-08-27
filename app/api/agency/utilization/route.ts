@@ -2,6 +2,7 @@ import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { parseDoubleJson } from "@/lib/active-engagement-parse"
+import { projectActiveByEndDate } from "@/lib/project-liveness"
 
 export const dynamic = "force-dynamic"
 
@@ -27,17 +28,6 @@ function parseClientBudget(raw: unknown): number | null {
   if (!s) return null
   const n = parseFloat(s)
   return Number.isFinite(n) ? n : null
-}
-
-/** Project still "active" for engagement stats: no end_date or end_date is today or later (UTC). */
-function projectActiveByEndDate(endDate: string | null | undefined): boolean {
-  if (endDate == null || String(endDate).trim() === "") return true
-  const d = new Date(endDate)
-  if (!Number.isFinite(d.getTime())) return true
-  const end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
-  const now = new Date()
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  return end >= today
 }
 
 function unwrapInbox(

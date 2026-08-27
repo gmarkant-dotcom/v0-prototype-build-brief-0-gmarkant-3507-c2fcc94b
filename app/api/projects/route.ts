@@ -10,6 +10,7 @@ import {
   type OrgEmbed,
 } from '@/lib/org-contact'
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
+import { projectActiveByEndDate } from '@/lib/project-liveness'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { agencyEntitlementId, hasAgencyEntitlement, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
@@ -36,17 +37,6 @@ function parseClientBudget(raw: unknown): number | null {
   if (!s) return null
   const n = parseFloat(s)
   return Number.isFinite(n) ? n : null
-}
-
-/** Active engagement: project has no end_date or end_date is today or later (UTC date). */
-function projectActiveByEndDate(endDate: string | null | undefined): boolean {
-  if (endDate == null || String(endDate).trim() === '') return true
-  const d = new Date(endDate)
-  if (!Number.isFinite(d.getTime())) return true
-  const end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
-  const now = new Date()
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  return end >= today
 }
 
 function inboxEmbedProjectId(raw: unknown): string | null {
