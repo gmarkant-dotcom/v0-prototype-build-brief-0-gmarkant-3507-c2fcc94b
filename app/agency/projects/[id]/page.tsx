@@ -273,6 +273,19 @@ function ProjectDetailContent() {
           </div>
         </div>
 
+        {/* WHICH CONTROL PERSISTS WHAT. The two pickers below write immediately
+            through their own calls; the Save Changes button at the foot of this card
+            does not carry them. That was implicit while these blocks sat in the
+            middle of the attributes and became easy to misread once they moved
+            adjacent to the button, so it is stated once, HERE - above both pickers,
+            where it is read before somebody reaches for Save rather than after. It
+            deliberately says nothing about handovers or add-only; each picker's own
+            helper line already covers those. */}
+        <p className="text-xs text-foreground-muted">
+          The point person and contributors save on their own; the Save Changes button covers
+          the project details only.
+        </p>
+
         {/* WHO RUNS THIS PROJECT. Placed on the surface where project detail is
             already edited rather than on a screen of its own - one point person per
             project, changeable by any team member (Greg's ruling R1), and the change
