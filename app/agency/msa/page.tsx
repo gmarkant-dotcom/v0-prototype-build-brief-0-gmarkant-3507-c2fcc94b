@@ -1149,14 +1149,15 @@ export function AgencyCashFlowContent({ hideProjectHeader = false }: { hideProje
                                 Chromium derives the popup surface from the control's own
                                 background-color. bg-white/5 is rgba(255,255,255,0.05), so it
                                 composites over the browser's own WHITE popup surface and reads
-                                as white, with text-foreground (#FFFFFF) on top of it. There is
-                                no `color-scheme: dark` anywhere in this repository, so nothing
-                                turns that surface dark. --background is #0C3535, flat and
-                                opaque. macOS routes the popup through a native AppKit menu and
-                                discards both values, so the only macOS-visible change is the
-                                closed control, slightly darker - and note it now sits darker
-                                than the sibling <input> controls in this same row, which keep
-                                bg-white/5. Same defect as e3ae7d3, one level up. */}
+                                as white, with text-foreground (#FFFFFF) on top of it.
+                                --background is #0C3535, flat and opaque. macOS routes the
+                                popup through a native AppKit menu and discards both values, so
+                                the only macOS-visible change from this class was the closed
+                                control, slightly darker - and note it sits darker than the
+                                sibling <input> controls in this same row, which keep
+                                bg-white/5. THE POPUP IS FIXED BY `color-scheme: dark` on :root
+                                (app/globals.css), the one property AppKit honours; this class
+                                still carries the fix off macOS. Same as e3ae7d3. */}
                             <select
                               className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
                               value={cf.status}

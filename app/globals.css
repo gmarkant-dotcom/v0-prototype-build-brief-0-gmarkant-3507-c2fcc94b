@@ -4,6 +4,30 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /**
+   * THE ROOT SURFACE IS DARK, AND NOW THE BROWSER KNOWS IT.
+   *
+   * `body` is `bg-background text-foreground` (the @layer base rule below), and
+   * --background is #0C3535. Every surface that inherits it - the agency portal, the
+   * public marketing pages, the auth pages and the guest RFP respond page - is dark.
+   * Until this declaration existed, NOTHING TOLD THE BROWSER THAT, so every native
+   * control fell back to the light UA rendering: white <select> popups, white date
+   * pickers, white autofill, light scrollbars, all of them on dark teal.
+   *
+   * THAT IS THE ROOT CAUSE OF THE <select> FAMILY that was fixed one control at a time
+   * (e3ae7d3 on an <option>, eb97010 on six controls). Those fixes set the CONTROL's
+   * background-color, which Chromium derives the popup surface from - and which macOS
+   * DISCARDS, because Chrome and Safari route a <select> popup through a native AppKit
+   * menu that ignores CSS colours entirely. `color-scheme` is the one property AppKit
+   * does honour, so this line is what actually fixes the popup on Greg's machine.
+   *
+   * IT IS SET HERE AND OVERRIDDEN IN EXACTLY ONE PLACE: the vendor portal's own root,
+   * components/partner-layout.tsx (PartnerChrome), which paints #FAFAFA and is light.
+   * See the comment there. Do not add a third; if a new surface needs the other value,
+   * scope it to that surface rather than weakening this one.
+   */
+  color-scheme: dark;
+
   /* LIGAMENT Design System */
   --background: #0C3535;
   --background-deep: #081F1F;

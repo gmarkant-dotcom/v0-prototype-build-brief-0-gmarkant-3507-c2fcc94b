@@ -518,11 +518,12 @@ export default function AgencyProfileSettingsPage() {
                 /* bg-background AND NOT bg-white/5. Chromium derives the popup surface from
                    the control's own background-color, and bg-white/5 is translucent, so it
                    composites over the browser's WHITE popup surface and comes out white -
-                   under text-foreground (#FFFFFF), an unreadable list. No `color-scheme: dark`
-                   exists anywhere in this repository, so nothing makes that surface dark.
+                   under text-foreground (#FFFFFF), an unreadable list.
                    --background is #0C3535, flat and opaque. macOS routes the popup through a
-                   native AppKit menu and discards both values, so on macOS the only change is
-                   the closed control, marginally darker. Same fix as e3ae7d3, one level up. */
+                   native AppKit menu and discards both values, so on macOS this class alone
+                   changed only the closed control, marginally darker. THE POPUP IS FIXED BY
+                   `color-scheme: dark` on :root (app/globals.css), the one property AppKit
+                   honours. This class still carries the fix off macOS. Same as e3ae7d3. */
                 className="w-full h-10 px-3 rounded-md border border-border bg-background text-sm text-foreground"
               >
                 {allDisciplines.map((d) => (

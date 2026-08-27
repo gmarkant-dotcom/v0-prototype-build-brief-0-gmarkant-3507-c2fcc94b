@@ -1620,13 +1620,15 @@ function AgencyRFPContent() {
                                 rgba(255,255,255,0.05) - translucent, so it composites over the
                                 browser's own popup surface, which is WHITE, giving white. With
                                 text-foreground (#FFFFFF) on top, the open list is white on white.
-                                Nothing on this page saves it: there is no `color-scheme: dark`
-                                anywhere in the repository, so native surfaces stay light.
                                 --background is #0C3535, a flat opaque hex, so the popup is legible
                                 where the styling is honoured. macOS Chrome and Safari route the
                                 popup through a native AppKit menu and discard both values, which
-                                is why this has never been seen here - and why the only thing that
-                                changes on macOS is the CLOSED control, very slightly darker. */}
+                                is why this was never seen here - and why on macOS this class alone
+                                changed only the CLOSED control, very slightly darker.
+                                THE POPUP ITSELF IS FIXED BY `color-scheme: dark` on :root
+                                (app/globals.css), which is the one property AppKit honours. This
+                                class is still correct and still load-bearing off macOS, where
+                                Chromium derives the popup from the control's own background. */}
                             <select
                               value={selectedInterpretationId ?? ""}
                               onChange={(e) => setSelectedInterpretationId(e.target.value || null)}

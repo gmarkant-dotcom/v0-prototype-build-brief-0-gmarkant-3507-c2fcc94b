@@ -142,7 +142,31 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
+    /**
+     * [color-scheme:light] IS A DEFENCE, NOT A CHANGE. It renders this subtree exactly as
+     * it renders today.
+     *
+     * app/globals.css sets `color-scheme: dark` on :root, because body is #0C3535 and every
+     * other surface in the product inherits it. THE VENDOR PORTAL IS THE ONE EXCEPTION -
+     * this div paints #FAFAFA and --vendor-surface is #FFFFFF - so without this override the
+     * root declaration would reach in here and darken every native control on the vendor
+     * side: the 14 <select> controls across profile, rfps, projects, payments and legal, the
+     * file pickers, the number spinners, the checkboxes, the range slider, the textarea
+     * resize handles, and the browser's form autofill. All of those are correct today
+     * because the browser default is light. This keeps them correct.
+     *
+     * IT COVERS THE WHOLE VENDOR PORTAL, INCLUDING THE DARK HEADER BELOW. That is deliberate
+     * and safe: the header bar is the only dark element here, it contains NO native control
+     * (every item in it is a <button> or an <a> with explicit Tailwind colours), and every
+     * surface that floats out of it is light anyway - the avatar dropdown and the tooltip are
+     * bg-vendor-surface (#FFFFFF) and the notification bell's vendor branch is bg-white.
+     * Scoping to <main> instead would leave those three floating surfaces under the dark root.
+     *
+     * EVERY vendor page reaches this component, via PartnerChrome directly (the RFP detail
+     * and profile pages) or via PartnerLayout (everything else). The three /partner routes
+     * that use neither - bids, invitations, rfps - are redirect stubs with no markup.
+     */
+    <div className="min-h-screen bg-[#FAFAFA] [color-scheme:light]">
       {/* Header */}
       <header className="bg-[#0C3535] text-white sticky top-0 z-20">
         <div className="max-w-7xl mx-auto px-6 py-4">
