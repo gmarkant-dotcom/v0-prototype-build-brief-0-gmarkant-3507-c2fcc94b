@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { CurrencyInput } from "@/components/ui/currency-input"
+import { ProjectLeadPicker } from "@/components/project-lead-picker"
 
 type Project = {
   id: string
@@ -198,6 +199,18 @@ function ProjectDetailContent() {
             placeholder="Client or brand name"
           />
         </div>
+
+        {/* WHO RUNS THIS PROJECT. Placed on the surface where project detail is
+            already edited rather than on a screen of its own - one point person per
+            project, changeable by any team member (Greg's ruling R1), and the change
+            is recorded as a handover rather than an overwrite (R2).
+
+            THIS SECTION CALLS MIGRATION 097, WHICH IS AUTHORED AND NOT YET APPLIED.
+            Until Greg runs it, this renders a red box naming the missing object. That
+            is deliberate and there is no fallback - see the header of
+            components/project-lead-picker.tsx. Nothing else on this page depends on
+            it, so the rest of the form saves normally either way. */}
+        <ProjectLeadPicker projectId={id} />
 
         <div className="space-y-2">
           <Label className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
