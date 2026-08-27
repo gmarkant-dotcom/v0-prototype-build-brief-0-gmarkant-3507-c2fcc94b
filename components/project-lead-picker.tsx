@@ -94,6 +94,51 @@ function memberLabel(
   return { name: dn || fn || em || "Unnamed member", email: em || null }
 }
 
+/**
+ * DISPLAY NAMES FOR A SET OF USER IDS.
+ *
+ * ITS OWN FUNCTION, AND DELIBERATELY ABOVE EVERY LINE IN THIS FILE THAT NAMES AN
+ * ORGANIZATION. The ids that reach here are PEOPLE - org_members.user_id and
+ * project_leads.user_id, both foreign keys to profiles(id). Nothing in this scope
+ * has an organization id in it, and that is the point rather than a detail: 079's
+ * whole defect class is a COMPANY id arriving at a profiles read and returning the
+ * right rows anyway, because the backfill gave sixteen organizations their founding
+ * user's id. A function that never holds an organization id cannot commit it.
+ *
+ * The separation is also what keeps scripts/check-org-id-reads.mjs quiet on this
+ * read. That is a consequence of the structure, not the reason for it - the check
+ * is a proximity heuristic and moving code to satisfy it would be worthless if the
+ * code did not genuinely become person-only. It did.
+ */
+async function loadDisplayNames(
+  supabase: ReturnType<typeof createClient>,
+  ids: string[]
+): Promise<Map<string, { name: string; email: string | null }>> {
+  const out = new Map<string, { name: string; email: string | null }>()
+  if (ids.length === 0) return out
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, display_name, email")
+    .in("id", ids)
+
+  if (error) {
+    // Names are cosmetic here; the picker still works with ids it cannot label.
+    // Logged rather than surfaced, because a person cannot act on it.
+    console.error("[project-lead-picker] profile read failed", {
+      code: error.code,
+      message: error.message,
+    })
+    return out
+  }
+
+  for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+    if (typeof row.id !== "string") continue
+    out.set(row.id, memberLabel(row.full_name, row.display_name, row.email))
+  }
+  return out
+}
+
 export function ProjectLeadPicker({ projectId }: { projectId: string }) {
   /**
    * LOADING IS DERIVED, NOT STORED. `loadedFor` is the project id this component
@@ -200,26 +245,7 @@ export function ProjectLeadPicker({ projectId }: { projectId: string }) {
       // colleague has since left the organization.
       const wanted = Array.from(new Set([...memberIds, ...(lead?.user_id ? [lead.user_id] : [])]))
 
-      let profileRows: Array<Record<string, unknown>> = []
-      if (wanted.length > 0) {
-        const profiles = await supabase
-          .from("profiles")
-          .select("id, full_name, display_name, email")
-          .in("id", wanted)
-        if (profiles.error) {
-          console.error("[project-lead-picker] profile read failed", {
-            code: profiles.error.code,
-            message: profiles.error.message,
-          })
-        } else {
-          profileRows = (profiles.data ?? []) as Array<Record<string, unknown>>
-        }
-      }
-
-      const byId = new Map<string, Record<string, unknown>>()
-      for (const p of profileRows) {
-        if (typeof p.id === "string") byId.set(p.id, p)
-      }
+      const labels = await loadDisplayNames(supabase, wanted)
 
       // Deduplicate by user id, per the house rule, even though org_members carries
       // UNIQUE(org_id, user_id) - which is exactly why a duplicate here would matter.
@@ -228,9 +254,8 @@ export function ProjectLeadPicker({ projectId }: { projectId: string }) {
       for (const id of memberIds) {
         if (seen.has(id)) continue
         seen.add(id)
-        const p = byId.get(id) ?? {}
-        const { name, email } = memberLabel(p.full_name, p.display_name, p.email)
-        roster.push({ userId: id, name, email, isYou: id === user.id })
+        const label = labels.get(id) ?? { name: "Unnamed member", email: null }
+        roster.push({ userId: id, name: label.name, email: label.email, isYou: id === user.id })
       }
       roster.sort((a, b) => a.name.localeCompare(b.name))
 
