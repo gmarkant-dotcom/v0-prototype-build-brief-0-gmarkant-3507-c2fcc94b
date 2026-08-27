@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { AgencyLayout } from "@/components/agency-layout"
 import { GlassCard } from "@/components/glass-card"
+import { PartnershipOwnerPicker } from "@/components/partnership-owner-picker"
 import { VendorPerformanceHistory } from "@/components/vendor-performance-history"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -734,6 +735,40 @@ export default function AgencyPartnerProfilePage() {
             rendering empty shells of sections the caller has not unlocked. */}
         {hasPartnershipTier && profile.partnership && (
           <VendorPerformanceHistory partnerId={partnerId} partnershipId={profile.partnership.id} partnerName={headerTitle} />
+        )}
+
+        {/* WHO OWNS THIS VENDOR RELATIONSHIP. Greg's ruling R1: on a vendor profile,
+            tagging a colleague says they OWN THE RELATIONSHIP, which is a different
+            claim from having worked on a project and is a different table.
+
+            IT TAKES profile.partnership.id, NOT partnerId. The route param is a
+            VENDOR ORGANIZATION id; partnership_owners.partnership_id is a foreign key
+            to partnerships(id). VendorPerformanceHistory above draws the same
+            distinction by taking both separately, and passing the wrong one here
+            would raise 23503 on every insert.
+
+            GATED ON THE PARTNERSHIP TIER for the same reason the two sections above
+            are: below that tier the server sends no partnership object, so there is
+            no relationship to own and no id to write.
+
+            THIS SECTION CALLS MIGRATION 098, WHICH IS AUTHORED AND NOT YET APPLIED.
+            Until Greg runs it this renders a red box naming the missing table. That
+            is deliberate and there is no fallback - see the header of
+            components/partnership-owner-picker.tsx. Nothing else on this page
+            depends on it. */}
+        {hasPartnershipTier && profile.partnership && (
+          <GlassCard className="p-6 md:p-8">
+            <h2 className="font-display font-bold text-lg text-foreground mb-1">
+              Relationship owners
+            </h2>
+            <p className="text-xs text-foreground-muted mb-6">
+              Private to your agency - not visible to the vendor
+            </p>
+            <PartnershipOwnerPicker
+              partnershipId={profile.partnership.id}
+              partnerName={headerTitle}
+            />
+          </GlassCard>
         )}
 
         {/* Agency notes */}
