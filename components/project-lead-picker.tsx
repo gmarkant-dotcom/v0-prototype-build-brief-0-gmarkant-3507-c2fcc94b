@@ -19,6 +19,20 @@
  *
  *   42P01  relation "public.project_leads" does not exist   -> 097 not applied
  *   42883  function public.set_project_lead does not exist  -> 097 not applied
+ *   42703  column project_leads.role does not exist         -> 098 not applied
+ *
+ * ---------------------------------------------------------------------------
+ * 098 CHANGED WHAT "THE OPEN ROW" MEANS, AND THIS FILE HAD TO CHANGE WITH IT.
+ *
+ * Before 098 there was at most one open row per project and it was the point
+ * person. 098 adds contributors to the same table, so the read below now names
+ * `role` explicitly. Without that filter `.maybeSingle()` raises PGRST116 as soon
+ * as any project has a contributor, and the point person would stop rendering on
+ * exactly the projects with the most people on them.
+ *
+ * >>> THIS MAKES THE MIGRATION ORDER STRICTER THAN IT WAS. Deploying this file
+ * >>> before 098 is applied breaks a picker that currently WORKS, with 42703.
+ * >>> APPLY 098 FIRST. See the ORDERING section in the migration header.
  *
  * ---------------------------------------------------------------------------
  * WHY THE WRITE IS ONE RPC AND NOT TWO POSTGREST CALLS.
@@ -65,11 +79,15 @@ import {
 } from "@/components/ui/select"
 import { formatDateTime } from "@/lib/utils"
 
-/** PostgREST codes that mean 097 has not been applied yet. Surfaced, never swallowed. */
+/** PostgREST codes that mean a migration has not been applied yet. Surfaced, never swallowed. */
 const UNDEFINED_TABLE = "42P01"
 const UNDEFINED_FUNCTION = "42883"
+/** 098 adds project_leads.role, which the read below now names. */
+const UNDEFINED_COLUMN = "42703"
 const MISSING_097 =
   "The point person feature needs migration 097, which has not been applied to this database yet."
+const MISSING_098 =
+  "The point person feature needs migration 098, which has not been applied to this database yet."
 
 type Member = {
   userId: string
@@ -196,10 +214,22 @@ export function ProjectLeadPicker({ projectId }: { projectId: string }) {
 
       const [memberResult, leadResult] = await Promise.all([
         supabase.from("org_members").select("user_id").eq("org_id", acting.orgId),
+        // `.eq("role", "lead")` IS LOAD-BEARING AND WAS ADDED BY 098.
+        //
+        // Without it this predicate matches EVERY open row - the lead AND every
+        // contributor - and `.maybeSingle()` then raises PGRST116 "JSON object
+        // requested, multiple rows returned" on the first project that has a
+        // contributor. The point person would stop rendering on exactly the
+        // projects with the most people on them.
+        //
+        // It is the same predicate 098 adds to set_project_lead()'s locating
+        // SELECT, for the same reason: after 098, "the open row" and "the lead"
+        // are no longer the same thing.
         supabase
           .from("project_leads")
           .select("user_id, started_at")
           .eq("project_id", projectId)
+          .eq("role", "lead")
           .is("ended_at", null)
           .maybeSingle(),
       ])
@@ -210,6 +240,16 @@ export function ProjectLeadPicker({ projectId }: { projectId: string }) {
       if (leadResult.error?.code === UNDEFINED_TABLE) {
         console.error("[project-lead-picker] project_leads does not exist - migration 097 is not applied")
         setLoadError(MISSING_097)
+        setLoadedFor(projectId)
+        return
+      }
+      // 098 NOT APPLIED. The read above names `role`, so this arrives in the window
+      // between deploying this code and applying 098. It is a visible, named failure
+      // rather than a fallback that quietly drops the role filter - which would
+      // reintroduce the PGRST116 the filter exists to prevent.
+      if (leadResult.error?.code === UNDEFINED_COLUMN) {
+        console.error("[project-lead-picker] project_leads.role does not exist - migration 098 is not applied")
+        setLoadError(MISSING_098)
         setLoadedFor(projectId)
         return
       }
