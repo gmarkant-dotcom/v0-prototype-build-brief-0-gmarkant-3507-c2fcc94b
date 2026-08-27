@@ -466,13 +466,26 @@ const KNOWN_OPEN_MIRROR = [
     why:
       "resolvePartnershipForAward's agencyId and partnerIdForResolution parameters, ten sites including four writes. app/api/agency/rfp-responses/[id]/route.ts passes user.id as agencyId - an INDIRECT defect.",
   },
-  {
-    file: "lib/entitlements.ts",
-    count: 1,
-    tiers: "SESSION",
-    why:
-      "agencyEntitlementId returns best?.org_id ?? userId. Deliberate and documented for quota accounting, where failing would take the AI surface down. Recorded because it is the one remaining place a user id can reach a caller expecting an organization id. resolveCallerWriteOrgId is the write-path alternative and returns null.",
-  },
+  // lib/entitlements.ts WAS HERE, count 1, and is DELETED because it measured 0.
+  //
+  // The block comment above this array is the authority for removing it: "FEWER is
+  // reported so the count gets lowered rather than left to rot; when a count reaches
+  // zero, delete the entry." It measured 0 at the last three baselines. This is the only
+  // entry touched, and it is trimmed DOWNWARD only - nothing here has ever been raised to
+  // accommodate a new finding.
+  //
+  // WHY IT REACHED ZERO. The recorded shape was `agencyEntitlementId returns
+  // best?.org_id ?? userId`, which the FALLBK matcher catches as `org_id ?? userId`. That
+  // function now delegates to resolveActingOrgId() and reads `resolution.orgId ?? userId`.
+  // The owner/admin/member ranking it used to do is genuinely gone.
+  //
+  // >>> THE FALLBACK ITSELF IS NOT GONE, ONLY ITS SPELLING. agencyEntitlementId() still
+  // >>> returns the caller's USER id when the org resolution refuses. That is deliberate,
+  // >>> it is the documented quota-accounting behaviour, and it is written up at length in
+  // >>> lib/entitlements.ts's own header (see the DELIBERATELY NOT BRANDED paragraph and
+  // >>> the resolveCallerWriteOrgId comparison). This guard matches column NAMES, not
+  // >>> semantics, so it can no longer see it. Deleting the entry loses no record: the
+  // >>> file documents the behaviour more fully than this line ever did.
   {
     file: "lib/magic-token-attach.ts",
     count: 3,
