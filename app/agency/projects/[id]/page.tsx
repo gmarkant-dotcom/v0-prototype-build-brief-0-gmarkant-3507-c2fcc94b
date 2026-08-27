@@ -201,35 +201,6 @@ function ProjectDetailContent() {
           />
         </div>
 
-        {/* WHO RUNS THIS PROJECT. Placed on the surface where project detail is
-            already edited rather than on a screen of its own - one point person per
-            project, changeable by any team member (Greg's ruling R1), and the change
-            is recorded as a handover rather than an overwrite (R2).
-
-            THIS SECTION CALLS MIGRATION 097, WHICH IS AUTHORED AND NOT YET APPLIED.
-            Until Greg runs it, this renders a red box naming the missing object. That
-            is deliberate and there is no fallback - see the header of
-            components/project-lead-picker.tsx. Nothing else on this page depends on
-            it, so the rest of the form saves normally either way. */}
-        <ProjectLeadPicker projectId={id} />
-
-        {/* WHO WORKED ON IT, WHICH IS NOT WHO RUNS IT. Greg's ruling R1: on a
-            project, tagging a colleague says they WORKED ON THAT WORK - a different
-            claim from the point person directly above, and the interface must not
-            blur them.
-
-            KEPT AS ITS OWN SECTION, BELOW rather than merged into the picker above.
-            R2 puts both claims in one table separated only by `role`, so the
-            interface is the only place the distinction is visible to a reader. The
-            point person keeps the Select that hands the role over; contributors are
-            a plain list that only grows.
-
-            THIS SECTION CALLS MIGRATION 098, WHICH IS AUTHORED AND NOT YET APPLIED.
-            Until Greg runs it this renders a red box naming 42703. That is
-            deliberate and there is no fallback - see the header of
-            components/project-contributor-picker.tsx. */}
-        <ProjectContributorPicker projectId={id} />
-
         <div className="space-y-2">
           <Label className="font-mono text-xs uppercase tracking-wider text-foreground-muted">
             Status
@@ -301,6 +272,35 @@ function ProjectDetailContent() {
             />
           </div>
         </div>
+
+        {/* WHO RUNS THIS PROJECT. Placed on the surface where project detail is
+            already edited rather than on a screen of its own - one point person per
+            project, changeable by any team member (Greg's ruling R1), and the change
+            is recorded as a handover rather than an overwrite (R2).
+
+            THIS SECTION CALLS MIGRATION 097, WHICH IS AUTHORED AND NOT YET APPLIED.
+            Until Greg runs it, this renders a red box naming the missing object. That
+            is deliberate and there is no fallback - see the header of
+            components/project-lead-picker.tsx. Nothing else on this page depends on
+            it, so the rest of the form saves normally either way. */}
+        <ProjectLeadPicker projectId={id} />
+
+        {/* WHO WORKED ON IT, WHICH IS NOT WHO RUNS IT. Greg's ruling R1: on a
+            project, tagging a colleague says they WORKED ON THAT WORK - a different
+            claim from the point person directly above, and the interface must not
+            blur them.
+
+            KEPT AS ITS OWN SECTION, BELOW rather than merged into the picker above.
+            R2 puts both claims in one table separated only by `role`, so the
+            interface is the only place the distinction is visible to a reader. The
+            point person keeps the Select that hands the role over; contributors are
+            a plain list that only grows.
+
+            THIS SECTION CALLS MIGRATION 098, WHICH IS AUTHORED AND NOT YET APPLIED.
+            Until Greg runs it this renders a red box naming 42703. That is
+            deliberate and there is no fallback - see the header of
+            components/project-contributor-picker.tsx. */}
+        <ProjectContributorPicker projectId={id} />
 
         {saveError && (
           <div className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
