@@ -43,7 +43,14 @@ import {
 import { HelpTerm } from "@/components/help-term"
 import { partnershipPoolColumn, partnershipStateLabel } from "@/lib/partnership-state"
 import {
+  describeColleagueEvidence,
+  evidenceIsCurrent,
+  sortColleagueEvidence,
+  type ColleagueEvidence,
+} from "@/lib/colleague-connection"
+import {
   anyFilterActive,
+  poolColleagueEmpty,
   POOL_NETWORK_EMPTY,
   POOL_INVITED_EMPTY,
   POOL_DISCOVERED_EMPTY,
@@ -334,6 +341,15 @@ function PartnerPoolPageInner() {
     byPartnership: Record<string, string[]>
   }>({ options: [], byPartnership: {} })
   const [selectedClientKey, setSelectedClientKey] = useState<string>("All")
+  /** M4: one colleague filter, three sources of evidence - see /api/agency/pool/colleague-connections.
+   *  `colleagues` is the whole roster of the ACTING organization, including people with no
+   *  connected vendor yet, so "Chris has worked with nobody" stays distinguishable from "Chris is
+   *  not on this team". `byColleague` is keyed userId -> partnershipId -> why. */
+  const [colleagueConnections, setColleagueConnections] = useState<{
+    colleagues: { userId: string; name: string; email: string | null; isYou: boolean; vendorCount: number }[]
+    byColleague: Record<string, Record<string, ColleagueEvidence[]>>
+  }>({ colleagues: [], byColleague: {} })
+  const [selectedColleagueId, setSelectedColleagueId] = useState<string>("All")
   const [selectedDesignationFilters, setSelectedDesignationFilters] = useState<DesignationKey[]>([])
   const [selectedInsuranceFilters, setSelectedInsuranceFilters] = useState<InsuranceKey[]>([])
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null)
@@ -404,6 +420,34 @@ function PartnerPoolPageInner() {
     }
   ]
 
+  /**
+   * M4. Same failure rule as loadClientHistory: a filter that cannot load is a filter that
+   * does not render. The route logs the reason; there is nothing here a user could act on.
+   *
+   * DECLARED ABOVE THE EFFECT, UNLIKE ITS THREE SIBLINGS, AND THAT IS THE ONLY REASON IT
+   * SITS APART FROM THEM. loadPartnerships, loadAccessRequests and loadClientHistory are all
+   * declared below the effect that calls them and each raises its own
+   * "accessed before it is declared" error under `pnpm lint`. Following them would have made
+   * that count four. The three existing ones are left exactly where they are - moving code
+   * this session did not otherwise touch is not this session's business.
+   */
+  const loadColleagueConnections = async () => {
+    try {
+      const res = await fetch("/api/agency/pool/colleague-connections", {
+        credentials: "same-origin",
+        cache: "no-store",
+      })
+      if (!res.ok) return
+      const data = await res.json().catch(() => ({}))
+      setColleagueConnections({
+        colleagues: data?.colleagues || [],
+        byColleague: data?.byColleague || {},
+      })
+    } catch {
+      // Deliberately silent, exactly as above.
+    }
+  }
+
   useEffect(() => {
     // Only load demo data on demo site
     if (isDemo) {
@@ -416,6 +460,7 @@ function PartnerPoolPageInner() {
       loadPartnerships()
       loadAccessRequests()
       void loadClientHistory()
+      void loadColleagueConnections()
     }
     setIsLoaded(true)
   }, [isDemo])
@@ -1068,6 +1113,27 @@ function PartnerPoolPageInner() {
       .map((p) => ({ mode: "prod" as const, p }))
   }, [isDemo, isLoaded, invitations, partners, partnerships])
 
+  /**
+   * M4: the chosen colleague's vendor map, or null when no colleague is chosen.
+   *
+   * `{}` IS A REAL ANSWER AND MUST NOT COLLAPSE TO NULL. "This colleague is connected to no
+   * vendor yet" is the normal state of a new hire and of an organization that has not set a
+   * point person on anything; turning it into null would silently switch the filter off and
+   * show the whole pool as if it had matched.
+   */
+  const colleagueVendorEvidence = useMemo(() => {
+    if (selectedColleagueId === "All") return null
+    return colleagueConnections.byColleague[selectedColleagueId] ?? {}
+  }, [selectedColleagueId, colleagueConnections])
+
+  const selectedColleague = useMemo(
+    () =>
+      selectedColleagueId === "All"
+        ? null
+        : colleagueConnections.colleagues.find((c) => c.userId === selectedColleagueId) ?? null,
+    [selectedColleagueId, colleagueConnections],
+  )
+
   const filteredNetworkRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return allNetworkRows.filter((row) => {
@@ -1079,6 +1145,14 @@ function PartnerPoolPageInner() {
         if (row.mode !== "prod") return false
         const worked = clientHistory.byPartnership[row.p.id] || []
         if (!worked.includes(selectedClientKey)) return false
+      }
+      // M4: ONE colleague filter. The evidence for WHY goes in the result, not here - see the
+      // "Connected through" lines on each card below. A vendor with no entry under this
+      // colleague is excluded. Demo rows carry no real project_leads or partnership_owners
+      // history, so an active colleague filter excludes them rather than inventing one.
+      if (colleagueVendorEvidence) {
+        if (row.mode !== "prod") return false
+        if (!colleagueVendorEvidence[row.p.id]) return false
       }
       if (row.mode === "demo") {
         const { inv, partner } = row
@@ -1133,6 +1207,7 @@ function PartnerPoolPageInner() {
     allNetworkRows,
     selectedClientKey,
     clientHistory,
+    colleagueVendorEvidence,
     searchQuery,
     selectedType,
     selectedStatus,
@@ -1554,6 +1629,51 @@ function PartnerPoolPageInner() {
               </span>
             </div>
           )}
+
+          {/* M4: "Connected to colleague". EIGHTH row, identical chip markup to the seven above
+              it. ONE row, not three: leading a project, contributing to it and owning the
+              relationship are different EVIDENCE for the same question and they nest, so the
+              distinction lives on each result card instead - see "Connected through" below.
+
+              Renders only when there is more than one person on the team, or when the one
+              person has at least one connected vendor. A solo agency with no award history
+              would otherwise get an eighth control whose only chip is themselves and whose
+              only answer is nothing. */}
+          {(colleagueConnections.colleagues.length > 1 ||
+            colleagueConnections.colleagues.some((c) => c.vendorCount > 0)) && (
+            <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border">
+              <span className="font-mono text-2xs text-foreground-muted mr-2">Connected to colleague:</span>
+              <button
+                onClick={() => setSelectedColleagueId("All")}
+                className={cn(
+                  "font-mono text-2xs px-2 py-1 rounded border transition-colors",
+                  selectedColleagueId === "All"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-foreground/90 hover:border-white/30"
+                )}
+              >
+                All
+              </button>
+              {colleagueConnections.colleagues.map((c) => (
+                <button
+                  key={c.userId}
+                  onClick={() => setSelectedColleagueId(c.userId)}
+                  className={cn(
+                    "font-mono text-2xs px-2 py-1 rounded border transition-colors",
+                    selectedColleagueId === c.userId
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-foreground/90 hover:border-white/30"
+                  )}
+                >
+                  {c.name}
+                  {c.isYou ? " (you)" : ""} ({c.vendorCount})
+                </button>
+              ))}
+              <span className="font-mono text-2xs text-foreground-muted/70 ml-1">
+                Point person, contributor, or relationship owner
+              </span>
+            </div>
+          )}
         </GlassCard>
 
         {(allNetworkRows.length > 0 || partners.length > 0) && (
@@ -1594,16 +1714,22 @@ function PartnerPoolPageInner() {
                      Six controls can, so the predicate is named rather than inlined - see
                      lib/agency-empty-copy.ts for why. */
                   <p className="text-sm text-foreground-muted">
-                    {anyFilterActive(
-                      searchQuery,
-                      selectedClientKey,
-                      selectedType,
-                      selectedStatus,
-                      selectedLegal,
-                      selectedDiscipline
-                    )
-                      ? POOL_NETWORK_EMPTY.filtered
-                      : POOL_NETWORK_EMPTY.empty}
+                    {selectedColleague
+                      ? poolColleagueEmpty(
+                          selectedColleague.name,
+                          selectedColleague.isYou,
+                          selectedColleague.vendorCount
+                        )
+                      : anyFilterActive(
+                            searchQuery,
+                            selectedClientKey,
+                            selectedType,
+                            selectedStatus,
+                            selectedLegal,
+                            selectedDiscipline
+                          )
+                        ? POOL_NETWORK_EMPTY.filtered
+                        : POOL_NETWORK_EMPTY.empty}
                   </p>
                 ) : (
                     filteredNetworkRows.map((row) => {
@@ -1771,6 +1897,41 @@ function PartnerPoolPageInner() {
                               <span className="text-foreground-muted ml-2">MSA open</span>
                             )}
                           </div>
+                          {/* M4: WHY THIS COLLEAGUE IS CONNECTED TO THIS VENDOR.
+                              The evidence lives here, in the RESULT, rather than in the filter
+                              block, because "led it", "contributed to it" and "owns the
+                              relationship" are nested answers to one question, and a reader can
+                              only judge them against a named vendor. A vendor may have several
+                              reasons and every one of them is shown.
+
+                              OWNING AND WORKING READ DIFFERENTLY ON PURPOSE. "Owns the vendor
+                              relationship" shares no wording with "Point person on X" or
+                              "Contributor on X" - somebody can own a relationship having led
+                              nothing in a year, and blurring the two would let an ownership tag
+                              be read as delivery experience.
+
+                              A CLOSED LEAD ROW IS SHOWN, AND MARKED. It carries "until <date>"
+                              from describeColleagueEvidence() and renders muted here. Chris DID
+                              work with that vendor; the history table exists to remember it. It
+                              is neither dropped nor dressed up as current. */}
+                          {colleagueVendorEvidence && selectedColleague && (
+                            <div className="mt-1.5 border-l-2 border-accent/40 pl-2">
+                              <div className="font-mono text-2xs text-foreground-muted">
+                                Connected through {selectedColleague.isYou ? "you" : selectedColleague.name}
+                              </div>
+                              {sortColleagueEvidence(colleagueVendorEvidence[p.id] ?? []).map((ev, i) => (
+                                <div
+                                  key={`${ev.kind}-${ev.kind === "owner" ? "owner" : ev.projectId}-${i}`}
+                                  className={cn(
+                                    "font-mono text-2xs",
+                                    evidenceIsCurrent(ev) ? "text-foreground/90" : "text-foreground-muted/70",
+                                  )}
+                                >
+                                  {describeColleagueEvidence(ev)}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       {/* ITEM 2. Was `flex items-center gap-2 shrink-0`. This card lives in a

@@ -88,6 +88,33 @@ export const POOL_NETWORK_EMPTY = {
     "No vendors are in your network yet. A vendor moves here once they accept an invitation, and you can then send them RFPs directly.",
 } as const
 
+/**
+ * M4: the colleague filter's own empty state.
+ *
+ * SEPARATE FROM `POOL_NETWORK_EMPTY.filtered` BECAUSE IT ANSWERS A DIFFERENT QUESTION.
+ * "No active vendors match your search or filters" points at the controls; when the colleague
+ * filter is the reason the list is empty, the controls are not the problem and nothing about
+ * them will help. What the reader needs to know is that this person has no recorded connection
+ * to any vendor yet, and what would create one.
+ *
+ * THE TWO CASES ARE NOT THE SAME AND ARE NOT MERGED. `vendorCount` is what the API measured
+ * for this colleague BEFORE any other filter ran, so zero means "connected to nobody" and
+ * anything else means "connected to somebody, and your other filters excluded them". Saying
+ * the first when the second is true is how the 086 precedent describes a lie.
+ *
+ * Markant's own organization has two project_leads rows and no partnership_owners rows, so on
+ * live data today the zero case is the one almost every colleague hits.
+ */
+export function poolColleagueEmpty(name: string, isYou: boolean, vendorCount: number): string {
+  const who = isYou ? "you" : name
+  if (vendorCount > 0) {
+    return `No vendors connected to ${who} match your other search or filters.`
+  }
+  return isYou
+    ? "No vendors are connected to you yet. A vendor is connected once you are the point person or a contributor on a project they were awarded, or once you are recorded as owning the relationship."
+    : `No vendors are connected to ${name} yet. A vendor is connected once they are the point person or a contributor on a project that vendor was awarded, or once they are recorded as owning the relationship.`
+}
+
 export const POOL_INVITED_EMPTY = {
   filtered: "No invited contacts match your search.",
   empty:
