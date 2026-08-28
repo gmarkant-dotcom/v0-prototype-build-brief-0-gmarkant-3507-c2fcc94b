@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
+import { projectActiveByEndDate } from "@/lib/project-liveness"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { PartnerLayout } from "@/components/partner-layout"
@@ -42,7 +43,7 @@ type EngagementItem = {
 
 type PagePayload = {
   found: boolean
-  project?: { id: string; title: string }
+  project?: { id: string; title: string; endDate?: string | null }
   leadAgency?: {
     email: string | null
     fullName: string | null
@@ -312,9 +313,30 @@ function PartnerActiveEngagementInner() {
             >
               ← All projects
             </Link>
-            <h1 className="font-display font-bold text-3xl text-vendor-foreground">Active engagements</h1>
+            {/* WAS "Active engagements". The unit was never wrong - every row below is one
+                awarded scope commitment, which is Greg's ruling - but nothing on this page or
+                behind it ever tested whether the project was still running. The route selects
+                the awarded assignment and the awarded response and filters on neither
+                end_date nor status, so a project that finished eighteen months ago rendered
+                under a heading claiming it was active.
+
+                TAGGED, NOT FILTERED, and here the reason is stronger than on the payments
+                page: this IS the project's detail page. Filtering would leave a vendor
+                following a link from their own project list at a page that says the project
+                does not exist. The heading now states the unit, and a finished project says
+                so beside its title. */}
+            <h1 className="font-display font-bold text-3xl text-vendor-foreground">Awarded engagements</h1>
             {pageData?.found && pageData.project && (
-              <p className="text-lg text-vendor-foreground mt-2 font-display font-semibold">{pageData.project.title}</p>
+              <p className="text-lg text-vendor-foreground mt-2 font-display font-semibold flex items-center gap-2 flex-wrap">
+                {pageData.project.title}
+                {!projectActiveByEndDate(pageData.project.endDate) && (
+                  <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-vendor-foreground/10 text-vendor-muted-strong">
+                    {pageData.project.endDate
+                      ? `Ended ${new Date(`${String(pageData.project.endDate).slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`
+                      : "Ended"}
+                  </span>
+                )}
+              </p>
             )}
           </div>
           <LeadAgencyFilter />
@@ -333,8 +355,8 @@ function PartnerActiveEngagementInner() {
 
         {!loading && !error && pageData && !pageData.found && (
           <div className="rounded-xl border border-vendor-border bg-vendor-background p-8 text-center text-vendor-foreground">
-            No active engagement found for this project. You&apos;ll see details here after the lead agency awards your
-            bid.
+            No awarded engagement found for this project. You&apos;ll see details here after the lead agency awards
+            your bid.
           </div>
         )}
 

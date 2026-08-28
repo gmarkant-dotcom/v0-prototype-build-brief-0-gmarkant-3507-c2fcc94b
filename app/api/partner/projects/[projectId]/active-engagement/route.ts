@@ -148,7 +148,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
 
     const { data: project, error: projectErr } = await supabase
       .from("projects")
-      .select("id, name, org_id")
+      // end_date added for the liveness TAG on the page heading. Purely additive: no row is
+      // dropped and no consumer's result set changes. lib/project-liveness holds the rule and
+      // it is applied on the client, next to the label it corrects.
+      .select("id, name, org_id, end_date")
       .eq("id", projectId)
       .maybeSingle()
 
@@ -338,6 +341,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ project
         project: {
           id: project.id,
           title: projectName,
+          endDate: ((project as { end_date?: string | null }).end_date ?? null) as string | null,
         },
         leadAgency: leadAgencyContact
           ? {

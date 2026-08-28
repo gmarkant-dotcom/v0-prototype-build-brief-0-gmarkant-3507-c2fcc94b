@@ -49,12 +49,21 @@ type PartnerEngagement = {
   response_id: string | null
   scope_item_name: string | null
   awarded_at: string | null
+  /**
+   * Liveness by end_date, computed once in /api/partner/projects (lib/project-liveness).
+   * READ HERE, NEVER FILTERED ON. See the "Awarded engagements" heading below for why.
+   */
+  is_active: boolean
+  end_date: string | null
 }
 
 type GroupedProject = {
   project_id: string
   project_name: string
   client_name: string | null
+  /** Every scope in a group belongs to one project, so all of them agree on this. */
+  is_active: boolean
+  end_date: string | null
   scopes: PartnerEngagement[]
 }
 
@@ -97,6 +106,10 @@ const demoEngagements: PartnerEngagement[] = [
     awarded_at: "2026-01-01T12:00:00Z",
     response_id: DEMO_RESPONSE_ID,
     scope_item_name: "Creator content",
+    // The demo project has no end date, which projectActiveByEndDate reads as live. Demo
+    // data shows the ordinary case; the "Ended" tag is exercised on real data.
+    is_active: true,
+    end_date: null,
   },
   {
     project_id: DEMO_PROJECT_ID,
@@ -108,6 +121,8 @@ const demoEngagements: PartnerEngagement[] = [
     awarded_at: "2026-01-01T12:00:00Z",
     response_id: DEMO_RESPONSE_ID_2,
     scope_item_name: "Paid media",
+    is_active: true,
+    end_date: null,
   },
 ]
 
@@ -374,6 +389,12 @@ function PartnerPaymentsPageLegacy() {
             awarded_at: p.awarded_at != null ? String(p.awarded_at) : null,
             response_id: p.response_id != null ? String(p.response_id) : null,
             scope_item_name: scope,
+            // Additive tag from /api/partner/projects. Absent means "assume live" rather
+            // than "assume ended": marking a running project as finished is the worse of
+            // the two mistakes, and it is what projectActiveByEndDate does with a null
+            // end_date anyway.
+            is_active: p.is_active !== false,
+            end_date: p.end_date != null ? String(p.end_date) : null,
           })
         }
         setEngagements(mapped.filter((e) => e.partnership_id && (e.assignment_id || e.response_id)))
@@ -425,11 +446,18 @@ function PartnerPaymentsPageLegacy() {
           project_id: e.project_id,
           project_name: e.project_name,
           client_name: e.client_name,
+          is_active: e.is_active,
+          end_date: e.end_date,
           scopes: [e],
         })
       } else {
         existing.scopes.push(e)
         if (!existing.client_name && e.client_name) existing.client_name = e.client_name
+        // Every scope in a group is on the same project, so these can only agree. Folded
+        // with OR rather than overwritten so a disagreement resolves to "live" - the group
+        // stays open and nothing is hidden either way.
+        existing.is_active = existing.is_active || e.is_active
+        if (!existing.end_date && e.end_date) existing.end_date = e.end_date
       }
     }
     for (const g of map.values()) {
@@ -655,9 +683,21 @@ function PartnerPaymentsPageLegacy() {
           {engagementsError ? <div className="text-sm text-amber-700">{engagementsError}</div> : null}
         </div>
 
-        {/* Middle: Active engagements — grouped by project */}
+        {/* Middle: Awarded engagements - grouped by project.
+            WAS "Active engagements", AND THE LIST UNDERNEATH NEVER WAS. `engagementsForAgency`
+            filters on partnership_id and nothing else, so every project this vendor was ever
+            awarded appears here, finished ones included. The unit was always right - one row
+            per awarded scope commitment, which is Greg's ruling - and only the word "Active"
+            was false.
+
+            >>> THE LIST IS TAGGED, NOT FILTERED, AND THAT IS LOAD-BEARING. Payment milestones
+            render ONLY inside these project groups. Dropping finished projects would make a
+            vendor's overdue milestone on a project that ended last month UNREACHABLE, which
+            is a worse defect than the mislabel. Verified live: April Test ended 2026-08-06
+            and its two overdue milestones are correctly still on screen. Nothing a vendor
+            could see before this change stops being visible after it. */}
         <div className="space-y-4">
-          <h2 className="font-display font-bold text-lg text-vendor-foreground">Active engagements</h2>
+          <h2 className="font-display font-bold text-lg text-vendor-foreground">Awarded engagements</h2>
           {!selectedId ? (
             <p className="text-sm text-vendor-muted">Select a lead agency to see awarded engagements.</p>
           ) : loadingShell ? (
@@ -712,8 +752,24 @@ function PartnerPaymentsPageLegacy() {
                             )}
                           />
                           <div className="flex-1 min-w-0">
-                            <div className="font-display font-bold text-sm text-vendor-foreground truncate">
-                              {group.project_name}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="font-display font-bold text-sm text-vendor-foreground truncate">
+                                {group.project_name}
+                              </div>
+                              {/* The tag that replaces the filter. A finished project keeps
+                                  its group, its scopes and its milestones, and says plainly
+                                  why it is still in a list of awarded work. */}
+                              {!group.is_active && (
+                                <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-vendor-foreground/10 text-vendor-muted-strong shrink-0">
+                                  {/* .slice(0, 10) because formatDueDate appends its own T12:00:00 and
+                                      projects.end_date reaches here as either a bare date or a
+                                      full timestamp. Concatenating onto the second shape yields
+                                      "Invalid Date" silently, with no throw to catch. */}
+                                  {group.end_date
+                                    ? `Ended ${formatDueDate(String(group.end_date).slice(0, 10))}`
+                                    : "Ended"}
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-vendor-muted truncate">
                               {group.client_name || "Client TBD"}
