@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
-import { resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { orgIdFromColumn, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import {
   RFP_CLOSABLE_STATUSES,
   isRfpClosureUnit,
   statusForUnit,
+  type RfpClosureStatus,
   type RfpClosureUnit,
 } from "@/lib/rfp-closure"
+import {
+  buildBrandedEmailHtml,
+  resolveOrgNotificationRecipients,
+  sendTransactionalEmail,
+  siteBaseUrl,
+} from "@/lib/email"
+import { notifyRfpClosed, notifyRfpNotSelected } from "@/lib/notifications"
+import { closureEmailCopy } from "@/lib/rfp-closure-copy"
 
 export const dynamic = "force-dynamic"
 
@@ -254,10 +263,29 @@ export async function POST(req: Request) {
       )
     }
 
+    // ─── PHASE 4. TELL THE VENDOR. EMAIL AND IN-APP, BOTH EVENTS. ──────────
+    //
+    // >>> R7: "A request vanishing silently reads as a bug." Every row this
+    // route just closed is a request a vendor is still expecting to act on.
+    //
+    // FIRE AND FORGET, PER ROW, EACH IN ITS OWN try/catch. The write has already
+    // committed. A notification that fails must never turn a completed closure
+    // into a 500, because the caller would retry, the retry would be a no-op by
+    // idempotency, and the agency would be told their action failed when it did
+    // not. Every failure is logged with enough to find the row again.
+    const notified = await emitClosureNotifications({
+      supabase,
+      rows: affectedRows,
+      status: nextStatus,
+      leadOrgId: writeOrgId,
+      route,
+    })
+
     console.log("[api] success", {
       route, method: "POST", userId: user.id, role: profile.role,
       orgId: writeOrgId, unit, nextStatus,
       subjectStatus: subject.status, closed: affectedRows.length,
+      emailed: notified.emailed, inApp: notified.inApp, unreachable: notified.unreachable,
     })
 
     return NextResponse.json({
@@ -265,6 +293,10 @@ export async function POST(req: Request) {
       unit,
       status: nextStatus,
       closed: affectedRows.length,
+      // Reported so an agency can be told the truth about who was reached,
+      // rather than shown a count of rows and left to assume mail went with it.
+      emailed: notified.emailed,
+      unreachable: notified.unreachable,
       scope_item_name: subject.scope_item_name,
       // The caller uses this to refresh the right SWR key without a full reload.
       inbox_item_ids: affectedRows.map((r) => r.id),
@@ -276,4 +308,181 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ error: "Failed to close the request" }, { status: 500 })
   }
+}
+
+
+type ClosureRow = {
+  id: string
+  vendor_org_id: string | null
+  recipient_email: string | null
+  scope_item_name: string | null
+  project_id: string | null
+}
+
+/**
+ * ONE EMAIL AND ONE IN-APP NOTIFICATION PER CLOSED ROW.
+ *
+ * ---------------------------------------------------------------------------
+ * HOW A RECIPIENT IS RESOLVED, AND WHY THE ORDER IS THIS WAY ROUND
+ *
+ * 1. vendor_org_id set -> resolveOrgNotificationRecipients(). THIS IS THE PATH
+ *    THAT RESPECTS THE PREFERENCE TOGGLE: that helper skips any profile whose
+ *    notification_preferences.email is exactly false (lib/email.ts:449). Reading
+ *    recipient_email directly would bypass it, which is why that is not the
+ *    first branch even though it is the simpler one.
+ *
+ * 2. It returned nobody AND recipient_email is set -> send to recipient_email,
+ *    and LOG THAT THE PREFERENCE COULD NOT BE CHECKED. This is not a loophole,
+ *    it is lib/email.ts:370-372's own standing ruling applied here: "the failure
+ *    direction for a notification system is to send one too many, never to go
+ *    quiet." It matters because org_members has a self-row-only SELECT policy,
+ *    so an AGENCY reading a VENDOR organization's members legitimately gets zero
+ *    rows, and without this branch a closure would go unannounced to exactly the
+ *    vendors it most needs to reach.
+ *
+ * 3. vendor_org_id null -> recipient_email. A manual or magic-link recipient
+ *    with no account has no preference to respect. This is the same population
+ *    broadcast-rfp already emails directly.
+ *
+ * ---------------------------------------------------------------------------
+ * THE IN-APP HALF HAS A LIMIT THAT IS NOT THIS ROUTE'S TO FIX, AND IT IS STATED
+ * RATHER THAN DISCOVERED.
+ *
+ * The notifications INSERT policy's counterparty arm is
+ * current_user_commercial_counterparty_user_ids(), which requires a
+ * `partnerships` row between the two organizations at status pending, active or
+ * suspended (096:302-327). A vendor reached as a manual recipient or a magic
+ * link who never became a partnership IS NOT IN THAT SET, so their bell row is
+ * refused by RLS and createOrgNotification returns false.
+ *
+ * >>> THEY GET THE EMAIL AND NO BELL. That is a pre-existing boundary, widening
+ * it is a separate decision on a different predicate, and this function counts
+ * the two channels separately so the gap is measurable instead of assumed.
+ */
+async function emitClosureNotifications({
+  supabase,
+  rows,
+  status,
+  leadOrgId,
+  route,
+}: {
+  supabase: Awaited<ReturnType<typeof import("@/lib/supabase/server").createClient>>
+  rows: ClosureRow[]
+  status: RfpClosureStatus
+  leadOrgId: string
+  route: string
+}): Promise<{ emailed: number; inApp: number; unreachable: number }> {
+  let emailed = 0
+  let inApp = 0
+  let unreachable = 0
+
+  if (rows.length === 0) return { emailed, inApp, unreachable }
+
+  // The agency's own display name, read once for the whole batch. Falls back to
+  // a neutral noun rather than an empty string: "  has closed the RFP" is worse
+  // than "The lead agency has closed the RFP".
+  let agencyName = "The lead agency"
+  try {
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", leadOrgId)
+      .maybeSingle<{ name: string | null }>()
+    if (org?.name && org.name.trim()) agencyName = org.name.trim()
+  } catch (nameErr) {
+    console.warn("[api] rfp-closure: could not read the acting organization's name", {
+      route, leadOrgId, message: nameErr instanceof Error ? nameErr.message : String(nameErr),
+    })
+  }
+
+  const baseUrl = siteBaseUrl()
+
+  for (const row of rows) {
+    const scopeItemName = (row.scope_item_name || "").trim() || "a scope item"
+    const copy = closureEmailCopy(status, { agencyName, scopeItemName })
+
+    // ── IN-APP ────────────────────────────────────────────────────────────
+    if (row.vendor_org_id) {
+      try {
+        const ok =
+          status === "closed"
+            ? await notifyRfpClosed(supabase, row.vendor_org_id, scopeItemName, agencyName)
+            : await notifyRfpNotSelected(supabase, row.vendor_org_id, scopeItemName, agencyName)
+        if (ok) inApp += 1
+      } catch (notifyErr) {
+        console.error("[api] rfp-closure: in-app notification threw", {
+          route, inboxItemId: row.id, vendorOrgId: row.vendor_org_id, status,
+          message: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+        })
+      }
+    }
+
+    // ── EMAIL ─────────────────────────────────────────────────────────────
+    // {email, name} pairs rather than bare addresses: buildBrandedEmailHtml
+    // requires a recipientName, and a greeting that says "Hi ," is worse than
+    // one that says "Hi there".
+    let addresses: { email: string; name: string }[] = []
+    let preferenceChecked = true
+    const vendorOrgId = orgIdFromColumn(row.vendor_org_id)
+    if (vendorOrgId) {
+      try {
+        const recipients = await resolveOrgNotificationRecipients(vendorOrgId, supabase)
+        addresses = recipients.map((r) => ({
+          email: r.email,
+          name: (r.full_name || r.company_name || "").trim() || "there",
+        }))
+      } catch (lookupErr) {
+        console.error("[api] rfp-closure: recipient lookup threw", {
+          route, inboxItemId: row.id, vendorOrgId: row.vendor_org_id,
+          message: lookupErr instanceof Error ? lookupErr.message : String(lookupErr),
+        })
+      }
+    }
+    if (addresses.length === 0 && row.recipient_email && row.recipient_email.trim()) {
+      addresses = [{ email: row.recipient_email.trim(), name: "there" }]
+      preferenceChecked = !vendorOrgId
+      if (!preferenceChecked) {
+        console.warn(
+          "[api] rfp-closure: falling back to recipient_email because the vendor organization " +
+            "resolved no recipients. The notification_preferences opt-out could NOT be checked " +
+            "for this send. See lib/email.ts:370-372 for why sending anyway is the ruling.",
+          { route, inboxItemId: row.id, vendorOrgId: row.vendor_org_id }
+        )
+      }
+    }
+
+    if (addresses.length === 0) {
+      unreachable += 1
+      console.error(
+        "[api] rfp-closure: the request was closed and NOBODY COULD BE TOLD. No resolvable " +
+          "recipient on the vendor organization and no recipient_email on the row.",
+        { route, inboxItemId: row.id, vendorOrgId: row.vendor_org_id, status }
+      )
+      continue
+    }
+
+    for (const to of addresses) {
+      try {
+        await sendTransactionalEmail({
+          to: to.email,
+          subject: copy.subject,
+          html: buildBrandedEmailHtml({
+            title: copy.title,
+            recipientName: to.name,
+            body: copy.body,
+            ctaText: "View your requests",
+            ctaUrl: `${baseUrl}/partner/rfps`,
+          }),
+        })
+        emailed += 1
+      } catch (emailErr) {
+        console.error("[api] rfp-closure: Resend send failed", {
+          route, inboxItemId: row.id, to: to.email, status,
+          message: emailErr instanceof Error ? emailErr.message : String(emailErr),
+        })
+      }
+    }
+  }
+
+  return { emailed, inApp, unreachable }
 }

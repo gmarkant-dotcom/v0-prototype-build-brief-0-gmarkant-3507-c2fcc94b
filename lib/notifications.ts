@@ -274,6 +274,19 @@ export type NotificationType =
   | 'project_awarded'
   | 'onboarding_deployed'
   | 'bid_submitted'
+  // R7, migration 099. TWO TYPES AND NOT ONE WITH A FLAG, because a bell cannot
+  // branch on a payload it does not read, and because these are DIFFERENT
+  // MESSAGES: an RFP that closed for everyone is not a rejection, and a vendor
+  // who was specifically not chosen is not a casualty of a cancelled project.
+  //
+  // NEITHER IS 'bid_declined' and there is no such type: both of these reach a
+  // vendor who NEVER BID. Naming follows 095's convention, <subject>_<outcome>.
+  //
+  // >>> BOTH RAISE 23514 UNTIL MIGRATION 099 IS APPLIED, inside
+  // createOrgNotification, which catches and returns false while the handler
+  // still returns 200. The vendor gets the email and no bell and nobody is told.
+  | 'rfp_closed'
+  | 'rfp_not_selected'
 
 interface CreateNotificationParams {
   supabase: SupabaseClient
@@ -448,5 +461,68 @@ export async function notifyProjectAwarded(
     message: `Congratulations! ${agencyName} has awarded you the project "${projectName}".`,
     link: `/partner/projects/${projectId}`,
     data: { projectId, projectName, agencyName }
+  })
+}
+
+/**
+ * R7. THE OPPORTUNITY ENDED, FOR EVERYONE.
+ *
+ * THE COPY IS THE POINT AND THIS ONE MUST NOT READ AS A REJECTION. A vendor on a
+ * closed RFP was not turned down; the request stopped existing. The message says
+ * so explicitly ("This is not a decision about your company") because a vendor
+ * reading "closed" with no other context will assume it was about them, and a
+ * platform that leaves them to assume that has made their working relationship
+ * worse for no reason.
+ *
+ * It also says the record survives, because the alternative reading of a request
+ * disappearing from a queue is that it was deleted. R7 is explicit that closure
+ * and deletion are different events and the vendor must be able to tell.
+ */
+export async function notifyRfpClosed(
+  supabase: SupabaseClient,
+  vendorOrgId: string,
+  scopeItemName: string,
+  agencyName: string
+) {
+  return createOrgNotification({
+    supabase,
+    orgId: vendorOrgId,
+    site: 'notifyRfpClosed',
+    type: 'rfp_closed',
+    title: 'An RFP you were invited to has closed',
+    message: `${agencyName} has closed the RFP for "${scopeItemName}". It is not taking bids from anyone now, so there is nothing further for you to do on it.`,
+    link: '/partner/rfps',
+    data: { scopeItemName, agencyName },
+  })
+}
+
+/**
+ * R7. THIS VENDOR SPECIFICALLY WAS NOT CHOSEN.
+ *
+ * THE OTHER HALF OF THE PAIR, AND IT MUST NOT READ LIKE THE FIRST ONE. This one
+ * IS about them, and pretending otherwise would be worse than saying it plainly.
+ * What it scopes instead is the BLAST RADIUS: this one request, not the
+ * relationship, and not the other RFPs the same agency will send.
+ *
+ * It does not say "declined", anywhere, in any casing. `declined` in this product
+ * means a vendor who submitted a bid and lost. This vendor did not bid, and
+ * telling them their bid was declined would be telling them about a bid that
+ * does not exist.
+ */
+export async function notifyRfpNotSelected(
+  supabase: SupabaseClient,
+  vendorOrgId: string,
+  scopeItemName: string,
+  agencyName: string
+) {
+  return createOrgNotification({
+    supabase,
+    orgId: vendorOrgId,
+    site: 'notifyRfpNotSelected',
+    type: 'rfp_not_selected',
+    title: 'Update on a request from ' + agencyName,
+    message: `${agencyName} has decided not to move forward with your company on "${scopeItemName}". They are not expecting a response from you on it.`,
+    link: '/partner/rfps',
+    data: { scopeItemName, agencyName },
   })
 }
