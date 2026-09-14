@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { parseBudgetProposal, parseTimelineProposal } from "@/lib/rfp-response-fields"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
+import { isRfpClosureStatus as isClosedInboxStatus } from "@/lib/rfp-closure"
 
 export const dynamic = "force-dynamic"
 
@@ -454,11 +455,28 @@ export async function GET(request: Request) {
           partner_display_name: displayName,
           project_name: (inboxById[i.id as string] as Record<string,unknown>)?.project_name as string | null ?? null,
           client_name: (inboxById[i.id as string] as Record<string,unknown>)?.client_name as string | null ?? null,
-          proposal_text: "Awaiting vendor response.",
+          proposal_text: isClosedInboxStatus(i.status)
+            ? "This request was closed without a bid."
+            : "Awaiting vendor response.",
           budget_proposal: "",
           timeline_proposal: "",
           attachments: [],
-          status: "awaiting_response",
+          /**
+           * 0b-6. THIS USED TO BE THE LITERAL "awaiting_response" AND NEVER READ
+           * i.status AT ALL.
+           *
+           * The synthetic row is how /agency/bids shows a vendor who was sent an
+           * RFP and has not bid. With the status hardcoded, an agency that closed
+           * an RFP would still see that row badged "New" - its own action,
+           * invisible to it, on the only surface where it could take the action.
+           *
+           * Only the two CLOSURE statuses are carried through. Every other inbox
+           * status on a row with no response is still "awaiting_response",
+           * because the agency-side badge vocabulary (lib/bid-shared.ts) is the
+           * RESPONSE vocabulary, and mapping e.g. 'viewed' into it would say
+           * something about a bid that does not exist.
+           */
+          status: isClosedInboxStatus(i.status) ? (i.status as string) : "awaiting_response",
           created_at: i.created_at,
           updated_at: i.updated_at || i.created_at,
           inbox: i,

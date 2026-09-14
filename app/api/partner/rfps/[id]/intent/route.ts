@@ -2,6 +2,7 @@ import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { requirePartnerRole } from "@/lib/api-auth"
+import { RFP_CLOSURE_STATUSES } from "@/lib/rfp-closure"
 
 const ALLOWED_INTENTS = new Set(["will_respond", "has_questions", "requesting_call"])
 
@@ -68,7 +69,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       effectiveStatus = String(existingResponse.status)
     }
 
-    const blockedStatuses = new Set(["bid_submitted", "submitted", "awarded", "declined"])
+    // 0b-10. `closed` and `not_selected` ADDED.
+    //
+    // Without them a vendor could still signal "I will respond" or "I would like
+    // a call" on a request the agency has already closed and already emailed
+    // them about. The agency would see an intent arrive on a dead RFP and the
+    // vendor would be waiting for a reply to a conversation that has ended.
+    //
+    // This is a DENY-list and the closure route's is an ALLOW-list. That is not
+    // an inconsistency: this one gates a vendor action whose default is
+    // permitted, and that one gates a destructive write whose default must be
+    // refused. The safe direction is opposite in the two cases.
+    const blockedStatuses = new Set([
+      "bid_submitted", "submitted", "awarded", "declined",
+      ...RFP_CLOSURE_STATUSES,
+    ])
     if (blockedStatuses.has(effectiveStatus)) {
       return NextResponse.json({ error: "Intent can no longer be updated for this RFP" }, { status: 409 })
     }

@@ -24,6 +24,7 @@ import {
   termsSummaryLine,
 } from "@/lib/bid-shared"
 import { compositeScoreColorClass } from "@/lib/bid-scoring"
+import type { RfpClosureUnit } from "@/lib/rfp-closure"
 import { HelpTerm } from "@/components/help-term"
 import { AiMarkdown } from "@/components/ai-markdown"
 import {
@@ -135,7 +136,7 @@ function BidSummaryStrip({
 // ── Bid card ─────────────────────────────────────────────────────────────────
 
 function BidCard({
-  row, groupBy, onView, selected, onToggleSelect, rank,
+  row, groupBy, onView, selected, onToggleSelect, rank, onRequestClosure,
 }: {
   row: BidRow
   groupBy: "client" | "partner"
@@ -143,6 +144,7 @@ function BidCard({
   selected: boolean
   onToggleSelect: (id: string) => void
   rank?: number | null
+  onRequestClosure: (row: BidRow, unit: RfpClosureUnit) => void
 }) {
   const [summaryGenerating, setSummaryGenerating] = useState(false)
   const [summaryError, setSummaryError] = useState<string | null>(null)
@@ -154,6 +156,19 @@ function BidCard({
   const budget = bestBudgetDisplay(row)
   const submittedAt = formatSubmittedAt(row.submitted_at)
   const canSelect = row.response_exists && Boolean(row.response_id)
+  /**
+   * R7. WHICH ROWS OFFER A CLOSURE ACTION.
+   *
+   * Only a row with NO BID that is not already closed. `awaiting_response` is
+   * the synthetic status /api/agency/rfp-responses mints for an inbox row with
+   * no partner_rfp_responses row, so this is exactly "a vendor we asked who has
+   * not answered" - which is exactly what a closure ends.
+   *
+   * A row carrying a bid never offers it. A submitted bid is not an unanswered
+   * request; the agency decides those with award/decline on the bid itself, and
+   * the route would refuse them anyway (RFP_CLOSABLE_STATUSES).
+   */
+  const canClose = !row.response_exists && row.status === "awaiting_response" && Boolean(row.inbox_item_id)
 
   const generateSummary = async () => {
     if (!guardAction("ai_analyses")) return
@@ -281,7 +296,7 @@ function BidCard({
         >
           View <ChevronRight className="w-3 h-3" />
         </button>
-        {row.response_exists && row.ai_summary_short && (
+        {((row.response_exists && row.ai_summary_short) || canClose) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -293,13 +308,37 @@ function BidCard({
                 <MoreVertical className="w-3.5 h-3.5" />
               </button>
             </DropdownMenuTrigger>
+            {/* bg-popover, not bg-card. This floats over page content with no
+                overlay beneath it, and --card is 7% opaque. See CLAUDE.md. The
+                Radix default here is already bg-background, which is opaque. */}
             <DropdownMenuContent align="end" className="bg-background border-border">
-              <DropdownMenuItem
-                onClick={() => void generateSummary()}
-                className="text-foreground focus:bg-white/5 focus:text-foreground"
-              >
-                Regenerate Summary
-              </DropdownMenuItem>
+              {row.response_exists && row.ai_summary_short && (
+                <DropdownMenuItem
+                  onClick={() => void generateSummary()}
+                  className="text-foreground focus:bg-white/5 focus:text-foreground"
+                >
+                  Regenerate Summary
+                </DropdownMenuItem>
+              )}
+              {canClose && (
+                <>
+                  {/* THE VENDOR UNIT FIRST. It is the narrower of the two and the
+                      one an agency reaches for more often: you are looking at one
+                      vendor's row when you decide they are not the one. */}
+                  <DropdownMenuItem
+                    onClick={() => onRequestClosure(row, "vendor")}
+                    className="text-foreground focus:bg-white/5 focus:text-foreground"
+                  >
+                    Mark not selected
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onRequestClosure(row, "rfp")}
+                    className="text-foreground focus:bg-white/5 focus:text-foreground"
+                  >
+                    Close this RFP for all vendors
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -311,13 +350,19 @@ function BidCard({
 // ── Ranked group ──────────────────────────────────────────────────────────────
 
 function RankedGroup({
-  rows, groupBy, onView, selectedIds, onToggleSelect,
+  rows, groupBy, onView, selectedIds, onToggleSelect, onRequestClosure,
 }: {
   rows: BidRow[]
   groupBy: "client" | "partner"
   onView: (row: BidRow) => void
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
+  // THREADED THROUGH EVEN THOUGH A RANKED GROUP IS MOSTLY SCORED BIDS.
+  // buildRankedBlocks puts EVERY row sharing a scope key into the block once two
+  // of them are scored and complete - including the awaiting-response rows. So a
+  // vendor who never bid can and does appear inside a ranked group, and dropping
+  // the callback here would silently remove their closure action.
+  onRequestClosure: (row: BidRow, unit: RfpClosureUnit) => void
 }) {
   const ranked = useMemo(() => sortRankedGroup(rows), [rows])
   const cachedNarrative = rows.map((r) => r.ranked_recommendation).find(Boolean) || null
@@ -396,6 +441,7 @@ function RankedGroup({
           selected={selectedIds.has(row.id)}
           onToggleSelect={onToggleSelect}
           rank={rank}
+          onRequestClosure={onRequestClosure}
         />
       ))}
     </div>
@@ -405,7 +451,7 @@ function RankedGroup({
 // ── Group section ─────────────────────────────────────────────────────────────
 
 function GroupSection({
-  label, rows, defaultOpen, groupBy, onView, selectedIds, onToggleSelect,
+  label, rows, defaultOpen, groupBy, onView, selectedIds, onToggleSelect, onRequestClosure,
 }: {
   label: string
   rows: BidRow[]
@@ -414,6 +460,7 @@ function GroupSection({
   onView: (row: BidRow) => void
   selectedIds: Set<string>
   onToggleSelect: (id: string) => void
+  onRequestClosure: (row: BidRow, unit: RfpClosureUnit) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const [activeStatus, setActiveStatus] = useState<BidStatusKey>("all")
@@ -497,6 +544,7 @@ function GroupSection({
                     onView={onView}
                     selected={selectedIds.has(block.row.id)}
                     onToggleSelect={onToggleSelect}
+                    onRequestClosure={onRequestClosure}
                   />
                 ) : (
                   <RankedGroup
@@ -506,6 +554,7 @@ function GroupSection({
                     onView={onView}
                     selectedIds={selectedIds}
                     onToggleSelect={onToggleSelect}
+                    onRequestClosure={onRequestClosure}
                   />
                 )
               )
@@ -528,8 +577,58 @@ export default function AgencyBidsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [compareRows, setCompareRows] = useState<BidRow[] | null>(null)
   const [scoringSettingsOpen, setScoringSettingsOpen] = useState(false)
+  // R7. The pending closure, held here rather than in the card, so the
+  // confirmation survives the dropdown closing and so the fetch happens once at
+  // the page level where the SWR key lives.
+  const [closurePrompt, setClosurePrompt] = useState<{ row: BidRow; unit: RfpClosureUnit } | null>(null)
+  const [closureSubmitting, setClosureSubmitting] = useState(false)
+  const [closureError, setClosureError] = useState<string | null>(null)
 
   const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(RFP_RESPONSES_URL)
+
+  const requestClosure = useCallback((row: BidRow, unit: RfpClosureUnit) => {
+    setClosureError(null)
+    setClosurePrompt({ row, unit })
+  }, [])
+
+  /**
+   * R7. THE WRITE.
+   *
+   * Sends ONLY the inbox_item_id and the unit. The project and the scope item
+   * that define "the whole RFP" are derived SERVER SIDE from the row the route
+   * re-reads under the caller's own organization - see the security note in
+   * app/api/agency/rfp-closure/route.ts. A client that could name the scope
+   * directly could close a scope it does not own.
+   */
+  const confirmClosure = useCallback(async () => {
+    if (!closurePrompt) return
+    setClosureSubmitting(true)
+    setClosureError(null)
+    try {
+      const res = await fetch("/api/agency/rfp-closure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inbox_item_id: closurePrompt.row.inbox_item_id,
+          unit: closurePrompt.unit,
+        }),
+      })
+      const payload = (await res.json().catch(() => ({}))) as { closed?: number; error?: string }
+      if (!res.ok) {
+        setClosureError(payload?.error || "Could not close this request. Please try again.")
+        return
+      }
+      // A zero count is NOT an error and is not reported as one. It is what
+      // idempotency looks like: somebody else closed it first, or every row was
+      // already answered. The list refresh below shows the real state either way.
+      setClosurePrompt(null)
+      void mutate(RFP_RESPONSES_URL)
+    } catch {
+      setClosureError("Could not close this request. Please try again.")
+    } finally {
+      setClosureSubmitting(false)
+    }
+  }, [closurePrompt])
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -698,6 +797,7 @@ export default function AgencyBidsPage() {
                 onView={setViewingBid}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
+                onRequestClosure={requestClosure}
               />
             ))}
           </div>
@@ -705,6 +805,103 @@ export default function AgencyBidsPage() {
       </div>
       <BidDetailSheet row={viewingBid} onClose={() => setViewingBid(null)} />
       <ScoringSettingsSheet open={scoringSettingsOpen} onOpenChange={setScoringSettingsOpen} />
+
+      {/*
+        R7 / 3e. THE CONFIRMATION.
+
+        WHAT IT HAS TO NAME, and each of these is a separate consequence an
+        agency can get wrong:
+          1. WHO it reaches. "every vendor who has not bid" vs "this one vendor".
+          2. WHAT IT DOES NOT TOUCH. A submitted bid is not an unanswered
+             request and is left exactly where it is.
+          3. THAT AN EMAIL GOES OUT. The vendor is told. That is the point of
+             R7 - a request vanishing silently reads as a bug - and it is also
+             the reason this cannot be taken back.
+          4. >>> 3f. THAT THERE IS NO UNDO. Reopen is not built. An agency must
+             know the action is final BEFORE they take it, not discover it
+             afterwards by looking for a button that is not there.
+
+        bg-card is correct HERE and only here: this modal sits on a
+        bg-black/80 backdrop-blur-sm overlay, which is what makes a 7%-opaque
+        surface read as solid. See CLAUDE.md.
+      */}
+      {closurePrompt && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => { if (!closureSubmitting) { setClosurePrompt(null); setClosureError(null) } }}
+        >
+          <div
+            className="w-full max-w-lg bg-card border border-border rounded-xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-display font-bold text-xl text-foreground">
+              {closurePrompt.unit === "rfp"
+                ? "Close this RFP?"
+                : `Tell ${closurePrompt.row.partner_display_name} they were not selected?`}
+            </h2>
+
+            <div className="mt-3 space-y-3 text-sm text-foreground-muted">
+              {closurePrompt.unit === "rfp" ? (
+                <>
+                  <p>
+                    This closes {closurePrompt.row.inbox?.scope_item_name || "this scope"} for every
+                    vendor who has not bid. Each of them gets an email and a notification saying the
+                    opportunity has ended, and the request moves out of their response queue into
+                    their history.
+                  </p>
+                  <p>
+                    Vendors who already submitted a bid are not affected. Their bids stay exactly
+                    where they are and you can still award, shortlist or decline them.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    This tells {closurePrompt.row.partner_display_name} they were not selected for{" "}
+                    {closurePrompt.row.inbox?.scope_item_name || "this scope"}. They get an email and
+                    a notification, and the request moves out of their response queue into their
+                    history.
+                  </p>
+                  <p>
+                    Every other vendor on this RFP stays open and can still bid.
+                  </p>
+                </>
+              )}
+              <p className="text-warning">
+                This cannot be undone. There is no reopen, and the email cannot be unsent.
+              </p>
+            </div>
+
+            {closureError && (
+              <p className="mt-4 text-sm text-destructive">{closureError}</p>
+            )}
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={closureSubmitting}
+                onClick={() => { setClosurePrompt(null); setClosureError(null) }}
+                className="border-border text-foreground"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={closureSubmitting}
+                onClick={() => void confirmClosure()}
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                {closureSubmitting
+                  ? "Working..."
+                  : closurePrompt.unit === "rfp"
+                    ? "Close RFP"
+                    : "Mark not selected"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedRows.length >= 2 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 rounded-full border border-border bg-background/95 backdrop-blur px-5 py-3 shadow-2xl">

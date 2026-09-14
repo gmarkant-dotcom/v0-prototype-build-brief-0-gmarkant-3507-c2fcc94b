@@ -12,6 +12,7 @@ import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
 import { validateTermsDisclosure, isTermsDisclosureStarted, withTermsDisclosureDefaults } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
 import { recordMilestone } from "@/lib/milestone-events"
+import { isRfpClosureStatus } from "@/lib/rfp-closure"
 
 export const dynamic = "force-dynamic"
 
@@ -147,12 +148,48 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: inbox, error: inboxErr } = await supabase
       .from("partner_rfp_inbox")
-      .select("id, lead_org_id, vendor_org_id, recipient_email, nda_gate_enforced, nda_confirmed_at, require_terms_disclosure")
+      .select("id, lead_org_id, vendor_org_id, recipient_email, status, nda_gate_enforced, nda_confirmed_at, require_terms_disclosure")
       .eq("id", inboxId)
       .maybeSingle()
 
     if (inboxErr || !inbox) {
       return NextResponse.json({ error: "RFP not found or access denied" }, { status: 404 })
+    }
+
+    /**
+     * 0b-11. A CLOSED REQUEST DOES NOT ACCEPT A BID. SERVER SIDE.
+     *
+     * This route read nothing about inbox.status before. It gated on NDA access
+     * and on close_bidding_at_deadline and nothing else, so a vendor could POST a
+     * bid onto an RFP the agency had already closed - and the write at the foot
+     * of this handler would then set the row back to 'bid_submitted', silently
+     * UN-CLOSING it.
+     *
+     * The client already hides the form: the canEdit allow-lists at
+     * app/partner/rfps/[id]/page.tsx:1186-1192 and :1355-1360 do not contain
+     * either closure status, so they fail closed. That is correct behaviour and
+     * it is not a guard - the route is the trust boundary and a hidden button is
+     * not an access control.
+     *
+     * 409 and not 403: the request is well-formed and the caller is entitled to
+     * this RFP. What has changed is the state of the thing, which is what 409
+     * means. The message is deliberately specific so a vendor whose form was
+     * open when the agency closed it reads an explanation rather than a fault.
+     */
+    if (isRfpClosureStatus(inbox.status)) {
+      console.log("[api] bid refused, request already closed", {
+        route, userId: user.id, inboxId, status: inbox.status,
+      })
+      return NextResponse.json(
+        {
+          error: "rfp_closed",
+          message:
+            inbox.status === "not_selected"
+              ? "This agency has moved forward without your company on this request, so it is no longer accepting bids."
+              : "This request has been closed by the agency and is no longer accepting bids.",
+        },
+        { status: 409 }
+      )
     }
 
     const access = partnerCanAccessPartnerRfpInbox(

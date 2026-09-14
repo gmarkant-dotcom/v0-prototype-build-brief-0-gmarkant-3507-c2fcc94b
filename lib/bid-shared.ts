@@ -97,6 +97,12 @@ export const BID_STATUSES = [
   { key: "meeting_requested", label: "Meeting Requested" },
   { key: "awarded",           label: "Awarded" },
   { key: "declined",          label: "Declined" },
+  // R7. TWO NEW FILTERS, AND THEY ARE NOT "Declined".
+  // "Declined" here means a vendor who submitted a bid and lost. These two mean
+  // a vendor who was asked and never answered. An agency filtering its pipeline
+  // needs to tell those apart as much as a vendor does.
+  { key: "closed",            label: "Closed" },
+  { key: "not_selected",      label: "Not Selected" },
 ] as const
 
 export type BidStatusKey = (typeof BID_STATUSES)[number]["key"]
@@ -109,6 +115,14 @@ export const STATUS_BADGE: Record<string, { bg: string; text: string; label: str
   meeting_requested: { bg: "bg-cyan-500/15",   text: "text-cyan-300",         label: "Meeting Requested" },
   awarded:           { bg: "bg-emerald-500/15",text: "text-emerald-300",       label: "Awarded" },
   declined:          { bg: "bg-red-500/15",    text: "text-red-300",          label: "Declined" },
+  // R7, and 0b-7. Without these two entries statusBadge() falls through to
+  // `?? STATUS_BADGE.awaiting_response` and renders a closed RFP as "New" - to
+  // the agency that closed it. Deliberately NEUTRAL rather than red: the agency
+  // took this action on purpose and it is not an alarm. Distinct from each other
+  // because the two are different facts, and distinct from declined's red
+  // because neither of them means a bid was rejected.
+  closed:            { bg: "bg-white/10",      text: "text-foreground-muted", label: "Closed" },
+  not_selected:      { bg: "bg-orange-500/15", text: "text-orange-300",       label: "Not Selected" },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
