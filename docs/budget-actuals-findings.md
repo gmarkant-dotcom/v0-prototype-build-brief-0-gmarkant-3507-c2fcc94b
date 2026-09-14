@@ -453,12 +453,54 @@ Everything above that needs a ruling, plus three that predate the test.
 9. **An intellectual property carve-out question on that tool's origin.** Unresolved, and it
    gates question 8 rather than following from it.
 
-**Also worth settling before the specification session**
+**A note rather than an open item**
 
-10. **Which of 079, 083, 085 and 086 are actually applied to production.** The repository
-    contradicts itself and declares its own log incomplete. Questions 4 and 5 are reasoned
-    against the organization model, so they need to know what that model actually is. One query
-    against `pg_proc` and `pg_policies` settles it.
+10. **Which migrations are applied to production. Settled for the ones this document names,
+    and left open past them.**
+
+    **079, 080, 082, 083, 085 and 086 are all confirmed applied in production as of
+    2026-09-11.** Verified by catalog query in the Supabase SQL editor, run as `postgres`, not
+    by any document:
+
+    | Probe | Result | Conclusion |
+    | --- | --- | --- |
+    | `milestone_events` table | exists | 080 applied |
+    | `partner_vouches` policies | 3 | consistent with 082 applied |
+    | `current_user_commercial_counterparty_org_ids` | exists | **085 applied** |
+    | `profiles.title` column | exists | **086 applied** |
+    | `project_documents` INSERT policy | 1 | **083 applied** |
+    | total policies in `public` | 122 | see below |
+
+    **This supersedes the contradiction recorded in the verification statement above, and the
+    caveat in finding 7 about whether the organization model is fully live.** Both are now
+    answered: it is live. `docs/m1-foundation-report.md:16`, which describes 085 and 086 as
+    "AUTHORED and NOT APPLIED", was **correct when it was written and is now stale**. It is not
+    wrong about its own moment, and it should not be read as current.
+
+    **Why this stays a note.** The policy total is **122**. The reported baseline is 110 after
+    086 on 2026-08-19, which would make 122 a gap of twelve and mean at least one further
+    migration has been applied that the documents visible from this branch do not reflect.
+
+    That baseline could not be located in the repository, and what the repository does record
+    points the same direction by a different route. The counts written down here are **107**
+    after 079 (`docs/079-authoring-report.md:242`), **104** recorded by 081 and **113** on
+    2026-08-20 (`docs/unattended-session-2026-08-20.md:469`, which calls the delta of 9 between
+    them "a delta that something must" account for), and **117** after 094
+    (`docs/095-notification-types-ruling.md:98`). The nearest 110 is
+    `docs/080-repair-report.md:37`, which counts "110 policy predicates 079 actually shipped"
+    and is a different measure, not a total.
+
+    122 is also the exact figure `docs/098-preapply-test.sql:1246` asserts as its own pass
+    condition: "T14 policy count = 122 as predicted". So on the repository's own numbers the
+    live total is consistent with migrations having been applied **through 098**, which is well
+    past anything this document reasons about.
+
+    Either reading reaches the same place. **Migrations beyond the six confirmed above have been
+    applied, and the document set visible from this branch does not establish which of them are
+    live or what they changed.** That is the part still owed, and it is why this is a note and
+    not a resolved item. Questions 4 and 5 are reasoned against the organization model, so a
+    specification session should re-derive the live policy set from the catalog rather than from
+    any file here, including this one.
 
 ---
 
