@@ -16,6 +16,7 @@ import { recordMilestones } from "@/lib/milestone-events"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
+import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
 
 type ScopeItemPayload = {
   id: string
@@ -120,10 +121,25 @@ export async function POST(request: NextRequest) {
       typeof body.response_deadline === "string" && body.response_deadline.trim().length > 0
         ? body.response_deadline.trim()
         : null
+    /**
+     * R1. THE FALLBACK IS A DATE, NOT NULL.
+     *
+     * This read `: null` and wrote that null straight onto every inbox row it
+     * created, which is one of the two ways 78 of 97 live rows came to hold no
+     * deadline at all. The wizard now always sends one, so this branch is reached
+     * only by a caller that sent none or sent something unparseable - and a route
+     * is a trust boundary, so it must produce a usable value rather than trust the
+     * client to have done so.
+     *
+     * An UNPARSEABLE date falls here too, deliberately. The old code silently
+     * turned "next tuesday" into null; it now turns it into the default horizon,
+     * which is wrong in the same way but recoverable, because the agency can see a
+     * date on the RFP and correct it. A null is invisible.
+     */
     const responseDeadline =
       responseDeadlineRaw && !Number.isNaN(new Date(responseDeadlineRaw).getTime())
         ? new Date(responseDeadlineRaw).toISOString()
-        : null
+        : defaultResponseDeadlineIso()
 
     if (!masterRfp || typeof masterRfp !== "object") {
       return NextResponse.json({ error: "masterRfp is required" }, { status: 400 })

@@ -94,11 +94,24 @@ export async function GET() {
     const vendorEmail = (emailProfile?.email || user.email || "").trim().toLowerCase()
 
     const [inboxRes, responsesRes, partnershipsRes] = await Promise.all([
+      // R4. ORDERED IN SQL, UNCONDITIONALLY.
+      //
+      // This read had no ORDER BY at all, so the queue's order was whatever
+      // PostgreSQL happened to return - which it makes no guarantee about and
+      // which can differ between two requests for the same rows. A vendor's top
+      // five could be a different five on a refresh with nothing on screen to
+      // explain why.
+      //
+      // created_at DESC matches app/api/agency/dashboard/route.ts:148 and
+      // app/api/partner/rfps/route.ts:234, so all three reads of this table now
+      // agree. It works whether or not a row has a deadline, which is the reason
+      // it is the floor rather than a design.
       supabase
         .from("partner_rfp_inbox")
         .select(
           "id, lead_org_id, vendor_org_id, recipient_email, project_id, scope_item_name, status, response_deadline, nda_gate_enforced, nda_confirmed_at, created_at"
-        ),
+        )
+        .order("created_at", { ascending: false }),
       supabase
         .from("partner_rfp_responses")
         .select("id, inbox_item_id, status, submitted_at, shortlisted_at, meeting_requested_at, declined_at")
@@ -266,12 +279,25 @@ export async function GET() {
       })
     }
 
-    needsResponse.sort((a, b) => {
-      if (a.deadline == null && b.deadline == null) return 0
-      if (a.deadline == null) return 1
-      if (b.deadline == null) return -1
-      return a.deadline.localeCompare(b.deadline)
-    })
+    // R4: THE JS COMPARATOR THAT USED TO SIT HERE IS REMOVED, AND REMOVING IT IS
+    // THE HALF OF R4 THAT ACTUALLY CHANGES BEHAVIOUR.
+    //
+    // It sorted by deadline ascending, nulls last. On today's data it was a
+    // guaranteed no-op: every deadline was null, so its first branch returned 0
+    // for every pair and the sort preserved an input order that was itself
+    // unspecified. Adding the ORDER BY above would have been enough while that
+    // stayed true.
+    //
+    // IT DOES NOT STAY TRUE. R1 ships in this same commit and defaults a deadline
+    // on every new broadcast, so this comparator would have woken up and re-sorted
+    // the rows the database had just ordered - and the order would then have been
+    // "created_at DESC, except when deadlines exist, in which case deadline ASC".
+    // R4 says created_at DESC unconditionally. A comparator that is conditional on
+    // whether the data happens to have deadlines in it is exactly the conditional
+    // R4 rules out, so it goes rather than being left to fire later.
+    //
+    // needsResponse is pushed in the order the rows arrive from SQL, so it is
+    // already in created_at DESC order at this point and needs no sort at all.
 
     // ── Onboarding steps pending on the partner's side ───────────────────────────
     let onboardingPending: OnboardingItem[] = []

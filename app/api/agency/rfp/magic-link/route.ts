@@ -9,6 +9,7 @@ import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 import { markPartnershipInvited } from "@/lib/partnership-invitations"
 import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
 import { recordMilestones, type MilestoneEvent } from "@/lib/milestone-events"
+import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
 
 export const dynamic = "force-dynamic"
 
@@ -133,10 +134,24 @@ export async function POST(request: NextRequest) {
       typeof body.response_deadline === "string" && body.response_deadline.trim().length > 0
         ? body.response_deadline.trim()
         : null
+    /**
+     * R1. THE FALLBACK IS A DATE, NOT NULL. Same change as
+     * app/api/agency/broadcast-rfp/route.ts, same reason, same constant.
+     *
+     * ONE BEHAVIOUR CHANGE THAT IS SPECIFIC TO THIS ROUTE AND IS INTENDED.
+     * `tokenUpsertPayload` below writes `response_deadline` UNCONDITIONALLY, so a
+     * resend that omitted this field used to WIPE the deadline the first send had
+     * set. It now replaces it with a fresh horizon instead. A resend is a fresh
+     * ask - the vendor is being invited again, from today - so a horizon measured
+     * from today is the right answer, and it is unambiguously better than the null
+     * it replaces, which is the state this whole change exists to stop producing.
+     *
+     * The wizard always sends a date, so this only affects a caller that does not.
+     */
     const responseDeadline =
       responseDeadlineRaw && !Number.isNaN(new Date(responseDeadlineRaw).getTime())
         ? new Date(responseDeadlineRaw).toISOString()
-        : null
+        : defaultResponseDeadlineIso()
 
     if (!vendorEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vendorEmail)) {
       return NextResponse.json({ error: "A valid vendor email is required" }, { status: 400 })

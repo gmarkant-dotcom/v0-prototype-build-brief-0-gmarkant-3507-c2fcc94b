@@ -86,6 +86,21 @@ export const VENDOR_BIDS_HISTORY_EMPTY =
 export const VENDOR_DASHBOARD_QUEUE_EMPTY =
   "Nothing is waiting on you. RFPs sent to your company by the agencies you work with will appear here."
 
+/**
+ * Body for the dashboard's "Overdue payments" section. R5.
+ *
+ * SEPARATE FROM VENDOR_DASHBOARD_QUEUE_EMPTY BECAUSE THE TWO SECTIONS ARE ABOUT
+ * DIFFERENT OBLIGATIONS. "Nothing is waiting on you" is the right thing to say
+ * about requests a vendor may decline. It is the wrong thing to say about money
+ * they are owed, where the vendor is not the one being waited on.
+ *
+ * Phrased as the all-clear rather than as an absence: a vendor reading this
+ * section wants to know they are not owed anything late, which is a different
+ * and more useful statement than "there is nothing here".
+ */
+export const VENDOR_DASHBOARD_OVERDUE_EMPTY =
+  "No payments are overdue. Milestones that pass their due date without being paid will appear here."
+
 /*
  * THERE IS DELIBERATELY NO MESSAGE-THREAD STRING HERE.
  *

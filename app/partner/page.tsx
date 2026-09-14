@@ -23,7 +23,11 @@ import { useSectionCollapse, useCappedList } from "@/lib/dashboard-section-state
 import { DashboardShowMoreToggle } from "@/components/dashboard-show-more"
 import { HelpTerm } from "@/components/help-term"
 import { usePaidUser } from "@/contexts/paid-user-context"
-import { VENDOR_DASHBOARD_QUEUE_EMPTY, vendorInboxEmptyDetail } from "@/lib/vendor-empty-copy"
+import {
+  VENDOR_DASHBOARD_QUEUE_EMPTY,
+  VENDOR_DASHBOARD_OVERDUE_EMPTY,
+  vendorInboxEmptyDetail,
+} from "@/lib/vendor-empty-copy"
 import {
   AlertTriangle,
   Clock,
@@ -108,10 +112,22 @@ type DashboardData = {
 /** Needs Your Response renders two row kinds (RFP queue items and onboarding steps) as one
  *  capped list - this discriminated union lets useCappedList treat them uniformly while
  *  keeping each row's own render branch. */
+/**
+ * R5. OVERDUE MILESTONES ARE NOT IN THIS UNION ANY MORE.
+ *
+ * They were, and the header count included them while the empty-state condition
+ * did not, so a vendor whose only outstanding item was an overdue payment read
+ * "Needs your response (1)" directly above "Nothing is waiting on you." The one
+ * thing costing that vendor money was the one thing the body denied existed.
+ *
+ * Merging the counts was the other available fix and is the wrong one. An RFP
+ * request is an opportunity a vendor may decline; an overdue milestone is work
+ * they have already won and not been paid for. Different obligations, different
+ * actions, and one number over both is unreadable in either direction.
+ */
 type QueueRow =
   | { kind: "rfp"; key: string; item: NeedsResponseItem }
   | { kind: "onboarding"; key: string; item: OnboardingPendingItem }
-  | { kind: "overdue-milestone"; key: string; item: MilestoneApiRow }
 
 type DashboardActiveProject = {
   id: string
@@ -430,6 +446,7 @@ export default function PartnerDashboardPage() {
     "partner",
     "needs-response"
   )
+  const { collapsed: overdueCollapsed, toggle: toggleOverdue } = useSectionCollapse("partner", "overdue-payments")
   const { collapsed: activityCollapsed, toggle: toggleActivity } = useSectionCollapse("partner", "recent-activity")
 
   // Derived strictly from the real paymentMilestones fetch (empty in demo mode, per the
@@ -443,12 +460,22 @@ export default function PartnerDashboardPage() {
     () => [
       ...needsResponseItems.map((item): QueueRow => ({ kind: "rfp", key: `rfp:${item.id}`, item })),
       ...onboardingPending.map((item): QueueRow => ({ kind: "onboarding", key: `onboarding:${item.id}`, item })),
-      ...overdueMilestones.map((item): QueueRow => ({ kind: "overdue-milestone", key: `overdue:${item.id}`, item })),
     ],
-    [needsResponseItems, onboardingPending, overdueMilestones]
+    [needsResponseItems, onboardingPending]
   )
+  // The overdue-milestone arm is gone from this predicate with the kind itself. The
+  // deadline half can now actually fire: R1 means new RFPs carry a deadline, so
+  // `daysLeft` stops being null on every row and the <= 7 test starts doing work.
   const queueIsUrgent = (row: QueueRow) =>
-    row.kind === "overdue-milestone" || (row.kind === "rfp" && ((row.item.daysLeft != null && row.item.daysLeft <= 7) || row.item.ndaPending))
+    row.kind === "rfp" && ((row.item.daysLeft != null && row.item.daysLeft <= 7) || row.item.ndaPending)
+
+  const {
+    visible: visibleOverdueMilestones,
+    hasMore: overdueHasMore,
+    expanded: overdueExpanded,
+    toggle: toggleOverdueExpanded,
+    total: overdueTotal,
+  } = useCappedList(overdueMilestones, SECTION_LIST_CAP)
   const {
     visible: visibleQueueRows,
     hasMore: queueHasMore,
@@ -497,6 +524,14 @@ export default function PartnerDashboardPage() {
     !isDemo &&
     !dashboardLoading &&
     !activeProjectsLoading &&
+    // R5. ADDED WITH THE OVERDUE BLOCK, AND FOR THE SAME REASON THE BLOCK EXISTS.
+    // This screen replaces the whole dashboard, so any condition it omits is a
+    // section it can hide. An unpaid milestone on a project that has ended has no
+    // active project to keep this false, and the vendor would have been shown
+    // "Welcome to Ligament" while being owed money. `paymentsLoading` is in the
+    // test too, so the welcome screen cannot flash before the milestones land.
+    !paymentsLoading &&
+    overdueMilestones.length === 0 &&
     fetchedActiveProjects.length === 0 &&
     needsResponseItems.length === 0 &&
     (funnel?.bidsSubmitted ?? 0) === 0
@@ -554,7 +589,12 @@ export default function PartnerDashboardPage() {
               <SectionSkeleton className="h-16" />
               <SectionSkeleton className="h-16" />
             </div>
-          ) : needsResponseItems.length === 0 && onboardingPending.length === 0 ? (
+          ) : /* R5: THIS CONDITION AND THE COUNT ABOVE NOW TEST THE SAME SET.
+                 queueRows is exactly needsResponseItems plus onboardingPending, so
+                 the header can no longer say (1) over a body that says nothing is
+                 waiting. That was only possible while milestones were counted here
+                 and not tested here; they are now in neither. */
+          needsResponseItems.length === 0 && onboardingPending.length === 0 ? (
             <div className="py-2 space-y-2">
               <p className="text-sm text-vendor-muted">{VENDOR_DASHBOARD_QUEUE_EMPTY}</p>
               {/* Conditional on the caller actually having a lead agency side - see
@@ -564,30 +604,6 @@ export default function PartnerDashboardPage() {
           ) : (
             <div className="space-y-2">
               {visibleQueueRows.map((row) => {
-                if (row.kind === "overdue-milestone") {
-                  const item = row.item
-                  return (
-                    <Link
-                      key={row.key}
-                      href="/partner/projects"
-                      className="flex items-center justify-between gap-4 p-4 rounded-lg border border-destructive/30 bg-destructive/5 hover:border-destructive/50 hover:shadow-sm transition-all"
-                    >
-                      <div className="min-w-0 flex items-center gap-3">
-                        <DollarSign className="w-4 h-4 text-destructive shrink-0" />
-                        <div>
-                          <div className="font-display font-bold text-sm text-vendor-foreground truncate">
-                            Overdue payment - {item.title}
-                          </div>
-                          <div className="font-mono text-2xs text-destructive mt-1">
-                            {formatUsdWhole(item.amount)} - {item.project_name}
-                          </div>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-vendor-muted/70 shrink-0" />
-                    </Link>
-                  )
-                }
-
                 if (row.kind === "onboarding") {
                   const item = row.item
                   return (
@@ -678,6 +694,84 @@ export default function PartnerDashboardPage() {
               <Link href="/partner/rfps" className="text-xs text-vendor-muted/70 hover:text-vendor-muted-strong hover:underline">
                 {expiredCount} request{expiredCount === 1 ? "" : "s"} expired unanswered
               </Link>
+            </div>
+          )}
+        </div>
+
+        {/*
+          OVERDUE PAYMENTS. R5.
+
+          Its own block, out of the RFP queue entirely, because an overdue milestone
+          is not a request. The vendor has already won this work and delivered against
+          it; what is outstanding is the agency's side, not theirs. Putting it in
+          "Needs your response" said the opposite, and putting it in the same COUNT as
+          RFP invitations made both numbers unreadable.
+
+          IT RENDERS EVEN WHEN EMPTY, DELIBERATELY. The all-clear is worth saying for
+          money in a way it is not for an empty inbox, and a section that only exists
+          when it has bad news in it is a section no vendor ever learns the location
+          of. It sits directly under the response queue and above the funnel tiles, so
+          the two obligations read in the order they cost the vendor.
+
+          `paymentsLoading` gates the whole thing: this must never render "No payments
+          are overdue" while the fetch is still in flight.
+        */}
+        <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <button type="button" onClick={toggleOverdue} className="flex items-center gap-2 min-w-0 group">
+              <ChevronDown
+                className={cn(
+                  "w-4 h-4 text-vendor-muted/70 shrink-0 transition-transform",
+                  overdueCollapsed && "-rotate-90"
+                )}
+              />
+              <h2 className="font-display font-bold text-lg text-vendor-foreground truncate group-hover:text-vendor-foreground/80">
+                Overdue payments ({overdueMilestones.length})
+              </h2>
+            </button>
+            <Link href="/partner/payments" className="font-mono text-xs text-vendor-foreground hover:underline shrink-0">
+              View all payments →
+            </Link>
+          </div>
+
+          {overdueCollapsed ? null : !isDemo && paymentsLoading ? (
+            <div className="space-y-2">
+              <SectionSkeleton className="h-16" />
+            </div>
+          ) : overdueMilestones.length === 0 ? (
+            <p className="py-2 text-sm text-vendor-muted">{VENDOR_DASHBOARD_OVERDUE_EMPTY}</p>
+          ) : (
+            <div className="space-y-2">
+              {visibleOverdueMilestones.map((item) => (
+                <Link
+                  key={`overdue:${item.id}`}
+                  href="/partner/payments"
+                  className="flex items-center justify-between gap-4 p-4 rounded-lg border border-destructive/30 bg-destructive/5 hover:border-destructive/50 hover:shadow-sm transition-all"
+                >
+                  <div className="min-w-0 flex items-center gap-3">
+                    <DollarSign className="w-4 h-4 text-destructive shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-display font-bold text-sm text-vendor-foreground truncate">
+                        Overdue payment - {item.title}
+                      </div>
+                      <div className="font-mono text-2xs text-destructive mt-1">
+                        {formatUsdWhole(item.amount)} - {item.project_name}
+                      </div>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-vendor-muted/70 shrink-0" />
+                </Link>
+              ))}
+
+              {overdueHasMore && (
+                <DashboardShowMoreToggle
+                  hasMore={overdueHasMore}
+                  expanded={overdueExpanded}
+                  total={overdueTotal}
+                  onToggle={toggleOverdueExpanded}
+                  className="text-vendor-foreground pt-1"
+                />
+              )}
             </div>
           )}
         </div>

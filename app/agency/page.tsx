@@ -35,6 +35,10 @@ import {
 } from "@/lib/business-criteria"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { MAX_RFP_EVALUATION_CRITERIA } from "@/lib/rfp-evaluation-criteria"
+import {
+  defaultResponseDeadlineDateInput,
+  RFP_RESPONSE_DEADLINE_DEFAULT_LABEL,
+} from "@/lib/rfp-response-deadline"
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
 import { ClientSelector, type ClientSelection } from "@/components/client-selector"
@@ -601,7 +605,18 @@ function AgencyRFPContent() {
   const [ndaSignatureRequired, setNdaSignatureRequired] = useState(false)
   const [ndaSigningLink, setNdaSigningLink] = useState("https://www.docusign.com/")
   const [defaultNdaUrl, setDefaultNdaUrl] = useState("")
-  const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
+  /**
+   * R1. DEFAULTED, NOT REQUIRED, AND NOT OPTIONAL-IN-PRACTICE.
+   *
+   * This was `useState("")` and 80% of the platform's inbox rows carry no deadline
+   * as a direct result. The initialiser is lazy so the horizon is measured when the
+   * wizard mounts rather than when this module is first evaluated - a long-lived tab
+   * would otherwise keep offering a date computed at page load.
+   *
+   * The agency can still change it or clear it. Clearing it is a deliberate act now
+   * rather than the default outcome of doing nothing.
+   */
+  const [responseDeadlineDate, setResponseDeadlineDate] = useState(() => defaultResponseDeadlineDateInput())
   // P2-4. Default OFF is the standing ruling: bidding stays open past the deadline unless the
   // agency deliberately opts in.
   const [closeBiddingAtDeadline, setCloseBiddingAtDeadline] = useState(false)
@@ -2858,7 +2873,9 @@ function AgencyRFPContent() {
                   className="bg-white/5 border-border text-foreground"
                 />
                 <p className="font-mono text-2xs text-foreground-muted">
-                  Optional. If set, partners will see “Respond by” in their inbox and RFP detail view.
+                  Defaults to {RFP_RESPONSE_DEADLINE_DEFAULT_LABEL} from today. Change it or clear it if you
+                  need to. Vendors see “Respond by” in their inbox and RFP detail view, and a
+                  request with no date has nothing to sort or chase it by.
                 </p>
                 <label className="flex items-center gap-2 cursor-pointer pt-2">
                   <Checkbox
