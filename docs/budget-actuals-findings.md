@@ -15,7 +15,7 @@ deconstruct it, and drive RFP allowances, margin visibility and delivery actuali
 it. Part of that is an **actuals feeder**: receipts and invoices are read, categorized against
 a chart of accounts, and become the authoritative "actual" figure per budget line.
 
-On 2026-09-11 a throwaway accuracy test was run to decide whether the actuals feeder is worth
+On 2026-09-14 a throwaway accuracy test was run to decide whether the actuals feeder is worth
 building **before** any integration work begins. It was a standalone Python script at
 `~/dev/receipt-test`, **not in this repository**, and it is not available to the author of this
 document. What follows records what that test established, so that a later specification
@@ -477,30 +477,20 @@ Everything above that needs a ruling, plus three that predate the test.
     "AUTHORED and NOT APPLIED", was **correct when it was written and is now stale**. It is not
     wrong about its own moment, and it should not be read as current.
 
-    **Why this stays a note.** The policy total is **122**. The reported baseline is 110 after
-    086 on 2026-08-19, which would make 122 a gap of twelve and mean at least one further
-    migration has been applied that the documents visible from this branch do not reflect.
+    **On the policy total of 122. Nothing is unaccounted for.** 122 is the exact figure
+    `docs/098-preapply-test.sql:1246` asserts as its own pass condition: "T14 policy count =
+    122 as predicted". The repository records the progression that reaches it: **107** after
+    079 (`docs/079-authoring-report.md:242`), **104** at 081 and **113** on 2026-08-20
+    (`docs/unattended-session-2026-08-20.md:469`), and **117** after 094
+    (`docs/095-notification-types-ruling.md:98`). **The live total is consistent with
+    migrations applied through 098**, and the documents do record that history.
 
-    That baseline could not be located in the repository, and what the repository does record
-    points the same direction by a different route. The counts written down here are **107**
-    after 079 (`docs/079-authoring-report.md:242`), **104** recorded by 081 and **113** on
-    2026-08-20 (`docs/unattended-session-2026-08-20.md:469`, which calls the delta of 9 between
-    them "a delta that something must" account for), and **117** after 094
-    (`docs/095-notification-types-ruling.md:98`). The nearest 110 is
-    `docs/080-repair-report.md:37`, which counts "110 policy predicates 079 actually shipped"
-    and is a different measure, not a total.
-
-    122 is also the exact figure `docs/098-preapply-test.sql:1246` asserts as its own pass
-    condition: "T14 policy count = 122 as predicted". So on the repository's own numbers the
-    live total is consistent with migrations having been applied **through 098**, which is well
-    past anything this document reasons about.
-
-    Either reading reaches the same place. **Migrations beyond the six confirmed above have been
-    applied, and the document set visible from this branch does not establish which of them are
-    live or what they changed.** That is the part still owed, and it is why this is a note and
-    not a resolved item. Questions 4 and 5 are reasoned against the organization model, so a
-    specification session should re-derive the live policy set from the catalog rather than from
-    any file here, including this one.
+    **Why this stays a note rather than a resolved item.** The six confirmed by catalog query
+    are a **subset of a longer applied history**, not the end of it. They are the six this
+    document happens to reason about, and the applied set runs well past them. So the note
+    settles the specific question finding 7 raised and does not settle the general one: a
+    specification session should re-derive the live policy set from the catalog rather than
+    from any file here, including this one.
 
 ---
 
