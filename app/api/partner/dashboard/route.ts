@@ -5,6 +5,7 @@ import { NextResponse } from "next/server"
 import { requirePartnerRole } from "@/lib/api-auth"
 import { isActivePartnership } from "@/lib/partnership-state"
 import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
+import { isRfpClosureStatus } from "@/lib/rfp-closure"
 
 export const dynamic = "force-dynamic"
 
@@ -252,6 +253,31 @@ export async function GET() {
     let expiredCount = 0
 
     for (const row of inboxRows) {
+      /**
+       * R7 / 0b-1. A CLOSED REQUEST LEAVES THE QUEUE. THIS IS THE LINE THE
+       * WHOLE RUN TURNS ON.
+       *
+       * Without it, closing an RFP changes nothing on the one surface this
+       * work exists to drain: the row stays in "Needs your response", the
+       * header keeps counting it, and the vendor gets an email about a request
+       * their portal still shows as waiting on them. That is worse than not
+       * shipping the close action at all.
+       *
+       * CHECKED ON row.status AND NOT ON effectiveStatus, DELIBERATELY. The
+       * closure statuses live on partner_rfp_inbox and only ever on rows with
+       * no response (RFP_CLOSABLE_STATUSES is new/viewed), so a response
+       * status can never carry one. Reading the inbox row directly says what
+       * is actually being tested instead of relying on a coalesce that happens
+       * to fall the right way.
+       *
+       * NOT FOLDED INTO RESPONDED_STATUSES. That set means "the vendor has
+       * already responded", and these vendors did not respond - the agency
+       * ended the request. Adding them there would make the set's name a lie
+       * and would quietly change what `expiredCount` and the funnel's
+       * bidsSubmitted are counting.
+       */
+      if (isRfpClosureStatus(row.status)) continue
+
       const resp = responseByInboxId.get(row.id as string)
       const effectiveStatus = resp?.status || (row.status as string) || "new"
       if (RESPONDED_STATUSES.has(effectiveStatus)) continue

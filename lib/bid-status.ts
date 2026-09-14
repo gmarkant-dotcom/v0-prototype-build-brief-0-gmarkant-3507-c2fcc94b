@@ -11,6 +11,10 @@ export type BidStatus =
   | "bid_submitted"
   | "feedback_received"
   | "revision_submitted"
+  // Migration 099. partner_rfp_inbox only - a RESPONSE can never carry either,
+  // because closure is only ever applied to rows that have no response.
+  | "closed"
+  | "not_selected"
 
 /**
  * partner_rfp_responses.status -> partner_rfp_inbox.status. The two tables use different
@@ -51,6 +55,14 @@ export function getBidStatusLabel(status: string, userType: "agency" | "partner"
         return "Awarded"
       case "declined":
         return "Declined"
+      // 0b-8. WITHOUT THESE THE DEFAULT BRANCH RETURNS "New" FOR A CLOSED RFP.
+      // A silent fall-through to a default is the failure mode this run was
+      // written to close: the status lands in the database and the interface
+      // shows something wrong without erroring anywhere.
+      case "closed":
+        return "Closed"
+      case "not_selected":
+        return "Not Selected"
       default:
         return "New"
     }
@@ -70,6 +82,10 @@ export function getBidStatusLabel(status: string, userType: "agency" | "partner"
       return "Awarded"
     case "declined":
       return "Declined"
+    case "closed":
+      return "Closed"
+    case "not_selected":
+      return "Not Selected"
     case "draft":
       return "Draft"
     default:
@@ -93,6 +109,13 @@ export function getBidStatusColor(status: string): string {
       return "bg-green-100 text-green-800"
     case "declined":
       return "bg-red-100 text-red-800"
+    // 0b-9. Neutral and amber, never `declined`'s red. Neither of these means a
+    // bid was rejected, and sharing a colour with the one that does is how two
+    // different facts stop being tellable apart at a glance.
+    case "closed":
+      return "bg-gray-100 text-gray-700"
+    case "not_selected":
+      return "bg-orange-100 text-orange-800"
     default:
       return "bg-gray-100 text-gray-700"
   }

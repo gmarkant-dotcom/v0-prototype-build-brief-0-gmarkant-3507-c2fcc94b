@@ -8,6 +8,7 @@ import { useFetch } from "@/hooks/useFetch"
 import { cn } from "@/lib/utils"
 import { formatBudgetForDisplay } from "@/lib/rfp-response-fields"
 import { getDeadlineUrgency } from "@/lib/deadline-urgency"
+import { isRfpClosureStatus } from "@/lib/rfp-closure"
 import {
   Search, Filter, ChevronDown, ChevronRight,
   Building2, FileText, AlertTriangle, Clock, Loader2,
@@ -18,6 +19,7 @@ import {
   VENDOR_RFPS_EMPTY,
   VENDOR_BIDS_OPEN_EMPTY,
   VENDOR_BIDS_HISTORY_EMPTY,
+  VENDOR_RFPS_CLOSED_EMPTY,
   vendorInboxEmptyDetail,
 } from "@/lib/vendor-empty-copy"
 
@@ -38,6 +40,9 @@ type PartnerInboxRow = {
   nda_gate_enforced?: boolean | null
   nda_confirmed_at?: string | null
   client_name?: string | null
+  /** Migration 099. Absent on every row until it is applied, and null on every
+   *  row that has not been closed. Never render a closure date from updated_at. */
+  closed_at?: string | null
 }
 
 type PartnerBidRow = {
@@ -53,7 +58,7 @@ type PartnerBidRow = {
   agency_full_name: string | null
 }
 
-type RfpTab = "open" | "my-bids" | "history"
+type RfpTab = "open" | "closed" | "my-bids" | "history"
 
 /** Bids still awaiting a final outcome - the "My Bids" tab's scope. "History" shows every
  *  bid regardless of status, awarded/declined included. */
@@ -88,6 +93,18 @@ const STATUS_BADGE: Record<string, { bg: string; border: string; text: string; l
   feedback_received: { bg: "bg-amber-50",         border: "border-amber-200",       text: "text-amber-700",  label: "Feedback" },
   revision_submitted:{ bg: "bg-sky-50",           border: "border-sky-200",         text: "text-sky-700",    label: "Revised" },
   viewed:            { bg: "bg-gray-100",         border: "border-vendor-border",        text: "text-vendor-muted-strong",   label: "Viewed" },
+  /*
+   * R7, and 0b-2. WITHOUT THESE TWO ENTRIES badge() falls through to
+   * `?? STATUS_BADGE.new` and renders a closed RFP to the vendor as "New".
+   *
+   * DISTINCT FROM `declined`'s RED, DELIBERATELY. `declined` here means a bid
+   * this vendor submitted and lost. Neither of these means a bid was rejected,
+   * and wearing the same colour would make the vendor's own history unreadable
+   * at a glance - which is the exact thing R7's two separate statuses exist to
+   * prevent.
+   */
+  closed:            { bg: "bg-gray-100",         border: "border-vendor-border",   text: "text-vendor-muted-strong", label: "Closed" },
+  not_selected:      { bg: "bg-orange-50",        border: "border-orange-200",      text: "text-orange-700",          label: "Not Selected" },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -179,6 +196,103 @@ function RFPCard({ row, showAgency }: { row: PartnerInboxRow; showAgency: boolea
         </div>
       </div>
       <ChevronRight className="w-4 h-4 text-vendor-muted/70 group-hover:text-vendor-foreground transition-colors shrink-0 mt-1" />
+    </Link>
+  )
+}
+
+/**
+ * R7 / PHASE 5. THE CLOSED REQUEST CARD.
+ *
+ * ===========================================================================
+ * WHY THIS IS A SEPARATE COMPONENT AND NOT AN RFPCard WITH A BADGE
+ * ===========================================================================
+ *
+ * The three things R7 requires of this surface are three things RFPCard does
+ * not say, and one thing RFPCard says that would now be wrong:
+ *
+ *   IT MUST SHOW WHEN IT CLOSED. RFPCard shows "Received" and "Due". A closed
+ *   request has no "Due" any more, and a deadline rendered on something that is
+ *   over is noise at best and a false instruction at worst.
+ *
+ *   IT MUST BE VISIBLY DISTINCT FROM A BID THE VENDOR SUBMITTED AND LOST. A
+ *   lost bid renders as a BidRow on /partner/bids under History. This is a
+ *   different shape on a different page and says in words what it is: a request
+ *   that was made and then ended, with no bid from this vendor.
+ *
+ *   IT MUST SHOW WHICH AGENCY AND WHICH RFP. Both, always, unconditionally -
+ *   not behind the `showAgency` grouping flag RFPCard uses, because there is no
+ *   grouping on this view to make the agency redundant.
+ *
+ * IT IS STILL A LINK. The detail page is where the vendor can read what was
+ * actually asked of them, which is most of the value of keeping the record at
+ * all. That page degrades correctly on its own: its canEdit allow-lists
+ * (app/partner/rfps/[id]/page.tsx:1186-1192, :1355-1360) do not contain either
+ * closure status, so the bid form does not render, and showIntentSection is
+ * likewise false.
+ */
+function ClosedRfpCard({ row }: { row: PartnerInboxRow }) {
+  const st = rowStatus(row)
+  const b = badge(st)
+  const closedOn = formatDate(row.closed_at)
+  const receivedOn = formatDate(row.created_at)
+
+  return (
+    <Link
+      href={`/partner/rfps/${row.id}`}
+      className="flex items-start gap-4 p-4 rounded-xl border border-vendor-border bg-vendor-background/40 hover:border-vendor-foreground/30 hover:bg-vendor-surface transition-all group"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <span className="font-display font-bold text-vendor-muted-strong truncate">{row.scope_item_name}</span>
+          <span className={cn(
+            "font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+            b.bg, b.border, b.text
+          )}>
+            {b.label}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 font-mono text-2xs text-vendor-muted flex-wrap">
+          <span className="flex items-center gap-1">
+            <Building2 className="w-3 h-3" />
+            {row.agency_company_name || "Lead agency"}
+          </span>
+          {row.client_name && (
+            <>
+              <span className="text-vendor-muted/50">·</span>
+              <span>{row.client_name}</span>
+            </>
+          )}
+          {receivedOn && (
+            <>
+              <span className="text-vendor-muted/50">·</span>
+              <span>Received {receivedOn}</span>
+            </>
+          )}
+        </div>
+        {/*
+          THE OUTCOME, IN WORDS, NOT ONLY IN A BADGE.
+
+          The two sentences differ for the same reason the two emails do: one
+          opportunity ended for everybody and one vendor was not chosen. A
+          single sentence covering both would tell half of these vendors
+          something untrue about themselves.
+
+          The date falls back to "Date not recorded" rather than being hidden.
+          Rows closed before migration 099 cannot have a closed_at, and a card
+          that silently omitted the date would look like the record was
+          incomplete rather than like the column was younger than the row.
+        */}
+        <p className="mt-2 text-sm text-vendor-muted-strong">
+          {st === "not_selected"
+            ? `${row.agency_company_name || "The agency"} moved forward without your company on this request.`
+            : `${row.agency_company_name || "The agency"} closed this request. It ended for everyone who was invited.`}
+          {" "}
+          <span className="text-vendor-muted">
+            {closedOn ? `Closed ${closedOn}.` : "Date not recorded."}
+          </span>
+        </p>
+      </div>
+      <ChevronRight className="w-4 h-4 text-vendor-muted/50 group-hover:text-vendor-foreground transition-colors shrink-0 mt-1" />
     </Link>
   )
 }
@@ -493,7 +607,59 @@ function PartnerRFPsContent({ surface }: { surface: RfpSurface }) {
   const emptyDetail = vendorInboxEmptyDetail(signupRole)
 
   const { data, isLoading, error } = useFetch<{ rfps: PartnerInboxRow[] }>("/api/partner/rfps")
-  const allRows: PartnerInboxRow[] = data?.rfps ?? []
+  const fetchedRows: PartnerInboxRow[] = data?.rfps ?? []
+
+  /**
+   * R7 / PHASE 5. THE PARTITION. THIS IS THE WHOLE OF "A CLOSED ROW NEVER
+   * APPEARS IN THE OPEN LIST".
+   *
+   * /api/partner/rfps applies NO status filter of any kind - it selects
+   * partner_rfp_inbox with an ORDER BY and nothing else. Before this partition,
+   * a closed row was returned by that route and rendered in Open RFPs, badged
+   * "New", because badge() falls through to STATUS_BADGE.new for a status it
+   * does not know. The vendor would have had an email saying the request ended
+   * sitting beside a portal saying it was brand new.
+   *
+   * SPLIT HERE RATHER THAN IN THE ROUTE, DELIBERATELY. The route feeds both
+   * views and the closed rows ARE the second view's data. Filtering them out
+   * server-side would mean a second fetch to get them back, and two reads of one
+   * table that must agree about which rows exist is how two surfaces drift.
+   *
+   * ON THE INBOX STATUS, NOT ON rowStatus(). rowStatus() coalesces the response
+   * status over the inbox status, and closure only ever lands on rows with no
+   * response, so reading row.status directly says what is actually being tested.
+   */
+  const { openRows, closedRows } = useMemo(() => {
+    const open: PartnerInboxRow[] = []
+    const closed: PartnerInboxRow[] = []
+    for (const r of fetchedRows) {
+      if (isRfpClosureStatus(r.status)) closed.push(r)
+      else open.push(r)
+    }
+    return { openRows: open, closedRows: closed }
+  }, [fetchedRows])
+
+  const allRows: PartnerInboxRow[] = openRows
+
+  /** Closed requests, newest closure first, then newest received first for the
+   *  rows that predate closed_at and have no closure date to sort by. */
+  const closedSorted = useMemo(
+    () =>
+      [...closedRows].sort((a, b) => {
+        const av = a.closed_at || a.created_at || ""
+        const bv = b.closed_at || b.created_at || ""
+        return bv.localeCompare(av)
+      }),
+    [closedRows]
+  )
+
+  const closedFiltered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return closedSorted
+    return closedSorted.filter(r =>
+      [r.agency_company_name, r.scope_item_name, r.client_name].join(" ").toLowerCase().includes(q)
+    )
+  }, [closedSorted, search])
 
   const { data: bidsData, isLoading: bidsLoading, error: bidsError } = useFetch<{ bids: PartnerBidRow[] }>("/api/partner/rfps/bids")
   const allBids: PartnerBidRow[] = bidsData?.bids ?? []
@@ -557,6 +723,8 @@ function PartnerRFPsContent({ surface }: { surface: RfpSurface }) {
               ? isLoading
                 ? "Loading…"
                 : `${totalRfps} RFP${totalRfps !== 1 ? "s" : ""} across ${totalGroups} ${groupNoun}`
+              : activeTab === "closed"
+                ? "Requests that were sent to you and have since ended"
               : activeTab === "my-bids"
                 ? "Bids you have submitted that are still awaiting an outcome"
                 : "Every bid you have submitted, including awarded and declined"
@@ -585,6 +753,49 @@ function PartnerRFPsContent({ surface }: { surface: RfpSurface }) {
           So the strip below renders ONLY on /partner/bids and carries two entries. Stage 01
           has a single view and therefore no tabs.
         */}
+        {/*
+          R7 / PHASE 5. STAGE 01 GETS A TAB STRIP BACK, WITH TWO ENTRIES.
+
+          The comment above explains why HISTORY lives with My Bids, and that
+          reasoning is unchanged and still correct: History answers "did I win",
+          which is a question about a bid, and it reads partner_rfp_responses.
+
+          THIS IS A DIFFERENT QUESTION AND A DIFFERENT TABLE. "What happened to
+          the requests I never answered" is about partner_rfp_inbox, and the
+          rows are ones with NO partner_rfp_responses row at all - which is
+          exactly why they could never appear under History and why that
+          comment's own last line predicted this gap:
+
+              "An RFP whose deadline passed without a bid never becomes history
+               here at all - it stays an inbox row."
+
+          So the closed requests stay with the invitations, which is the entity
+          they belong to, and the 1:1 nav mirror the split created is untouched:
+          this is a view inside stage 01, not a new nav item.
+        */}
+        {surface === "rfps" && (
+        <div className="flex rounded-lg overflow-hidden border border-vendor-border w-fit">
+          {([
+            { key: "open", label: "Open" },
+            { key: "closed", label: `Closed (${closedRows.length})` },
+          ] as { key: RfpTab; label: string }[]).map(t => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveTab(t.key)}
+              className={cn(
+                "px-4 py-2 font-mono text-2xs uppercase tracking-wider transition-colors",
+                activeTab === t.key
+                  ? "bg-vendor-foreground text-white"
+                  : "bg-vendor-surface text-vendor-muted hover:bg-vendor-background"
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        )}
+
         {surface === "bids" && (
         <div className="flex rounded-lg overflow-hidden border border-vendor-border w-fit">
           {([
@@ -701,6 +912,64 @@ function PartnerRFPsContent({ surface }: { surface: RfpSurface }) {
             )}
             {!isLoading && groups.length > 0 && groupBy === "status" && (
               <FlatStatusView allRows={groups.flatMap(g => g.rows)} />
+            )}
+          </>
+        )}
+
+        {/*
+          THE CLOSED VIEW. R7's three requirements, in order:
+            1. a closed row NEVER appears in "Needs your response" - done at
+               app/api/partner/dashboard/route.ts, and never reaches the Open
+               tab because of the partition above;
+            2. visibly distinct from a bid this vendor submitted and lost - a
+               different card, on a different page, saying in words what it is;
+            3. shows which agency, which RFP, and when it closed - all three on
+               every card, unconditionally.
+
+          Search is shared with the Open tab deliberately: a vendor looking for
+          an agency's name should not have to remember which view it is in.
+          Group-by is NOT offered here. This list is ordered by when things
+          ended, which is the only question anyone brings to it.
+        */}
+        {activeTab === "closed" && (
+          <>
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vendor-muted/70" />
+              <Input
+                placeholder="Search agency or scope…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pl-10 bg-vendor-surface border-vendor-border text-vendor-foreground placeholder:text-vendor-muted/70"
+              />
+            </div>
+
+            {isLoading && (
+              <div className="flex items-center justify-center py-12 gap-3 text-vendor-muted">
+                <Loader2 className="w-5 h-5 animate-spin text-vendor-foreground" />
+                <span className="font-mono text-sm">Loading requests…</span>
+              </div>
+            )}
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                Failed to load requests. Please refresh.
+              </div>
+            )}
+            {!isLoading && !error && closedFiltered.length === 0 && (
+              <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
+                <div className="font-display font-bold text-xl text-vendor-foreground mb-2">
+                  {search ? "No results" : "Nothing closed yet"}
+                </div>
+                <p className="text-vendor-muted-strong max-w-lg mx-auto">
+                  {search ? "Try a different search term." : VENDOR_RFPS_CLOSED_EMPTY}
+                </p>
+              </div>
+            )}
+            {!isLoading && !error && closedFiltered.length > 0 && (
+              <div className="space-y-2">
+                {closedFiltered.map(row => (
+                  <ClosedRfpCard key={row.id} row={row} />
+                ))}
+              </div>
             )}
           </>
         )}

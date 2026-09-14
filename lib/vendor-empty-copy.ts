@@ -78,6 +78,19 @@ export const VENDOR_RFPS_EMPTY = {
 export const VENDOR_BIDS_OPEN_EMPTY =
   "You have not submitted any bids that are still awaiting a decision. Bids you submit will appear here until the agency responds."
 
+/**
+ * Body for stage 01's Closed tab. R7, phase 5.
+ *
+ * SAYS WHAT WOULD PUT SOMETHING HERE, not just that there is nothing. A vendor
+ * who finds an empty history surface concludes their record was deleted - which
+ * is the precise misreading R7 exists to prevent, since closure and deletion are
+ * different events and the whole point of this view is that the record survives.
+ * So the copy names the two things that land here and implies neither has
+ * happened yet.
+ */
+export const VENDOR_RFPS_CLOSED_EMPTY =
+  "None of the requests sent to you have been closed. When an agency ends an RFP, or tells you they are moving forward without your company, it moves here and stays here."
+
 /** Body for the History tab. */
 export const VENDOR_BIDS_HISTORY_EMPTY =
   "You have not submitted any bids yet. Every bid you submit will stay here, including the awarded and declined ones."

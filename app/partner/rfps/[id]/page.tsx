@@ -41,6 +41,7 @@ import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-sec
 import { BidBudgetCategories } from "@/components/bid-budget-categories"
 import { BidProposalSectionsEditor } from "@/components/bid-proposal-sections"
 import { isBiddingClosed, BIDDING_CLOSED_VENDOR_MESSAGE, BIDDING_CLOSED_BADGE } from "@/lib/bid-close"
+import { isRfpClosureStatus } from "@/lib/rfp-closure"
 import {
   buildProposalSectionsForSave,
   normalizeProposalSections,
@@ -1368,6 +1369,9 @@ export default function PartnerRfpDetailPage() {
   })
   const responseDeadlineLabel = formatDeadlineDate(inbox.response_deadline)
   const deadlineStateLabel = biddingClosed ? BIDDING_CLOSED_BADGE : null
+  /** Migration 099's two closure statuses, or null. Read off the INBOX row, never
+   *  off the response: closure only ever lands on a row that has no response. */
+  const rfpClosureState = isRfpClosureStatus(inbox.status) ? (inbox.status as string) : null
   const responseDeadlineUrgency = getDeadlineUrgency(inbox.response_deadline)
 
   const requiredCriteria = normalizeBusinessCriteriaRequired(
@@ -1845,7 +1849,29 @@ export default function PartnerRfpDetailPage() {
               )}
             </div>
           )}
-          {biddingClosed ? (
+          {/*
+            R7 / PHASE 5. THE CLOSED REQUEST BANNER.
+
+            WHY IT COMES FIRST, BEFORE biddingClosed. The two states can coexist
+            - a request whose deadline passed with close_bidding_at_deadline on
+            AND which the agency then closed - and the agency's decision is the
+            more specific and more recent fact. A deadline message on a request
+            that has been closed would be true and beside the point.
+
+            WHY IT EXISTS AT ALL. The bid form already vanishes on a closed row,
+            because the canEdit allow-lists do not contain either closure status.
+            That is correct and it is also SILENT: a vendor arriving here from
+            their Closed tab would find a page with no form and no explanation,
+            which reads as a fault rather than as a state. This says which of the
+            two things happened, in the same words the email used.
+          */}
+          {rfpClosureState ? (
+            <p className="text-xs text-vendor-muted-strong bg-vendor-background border border-vendor-border rounded-md px-3 py-2 mb-4">
+              {rfpClosureState === "not_selected"
+                ? `${inbox.agency_company_name || "This agency"} has decided not to move forward with your company on this request. They are not expecting a response from you on it. This is about this one request and it stays here as a record.`
+                : `${inbox.agency_company_name || "This agency"} has closed this request. It ended for everyone who was invited and is not taking bids, so there is nothing further for you to do on it. It stays here as a record.`}
+            </p>
+          ) : biddingClosed ? (
             <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 mb-4">
               {BIDDING_CLOSED_VENDOR_MESSAGE}
             </p>
