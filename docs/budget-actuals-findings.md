@@ -1,6 +1,6 @@
 # Budget actuals: what a throwaway extraction test established
 
-**Date:** 2026-09-11
+**Date:** 2026-09-14
 **Branch:** `feat/budgeting-findings`
 **Status:** input to a future specification session. **This is not a specification.**
 **Scope of this run:** one new file. No application code, no migration, no script, no SQL,
@@ -459,7 +459,7 @@ Everything above that needs a ruling, plus three that predate the test.
     and left open past them.**
 
     **079, 080, 082, 083, 085 and 086 are all confirmed applied in production as of
-    2026-09-11.** Verified by catalog query in the Supabase SQL editor, run as `postgres`, not
+    2026-09-14.** Verified by catalog query in the Supabase SQL editor, run as `postgres`, not
     by any document:
 
     | Probe | Result | Conclusion |
