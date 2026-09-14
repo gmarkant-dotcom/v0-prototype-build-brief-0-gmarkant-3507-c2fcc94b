@@ -119,14 +119,14 @@ better than the null it replaces.
 ### Phase 2. Migration 099. AUTHORED ONLY. NOT APPLIED.
 
 > ### `supabase/migrations/099_rfp_closure.sql`
-> ### **BEGIN; is on LINE 420. COMMIT; is on LINE 606.**
+> ### **BEGIN; is on LINE 507. COMMIT; is on LINE 841.**
 >
 > Those two are the only executable lines in the file beginning with either word. Every
 > other hit under `grep -n 'BEGIN;'` / `grep -n 'COMMIT;'` is prefixed with `--`: the header
 > quoting itself, and the commented probes in the VERIFICATION block.
 >
 > ### `supabase/migrations/099_rfp_closure_down.sql`
-> ### **BEGIN; is on LINE 128. COMMIT; is on LINE 258.**
+> ### **BEGIN; is on LINE 147. COMMIT; is on LINE 295.**
 
 Contents, and the argument for each:
 
@@ -152,22 +152,39 @@ Contents, and the argument for each:
      derivable column is a second place for one fact to disagree with itself.
    - **No reopen column.** Reopen is out of scope (see 3f below). If it is ever built it
      needs none: `status` back to `new` and `closed_at` back to `NULL` already express it.
-4. **Two policy changes**, argued in full in section 6.
+4. **One helper function**, `partner_rfp_inbox_status_before(uuid)`, `STABLE SECURITY
+   DEFINER`. It exists only because a WITH CHECK predicate cannot see `OLD`. Section 6.
+5. **Two policy changes**, argued in full in section 6.
 
 Plus a 7-query **PRE-FLIGHT CAPTURE** (the file was authored from an on-disk history that
 `LIGAMENT_CONTEXT.md` says cannot reproduce this database) and a 10-query **VERIFICATION**
 block with every expected value stated.
 
-`supabase/migrations/099_preapply_test.sql`, 13 numbered assertions, one paste, ends in
-`ROLLBACK`. **The two that matter are called out by name in the file's own header:**
+`supabase/migrations/099_preapply_test.sql`, **27 assertions**, one paste, ends in
+`ROLLBACK`. **The ones that matter are called out by name in the file's own header:**
 
-- **T7. A VENDOR CANNOT SET `closed` ON THEIR OWN ROW.** The assertion the brief mandates
-  and the one the whole file exists for.
+- **T7a to T7j. A VENDOR CANNOT SET ANY AGENCY-OWNED STATUS.** Ten assertions, **one per
+  excluded status**, not one covering all of them - because the ten are not equivalent.
+  `awarded` leaking means a vendor can mark themselves the winner; `new` leaking means they
+  can **un-close** a closed request; `closed` leaking means they can close it. Each names
+  itself in the report.
+- **T14. A VENDOR CANNOT REASSIGN `vendor_org_id`** to an organization they do not belong to.
 - **T10. AN AGENCY CANNOT CLOSE ANOTHER AGENCY'S ROW.**
 
-T8 is T7's counterweight: the vendor **can** still set `viewed`, so T7's refusal is about
-the value and not about the vendor having lost write access to their own row. T9 proves the
-agency **can** close its own, which before section 4a would have silently matched zero rows.
+**And the four counterweights, which matter as much.** A policy that refuses everything
+passes all ten refusal assertions and takes the vendor portal down for every user:
+
+- **T8.** The vendor **can** still stamp `viewed_at` on a row sitting at `awarded`. This is
+  the load-bearing case for clause (C)'s unchanged arm, and it parks the row at `awarded` as
+  the owner first so it measures the case that actually breaks.
+- **T8b.** The vendor **can** still set `bid_submitted`.
+- **T8c.** But **not** from a `closed` row. A closed request cannot be bid back open.
+- **T15.** The vendor **can** still claim an invitation by writing their own org id. It
+  unclaims the row as the owner first, so it is not just re-writing the value already there.
+
+T7k records that `under_review` is refused by the **constraint**, not the policy. T9 proves
+the agency can close its own row, which before section 4a would have silently matched zero
+rows.
 
 ### Phase 3. The two actions.
 
@@ -523,44 +540,144 @@ through the same verb. Which statuses an agency may set is an application questi
 > `docs/099-phase0-baseline.md`, repeated as V10 in the migration, is the one that settles
 > it. Run it before applying and again after.
 
-**4b. The vendor UPDATE policy, NARROWED. This is the security half of the migration.**
+**4b/4c. The vendor UPDATE policy, NARROWED. THREE CLAUSES. This is the security half of
+the migration.** *(Revised after review. The first version of this file had two gaps; both
+are described in section 9.)*
 
 `"Partners update own inbox rows"` has a USING clause and **no WITH CHECK**. PostgreSQL
-applies USING as the check when WITH CHECK is absent, so **today a vendor may set their own
-row to any value the CHECK constraint permits**, straight from the browser client, with no
-route involved. The vendor portal legitimately needs this write: `viewed_at`,
-`partner_intent`, `nda_confirmed_at`, the `bid_submitted` transition.
+applies USING to the post-update row when WITH CHECK is absent, so **today a vendor may set
+their own row to any value the CHECK constraint permits and may write any `vendor_org_id`
+that keeps them matching**, straight from the browser client, with no route involved.
 
 > **SO SECTION 1 OF 099, ON ITS OWN, WOULD HAND EVERY VENDOR THE CLOSE ACTION.** Widening a
-> CHECK constraint looks like a spelling change. Here it is a privilege grant, because that
-> constraint is the only thing standing between a vendor and any status string. **Section 1
-> and section 4b must land together or not at all**, which is why the file has one
-> transaction and not two.
+> CHECK constraint looks like a spelling change. Here it is a privilege grant.
+
+**THE WRITE CENSUS the allow-list is derived from.** Every site that sets
+`partner_rfp_inbox.status`, with the actor at each:
+
+| Site | Client / actor | Writes |
+|---|---|---|
+| `partner/rfps/[id]/response/route.ts:368` | **SESSION, VENDOR** | `bid_submitted` |
+| `agency/rfp-closure/route.ts:190` | session, AGENCY | `closed`, `not_selected` |
+| `agency/rfp-responses/[id]/route.ts:764` | session, AGENCY | `shortlisted`, `meeting_requested`, `awarded`, `declined`, `bid_submitted` |
+| `agency/broadcast-rfp/route.ts:261,410` (INSERT) | session, AGENCY | `new` |
+| `lib/magic-token-attach.ts:356/:167/:395` | **SERVICE ROLE** | various |
+
+**Exactly one row of that table is a vendor session and it writes exactly one value.** The
+service-role row does not constrain the allow-list, and that was **checked, not assumed**:
+`attachMagicTokenToPartnerInbox` has four callers and all four pass a service-role client
+(`partner/rfps:72`, `partner/rfps/bids:56`, `guest/[token]/attach-existing-account:77`,
+`agency/rfp/magic-link:356`), and none falls back to the session client when the key is
+absent.
+
+**THE ALLOW-LIST IS `bid_submitted`. Every excluded status and who sets it:**
+
+| Excluded | Set by |
+|---|---|
+| `awarded`, `shortlisted`, `meeting_requested`, `declined` | the **AGENCY**, `rfp-responses/[id]:764` |
+| `closed`, `not_selected` | the **AGENCY**, `rfp-closure:190` |
+| `new` | the **AGENCY**, and only as the broadcast INSERT default. **Excluded from the vendor list specifically because it is the un-close vector**: a vendor permitted to set `new` could move a closed row back into their own live queue. |
+| `viewed`, `feedback_received`, `revision_submitted` | **NOBODY.** No write of any of these three to this column exists anywhere in the repository. Legacy constraint values. |
+
+**`under_review` is not on that list because it is not a `partner_rfp_inbox` status at all.**
+It is a `partner_rfp_responses` value (`scripts/019:8`) and is absent from
+`partner_rfp_inbox_status_check` (`scripts/019:16-26`). A vendor writing it is refused by the
+**CHECK constraint with 23514**, before any policy is consulted, both before and after this
+file. T7k asserts exactly that.
+
+### Why a bare allow-list would have been wrong in both directions
+
+**WITH CHECK is evaluated on every UPDATE the vendor makes, not only the ones that touch
+`status`.** On a write that does not change status, the predicate sees the status the row
+already had. So `status IN ('bid_submitted')` alone would have refused:
+
+- `partner/rfps/[id]/route.ts:72` stamping `viewed_at` on a `new` row
+- `partner/rfps/[id]/intent/route.ts:94` writing `partner_intent`
+- `partner/rfps/[id]/nda-notify:117`
+- `partner/rfps/claim/route.ts:75-83` **the claim itself**
+
+**And the one easiest to miss:** a magic-link row synthesized by
+`lib/magic-token-attach.ts:342` from an already-decided response carries status `awarded` or
+`shortlisted` and no `viewed_at`. A vendor opening that RFP for the first time writes
+`viewed_at` to a row whose status is `awarded`. **A bare allow-list 42501s them out of their
+own won work.** T8 is written against exactly that case.
+
+So clause (C) is **"unchanged, or the allow-list"**. The unchanged arm needs the previous
+value, WITH CHECK cannot see `OLD`, and that is the entire reason section 4b's helper exists.
+
+### The three clauses
+
+```
+(A) OWNERSHIP    the same two arms as USING
+(B) IDENTITY     vendor_org_id IS NULL
+                 OR vendor_org_id IN (SELECT current_user_org_ids())
+(C) STATUS       status = partner_rfp_inbox_status_before(id)
+                 OR (status = 'bid_submitted'
+                     AND partner_rfp_inbox_status_before(id) <> 'closed'
+                     AND partner_rfp_inbox_status_before(id) <> 'not_selected')
+```
+
+**Clause (B), and why `vendor_org_id` must stay writable.** The claim path needs it. It is
+`app/api/partner/rfps/claim/route.ts:75-83`, it writes `vendor_org_id: writeOrgId`, and it
+runs **on the session client as the vendor, not on the service role** - after proving the
+caller's profile email equals `recipient_email`. `writeOrgId` comes from
+`resolveCallerWriteOrgId`, so it is always one of the caller's own organizations. Refusing
+this clause would break every invitation claim on the platform; T15 asserts it still works.
+NULL must also be permitted, because an unclaimed manual-recipient row carries NULL and the
+vendor reaches it through the email arm to stamp `viewed_at` long before anything claims it.
+
+**What (B) refuses:** any organization id the caller does not belong to. Before it, a vendor
+admitted by the email arm could write an arbitrary org id and hand the agency's request to a
+company of their choosing.
+
+**What (B) cannot refuse, stated plainly:** moving a row from one organization the caller
+belongs to, to another organization the caller *also* belongs to. WITH CHECK sees only the
+new row, so "it was already claimed by someone else" is not expressible there. That needs a
+`BEFORE UPDATE` trigger comparing `OLD.vendor_org_id` and is a separate decision. The claim
+route already guards it with `.is("claimed_at", null)`; this is the gap between that route
+and raw PostgREST.
+
+**Clause (C) is not a deny-list and needs no extension.** A status added to the constraint in
+some future migration is refused to vendors by default: it is neither equal to the previous
+value on a change, nor `bid_submitted`. Nobody has to remember to come back.
+
+### The one risk in this design, stated rather than buried
+
+`public.partner_rfp_inbox_status_before(uuid)` is `STABLE SECURITY DEFINER`. **STABLE is
+load-bearing, not decoration:** it is what pins the read to the statement-start snapshot,
+i.e. the pre-update row. `SECURITY DEFINER` is required because an invoker-rights function
+reading `partner_rfp_inbox` from inside that table's own policy re-enters RLS on the same
+table and raises 42P17.
+
+> **IF THAT FUNCTION EVER RETURNED THE NEW STATUS INSTEAD OF THE OLD ONE, clause (C) would be
+> TRUE for every write and THE WHOLE CHECK WOULD BE VACUOUS while every statement reported
+> success.** That is a success-shaped non-event of exactly the kind this project keeps being
+> bitten by.
+>
+> **I HAVE NOT EXECUTED THIS.** The semantics are asserted, not measured. The pre-apply test
+> is built around catching it: the ten T7 probes each try one agency-owned status, and **if
+> all ten succeed the headline says so by name** - "ALL TEN STATUS PROBES SUCCEEDED, WHICH
+> MEANS CLAUSE (C) IS VACUOUS, NOT THAT TEN THINGS ARE BROKEN" - and tells the reader to
+> check `provolatile`, and that if it is already `s` the design must change to a
+> `BEFORE UPDATE` trigger. V5b checks `provolatile` directly.
+
+### The predicate is still equal-or-narrower
 
 ```
 BEFORE:  USING      <P>
          WITH CHECK  (absent, so PostgreSQL uses <P>)
 
-AFTER:   USING      <P>                                  -- UNTOUCHED, NOT RESTATED
-         WITH CHECK <P> AND status <> 'closed'
-                        AND status <> 'not_selected'
+AFTER:   USING      <P>                    -- UNTOUCHED, NOT NAMED
+         WITH CHECK <P> AND (B) AND (C)
 ```
 
-`<P>` is not retyped: section 4b names WITH CHECK **only**, so the live USING survives
-verbatim whatever it is, including the recipient-email arm 079 deliberately left alone
-pending a product ruling. The new check is the old effective check ANDed with two
-inequalities. **A conjunction with a new term can only admit fewer rows. There is no input
-for which the new predicate is true and the old one false. It is narrower by construction,
-not by inspection.**
+The new check is the old effective check ANDed with two further clauses. **A conjunction with
+new terms can only ever admit fewer rows.** Narrower by construction, not by inspection.
 
-Two `<>` terms rather than `NOT IN`: `NOT IN` yields NULL for a NULL status, and a NULL WITH
-CHECK result is a refusal, which would block a legitimate write. The column is NOT NULL
-today; the two-term form does not depend on that staying true.
-
-`ALTER POLICY`, never DROP-then-CREATE. A DROP on a name that is not live **silently
-no-ops** against this database, and the CREATE that followed would add a **second permissive
-policy** that ORs with the first - closing nothing, widening everything, and reporting
-"Success. No rows returned" while it did so. `096:365-372` established the rule.
+`ALTER POLICY`, never DROP-then-CREATE. A DROP on a name that is not live **silently no-ops**
+and the CREATE that followed would add a **second permissive policy** that ORs with the
+first - closing nothing, widening everything, and reporting success while it did so.
+`096:365-372` established the rule.
 
 **No route gained the service role and no session or role check was removed or weakened.**
 
@@ -700,13 +817,44 @@ the gate on everything after them.
     **EXPECT: 403, or a 200 that affected zero rows.** Then **[V]** reload
     `/partner/rfps` and **expect the RFP to still be in the Open tab, unchanged.**
 
-    **>>> IF THE ROW CLOSES, STOP EVERYTHING. Migration 099 section 4b did not take, and
-    every vendor on the platform can close their own requests. Re-run V5 and re-apply
-    section 4b.**
+    **REPEAT with `{"status":"awarded"}`.** That one is not a formality: `awarded` was
+    writable by any vendor before this migration and is the most valuable status in the
+    product to be able to forge.
 
-    The database-level version of this same check is **T7** in the pre-apply test and is
-    easier to run. **Do both.** T7 measures the policy; this measures the policy plus the
-    route plus whatever the deployed build actually shipped.
+    **>>> IF EITHER ROW CHANGES, STOP EVERYTHING. Migration 099 clause (C) did not take.
+    Re-run V5 and V5b and re-apply section 4c.**
+
+    The database-level version of this check is the **T7 block** in the pre-apply test -
+    ten assertions, one per excluded status - and is easier to run. **Do both.** T7
+    measures the policy; this measures the policy plus the route plus whatever the deployed
+    build actually shipped.
+
+20b. **>>> A VENDOR CANNOT HAND THE REQUEST TO ANOTHER COMPANY. <<<**
+
+    **[V]** Same technique, body `{"vendor_org_id":"<ANY ORG ID THE VENDOR IS NOT IN>"}`.
+    Get one from the SQL Editor with `SELECT id, name FROM public.organizations LIMIT 5;`.
+
+    **EXPECT: 403, or 200 affecting zero rows.** Then confirm in the SQL Editor:
+
+    ```sql
+    SELECT id, vendor_org_id FROM public.partner_rfp_inbox WHERE id = '<THE ROW>';
+    ```
+
+    **EXPECT `vendor_org_id` unchanged.**
+
+    **>>> IF IT CHANGED, a vendor can reassign an agency's RFP request to a company of
+    their choosing. Clause (B) did not take.**
+
+20c. **THE OTHER DIRECTION. TOO TIGHT IS WORSE THAN THE HOLE.**
+
+    **[V]** Open an RFP in the Open tab normally, click through to the detail page, set an
+    intent signal, and submit or save a draft bid.
+
+    **EXPECT ALL OF IT TO WORK.** If opening an RFP, signalling intent, claiming an
+    invitation or submitting a bid now fails, **clause (B) or (C) is too tight and the
+    vendor portal is broken for every vendor on the platform.** That is a worse outcome
+    than the hole this migration closes. T8, T8b, T8c and T15 cover the same ground in the
+    pre-apply test.
 
 21. **>>> AN AGENCY CANNOT CLOSE ANOTHER AGENCY'S RFP. <<<**
 
@@ -768,3 +916,80 @@ the gate on everything after them.
 
 23. **[A]** Update the migrations table in `LIGAMENT_CONTEXT.md` with the 099 row, per the
     standing sequence.
+
+---
+
+## 9. THE REVIEW ROUND: TWO GAPS IN 099's WITH CHECK, BOTH CLOSED
+
+Raised against the first version of the migration. **Both were real, both were live today,
+and neither was closed by the version I first committed.** What follows is what changed and
+what I verified versus read.
+
+### Gap 1. The status check was a two-value deny-list.
+
+The first version was `AND status <> 'closed' AND status <> 'not_selected'`. That blocked
+the two values this run adds and **nothing else**. A vendor could still set their own row to
+`awarded`, `shortlisted`, `meeting_requested`, `declined` or `feedback_received` - every
+status representing an agency decision - exactly as they can today.
+
+It was also a deny-list, which is the failure mode this file's own section 2 comment warns
+about for notification types: it has to be extended every time a status is added, and the
+cost of forgetting is silent.
+
+**What I did.** Built the write census above by grepping every `.update(`/`.insert(` within
+eight lines of a `from("partner_rfp_inbox")` across `app/` and `lib/`, then reading each
+site for its client. The allow-list is `bid_submitted` and it is one value because exactly
+one vendor-session site writes this column.
+
+**The part I got wrong on the first pass and corrected during this one.** My first draft of
+the fix was a bare allow-list with no reference to the previous status. **That would have
+broken the vendor portal**, because WITH CHECK runs on every vendor write and not only on
+status changes - including a vendor opening a magic-link RFP whose status is already
+`awarded`. Hence the unchanged arm, hence the helper function. T8 exists specifically to
+catch that class of mistake if it is ever reintroduced.
+
+### Gap 2. `vendor_org_id` was freely writable through the email arm.
+
+The first version's WITH CHECK mirrored USING, so a vendor admitted by the `recipient_email`
+arm satisfied the check **whatever they wrote into `vendor_org_id`** - including an
+organization they do not belong to. That is reassignment of an agency's RFP request to a
+company of the vendor's choosing.
+
+**Must it remain writable? Yes, and here is the code.**
+`app/api/partner/rfps/claim/route.ts:75-83` writes `vendor_org_id: writeOrgId`. It runs
+**on the session client as the vendor** - `createClient` from `@/lib/supabase/server`, line 3
+of that file - **not on the service role**. It writes only after `emailMatches(inbox.recipient_email,
+profileEmail)` passes, and `writeOrgId` comes from `resolveCallerWriteOrgId`, so the value is
+always one of the caller's own organizations.
+
+**So the clause is `vendor_org_id IS NULL OR vendor_org_id IN (SELECT current_user_org_ids())`.**
+Permits every legitimate claim, refuses every cross-organization write. What it cannot do is
+stated in section 6 rather than glossed: it cannot see `OLD`, so it cannot stop the same
+human moving a row between two organizations they both belong to.
+
+### What changed, by file
+
+| File | Change |
+|---|---|
+| `099_rfp_closure.sql` | Section 4b is new: the `STABLE SECURITY DEFINER` helper, with `REVOKE`/`GRANT` following 096's pattern. Section 4c replaces the old 4b with the three-clause WITH CHECK. The header's 4b argument is replaced by the write census, the excluded-status table with actors, and the "why a bare allow-list is wrong in both directions" section. V5 now reads for all three clauses by name; **V5b is new** and checks `provolatile` and the `anon` grant. V7 is rewritten to cover all ten statuses plus the identity write, and **V7b is new** for the must-succeed direction. **BEGIN moved 420 to 507, COMMIT 606 to 841**, and the header was resynced. |
+| `099_rfp_closure_down.sql` | Consequence (3) rewritten: removing the check gives back **two** holes, and narrowing the constraint takes back only one of them. New section 4c drops the helper, **after** the policy restore, with a note that `CASCADE` must never be added because it would drop the policy itself. D2b added. **BEGIN moved 128 to 147, COMMIT 258 to 295.** |
+| `099_preapply_test.sql` | Section A applies the helper and the three-clause policy. T7 became **ten assertions in a loop, one per excluded status**, each restoring the row before the next. **T7k** (under_review is the constraint's refusal, not the policy's), **T8** rewritten to park the row at `awarded` first, **T8b**, **T8c**, **T14** and **T15** are new. A `v_leaked` counter and a dedicated headline name the vacuous-clause failure. 13 assertions became **27**. |
+
+### What I verified versus read, on this round
+
+**VERIFIED BY EXECUTION:** the write census greps; that all four
+`attachMagicTokenToPartnerInbox` callers pass a service-role client and none falls back;
+that `under_review` is absent from `partner_rfp_inbox_status_check` (`scripts/019:16-26`);
+that nothing anywhere writes `viewed`, `feedback_received` or `revision_submitted` to this
+column; that no `components/` file writes `partner_rfp_inbox` at all; that the guest token
+route never touches the table; `tsc`, `build`, `lint` and the three code guards.
+
+**READ, NOT EXECUTED:** everything about how the database will behave. In particular
+**the snapshot semantics clause (C) depends on.** No SQL was run this round either.
+
+**REASONED:** that a bare allow-list breaks the portal; that `bid_submitted` from a `closed`
+row must still be refused even though it is on the allow-list; that `new` must be excluded
+because it is the un-close vector.
+
+**STILL NOT CLOSED, AND DELIBERATELY:** a vendor moving a row between two organizations they
+both belong to. It needs a `BEFORE UPDATE` trigger and is a separate decision.

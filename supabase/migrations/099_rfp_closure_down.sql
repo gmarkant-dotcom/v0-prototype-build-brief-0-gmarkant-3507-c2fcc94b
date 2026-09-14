@@ -9,8 +9,8 @@
 -- STOP GATE. GREG APPLIES THIS. THE AGENT DOES NOT.
 -- =====================================================================
 --
--- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 128
--- and an explicit COMMIT; on LINE 258. THOSE TWO ARE THE ONLY EXECUTABLE
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 147
+-- and an explicit COMMIT; on LINE 295. THOSE TWO ARE THE ONLY EXECUTABLE
 -- LINES IN THE FILE that begin with either word. Verify with:
 --
 --     grep -n 'BEGIN;'  supabase/migrations/099_rfp_closure_down.sql
@@ -68,13 +68,32 @@
 -- see and appears nowhere in the interface.
 --
 -- >>> (3) RESTORING THE VENDOR POLICY'S NULL WITH CHECK IS A SECURITY
--- >>> REGRESSION IF THE STATUS CONSTRAINT STAYS WIDE. THE TWO ARE
--- >>> COUPLED AND THE COUPLING RUNS ONE WAY ONLY.
+-- >>> REGRESSION IN TWO SEPARATE WAYS, AND ONLY ONE OF THEM IS UNDONE
+-- >>> BY NARROWING THE CONSTRAINT AGAIN.
 --
--- 099's section 4b added a WITH CHECK to "Partners update own inbox
--- rows" so a vendor cannot set 'closed' or 'not_selected' on their own
--- row. That narrowing is ONLY safe to remove if the status constraint no
--- longer permits those values.
+-- 099's section 4c added a three-clause WITH CHECK to "Partners update
+-- own inbox rows". Removing it gives back BOTH of the holes it closed:
+--
+--   (a) THE STATUS HOLE. A vendor can again set their own row to any
+--       value the CHECK constraint permits - 'awarded', 'shortlisted',
+--       'meeting_requested', 'declined', and 'closed'/'not_selected' if
+--       the constraint is still wide. Narrowing the constraint (section
+--       1) takes back the last two and NOT THE OTHER FOUR. Those four
+--       are agency decisions and they were writable by vendors before
+--       099 and will be again after this file. That is a restoration of
+--       a PRE-EXISTING hole, not a new one - but it is a hole, and
+--       nothing in this file closes it.
+--
+--   (b) >>> THE IDENTITY HOLE, WHICH SECTION 1 DOES NOT TOUCH AT ALL.
+--       A vendor admitted by the recipient_email arm can again write ANY
+--       organization id into vendor_org_id, including one they do not
+--       belong to, handing an agency's RFP request to a company of their
+--       choosing. No constraint narrowing affects this. If you run
+--       section 4b of this file, that capability comes back and stays
+--       back until somebody re-adds a check.
+--
+-- The status half is ONLY safe to remove if the status constraint no
+-- longer permits the closure values.
 --
 -- >>> SO THE ORDER IN THIS FILE IS NOT ARBITRARY AND MUST NOT BE
 -- >>> REARRANGED: section 1 narrows the status constraint BEFORE section
@@ -220,9 +239,11 @@ DROP POLICY IF EXISTS "Agencies update own partner RFP inbox rows"
 -- ---------------------------------------------------------------------
 -- 4b. THE VENDOR UPDATE POLICY'S WITH CHECK, REMOVED.
 --
--- >>> ONLY SAFE BECAUSE SECTION 1 RAN FIRST AND THE CONSTRAINT NO LONGER
--- >>> PERMITS THE TWO CLOSURE VALUES. If you skipped section 1, SKIP
--- >>> THIS TOO. See (3) in the header.
+-- >>> ONLY PARTLY SAFE EVEN AFTER SECTION 1. See (3) in the header:
+-- >>> narrowing the constraint takes back 'closed' and 'not_selected'
+-- >>> and takes back NOTHING ELSE. The four agency-decision statuses and
+-- >>> the vendor_org_id reassignment both become writable again.
+-- >>> If you skipped section 1, SKIP THIS TOO.
 --
 -- PostgreSQL has no syntax for "remove a WITH CHECK clause". ALTER
 -- POLICY ... WITH CHECK (<the USING predicate>) is the equivalent: it
@@ -255,6 +276,22 @@ ALTER POLICY "Partners update own inbox rows"
   );
 
 
+-- ---------------------------------------------------------------------
+-- 4c. THE STATUS-BEFORE HELPER.
+--
+-- >>> MUST RUN AFTER 4b, NEVER BEFORE IT. The policy created by 099
+-- >>> section 4c REFERENCES this function. Dropping it while that policy
+-- >>> is still live raises 2BP01 (dependent objects still exist), which
+-- >>> aborts this transaction - that is the safe failure. But if it were
+-- >>> forced with CASCADE it would DROP THE POLICY ITSELF, leaving the
+-- >>> table with NO vendor UPDATE policy at all and the vendor portal
+-- >>> silently unable to write anything. Never add CASCADE here.
+--
+-- IF EXISTS so a re-run is a no-op rather than 42883. The argument type
+-- is named because a bare name is ambiguous if an overload is ever added.
+-- ---------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.partner_rfp_inbox_status_before(uuid);
+
 COMMIT;
 
 
@@ -281,6 +318,14 @@ COMMIT;
 --       WHERE table_schema = 'public' AND table_name = 'partner_rfp_inbox'
 --         AND column_name = 'closed_at';
 --       -- EXPECTED: 0.
+--
+-- D2b. The helper function is gone.
+--
+--       SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname = 'public' AND p.proname = 'partner_rfp_inbox_status_before';
+--       -- EXPECTED: 0. A non-zero count with the policy already
+--       -- restored means section 4c did not run; harmless, but the
+--       -- function is then dead code with an EXECUTE grant on it.
 --
 -- D3. FIVE policies on the table, and the vendor one's with_check reads
 --     exactly as its qual.

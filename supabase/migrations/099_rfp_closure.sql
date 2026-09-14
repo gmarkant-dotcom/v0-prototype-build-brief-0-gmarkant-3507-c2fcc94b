@@ -27,8 +27,8 @@
 -- >>> supabase/migrations/099_preapply_test.sql first, and read the
 -- >>> PRE-FLIGHT CAPTURE below before either.
 --
--- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 420
--- and an explicit COMMIT; on LINE 606. THOSE TWO ARE THE ONLY EXECUTABLE
+-- TRANSACTION CONTROL. This file carries an explicit BEGIN; on LINE 507
+-- and an explicit COMMIT; on LINE 841. THOSE TWO ARE THE ONLY EXECUTABLE
 -- LINES IN THE FILE that begin with either word.
 --
 -- Do NOT verify with grep -n '^BEGIN;$'. That anchored form has produced
@@ -352,52 +352,139 @@
 -- >>> docs/099-phase0-baseline.md is the query that measures the damage.
 -- >>> RUN IT. The rows will not repair themselves.
 --
--- >>> 4b. THE VENDOR UPDATE POLICY, NARROWED. THIS IS THE SECURITY HALF
--- >>> OF THIS MIGRATION AND IT IS THE EASIEST THING HERE TO MISS.
+-- >>> 4b/4c. THE VENDOR UPDATE POLICY, NARROWED. THIS IS THE SECURITY
+-- >>> HALF OF THIS MIGRATION AND IT IS THE EASIEST THING HERE TO MISS.
 --
 -- "Partners update own inbox rows" (079:1356-1364) has a USING clause
--- and NO WITH CHECK. PostgreSQL applies USING as the check when WITH
--- CHECK is absent, so TODAY A VENDOR MAY SET THEIR OWN ROW TO ANY VALUE
--- THE CHECK CONSTRAINT PERMITS, straight from the browser client, with
--- no route involved. The vendor portal legitimately needs this: it
--- stamps viewed_at, partner_intent, nda_confirmed_at and the
--- bid_submitted status transition.
+-- and NO WITH CHECK. PostgreSQL applies USING to the POST-UPDATE row
+-- when WITH CHECK is absent, so TODAY A VENDOR MAY SET THEIR OWN ROW TO
+-- ANY VALUE THE CHECK CONSTRAINT PERMITS AND MAY WRITE ANY
+-- vendor_org_id THAT KEEPS THEM MATCHING, straight from the browser
+-- client, with no route involved. The vendor portal legitimately needs
+-- this policy: it stamps viewed_at, partner_intent, nda_confirmed_at,
+-- the claim, and the bid_submitted transition.
 --
 -- >>> SO SECTION 1, ON ITS OWN, WOULD HAND VENDORS THE CLOSE ACTION.
 -- >>> Widening a CHECK constraint looks like a spelling change. Here it
 -- >>> is a privilege grant, because the only thing standing between a
--- >>> vendor and any status string is that constraint. R7 says a vendor
--- >>> must NEVER be able to close or not_select their own row. Section 1
--- >>> and section 4b MUST land together or not at all, which is why this
+-- >>> vendor and any status string is that constraint. Section 1 and
+-- >>> section 4c MUST land together or not at all, which is why this
 -- >>> file has one transaction and not two.
 --
--- THE PREDICATE, AND WHY IT IS EQUAL-OR-NARROWER:
+-- ---------------------------------------------------------------------
+-- THE WRITE CENSUS. EVERY SITE THAT SETS partner_rfp_inbox.status,
+-- AND WHO THE ACTOR IS AT EACH. THE ALLOW-LIST IS DERIVED FROM THIS.
+-- ---------------------------------------------------------------------
+--
+--   SITE                                              CLIENT / ACTOR      WRITES
+--   ------------------------------------------------  ------------------  ------
+--   partner/rfps/[id]/response/route.ts:368           SESSION, VENDOR     'bid_submitted'
+--   agency/rfp-closure/route.ts:190                   session, AGENCY     'closed', 'not_selected'
+--   agency/rfp-responses/[id]/route.ts:764            session, AGENCY     'shortlisted', 'meeting_requested',
+--                                                                         'awarded', 'declined', 'bid_submitted'
+--                                                                         (via mapResponseStatusToInboxStatus)
+--   agency/broadcast-rfp/route.ts:261,410 (INSERT)    session, AGENCY     'new'
+--   lib/magic-token-attach.ts:356 / :167 / :395       SERVICE ROLE        various
+--
+-- >>> EXACTLY ONE ROW OF THAT TABLE IS A VENDOR SESSION, AND IT WRITES
+-- >>> EXACTLY ONE VALUE. That is the allow-list: 'bid_submitted'.
+--
+-- THE SERVICE-ROLE ROW DOES NOT CONSTRAIN THE ALLOW-LIST, and this was
+-- checked rather than assumed. attachMagicTokenToPartnerInbox has four
+-- callers and ALL FOUR pass a service-role client:
+--   app/api/partner/rfps/route.ts:72
+--   app/api/partner/rfps/bids/route.ts:56
+--   app/api/rfp/guest/[token]/attach-existing-account/route.ts:77
+--   app/api/agency/rfp/magic-link/route.ts:356
+-- None of them falls back to the session client when the key is absent:
+-- the first two `return` and the third 500s. The service role bypasses
+-- RLS, so those writes never meet this policy.
+--
+-- ---------------------------------------------------------------------
+-- EVERY EXCLUDED STATUS, AND WHICH ACTOR SETS IT
+-- ---------------------------------------------------------------------
+--
+--   'awarded'             the AGENCY, rfp-responses/[id]:764 on award.
+--   'shortlisted'         the AGENCY, same site.
+--   'meeting_requested'   the AGENCY, same site.
+--   'declined'            the AGENCY, same site. Means a vendor who BID
+--                         AND LOST.
+--   'closed'             the AGENCY, rfp-closure:190. R7.
+--   'not_selected'       the AGENCY, rfp-closure:190. R7.
+--   'new'                the AGENCY, and only as the broadcast INSERT
+--                        default (broadcast-rfp:261 and :410), which is
+--                        governed by the INSERT policy, not this one.
+--                        >>> EXCLUDED FROM THE VENDOR LIST SPECIFICALLY
+--                        >>> BECAUSE IT IS THE UN-CLOSE VECTOR: a vendor
+--                        >>> permitted to set 'new' could move a 'closed'
+--                        >>> row back into their own live queue.
+--   'viewed'             NOBODY. No write of this value to this column
+--                        exists anywhere in the repository. The column
+--                        default is 'new' and "seen" is carried by the
+--                        separate viewed_at timestamp. It survives in
+--                        the constraint and in the label maps as a
+--                        legacy value.
+--   'feedback_received'  NOBODY. mapResponseStatusToInboxStatus never
+--                        returns it and no literal write exists. Legacy.
+--   'revision_submitted' NOBODY. Same. Legacy.
+--
+-- >>> 'under_review' IS NOT ON THIS LIST BECAUSE IT IS NOT A
+-- >>> partner_rfp_inbox STATUS AT ALL. It is a partner_rfp_responses
+-- >>> value (scripts/019:8) and is absent from
+-- >>> partner_rfp_inbox_status_check (scripts/019:16-26). A vendor
+-- >>> writing it to this column is refused by the CHECK CONSTRAINT with
+-- >>> 23514, before any policy is consulted, both before and after this
+-- >>> file. T7k asserts exactly that, so the difference is recorded
+-- >>> rather than assumed.
+--
+-- ---------------------------------------------------------------------
+-- WHY A BARE ALLOW-LIST WOULD HAVE BEEN WRONG IN BOTH DIRECTIONS
+-- ---------------------------------------------------------------------
+--
+-- WITH CHECK IS EVALUATED ON EVERY UPDATE THE VENDOR MAKES, NOT ONLY ON
+-- THE ONES THAT TOUCH status. The predicate sees the row as it will be,
+-- and on a write that does not change status that is simply the status
+-- the row already had.
+--
+-- So `status IN ('bid_submitted')` alone would refuse:
+--   partner/rfps/[id]/route.ts:72        viewed_at on a 'new' row
+--   partner/rfps/[id]/intent/route.ts:94 partner_intent on a 'new' row
+--   partner/rfps/[id]/nda-notify:117     agency_nda_notified_at
+--   partner/rfps/claim/route.ts:75-83    THE CLAIM ITSELF
+--
+-- >>> AND THE ONE THAT IS EASIEST TO MISS: a magic-link row synthesized
+-- >>> by lib/magic-token-attach.ts:342 from an ALREADY-DECIDED response
+-- >>> carries status 'awarded' or 'shortlisted' and NO viewed_at. The
+-- >>> vendor opening that RFP for the first time writes viewed_at to a
+-- >>> row whose status is 'awarded'. A bare allow-list 42501s them out
+-- >>> of their own won work.
+--
+-- Hence clause (C) is "UNCHANGED, or the allow-list". The unchanged arm
+-- needs the previous value, WITH CHECK cannot see OLD, and that is the
+-- entire reason section 4b exists.
+--
+-- ---------------------------------------------------------------------
+-- THE PREDICATE, AND WHY IT IS EQUAL-OR-NARROWER
+-- ---------------------------------------------------------------------
 --
 --   BEFORE:  USING      <P>
 --            WITH CHECK  (absent, so PostgreSQL uses <P>)
 --
---   AFTER:   USING      <P>                          -- UNTOUCHED
---            WITH CHECK <P> AND status <> 'closed'
---                           AND status <> 'not_selected'
+--   AFTER:   USING      <P>                    -- UNTOUCHED, NOT NAMED
+--            WITH CHECK <P>
+--                       AND <identity clause>
+--                       AND <status clause>
 --
--- <P> is not restated, retyped or re-derived by this file: section 4b
--- names WITH CHECK ONLY, so the live USING survives verbatim whatever it
--- is. The new check is the old effective check ANDed with two
--- inequalities. A conjunction with a new term can only ever admit fewer
--- rows. There is no input for which the new predicate is true and the
--- old one false. It is narrower by construction, not by inspection.
+-- The new check is the old effective check ANDed with two further
+-- clauses. A conjunction with new terms can only ever admit fewer rows.
+-- There is no input for which the new predicate is true and the old one
+-- false. It is narrower by construction, not by inspection.
 --
--- WRITTEN AS TWO `<>` TERMS RATHER THAN `NOT IN`. `status NOT IN
--- ('closed','not_selected')` evaluates to NULL, not TRUE, if status is
--- ever NULL - and a NULL WITH CHECK result is treated as a failure, so
--- it would refuse a legitimate write. The column is NOT NULL today
--- (scripts/013:19) so this cannot arise, but the two-term form does not
--- depend on that staying true.
---
--- WHAT A VENDOR CAN STILL DO, UNCHANGED: every status in the nine, which
--- is every status they could set before this file. Nothing a vendor does
--- today stops working. The ONLY thing they lose is the ability to set
--- two values that did not exist until this file created them.
+-- WHAT A VENDOR CAN STILL DO, UNCHANGED: open an RFP, signal intent,
+-- confirm an NDA, claim an invitation, submit a bid, and edit a bid.
+-- Every one of those is asserted in 099_preapply_test.sql - T8, T8b and
+-- T8c - precisely because "too tight" is a worse outcome than the hole
+-- and a file that only tested refusals would not notice.
 --
 -- =====================================================================
 -- VALIDATION COST
@@ -558,34 +645,110 @@ CREATE POLICY "Agencies update own partner RFP inbox rows"
 
 
 -- ---------------------------------------------------------------------
--- 4b. THE VENDOR UPDATE POLICY, NARROWED.
+-- 4b. THE STATUS-BEFORE HELPER. REQUIRED BY 4c.
 --
--- >>> THIS IS THE SECURITY STATEMENT OF THIS FILE. Section 1 permits two
--- >>> new strings in a column a vendor can already write. Without this
--- >>> statement, section 1 hands the close action to every vendor on the
--- >>> platform.
+-- >>> WHY A FUNCTION AT ALL. A WITH CHECK PREDICATE CANNOT SEE `OLD`.
+-- It is evaluated against the row AS IT WILL BE, and nothing else. So
+-- "the vendor may not CHANGE the status" is not directly expressible,
+-- and the obvious workaround - an allow-list of permitted status values
+-- with no reference to the previous one - IS WRONG IN BOTH DIRECTIONS.
+-- See the header section on 4c for why: WITH CHECK runs on EVERY vendor
+-- write, including the ones that do not touch status at all, so a bare
+-- allow-list would refuse a vendor opening an awarded magic-link RFP.
+--
+-- This reads the status the row held BEFORE the update, by id.
+--
+-- >>> STABLE IS LOAD-BEARING, NOT DECORATION. It is what pins the read
+-- >>> to the snapshot taken at statement start, which is the PRE-update
+-- >>> row. A VOLATILE function could observe the statement's own
+-- >>> in-progress changes, and if it ever returned the NEW status then
+-- >>> `status = partner_rfp_inbox_status_before(id)` would be TRUE for
+-- >>> every write and THE WHOLE CHECK WOULD BE VACUOUS while reporting
+-- >>> success. That is a success-shaped non-event of exactly the kind
+-- >>> this project keeps being bitten by, so it is ASSERTED rather than
+-- >>> assumed: T7c to T7j in 099_preapply_test.sql each try to set one
+-- >>> agency-owned status as a vendor and require a refusal. If the
+-- >>> semantics are not what this comment says, those assertions FAIL
+-- >>> and the file must not be applied.
+--
+-- >>> SECURITY DEFINER IS REQUIRED AND IS NOT A WIDENING. An
+-- >>> invoker-rights function reading partner_rfp_inbox from inside that
+-- >>> table's own policy re-enters RLS on the same table and raises
+-- >>> 42P17 (infinite recursion). It grants nothing: it returns one text
+-- >>> value for one row id, and the only context it can be called from
+-- >>> is a policy on a row the caller has already been admitted to by
+-- >>> the USING clause. It exposes no row, no column of any other row,
+-- >>> and cannot be used to enumerate anything - a caller who guesses an
+-- >>> id learns one status and nothing that identifies whose it is.
+--
+-- REVOKED FROM anon BY NAME, NOT ONLY FROM PUBLIC. A stock Supabase
+-- project carries a DEFAULT PRIVILEGE granting anon EXECUTE on new
+-- functions in public, and REVOKE ... FROM PUBLIC does not remove a
+-- direct grant. 089 established this, 094 and 096 repeated it.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.partner_rfp_inbox_status_before(p_id uuid)
+RETURNS text
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+  SELECT i.status FROM public.partner_rfp_inbox i WHERE i.id = p_id;
+$$;
+
+COMMENT ON FUNCTION public.partner_rfp_inbox_status_before(uuid) IS
+  'The status a partner_rfp_inbox row holds BEFORE the statement currently updating it. '
+  'Exists solely for the WITH CHECK on "Partners update own inbox rows", which cannot '
+  'reference OLD. STABLE is required: it pins the read to the statement-start snapshot. '
+  'If this is ever changed to VOLATILE the policy silently stops constraining anything. '
+  'SECURITY DEFINER is required to avoid 42P17 recursion into the same table''s RLS. '
+  'Migration 099.';
+
+REVOKE EXECUTE ON FUNCTION public.partner_rfp_inbox_status_before(uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.partner_rfp_inbox_status_before(uuid) FROM anon;
+GRANT  EXECUTE ON FUNCTION public.partner_rfp_inbox_status_before(uuid) TO authenticated;
+
+
+-- ---------------------------------------------------------------------
+-- 4c. THE VENDOR UPDATE POLICY, NARROWED. THREE CLAUSES.
+--
+-- >>> THIS IS THE SECURITY STATEMENT OF THIS FILE. See the header for
+-- >>> the full argument on each clause. In short:
+--
+--   (A) OWNERSHIP. Mirrors USING. Unchanged in meaning from the live
+--       effective check, which is USING itself.
+--
+--   (B) IDENTITY. vendor_org_id may only ever end up NULL or one of the
+--       CALLER'S OWN organizations. Closes RFP identity reassignment:
+--       without it, a vendor admitted by the recipient_email arm could
+--       write ANY organization id onto the row, including one they do
+--       not belong to.
+--
+--   (C) STATUS. Unchanged, or 'bid_submitted' from a non-closed row.
+--       That one value IS the allow-list, derived from the write census
+--       in the header. Everything else - every agency decision, and the
+--       two closure statuses - is refused.
 --
 -- ALTER, NEVER DROP-THEN-CREATE. If the policy name has drifted, ALTER
 -- raises 42704 and this transaction aborts with nothing applied. A DROP
 -- on a name that is not live SILENTLY NO-OPS against this database, and
 -- the CREATE that followed would add a SECOND permissive policy that ORs
 -- with the first - closing nothing, widening everything, and reporting
--- "Success. No rows returned" while it did so. Several live policies here
--- exist under names that appear nowhere in this repository, so this is
--- not hypothetical. 096:365-372 established the rule.
+-- "Success. No rows returned" while it did so. 096:365-372 established
+-- the rule.
 --
 -- WITH CHECK ONLY. The USING clause is NOT NAMED and therefore NOT
 -- TOUCHED: whatever is live survives verbatim, including the
 -- recipient-email arm that 079 deliberately left alone pending a product
--- ruling (079:1108-1117). Restating USING here would mean retyping a
--- predicate from a file that cannot reproduce this database.
---
--- The result is the old effective check ANDed with two inequalities.
--- A conjunction can only admit fewer rows. Narrower by construction.
+-- ruling (079:1108-1117). Clause (A) below RESTATES that predicate for
+-- the check side only; if the live USING has drifted from 079, clause
+-- (A) drifts with it and the two sides stop agreeing. P3 is what catches
+-- that before this runs.
 -- ---------------------------------------------------------------------
 ALTER POLICY "Partners update own inbox rows"
   ON public.partner_rfp_inbox
   WITH CHECK (
+    -- (A) OWNERSHIP. The same two arms as USING.
     (
       vendor_org_id IN (SELECT public.current_user_org_ids())
       OR (recipient_email IS NOT NULL AND EXISTS (
@@ -593,15 +756,87 @@ ALTER POLICY "Partners update own inbox rows"
             WHERE pr.id = auth.uid()
               AND lower(btrim(pr.email)) = lower(btrim(partner_rfp_inbox.recipient_email))))
     )
-    -- R7. THE VENDOR MAY NEVER SET EITHER CLOSURE STATUS ON THEIR OWN
-    -- ROW. Two inequalities rather than NOT IN: NOT IN yields NULL for a
-    -- NULL status and a NULL WITH CHECK result is a refusal, which would
-    -- block a legitimate write. The column is NOT NULL today; this form
-    -- does not depend on that staying true.
-    AND status <> 'closed'
-    AND status <> 'not_selected'
-  );
 
+    -- (B) IDENTITY. THE RFP REQUEST CANNOT BE REASSIGNED TO SOMEBODY ELSE.
+    --
+    -- NULL IS PERMITTED AND HAS TO BE. An unclaimed manual-recipient row
+    -- carries vendor_org_id NULL, and the vendor reaches it through the
+    -- recipient_email arm to stamp viewed_at and partner_intent long
+    -- before anything claims it. Refusing NULL here would make an
+    -- unclaimed RFP unopenable.
+    --
+    -- THE CALLER'S OWN ORG IS PERMITTED AND HAS TO BE. That write is the
+    -- CLAIM, and it is a real, live, vendor-session code path:
+    -- app/api/partner/rfps/claim/route.ts:75-83 writes
+    -- `vendor_org_id: writeOrgId` on the SESSION client as the vendor,
+    -- after proving the caller's profile email equals recipient_email.
+    -- writeOrgId comes from resolveCallerWriteOrgId, so it is always one
+    -- of the caller's own organizations and always satisfies this arm.
+    -- IT DOES NOT RUN ON THE SERVICE ROLE. Refusing this clause would
+    -- break every invitation claim on the platform.
+    --
+    -- WHAT IT REFUSES: any organization id the caller does not belong
+    -- to. Before this, a vendor admitted by the email arm could write an
+    -- arbitrary org id and hand the agency's request to a company of
+    -- their choosing, and the email arm would still pass them.
+    --
+    -- >>> WHAT IT DOES NOT AND CANNOT REFUSE, STATED PLAINLY: moving a
+    -- >>> row from one organization the caller belongs to, to another
+    -- >>> organization the caller also belongs to. WITH CHECK sees only
+    -- >>> the new row, so "it was already claimed by someone else"
+    -- >>> cannot be expressed here. That needs a BEFORE UPDATE trigger
+    -- >>> comparing OLD.vendor_org_id, and it is a separate decision.
+    -- >>> The claim ROUTE already guards it with `.is("claimed_at",
+    -- >>> null)`; this is the gap between that route and raw PostgREST.
+    AND (
+      vendor_org_id IS NULL
+      OR vendor_org_id IN (SELECT public.current_user_org_ids())
+    )
+
+    -- (C) STATUS. THE ALLOW-LIST IS ONE VALUE, AND THE UNCHANGED ARM IS
+    --     WHAT MAKES IT SAFE.
+    --
+    -- THE VENDOR MAY LEAVE THE STATUS EXACTLY AS IT IS. This arm is not
+    -- a convenience: it is what lets every vendor write that is NOT a
+    -- status change through at all. viewed_at, partner_intent,
+    -- intent_set_at, agency_nda_notified_at, nda_confirmed_at,
+    -- vendor_org_id and claimed_at are all written by the vendor on rows
+    -- whose status is whatever the agency last left it at, INCLUDING
+    -- 'awarded' and 'shortlisted' on a magic-link row synthesized from
+    -- an already-decided bid. Without this arm, a bare allow-list would
+    -- refuse a vendor simply OPENING such an RFP.
+    --
+    -- OR THE VENDOR MAY SET 'bid_submitted', AND NOTHING ELSE. That is
+    -- the entire vendor status-write census:
+    --   app/api/partner/rfps/[id]/response/route.ts:368
+    --     .update({ status: "bid_submitted", ... })  <- session, vendor
+    -- It is the ONLY site in the repository where a vendor session
+    -- writes this column. Every other status write is the agency's or
+    -- the service role's; see the header table.
+    --
+    -- NOT FROM A CLOSED ROW. Without the NOT IN, a vendor could move a
+    -- 'closed' row to 'bid_submitted' and un-close it, reopening the
+    -- exact hole this migration exists to close. The ROUTE already
+    -- refuses this (409, added in the phase 3 commit), but a route is
+    -- not an access control and raw PostgREST does not go through it.
+    --
+    -- >>> WHY THIS IS NOT A DENY-LIST AND NEEDS NO EXTENSION. A status
+    -- >>> added to partner_rfp_inbox_status_check in some future
+    -- >>> migration is refused to vendors BY DEFAULT: it is neither
+    -- >>> equal to the previous value on a change, nor 'bid_submitted'.
+    -- >>> Nobody has to remember to come back here. A deny-list would
+    -- >>> have had to be extended every time, which is the failure mode
+    -- >>> the notification-type comment in this file's own section 2
+    -- >>> warns about.
+    AND (
+      status = public.partner_rfp_inbox_status_before(id)
+      OR (
+        status = 'bid_submitted'
+        AND public.partner_rfp_inbox_status_before(id) <> 'closed'
+        AND public.partner_rfp_inbox_status_before(id) <> 'not_selected'
+      )
+    )
+  );
 
 COMMIT;
 
@@ -684,16 +919,42 @@ COMMIT;
 --       --
 --       -- (ii) "Partners update own inbox rows", cmd UPDATE.
 --       --      >>> with_check MUST NO LONGER BE NULL. <<<
---       --      It must contain BOTH `status <> 'closed'` AND
---       --      `status <> 'not_selected'`, AND the whole of its previous
---       --      USING predicate including the recipient_email arm.
+--       --      It must contain ALL THREE clauses. Read for each by name:
+--       --        (A) the recipient_email arm, i.e. the whole of its
+--       --            previous USING predicate;
+--       --        (B) `vendor_org_id IS NULL OR vendor_org_id IN (...)`;
+--       --        (C) `partner_rfp_inbox_status_before` appearing THREE
+--       --            times, and the literal 'bid_submitted'.
 --       --      qual must be UNCHANGED from what P3 recorded - compare
 --       --      the two strings, do not skim them.
 --       --
 --       -- >>> IF with_check IS STILL NULL ON (ii), STOP AND DO NOT
 --       -- >>> DEPLOY THE PHASE 3 CODE. Every vendor on the platform can
 --       -- >>> close their own RFP rows from the browser client. Re-apply
---       -- >>> section 4b before anything else.
+--       -- >>> section 4c before anything else.
+--       --
+--       -- >>> IF with_check EXISTS BUT NAMES NO
+--       -- >>> partner_rfp_inbox_status_before, clause (C) did not take
+--       -- >>> and a vendor can still set 'awarded' on their own row.
+--
+-- V5b. THE HELPER FUNCTION EXISTS, IS STABLE, AND anon CANNOT EXECUTE IT.
+--
+--       SELECT p.proname, p.provolatile, p.prosecdef,
+--              has_function_privilege('anon', p.oid, 'EXECUTE')          AS anon_can,
+--              has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth_can
+--       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+--       WHERE n.nspname = 'public'
+--         AND p.proname = 'partner_rfp_inbox_status_before';
+--       -- EXPECTED: 1 row. provolatile = 's' (STABLE). prosecdef = true.
+--       -- anon_can = FALSE. auth_can = TRUE.
+--       --
+--       -- >>> provolatile = 'v' IS A FAILURE AND IS THE DANGEROUS ONE.
+--       -- >>> A VOLATILE version can observe the statement's own
+--       -- >>> in-progress row, which would make
+--       -- >>> `status = partner_rfp_inbox_status_before(id)` TRUE for
+--       -- >>> every write and clause (C) VACUOUS - while every query
+--       -- >>> above still reports success. If you see 'v', re-apply
+--       -- >>> section 4b and re-run the pre-apply test.
 --
 -- V6. THE POLICY COUNT MOVED BY EXACTLY ONE.
 --
@@ -701,18 +962,20 @@ COMMIT;
 --       -- EXPECTED: P6's number + 1. This file CREATEs one policy and
 --       -- ALTERs one in place; an ALTER adds no row.
 --
--- V7. A VENDOR CANNOT SET EITHER STATUS. THE BOUNDARY, MEASURED.
+-- V7. A VENDOR CANNOT SET AN AGENCY-OWNED STATUS, AND CANNOT REASSIGN
+--     THE ROW. THE BOUNDARY, MEASURED.
 --     >>> THIS ONE WRITES. THE ROLLBACK IS NOT OPTIONAL. <<<
 --
---     Substitute a real vendor's user id and one of their own inbox row
---     ids. supabase/migrations/099_preapply_test.sql does this
---     properly, with impersonation, as assertion T7 - prefer that file.
---     This is the by-hand version for after the apply.
+--     supabase/migrations/099_preapply_test.sql does this properly, with
+--     impersonation, as T7a through T7k and T14 - one assertion per
+--     excluded status. PREFER THAT FILE. This is the by-hand version for
+--     after the apply. Substitute a real vendor's user id and one of
+--     their own inbox row ids.
 --
 --       BEGIN;
 --       SET LOCAL ROLE authenticated;
 --       SET LOCAL request.jwt.claims = '{"sub":"<VENDOR_USER_ID>","role":"authenticated"}';
---       UPDATE public.partner_rfp_inbox SET status = 'closed'
+--       UPDATE public.partner_rfp_inbox SET status = 'awarded'
 --       WHERE id = '<AN_INBOX_ROW_THAT_VENDOR_OWNS>';
 --       ROLLBACK;
 --       -- EXPECTED: ERROR 42501, "new row violates row-level security
@@ -720,7 +983,46 @@ COMMIT;
 --       -- "UPDATE 0" is ALSO a pass and means the USING clause refused
 --       -- it first - say which one you saw.
 --       -- >>> "UPDATE 1" IS A FAILURE AND IS THE WORST OUTCOME THIS
---       -- >>> FILE CAN HAVE. Section 4b did not take. Re-run V5(ii).
+--       -- >>> FILE CAN HAVE. Clause (C) did not take. Re-run V5 and V5b.
+--
+--     REPEAT FOR EACH OF: 'closed', 'not_selected', 'awarded',
+--     'shortlisted', 'meeting_requested', 'declined', 'new', 'viewed',
+--     'feedback_received', 'revision_submitted'. ALL TEN MUST REFUSE.
+--     'new' is not a formality: it is the un-close vector.
+--
+--     THEN THE IDENTITY HALF, WHICH IS A DIFFERENT CLAUSE:
+--
+--       BEGIN;
+--       SET LOCAL ROLE authenticated;
+--       SET LOCAL request.jwt.claims = '{"sub":"<VENDOR_USER_ID>","role":"authenticated"}';
+--       UPDATE public.partner_rfp_inbox
+--          SET vendor_org_id = '<AN ORG THE VENDOR DOES NOT BELONG TO>'
+--       WHERE id = '<AN_INBOX_ROW_THAT_VENDOR_OWNS>';
+--       ROLLBACK;
+--       -- EXPECTED: 42501, or UPDATE 0. THE REFUSAL IS THE PASS.
+--       -- >>> UPDATE 1 MEANS A VENDOR CAN HAND AN AGENCY'S RFP REQUEST
+--       -- >>> TO A COMPANY OF THEIR CHOOSING. Clause (B) did not take.
+--
+-- V7b. >>> AND THE OTHER DIRECTION, WHICH MATTERS JUST AS MUCH.
+--      TOO TIGHT IS WORSE THAN THE HOLE. These must all SUCCEED.
+--
+--       BEGIN;
+--       SET LOCAL ROLE authenticated;
+--       SET LOCAL request.jwt.claims = '{"sub":"<VENDOR_USER_ID>","role":"authenticated"}';
+--       -- the vendor opens an RFP (status untouched)
+--       UPDATE public.partner_rfp_inbox SET viewed_at = now()
+--       WHERE id = '<AN_INBOX_ROW_THAT_VENDOR_OWNS>';
+--       -- the vendor submits a bid
+--       UPDATE public.partner_rfp_inbox SET status = 'bid_submitted'
+--       WHERE id = '<AN_INBOX_ROW_THAT_VENDOR_OWNS>';
+--       ROLLBACK;
+--       -- EXPECTED: UPDATE 1 for BOTH. No error.
+--       -- >>> A 42501 ON EITHER MEANS THE POLICY IS TOO TIGHT AND THE
+--       -- >>> VENDOR PORTAL IS BROKEN. That is a worse outcome than the
+--       -- >>> hole this file closes, because it takes the product down
+--       -- >>> for every vendor rather than exposing an edge to a few.
+--       -- The first one is the load-bearing case: it is the write a
+--       -- vendor makes on a row whose status the AGENCY last set.
 --
 -- V8. THE CONSTRAINTS STILL CONSTRAIN. A WIDENING THAT ACCEPTS ANYTHING
 --     IS NOT A WIDENING, IT IS A REMOVAL.
