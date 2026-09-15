@@ -400,7 +400,7 @@ function PartnerPaymentsPageLegacy() {
          * LEFT IN PLACE ON THIS RUN. Taking it out is the access widening, and that is Greg's
          * to apply.
          */
-        const rows = allRows.filter((p) => String(p.status || "").toLowerCase() === "active")
+        const rows = allRows
         setActivePartnerships(rows)
         setEndedPartnerships(allRows.filter((p) => relationshipTag(p.status) !== null))
         setSelectedId((prev) => {
@@ -795,18 +795,6 @@ function PartnerPaymentsPageLegacy() {
           {selectedPartnershipRow && selectedTag && (
             <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-3">
               {relationshipNotice(agencyLabel(selectedPartnershipRow), selectedTag)}
-            </div>
-          )}
-          {/* The vendor has a live agency selected AND a separate relationship that ended. The
-              selector cannot show the ended one while the filters stand, so without this line
-              the ended relationship is invisible on this page rather than merely unselectable. */}
-          {activePartnerships.length > 0 && endedPartnerships.length > 0 && (
-            <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-3 space-y-1">
-              {endedPartnerships.map((p) => {
-                const tag = relationshipTag(p.status)
-                if (!tag) return null
-                return <div key={p.id}>{relationshipNotice(agencyLabel(p), tag)}</div>
-              })}
             </div>
           )}
           {paymentsError ? <div className="text-sm text-amber-700">{paymentsError}</div> : null}

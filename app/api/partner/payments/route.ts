@@ -100,7 +100,6 @@ export async function GET() {
       .from("partnerships")
       .select("id, lead_org_id, status")
       .in("vendor_org_id", callerOrgIds)
-      .eq("status", "active")
       .order("created_at", { ascending: false })
 
     if (pErr) {
