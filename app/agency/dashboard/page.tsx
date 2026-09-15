@@ -445,11 +445,55 @@ function GettingStartedChecklist({ checklist }: { checklist: ChecklistData }) {
 // ── Funnel metrics ────────────────────────────────────────────────────────────
 
 function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
+  /**
+   * WHAT EACH OF THESE FOUR COUNTS. Established by reading app/api/agency/dashboard/route.ts
+   * on 2026-09-15; the expression line is given for each so the next reader does not re-derive it.
+   *
+   *   Active Vendors        partnerships with status exactly 'active' (`route.ts:434`,
+   *                         isActivePartnership). SAME UNIT as the pool page's "Active vendors"
+   *                         tile, so the two agree by construction rather than by luck.
+   *   Open RFPs             DISTINCT PROJECTS with at least one open scope item (`route.ts:437`),
+   *                         NOT open scope items. A project broadcasting three open scopes reads 1.
+   *                         >>> THIS NUMBER IS WRONG FOR TWO REASONS. See the block below.
+   *   Bids Received         partner_rfp_responses with submitted_at in the CALENDAR month to
+   *                         date, UTC (`route.ts:440`, monthStartIso at `:98`).
+   *   Awarded               project_assignments with status 'awarded' and awarded_at in the
+   *                         CALENDAR quarter to date, UTC (`route.ts:443`, quarterStartIso at
+   *                         `:103`). The unit is an ASSIGNMENT: one project awarded to three
+   *                         vendors reads 3, and the same vendor winning two scope items reads 2.
+   *                         It therefore does NOT share a unit with "Bids Received" beside it,
+   *                         which counts responses. Naming that unit on screen is blocked on the
+   *                         engagement ruling in docs/active-engagements-one-source.md section 6 -
+   *                         an assignment is exactly what Option B calls an engagement.
+   *
+   * "(This Month)" and "(This Quarter)" replaced "(Month)" and "(Quarter)" on 2026-09-15.
+   * COPY ONLY - no expression, query or unit was touched. Both windows are calendar to date and
+   * the bare noun read equally well as a trailing 30 or 90 days.
+   *
+   * >>> "Open RFPs" WAS DELIBERATELY NOT RELABELLED, because it is not in the ambiguous class.
+   * >>> Two independent defects, both reported and neither fixed here (a number changing on a
+   * >>> customer-visible tile gets its own change and its own walk):
+   * >>>
+   * >>> 1. IT IGNORES RFP CLOSURE ENTIRELY. Migration 099 added partner_rfp_inbox.closed_at and
+   * >>>    the 'closed' / 'not_selected' statuses, and app/api/agency/rfp-closure/route.ts:190
+   * >>>    writes them WITHOUT creating any partner_rfp_responses row. The inbox select at
+   * >>>    `route.ts:156` fetches neither column, and the group test at `route.ts:430` is only
+   * >>>    `g.responded < g.invited`, with no status and no deadline filter. So an RFP that was
+   * >>>    closed with no bids stays in this count forever.
+   * >>> 2. IT INHERITS A 500-ROW CEILING FROM A TABLE IT DOES NOT BOUND. inboxRows is
+   * >>>    unbounded; partner_rfp_responses is `.limit(500)` newest-first (`route.ts:162`), and
+   * >>>    `hasResponded` (`route.ts:409`) is derived from that capped array. Past 500 lifetime
+   * >>>    responses, an old recipient whose response aged out of the window reads as invited
+   * >>>    and not responded, and the tile climbs on its own.
+   * >>>
+   * >>> Relabelling a number that is wrong would have left it as wrong as before and more
+   * >>> confidently so. Full evidence in docs/engagements-and-counts-report.md phase 3.
+   */
   const stats: { label: string; value: number; href: string; icon: typeof Users }[] = [
     { label: "Active Vendors", value: funnel.activePartners, href: "/agency/pool", icon: Users },
     { label: "Open RFPs", value: funnel.openRfps, href: "/agency/bids", icon: Send },
-    { label: "Bids Received (Month)", value: funnel.bidsReceivedThisMonth, href: "/agency/bids", icon: Gavel },
-    { label: "Awarded (Quarter)", value: funnel.awardedThisQuarter, href: "/agency/bids", icon: Trophy },
+    { label: "Bids Received (This Month)", value: funnel.bidsReceivedThisMonth, href: "/agency/bids", icon: Gavel },
+    { label: "Awarded (This Quarter)", value: funnel.awardedThisQuarter, href: "/agency/bids", icon: Trophy },
   ]
 
   const spendPct =

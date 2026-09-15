@@ -434,6 +434,33 @@ export async function GET() {
     const activePartners = partnerships.filter((p) => isActivePartnership(p)).length
     // Distinct projects with at least one open RFP scope item, not a count of open scope
     // items themselves - a project broadcasting 3 open scopes should read as 1 open RFP.
+    //
+    // >>> THIS NUMBER IS WRONG, IN TWO INDEPENDENT WAYS. FOUND 2026-09-15, REPORTED AND NOT
+    // >>> FIXED - it is a customer-visible tile and changing it deserves its own change and
+    // >>> its own walk. Evidence in docs/engagements-and-counts-report.md phase 3.
+    //
+    // 1. RFP CLOSURE IS INVISIBLE TO IT. `openRfpGroups` is `allRfpGroups.filter(g =>
+    //    g.responded < g.invited)` (see above) - no status filter, no deadline filter, no
+    //    closure filter. Migration 099 added `partner_rfp_inbox.closed_at` and the 'closed'
+    //    and 'not_selected' statuses, and app/api/agency/rfp-closure/route.ts:190 writes both
+    //    WITHOUT inserting any partner_rfp_responses row. The inbox select in this handler
+    //    fetches NEITHER `status` NOR `closed_at`. So a closed RFP that nobody bid on counts
+    //    as open here permanently, and the count only ever grows.
+    //
+    // 2. IT INHERITS A CEILING FROM A TABLE IT DOES NOT BOUND. `inboxRows` is unbounded;
+    //    `partner_rfp_responses` is capped at 500 newest-first in the same Promise.all, and
+    //    `hasResponded` is decided from `responsesByInboxId`, built from that capped array.
+    //    Past 500 lifetime responses an old recipient whose response fell outside the window
+    //    reads as invited-and-not-responded, which reopens an RFP that was answered.
+    //
+    // THE SAME CEILING ALSO TRUNCATES `committedPartnerSpend` BELOW, and there it is worse:
+    // that sum has no time window at all, so every awarded response older than the newest 500
+    // is silently dropped from the numerator while `totalClientBudget` sums every project
+    // with no cap. The ratio understates for exactly the agencies that have the most history.
+    //
+    // NEITHER DEFECT BITES AN AGENCY UNDER 500 LIFETIME RESPONSES, and whether any agency is
+    // over it was NOT measured - there is no database access in the session that found this.
+    // The settling query is in the report.
     const openRfps = new Set(openRfpGroups.map((g) => g.projectId)).size
     const monthStart = monthStartIso()
     const quarterStart = quarterStartIso()

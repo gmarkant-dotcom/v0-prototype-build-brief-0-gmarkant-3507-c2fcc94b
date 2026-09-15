@@ -1504,7 +1504,14 @@ function PartnerPoolPageInner() {
               <Ban className="w-4 h-4 text-red-400" />
             </div>
             <div className="font-display font-bold text-2xl text-red-400">{blacklistedPartnersStat}</div>
-            <div className="font-mono text-2xs text-red-400 uppercase tracking-wider mt-1">Blacklisted</div>
+            {/* "Whole pool" is the ONLY thing added here. The expression is untouched.
+                This tile counts blacklisted rows across Active vendors, Invited AND
+                Discovered, because `partnerships` holds all three and the filter tests only
+                the note flag. The Status: Blacklisted chip below narrows Active vendors ONLY,
+                so a pool whose blacklisted contacts are all still pending reads a non-zero
+                tile here and an empty Active vendors column with the chip on. Both numbers
+                were already right; nothing on screen said they had different scopes. */}
+            <div className="font-mono text-2xs text-red-400 uppercase tracking-wider mt-1">Blacklisted (whole pool)</div>
           </GlassCard>
         </div>
 
