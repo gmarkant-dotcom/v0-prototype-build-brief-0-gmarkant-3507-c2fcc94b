@@ -629,22 +629,27 @@ function PartnerPoolPageInner() {
   /** Discovered-section "Remove" action - sets status='removed' instead of deleting, so the
    *  associated rfp_magic_tokens and bid history survive.
    *
-   *  THE SECOND HALF OF THE OLD COMMENT HERE WAS FALSE AND IS CORRECTED RATHER THAN KEPT.
-   *  It said this "hides the row from every pool section". It does not.
-   *  partnershipPoolColumn() (lib/partnership-state.ts:71-74) routes every status except
-   *  'pending' to the "network" column, and 'removed' is not 'pending' - so the row does not
-   *  disappear, it MOVES OUT OF Discovered AND INTO "Active vendors", badged
-   *  `Vendor (removed)` by partnershipStateLabel(). Nothing filters it out: allNetworkRows
-   *  applies no status exclusion, and the default "All" status filter passes it through.
-   *  Pressing Remove on a Discovered contact makes them more prominent, not less.
+   *  THE ROW DISAPPEARS FROM THE POOL. IT IS NOT PROMOTED, AND THE COMMENT THAT SAID SO IS
+   *  CORRECTED. The previous comment here claimed Remove moves a Discovered contact INTO
+   *  "Active vendors" badged `Vendor (removed)`. It does not, and the reason is one line
+   *  above partnershipPoolColumn(): GET /api/partnerships never returns the row.
+   *  The agency branch filters `.neq('status', 'removed')` on BOTH of its queries - the
+   *  embed at app/api/partnerships/route.ts:95 and the plain fallback at :129 - so a removed
+   *  row is gone before any column function sees it. This handler awaits loadPartnerships()
+   *  on success, which refetches through exactly that route. That is also what migration
+   *  063 said 'removed' was for: "lets an agency hide a Discovered/Invited row from the pool
+   *  without deleting the row outright".
    *
-   *  NOT CHANGED HERE. lib/partnership-state.ts names 'suspended' and 'terminated' as the
-   *  ended states that belong beside the live ones; 'removed' reaches that column by falling
-   *  through, not by a ruling. Whether a removed row should be hidden, kept and badged, or
-   *  given a fourth column is Greg's call, and changing it silently would swap one wrong
-   *  behaviour for another unasked one. docs/silent-failures-report.md Phase 1 carries it as
-   *  an open question with options. The stat counters are unaffected: activePartnersStat
-   *  filters status === 'active' and reads correctly today. */
+   *  partnershipPoolColumn() WOULD route 'removed' to "network" if it were ever asked, and
+   *  that is a live trap rather than a live defect - it is masked only by the API filter.
+   *  lib/partnership-state.ts closes it.
+   *
+   *  WHAT REMOVAL DOES NOT DO IS REVOKE ANYTHING. No policy in the schema filters on
+   *  partnerships.status, and /api/partner/projects reads the vendor's awarded work with no
+   *  status filter at all, so a removed vendor keeps every project, document and onboarding
+   *  package they had. See docs/vendor-removal-report.md section 1 for the full list of what
+   *  does and does not change. The stat counters are unaffected: activePartnersStat filters
+   *  status === 'active', and no removed row is in `partnerships` to be counted. */
   const handleRemovePartnership = async (row: Partnership) => {
     setRemovingId(row.id)
     try {
@@ -2599,9 +2604,13 @@ function PartnerPoolPageInner() {
             UNREACHABLE TODAY AND DELIBERATELY KEPT. Nothing sets showDeleteConfirm any more:
             the only control that did is disabled above. It is left intact, rather than
             deleted, because it is exactly what gets re-enabled if Greg rules for a hard
-            delete, and re-enabling is then a one-line revert instead of a rebuild. Its copy
-            ("This action cannot be undone") is the copy that would need revisiting under a
-            soft-removal ruling. */}
+            delete, and re-enabling is then a one-line revert instead of a rebuild.
+
+            ITS COPY CLAIMED SOMETHING FALSE AND NO LONGER DOES. It read "They will no longer
+            have access to your projects. This action cannot be undone." Neither half was
+            true. Removal revokes nothing - no policy in the schema filters on
+            partnerships.status - and the row is kept, not destroyed. The replacement says
+            what removal actually does. */}
         <Dialog open={showDeleteConfirm && !!partnerToDelete} onOpenChange={(open) => {
           if (!open) {
             setShowDeleteConfirm(false)
@@ -2612,7 +2621,7 @@ function PartnerPoolPageInner() {
             <DialogHeader>
               <DialogTitle className="font-display">Remove vendor?</DialogTitle>
               <DialogDescription className="text-foreground-muted">
-                Are you sure you want to remove <span className="font-semibold text-foreground">{partnerToDelete?.name}</span> from your vendor pool? They will no longer have access to your projects. This action cannot be undone.
+                Remove <span className="font-semibold text-foreground">{partnerToDelete?.name}</span> from your vendor pool? They stop appearing in your pool and you will not be able to send them new RFPs. Work already awarded to them is not affected.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2">
@@ -2636,7 +2645,15 @@ function PartnerPoolPageInner() {
           </DialogContent>
         </Dialog>
 
-        {/* Remove from pool confirmation (inline row action) */}
+        {/* Remove from pool confirmation (inline row action).
+            THE COPY DESCRIBES WHAT THE PATCH ACTUALLY DOES. It sets status='removed', which
+            GET /api/partnerships filters out of the agency's pool entirely (:95 and :129).
+            The row survives with its rfp_magic_tokens and bid history; what ends is the
+            agency's view of it. "This action cannot be undone" was the old second sentence
+            and it is dropped rather than softened: it is true only because nothing restores
+            a removed row today, and it read as if the record were destroyed. The sentence
+            that replaced it says the record is kept AND that this page will not bring it
+            back, which is the same warning without the false implication. */}
         <Dialog open={!!partnershipToRemove} onOpenChange={(open) => {
           if (!open) setPartnershipToRemove(null)
         }}>
@@ -2644,7 +2661,7 @@ function PartnerPoolPageInner() {
             <DialogHeader>
               <DialogTitle className="font-display">Remove from pool?</DialogTitle>
               <DialogDescription className="text-foreground-muted">
-                Remove <span className="font-semibold text-foreground">{partnershipToRemove?.partnerEmail}</span> from your pool? This action cannot be undone.
+                Remove <span className="font-semibold text-foreground">{partnershipToRemove?.partnerEmail}</span> from your pool? They stop appearing in your pool and you will not be able to send them RFPs. Their record and any bid history are kept, but nothing on this page adds them back.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2">
