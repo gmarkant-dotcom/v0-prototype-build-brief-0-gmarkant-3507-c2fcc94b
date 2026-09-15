@@ -30,6 +30,59 @@ const RESPONDED_STATUSES = new Set([
   "declined",
 ])
 
+/**
+ * R6. THE VENDOR ATTENTION QUEUE GETS A CEILING, AND IT IS THE AGENCY'S NUMBER.
+ *
+ * docs/vendor-attention-queue.md section 2: the agency dashboard bounds its equivalent read at
+ * the database (`app/api/agency/dashboard/route.ts:148-149`, `.order("created_at", { ascending:
+ * false }).limit(500)`) and this side bounded nothing, so it grew without bound for every
+ * vendor on the platform. One vendor was measured at 67 rows. 500 is mirrored rather than
+ * invented; nothing about this number is a new judgment.
+ *
+ * ---------------------------------------------------------------------------
+ * >>> WHY IT IS NOT `.limit(500)` ON THE SQL READ, WHICH IS WHAT R6 ASKS FOR LITERALLY.
+ *
+ * BECAUSE THIS READ HAS NO WHERE CLAUSE, AND THE AGENCY'S DOES.
+ *
+ * The agency's 500 sits on a read already narrowed to the caller's own company
+ * (`.in("lead_org_id", callerOrgIds)`), so it means "the newest 500 rows THAT ARE MINE". The
+ * vendor read below selects `partner_rfp_inbox` with no filter of its own and is narrowed
+ * afterwards, in JavaScript, by `vendorOwnsPartnerRfpInboxRow` - the deliberate belt-and-braces
+ * shape `app/api/partner/rfps/route.ts:215-229` sets out and explains.
+ *
+ * So a SQL `.limit(500)` here would mean "the newest 500 rows RLS LETS ME SEE", and then throw
+ * most of them away. For a DUAL-ROLE account - one organization that is the lead agency in some
+ * partnerships and the vendor in others, which is the normal shape here and is gmarkant@gmail.com
+ * exactly - RLS returns their OUTBOUND broadcast rows too, and the filter's own log line
+ * ("acting-role filter dropped rows the caller sees as the lead agency") exists because that
+ * number is not zero. An agency that has broadcast 500 RFPs recently would have its entire
+ * vendor queue consumed by its own outbound rows and see an EMPTY queue, with no error, on a
+ * change whose commit message says it added a safety ceiling.
+ *
+ * That is the success-shaped non-event this project keeps getting bitten by, so the ceiling is
+ * applied to the vendor's OWN rows, which is the thing the agency's 500 actually bounds.
+ *
+ * THE SQL READ IS THEREFORE STILL UNBOUNDED, and that is stated rather than hidden. Bounding it
+ * safely means giving it a real WHERE, which is a change to the query's access shape and a
+ * ruling, not a limit. See docs/notification-routing-report.md.
+ *
+ * ---------------------------------------------------------------------------
+ * APPLIED TO THE QUEUE, NOT TO `inboxRows`, AND THAT DISTINCTION IS LOAD-BEARING.
+ *
+ * `inboxRows` also feeds the Recent activity union (:428) and the response-to-inbox join
+ * (:447). Capping it would silently cost a bid its scope name and its deep link whenever its
+ * inbox row fell outside the newest 500. R6 is about the attention queue; the cap goes on the
+ * attention queue.
+ *
+ * WHAT A VENDOR AT THE CEILING SEES. The 500 most recent unanswered requests, and a header
+ * reading 500, because the header renders `queueRows.length` and the list renders the same
+ * array (`app/partner/page.tsx:544` and `:458`) - so they cannot disagree, which is the
+ * header-versus-body contradiction R5 fixed in this same component. Older unanswered requests
+ * are not counted and not shown ON THE DASHBOARD. They are not lost: `/partner/rfps` lists them
+ * from its own read, which has no ceiling.
+ */
+const VENDOR_QUEUE_CEILING = 500
+
 type NeedsResponseItem = {
   id: string
   scopeItemName: string
@@ -325,6 +378,36 @@ export async function GET() {
     // needsResponse is pushed in the order the rows arrive from SQL, so it is
     // already in created_at DESC order at this point and needs no sort at all.
 
+    /**
+     * R6. THE CEILING. See VENDOR_QUEUE_CEILING at the head of this file for why it is here
+     * and not on the SQL read, and for what a vendor at the ceiling sees.
+     *
+     * SLICED AFTER THE LOOP RATHER THAN BREAKING OUT OF IT, so that `expiredCount` is still
+     * counted over every row. It is a different number reported in a different place, and a
+     * ceiling on the queue must not quietly become a ceiling on it too.
+     *
+     * The slice keeps the HEAD, and the loop pushes in created_at DESC, so what a vendor keeps
+     * is the 500 most recent unanswered requests.
+     *
+     * LOGGED WHEN IT BITES, rather than assumed never to. The same habit as the acting-role
+     * filter's log line above: the number is watched instead of guessed at. Nothing is added to
+     * the response body for it - a "showing 500 of N" banner is UI nobody has ruled on, and it
+     * is offered to Greg in docs/notification-routing-report.md rather than invented here.
+     */
+    const queueRowsBeforeCeiling = needsResponse.length
+    const cappedNeedsResponse =
+      queueRowsBeforeCeiling > VENDOR_QUEUE_CEILING
+        ? needsResponse.slice(0, VENDOR_QUEUE_CEILING)
+        : needsResponse
+    if (cappedNeedsResponse.length !== queueRowsBeforeCeiling) {
+      console.log("[partner/dashboard] attention queue hit the ceiling", {
+        userId: user.id,
+        unansweredRequests: queueRowsBeforeCeiling,
+        shown: cappedNeedsResponse.length,
+        ceiling: VENDOR_QUEUE_CEILING,
+      })
+    }
+
     // ── Onboarding steps pending on the partner's side ───────────────────────────
     let onboardingPending: OnboardingItem[] = []
     if (partnershipIds.length > 0) {
@@ -517,9 +600,12 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        needsResponse: { items: needsResponse, expiredCount, onboardingPending },
+        // R6. BOTH READ THE CAPPED ARRAY. `openRfps` is the funnel tile and `items` is the
+        // list, and a tile that counted the uncapped array while the list rendered the capped
+        // one is precisely the header-versus-body contradiction fixed in this component today.
+        needsResponse: { items: cappedNeedsResponse, expiredCount, onboardingPending },
         funnel: {
-          openRfps: needsResponse.length,
+          openRfps: cappedNeedsResponse.length,
           bidsSubmitted,
           bidsByStatus,
           winRate: { awarded: bidsByStatus.awarded, declined: bidsByStatus.declined, rate: winRate },
