@@ -245,6 +245,42 @@ function agencyLabel(p: PartnershipApiRow) {
   return name || "Lead agency"
 }
 
+/**
+ * THE RELATIONSHIP TAG. Greg's ruling of 2026-09-14: a vendor who is owed money keeps seeing
+ * what they are owed after the relationship ends, because the counterparty keeps their record.
+ *
+ * WHAT THIS SOLVES. An unpaid milestone from an ended partnership renders identically to one
+ * from a live partnership, so a vendor chases it as ordinary business: they invoice, they
+ * follow up, and nothing on the screen tells them the relationship behind it is over.
+ *
+ * SUSPENDED IS NOT TERMINATED AND IS NOT LABELLED AS IF IT WERE. A paused relationship can
+ * resume; telling a vendor it "ended" would be its own false statement, and the point of this
+ * tag is to stop the screen making one. 'pending' returns null on purpose: a relationship that
+ * has not started yet has not ended either.
+ *
+ * CORRECT IN BOTH WORLDS. Today the route filters to status='active' and the client filters
+ * again below, so nothing here can render. It is driven entirely off the row's status, so it
+ * starts telling the truth the moment those filters come off and needs no second edit.
+ * See docs/pool-counts-and-payments-report.md section 2.
+ */
+function relationshipTag(status: string | null | undefined): { label: string; ended: boolean } | null {
+  const s = String(status || "").trim().toLowerCase()
+  if (s === "" || s === "active" || s === "pending") return null
+  if (s === "suspended") return { label: "Paused", ended: false }
+  // 'terminated' and 'removed' both mean the agency ended it. Any status added to the CHECK
+  // constraint later lands here and reads "Ended", which errs toward telling the vendor
+  // something changed rather than staying silent about it.
+  return { label: "Ended", ended: true }
+}
+
+/** The sentence under the agency selector. Says what changed, and what did not. */
+function relationshipNotice(agency: string, tag: { label: string; ended: boolean }): string {
+  if (!tag.ended) {
+    return `Your relationship with ${agency} is paused. Anything you are owed stays on this page, and you will not be sent new RFPs while it is paused.`
+  }
+  return `Your relationship with ${agency} has ended. Anything you are owed stays on this page so you can still see and chase it, and you will not be sent new RFPs.`
+}
+
 function agencyInitials(name: string) {
   const parts = name.split(/\s+/).filter(Boolean)
   if (parts.length === 0) return "LA"
@@ -270,6 +306,16 @@ function PartnerPaymentsPageLegacy() {
   const isDemo = isDemoMode()
 
   const [activePartnerships, setActivePartnerships] = useState<PartnershipApiRow[]>([])
+  /**
+   * The vendor's ENDED relationships, from the SAME /api/partnerships response that fills
+   * `activePartnerships`. No extra request, no widened predicate: these rows are already in
+   * the browser and are already this vendor's own, they were simply filtered out and dropped.
+   *
+   * They exist so the screen can say a relationship ended. A vendor whose only agency ended
+   * the relationship used to read "No active partnerships yet. Accept an invitation..." on
+   * this page, which is the exact sentence that hides the thing they need to know.
+   */
+  const [endedPartnerships, setEndedPartnerships] = useState<PartnershipApiRow[]>([])
   const [partnershipsError, setPartnershipsError] = useState<string | null>(null)
   const [loadingPartnerships, setLoadingPartnerships] = useState(!isDemo)
 
@@ -338,11 +384,25 @@ function PartnerPaymentsPageLegacy() {
       if (!partRes.ok) {
         setPartnershipsError((partData as { error?: string }).error || "Failed to load partnerships")
         setActivePartnerships([])
+        setEndedPartnerships([])
       } else {
-        const rows = ((partData as { partnerships?: PartnershipApiRow[] }).partnerships || []).filter(
-          (p) => String(p.status || "").toLowerCase() === "active"
-        )
+        const allRows = (partData as { partnerships?: PartnershipApiRow[] }).partnerships || []
+        /**
+         * THE SECOND ACTIVE-ONLY FILTER, AND THE ONE A READER MISSES.
+         *
+         * app/api/partner/payments/route.ts carries the filter everybody knows about. This
+         * one narrows /api/partnerships again, in the browser, and it is what fills the agency
+         * selector. Removing the route filter ALONE changes nothing a vendor can see: the
+         * milestones would arrive and there would still be no agency to select them under.
+         * Both come off together or neither does. See the exact diff in
+         * docs/pool-counts-and-payments-report.md section 2.
+         *
+         * LEFT IN PLACE ON THIS RUN. Taking it out is the access widening, and that is Greg's
+         * to apply.
+         */
+        const rows = allRows.filter((p) => String(p.status || "").toLowerCase() === "active")
         setActivePartnerships(rows)
+        setEndedPartnerships(allRows.filter((p) => relationshipTag(p.status) !== null))
         setSelectedId((prev) => {
           const ids = rows.map((r) => r.id)
           if (prev && ids.includes(prev)) return prev
@@ -404,6 +464,7 @@ function PartnerPaymentsPageLegacy() {
       setPaymentsError("Failed to load payments")
       setEngagementsError("Failed to load engagements")
       setActivePartnerships([])
+      setEndedPartnerships([])
       setAllMilestones([])
       setEngagements([])
     } finally {
@@ -430,6 +491,12 @@ function PartnerPaymentsPageLegacy() {
   const selectedPartnershipRow = useMemo(
     () => activePartnerships.find((p) => p.id === selectedId) ?? null,
     [activePartnerships, selectedId]
+  )
+
+  /** Null for every row the selector can hold today, by construction. See relationshipTag(). */
+  const selectedTag = useMemo(
+    () => relationshipTag(selectedPartnershipRow?.status),
+    [selectedPartnershipRow]
   )
 
   const engagementsForAgency = useMemo(() => {
@@ -622,9 +689,36 @@ function PartnerPaymentsPageLegacy() {
           ) : partnershipsError ? (
             <div className="text-sm text-red-600">{partnershipsError}</div>
           ) : activePartnerships.length === 0 ? (
-            <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-3">
-              No active partnerships yet. Accept an invitation to see payment schedules and rate fields here.
-            </div>
+            /* THE CASE THE OLD SENTENCE HID. A vendor whose only relationship ended has no
+               active partnership, so this branch fired and told them to accept an invitation.
+               It never mentioned that they had a relationship and it is over, which is the one
+               thing they need in order to read the rest of the page correctly. */
+            endedPartnerships.length > 0 ? (
+              <div className="space-y-2">
+                {endedPartnerships.map((p) => {
+                  const tag = relationshipTag(p.status)
+                  if (!tag) return null
+                  return (
+                    <div
+                      key={p.id}
+                      className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-3"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium text-vendor-foreground">{agencyLabel(p)}</span>
+                        <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-vendor-foreground/10 text-vendor-muted-strong shrink-0">
+                          {tag.label}
+                        </span>
+                      </div>
+                      {relationshipNotice(agencyLabel(p), tag)}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-3">
+                No partnerships yet. Accept an invitation to see payment schedules and rate fields here.
+              </div>
+            )
           ) : (
             <div className="relative max-w-md" ref={agencyDropdownRef}>
               <button
@@ -641,6 +735,14 @@ function PartnerPaymentsPageLegacy() {
                 <span className="text-sm font-medium truncate flex-1 text-left">
                   {selectedPartnershipRow ? agencyLabel(selectedPartnershipRow) : "Select lead agency"}
                 </span>
+                {/* Same tag as the ended-project tag on the groups below, for the same reason:
+                    the row stays, and says what it is. Cannot render while the two active-only
+                    filters stand. */}
+                {selectedTag && (
+                  <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-white/20 shrink-0">
+                    {selectedTag.label}
+                  </span>
+                )}
                 <ChevronDown
                   className={cn("w-4 h-4 flex-shrink-0 transition-transform", agencyDropdownOpen && "rotate-180")}
                 />
@@ -650,6 +752,7 @@ function PartnerPaymentsPageLegacy() {
                 <div className="absolute top-full left-0 mt-1 w-full min-w-[250px] bg-vendor-surface border border-vendor-border rounded-lg shadow-xl z-50 overflow-hidden">
                   {activePartnerships.map((p) => {
                     const label = agencyLabel(p)
+                    const rowTag = relationshipTag(p.status)
                     const isSelected = p.id === selectedId
                     return (
                       <button
@@ -668,7 +771,14 @@ function PartnerPaymentsPageLegacy() {
                           <span className="text-xs font-bold text-vendor-foreground">{agencyInitials(label)}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{label}</div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="text-sm font-medium truncate">{label}</div>
+                            {rowTag && (
+                              <span className="font-mono text-2xs px-2 py-0.5 rounded-full bg-vendor-foreground/10 text-vendor-muted-strong shrink-0">
+                                {rowTag.label}
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-vendor-muted truncate">Payment schedule and rate card</div>
                         </div>
                         {isSelected ? <Check className="w-4 h-4 text-vendor-foreground flex-shrink-0" /> : null}
@@ -677,6 +787,26 @@ function PartnerPaymentsPageLegacy() {
                   })}
                 </div>
               )}
+            </div>
+          )}
+          {/* THE BANNER. Milestones on this page all sit under the one selected agency, so the
+              relationship statement belongs here rather than on each milestone row: one true
+              sentence above the schedule beats a badge repeated down every line of it. */}
+          {selectedPartnershipRow && selectedTag && (
+            <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-3">
+              {relationshipNotice(agencyLabel(selectedPartnershipRow), selectedTag)}
+            </div>
+          )}
+          {/* The vendor has a live agency selected AND a separate relationship that ended. The
+              selector cannot show the ended one while the filters stand, so without this line
+              the ended relationship is invisible on this page rather than merely unselectable. */}
+          {activePartnerships.length > 0 && endedPartnerships.length > 0 && (
+            <div className="text-sm text-vendor-muted-strong rounded-xl border border-vendor-border bg-vendor-surface px-4 py-3 space-y-1">
+              {endedPartnerships.map((p) => {
+                const tag = relationshipTag(p.status)
+                if (!tag) return null
+                return <div key={p.id}>{relationshipNotice(agencyLabel(p), tag)}</div>
+              })}
             </div>
           )}
           {paymentsError ? <div className="text-sm text-amber-700">{paymentsError}</div> : null}

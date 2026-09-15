@@ -70,6 +70,32 @@ export async function GET() {
       return NextResponse.json({ error: "Vendors only" }, { status: 403, headers: noStore })
     }
 
+    /**
+     * THE ACTIVE-ONLY FILTER. GREG RULED AGAINST IT ON 2026-09-14 AND IT IS STILL HERE.
+     *
+     * The ruling: a vendor who is owed money keeps seeing what they are owed after the
+     * relationship ends, the same principle as the RFP closure ruling. The counterparty
+     * keeps their record.
+     *
+     * The defect this filter causes: `payment_milestones` carries no status predicate in any
+     * of its policies, so a vendor whose partnership moves to any end state loses the payments
+     * SCREEN while keeping the DATA underneath. An agency can put a partnership into that
+     * state today.
+     *
+     * It gates BOTH milestone reads below, not just one. `partnershipIds` feeds the
+     * partnership_id query directly and also feeds `awardedProjectIds`, which feeds the
+     * project_id query. When a vendor's only partnership is ended, both id lists are empty,
+     * both queries are skipped by their `length > 0` guards, and the response is
+     * `{ milestones: [], partnerships: [] }`. Not an error, not a partial list: an empty
+     * screen. A vendor with one ended agency and one live one gets a partial list instead,
+     * with nothing saying the other exists.
+     *
+     * NOT REMOVED ON THIS RUN, DELIBERATELY. Removing it widens what a vendor can see, and an
+     * access widening is applied in a session where the proof can be read. The exact diff,
+     * the policy quotes that justify it, and the SECOND filter that has to come off with it
+     * (app/partner/payments/page.tsx, the client-side status === "active" narrowing of
+     * /api/partnerships) are in docs/pool-counts-and-payments-report.md section 2.
+     */
     const { data: partnershipRows, error: pErr } = await supabase
       .from("partnerships")
       .select("id, lead_org_id, status")
@@ -247,6 +273,13 @@ export async function GET() {
         partnership_id: pid,
         lead_org_id: aid,
         agency_name: agencyNameById[aid] || "Agency",
+        // ADDITIVE, AND IT IS ALWAYS 'active' TODAY. `status` has been selected since this
+        // route was written and was never returned, so the payments screen had no way to
+        // tell a live relationship from an ended one even in principle. It is returned now
+        // so the screen's "relationship ended" labelling is driven by the row rather than
+        // assumed from the fact that the row arrived at all. See the status filter note on
+        // the partnerships query above.
+        status: (row.status as string | null) ?? null,
         milestones: list,
       }
     })
