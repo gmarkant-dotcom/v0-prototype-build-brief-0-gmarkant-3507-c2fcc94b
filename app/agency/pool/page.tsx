@@ -24,7 +24,7 @@ import {
   resolveOrgContact,
   type OrgEmbed,
 } from "@/lib/org-contact"
-import { Star, Shield, Building2, User, Users, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Trash2, Compass, Upload } from "lucide-react"
+import { Star, Shield, Building2, User, Users, Video, X, ExternalLink, Mail, MapPin, Calendar, Briefcase, Award, ChevronRight, Ban, Plus, Globe, Send, CheckCircle, AlertCircle, UserPlus, Pencil, Compass, Upload } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { MarketplaceContent } from "@/components/marketplace-content"
@@ -394,9 +394,6 @@ function PartnerPoolPageInner() {
   const [confirmingMsaFor, setConfirmingMsaFor] = useState<string | null>(null)
   
   // Delete confirmation state
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [partnerToDelete, setPartnerToDelete] = useState<Partner | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   // Success notification state
   const [successModal, setSuccessModal] = useState<{
@@ -673,47 +670,6 @@ function PartnerPoolPageInner() {
     }
   }
 
-  const handleDeletePartner = async () => {
-    if (!partnerToDelete) return
-    
-    if (isDemo) {
-      // Demo mode: just remove from local state
-      setPartners(prev => prev.filter(p => p.id !== partnerToDelete.id))
-      setShowDeleteConfirm(false)
-      setPartnerToDelete(null)
-      setSelectedPartner(null)
-      return
-    }
-    
-    setIsDeleting(true)
-    try {
-      // Find the partnership ID for this partner
-      const partnership = partnerships.find(p => p.partnerId === partnerToDelete.id)
-      if (partnership) {
-        const response = await fetch(`/api/partnerships?id=${partnership.id}`, {
-          method: 'DELETE',
-        })
-        
-        if (response.ok) {
-          await loadPartnerships()
-        } else {
-          const data = await response.json()
-          alert(data.error || 'Failed to remove vendor')
-        }
-      } else {
-        // For demo partners without a partnership record, just remove locally
-        setPartners(prev => prev.filter(p => p.id !== partnerToDelete.id))
-      }
-    } catch (error) {
-      console.error('Error deleting partner:', error)
-      alert('Failed to remove vendor')
-    }
-    setIsDeleting(false)
-    setShowDeleteConfirm(false)
-    setPartnerToDelete(null)
-    setSelectedPartner(null)
-  }
-  
   const loadAccessRequests = async () => {
     try {
       const supabase = createClient()
@@ -2550,45 +2506,41 @@ function PartnerPoolPageInner() {
               )}
 
               {/* Action Buttons */}
-              {/* "Remove from Pool" IS DISABLED, AND THE REASON IS NOT COSMETIC.
-                  It called DELETE /api/partnerships, which cannot delete: public.partnerships
-                  has no DELETE policy (079:1465-1497 creates INSERT/SELECT/UPDATE and nothing
-                  else, 087 replaces only the INSERT, and no migration through 099 adds one), so
-                  RLS denies the statement for every caller and the route answers 501
-                  (app/api/partnerships/route.ts:1392-1404). Pressing this button could only ever
-                  produce an alert saying the thing did not happen.
+              {/* THE "REMOVE FROM POOL" CONTROL IS GONE, AND THE REASON IS THAT ARCHIVE AND
+                  REMOVE ARE THE SAME ACT.
 
-                  IT IS NOT FIXED BY ADDING THE POLICY, AND THAT IS A PRODUCT RULING, NOT A
-                  BUILD TASK. Nine tables hang off partnerships.id, and they are the VENDOR's
-                  records, not the agency's: partner_rfp_responses (their bids),
-                  partner_rfp_inbox (the requests they were sent), partner_status_updates
-                  (their posts), payment_milestones, msa_agreements, delivery_reviews,
-                  onboarding_packages, project_assignments and partnership_owners. Greg ruled
-                  this same question for RFP closure: DELETE removes the row, CLOSE preserves
-                  the vendor's record that a request was once made. A hard delete here destroys
-                  or orphans exactly what that ruling exists to protect.
+                  It was disabled rather than removed by the previous session, as a visible
+                  placeholder for a ruling. The ruling came back "keep the control, make it
+                  ARCHIVE rather than delete", and asking what archive would actually WRITE
+                  answers the question differently: partnerships.status already carries
+                  'removed', and migration 063 created that value in these words - "lets an
+                  agency hide a Discovered/Invited row from the pool without deleting the row
+                  outright, since it may carry associated rfp_magic_tokens or bid history worth
+                  keeping for audit". That IS archive. An Archive button would PATCH the same
+                  column on the same table to the same value, and the row would then be hidden
+                  by the same two .neq('status','removed') clauses in GET /api/partnerships. It
+                  would be a second name for the Remove control in the Discovered list, not a
+                  second state. Two buttons doing one thing is worse than one button.
 
-                  So the control says so plainly INSTEAD of rendering an action that fails.
-                  The alternative was to stop rendering it, which would have hidden the open
-                  question rather than stating it. See docs/silent-failures-report.md Phase 1
-                  for the ruling, its options, and the catalog query that settles the ON DELETE
-                  actions this file could only read for three of the nine. */}
-              <div className="flex items-start justify-between gap-4 pt-4 mt-4 border-t border-border">
-                <div className="min-w-0">
-                  <Button
-                    variant="destructive-outline"
-                    disabled
-                    title="Removing a vendor is not available yet."
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Remove from Pool
-                  </Button>
-                  <p className="font-mono text-2xs text-foreground-muted mt-2 max-w-xs">
-                    Not available yet. This vendor&apos;s bids, status updates and payment history
-                    are attached to this record, so removing it needs a decision about what
-                    happens to them.
-                  </p>
-                </div>
+                  NOTHING IS LOST BY DELETING IT, because it never worked. It called
+                  DELETE /api/partnerships, which returns 501: public.partnerships has no DELETE
+                  policy in any migration through 099, so RLS matched zero rows for every caller
+                  including the owning agency. No capability is removed here, only a control
+                  that could not act and a confirmation dialog nothing could open.
+
+                  >>> THE GAP THIS LEAVES VISIBLE IS A DIFFERENT GAP FROM THE ONE THE DISABLED
+                  >>> BUTTON WAS MARKING. There is no agency-side control anywhere in this
+                  product that ENDS a relationship with an ACTIVE vendor. Nothing in app/ writes
+                  'suspended' or 'terminated' from the agency side; only the vendor does
+                  (app/partner/network/page.tsx:456, and the decline branch). 'removed' is the
+                  wrong value for that act - it is the archive for a contact you never worked
+                  with, and applying it to an active vendor silently blanks that vendor's own
+                  payments page, because /api/partner/payments:77 requires status='active'.
+                  Suspend and terminate are the values that exist for ending a live
+                  relationship, and neither has a control. That is the next piece of work, and
+                  it is a product ruling, not a build task. See
+                  docs/vendor-removal-report.md section 2. */}
+              <div className="flex items-center justify-end gap-4 pt-4 mt-4 border-t border-border">
                 <Button
                   onClick={() => setSelectedPartner(null)}
                   className="bg-accent text-accent-foreground hover:bg-accent/90"
@@ -2600,51 +2552,6 @@ function PartnerPoolPageInner() {
           </div>
         )}
         
-        {/* Delete Confirmation Dialog.
-            UNREACHABLE TODAY AND DELIBERATELY KEPT. Nothing sets showDeleteConfirm any more:
-            the only control that did is disabled above. It is left intact, rather than
-            deleted, because it is exactly what gets re-enabled if Greg rules for a hard
-            delete, and re-enabling is then a one-line revert instead of a rebuild.
-
-            ITS COPY CLAIMED SOMETHING FALSE AND NO LONGER DOES. It read "They will no longer
-            have access to your projects. This action cannot be undone." Neither half was
-            true. Removal revokes nothing - no policy in the schema filters on
-            partnerships.status - and the row is kept, not destroyed. The replacement says
-            what removal actually does. */}
-        <Dialog open={showDeleteConfirm && !!partnerToDelete} onOpenChange={(open) => {
-          if (!open) {
-            setShowDeleteConfirm(false)
-            setPartnerToDelete(null)
-          }
-        }}>
-          <DialogContent className="bg-card border-border text-foreground">
-            <DialogHeader>
-              <DialogTitle className="font-display">Remove vendor?</DialogTitle>
-              <DialogDescription className="text-foreground-muted">
-                Remove <span className="font-semibold text-foreground">{partnerToDelete?.name}</span> from your vendor pool? They stop appearing in your pool and you will not be able to send them new RFPs. Work already awarded to them is not affected.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowDeleteConfirm(false)
-                  setPartnerToDelete(null)
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDeletePartner}
-                disabled={isDeleting}
-              >
-                {isDeleting ? 'Removing...' : 'Remove vendor'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         {/* Remove from pool confirmation (inline row action).
             THE COPY DESCRIBES WHAT THE PATCH ACTUALLY DOES. It sets status='removed', which
             GET /api/partnerships filters out of the agency's pool entirely (:95 and :129).
