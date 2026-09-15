@@ -395,6 +395,23 @@ const MILESTONE_PREDICATES: Record<string, (i: PredicateInput) => string> = {
   "onboarding.package_send": (i) => `sent the onboarding package to ${vendorOf(i)}`,
   "onboarding.deploy": (i) => `deployed onboarding for ${i.project || "a project"}`,
   "msa.confirm": (i) => `confirmed the MSA with ${vendorOf(i)}`,
+  // ── Agency-internal. Ruled 2026-09-14 (rulings 1, 2, 4 and 5) and NONE of the five is on
+  //    vendor_visible_event_types(). Four fail gate 2 on the event type; rfp.generate fails
+  //    it one clause earlier, on a null partnership_id, because at generation time there is
+  //    no recipient and so no partnership.
+  //
+  //    They are here because a type absent from this table renders NO LINE AT ALL - gate 3 -
+  //    so without an entry the rulings would have emitted rows nobody could read.
+  //
+  //    vendor.remove, vendor.blacklist and rfp.generate HAVE emitters as of this commit.
+  //    bid.analyze and bid.analyze_retry DO NOT YET - ruling 5's emitter is a later commit,
+  //    and their copy is written ahead of it exactly as the eighteen vendor-side entries
+  //    below were written ahead of theirs.
+  "vendor.remove": (i) => `removed ${vendorOf(i)} from the vendor pool`,
+  "vendor.blacklist": (i) => `blacklisted ${vendorOf(i)}`,
+  "rfp.generate": (i) => `generated the master RFP for ${i.project || "a project"}`,
+  "bid.analyze": (i) => `analyzed a bid on ${scopeOf(i)}`,
+  "bid.analyze_retry": (i) => `re-ran the analysis of a bid on ${scopeOf(i)}`,
   "status_update.resolve": (i) => `resolved a status update on ${i.project || "a project"}`,
   "payment.mark_paid": (i) => `marked a payment milestone paid for ${vendorOf(i)}`,
   // ── Vendor side. No emitter and no INSERT policy yet (080 withheld both); these exist

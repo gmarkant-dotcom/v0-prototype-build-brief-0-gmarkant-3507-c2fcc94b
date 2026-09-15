@@ -858,6 +858,10 @@ function AgencyRFPContent() {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
+          // Named for the rfp.generate milestone's subject only. The route VERIFIES it
+          // against the caller's own organizations and drops it to null if it does not
+          // belong to them, so this is a value the server checks rather than one it trusts.
+          projectId: selectedProject?.id || null,
           projectName: selectedProject?.name || "New Project",
           clientName: selectedProject?.client || "Client TBD",
           briefText: sourceText,

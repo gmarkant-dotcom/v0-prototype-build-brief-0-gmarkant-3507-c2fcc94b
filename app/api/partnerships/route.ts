@@ -839,9 +839,16 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Get partnership to verify ownership
+    //
+    // `partner_email` is a PROJECTION ADDED FOR THE vendor.remove MILESTONE and for nothing
+    // else. It widens no predicate: the row is selected by id, the caller is proved to be a
+    // party to it four lines below, and RLS decided whether this row is readable at all
+    // before any of that. It is here because on the only removal the product can actually
+    // perform - a Discovered contact who was never invited - `vendor_org_id` is NULL and the
+    // address is the ONLY identity the row carries. Without it the breadcrumb names nobody.
     const { data: partnership, error: partnershipFetchErr } = await supabase
       .from('partnerships')
-      .select('lead_org_id, vendor_org_id, status')
+      .select('lead_org_id, vendor_org_id, status, partner_email')
       .eq('id', partnershipId)
       .maybeSingle()
 
@@ -1308,6 +1315,21 @@ export async function PATCH(request: NextRequest) {
 
     // Agency managing partnership
     if (isAgency) {
+      /**
+       * THE TRANSITION, NAMED BEFORE THE WRITE. Same shape as `isMarkingPaid`
+       * (app/api/agency/msa/milestones/route.ts) and `isShortlisting`
+       * (app/api/agency/rfp-responses/[id]/route.ts): the prior status is read before the
+       * update, and the one expression that decides "this is a removal" is the one the
+       * milestone fires on. `partnership.status` is the pre-read above, so re-sending
+       * `removed` for a row that is already removed records nothing.
+       *
+       * This branch accepts four statuses and only one of them is this act. `suspended` and
+       * `terminated` have no emitter because no agency-side control in the product writes
+       * either (docs/vendor-removal-report.md section 2e); writing one here would be an
+       * emitter for a button nobody can press.
+       */
+      const isRemoving = partnership.status !== 'removed' && status === 'removed'
+
       const { data: updated, error } = await supabase
         .from('partnerships')
         .update({ status, updated_at: new Date().toISOString() })
@@ -1316,6 +1338,88 @@ export async function PATCH(request: NextRequest) {
         .single()
 
       if (error) throw error
+
+      /**
+       * Milestone: vendor.remove. RULING 1, 2026-09-14.
+       *
+       * GREG'S RULING: EMIT, AGENCY FEED ONLY. `vendor.remove` is deliberately NOT added to
+       * `vendor_visible_event_types()`, so gate 2 fails on the event type and no counterparty
+       * can read this row. That is the whitelist failing closed, which is what
+       * 080_milestone_events.sql:133-137 says the whitelist is for - not an omission.
+       *
+       * WHY OFF THE WHITELIST IS THE WHOLE RULING AND NOT A DETAIL. The counterparty policy
+       * carries NO status predicate, on purpose (080:337-349). Anything vendor-visible is
+       * readable by that vendor PERMANENTLY. A whitelisted `vendor.remove` would hand the
+       * removed vendor a permanent record of their own removal, for as long as the
+       * partnership row exists, with no way to withdraw it.
+       *
+       * WHAT THIS ACT ACTUALLY REACHES TODAY, STATED SO THE FEED LINE IS NOT READ AS MORE
+       * THAN IT IS. The only removal control in the product renders on Discovered rows
+       * (app/agency/pool/page.tsx:2241) and acts on contacts who were never invited. The
+       * route accepts `removed` for any partnership the caller leads, so a direct API call
+       * could remove an active vendor - but nothing in the interface sends one.
+       * docs/vendor-removal-report.md section 1b has the full list of what removal does and
+       * does not change, and it does NOT revoke access.
+       *
+       * THE PAYLOAD, FIELD BY FIELD, AGAINST THE ONE TEST IN
+       * docs/broadcast-payload-leak-fix.md - "is this field about the reader, or about
+       * anyone else":
+       *
+       *   partner_email  ABOUT THE READER. Their own address, the one this agency sent the
+       *                  invitation to. Exactly the precedent `vendor.invite` set and the
+       *                  payload audit accepted: "their own address, from the invitation they
+       *                  received". It is also the only identity on a row whose
+       *                  `vendor_org_id` is NULL.
+       *   prior_status   ABOUT THE READER. The status of their OWN partnership immediately
+       *                  before this act. A vendor can already read it - the SELECT policy on
+       *                  `partnerships` carries no status predicate - so this discloses
+       *                  nothing they could not fetch themselves. It is here because
+       *                  "was this a live relationship or a contact we never invited" is the
+       *                  question docs/vendor-removal-report.md section 6 Q1 exists to ask,
+       *                  and every removal from now on answers it without a query.
+       *
+       * WHAT IS DELIBERATELY ABSENT. No reason string, no note, no count of the pool, no
+       * remaining-vendor total. Every one of those is agency internal state or describes the
+       * field rather than the reader, and is the `recipient_count` class
+       * (docs/broadcast-payload-leak-fix.md section 0). The payload is unenforced today
+       * because nobody outside the org can read the row; it is written to the rule anyway,
+       * because a payload written under an off-whitelist ruling is exactly what a later
+       * decision to whitelist would expose wholesale.
+       *
+       * THE LINE WILL OFTEN NOT NAME THE VENDOR, AND THAT IS NOT FIXED HERE. `vendorOf()`
+       * resolves through `vendor_org_id`, which is NULL on a never-invited contact, so the
+       * line reads "removed a vendor". `vendor.invite` has the identical shape on the
+       * identical rows and has always rendered that way. Changing it is a change to how the
+       * feed resolves identity, not to this emitter.
+       *
+       * Fire-and-forget and last, like every other emitter here: the removal has already
+       * committed, `recordMilestone()` catches everything and returns void, and a lost
+       * breadcrumb cannot cost the agency the removal it describes.
+       */
+      if (isRemoving) {
+        await recordMilestone(supabase, {
+          eventType: 'vendor.remove',
+          // 079 PARAMETER CLASS: `partnership.lead_org_id` is an organization column, and
+          // `isAgency` is `callerOwnsOrg(callerOrgIds, partnership.lead_org_id)` - so this
+          // value is provably one of the caller's own organizations. It clears 080's
+          // org_id foreign key and the SELECT policy's
+          // `org_id IN (SELECT public.current_user_org_ids())` alike.
+          orgId: orgIdFromColumn(partnership.lead_org_id),
+          actorId: user.id,
+          vendorOrgId: orgIdFromColumn(partnership.vendor_org_id),
+          // Carried because it is TRUE - this row is about that partnership - and not
+          // because it grants anything. Gate 2 needs `partnership_id IS NOT NULL` AND the
+          // type on the whitelist; the second half fails, so the vendor reads nothing.
+          partnershipId: partnershipId as string,
+          subjectType: 'partnership',
+          subjectId: partnershipId as string,
+          payload: {
+            partner_email: (partnership.partner_email as string | null) ?? null,
+            prior_status: (partnership.status as string | null) ?? null,
+          },
+        })
+      }
+
       console.log('[api] success', { route, method: 'PATCH', userId: user.id, role: null, recordId: updated.id, status: updated.status })
       return NextResponse.json({ partnership: updated })
     }

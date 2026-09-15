@@ -4,7 +4,8 @@ import { generateText, Output } from "ai"
 import { anthropic } from "@ai-sdk/anthropic"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
-import { canUseAgencyAi } from "@/lib/entitlements"
+import { canUseAgencyAi, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 
 const scopeItemSchema = z.object({
   id: z.string(),
@@ -57,6 +58,8 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
+    const requestedProjectId =
+      typeof body.projectId === "string" && body.projectId.trim() ? body.projectId.trim() : null
     const projectName = (body.projectName || "New Project").toString()
     const clientName = (body.clientName || "Client TBD").toString()
     let briefText = (body.briefText || "").toString()
@@ -135,6 +138,100 @@ ${briefText}`
       temperature: 0.25,
       maxOutputTokens: 8192,
     })
+
+    /**
+     * Milestone: rfp.generate. RULING 4, 2026-09-14.
+     *
+     * GREG'S RULING: EMIT, AND IT IS AGENCY-ONLY STRUCTURALLY RATHER THAN BY WHITELIST.
+     * At generation time the RFP has not been broadcast, so there are no recipients, no
+     * vendor and no partnership. The row carries `partnership_id = NULL` and gate 2 fails on
+     * its FIRST clause - `partnership_id IS NOT NULL` (080:350-362) - whatever
+     * `vendor_visible_event_types()` says. There is no counterparty-visible option to weigh
+     * here; the only way to get one would be to re-scope generation to emit after recipients
+     * are known, which is what `rfp.broadcast` already is.
+     *
+     * The case FOR emitting is the colleague: without it a teammate cannot see that drafting
+     * happened at all, and the day's work renders as one broadcast line with nothing before
+     * it. The cost is one line per run, and the grouping in lib/activity-feed.ts cannot
+     * collapse separate runs because they do not share a transaction timestamp - so an RFP
+     * drafted four times renders four lines. That is the ruling's own accounting and it is
+     * accepted, not worked around.
+     *
+     * >>> ONE TYPE, NOT TWO. `rfp.regenerate` IS DELIBERATELY NOT EMITTED. <<<
+     *
+     * Greg's ruling, 2026-09-14, overruling the two-wording draft. NOTHING PERSISTS A
+     * GENERATION RUN - this route writes no row, and the master brief lives in React state
+     * until the RFP is broadcast - so THE SERVER CANNOT TELL A FIRST DRAFT FROM A REDRAFT.
+     * The only available discriminator is a flag from the browser, and every event type in
+     * this product is server-determined. One type that is honest beats two where one is a
+     * client's claim about itself, and the precedent of trusting a client for an event type
+     * is the thing being refused: once one type takes it, the next one will.
+     * `rfp.regenerate` stays in CAPABILITY_MINIMUM_ROLE as a permission key and is recorded
+     * as an owed ruling in docs/emitter-rulings-owed.md.
+     *
+     * >>> THE PAYLOAD RULE, ENFORCED AT THE EMIT RATHER THAN ASKED FOR IN A COMMENT. <<<
+     *
+     * THE PAYLOAD IS EMPTY. Not "scrubbed", not "filtered" - there is no expression below
+     * that can reach the prompt, the model output, the token counts or a cost figure,
+     * because none of them is written. `result`, `prompt`, `briefText` and `templateText`
+     * are all in scope at this line and every one of them is agency internal state under the
+     * test in docs/broadcast-payload-leak-fix.md: the client's brief is the client's, the
+     * prompt is the agency's method, and a token or cost figure is a fact about the agency's
+     * tooling and its bill. The ruling names these as "the field most likely to be reached
+     * for here", and the defence against reaching for them is that the object is `{}`.
+     *
+     * The line's only variable is the PROJECT, and it is resolved from `subject_id` through
+     * the dashboard's own `projects` read - never from a payload.
+     *
+     * WHY THE PROJECT ID IS VERIFIED AND NOT TRUSTED. The browser names the project, because
+     * only the browser knows which one is selected. The server then proves the caller owns
+     * it, and drops it to NULL if not. That is the same rule the paragraph above applies to
+     * the event type, not an exception to it: a client may SUPPLY a value the server can
+     * check, and may never DECIDE one the server cannot.
+     *
+     * AFTER THE GENERATION, AND FIRE-AND-FORGET. `recordMilestone()` catches everything and
+     * returns void. A breadcrumb must never cost the agency a brief that took 90 seconds to
+     * produce - which is also why this sits after `generateText` resolved and before the
+     * response is composed.
+     */
+    try {
+      const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+      let milestoneProjectId: string | null = null
+      if (requestedProjectId) {
+        const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
+        if (callerOrgIds.length > 0) {
+          const { data: ownedProject } = await supabase
+            .from("projects")
+            .select("id")
+            .eq("id", requestedProjectId)
+            .in("org_id", callerOrgIds)
+            .maybeSingle()
+          milestoneProjectId = (ownedProject?.id as string | null) ?? null
+        }
+      }
+
+      await recordMilestone(supabase, {
+        eventType: "rfp.generate",
+        // 079 PARAMETER CLASS: the acting organization, never `user.id`. A profiles id here
+        // raises 23503 against milestone_events_org_id_org_fkey. A caller with no
+        // organization resolves null and lib/milestone-events.ts drops the event loudly
+        // rather than writing a row nobody could read.
+        orgId: writeOrgId,
+        actorId: user.id,
+        // No vendor and no partnership: nobody has been sent anything yet. This is what
+        // makes the row agency-only structurally rather than by whitelist.
+        vendorOrgId: null,
+        partnershipId: null,
+        subjectType: "project",
+        subjectId: milestoneProjectId,
+        // See above. Empty is the enforcement.
+        payload: {},
+      })
+    } catch (milestoneErr) {
+      // recordMilestone() never throws; this catches the two lookups above it. A missing
+      // breadcrumb must never cost the agency the brief.
+      console.error("[ai/master-brief] rfp.generate milestone failed (non-fatal)", milestoneErr)
+    }
 
     const parsed = result.output
     if (!parsed) {

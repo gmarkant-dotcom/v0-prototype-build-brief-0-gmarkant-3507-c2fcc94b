@@ -1,4 +1,5 @@
-import { resolveCallerOrgIds, type OrgId } from "@/lib/entitlements"
+import { orgIdFromColumn, resolveCallerOrgIds, type OrgId } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
@@ -60,11 +61,16 @@ async function assertActiveAgencyPartnership(
   supabase: Awaited<ReturnType<typeof createClient>>,
   agencyOrgIds: readonly OrgId[],
   partnerId: string
-): Promise<{ id: string; partnership_notes: unknown } | null> {
+): Promise<{ id: string; partnership_notes: unknown; lead_org_id: string | null } | null> {
   if (agencyOrgIds.length === 0) return null
   const { data, error } = await supabase
     .from("partnerships")
-    .select("id, partnership_notes")
+    // `lead_org_id` is a PROJECTION ADDED FOR THE vendor.blacklist MILESTONE. It widens
+    // nothing: the query below already filters `.in("lead_org_id", agencyOrgIds)`, so every
+    // value this column can return is one the caller supplied. Reading it back is what lets
+    // the emitter attribute the row to an organization instead of to `user.id`, which is a
+    // profiles id and would raise 23503 against milestone_events_org_id_org_fkey.
+    .select("id, partnership_notes, lead_org_id")
     .in("lead_org_id", agencyOrgIds)
     .eq("vendor_org_id", partnerId)
     // The same single predicate as isActivePartnership() in lib/partnership-state.ts,
@@ -83,7 +89,7 @@ async function assertActiveAgencyPartnership(
     console.error("[api/agency/pool/notes] partnership", error)
     return null
   }
-  const rows = (data ?? []) as Array<{ id: string; partnership_notes: unknown }>
+  const rows = (data ?? []) as Array<{ id: string; partnership_notes: unknown; lead_org_id: string | null }>
   return rows[0] ?? null
 }
 
@@ -185,6 +191,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
     const prev = normalizeNotes(row.partnership_notes)
     const next = mergeNotes(prev, patch)
 
+    /**
+     * THE TRANSITION, NAMED BEFORE THE WRITE. RULING 2's whole implementation is this
+     * boolean, and getting it wrong is worse than not emitting at all.
+     *
+     * >>> `body.blacklisted !== undefined` IS NOT THE TEST. THE CLIENT SENDS THE FLAG ON
+     * >>> EVERY SAVE. app/agency/pool/[partnerId]/page.tsx:310 posts
+     * >>> `blacklisted: notesState.blacklisted ?? false` from `saveNotes()`, which is the
+     * >>> ONE save button on that panel - it is how a rating, a note, a would-work-again
+     * >>> answer and the blacklist flag all reach this route. So the flag is present on a
+     * >>> save that only edited a sentence of prose, and an emitter keyed on its presence
+     * >>> would put a `blacklisted {vendor}` line on the agency's feed every time somebody
+     * >>> typed a note. On the feed those two rows are indistinguishable.
+     *
+     * The comparison is `prev` (read off the row before the update) against `next` (what is
+     * about to be written), which is the same prior-value shape `isMarkingPaid` uses in
+     * app/api/agency/msa/milestones/route.ts and `isShortlisting` in
+     * app/api/agency/rfp-responses/[id]/route.ts. A re-save of an already-blacklisted vendor
+     * records nothing. A vendor blacklisted, cleared, and blacklisted again records two
+     * events, which is correct: those are two acts.
+     *
+     * FALSE -> TRUE ONLY. Greg's ruling, 2026-09-14. Lifting a blacklist has no event type,
+     * no wording, and `vendor.blacklist` is the wrong one for it - the feed would render
+     * "blacklisted {vendor}" for the act that UN-blacklisted them, which is worse than
+     * silence. The clear is recorded as an owed ruling in docs/emitter-rulings-owed.md.
+     */
+    const wasBlacklisted = prev.blacklisted === true
+    const nowBlacklisted = next.blacklisted === true
+    const isBlacklisting = !wasBlacklisted && nowBlacklisted
+
     // Append to timestamped log if notes text changed and is non-empty
     if (patch.notes !== undefined && patch.notes.trim()) {
       const prevLog = Array.isArray(prev.notes_log) ? prev.notes_log : []
@@ -211,6 +246,61 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
     if (upErr) {
       console.error("[api/agency/pool/notes] update", upErr)
       return NextResponse.json({ error: "Failed to save notes" }, { status: 500, headers: noStore })
+    }
+
+    /**
+     * Milestone: vendor.blacklist. RULING 2, 2026-09-14.
+     *
+     * GREG'S RULING: EMIT, AGENCY FEED ONLY. Same whitelist answer as ruling 1 -
+     * `vendor.blacklist` is deliberately NOT added to `vendor_visible_event_types()`, so
+     * gate 2 fails on the event type and no counterparty can read this row.
+     *
+     * WHY THE SAME ANSWER LANDS HARDER HERE. A removal is an administrative state change; a
+     * blacklist is a JUDGMENT. The counterparty policy has no status predicate (080:337-349),
+     * so a whitelisted `vendor.blacklist` would be permanent: a blacklist later lifted would
+     * not withdraw the row, and the vendor would hold the agency's opinion of them for as
+     * long as the partnership exists. Only a DELETE would remove it, and there is no DELETE
+     * policy on this table for anybody.
+     *
+     * >>> THE PAYLOAD IS EMPTY, AND THAT IS THE RULING RATHER THAN AN OVERSIGHT. <<<
+     *
+     * The flag lives in `partnerships.partnership_notes` (migration 068) alongside the free
+     * text note, the rating, the would-work-again answer and the timestamped `notes_log`.
+     * NOTHING FROM THAT OBJECT GOES IN THE PAYLOAD. Under the one test in
+     * docs/broadcast-payload-leak-fix.md every field of it is agency internal state, and the
+     * content here is a judgment rather than a fact - a reason string is the agency's
+     * reasoning about a company, which is the `recipient_count` class with the numbers
+     * swapped for an opinion. There is no field of `partnership_notes` that passes, so the
+     * payload carries none of them.
+     *
+     * WHAT THE LINE THEREFORE RENDERS FROM. `vendorOf()` alone, resolved from
+     * `vendor_org_id` through the `organizations` read the dashboard already performs - never
+     * from a payload. This route requires an ACTIVE partnership, so `vendor_org_id` is
+     * non-null and the line names the vendor properly, unlike ruling 1's.
+     *
+     * Fire-and-forget and after the write: the flag is already saved, `recordMilestone()`
+     * catches everything and returns void, and the agency's save must not fail because a
+     * breadcrumb did.
+     */
+    if (isBlacklisting) {
+      await recordMilestone(supabase, {
+        eventType: "vendor.blacklist",
+        // 079 PARAMETER CLASS: read back off a row selected under
+        // `.in("lead_org_id", agencyOrgIds)`, so it is provably one of the caller's own
+        // organizations. NOT `user.id`, which is a profiles id and would raise 23503.
+        orgId: orgIdFromColumn(row.lead_org_id),
+        actorId: user.id,
+        // The [partnerId] route param IS an organization id - the Vendor Pool page sets it
+        // from `vendor_org_id`, and `assertActiveAgencyPartnership` matched the row on
+        // `.eq("vendor_org_id", partnerId)` above, so the equality is proved rather than
+        // assumed.
+        vendorOrgId: orgIdFromColumn(partnerId),
+        partnershipId: row.id,
+        subjectType: "partnership",
+        subjectId: row.id,
+        // Empty. See the block above - this is the ruling, not an omission.
+        payload: {},
+      })
     }
 
     return NextResponse.json({ partnership_id: row.id, notes: next }, { headers: noStore })
