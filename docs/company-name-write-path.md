@@ -1,3 +1,25 @@
+> # RESOLVED. THE CODE THIS DOCUMENT CALLS "NOT COMMITTED" IS COMMITTED, IN `d610c16`.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run, verified against the code.
+>
+> The status line below reads *"code written, gates re-run, **not committed** - held for the
+> writer list in section 3."* That was true on 2026-08-20. `lib/company-identity.ts` has been on
+> `main` since `d610c16` (2026-08-20, *"fix: company names derived from mail providers, and the
+> /partner/rfps/null CTA"*), established with `git log -1 -- lib/company-identity.ts`.
+>
+> **The defect described under "The defect, restated from source" is CLOSED.** `organizations.name`
+> had no write path anywhere; it now has exactly one. Verified by executing
+> `grep -rn 'from("organizations")' app/ lib/ components/` and inspecting every hit: 24 sites, and
+> the only writes are `lib/company-identity.ts:306` (`.update({ name })`) and two admin routes
+> that write `is_paid` and nothing else. `saveCompanyIdentity` is imported by
+> `app/agency/settings/profile/page.tsx` and `app/partner/profile/page.tsx` - both settings forms,
+> which is the pair section 3 named.
+>
+> **STILL OPEN, and it is why this is not a clean close:** section 5's repair SQL for the one
+> drifted row was **never run**, and cannot be verified from this repository. The preventive fix
+> shipped; the repair did not. That query is carried into
+> `docs/engagements-and-counts-report.md` as a checklist item for Greg.
+
 # The company name write path
 
 **Date:** 2026-08-20

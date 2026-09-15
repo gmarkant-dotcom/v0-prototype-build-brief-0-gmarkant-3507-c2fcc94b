@@ -388,17 +388,18 @@ function PartnerPaymentsPageLegacy() {
       } else {
         const allRows = (partData as { partnerships?: PartnershipApiRow[] }).partnerships || []
         /**
-         * THE SECOND ACTIVE-ONLY FILTER, AND THE ONE A READER MISSES.
+         * THE SECOND ACTIVE-ONLY FILTER USED TO BE HERE, AND IT IS GONE. Removed in edff222
+         * alongside the route-side one, per Greg's 2026-09-14 ruling.
          *
-         * app/api/partner/payments/route.ts carries the filter everybody knows about. This
-         * one narrows /api/partnerships again, in the browser, and it is what fills the agency
-         * selector. Removing the route filter ALONE changes nothing a vendor can see: the
-         * milestones would arrive and there would still be no agency to select them under.
-         * Both come off together or neither does. See the exact diff in
-         * docs/pool-counts-and-payments-report.md section 2.
+         * `const rows = allRows` IS DELIBERATE. Every partnership the caller's org holds fills
+         * the agency selector, ended ones included, each tagged by relationshipTag() below.
+         * Do not re-add a status filter here without re-making the ruling.
          *
-         * LEFT IN PLACE ON THIS RUN. Taking it out is the access widening, and that is Greg's
-         * to apply.
+         * Why the pair mattered: app/api/partner/payments/route.ts carried the filter everybody
+         * knew about; this one narrowed /api/partnerships again, in the browser, and it is what
+         * fills the selector. Removing the route filter ALONE would have changed nothing a
+         * vendor can see - the milestones would have arrived with no agency to select them
+         * under. They had to come off together and they did.
          */
         const rows = allRows
         setActivePartnerships(rows)

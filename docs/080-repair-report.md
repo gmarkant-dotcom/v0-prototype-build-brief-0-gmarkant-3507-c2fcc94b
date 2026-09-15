@@ -1,3 +1,25 @@
+> # RESOLVED. 080 IS APPLIED. THIS REPORT'S "repaired, NOT applied" IS FOUR WEEKS OUT OF DATE.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run.
+>
+> Three independent pieces of evidence, none of them another document's summary:
+>
+> 1. `lib/milestone-events.ts:28` states **"080 IS APPLIED"** in its own header, and the file's
+>    error handling is written around that fact: `:42` says a PGRST205 "now means a broken
+>    environment rather than the expected state", which is only true post-apply.
+> 2. `lib/milestone-events.ts:146` depends on 080's agency-only INSERT policy existing, and that
+>    dependency is live code, not a comment.
+> 3. `docs/roadmap-state.md` section 1 records a catalog query Greg ran on 2026-09-14 listing
+>    080 among the applied migrations. That is a live catalog read, and it is the strongest of
+>    the three because it observed the database rather than the repository.
+>
+> **The opening paragraph below is also stale in every clause:** `milestone_events` exists,
+> milestone emits are no longer all dropped with a logged PGRST205, and the `partnerships`
+> observation about `partner_id` still holds.
+>
+> **NO SQL WAS RUN BY THIS RUN.** Item 3 is quoted from a query somebody else executed; items 1
+> and 2 are read from source.
+
 # 080 repair report: `milestone_events` for the post-079 model
 
 **Status: repaired, NOT applied.** Nothing in this session executed a statement against any

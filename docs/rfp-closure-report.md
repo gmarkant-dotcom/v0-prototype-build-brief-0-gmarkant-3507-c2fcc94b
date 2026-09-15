@@ -1,3 +1,32 @@
+> # MERGED TO `main`. THIS REPORT'S OWN HEADER SAYS IT IS NOT. Do not re-open anything below as unshipped.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run. The header sentence
+> ("Six commits, nothing pushed, nothing merged.") was true the moment it was written and is false now.
+>
+> **How this was verified:** `git merge-base --is-ancestor <sha> main` was EXECUTED for every
+> commit this report names. All of them returned 0. No document was taken at its word, this
+> one included.
+>
+> **Commits, all on `main`:** `014e783`, `f177a2f`, `d782dd1`, `0f13335`, `900f235`, `c6612c4`
+>
+> Phase 2's row says migration 099 is **"Authored, not applied."** That row is ALSO stale: 099 is
+> inside the applied 079-099 band. The code merging and the migration applying are two separate
+> facts and this banner asserts only the first; the 099 correction rests on the run brief's
+> statement, which is Greg's own and is not re-derivable from this repository.
+>
+> **THIS IS THE PROJECT'S MOST EXPENSIVE DOCUMENTATION TRAP, AND IT IS IN EIGHT FILES AT ONCE.**
+> Every run report here opens by declaring its own branch unmerged, because that is the truthful
+> thing to write while the branch is open, and nothing revisits the sentence when the branch
+> lands. A later session reading it concludes the work is still on a branch and either redoes it
+> or leaves a shipped defect marked open. The previous run named this pattern
+> (`docs/pool-counts-and-payments-report.md` section 3d, "when a fix commits, the report that
+> says 'uncommitted' is what strands the diagnosis") and did not sweep for it. This run did.
+> The full list is in `docs/engagements-and-counts-report.md` section 1.
+>
+> **What this banner does NOT say.** It says the code merged. It says nothing about migrations.
+> Migration 100 remains **AUTHORED AND NOT APPLIED**, and any section below describing an
+> unapplied migration is still accurate.
+
 # RFP closure: the run report
 
 Branch `feat/rfp-closure`, cut from `8976955` on main. **Six commits, nothing pushed,

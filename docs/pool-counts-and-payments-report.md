@@ -1,3 +1,45 @@
+> # MERGED, AND OVERTAKEN. SECTION 2 SAYS "PREPARED, NOT APPLIED". IT WAS APPLIED THE SAME DAY.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run, verified against the code and
+> against `git`, not against any document.
+>
+> **Two separate corrections. The second is the one that costs something.**
+>
+> **1. The branch is merged.** All five commits are on `main`, confirmed with
+> `git merge-base --is-ancestor` EXECUTED per commit: `3ed33a6`, `472d67f`, `b320081`,
+> `446f85a`, `3a2e0b4`. The header's "NOT PUSHED. NOT MERGED." was true when written.
+>
+> **2. THE SECTION 2f DIFF THIS REPORT DECLINED TO APPLY WAS APPLIED IN `edff222`**, the commit
+> immediately after this report, titled *"fix: a vendor owed money keeps seeing it after the
+> relationship ends"*. Both filters came off together, exactly as section 2f said they must:
+>
+> - `app/api/partner/payments/route.ts` - `.eq("status", "active")` **deleted**. Verified by
+>   reading the file at `HEAD`: the `partnerships` select now carries only `.in("vendor_org_id",
+>   callerOrgIds)` and `.order(...)`.
+> - `app/partner/payments/page.tsx:403` - the browser-side `status === "active"` narrowing
+>   **deleted**; the line is now `const rows = allRows`.
+>
+> **THEREFORE SECTIONS 2, 2a, 2f, 6 AND 7 NO LONGER DESCRIBE THIS PRODUCT.** Specifically:
+>
+> | Says | Now |
+> | --- | --- |
+> | Section 2 heading: "PREPARED, NOT APPLIED" | Applied, in `edff222` |
+> | Section 2a: an ended-only vendor sees "An empty screen" | They see their milestones. That was the point of `edff222` |
+> | Section 2f: "THE EXACT DIFF GREG WOULD APPLY. NOT APPLIED" | It is applied. Reading it as pending work is the trap |
+> | Section 6 revert table: four commits | Five. `edff222` is not in the table and is the only one that changed what a vendor can read |
+> | **Checklist step 7**: "with the filters still in place: **the agency is gone from the selector**" | **WRONG NOW.** With the filters gone the ended agency STAYS in the selector, tagged |
+> | **Checklist step 8**: the ended agency's notice renders below the selector | **THAT BLOCK WAS DELETED** by `edff222`. There is no separate panel in the both-cases branch any more |
+> | Checklist step 10: "should show **four** commits plus this report" | Six commits now sit on `main` from that branch plus `edff222` |
+>
+> **Steps 7 and 8 are the dangerous rows.** They tell Greg to verify a screen that no longer
+> exists, so following them produces a "this run is broken" result from a run that is fine. The
+> corrected steps are carried into `docs/engagements-and-counts-report.md`, marked CARRIED OVER.
+>
+> **What did NOT change:** no policy, no migration, no RLS predicate. `edff222` removed two
+> application-level query filters. Section 2b's verdict that the policies are SUFFICIENT is what
+> makes that safe, and it is unchanged. Section 1 (the pool page labels) is untouched and still
+> accurate.
+
 # Pool counts and payments: run report
 
 **Branch:** `feat/pool-counts-and-payments`, cut from `main` at `d6074a8`. Five commits.

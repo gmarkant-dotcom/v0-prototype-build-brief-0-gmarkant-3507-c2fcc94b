@@ -1,3 +1,73 @@
+> # SECOND CORRECTION BANNER, 2026-09-15. THERE ARE NOW TWO. READ BOTH, THIS ONE FIRST.
+>
+> Added by the `feat/engagements-one-source` run. The banner below mine was added the same day by
+> the `feat/pool-counts-and-payments` run and **everything in it still holds** - I re-checked its
+> five rows rather than inheriting them. This banner adds what has changed since, plus **one
+> claim in the body that was never true**, which the first banner did not catch.
+>
+> **THE FILE NOW CARRIES TWO CORRECTION LAYERS OVER AN UNCORRECTED BODY.** That is a worse shape
+> than a rewritten body and it is deliberate: a body edited to agree with its corrections stops
+> being evidence of what was actually believed. But it means **section 0's "three things to know
+> first" is the most out-of-date part of a file whose whole purpose is being read cold.** If you
+> read nothing else here, read the next table.
+>
+> ## A. ONE FINDING IN THE BODY IS DISPROVEN. It was never true, and it is load-bearing
+>
+> **Section 4.1, "Half two":** *"even if a control existed it would revoke nothing. No policy
+> anywhere filters on `partnerships.status`."*
+>
+> **DISPROVEN, not resolved. Nobody fixed this; it was wrong when written.** Two `SECURITY
+> DEFINER` helpers filter on exactly that column and both gate live policies. Verified by reading
+> the migrations, not by trusting `docs/relationship-end-rulings.md` section 0b, which found it
+> first:
+>
+> | Helper | Filter | Read at | What it gates |
+> | --- | --- | --- | --- |
+> | `current_user_active_counterparty_user_ids()` | `AND p.status = 'active'` | `supabase/migrations/079_organizations.sql:794` and `:799` | the `notifications` INSERT policy |
+> | `current_user_commercial_counterparty_org_ids()` | excludes `terminated` and `removed` | `supabase/migrations/085_counterparty_status_boundary.sql` | `profiles`, via `current_user_visible_profile_ids()` - so `default_terms`, `business_criteria`, `default_nda_url` |
+>
+> **Why this matters more than a footnote.** 085 is a deliberate, argued precedent for the exact
+> mechanism a relationship-end ruling needs - *"a company NAME survives the end of a relationship;
+> its commercial terms do not"*. Section 4.1 tells a session that the mechanism does not exist
+> anywhere. It does, it is already load-bearing, and the ruling should be built on it rather than
+> inventing a second one.
+>
+> **The accurate version of the claim, which is still serious:** no policy on any **delivery
+> artifact** table filters on status. Section 4.1's own example survives intact -
+> `app/api/partner/projects/route.ts:87-90` was re-read at `HEAD` and still selects partnerships
+> by `vendor_org_id` with no status filter at all.
+>
+> ## B. WHAT HAS SHIPPED SINCE THE BODY WAS WRITTEN
+>
+> | Body says | Actually | Verified by |
+> | --- | --- | --- |
+> | S0.1, S4.1, S6.1: the relationship-end ruling is unmade and blocked | **Q2 IS RULED AND SHIPPED.** A vendor owed money keeps seeing it after the relationship ends. Greg ruled 2026-09-14; `edff222` removed both active-only payment filters | `git show edff222`; `app/api/partner/payments/route.ts` read at `HEAD` - the `partnerships` select has no status predicate. **Q1, Q3 and Q4 are still open** |
+> | S3 ruling 3: the `client.edit` deferral is "**NOT** yet recorded" in `docs/emitter-rulings-owed.md` | It is recorded, with the definition of "material" | `docs/emitter-rulings-owed.md:200-218`, a RULED block |
+> | S6.4: "Ship emitter ruling 5's emitter ... the `decompose` route needs the call" | **Done.** It emits | `app/api/agency/bids/[responseId]/decompose/route.ts:290` |
+> | S6.5: "Merge or drop `feat/emitter-rulings`. One commit, unmerged" | **Merged**, and it was four commits | `git merge-base --is-ancestor` EXECUTED for `bc4a600`, `891a05e`, `f90972a`, `d6074a8` |
+> | S5 debt table, rows 1 and 2 | **Both done.** The onboarding marker and the ruling 3 deferral are recorded | The two files, read |
+> | S2 row: onboarding regression FIXED | **Still true.** Re-verified independently, not inherited: `lost[]` is built at `components/stage-03-onboarding-workflow.tsx:443` and a non-empty `lost[]` returns at `:534`, **before** `setSending(true)` at `:541` | Read at `HEAD` |
+>
+> ## C. THREE MORE DOCUMENTS IN SECTION 5'S CLASS, NONE OF THEM LISTED THERE
+>
+> All three said they were unfinished and all three were finished. `docs/095-notification-types-ruling.md`
+> ("no migration numbered 095 exists" - it exists and widens the CHECK to eleven),
+> `docs/080-repair-report.md` ("repaired, NOT applied" - 080 is applied) and
+> `docs/company-name-write-path.md` ("not committed" - committed in `d610c16`; `lib/company-identity.ts`
+> is live and is the only writer of `organizations.name`). Each now carries its own marker.
+>
+> **And the general case, which is section 5's real entry:** **eight run reports in `docs/` open by
+> declaring their own branch not pushed and not merged, and all eight are merged.** Every one now
+> carries a banner. `docs/engagements-and-counts-report.md` section 1 has the list and the
+> verification.
+>
+> ## D. WHAT THIS BANNER DOES NOT TOUCH
+>
+> **Migration 100 is still AUTHORED AND NOT APPLIED.** Ruling 6 remains a live silent failure.
+> Nothing here changes section 1's migration boundary, section 4.2's budgeting spine, section 4.3
+> or section 4.4, and **no SQL was run by this run**, read-only or otherwise. Section 3.1, section
+> 4.2, 4.3 and 4.4 were NOT re-verified and should be read as written.
+
 > # STALE IN FIVE PLACES AS OF 2026-09-15. READ THIS BLOCK BEFORE SECTION 0.
 >
 > This file was written on 2026-09-14 and says at the top that you can open it cold and know

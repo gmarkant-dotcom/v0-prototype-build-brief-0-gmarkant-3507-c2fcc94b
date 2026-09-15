@@ -1,3 +1,19 @@
+> # PARTIALLY RESOLVED. (b) AND (c) ARE FIXED IN `d5aba30`. (a) AND (d) ARE NOT.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run, verified by reading
+> `app/api/partner/dashboard/route.ts` at `HEAD`. No database was queried.
+>
+> | Section | Verdict | Evidence |
+> | --- | --- | --- |
+> | **2. (b) IS 67 CAPPED ANYWHERE?** - "In SQL: NO. Not by a limit, and not by anything else." | **RESOLVED** | `VENDOR_QUEUE_CEILING = 500` at `app/api/partner/dashboard/route.ts:84`, applied to the queue after the filter loop. The 40-line header above it explains why it is NOT `.limit(500)` on the SQL read: that read has no `WHERE` and is narrowed in JS afterwards, so a SQL limit would let a dual-role account's own outbound broadcasts consume the whole queue. **The SQL read is still unbounded and the code says so** - so (b)'s literal claim survives while the defect it describes does not |
+> | **3. (c) WHAT ORDERS THE LIST?** - "Today: **NOTHING.** The order is whatever Postgres happened to return." | **RESOLVED** | `.order("created_at", { ascending: false })` at `:168`, with a comment at `:153` recording that the read previously had no `ORDER BY` at all, and a second at `:364-379` explaining why no JS comparator was added on top |
+> | **1. (a) WHY IS EVERY DEADLINE EMPTY?** | **NOT VERIFIABLE FROM SOURCE.** Its own answer is that the deadline is optional at capture and nobody sets one, and that the display path is intact. Settling it needs the row counts in its section 1 "THE QUERIES THAT SETTLE IT. NOT RUN." Still not run | |
+> | **4. (d) ARE THE COUNT AND THE LIST FROM THE SAME SOURCE?** | **NOT RE-VERIFIED by this run.** The ceiling commit's message asserts items, header count and the funnel tile all read the same capped array, which is the shape (d) asked about - but that is the commit's word and this run did not trace it | |
+> | **6. THE RULINGS GREG OWES** | **STILL OWED.** `d5aba30` shipped R6 (the ceiling) only | |
+>
+> **The status line below - "NOTHING WAS FIXED AND NO `.ts` OR `.tsx` FILE WAS TOUCHED" - was
+> true of the pass that wrote it and is false of the document's subject matter now.**
+
 # The vendor attention queue: 67 rows, no deadlines, no order
 
 **Status: DIAGNOSIS ONLY. NOTHING WAS FIXED AND NO `.ts` OR `.tsx` FILE WAS TOUCHED

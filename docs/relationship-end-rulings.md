@@ -1,3 +1,49 @@
+> # Q2 IS ANSWERED, AND IT WAS ANSWERED IN CODE. OPTION A SHIPPED IN `edff222`.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run. Verified by reading
+> `app/api/partner/payments/route.ts` and `app/partner/payments/page.tsx` at `HEAD`, and by
+> `git show edff222`. No database was queried and no SQL was run.
+>
+> **What section 4's Q2 asks:** what happens to unpaid payment milestones when a relationship
+> ends. **Option A** was "payments survive every end state", mechanism "**DELETE** the route
+> filter at `partner/payments/route.ts:77`. One line. No migration."
+>
+> **That is what `edff222` did**, titled *"fix: a vendor owed money keeps seeing it after the
+> relationship ends"*. Both halves of the filter came off - the route's `.eq("status","active")`
+> and the browser-side narrowing at `app/partner/payments/page.tsx:403`, which
+> `docs/pool-counts-and-payments-report.md` section 2 established had to come off with it.
+>
+> **SO THE FOLLOWING SENTENCES IN THIS DOCUMENT ARE NOW FALSE:**
+>
+> - **Section 1c** and **Q2's own preamble**: "`app/api/partner/payments/route.ts:77` filters to
+>   `status = 'active'`, so today ANY end state blanks the payments page". It does not. There is
+>   no status filter on that read any more.
+> - **Section 7**: "`app/api/partner/payments/route.ts:77` was **left exactly as it is**". It was
+>   not left; it was deleted one commit later.
+> - **Option B's** description of itself as "**This is the status quo**". It is no longer the
+>   status quo. Choosing B is now a change, not an absence of one.
+> - **Section 6 question 2** (how many vendors are affected) is now a question about what
+>   `edff222` *revealed*, not about what is hidden.
+>
+> **WHAT IS STILL OWED, AND THIS IS THE POINT.** Q1, Q3 and Q4 are **untouched and still open**.
+> Only Q2 has an answer. Nothing else in section 4 was decided, and Q2's answer does not imply
+> the others: a product that shows ended-relationship payments still has no agency-side control
+> that ends a relationship (section 8), and still revokes nothing else.
+>
+> **WHERE THE RULING IS ACTUALLY WRITTEN DOWN, which is not here.** It is in the code, dated and
+> attributed, at `app/api/partner/payments/route.ts`: *"GREG RULED AGAINST IT ON 2026-09-14 ... a
+> vendor who is owed money keeps seeing what they are owed after the relationship ends, the same
+> principle as the RFP closure ruling. The counterparty keeps their record."* So Q2 was ruled
+> deliberately, with a stated principle, BEFORE the code changed - section 1c's complaint that
+> the product had answered Q2 by accident no longer applies in either direction.
+>
+> **What is still owed is bookkeeping, not a decision.** The ruling lives in a route comment and
+> a commit message; the document written to hold it does not record it, and Option B below still
+> describes itself as the status quo. One thing Q2's text raises and the ruling does not address
+> is Option A's stated cost - "the agency cannot make a disputed record disappear". Whether that
+> was accepted or simply not the deciding factor is not recorded anywhere this run could find.
+> **This run did not invent an answer to that.**
+
 # Ending a relationship with an active vendor: the rulings Greg owes
 
 `feat/emitter-rulings`, 2026-09-15. **Discovery only. No feature code was written in this

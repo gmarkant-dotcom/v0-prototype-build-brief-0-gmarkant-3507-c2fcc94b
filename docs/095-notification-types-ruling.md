@@ -1,3 +1,25 @@
+> # RESOLVED. THE RULING WAS MADE AND SHIPPED. MIGRATION 095 EXISTS AND WIDENS TO ELEVEN.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run.
+>
+> The status line below reads *"AWAITING RULING. No SQL authored. No migration numbered 095
+> exists."* Both halves are now false:
+>
+> - `supabase/migrations/095_notification_types.sql` exists, with a `_down` file beside it.
+>   `ls supabase/migrations/` was EXECUTED.
+> - It does exactly what section 5 specified: `ADD CONSTRAINT notifications_type_check CHECK
+>   (type IN (...))` over **eleven** values, `'bid_submitted'` among them, annotated per write
+>   site. Read at `supabase/migrations/095_notification_types.sql:314-330`.
+>
+> **On whether it is APPLIED:** the run brief states that 079 through 099 are applied to
+> production, which puts 095 inside that band. **That is Greg's own statement and is not
+> re-derivable from this repository** - no SQL was run here, read-only or otherwise. The
+> authoring half is verified by `ls` and by reading the file; the applied half is not.
+>
+> **Section 3's warning is unaffected and still worth reading:** widening the CHECK is necessary
+> but not sufficient, and which of the six sites actually start writing on the day it widens is a
+> separate question this closure does not answer.
+
 # 095: the notification `type` CHECK. A ruling Greg owes, not a migration.
 
 **Status: AWAITING RULING. No SQL authored. No migration numbered 095 exists.**

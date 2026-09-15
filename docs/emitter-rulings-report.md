@@ -1,3 +1,35 @@
+> # MERGED TO `main`. THIS REPORT'S OWN HEADER SAYS IT IS NOT. Do not re-open anything below as unshipped.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run. The header sentence
+> ("four commits, not pushed and not merged") was true the moment it was written and is false now.
+>
+> **How this was verified:** `git merge-base --is-ancestor <sha> main` was EXECUTED for every
+> commit this report names. All of them returned 0. No document was taken at its word, this
+> one included.
+>
+> **Commits, all on `main`:** `bc4a600`, `891a05e`, `f90972a`, `d6074a8`
+>
+> **THIS IS THE PROJECT'S MOST EXPENSIVE DOCUMENTATION TRAP, AND IT IS IN EIGHT FILES AT ONCE.**
+> Every run report here opens by declaring its own branch unmerged, because that is the truthful
+> thing to write while the branch is open, and nothing revisits the sentence when the branch
+> lands. A later session reading it concludes the work is still on a branch and either redoes it
+> or leaves a shipped defect marked open. The previous run named this pattern
+> (`docs/pool-counts-and-payments-report.md` section 3d, "when a fix commits, the report that
+> says 'uncommitted' is what strands the diagnosis") and did not sweep for it. This run did.
+> The full list is in `docs/engagements-and-counts-report.md` section 1.
+>
+> **SECTION 4b IS ALSO RESOLVED, and it is the one finding in this report that stopped being
+> true.** 4b says *"A vendor owed money may already be unable to see the record"* and that the
+> line at `app/api/partner/payments/route.ts:77` "was left exactly as it is". It was removed in
+> `edff222`, after Greg ruled on 2026-09-14. Verified by reading the file at `HEAD`: the
+> `partnerships` select carries no status predicate. See `docs/relationship-end-rulings.md`,
+> whose Q2 this answered. **4a and 4c are UNCHANGED and still live** - `bid.revise` can still
+> crowd the feed, and `suspended`/`terminated` still have a badge, a column and no way in.
+>
+> **What this banner does NOT say.** It says the code merged. It says nothing about migrations.
+> Migration 100 remains **AUTHORED AND NOT APPLIED**, and any section below describing an
+> unapplied migration is still accurate.
+
 # The emitter rulings run: what shipped, what did not, and what is owed
 
 Branch `feat/emitter-rulings`, four commits, **not pushed and not merged**. 2026-09-15.

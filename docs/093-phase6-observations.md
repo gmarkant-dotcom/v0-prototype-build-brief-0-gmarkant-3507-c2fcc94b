@@ -1,3 +1,35 @@
+> # (a) IS STILL LIVE. (b) IS A SURVEY, NOT A DEFECT. READ THE DISTINCTION BELOW BEFORE ACTING.
+>
+> **Added 2026-09-15** by the `feat/engagements-one-source` run, verified against the code.
+>
+> **(a) THE SNAPSHOT-STRING GROUPING IS STILL LIVE.** `components/partner-rfp-surface.tsx:692-693`
+> still reads:
+>
+> ```ts
+> const key = groupBy === "agency"
+>   ? (r.agency_company_name || "Unknown Agency").trim()
+> ```
+>
+> The group key is still the denormalized string on the row, not `lead_org_id`. Two spellings of
+> one organization are still two groups by construction. Nothing has changed here since
+> 2026-08-21, and it needs the data repair section (a) describes, which is Greg's SQL.
+>
+> **DO NOT CONFUSE THIS WITH THE "2 agencys" BUG, WHICH WAS A DIFFERENT DEFECT AND IS FIXED.**
+> Section (a) mentions the header reading `2 agencys`. Two things were wrong in that sentence and
+> only one of them was this document's finding:
+>
+> | Defect | State |
+> | --- | --- |
+> | The header pluralized by appending "s", producing "agencys" | **FIXED.** `components/partner-rfp-surface.tsx` now carries a `GROUP_NOUN` table spelling out singular and plural per group type, with a comment saying why it is a table and not a patched ternary |
+> | The **count** was 2 because one organization had two name spellings on its rows | **STILL LIVE.** This is (a), and the grouping key above is why |
+>
+> A session that reads "2 agencys" and finds the pluralization fixed will conclude (a) is closed.
+> It is not. **The number is still wrong; only the word next to it was repaired.**
+>
+> **(b) is not a defect and has no state to close.** It is a surface-area survey of the two
+> portal layouts, written explicitly as "proposing nothing and building nothing". Its line counts
+> and file structure were NOT re-verified by this run and may have drifted.
+
 # Phase 6: two observations, reported and not fixed
 
 **Branch:** `fix/acting-role-read-scope`  **Date:** 2026-08-21
