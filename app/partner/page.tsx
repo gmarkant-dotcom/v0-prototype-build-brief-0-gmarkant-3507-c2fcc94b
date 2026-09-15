@@ -193,10 +193,49 @@ export default function PartnerDashboardPage() {
     legal: false,
     payments: false,
   })
+  /**
+   * >>> WHETHER THE FIVE BOOLEANS ABOVE ARE AN ANSWER OR A PLACEHOLDER. THE WHOLE OF THE
+   * >>> "60% THEN 0%" DEFECT IS THAT NOTHING USED TO TELL THEM APART.
+   *
+   * The badge read "60% Complete - Add a reel or portfolio link" and then, the same evening
+   * on the same account with no profile edit between, "0% Complete - Add your capabilities".
+   * Both were rendered off this one state.
+   *
+   * ALL-FALSE HAS THREE PRODUCERS AND ONLY ONE OF THEM IS A MEASUREMENT:
+   *
+   *   1. THE INITIAL VALUE, before the effect below has resolved anything. Every vendor sees
+   *      it on every load, for as long as a profile read plus up to two API round trips
+   *      takes. A slow or stalled one holds it there.
+   *   2. THE `if (!user) return` EARLY EXIT, which leaves the initial value standing.
+   *   3. THE catch, which OVERWROTE a real answer with all-false on any throw - the
+   *      partnerships fetch, the rate-info fetch, an auth hiccup.
+   *
+   * Only the success path is a statement about the profile. The other two were being
+   * rendered as "0% Complete, add your capabilities", which is a specific and confident
+   * claim about a vendor who may well have filled everything in. It is the same silent
+   * failure class as the rest of this codebase's worst bugs: a refusal arriving as a fact.
+   *
+   * CLAUDE.md, verbatim: "Never show loading/empty states during hydration - wait for
+   * isLoading to be false." This surface had no isLoading at all.
+   *
+   * "ready" IS THE ONLY STATE THAT RENDERS THE BAR. "loading" and "failed" render nothing,
+   * because the honest thing to say about a number you do not have is nothing. A genuinely
+   * empty profile still reaches "ready" through the success path and still reads 0%, which
+   * is correct and is the case this must not suppress.
+   *
+   * >>> WHAT THIS DOES NOT DO, DELIBERATELY: it does not change what "complete" means. The
+   * >>> five predicates below are untouched. Whether 60% was the right number for that
+   * >>> account is a question about the profile row, not about this code, and it is Q1 in
+   * >>> docs/closure-routing-report.md.
+   */
+  const [profileChecklistState, setProfileChecklistState] = useState<"loading" | "ready" | "failed">(
+    isDemo ? "ready" : "loading"
+  )
 
   useEffect(() => {
     if (isDemo) {
       setProfileChecklist({ capabilities: true, credentials: true, reel: true, legal: true, payments: true })
+      setProfileChecklistState("ready")
       return
     }
 
@@ -210,6 +249,20 @@ export default function PartnerDashboardPage() {
         if (!user || cancelled) return
 
         const profileQuery = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle()
+        // A REFUSED OR FAILED PROFILE READ IS NOT AN EMPTY PROFILE. `.maybeSingle()` returns
+        // `{ data: null, error }` for both, and `profileQuery.data || {}` collapsed the two
+        // into "this vendor has filled in nothing" - which is then rendered as a percentage.
+        // Nothing here can distinguish a real empty row from an unreadable one, so it stops
+        // rather than guesses.
+        if (profileQuery.error) {
+          console.error("[partner/dashboard] profile read failed, completion badge suppressed", {
+            userId: user.id,
+            code: profileQuery.error.code,
+            message: profileQuery.error.message,
+          })
+          if (!cancelled) setProfileChecklistState("failed")
+          return
+        }
         const profileData = (profileQuery.data || {}) as {
           capabilities?: unknown
           credentials?: unknown
@@ -265,11 +318,17 @@ export default function PartnerDashboardPage() {
             legal: legalComplete,
             payments: paymentInfoComplete,
           })
+          setProfileChecklistState("ready")
         }
-      } catch {
-        if (!cancelled) {
-          setProfileChecklist({ capabilities: false, credentials: false, reel: false, legal: false, payments: false })
-        }
+      } catch (err) {
+        // WAS: overwrite the checklist with all-false and say nothing. That turned any throw
+        // on this path into a confident "0% Complete, add your capabilities" on the screen of
+        // a vendor whose profile may be finished, and left no trace anywhere that it had
+        // happened. The bar now hides and the reason is logged.
+        console.error("[partner/dashboard] profile completion inputs failed, badge suppressed", {
+          message: err instanceof Error ? err.message : String(err),
+        })
+        if (!cancelled) setProfileChecklistState("failed")
       }
     })()
 
@@ -394,7 +453,9 @@ export default function PartnerDashboardPage() {
     (k) => !profileChecklist[k]
   )
 
-  const profileCompletionBar = totalCompletion < 100 && (
+  // "ready" AND ONLY "ready". See the note on profileChecklistState: "loading" and "failed"
+  // both used to render as 0%, which is a claim about the vendor rather than about the read.
+  const profileCompletionBar = profileChecklistState === "ready" && totalCompletion < 100 && (
     <div className="flex items-center justify-between gap-3 bg-vendor-foreground/5 border border-vendor-foreground/20 rounded-xl px-4 py-2.5">
       <div className="flex items-center gap-3 min-w-0">
         <span className="font-display font-bold text-sm text-vendor-foreground shrink-0">{totalCompletion}% Complete</span>
