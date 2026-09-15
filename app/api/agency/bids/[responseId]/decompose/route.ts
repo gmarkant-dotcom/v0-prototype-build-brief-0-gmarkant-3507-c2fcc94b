@@ -4,6 +4,7 @@ import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
 import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 45
@@ -124,21 +125,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     const body = await req.json().catch(() => ({}))
     const force = body?.force === true
 
-    if (!force) {
-      const { data: existing } = await supabase
-        .from("bid_decompositions")
-        .select("line_items, narrative_summary, generated_at")
-        .eq("response_id", responseId)
-        .in("org_id", callerOrgIds)
-        .maybeSingle()
-      if (existing) {
-        return NextResponse.json({
-          line_items: existing.line_items,
-          narrative_summary: existing.narrative_summary,
-          generated_at: existing.generated_at,
-          cached: true,
-        })
-      }
+    /**
+     * THE PRIOR ROW, READ BEFORE THE WRITE, AND IT NOW DOES TWO JOBS.
+     *
+     * Job one, unchanged: on a non-force run an existing decomposition is returned from
+     * cache without an AI call.
+     *
+     * Job two, RULING 5: it is the discriminator between `bid.analyze` and
+     * `bid.analyze_retry`. See the emit block below for why it is this row and NOT
+     * `force`.
+     *
+     * THE QUERY MOVED OUT OF `if (!force)`, and that is the whole cost of job two: a force
+     * run now makes this one extra `maybeSingle()` where it previously made none. A
+     * non-force run makes exactly the same number of queries it always did. The predicate
+     * is byte-for-byte what it was, `.in("org_id", callerOrgIds)` included, so this widens
+     * no read: a caller who could not see this row a moment ago still cannot.
+     */
+    const { data: existing } = await supabase
+      .from("bid_decompositions")
+      .select("line_items, narrative_summary, generated_at")
+      .eq("response_id", responseId)
+      .in("org_id", callerOrgIds)
+      .maybeSingle()
+
+    if (!force && existing) {
+      return NextResponse.json({
+        line_items: existing.line_items,
+        narrative_summary: existing.narrative_summary,
+        generated_at: existing.generated_at,
+        cached: true,
+      })
     }
 
     const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
@@ -188,6 +204,114 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     if (upsertErr) {
       console.error("[api] failure", { route, method: "POST", responseId, message: upsertErr.message })
       return NextResponse.json({ error: "Failed to save cost breakdown" }, { status: 500 })
+    }
+
+    /**
+     * Milestone: bid.analyze / bid.analyze_retry. RULING 5, 2026-09-14.
+     *
+     * GREG'S RULING: EMIT, AGENCY FEED ONLY, OFF THE WHITELIST, AND FROM THIS ROUTE ONLY.
+     * Neither type is added to `vendor_visible_event_types()`, so gate 2 fails on the event
+     * type. This row ALSO carries `partnership_id = NULL`, so it fails gate 2's FIRST clause
+     * as well - see below. Two independent failures, and the ruling depends on neither one
+     * alone.
+     *
+     * >>> THE COMPARE ROUTE EMITS NOTHING, AND THAT IS PART OF THE RULING. <<<
+     *
+     * `app/api/agency/bids/compare/route.ts` is N bids across N vendors and caches a
+     * narrative in `bid_comparisons` keyed on a hash of the response ids (migration 064). It
+     * has no `recordMilestone` import today and must not acquire one. A clean payload would
+     * not save it: `groupMilestoneRows()` in lib/activity-feed.ts groups on an exact shared
+     * `created_at`, one insert is one transaction is one timestamp, and `vendorCount` is
+     * rendered as "to N vendors" - so N rows from one comparison would put THE SIZE OF THE
+     * COMPETITIVE FIELD into the feed line through the GROUPING, with nothing in the payload
+     * at all. That is the `recipient_count` defect arriving by a different road
+     * (docs/broadcast-payload-leak-fix.md). One bid, one vendor, one row: this route only.
+     *
+     * >>> THE TYPE IS SERVER-DETERMINED. `force` NAMES NEITHER EVENT. <<<
+     *
+     * A DELIBERATE DEPARTURE FROM THE LETTER OF THE RULING, WHICH CALLS `force: true` "the
+     * retry variant". `force` is a flag from the browser, and ruling 4 (commit 2c2db0f)
+     * refused exactly that for `rfp.generate`: a client may SUPPLY a value the server can
+     * check and may never DECIDE one the server cannot. The refusal is worth more than the
+     * spelling.
+     *
+     * And here the server has the better fact anyway. A retry is a run against a response
+     * that ALREADY HAD a decomposition, which is `existing`, read above under the caller's
+     * own `org_id` scope. The two disagree in a real case: `force: true` on a response with
+     * no prior row is a FIRST analysis that the client flag would file as a retry. The row
+     * is what happened; the flag is what was asked for.
+     *
+     * >>> THE PAYLOAD IS scope_item_name AND NOTHING ELSE, ENFORCED BY THE COMPILER. <<<
+     *
+     * Not a convention and not a comment asking the next author nicely. `analysisPayload` is
+     * annotated `{ scope_item_name: string | null }`, so TypeScript's excess property check
+     * on the object literal REFUSES any second key at compile time. `npx tsc --noEmit` is
+     * the gate.
+     *
+     * WHY THAT MATTERS MORE HERE THAN ANYWHERE ELSE IN THIS RUN. Every field this feature
+     * can reach for - a rank, a score relative to others, a set size, a spread - is drawn
+     * from a COMPARISON and describes the competitive field rather than the reader. The
+     * ruling names them one by one. `ctx` is in scope on the line below and carries
+     * `proposalText`, `budgetProposal`, `budgetLines`, `paymentTerms` and
+     * `partnerDisplayName`; `lineItems` and `narrativeSummary` are the agency's AI reading of
+     * one vendor's money. None of them can reach the payload, because the type will not hold
+     * them. The payload is unenforced by the database today - nobody outside the org can read
+     * this row - and is written to the rule anyway, because a payload composed under an
+     * off-whitelist ruling is precisely what a later decision to whitelist would expose
+     * wholesale.
+     *
+     * >>> partnership_id IS NULL, AND lib/bid-analysis-context.ts IS LEFT ALONE. <<<
+     *
+     * docs/emitter-rulings-owed.md carries an amendment (2026-09-14) saying ruling 5 is
+     * unbuildable because `loadBidAnalysisContext` omits `partnership_id`. VERIFIED, AND IT
+     * DOES NOT BITE. The amendment is factually right about the projection - the inbox select
+     * at lib/bid-analysis-context.ts:82 reads `scope_item_name, scope_item_description` and
+     * `BidAnalysisContext` has no such field - and it is right that OPTION A needs the column,
+     * because gate 2 opens with `partnership_id IS NOT NULL`. Greg ruled OPTION B. Gate 1 for
+     * an agency-side write is `org_id IN current_user_org_ids()` and asks nothing about a
+     * partnership, so this row is written with a null one and read by the agency. The
+     * amendment's cost table is a prerequisite for a ruling that was not taken. Nothing in
+     * lib/bid-analysis-context.ts is changed by this commit.
+     *
+     * `vendor_org_id` is null for the same reason and costs nothing: the feed line for both
+     * types renders through `scopeOf()`, not `vendorOf()` (lib/activity-feed.ts).
+     *
+     * AFTER THE UPSERT AND FIRE-AND-FORGET. The breakdown is already saved.
+     * `recordMilestone()` catches everything and returns void, and a lost breadcrumb must
+     * never cost the agency an analysis that took 40 seconds to produce.
+     */
+    try {
+      const isRetry = Boolean(existing)
+      // THE ENFORCEMENT. Annotated, so a second key is a compile error, not a code review.
+      const analysisPayload: { scope_item_name: string | null } = {
+        scope_item_name: ctx.scopeItemName?.trim() || null,
+      }
+      await recordMilestone(supabase, {
+        eventType: isRetry ? "bid.analyze_retry" : "bid.analyze",
+        // 079 PARAMETER CLASS: the acting organization, never `user.id`. Guarded by the 403
+        // above, so it is non-null here.
+        orgId: writeOrgId,
+        actorId: user.id,
+        // See the block above. Not reachable from this route's context, not needed by the
+        // line, and not worth widening a shared loader to obtain.
+        vendorOrgId: null,
+        partnershipId: null,
+        // The response, matching the three bid-side emitters in
+        // app/api/agency/rfp-responses/[id]/route.ts. Neither type is on
+        // UNION_REPLACING_EVENT_TYPES, so `milestoneDedupeKey()` returns null and this row
+        // cannot collide with the derived bid line.
+        subjectType: "bid",
+        subjectId: responseId,
+        payload: analysisPayload,
+      })
+    } catch (milestoneErr) {
+      // recordMilestone() never throws. A missing breadcrumb must never cost the agency the
+      // cost breakdown it describes.
+      console.error("[api] decompose: bid.analyze milestone failed (non-fatal)", {
+        route,
+        responseId,
+        message: milestoneErr instanceof Error ? milestoneErr.message : String(milestoneErr),
+      })
     }
 
     await incrementAiAnalysis(await agencyEntitlementId(user.id, supabase), supabase)

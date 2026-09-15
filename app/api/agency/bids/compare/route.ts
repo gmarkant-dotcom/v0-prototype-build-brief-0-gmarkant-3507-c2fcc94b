@@ -8,6 +8,31 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
+/**
+ * THIS ROUTE EMITS NO MILESTONE, BY RULING, AND THE ABSENCE IS THE DECISION.
+ *
+ * RULING 5, 2026-09-14. `bid.analyze` and `bid.analyze_retry` are emitted from
+ * app/api/agency/bids/[responseId]/decompose/route.ts and from nowhere else. There is no
+ * `recordMilestone` import in this file and there must not be one. Written here because an
+ * absence leaves no trace at the site it was decided for, and the next reader comparing the
+ * two analysis routes will notice that one emits and this one does not.
+ *
+ * WHY. A comparison is N bids belonging to N vendors. One row could carry only one subject,
+ * so the shape would be N rows - the `recordMilestones()` broadcast shape - written by one
+ * insert. `groupMilestoneRows()` in lib/activity-feed.ts groups on an EXACT shared
+ * `created_at`, and one insert is one transaction is one `now()`, so all N land in one group
+ * and `vendorCount` renders as "to N vendors". THE SIZE OF THE COMPETITIVE FIELD WOULD REACH
+ * THE FEED LINE THROUGH THE GROUPING, with an empty payload and nothing to scrub - which is
+ * `rfp.broadcast.payload.recipient_count` (docs/broadcast-payload-leak-fix.md) arriving by a
+ * road no payload rule watches.
+ *
+ * Off the whitelist that would be agency-internal today. It would not stay that way for
+ * free: the comparison narrative, the ranking and the set size are the fields most likely to
+ * be reached for the moment anybody proposes whitelisting these types.
+ *
+ * `bid.compare` is recorded as an OWED RULING in docs/emitter-rulings-owed.md. It is not
+ * answered here and must not be answered by adding an emitter.
+ */
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
 type DecompositionLineItem = { category: string; amount: number; percentage_of_total: number; description: string }
