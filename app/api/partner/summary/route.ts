@@ -61,6 +61,23 @@ export async function GET() {
       return NextResponse.json({ error: "Failed to load summary" }, { status: 500, headers: noStoreHeaders })
     }
 
+    /**
+     * `active_engagements` HERE IS A SIXTH UNIT FOR THE PHRASE, AND THIS WHOLE ROUTE IS UNUSED.
+     *
+     * Unit: one AWARDED `project_assignments` row across every partnership the caller's org
+     * holds. **No liveness test of any kind** - not end_date, not status - so an assignment on
+     * a project that finished eighteen months ago still counts. That is the same defect
+     * `113a829` fixed on the vendor dashboard tile and `670de54` fixed on two more vendor
+     * surfaces; this one was never in either pass because nothing renders it.
+     *
+     * **NO CONSUMER.** `grep -rn "api/partner/summary"` over the whole tree returns only this
+     * file. Verified 2026-09-15.
+     *
+     * The unit is ALSO not the same as the agency-side count at app/agency/project/page.tsx:566,
+     * which is one (assignment x awarded response) PAIR. An assignment with two awarded
+     * responses is 1 here and 2 there. If this route is ever wired to a screen, that difference
+     * has to be settled first - see docs/active-engagements-one-source.md.
+     */
     const partnershipIds = (pships || []).map((r) => r.id as string)
     let activeEngagements = 0
     if (partnershipIds.length > 0) {

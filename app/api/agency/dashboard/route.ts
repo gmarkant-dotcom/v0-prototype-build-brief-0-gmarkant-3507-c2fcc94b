@@ -45,6 +45,19 @@ const RECENT_ACTIVITY_LIMIT = 15
 // dashboardWorkflowForProject - reused here (not imported, since that function is
 // private to that file) rather than falling back to the raw projects.status column,
 // which is this task's whole point: replace the fake progress bar with the real stage.
+//
+// >>> THIS IS THE LIVE COPY. Of the three "Active Engagements" stage classifiers in this
+// >>> codebase, this is the ONLY one whose label reaches a screen: it renders the stage pill
+// >>> on the agency dashboard at app/agency/dashboard/page.tsx:698, via `stageLabel`.
+// >>> app/api/projects/route.ts's copy and app/api/agency/active-engagements/route.ts's copy
+// >>> both emit their stage fields to no reader at all. Verified 2026-09-15 by grepping every
+// >>> emitted field name over the whole tree. The full comparison is in the header comment
+// >>> above dashboardWorkflowForProject in app/api/projects/route.ts.
+//
+// THE UNIT OF THIS LABEL IS ONE PROJECT, and it is a bucket name rather than a count. Anything
+// that groups these projects by stage and shows "Active Engagements (N)" is counting PROJECTS,
+// which disagrees with every other surface wearing the phrase. See
+// docs/active-engagements-one-source.md; the ruling on what the word should mean is still owed.
 type WorkflowStageKey = "active_engagements" | "bid_management" | "rfp_broadcast" | "setup"
 const WORKFLOW_STAGE_LABELS: Record<WorkflowStageKey, string> = {
   active_engagements: "Active Engagements",

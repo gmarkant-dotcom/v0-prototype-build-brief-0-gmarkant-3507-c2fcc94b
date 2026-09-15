@@ -563,6 +563,18 @@ function GroupSection({ label, rows, defaultOpen, onRowClick, reviewsByPartnersh
         <div className="flex-1 min-w-0">
           <div className="font-display font-bold text-xl text-foreground">{label}</div>
           <div className="flex items-center gap-3 mt-0.5 font-mono text-2xs text-foreground-muted">
+            {/* THE FINEST GRAIN OF THE PHRASE, AND THE ONLY LIVE COUNT THAT USES THE WORD.
+                One row is one (assignmentId, awardedResponseId) pair - an awarded scope
+                commitment. One project with three awarded vendors reads 3; the SAME vendor
+                awarded two scope items reads 2. The pool tile "Vendors with active
+                engagements" counts DISTINCT PARTNERSHIPS over the same work and so reads 1
+                for both of those cases, and it is not wrong: its label says "Vendors".
+
+                NO LIVENESS FILTER IS APPLIED HERE. A completed assignment still counts in
+                this header, even though the status filter directly below can hide it from
+                the list, so the header and its own body can disagree. That is a NUMBER on a
+                customer-visible surface and changing it needs the ruling owed in
+                docs/active-engagements-one-source.md - it is deliberately not touched here. */}
             <span>{rows.length} engagement{rows.length !== 1 ? "s" : ""}</span>
             {totalAlerts > 0 && (
               <span className="flex items-center gap-1 text-amber-400">

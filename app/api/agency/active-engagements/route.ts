@@ -524,6 +524,29 @@ export async function GET(request: NextRequest) {
     const projects = Array.from(byProject.entries()).map(([pid, partners]) => {
       const meta = projectMetaById.get(pid)
       const st = (meta?.status || "").toLowerCase()
+      /**
+       * THE THIRD "Active Engagements" STAGE CLASSIFIER, AND THE ONE THAT DISAGREES.
+       *
+       * The other two (app/api/projects/route.ts:dashboardWorkflowForProject and
+       * app/api/agency/dashboard/route.ts:workflowStageForProject) key on whether the project
+       * has an awarded response, a bid, or an inbox row. This one keys on `projects.status`
+       * TEXT, adds `onboarding` and `completed` stages the other two do not have, and maps
+       * `on_hold` to `active_engagements` - a project neither of the others would call active.
+       *
+       * IT IS ALSO BUILT ON THE COLUMN lib/project-liveness.ts EXISTS TO AVOID. That file says
+       * why in its own header: `projects.status` carries an eleven-entry STATUS_LEGACY_MAP
+       * folding ten spellings onto five canonical values, so anything keyed on it is a second
+       * normalization table that has to stay in step with the first. `st` here is a raw
+       * lowercase of the stored string and matches only four exact spellings; every other
+       * legacy spelling falls through to "setup".
+       *
+       * **NOTHING READS EITHER FIELD.** `dashboardWorkflowStage` and `dashboardWorkflowLabel`
+       * are emitted below and `grep -rn` over the whole tree finds no consumer, so the
+       * divergence is currently invisible rather than harmless. Verified 2026-09-15.
+       *
+       * DO NOT WIRE THIS UP WITHOUT THE RULING in docs/active-engagements-one-source.md. A
+       * consumer added here would put a third definition of the phrase on a screen.
+       */
       const workflowStage =
         st === "active" || st === "in_progress" ? "active_engagements" :
         st === "onboarding" ? "onboarding" :

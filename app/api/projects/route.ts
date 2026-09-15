@@ -86,6 +86,36 @@ function unwrapAssignmentRows(raw: unknown): { status?: string }[] {
   return arr.filter((a) => a && typeof a === 'object') as { status?: string }[]
 }
 
+/**
+ * "ACTIVE ENGAGEMENTS" HERE IS A BUCKET NAME FOR ONE PROJECT. IT COUNTS NOTHING.
+ *
+ * This classifies a SINGLE project into one of four workflow stages. A project with one
+ * awarded bid and a project with nine both return this same label; the function returns
+ * before it looks at how many. Anything that groups by `key` and counts the groups produces
+ * a number labelled "Active Engagements" whose unit is PROJECTS, which is not the unit any
+ * other surface using that phrase counts in. See docs/active-engagements-one-source.md.
+ *
+ * >>> THERE ARE THREE OF THESE CLASSIFIERS, NOT ONE, AND THEY DO NOT AGREE. Established by
+ * >>> reading all three on 2026-09-15; none of them imports the others.
+ *
+ *   1. THIS ONE. Keyed on `hasAwarded` / bid / inbox membership. Emitted at
+ *      `dashboard_workflow_stage` and `dashboard_workflow_label` below. **NOTHING IN THIS
+ *      REPOSITORY READS EITHER FIELD** - `grep -rn 'dashboard_workflow_'` over the whole tree
+ *      returns only the two lines that write them. It is dead output.
+ *   2. `app/api/agency/dashboard/route.ts:55` `workflowStageForProject()`. Same four keys,
+ *      same labels, same rules, copied by hand - its own comment says so and says why it is
+ *      not imported. **THIS IS THE LIVE ONE**: it is what renders the stage pill on the
+ *      agency dashboard at `app/agency/dashboard/page.tsx:698`.
+ *   3. `app/api/agency/active-engagements/route.ts:527`. **DIFFERENT RULES.** It keys on
+ *      `projects.status` text rather than on awarded/bid/inbox membership, adds `onboarding`
+ *      and `completed` stages, and maps `on_hold` to `active_engagements` - a project this
+ *      one and #2 would never call active. Also dead: `dashboardWorkflowStage` and
+ *      `dashboardWorkflowLabel` have no reader either.
+ *
+ * So the phrase enters the vocabulary in three places with two different definitions, and the
+ * copy a customer actually sees comes from #2. Renaming the label is a product decision and is
+ * NOT made here; the ruling is owed in docs/active-engagements-one-source.md.
+ */
 function dashboardWorkflowForProject(
   projectId: string,
   hasAwarded: boolean,
@@ -339,7 +369,26 @@ export async function GET(request: NextRequest) {
           .eq('status', 'awarded'),
       ])
 
-      // Process engagement stats from engagementResult
+      /**
+       * `total_active_engagements` IS A FIFTH UNIT FOR THE SAME PHRASE, AND NOTHING READS IT.
+       *
+       * Unit: one AWARDED `partner_rfp_responses` ROW whose project passes
+       * `projectActiveByEndDate`. `projectIdPerResponse` deliberately keeps duplicates, so a
+       * project with three awarded responses contributes 3, not 1. That is the finest grain of
+       * any surface using this phrase and it is close to - but not the same as - the
+       * (assignment x awarded response) pair counted at `app/agency/project/page.tsx:566`.
+       *
+       * `total_awarded_engagements` is the same set WITHOUT the liveness filter.
+       *
+       * **NO CONSUMER.** These reach the client inside `agency_dashboard_stats` at the foot of
+       * this handler, and `grep -rn 'agency_dashboard_stats'` over the whole tree returns only
+       * the single line that writes it. Verified 2026-09-15. Do not treat the number as
+       * agreeing with any tile: no tile renders it.
+       *
+       * On the error path below, `total_active_engagements` is set to the UNFILTERED total
+       * rather than to 0, so a failed `projects` read overstates rather than silently zeroes.
+       * That is deliberate and is left alone.
+       */
       let total_awarded_engagements = 0
       let total_active_engagements = 0
       const agencyProjectIdSet = new Set(agencyProjectIds)
