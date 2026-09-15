@@ -599,6 +599,16 @@ function ActivityFeed({ items }: { items: DashboardData["activity"] }) {
           <ChevronDown
             className={cn("w-3.5 h-3.5 text-foreground-muted transition-transform", collapsed && "-rotate-90")}
           />
+          {/* THE COUNT IS A CLAIM, AND IT CAN BE SHORT. NOT CHANGED HERE.
+              `items` is the merge of four derived timestamp sources and milestone_events.
+              A milestone insert refused by RLS is dropped by lib/milestone-events.ts, which
+              never throws and never tells the route, so this number is silently one lower
+              than the truth whenever that happens. Live today for a vendor with no
+              partnership row (docs/emitter-rulings-owed.md ruling 6): bid.revise and
+              nda.acknowledge have no derived fallback and go missing entirely.
+              The drop is now reported to Sentry, so the shortfall is countable. Whether this
+              heading should stop asserting an exact count is a product decision and is
+              written up in docs/silent-failures-report.md Phase 2d rather than decided here. */}
           <h2 className="font-mono text-2xs uppercase tracking-wider text-foreground-muted group-hover:text-foreground transition-colors">
             Recent activity ({items.length})
           </h2>

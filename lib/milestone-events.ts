@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/nextjs"
+
 import type { createClient } from "./supabase/server"
 import type { Capability } from "./capabilities"
 import type { OrgId } from "@/lib/entitlements"
@@ -39,6 +41,35 @@ import type { OrgId } from "@/lib/entitlements"
  * from everything else, because "the table is not there" is a different thing to act on than
  * "the insert was rejected". With 080 applied it now means a broken environment rather than
  * a pending migration. Everything else logs at ERROR.
+ *
+ * ---------------------------------------------------------------------------
+ * FIRE-AND-FORGET IS NOT THE SAME AS UNOBSERVED. EVERY DROP NOW REACHES SENTRY.
+ *
+ * The four drop paths below all returned `undefined` and all wrote a console line. Nothing
+ * read those lines. `grep -rn "\[milestone\]"` outside this file finds documentation and
+ * nothing else, so a refused insert was, in practice, a breadcrumb that vanished with no
+ * observer anywhere - the same shape as the onboarding send that mailed "your documents are
+ * ready" while writing zero document rows.
+ *
+ * SENTRY IS THE OBSERVER, AND IT IS NOT A NEW DEPENDENCY OR AN ASPIRATION. `@sentry/nextjs`
+ * is in package.json, `sentry.server.config.ts` calls `Sentry.init` with
+ * NEXT_PUBLIC_SENTRY_DSN, `instrumentation.ts` imports it on every Node server boot,
+ * next.config.mjs wraps the build in `withSentryConfig`, and the DSN is set in
+ * .env.production.local. Six routes already call `Sentry.captureException` for exactly this
+ * reason - see app/api/agency/payment-synthesis/route.ts:384. This file now joins them.
+ *
+ * WHAT IS DELIBERATELY NOT CHANGED. The contract is identical: still `Promise<void>`, still
+ * catches everything, still never throws, still never blocks the caller. A vendor's bid must
+ * submit whether or not its feed row lands, and every one of the 22 call sites can keep
+ * ignoring the result. Making the failure OBSERVABLE and making it FATAL are different
+ * changes and only the first one is wanted.
+ *
+ * A RETURN VALUE WAS CONSIDERED AND NOT ADDED. `createOrgNotification()` returns a boolean
+ * and that shape was offered for this module in docs/101-phase0-baseline.md section 4. It is
+ * declined for now because no caller would act on it: all 22 sites emit AFTER the act they
+ * describe has committed and none of them has a second thing to do on failure. A returned
+ * boolean that 22 sites ignore is a wider signature with the same number of observers, which
+ * is the theatre this change exists to avoid. The reporting is where the observer is.
  *
  * ---------------------------------------------------------------------------
  * WHAT MIGRATION 079 CHANGES HERE
@@ -137,6 +168,46 @@ type MilestoneRow = {
 }
 
 /**
+ * Report a dropped breadcrumb to Sentry.
+ *
+ * ONE FUNCTION SO THE FOUR PATHS ARE COMPARABLE. Each drop reason is a distinct `reason`
+ * tag, so "how often does gate 1 refuse a vendor row" is a Sentry query rather than a
+ * database one - which matters because the RLS refusal is invisible from every other angle:
+ * the route succeeded, the user saw success, and the only trace is the row that is not there.
+ *
+ * `captureMessage`, not `captureException`. Three of the four paths have no Error to attach;
+ * PostgREST hands back a plain object, and manufacturing an Error for it would put this
+ * file's own line numbers on the stack rather than the call site's, which is the opposite of
+ * useful. The route and the event types are on the event as tags and context instead, and
+ * those are what a reader actually groups by.
+ *
+ * NOTHING IDENTIFYING GOES IN. Event types, subject types, codes, counts and PostgREST
+ * messages only. No payloads, no emails, no organization ids, no subject ids - the same rule
+ * the payload doc at the head of this file states for the counterparty, applied to the error
+ * tracker, which has a wider audience than any vendor does.
+ *
+ * IT CANNOT THROW. Sentry is initialized by instrumentation.ts on the Node server and not at
+ * all in some contexts (a unit test, a script, an unconfigured preview). A reporter that
+ * threw would convert a silently lost breadcrumb into a thrown one inside a function whose
+ * entire contract is that it never throws, so the call is wrapped.
+ */
+function reportMilestoneDrop(
+  reason: "no-organization" | "schema-cache-miss" | "insert-failed" | "insert-threw" | "actor-email-conflict",
+  level: "warning" | "error",
+  context: Record<string, unknown>
+): void {
+  try {
+    Sentry.captureMessage(`[milestone] breadcrumb dropped: ${reason}`, {
+      level,
+      tags: { subsystem: "milestone_events", drop_reason: reason },
+      extra: context,
+    })
+  } catch {
+    // An unreachable or unconfigured Sentry must never be the thing that breaks an emitter.
+  }
+}
+
+/**
  * THE actor_email RULE, ENFORCED HERE RATHER THAN ASKED FOR.
  *
  * `actor_email` may be populated only when `actor_id` is null.
@@ -168,6 +239,13 @@ function resolveActorEmail(event: MilestoneEvent): string | null {
       subjectId: event.subjectId ?? null,
     }
   )
+  // The EVENT survives here; only the address is dropped. Reported anyway, because this one
+  // means a call site is passing a field it is not allowed to pass, and that is a code defect
+  // rather than a data condition. subjectId is deliberately not sent.
+  reportMilestoneDrop("actor-email-conflict", "error", {
+    eventType: event.eventType,
+    subjectType: event.subjectType,
+  })
   return null
 }
 
@@ -226,9 +304,22 @@ export async function recordMilestones(
   // breadcrumb nobody can ever read.
   const usable = events.filter((e): e is MilestoneEvent & { orgId: OrgId } => Boolean(e.orgId))
   if (usable.length !== events.length) {
+    const droppedTypes = [...new Set(events.filter((e) => !e.orgId).map((e) => e.eventType))]
     console.error("[milestone] dropped event(s) with no resolvable organization", {
-      eventTypes: [...new Set(events.filter((e) => !e.orgId).map((e) => e.eventType))],
+      eventTypes: droppedTypes,
       dropped: events.length - usable.length,
+    })
+    // NO LIVE CALL SITE CAN REACH THIS TODAY, and it is reported loudly for that exact
+    // reason. All 22 emit sites either guard `resolveCallerWriteOrgId` with an early 403 or
+    // read org_id off a column migration 079 made NOT NULL, so an event arriving here means
+    // a NEW emitter was written that resolves a membership SET and never a single write id -
+    // the shape docs/emitter-rulings-owed.md rulings 3 and 4 would produce. It compiles, it
+    // runs, it returns success, and it writes nothing. This is how that gets noticed on the
+    // first request instead of on the first person to ask why the feed is short.
+    reportMilestoneDrop("no-organization", "error", {
+      eventTypes: droppedTypes,
+      dropped: events.length - usable.length,
+      submitted: events.length,
     })
   }
   if (usable.length === 0) return
@@ -256,6 +347,11 @@ export async function recordMilestones(
           code: error.code,
         }
       )
+      reportMilestoneDrop("schema-cache-miss", "warning", {
+        eventTypes: [...new Set(usable.map((e) => e.eventType))],
+        count: usable.length,
+        code: error.code,
+      })
       return
     }
 
@@ -265,8 +361,37 @@ export async function recordMilestones(
       code: error.code,
       message: error.message,
     })
+    // THE ONE PATH THAT IS REACHABLE IN PRODUCTION TODAY, and the reason this change exists.
+    // An RLS refusal arrives here as 42501. The live case is migration 088's vendor INSERT
+    // policy, whose `partnership_id IS NOT NULL` clause refuses rfp.view, bid.submit,
+    // bid.revise and nda.acknowledge from a vendor who has no partnership row with the
+    // agency yet - which is the normal state of a vendor early in the journey, and is
+    // docs/emitter-rulings-owed.md ruling 6. `vendorPartnershipMissing` separates that known
+    // case from an unknown refusal, so ruling 6's ongoing cost can be counted without
+    // burying a genuinely new failure inside the same number.
+    reportMilestoneDrop("insert-failed", "error", {
+      eventTypes: [...new Set(usable.map((e) => e.eventType))],
+      count: usable.length,
+      code: error.code,
+      message: error.message,
+      actorSides: [...new Set(usable.map((e) => e.actorSide ?? "agency"))],
+      vendorPartnershipMissing: usable.some((e) => (e.actorSide ?? "agency") === "vendor" && !e.partnershipId),
+    })
   } catch (e) {
     console.error("[milestone] insert threw (the action itself succeeded)", {
+      eventTypes: [...new Set(usable.map((e) => e.eventType))],
+      count: usable.length,
+      message: e instanceof Error ? e.message : String(e),
+    })
+    // The only branch with a real Error, so the exception goes too - it carries the stack,
+    // which for a transport-level throw is the whole diagnostic. The message event is kept
+    // beside it so all four drop reasons stay queryable under one tag.
+    try {
+      Sentry.captureException(e, { tags: { subsystem: "milestone_events", drop_reason: "insert-threw" } })
+    } catch {
+      // See reportMilestoneDrop.
+    }
+    reportMilestoneDrop("insert-threw", "error", {
       eventTypes: [...new Set(usable.map((e) => e.eventType))],
       count: usable.length,
       message: e instanceof Error ? e.message : String(e),

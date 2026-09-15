@@ -156,8 +156,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       }
 
       // KNOWN RESIDUAL, NOT FIXED HERE. 088's vendor INSERT policy requires
-      // partnership_id IS NOT NULL, so a vendor with no partnership loses this breadcrumb
-      // silently. See docs/emitter-coverage.md - the only fix is a policy change.
+      // partnership_id IS NOT NULL, so a vendor with no partnership loses this breadcrumb.
+      // The only fix is a policy change - docs/emitter-rulings-owed.md ruling 6.
+      //
+      // NOT SILENT ANY MORE, AND THIS IS THE WORST OF THE THREE VENDOR SITES. The drop now
+      // reaches Sentry (lib/milestone-events.ts, drop_reason "insert-failed"). It matters
+      // more here than at rfp.view or bid.submit because nda.acknowledge is NOT on
+      // UNION_REPLACING_EVENT_TYPES and the dashboard has no derived source for it: unlike
+      // those two, a refused row here means the agency's feed has no line at all for an
+      // acknowledgement that did happen, rather than a line missing its actor.
       await recordMilestone(supabase, {
         eventType: "nda.acknowledge",
         actorSide: "vendor",

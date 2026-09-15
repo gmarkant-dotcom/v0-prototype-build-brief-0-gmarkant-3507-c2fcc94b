@@ -498,6 +498,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
        *     what puts this line on their dashboard. The acting company rides on vendor_org_id.
        *   - partnership_id is REQUIRED by the policy, which pins org_id through it. Resolved
        *     below, non-fatally: no partnership means no breadcrumb, never a failed bid.
+       *     The refusal is 42501 and it is now REPORTED - lib/milestone-events.ts sends every
+       *     drop to Sentry with drop_reason "insert-failed" and vendorPartnershipMissing
+       *     true. The two types this block emits degrade DIFFERENTLY and the difference is
+       *     worth knowing: bid.submit is on UNION_REPLACING_EVENT_TYPES, so a refused row
+       *     still leaves the dashboard's derived line from partner_rfp_responses.submitted_at
+       *     and only the actor is lost. bid.revise is NOT on that list and a revision writes
+       *     no new derived line, so a refused bid.revise is a feed line that does not exist
+       *     at all.
        *
        * ONE TYPE PER TRANSITION. `nextVersion === 1` means no prior version row exists for
        * this response, and version rows are written only inside this `status === "submitted"`

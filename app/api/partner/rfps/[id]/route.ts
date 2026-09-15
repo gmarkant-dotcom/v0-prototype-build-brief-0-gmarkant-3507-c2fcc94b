@@ -116,10 +116,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
           // KNOWN RESIDUAL, NOT FIXED HERE. 088's vendor INSERT policy requires
           // partnership_id IS NOT NULL, so when the lookup above finds nothing this emit is
-          // refused by RLS and recordMilestone() swallows it - the breadcrumb is silently
-          // lost. That collides with the ruling that a vendor may bid without a
-          // partnership. Reported in docs/emitter-coverage.md rather than worked around,
-          // because the only workaround is a policy change.
+          // refused by RLS with 42501 and the row is never written. That collides with the
+          // ruling that a vendor may bid without a partnership, and the only fix is a policy
+          // change - docs/emitter-rulings-owed.md ruling 6.
+          //
+          // NO LONGER SILENT. lib/milestone-events.ts now reports every drop to Sentry with
+          // drop_reason "insert-failed" and vendorPartnershipMissing true, so the ongoing
+          // cost of ruling 6 is countable instead of invisible. WHAT THE AGENCY SEES IS
+          // UNCHANGED AND IS THE SMALLER HALF HERE: rfp.view is on
+          // UNION_REPLACING_EVENT_TYPES, so the dashboard still renders a viewed line derived
+          // from partner_rfp_inbox.viewed_at, stamped by this same route. The loss is the
+          // ACTOR on that line, not the line.
           await recordMilestone(supabase, {
             eventType: "rfp.view",
             actorSide: "vendor",
