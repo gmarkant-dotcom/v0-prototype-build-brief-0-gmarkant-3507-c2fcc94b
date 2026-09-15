@@ -353,10 +353,35 @@ function PartnerActiveEngagementInner() {
           <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-800">{error}</div>
         )}
 
+        {/**
+         * THIS IS THE ONE DESTINATION A NOTIFICATION CAN OUTLIVE, SO IT STOPS PROMISING A
+         * FUTURE THAT MAY NOT ARRIVE.
+         *
+         * `project_assignment` and `project_awarded` both link here with a `projectId` off
+         * the notification row, and the thing named can be gone by the time it is clicked:
+         * `project_assignments.project_id REFERENCES projects(id) ON DELETE CASCADE`
+         * (scripts/010-closed-ecosystem-schema.sql:73), so deleting a project takes the
+         * awarded assignment with it and this branch is what the vendor lands on.
+         *
+         * It used to read "You'll see details here after the lead agency awards your bid",
+         * which is a promise about the future. It is true for the common case and FALSE for a
+         * deleted project, where no award can ever arrive, and false for a project that was
+         * never this vendor's.
+         *
+         * IT STILL DOES NOT DISTINGUISH THE THREE CASES, AND MUST NOT. The route returns the
+         * identical `{found:false}` for "not awarded yet", "deleted" and "belongs to another
+         * company", because its assignment read is reached only through
+         * `partnerships .in("vendor_org_id", callerOrgIds)`
+         * (app/api/partner/projects/[projectId]/active-engagement/route.ts:94-97, :129). That
+         * is the correct shape: wording that told them apart would confirm to anyone editing
+         * the URL which project ids exist. So this names both possibilities, commits to
+         * neither, and says who can settle it.
+         */}
         {!loading && !error && pageData && !pageData.found && (
           <div className="rounded-xl border border-vendor-border bg-vendor-background p-8 text-center text-vendor-foreground">
-            No awarded engagement found for this project. You&apos;ll see details here after the lead agency awards
-            your bid.
+            There is no awarded engagement to show here. Either the lead agency has not awarded
+            this scope yet, or this project is no longer available to your company. If you were
+            expecting to see work here, the lead agency is the one to ask.
           </div>
         )}
 
