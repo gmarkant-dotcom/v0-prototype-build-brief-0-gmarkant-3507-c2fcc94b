@@ -452,13 +452,13 @@ function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
    *   Active Vendors        partnerships with status exactly 'active' (`route.ts:434`,
    *                         isActivePartnership). SAME UNIT as the pool page's "Active vendors"
    *                         tile, so the two agree by construction rather than by luck.
-   *   Open RFPs             DISTINCT PROJECTS with at least one open scope item (`route.ts:437`),
+   *   Open RFPs             DISTINCT PROJECTS with at least one open scope item (`route.ts:464`),
    *                         NOT open scope items. A project broadcasting three open scopes reads 1.
    *                         >>> THIS NUMBER IS WRONG FOR TWO REASONS. See the block below.
    *   Bids Received         partner_rfp_responses with submitted_at in the CALENDAR month to
-   *                         date, UTC (`route.ts:440`, monthStartIso at `:98`).
+   *                         date, UTC (`route.ts:467`, monthStartIso at `:98`).
    *   Awarded               project_assignments with status 'awarded' and awarded_at in the
-   *                         CALENDAR quarter to date, UTC (`route.ts:443`, quarterStartIso at
+   *                         CALENDAR quarter to date, UTC (`route.ts:470`, quarterStartIso at
    *                         `:103`). The unit is an ASSIGNMENT: one project awarded to three
    *                         vendors reads 3, and the same vendor winning two scope items reads 2.
    *                         It therefore does NOT share a unit with "Bids Received" beside it,
@@ -477,12 +477,12 @@ function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
    * >>> 1. IT IGNORES RFP CLOSURE ENTIRELY. Migration 099 added partner_rfp_inbox.closed_at and
    * >>>    the 'closed' / 'not_selected' statuses, and app/api/agency/rfp-closure/route.ts:190
    * >>>    writes them WITHOUT creating any partner_rfp_responses row. The inbox select at
-   * >>>    `route.ts:156` fetches neither column, and the group test at `route.ts:430` is only
+   * >>>    `route.ts:154-157` fetches neither column, and the group test at `route.ts:431` is only
    * >>>    `g.responded < g.invited`, with no status and no deadline filter. So an RFP that was
    * >>>    closed with no bids stays in this count forever.
    * >>> 2. IT INHERITS A 500-ROW CEILING FROM A TABLE IT DOES NOT BOUND. inboxRows is
    * >>>    unbounded; partner_rfp_responses is `.limit(500)` newest-first (`route.ts:162`), and
-   * >>>    `hasResponded` (`route.ts:409`) is derived from that capped array. Past 500 lifetime
+   * >>>    `hasResponded` (`route.ts:410`) is derived from that capped array. Past 500 lifetime
    * >>>    responses, an old recipient whose response aged out of the window reads as invited
    * >>>    and not responded, and the tile climbs on its own.
    * >>>
