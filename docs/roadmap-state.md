@@ -1,3 +1,29 @@
+> # STALE IN FIVE PLACES AS OF 2026-09-15. READ THIS BLOCK BEFORE SECTION 0.
+>
+> This file was written on 2026-09-14 and says at the top that you can open it cold and know
+> what to do next. Five of its claims stopped being true the same week, and four of them would
+> send a session to redo finished work. Corrected below by the `feat/pool-counts-and-payments`
+> run, each **verified against the code, not against another document**. The body of the file
+> is left exactly as written.
+>
+> | Says | Actually | Verified by |
+> | --- | --- | --- |
+> | S0.1 and S4.1: `docs/relationship-end-rulings.md` **does not exist** | It exists, committed in `94017c5` | `ls docs/relationship-end-rulings.md` |
+> | S3 ruling 1 `vendor.remove` and ruling 2 `vendor.blacklist`: built only on unmerged branch | Both emit from `main` | `app/api/partnerships/route.ts:1401`, `app/api/agency/pool/[partnerId]/notes/route.ts:287` |
+> | S3 ruling 4 `rfp.generate`: built only on unmerged branch | Emits from `main` | `app/api/ai/master-brief/route.ts:214` |
+> | S3 ruling 5 `bid.analyze`: **"NO. Copy only. Neither route emits"** | The `decompose` route emits; `compare` still does not, which is the ruling | `app/api/agency/bids/[responseId]/decompose/route.ts:290` |
+> | S3.1 and S6.2 ruling 6: **"No migration written. Highest migration is 099"** | `100_milestone_inbox_pin.sql` is authored, with a down file and a preapply test | `ls supabase/migrations/` |
+>
+> **ONE THING THE TABLE ABOVE MUST NOT BE READ AS SAYING.** Migration 100 is **AUTHORED AND NOT
+> APPLIED.** Ruling 6 is still a live silent failure in production. What changed is that the
+> migration now exists to be applied, not that it has been.
+>
+> **Section 5 row 1 is also done:** `docs/079-onboarding-docs-regression.md` now carries a
+> resolution marker, added 2026-09-15 after re-verifying the fix against the code.
+>
+> **NOT re-verified by this run, so treat section 1 as written:** the migration applied/authored
+> boundary, and everything in sections 2, 4.2, 4.3 and 4.4. Section 1's own warning stands.
+
 # Roadmap state: what is built, what is ruled and unbuilt, what is blocked
 
 **Date:** 2026-09-14. **Branch:** `feat/budgeting-spec`.

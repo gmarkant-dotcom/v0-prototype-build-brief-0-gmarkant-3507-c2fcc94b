@@ -1,6 +1,29 @@
 # 087 broke the bid award path: diagnosis
 
+> # RESOLVED IN CODE. Fixed by `915d029`. Do not re-diagnose this as a live defect.
+>
+> **Resolution added 2026-09-15** by the `feat/pool-counts-and-payments` run, which verified the
+> fix against the code rather than against `docs/087-award-fix-report.md`. That report describes
+> the fix as **"code applied, uncommitted"**, which was true when it was written and is the
+> reason this diagnosis still reads as open. The code is committed and on `main`.
+>
+> **Verified at `HEAD` (`d6074a8`):**
+>
+> - `app/api/agency/rfp-responses/[id]/route.ts:366` and `:410` now select `recipient_email`,
+>   the column section 3(a) named. The email the handler needed was on a row it had already
+>   fetched and had chosen not to select.
+> - `lib/award-partnership-resolution.ts:153` guards the linked insert with
+>   `if (partnerIdForResolution && normalizedEmail)`, so the branch can no longer build the
+>   `vendor_org_id` set / `partner_email` NULL row that 087's INSERT policy refuses with 42501.
+>   The null-email case falls through to a deliberate, loudly logged ghost row instead.
+>
+> **EXECUTED:** the file reads and `git log` on both paths. **NOT EXECUTED:** no SQL, no award
+> performed, no production check. What is verified is that the refused row shape is now
+> unreachable from this resolver. Pre-flight P3 and the other queries this document asks for
+> were **not** run and are still unanswered.
+
 **Status: diagnosis only. No code changed, no migration written, no fix applied.**
+*(The line above is the original 2026 status and is preserved. See the resolution block.)*
 
 Observed locally, awarding a bid as markant:
 

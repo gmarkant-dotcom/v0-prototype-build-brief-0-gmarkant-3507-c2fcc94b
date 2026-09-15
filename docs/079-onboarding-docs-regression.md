@@ -1,3 +1,37 @@
+> # RESOLVED. Fixed by `e2c5841` on 2026-08-18. Do not re-diagnose this as a live defect.
+>
+> **Resolution added 2026-09-15** by the `feat/pool-counts-and-payments` run, which re-verified
+> the fix against the code rather than inheriting the claim. Nothing below this block was
+> changed: the diagnosis is preserved exactly as written, and it is still the record of what
+> happened on 2026-08-18.
+>
+> **What was fixed, in two layers, both in the one commit `e2c5841`:**
+>
+> - `components/stage-03-onboarding-workflow.tsx` - the three silent `continue` statements this
+>   report identified at `:428`, `:430` and `:441` now each name what they discarded. Drops A
+>   and B push onto `lost[]`; drop C splits, pushing a row with NEITHER label nor url onto
+>   `placeholders[]` (logged and skipped, an untouched "Add item" row) and a row with exactly
+>   ONE of the two onto `lost[]`. A non-empty `lost[]` calls `setError()` and returns BEFORE
+>   `setSending(true)` and before the `fetch`, so the request is never made: no package row, no
+>   email. **The predicate deciding what counts as a valid document is byte-for-byte unchanged.
+>   Only the reporting of a discard is new.**
+> - `app/api/projects/[id]/onboarding-packages/route.ts` - the server refuses the signature
+>   independently. `if (rawDocs.length > 0 && docs.length === 0)` returns a 400 with the counts
+>   logged. `documents: []` is deliberately still allowed, because a no-documents package is
+>   legitimate and is not the 2026-08-18 signature.
+>
+> **How this was verified:** `sed` reads of both files at `HEAD` (commit `d6074a8`), tracing the
+> control flow from each `continue` to the `return`, plus `git log` on both paths. **EXECUTED:**
+> the file reads and the `git log`/`git show` calls. **NOT EXECUTED:** no SQL, no browser, no
+> production check. The claim verified here is that the code path cannot silently discard an
+> attachment. Whether any package row created before 2026-08-18 is still short its documents is
+> a data question this run could not and did not touch.
+>
+> **What remains open from this report, and is NOT resolved by the above:** TASK 5's root cause.
+> Why the array arrived empty on those three sends is still not established, and is not
+> establishable from source. The fix does not depend on knowing it, which is the point the
+> commit message makes.
+
 # 079 onboarding documents regression — read-only diagnosis
 
 **Date:** 2026-08-18
