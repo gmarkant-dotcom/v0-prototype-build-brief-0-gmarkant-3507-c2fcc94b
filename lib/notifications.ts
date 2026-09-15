@@ -482,7 +482,8 @@ export async function notifyRfpClosed(
   supabase: SupabaseClient,
   vendorOrgId: string,
   scopeItemName: string,
-  agencyName: string
+  agencyName: string,
+  inboxId: string
 ) {
   return createOrgNotification({
     supabase,
@@ -492,7 +493,9 @@ export async function notifyRfpClosed(
     title: 'An RFP you were invited to has closed',
     message: `${agencyName} has closed the RFP for "${scopeItemName}". It is not taking bids from anyone now, so there is nothing further for you to do on it.`,
     link: '/partner/rfps',
-    data: { scopeItemName, agencyName },
+    // inboxId IS THE CLOSED ROW ITSELF, AND IT IS WHAT MAKES THIS ROW CLICKABLE TO A RECORD.
+    // See the note on notifyRfpNotSelected below, which applies identically to both.
+    data: { inboxId, scopeItemName, agencyName },
   })
 }
 
@@ -513,7 +516,8 @@ export async function notifyRfpNotSelected(
   supabase: SupabaseClient,
   vendorOrgId: string,
   scopeItemName: string,
-  agencyName: string
+  agencyName: string,
+  inboxId: string
 ) {
   return createOrgNotification({
     supabase,
@@ -523,6 +527,28 @@ export async function notifyRfpNotSelected(
     title: 'Update on a request from ' + agencyName,
     message: `${agencyName} has decided not to move forward with your company on "${scopeItemName}". They are not expecting a response from you on it.`,
     link: '/partner/rfps',
-    data: { scopeItemName, agencyName },
+    /**
+     * >>> inboxId IS REQUIRED, NOT OPTIONAL, AND THAT IS THE POINT.
+     *
+     * These two types were the only cell in the notification-routing table where a record
+     * destination was AVAILABLE and missed: the caller already holds the closed row's own id
+     * (app/api/agency/rfp-closure/route.ts, `row.id` inside emitClosureNotifications) and
+     * simply did not pass it. lib/notification-routing.ts reads `data.inboxId` and sends the
+     * vendor to /partner/rfps/{inboxId} - the request the notification is actually about -
+     * rather than to a Closed TAB they then have to search.
+     *
+     * A REQUIRED PARAMETER RATHER THAN AN OPTIONAL ONE because the alternative fails
+     * silently: an emitter added later that forgets it would compile, write a row, and route
+     * to the list, and nobody would learn that it had happened. TypeScript refusing to
+     * compile is the only signal in this shape that anyone actually sees. The routing module
+     * still tolerates a missing or non-uuid value at READ time, because rows written before
+     * this shipped have none and cannot be backfilled.
+     *
+     * IT IS NOT AN AUTHORIZATION GRANT. The id names a row; it does not open one. The
+     * destination re-verifies ownership itself - /api/partner/rfps/[id] resolves
+     * resolveCallerOrgIds() and runs partnerCanAccessPartnerRfpInbox(), and answers a refused
+     * id and a nonexistent id with the same 404.
+     */
+    data: { inboxId, scopeItemName, agencyName },
   })
 }

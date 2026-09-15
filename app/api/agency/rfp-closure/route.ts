@@ -404,10 +404,14 @@ async function emitClosureNotifications({
     // ── IN-APP ────────────────────────────────────────────────────────────
     if (row.vendor_org_id) {
       try {
+        // `row.id` IS THE CLOSED INBOX ROW, AND IT IS WHY THE BELL ROW IS CLICKABLE TO A
+        // RECORD. It comes off the UPDATE's own RETURNING projection above, so it is a row
+        // this route just wrote under `.eq("lead_org_id", writeOrgId)` - never a value from
+        // the request body. lib/notification-routing.ts turns it into /partner/rfps/{id}.
         const ok =
           status === "closed"
-            ? await notifyRfpClosed(supabase, row.vendor_org_id, scopeItemName, agencyName)
-            : await notifyRfpNotSelected(supabase, row.vendor_org_id, scopeItemName, agencyName)
+            ? await notifyRfpClosed(supabase, row.vendor_org_id, scopeItemName, agencyName, row.id)
+            : await notifyRfpNotSelected(supabase, row.vendor_org_id, scopeItemName, agencyName, row.id)
         if (ok) inApp += 1
       } catch (notifyErr) {
         console.error("[api] rfp-closure: in-app notification threw", {
@@ -470,8 +474,23 @@ async function emitClosureNotifications({
             title: copy.title,
             recipientName: to.name,
             body: copy.body,
-            ctaText: "View your requests",
-            ctaUrl: `${baseUrl}/partner/rfps`,
+            ctaText: "View this request",
+            // THE EMAIL LANDS ON THE SAME RECORD THE BELL DOES.
+            //
+            // It used to land on /partner/rfps, which is the OPEN list -
+            // components/partner-rfp-surface.tsx partitions closed rows out of it, so the
+            // mail about a closed request took its recipient to a list defined as not
+            // containing that request. docs/notification-routing-report.md section 4 flagged
+            // it as the worse half of the in-app/email pair and left it, because no
+            // identifier was being carried. One now is, so the two channels agree rather
+            // than this run widening the gap it was sent to close.
+            //
+            // A recipient with no account is no worse off than before: they are sent to
+            // sign in exactly as /partner/rfps would have sent them, and the row's
+            // recipient_email arm in partnerCanAccessPartnerRfpInbox admits them once they
+            // are. A recipient who is not entitled to the row gets the destination's own
+            // 404, which is what a hand-typed id gets.
+            ctaUrl: `${baseUrl}/partner/rfps/${encodeURIComponent(row.id)}`,
           }),
         })
         emailed += 1

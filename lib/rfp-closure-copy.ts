@@ -86,3 +86,57 @@ export function closureEmailCopy(
       `It stays in your history on Ligament, so you keep the record that it was sent to you.`,
   }
 }
+
+/**
+ * THE SAME TWO FACTS, IN THE VENDOR PORTAL, IN ONE SENTENCE EACH.
+ *
+ * ===========================================================================
+ * WHY THIS IS HERE AND NOT INLINE IN THE PAGE
+ * ===========================================================================
+ *
+ * It shipped inline, once, in the My Bid tab of app/partner/rfps/[id]/page.tsx.
+ * It now has to render in TWO places on that page, and the reason is the whole
+ * of the argument for moving it:
+ *
+ *   A CLOSED ROW DOES NOT LAND ON THE TAB THE EXPLANATION WAS ON. The default
+ *   tab is chosen by `shouldDefaultToStatus`, which is true for every status
+ *   outside {submitted, bid_submitted} - so a closed or not_selected row opens
+ *   on Status & Feedback. That tab showed a chip reading "Closed" or "Not
+ *   Selected" and nothing else. The sentence saying which of the two things
+ *   happened, and that it is not a rejection, was one click away on a tab
+ *   labelled My Bid, which is the last place a vendor with no bid would look.
+ *
+ * That was survivable while the only way in was the vendor's own Closed tab,
+ * where they had just read the row's status to get here. It stops being
+ * survivable now that a notification and an email both deep-link straight to
+ * this page: the click lands on a status word with no explanation, which is the
+ * "inert screen" the closure banner was written to prevent in the first place.
+ *
+ * ONE FUNCTION, TWO CALL SITES, SO THE TWO CANNOT DRIFT. Two copies of a
+ * sentence that must not read as a rejection is two chances for one of them to
+ * start reading as one. Same argument closureEmailCopy() above makes for the
+ * two emails, applied to the two tabs.
+ *
+ * ===========================================================================
+ * WHY IT IS NOT closureEmailCopy().body
+ * ===========================================================================
+ *
+ * The email must carry the record on its own, away from the product, to someone
+ * who may not sign in. It gets three paragraphs and a call to action. This
+ * renders ON the record, next to the status chip and the RFP itself, to someone
+ * who is already looking at it - so it says which of the two things happened
+ * and stops. Making one serve both would make the email thin or the page
+ * repeat itself.
+ *
+ * WHAT IT STILL SHARES WITH THE EMAIL, DELIBERATELY: closed says the request
+ * ended for everyone, not_selected says it is about this one request only, and
+ * both say the record survives. Those are the three load-bearing facts, and a
+ * vendor who reads the mail and then opens the page must not meet a fourth
+ * version of the story.
+ */
+export function closureVendorNotice(status: RfpClosureStatus, agencyName: string): string {
+  const who = agencyName.trim() || "This agency"
+  return status === "not_selected"
+    ? `${who} has decided not to move forward with your company on this request. They are not expecting a response from you on it. This is about this one request and it stays here as a record.`
+    : `${who} has closed this request. It ended for everyone who was invited and is not taking bids, so there is nothing further for you to do on it. It stays here as a record.`
+}

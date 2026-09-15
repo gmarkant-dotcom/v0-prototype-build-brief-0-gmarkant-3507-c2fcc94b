@@ -149,15 +149,27 @@ function candidateDestination(n: RoutableNotification): string | null {
     }
 
     case "rfp_closed":
-    case "rfp_not_selected":
-      // F5. NO IDENTIFIER EXISTS ON THESE ROWS. app/api/agency/rfp-closure/route.ts passes
-      // scopeItemName and agencyName, which are display strings, and no key. A record
-      // destination is impossible rather than deferred, and saying so is the answer.
+    case "rfp_not_selected": {
+      // THE IDENTIFIER NOW EXISTS, AND THE LIST IS THE FALLBACK RATHER THAN THE ANSWER.
       //
-      // F9. THE TAB MATTERS MORE THAN USUAL HERE. components/partner-rfp-surface.tsx
-      // partitions closed rows OUT of the open list, so the unparameterised /partner/rfps
-      // takes a vendor to a list defined as not containing the thing they were told about.
-      return "/partner/rfps?tab=closed"
+      // WHAT CHANGED. The Phase 0 table for the notification-routing run recorded this cell
+      // as "none exists", and that was true of the code as it then stood:
+      // app/api/agency/rfp-closure/route.ts passed scopeItemName and agencyName, both display
+      // strings, and no key. It was NOT true of the data available at the write site - the
+      // closed row's own id is in hand there, on `row.id` inside emitClosureNotifications -
+      // so the identifier was missing rather than impossible. Both emitters now carry it as
+      // `data.inboxId` and this is the one cell in that table where a record destination was
+      // available and missed.
+      //
+      // THE FALLBACK IS STILL THE CLOSED TAB AND STILL MATTERS. Every row written before
+      // this shipped has no inboxId, and there is no backfill (see
+      // docs/closure-routing-report.md section 1e). Those rows keep the list destination.
+      // components/partner-rfp-surface.tsx partitions closed rows OUT of the open list, so
+      // the unparameterised /partner/rfps would take a vendor to a list defined as not
+      // containing the thing they were told about. F9.
+      const inboxId = readId(n.data, "inboxId")
+      return inboxId ? `/partner/rfps/${encodeURIComponent(inboxId)}` : "/partner/rfps?tab=closed"
+    }
 
     // ── Agency-addressed ────────────────────────────────────────────────────
 

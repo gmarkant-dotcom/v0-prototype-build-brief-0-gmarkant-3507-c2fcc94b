@@ -41,7 +41,8 @@ import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-sec
 import { BidBudgetCategories } from "@/components/bid-budget-categories"
 import { BidProposalSectionsEditor } from "@/components/bid-proposal-sections"
 import { isBiddingClosed, BIDDING_CLOSED_VENDOR_MESSAGE, BIDDING_CLOSED_BADGE } from "@/lib/bid-close"
-import { isRfpClosureStatus } from "@/lib/rfp-closure"
+import { isRfpClosureStatus, type RfpClosureStatus } from "@/lib/rfp-closure"
+import { closureVendorNotice } from "@/lib/rfp-closure-copy"
 import {
   buildProposalSectionsForSave,
   normalizeProposalSections,
@@ -1370,8 +1371,11 @@ export default function PartnerRfpDetailPage() {
   const responseDeadlineLabel = formatDeadlineDate(inbox.response_deadline)
   const deadlineStateLabel = biddingClosed ? BIDDING_CLOSED_BADGE : null
   /** Migration 099's two closure statuses, or null. Read off the INBOX row, never
-   *  off the response: closure only ever lands on a row that has no response. */
-  const rfpClosureState = isRfpClosureStatus(inbox.status) ? (inbox.status as string) : null
+   *  off the response: closure only ever lands on a row that has no response.
+   *
+   *  TYPED AS THE UNION RATHER THAN string, so closureVendorNotice() below is reached with
+   *  the value the guard already proved rather than with a cast. */
+  const rfpClosureState: RfpClosureStatus | null = isRfpClosureStatus(inbox.status) ? inbox.status : null
   const responseDeadlineUrgency = getDeadlineUrgency(inbox.response_deadline)
 
   const requiredCriteria = normalizeBusinessCriteriaRequired(
@@ -1691,6 +1695,31 @@ export default function PartnerRfpDetailPage() {
               {currentStatus === "declined" && (
                 <div className="bg-gray-100 border border-vendor-border rounded-xl p-4 text-vendor-foreground">This bid was declined.</div>
               )}
+              {/*
+                THE CLOSURE EXPLANATION, ON THE TAB A CLOSED ROW ACTUALLY OPENS ON.
+
+                Every other terminal outcome on this tab already says what it means in a
+                sentence - awarded, declined, changes requested, meeting requested - and the
+                two statuses migration 099 added were the only ones that did not. They had
+                a chip and nothing else, because the sentence lived on My Bid, and
+                `shouldDefaultToStatus` sends a closed or not_selected row HERE.
+
+                IT MATTERS MORE NOW THAN IT DID YESTERDAY. The bell row and the closure
+                email both deep-link to this page (lib/notification-routing.ts and
+                app/api/agency/rfp-closure/route.ts). Before that, the only way in was the
+                vendor's own Closed tab, where they had just read the status to get here.
+                Now the click arrives cold and the first thing it must do is say which of
+                the two things happened.
+
+                SAME SENTENCE AS THE MY BID BANNER, FROM THE SAME FUNCTION. Two hand-copied
+                versions of a message whose entire job is not to read as a rejection is two
+                chances for one of them to drift into reading as one.
+              */}
+              {rfpClosureState && (
+                <div className="bg-vendor-surface border border-vendor-border rounded-xl p-4 text-sm text-vendor-foreground">
+                  {closureVendorNotice(rfpClosureState, inbox.agency_company_name || "")}
+                </div>
+              )}
 
               <div className="bg-vendor-surface rounded-xl border border-vendor-border p-6">
                 <button
@@ -1867,9 +1896,7 @@ export default function PartnerRfpDetailPage() {
           */}
           {rfpClosureState ? (
             <p className="text-xs text-vendor-muted-strong bg-vendor-background border border-vendor-border rounded-md px-3 py-2 mb-4">
-              {rfpClosureState === "not_selected"
-                ? `${inbox.agency_company_name || "This agency"} has decided not to move forward with your company on this request. They are not expecting a response from you on it. This is about this one request and it stays here as a record.`
-                : `${inbox.agency_company_name || "This agency"} has closed this request. It ended for everyone who was invited and is not taking bids, so there is nothing further for you to do on it. It stays here as a record.`}
+              {closureVendorNotice(rfpClosureState, inbox.agency_company_name || "")}
             </p>
           ) : biddingClosed ? (
             <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 mb-4">
