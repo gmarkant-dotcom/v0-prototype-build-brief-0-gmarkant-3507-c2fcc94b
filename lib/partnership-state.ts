@@ -23,7 +23,7 @@
  */
 
 /**
- * The three pool columns. Exhaustive and mutually exclusive - every row lands in exactly one.
+ * The four pool columns. Exhaustive and mutually exclusive - every row lands in exactly one.
  *
  * "network" is the relationship column (the pool's "Active vendors"): active, plus the paused
  * and ended states that were once active. It is deliberately NOT a synonym for
@@ -31,8 +31,33 @@
  * and belongs beside the live ones, badged for what it is. Filing it under Invited would be a
  * new lie in place of the one this module removes. Within the column, the Active treatment is
  * still driven by isActivePartnership() alone.
+ *
+ * "removed" IS NEW, AND IT CLOSES A TRAP RATHER THAN FIXING A VISIBLE DEFECT. Read what this
+ * function did before: every status except 'pending' fell through to "network", so a
+ * 'removed' row asked for a column was told it belonged beside the live vendors. Nobody has
+ * ever seen that happen, and the reason is not this module - it is that GET
+ * /api/partnerships never returns a removed row to the agency. It filters
+ * .neq('status', 'removed') on BOTH of its agency queries (the embed at
+ * app/api/partnerships/route.ts:95 and the plain fallback at :129), which is what migration
+ * 063 introduced the value for. So the wrong answer was masked by a filter one layer up.
+ *
+ * That mask is exactly the kind that fails the first time somebody legitimately lifts it,
+ * and /agency/pool now does lift it, on purpose, to list removed contacts so a producer can
+ * find one again. 'removed' therefore gets its own column instead of borrowing the live
+ * vendors' one.
+ *
+ * >>> A THIRD NON-NETWORK VALUE BREAKS `!== "network"`. Two call sites used that shorthand to
+ * >>> mean "still pending" back when it could only mean that. Both now name the pending pair
+ * >>> explicitly (app/agency/page.tsx and app/partner/network/page.tsx); without that change,
+ * >>> a removed row would have started appearing in the vendor's pending-invitation list,
+ * >>> which reads the unfiltered vendor branch of the same route.
  */
-export type PartnershipPoolColumn = "network" | "invited" | "discovered"
+export type PartnershipPoolColumn = "network" | "invited" | "discovered" | "removed"
+
+/** The two columns that mean "this invitation has not been answered yet". */
+export function isPendingPoolColumn(column: PartnershipPoolColumn): boolean {
+  return column === "invited" || column === "discovered"
+}
 
 /**
  * Accepts either spelling of the columns, because the API routes carry snake_case straight
@@ -66,10 +91,15 @@ export function wasInvitationSent(row: PartnershipStateInput | null | undefined)
 /**
  * Which pool column a row belongs in. `pending` is the only status that can still be awaiting
  * an answer, so it is the only one that splits on whether an invitation was actually sent.
- * Everything else has a relationship behind it and belongs in the network column.
+ * `removed` is the archive and stands alone. Everything else has a relationship behind it and
+ * belongs in the network column.
+ *
+ * The `removed` test is a named check rather than another fallthrough so that the next status
+ * value added to partnerships.status lands in "network" only if somebody decides it should.
  */
 export function partnershipPoolColumn(row: PartnershipStateInput): PartnershipPoolColumn {
   const status = row.status ?? "pending"
+  if (status === "removed") return "removed"
   if (status !== "pending") return "network"
   return wasInvitationSent(row) ? "invited" : "discovered"
 }
@@ -85,6 +115,8 @@ export function partnershipStateLabel(row: PartnershipStateInput): string {
       return isActivePartnership(row) ? "Active vendor" : `Vendor (${row.status})`
     case "invited":
       return "Invited"
+    case "removed":
+      return "Removed"
     default:
       return "Discovered"
   }

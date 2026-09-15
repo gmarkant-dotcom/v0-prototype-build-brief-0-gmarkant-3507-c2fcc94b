@@ -58,6 +58,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to load profile' }, { status: 500, headers: noStoreHeaders })
     }
     const acting = actingRole(profile)
+
+    /**
+     * `?include=removed` - the agency's archive, off by default.
+     *
+     * WHY AN OPT-IN AND NOT A WIDENING. The agency's two queries below have always ended
+     * `.neq('status', 'removed')`, which is a PRESENTATION default, not an access boundary:
+     * the SELECT policy on public.partnerships carries no status predicate at all, so these
+     * rows were always readable by this caller and RLS is untouched by this flag. The
+     * organization predicate is byte-for-byte the one that was already there -
+     * `.in('lead_org_id', callerOrgIds)` - and nothing here widens it. What the flag changes
+     * is one clause of the default view, and only when the caller asks for it.
+     *
+     * IT IS AGENCY-ONLY ON PURPOSE. The vendor branch is not given the flag and does not read
+     * it. A vendor has no archive to browse, and the branch already returns removed rows
+     * unfiltered, so there is nothing for a flag to unlock there.
+     *
+     * WHY IT EXISTS. Removal is not deletion - the row is kept deliberately - but with the
+     * filter unconditional there was no way to see a removed contact again from anywhere in
+     * the product, so "removed" behaved exactly like "deleted" to the only person who could
+     * have wanted it back. /agency/pool uses this to list them.
+     */
+    const includeRemoved = new URL(request.url).searchParams.get('include') === 'removed'
+
     console.log('[api] start', {
       route,
       method: 'GET',
@@ -65,6 +88,7 @@ export async function GET(request: NextRequest) {
       role: profile?.role ?? null,
       activeRole: profile?.active_role ?? null,
       acting,
+      includeRemoved,
     })
 
     let partnerships
@@ -74,9 +98,11 @@ export async function GET(request: NextRequest) {
     // to the caller's own id or email, so it is the safe default.
     if (acting === 'agency') {
       // Agency sees rows where they are lead_org_id (not vendor_org_id). 'removed' rows are
-      // hidden entirely - the agency explicitly dismissed them from the pool, but the row
-      // is kept (not deleted) for any associated rfp_magic_tokens/bid history.
-      const rich = await supabase
+      // hidden by default - the agency explicitly dismissed them from the pool, but the row
+      // is kept (not deleted) for any associated rfp_magic_tokens/bid history. `?include=removed`
+      // returns ONLY those rows, so the archive is a separate list and never mixes into the
+      // pool columns or the counts above them.
+      const richBase = supabase
         // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
         // vendor_org_id points at organizations after 079, so the company name comes from
         // organizations.name and the contact comes from the designated primary contact.
@@ -92,8 +118,10 @@ export async function GET(request: NextRequest) {
           vendor_org:organizations!vendor_org_id(${ORG_CONTACT_SELECT_RICH})
         `)
         .in('lead_org_id', callerOrgIds)
-        .neq('status', 'removed')
-        .order('created_at', { ascending: false })
+      const rich = await (includeRemoved
+        ? richBase.eq('status', 'removed')
+        : richBase.neq('status', 'removed')
+      ).order('created_at', { ascending: false })
 
       if (!rich.error && rich.data) {
         // Normalize the two-hop embed back onto the wire key every consumer already reads.
@@ -122,12 +150,14 @@ export async function GET(request: NextRequest) {
             hint: rich.error.hint,
           })
         }
-        const simple = await supabase
+        const simpleBase = supabase
           .from('partnerships')
           .select('*')
           .in('lead_org_id', callerOrgIds)
-          .neq('status', 'removed')
-          .order('created_at', { ascending: false })
+        const simple = await (includeRemoved
+          ? simpleBase.eq('status', 'removed')
+          : simpleBase.neq('status', 'removed')
+        ).order('created_at', { ascending: false })
         if (simple.error) throw simple.error
         partnerships = simple.data
       }

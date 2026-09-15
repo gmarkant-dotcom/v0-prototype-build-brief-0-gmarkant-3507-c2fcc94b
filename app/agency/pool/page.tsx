@@ -374,6 +374,17 @@ function PartnerPoolPageInner() {
 
   // Partnerships state (new closed ecosystem)
   const [partnerships, setPartnerships] = useState<Partnership[]>([])
+  /**
+   * The archive, kept in its own state and NEVER merged into `partnerships`.
+   *
+   * That separation is the whole design. Every count on this page - the three stat tiles,
+   * the three section counts, "Showing N results" - is derived from `partnerships`, so a
+   * removed contact that never enters that array cannot change a single one of them. The
+   * alternative, adding removed rows to `partnerships` and filtering them back out at each
+   * render site, is how a header ends up disagreeing with the list beneath it.
+   */
+  const [removedRows, setRemovedRows] = useState<Partnership[]>([])
+  const [removedOpen, setRemovedOpen] = useState(false)
   const [partnersWithActiveEngagements, setPartnersWithActiveEngagements] = useState(0)
   const [resendingEmail, setResendingEmail] = useState<string | null>(null)
   const [resendMsg, setResendMsg] = useState<string | null>(null)
@@ -495,6 +506,44 @@ function PartnerPoolPageInner() {
     }
   }
 
+  /**
+   * The removed contacts, read through `?include=removed`, which returns ONLY those rows.
+   *
+   * A failure here is swallowed on purpose: the archive is a recovery aid, and a pool page
+   * that refuses to render because an optional list did not load would be a worse outcome
+   * than an archive section that is briefly absent. The section does not render at all when
+   * the array is empty, so a failed load and a genuinely empty archive look the same - which
+   * is why the failure is logged.
+   */
+  const loadRemovedPartnerships = async () => {
+    try {
+      const response = await fetch('/api/partnerships?include=removed', { credentials: 'same-origin', cache: 'no-store' })
+      if (!response.ok) {
+        console.error('[agency/pool] GET /api/partnerships?include=removed failed', { status: response.status })
+        return
+      }
+      const data = await response.json().catch(() => ({}))
+      setRemovedRows(
+        ((data.partnerships || []) as Record<string, unknown>[]).map((p) => ({
+          id: p.id as string,
+          partnerId: (p.vendor_org as { id?: string } | undefined)?.id || (p.vendor_org_id as string | undefined) || undefined,
+          partnerEmail:
+            (p.vendor_org as { contact_email?: string } | undefined)?.contact_email || (p.partner_email as string),
+          partnerName: (p.vendor_org as { contact_name?: string } | undefined)?.contact_name,
+          partnerCompany: (p.vendor_org as { name?: string } | undefined)?.name,
+          status: p.status as Partnership["status"],
+          partnershipCreatedAt: p.created_at as string,
+          invitationSentAt: (p.invitation_sent_at as string | null) ?? null,
+          vendorName: (p.vendor_name as string | null) ?? null,
+          contactName: (p.contact_name as string | null) ?? null,
+          companyName: (p.company_name as string | null) ?? null,
+        })) as Partnership[],
+      )
+    } catch (error) {
+      console.error('[agency/pool] GET /api/partnerships?include=removed threw', { error })
+    }
+  }
+
   const loadPartnerships = async () => {
     try {
       const response = await fetch('/api/partnerships')
@@ -594,6 +643,14 @@ function PartnerPoolPageInner() {
         loaded = loaded.map((row) => ({ ...row }))
       }
       setPartnerships(loaded)
+
+      // The archive is the other half of this read and is refreshed with it, rather than
+      // from the mount effect. Two reasons, and the second is the real one: every caller
+      // that reloads the pool (invite, add, import, remove) wants both lists current, and
+      // calling it from the effect would reference it above its own declaration, which
+      // react-hooks/immutability flags as an error. Not awaited - the pool must never wait
+      // on the archive to render.
+      void loadRemovedPartnerships()
     } catch (error) {
       console.error('Error loading partnerships:', error)
     }
@@ -657,6 +714,8 @@ function PartnerPoolPageInner() {
         body: JSON.stringify({ partnershipId: row.id, status: 'removed' }),
       })
       if (res.ok) {
+        // Refreshes both lists: the row left `partnerships` and joined `removedRows` in the
+        // same act, and loadPartnerships() reloads the archive alongside itself.
         await loadPartnerships()
       } else {
         const data = await res.json().catch(() => ({}))
@@ -2190,6 +2249,88 @@ function PartnerPoolPageInner() {
               </div>
           </div>
         </div>
+
+        {/* REMOVED CONTACTS. The archive, and the reason it exists.
+            Removal is not deletion - migration 063 created 'removed' precisely so the row
+            and its bid history survive - but until this section existed there was no way to
+            see a removed contact again from anywhere in the product, because GET
+            /api/partnerships filters them out of every pool column. "Removed" and "deleted"
+            were therefore the same thing to the only person who might want one back. The
+            closure ruling settled the same principle for RFP requests: a closed request
+            stays findable.
+
+            IT CHANGES NO COUNT ON THIS PAGE. `removedRows` is loaded separately and is never
+            merged into `partnerships`, which is what every stat tile, section count and the
+            "Showing N results" line are derived from. This section carries its own count and
+            it is the length of the list directly beneath it.
+
+            SEARCH DOES NOT NARROW IT. The search box drives filteredNetworkRows,
+            filteredInvitedRows and filteredDiscoveredRows; this list is deliberately outside
+            that set, so the count in the header cannot drift from the rows below it while a
+            query is typed. The archive is small by nature and reads in full.
+
+            THERE IS NO RESTORE HERE, AND THAT IS NOT AN OVERSIGHT. PATCH /api/partnerships
+            validates status against ['active','suspended','terminated','removed'] and rejects
+            'pending', so a Discovered contact cannot be put back where it came from without a
+            ruling and a one-line change to that list. Restoring an ex-active vendor and
+            restoring a never-invited contact are also different acts. See
+            docs/vendor-removal-report.md section 3. */}
+        {removedRows.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-5 mb-8">
+            <button
+              type="button"
+              onClick={() => setRemovedOpen((v) => !v)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <div className="min-w-0">
+                <h2 className="font-display font-bold text-sm text-foreground">Removed contacts</h2>
+                <p className="text-xs text-foreground-muted mt-1">
+                  Kept on record and hidden from the pool. They cannot be sent RFPs.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-4">
+                <span className="font-mono text-2xs text-foreground-muted">{removedRows.length}</span>
+                <ChevronRight
+                  className={cn("w-4 h-4 text-foreground-muted transition-transform", removedOpen && "rotate-90")}
+                />
+              </div>
+            </button>
+            {removedOpen && (
+              <div className="space-y-2 mt-4 md:overflow-y-auto md:max-h-[400px] md:pr-1">
+                {removedRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white/[0.03] p-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-display font-bold text-sm text-foreground truncate">
+                          {row.partnerCompany || row.partnerName || row.companyName || row.contactName || row.vendorName || row.partnerEmail}
+                        </span>
+                        <span className="font-mono text-2xs uppercase tracking-wider px-2 py-0.5 rounded-full border border-border text-foreground-muted">
+                          {partnershipStateLabel(row)}
+                        </span>
+                      </div>
+                      <div className="font-mono text-2xs text-foreground-muted mt-1 truncate">
+                        {row.partnerEmail}
+                        <span> · Added {formatDateTime(row.partnershipCreatedAt)}</span>
+                      </div>
+                    </div>
+                    {row.partnerId && (
+                      <Link
+                        href={`/agency/pool/${encodeURIComponent(row.partnerId)}`}
+                        className="inline-flex items-center gap-1 font-mono text-2xs text-accent hover:underline px-2 py-1 rounded-md border border-accent/30 hover:bg-accent/10 shrink-0 ml-auto"
+                      >
+                        View profile
+                        <ChevronRight className="w-3 h-3" />
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Discovery grid */}
         {partners.length > 0 ? (

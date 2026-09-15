@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
-import { isActivePartnership, partnershipPoolColumn } from "@/lib/partnership-state"
+import { isActivePartnership, isPendingPoolColumn, partnershipPoolColumn } from "@/lib/partnership-state"
 import { wasCuedByBroadcast } from "@/lib/broadcast-cue-shape"
 import { isDemoMode } from "@/lib/demo-data"
 import { cn, formatDateTime } from "@/lib/utils"
@@ -634,8 +634,15 @@ function AgencyNetworkPageInner() {
   }
 
   // One definition of the state, shared with the agency pool - see lib/partnership-state.ts.
+  //
+  // `isPendingPoolColumn` RATHER THAN `!== "network"`, AND HERE IT IS LOAD-BEARING. The vendor
+  // branch of GET /api/partnerships applies NO status filter, so a partnership the agency has
+  // set to 'removed' does reach this page. Under the old shorthand, giving 'removed' its own
+  // column would have moved those rows straight into "pending invitations" - an agency that
+  // archived a contact would reappear in that vendor's queue asking for an answer. Naming the
+  // pending pair keeps the behaviour exactly as it is today: a removed row is in neither list.
   const pendingPartnerships = useMemo(
-    () => partnerships.filter((p) => partnershipPoolColumn(p) !== "network"),
+    () => partnerships.filter((p) => isPendingPoolColumn(partnershipPoolColumn(p))),
     [partnerships],
   )
   const activePartnerships = useMemo(() => partnerships.filter((p) => isActivePartnership(p)), [partnerships])

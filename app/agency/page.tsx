@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
-import { isActivePartnership, partnershipPoolColumn } from "@/lib/partnership-state"
+import { isActivePartnership, isPendingPoolColumn, partnershipPoolColumn } from "@/lib/partnership-state"
 import { usePaidUser } from "@/contexts/paid-user-context"
 import { useSelectedProject } from "@/contexts/selected-project-context"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
@@ -214,8 +214,13 @@ function AgencyRFPContent() {
           }
         })
 
+        // `isPendingPoolColumn` rather than `!== "network"`. The shorthand meant "still
+        // pending" only while "network" was the single alternative; 'removed' is a fourth
+        // column now and must not be counted as a pending invitation. The agency branch of
+        // GET /api/partnerships filters removed rows out anyway, so this changes nothing
+        // rendered here - it stops the change from depending on that filter staying put.
         const pending = rows
-          .filter((p) => partnershipPoolColumn(p) !== "network")
+          .filter((p) => isPendingPoolColumn(partnershipPoolColumn(p)))
           .map((p) => ({
             id: p.id,
             email: (p.partner_email || p.vendor_org?.contact_email || "").trim(),
