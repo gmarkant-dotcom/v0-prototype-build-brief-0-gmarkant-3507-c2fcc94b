@@ -626,8 +626,25 @@ function PartnerPoolPageInner() {
     }
   }
 
-  /** Discovered-section "Remove" action - hides the row from every pool section without
-   *  deleting it (associated rfp_magic_tokens/bid history may still be worth keeping). */
+  /** Discovered-section "Remove" action - sets status='removed' instead of deleting, so the
+   *  associated rfp_magic_tokens and bid history survive.
+   *
+   *  THE SECOND HALF OF THE OLD COMMENT HERE WAS FALSE AND IS CORRECTED RATHER THAN KEPT.
+   *  It said this "hides the row from every pool section". It does not.
+   *  partnershipPoolColumn() (lib/partnership-state.ts:71-74) routes every status except
+   *  'pending' to the "network" column, and 'removed' is not 'pending' - so the row does not
+   *  disappear, it MOVES OUT OF Discovered AND INTO "Active vendors", badged
+   *  `Vendor (removed)` by partnershipStateLabel(). Nothing filters it out: allNetworkRows
+   *  applies no status exclusion, and the default "All" status filter passes it through.
+   *  Pressing Remove on a Discovered contact makes them more prominent, not less.
+   *
+   *  NOT CHANGED HERE. lib/partnership-state.ts names 'suspended' and 'terminated' as the
+   *  ended states that belong beside the live ones; 'removed' reaches that column by falling
+   *  through, not by a ruling. Whether a removed row should be hidden, kept and badged, or
+   *  given a fourth column is Greg's call, and changing it silently would swap one wrong
+   *  behaviour for another unasked one. docs/silent-failures-report.md Phase 1 carries it as
+   *  an open question with options. The stat counters are unaffected: activePartnersStat
+   *  filters status === 'active' and reads correctly today. */
   const handleRemovePartnership = async (row: Partnership) => {
     setRemovingId(row.id)
     try {
@@ -2528,17 +2545,45 @@ function PartnerPoolPageInner() {
               )}
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-4 mt-4 border-t border-border">
-                <Button
-                  variant="destructive-outline"
-                  onClick={() => {
-                    setPartnerToDelete(selectedPartner)
-                    setShowDeleteConfirm(true)
-                  }}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Remove from Pool
-                </Button>
+              {/* "Remove from Pool" IS DISABLED, AND THE REASON IS NOT COSMETIC.
+                  It called DELETE /api/partnerships, which cannot delete: public.partnerships
+                  has no DELETE policy (079:1465-1497 creates INSERT/SELECT/UPDATE and nothing
+                  else, 087 replaces only the INSERT, and no migration through 099 adds one), so
+                  RLS denies the statement for every caller and the route answers 501
+                  (app/api/partnerships/route.ts:1392-1404). Pressing this button could only ever
+                  produce an alert saying the thing did not happen.
+
+                  IT IS NOT FIXED BY ADDING THE POLICY, AND THAT IS A PRODUCT RULING, NOT A
+                  BUILD TASK. Nine tables hang off partnerships.id, and they are the VENDOR's
+                  records, not the agency's: partner_rfp_responses (their bids),
+                  partner_rfp_inbox (the requests they were sent), partner_status_updates
+                  (their posts), payment_milestones, msa_agreements, delivery_reviews,
+                  onboarding_packages, project_assignments and partnership_owners. Greg ruled
+                  this same question for RFP closure: DELETE removes the row, CLOSE preserves
+                  the vendor's record that a request was once made. A hard delete here destroys
+                  or orphans exactly what that ruling exists to protect.
+
+                  So the control says so plainly INSTEAD of rendering an action that fails.
+                  The alternative was to stop rendering it, which would have hidden the open
+                  question rather than stating it. See docs/silent-failures-report.md Phase 1
+                  for the ruling, its options, and the catalog query that settles the ON DELETE
+                  actions this file could only read for three of the nine. */}
+              <div className="flex items-start justify-between gap-4 pt-4 mt-4 border-t border-border">
+                <div className="min-w-0">
+                  <Button
+                    variant="destructive-outline"
+                    disabled
+                    title="Removing a vendor is not available yet."
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Remove from Pool
+                  </Button>
+                  <p className="font-mono text-2xs text-foreground-muted mt-2 max-w-xs">
+                    Not available yet. This vendor&apos;s bids, status updates and payment history
+                    are attached to this record, so removing it needs a decision about what
+                    happens to them.
+                  </p>
+                </div>
                 <Button
                   onClick={() => setSelectedPartner(null)}
                   className="bg-accent text-accent-foreground hover:bg-accent/90"
@@ -2550,7 +2595,13 @@ function PartnerPoolPageInner() {
           </div>
         )}
         
-        {/* Delete Confirmation Dialog */}
+        {/* Delete Confirmation Dialog.
+            UNREACHABLE TODAY AND DELIBERATELY KEPT. Nothing sets showDeleteConfirm any more:
+            the only control that did is disabled above. It is left intact, rather than
+            deleted, because it is exactly what gets re-enabled if Greg rules for a hard
+            delete, and re-enabling is then a one-line revert instead of a rebuild. Its copy
+            ("This action cannot be undone") is the copy that would need revisiting under a
+            soft-removal ruling. */}
         <Dialog open={showDeleteConfirm && !!partnerToDelete} onOpenChange={(open) => {
           if (!open) {
             setShowDeleteConfirm(false)
