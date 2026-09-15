@@ -380,3 +380,104 @@ Each of these is a live query. **None was run.** They appear as checklist items 
 **No feature code. No migration. No policy.** No control was added, no predicate was
 changed, and `app/api/partner/payments/route.ts:77` was **left exactly as it is** despite
 1c reading like a bug - because which direction it should move is Q2, and Q2 is Greg's.
+
+---
+
+## 8. What the build actually costs
+
+**Added 2026-09-15 by the `feat/pool-counts-and-payments` run. NO CODE WAS WRITTEN FOR THIS
+SECTION.** Its purpose is narrow and it is not a ruling: section 5 costs the ACCESS options,
+which are Greg's to choose. This section costs the **agency-side control** - the thing that
+must exist before any of those options has a trigger - so that the session which builds it
+starts from a known surface instead of rediscovering one.
+
+**It is independent of every question in section 4.** Whatever Q1 through Q4 are answered,
+an agency needs a way to perform the act. What that act then revokes is the ruling.
+
+### 8a. Every write to `partnerships.status`, and which control reaches it
+
+`grep -rn "'suspended'\|'terminated'"` over `app/` and `lib/` was **executed** at `d6074a8`,
+along with a sweep of every `.from('partnerships').update(` in both trees. Every hit on
+`suspended` and `terminated` outside the two writes below is a type union, a badge branch, a
+comment, or a validation list.
+
+| Target status | Written at | Reached from | Who | Precondition |
+|---|---|---|---|---|
+| `active` | `app/api/partnerships/route.ts:1066` | vendor accepts an invitation | vendor | `partnership.status === 'pending'` |
+| `terminated` | `app/api/partnerships/route.ts:1216` | `app/partner/network/page.tsx:456`, declining an invitation | vendor | `partnership.status === 'pending'` |
+| `removed` | `app/api/partnerships/route.ts:1335` | `app/agency/pool/page.tsx:2305` "Remove", Discovered column only | agency | none in the route; the control renders only on `pending` rows |
+| `suspended` | `app/api/partnerships/route.ts:1335` | **nothing** | - | - |
+| `terminated` **from an active row** | `app/api/partnerships/route.ts:1335` | **nothing** | - | - |
+
+**The premise holds, and section 0a's sharper version of it holds too.** The vendor branch is
+gated at `:1061` on `if (isPartner && partnership.status === 'pending')`, so the vendor's
+`terminated` write is the decline of an invitation and cannot touch a live relationship. The
+agency's only control acts on Discovered rows. **No control on either side moves an active
+partnership out of `active`.**
+
+### 8b. The route needs NO change. This is entirely a front-end gap
+
+The agency branch is nine lines and it already does the whole job:
+
+```ts
+// app/api/partnerships/route.ts:1317
+if (isAgency) {
+  const isRemoving = partnership.status !== 'removed' && status === 'removed'
+  const { data: updated, error } = await supabase
+    .from('partnerships')
+    .update({ status, updated_at: new Date().toISOString() })   // :1335
+    .eq('id', partnershipId)
+```
+
+- **Validation already admits both values.** `:1056` checks `status` against
+  `['active','suspended','terminated','removed']` and rejects anything else. `suspended` and
+  `terminated` pass today.
+- **The write is generic.** `.update({ status, ... })` writes whatever passed validation. There
+  is no per-status branch, so neither value needs a new code path.
+- **Authorization is already correct and must not be touched.** `isAgency` is
+  `callerOwnsOrg(callerOrgIds, partnership.lead_org_id)`. An agency can only move its own
+  partnerships. **No predicate needs widening for this control to work**, which is what makes
+  it separable from everything else in this document.
+- **The read side is already built.** `app/agency/pool/page.tsx:1932-1935` renders "Suspended"
+  and "Terminated" badges, and `partnershipPoolColumn()` files both under the network column
+  deliberately. A row put into either state today would render correctly and immediately.
+
+**So the estimate is: zero route files, zero migrations, zero policies, one component.**
+
+### 8c. Where the control belongs, and the two things it must not copy
+
+**Where.** The Active vendors card action group, `app/agency/pool/page.tsx:2048`, beside
+"View profile" and the NDA/MSA confirm group. That group already carries the per-row actions
+for a network row and already wraps rather than overflows, which the comment above it explains
+at length.
+
+**The call shape already exists.** `handleRemovePartnership()` at `:707` is a nine-line PATCH
+against `/api/partnerships` with `{ partnershipId, status }`, followed by `loadPartnerships()`.
+A suspend or terminate handler differs from it **only in the status string**.
+
+**What it must not copy, one.** The Discovered "Remove" dialog's copy. `removed` is the archive
+for a contact never worked with, and section 1c is why applying it to an active vendor is the
+wrong act: it silently blanks that vendor's payments screen through
+`app/api/partner/payments/route.ts:77`. A suspend/terminate dialog states what the act does,
+and until Q1 is ruled the honest sentence is that it stops future RFPs and does **not** revoke
+work already awarded.
+
+**What it must not copy, two.** The deleted dead control. The button removed in
+`docs/vendor-removal-report.md` phase 2 called `DELETE /api/partnerships`, which returns 501
+because `public.partnerships` has no DELETE policy through 099. A new control must PATCH.
+
+### 8d. What this does NOT buy, stated so the estimate is not misread
+
+Shipping 8b and 8c gives an agency a way to move a partnership to `suspended` or `terminated`,
+gives both states a correct badge, and **revokes nothing**. Section 1 is the list of what stays
+readable, and section 0b's two `SECURITY DEFINER` helpers are the only status filters that
+exist. The control without a ruling is an honest status change and a badge; it is not
+revocation, and the dialog copy must not imply that it is.
+
+**One thing it does buy immediately, beyond the act itself.** It makes the divergence recorded
+at `app/agency/pool/page.tsx:1391` live: the "Active vendors" TILE counts `status='active'`
+while the "Active vendors" COLUMN counts the network pool column, which holds `suspended` and
+`terminated` too. They agree today only because nothing writes those statuses. The first
+suspended vendor makes the tile and the column header disagree under the same words. That is a
+one-line label decision and it belongs to whoever builds this control. See
+`docs/pool-counts-and-payments-report.md` section 1.
