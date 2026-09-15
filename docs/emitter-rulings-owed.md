@@ -274,6 +274,65 @@ touch more than one vendor.
 - **What the feed loses:** the feed jumps from bid received to shortlisted with nothing in
   between, and a retry storm is invisible to the agency's own colleagues.
 
+### AMENDMENT (2026-09-14, feat/silent-failures Phase 3). THE PREMISE ABOVE IS FALSE, AND NO OPTION IS ANSWERABLE UNTIL IT IS REPAIRED.
+
+**NOTHING HERE ANSWERS THE RULING.** The question and all three options stand exactly as
+written. What is corrected is one factual sentence they rest on, so that whichever option is
+chosen is implementable.
+
+**THE FALSE SENTENCE.** Above: "the emit site holds a `partnership_id` by the same route
+`bid.feedback` and `bid.decline` already use." **It does not.**
+
+- That route is `resolveBidMilestoneContext`, and it is a LOCAL, NON-EXPORTED function inside
+  `app/api/agency/rfp-responses/[id]/route.ts:122`. Neither analysis route can call it.
+- The two analysis routes reach their bid through `loadBidAnalysisContext`
+  (`lib/bid-analysis-context.ts:42`), used by `app/api/agency/bids/[responseId]/decompose/route.ts:147`
+  and `app/api/agency/bids/compare/route.ts:120,125`.
+- **`partnership_id` is absent from every projection it makes.** The bid select is
+  `:49-51`; the portal-branch scope select is `:82` and reads
+  `partner_rfp_inbox` - the very table `partnership_id` lives on - as
+  `.select("scope_item_name, scope_item_description")`; the guest branch is `:91`.
+  `BidAnalysisContext` (`:13-27`) has no such field, so nothing downstream could use one.
+
+**WHY THAT MAKES THE RULING UNBUILDABLE AS WRITTEN.** Migration 088's vendor INSERT policy
+is not the relevant one here (an agency acts), but gate 2 is: 080's counterparty SELECT
+policy opens with `partnership_id IS NOT NULL`. **Option A - "the vendor learns their bid
+was analyzed" - cannot happen with a null `partnership_id`, whatever the whitelist says.**
+Option B and Option C are unaffected: neither needs the column.
+
+**THE COST OF REPAIRING IT, MEASURED. IT IS SMALLER THAN A REFACTOR AND IT SPLITS IN TWO.**
+
+| Bid shape | Is `partnership_id` reachable from what the route already has? | Cost |
+|---|---|---|
+| Portal bid (`inbox_item_id` set) | **Yes.** `loadBidAnalysisContext:82` already SELECTs `partner_rfp_inbox` by that id, already scoped `.in("lead_org_id", orgIds)`. | **One column added to an existing select. Zero extra queries.** |
+| Guest / magic-link bid (`inbox_item_id` null) | **No.** `:91` reads `rfp_magic_tokens`, which carries no `partnership_id` at all. | One extra query against the synthesized `partner_rfp_inbox` row, which is exactly what `resolveGuestBidContext` (`rfp-responses/[id]/route.ts:86-88`) already does. |
+
+**TWO CLAIMS IN `docs/101-phase0-baseline.md` SECTION 3 ARE OVERSTATED, CHECKED AGAINST SOURCE.**
+
+1. It says Option A "begins with an extraction into `lib/`, exercised by five existing call
+   sites". `grep -rn "resolveBidMilestoneContext("` over `app/` and `lib/` returns **two
+   lines: the declaration at `:122` and ONE call at `:805`.** The other three emit sites in
+   that file read `inbox?.partnership_id`, `inboxRow?.partnership_id` and
+   `awardContext.partnershipId` directly and do not touch the resolver. So the refactor has
+   one dependant, not five - and for the portal case it is not needed at all, because the
+   column can be added to `loadBidAnalysisContext`'s own existing select.
+2. It says the guest path resolves through `rfp_magic_tokens`. For scope text, yes. For
+   `partnership_id`, no: `resolveGuestBidContext:82-88` says in its own comment that the
+   synthesized `partner_rfp_inbox` row "is the only source of `partnership_id`".
+
+**AND ONE THING THE RULING DOES NOT ASK, WHICH OPTION A CANNOT AVOID.** `compare` is about
+N bids belonging to N vendors, and a single row could carry only one `partnership_id`.
+`compare/route.ts:125` ALREADY calls `loadBidAnalysisContext` once per response inside a
+`Promise.all`, so if the context carried the column, one row per response - the
+`rfp.broadcast` shape `recordMilestones()` exists for - falls out with no further work.
+**It is the only shape gate 2 can serve, and it sharpens the payload warning above rather
+than softening it: each of the N vendors reads their own row, and any comparison-derived
+field on that row describes the other N-1.**
+
+**WHAT THIS AMENDMENT ASKS FOR.** Nothing beyond the ruling already owed. Option A now
+carries a known, costed prerequisite instead of a false premise; Options B and C are
+unchanged and need no column.
+
 ---
 
 ## 6. The vendor with no partnership (`docs/emitter-coverage.md` §5)
