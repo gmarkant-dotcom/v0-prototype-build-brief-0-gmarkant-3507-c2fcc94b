@@ -1376,7 +1376,6 @@ function PartnerPoolPageInner() {
     return map
   }, [partnerships])
 
-  const totalFilteredMatches = filteredNetworkRows.length + filteredPartners.length
   const hasNetworkSource = allNetworkRows.length > 0
 
   if (!isLoaded) {
@@ -1389,6 +1388,26 @@ function PartnerPoolPageInner() {
     )
   }
 
+  /**
+   * THE TILE AND THE COLUMN A HEADER ARE NOT THE SAME COUNT, AND THEY AGREE ONLY BY ACCIDENT.
+   *
+   * This tile counts `status === 'active'`. The "Active vendors" column header beneath it
+   * counts `filteredNetworkRows`, whose membership is decided by partnershipPoolColumn(),
+   * which routes EVERY non-pending non-removed status into "network" - so 'suspended' and
+   * 'terminated' land there too and are NOT counted here.
+   *
+   * They read equal today because nothing in app/ ever writes 'suspended' or 'terminated'
+   * from the agency side (see docs/relationship-end-rulings.md, "what the build actually
+   * costs"). The first agency-side control that ends a relationship makes these two numbers
+   * diverge under the same words, with no change to either expression.
+   *
+   * NOT FIXED HERE, DELIBERATELY. Choosing what the column is then called is a product
+   * decision and it belongs with the ruling that creates the statuses. It is recorded as an
+   * owed ruling in docs/pool-counts-and-payments-report.md. What this run did instead is make
+   * the divergence visible the moment it happens: the summary line above the columns prints
+   * "Active vendors {filtered} of {allNetworkRows.length}", and that denominator counts
+   * suspended and terminated rows while this tile does not.
+   */
   const activePartnersStat = isDemo
     ? activePartnerships
     : partnerships.filter((p) => p.status === "active").length
@@ -1397,6 +1416,15 @@ function PartnerPoolPageInner() {
     ? Math.min(activePartnerships, 2)
     : partnersWithActiveEngagements
 
+  /**
+   * Counts blacklisted rows across the WHOLE pool - Active vendors, Invited and Discovered
+   * alike - because `partnerships` holds all three and this filter tests only the note flag.
+   *
+   * The Status: Blacklisted chip does NOT match it. That chip narrows column A only, so a
+   * pool whose blacklisted contacts are still pending shows a non-zero tile here and an empty
+   * Active vendors column when the chip is on. The tile is right, the chip is right, and the
+   * summary line above the columns now says which column the chips act on.
+   */
   const blacklistedPartnersStat = isDemo
     ? partners.filter((p) => p.status === "blacklisted").length
     : partnerships.filter((p) => isPartnershipNotesBlacklisted(p.partnership_notes)).length
@@ -1713,22 +1741,58 @@ function PartnerPoolPageInner() {
           )}
         </GlassCard>
 
-        {(allNetworkRows.length > 0 || partners.length > 0) && (
-          <p className="font-mono text-2xs text-foreground-muted mb-6">
-            Showing {totalFilteredMatches} result{totalFilteredMatches !== 1 ? "s" : ""}
-            {allNetworkRows.length > 0 && (
-              <span>
-                {" "}
-                · {filteredNetworkRows.length} in network (of {allNetworkRows.length})
-              </span>
-            )}
-            {partners.length > 0 && (
-              <span>
-                {" "}
-                · {filteredPartners.length} in discovery (of {partners.length})
-              </span>
-            )}
-          </p>
+        {(allNetworkRows.length > 0 || partners.length > 0 || invitedRows.length > 0 || discoveredRows.length > 0) && (
+          <div className="mb-6 space-y-1">
+            {/*
+              WHAT THIS LINE COUNTS, AND WHY IT NAMES EACH COLUMN.
+
+              It used to read "Showing N results" above a THREE column layout while counting
+              ONE of them. On 2026-09-14 the live page read "Showing 5 results - 5 in network
+              (of 5)" with 32 rows underneath it: 5 in Active vendors, 16 in Invited, 11 in
+              Discovered. Every number was arithmetically right for what it counted. The page
+              simply never said what that was, so the only reading available to a producer was
+              that 27 rows had gone missing.
+
+              NO ARITHMETIC CHANGED HERE. Each number below is the same expression that was
+              already rendering; what is new is that each one now carries the name of the
+              column it counts, and the two columns that were never summarised at all now are.
+
+              The pair is "shown of total" per column, so a narrowed column shows its own
+              denominator rather than borrowing the page's.
+            */}
+            <p className="font-mono text-2xs text-foreground-muted">
+              Active vendors {filteredNetworkRows.length} of {allNetworkRows.length}
+              {" · "}Invited {filteredInvitedRows.length} of {invitedRows.length}
+              {" · "}Discovered {filteredDiscoveredRows.length} of {discoveredRows.length}
+              {/*
+                Demo only. `partners` is emptied on the production branch of the load effect
+                (setPartners([]) above), so this clause never renders against real data and
+                `filteredPartners` is always 0 there. It is kept because the demo site is the
+                only place the discovery list exists.
+              */}
+              {partners.length > 0 && (
+                <span>
+                  {" · "}Discovery {filteredPartners.length} of {partners.length}
+                </span>
+              )}
+            </p>
+            {/*
+              THE SCOPE OF THE CONTROLS, SAID OUT LOUD.
+
+              Eight filter rows sit above this line and every one of them narrows Active
+              vendors ONLY: filteredInvitedRows and filteredDiscoveredRows depend on
+              [rows, searchQuery] and on nothing else. Choosing Status: Blacklisted empties
+              Active vendors down to the blacklisted subset and leaves Invited and Discovered
+              exactly as they were, which reads as a broken filter unless the page says which
+              column it acts on.
+
+              Same house pattern as the "From awarded work only" and "Point person,
+              contributor, or relationship owner" hints on the chip rows above.
+            */}
+            <p className="font-mono text-2xs text-foreground-muted/70">
+              Filters narrow Active vendors. Search narrows all three columns.
+            </p>
+          </div>
         )}
 
         {resendMsg && <p className="text-xs text-accent mb-4">{resendMsg}</p>}
