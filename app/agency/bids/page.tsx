@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo, useCallback, useEffect } from "react"
+import { useState, useMemo, useCallback, useEffect, Suspense } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { mutate } from "swr"
 import { AgencyLayout } from "@/components/agency-layout"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
@@ -570,7 +571,40 @@ function GroupSection({
 
 type GroupBy = "client" | "partner"
 
-export default function AgencyBidsPage() {
+/**
+ * THE DEEP LINK FROM THE NOTIFICATION BELL, AND WHY IT CARRIES NO AUTHORIZATION OF ITS OWN.
+ *
+ * `?response=<partner_rfp_responses.id>` opens that bid's detail sheet. It is what makes
+ * "April Partner Test Agency updated their bid on X" reach that bid instead of a list of every
+ * bid. The id comes off `notifications.data.responseId`, which `notifyBidSubmitted` has been
+ * writing since migration 095 turned the type on.
+ *
+ * >>> THE IDENTIFIER IS A CLAIM, NOT A GRANT, AND NOTHING HERE TREATS IT AS ONE. <<<
+ *
+ * There is no fetch by id and no new endpoint. The parameter is matched against `data.responses`
+ * - the list this page already holds, from GET /api/agency/rfp-responses, which resolves
+ * `resolveCallerOrgIds(user.id, supabase)` and filters `.in("lead_org_id", callerOrgIds)` on
+ * every one of its reads (app/api/agency/rfp-responses/route.ts:25, :91, :123, :210). A
+ * response id belonging to another company is not in that array, so it matches nothing and
+ * opens nothing. Hand-editing the URL therefore reaches exactly as far as it did before this
+ * parameter existed, which is nowhere.
+ *
+ * It is matched on `response_exists && response_id`, NOT on `row.id`. `row.id` is the response
+ * id for a real bid but the synthetic string `inbox-<uuid>` for an inbox row with no response
+ * yet (route.ts:451), and those synthetic ids are not what any notification carries.
+ *
+ * WHAT A FAILED MATCH SHOWS, DECIDED HERE RATHER THAN LEFT TO THE IMPLEMENTATION (brief 1d):
+ *
+ *   - NOT a silent redirect to the dashboard. That teaches nothing and reads as a broken app.
+ *   - NOT an error that names the record. "Bid 4f3a... was not found" confirms to anyone
+ *     editing the URL that some ids exist and others do not, which is an existence oracle
+ *     over another company's data.
+ *   - INSTEAD: the page renders normally, and one dismissible notice sits above the list. The
+ *     wording is IDENTICAL for "withdrawn", "deleted" and "belongs to another company",
+ *     because the page genuinely cannot tell them apart and must not appear to. The user lands
+ *     where they expected, with an explanation, and everything else on the page still works.
+ */
+function AgencyBidsPageInner() {
   const [search, setSearch] = useState("")
   const [groupBy, setGroupBy] = useState<GroupBy>("client")
   const [viewingBid, setViewingBid] = useState<BidRow | null>(null)
@@ -585,6 +619,48 @@ export default function AgencyBidsPage() {
   const [closureError, setClosureError] = useState<string | null>(null)
 
   const { data, isLoading, error } = useFetch<{ responses: BidRow[] }>(RFP_RESPONSES_URL)
+
+  /**
+   * THE NOTIFICATION BELL'S DEEP LINK. Read the header above this component first.
+   *
+   * DERIVED, NOT STORED, AND THERE IS NO EFFECT. The obvious shape is an effect that finds the
+   * row and calls setViewingBid, and it is the wrong one twice over: this repository's ESLint
+   * config errors on `setState` inside an effect (cascading renders), and an effect needs a
+   * "consumed" flag to stop the URL reopening the sheet the moment it is closed. Both
+   * disappear if the open sheet is a function of the URL rather than a copy of it.
+   *
+   * WHAT IS DISMISSED IS AN ID, NOT A BOOLEAN. Clicking a second notification for a different
+   * bid is a client navigation between two search strings on the SAME route, so this component
+   * does not remount. A boolean would stay dismissed and the second bid would never open.
+   */
+  const searchParams = useSearchParams()
+  const requestedResponseId = (searchParams.get("response") || "").trim()
+  const [dismissedResponseId, setDismissedResponseId] = useState<string | null>(null)
+  const deepLinkActive = requestedResponseId !== "" && dismissedResponseId !== requestedResponseId
+
+  /**
+   * NOT MEMOISED, DELIBERATELY. A `useMemo` here reports "Existing memoization could not be
+   * preserved" under this repository's React Compiler lint rule, because `data?.responses` in
+   * a dependency array is an optional-chain the compiler cannot match - and it buys nothing:
+   * `find` returns an element of an array SWR already holds stable between revalidations, so
+   * the identity downstream is unchanged either way, and the miss case returns a literal null.
+   *
+   * Matched on `response_id`, NOT `row.id`: `row.id` is the synthetic `inbox-<uuid>` for an
+   * inbox row with no response yet (app/api/agency/rfp-responses/route.ts:451), and no
+   * notification carries one of those.
+   */
+  const deepLinkRow =
+    !deepLinkActive || isLoading || !data?.responses
+      ? null
+      : data.responses.find((r) => r.response_exists && r.response_id === requestedResponseId) ?? null
+
+  /** "Not found" is claimed only once the list has arrived. The house rule about empty states
+   *  during load applies to a banner exactly as it does to a list. */
+  const deepLinkUnresolved = deepLinkActive && !isLoading && Boolean(data?.responses) && deepLinkRow === null
+  const dismissDeepLink = () => setDismissedResponseId(requestedResponseId || null)
+
+  /** The card click wins over the URL, and closing either one closes both. */
+  const sheetRow = viewingBid ?? deepLinkRow
 
   const requestClosure = useCallback((row: BidRow, unit: RfpClosureUnit) => {
     setClosureError(null)
@@ -711,6 +787,28 @@ export default function AgencyBidsPage() {
   return (
     <AgencyLayout>
       <div className="p-8 max-w-5xl space-y-6 pb-24">
+        {/* 1d. THE SAME SENTENCE FOR WITHDRAWN, DELETED AND NOT-YOURS.
+            This page cannot tell those apart - the id simply is not in the org-scoped array -
+            and it must not appear to, because wording that distinguishes them is an existence
+            oracle over another company's bids. It sits above the list rather than replacing
+            it: the rest of the page is fine and the user is where they meant to be. */}
+        {deepLinkUnresolved && (
+          <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-white/5 px-4 py-3">
+            <p className="text-sm text-foreground-muted">
+              That bid could not be opened. It may have been withdrawn, or it may no longer be
+              available to your company.
+            </p>
+            <button
+              type="button"
+              onClick={dismissDeepLink}
+              className="shrink-0 text-foreground-muted hover:text-foreground transition-colors"
+              aria-label="Dismiss"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -803,7 +901,13 @@ export default function AgencyBidsPage() {
           </div>
         )}
       </div>
-      <BidDetailSheet row={viewingBid} onClose={() => setViewingBid(null)} />
+      <BidDetailSheet
+        row={sheetRow}
+        onClose={() => {
+          setViewingBid(null)
+          dismissDeepLink()
+        }}
+      />
       <ScoringSettingsSheet open={scoringSettingsOpen} onOpenChange={setScoringSettingsOpen} />
 
       {/*
@@ -933,5 +1037,19 @@ export default function AgencyBidsPage() {
         </div>
       )}
     </AgencyLayout>
+  )
+}
+
+/**
+ * Suspense is required, not decorative: useSearchParams() opts the tree into client-side
+ * rendering and Next fails the build without a boundary. Same shape as
+ * app/agency/pool/page.tsx and components/partner-rfp-surface.tsx, which reached this the
+ * same way.
+ */
+export default function AgencyBidsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AgencyBidsPageInner />
+    </Suspense>
   )
 }

@@ -567,9 +567,23 @@ function PartnerRFPsContent({ surface }: { surface: RfpSurface }) {
   const [groupBy, setGroupBy] = useState<GroupBy>("agency")
   // THE STAGE DECIDES THE TAB, not the other way round. `/partner/rfps` opens on the
   // invitations and `/partner/bids` opens on the submissions, and neither page can reach the
-  // other's tab - the nav does that now. No URL selected a tab before this split (the state
-  // was plain useState with no query parameter), so nothing that worked yesterday stops.
-  const [activeTab, setActiveTab] = useState<RfpTab>(surface === "bids" ? "my-bids" : "open")
+  // other's tab - the nav does that now.
+  //
+  // `?tab=` ONLY NARROWS THAT, IT DOES NOT CROSS IT. Added 2026-09-14 for the notification
+  // bell: an `rfp_closed` or `rfp_not_selected` row sent the vendor to `/partner/rfps`, which
+  // opens on "open" - and the closed rows are partitioned OUT of the open list further down
+  // (see the openRows/closedRows split). So the notification saying "this request closed"
+  // landed them on a list defined as not containing it. `?tab=closed` fixes exactly that.
+  //
+  // It is validated against the tabs THIS surface renders, not against RfpTab. `?tab=history`
+  // on /partner/rfps would otherwise select a tab whose strip is not on the page, leaving a
+  // list with no way back and no tab highlighted. Anything unrecognised falls through to the
+  // surface default, which is today's behaviour.
+  const [activeTab, setActiveTab] = useState<RfpTab>(() => {
+    const allowed: RfpTab[] = surface === "bids" ? ["my-bids", "history"] : ["open", "closed"]
+    const requested = (searchParams.get("tab") || "").trim() as RfpTab
+    return allowed.includes(requested) ? requested : allowed[0]
+  })
 
   // Auto-claim invite token for already-logged-in partners arriving via email CTA
   useEffect(() => {

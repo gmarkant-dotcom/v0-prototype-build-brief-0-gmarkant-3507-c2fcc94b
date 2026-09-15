@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import useSWR from "swr"
 import { Bell, Check } from "lucide-react"
 import { cn, formatDateTime } from "@/lib/utils"
+import { resolveNotificationDestination } from "@/lib/notification-routing"
 
 /**
  * THE CONSUMER FOR AN INBOX THAT HAS BEEN WRITTEN TO FOR MONTHS AND READ BY NOBODY.
@@ -70,6 +71,33 @@ import { cn, formatDateTime } from "@/lib/utils"
  * person who had clicked "Load more" four times would issue five requests per revalidation
  * on every page of the portal. That is the multiplication the paragraph above exists to
  * prevent, arriving by a different door.
+ *
+ * ---------------------------------------------------------------------------
+ * ROUTING, 2026-09-14. THE ROW WAS ALREADY CLICKABLE. IT WAS GOING TO THE WRONG PLACE.
+ *
+ * The reported defect was "clicking a notification does nothing", and the click target was
+ * never missing: this file has pushed `n.link` since it shipped, and every write site sets a
+ * link. Two things were actually wrong, and both are fixed here.
+ *
+ *   1. THE DESTINATION THREW THE IDENTIFIER AWAY. `notifyBidSubmitted` writes
+ *      `data: { responseId }` and `link: '/agency/bids'` in the same call, so "April Partner
+ *      Test Agency updated their bid" knew which bid it meant and sent you to a list of all
+ *      of them. Pushed while already standing on that list, it moved nothing, which is what
+ *      "does nothing" looked like. Destinations are now resolved from `(type, data, variant)`
+ *      in lib/notification-routing.ts, at READ time, so rows already in the table get the
+ *      better destination without a backfill.
+ *
+ *   2. `variant` DECIDED NOTHING. This is ONE component in BOTH portals and the endpoint
+ *      filters by user, not by portal - so a dual-role user sees vendor rows in the agency
+ *      portal and vice versa. Clicking one pushed the other portal's URL and middleware
+ *      redirected them to their own portal's home, silently. Those rows are now inert here
+ *      rather than dead-ended there.
+ *
+ * AND CLICKING A ROW NOW MARKS IT READ, which it never did. See markOneRead().
+ *
+ * The routing table this implements, all 26 (type, viewer side) cells of it, including the
+ * ones deliberately left unrouted and the rulings still owed, is
+ * docs/100-phase0-baseline.md.
  */
 
 type NotificationRow = {
@@ -80,6 +108,16 @@ type NotificationRow = {
   link: string | null
   read: boolean | null
   created_at: string | null
+  /**
+   * The `data` jsonb, carried through because it is where the record identifiers live. The
+   * endpoint has always returned it (`select('*')`); this type simply stopped at `link`, which
+   * is the shape of the defect: `notifyBidSubmitted` writes `data.responseId` and a link of
+   * `/agency/bids` in the same call, so the row knew which bid it was about and the panel did
+   * not look. Typed `unknown` rather than a union of every payload shape - the two write sites
+   * behind `project_assignment` do not agree on their keys (F3), so a declared shape would be
+   * a claim this file cannot keep. lib/notification-routing.ts reads it defensively.
+   */
+  data?: unknown
 }
 
 type NotificationsResponse = {
@@ -108,12 +146,16 @@ const PAGE_SIZE = 20
  * unfinished instead of arriving invisible. That is the intended outcome: a visible gap is
  * a bug report, a silent drop is not.
  *
- * The eleven keys are exactly `NotificationType` in lib/notifications.ts. They are NOT
+ * The thirteen keys are exactly `NotificationType` in lib/notifications.ts. They are NOT
  * imported from it: that module builds a service-role Supabase client at call time and
  * pulls in @supabase/supabase-js, and importing it here would drag all of that into the
- * client bundle of every page in both portals to read eleven strings. The cost of the
+ * client bundle of every page in both portals to read thirteen strings. The cost of the
  * duplication is that a new type added there is not labelled here, and that cost is exactly
- * what the fallback covers.
+ * what the fallback covers - as 099 demonstrated, shipping `rfp_closed` and
+ * `rfp_not_selected` straight onto the fallback because this map was not opened with it.
+ *
+ * lib/notification-routing.ts duplicates the same list for the same reason and pays the same
+ * cost, and its `default` branch is the equivalent fallback for the destination.
  */
 const TYPE_LABELS: Record<string, string> = {
   partnership_invitation: "Partnership",
@@ -127,6 +169,12 @@ const TYPE_LABELS: Record<string, string> = {
   project_awarded: "Award",
   onboarding_deployed: "Onboarding",
   bid_submitted: "Bid",
+  // Added 2026-09-14. Migration 099 put these two in the union and in the CHECK constraint and
+  // did not add them here, so both had been rendering through unknownTypeLabel() as the raw
+  // strings "Rfp closed" and "Rfp not selected". That fallback worked exactly as its header
+  // says it should - visible rather than invisible - which is how this was found.
+  rfp_closed: "RFP",
+  rfp_not_selected: "RFP",
 }
 
 /**
@@ -168,7 +216,6 @@ function rowTitle(n: NotificationRow): string {
 type BellVariant = "agency" | "vendor"
 
 export function NotificationBell({ variant }: { variant: BellVariant }) {
-  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [marking, setMarking] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -315,9 +362,50 @@ export function NotificationBell({ variant }: { variant: BellVariant }) {
     }
   }
 
-  const openNotification = (n: NotificationRow) => {
+  /**
+   * ONE ROW, MARKED READ. NEW BEHAVIOUR, AND IT REPLACES NOTHING.
+   *
+   * Clicking a row never marked it read: `openNotification` closed the panel and pushed, and
+   * "Mark all read" was the only writer of `read` in the product. So there is no existing
+   * read behaviour for routing to lose - the brief's 1a guards against a case that does not
+   * exist here, and this is the case being added.
+   *
+   * NO NEW ENDPOINT. `PATCH /api/notifications` has accepted `{ notificationIds }` since it
+   * was written and scopes its UPDATE to `user_id = auth.uid()` server-side
+   * (app/api/notifications/route.ts:220-231). Nothing about who may write what changes.
+   *
+   * NOT OPTIMISTIC, FOR THE REASON markAllRead ALREADY GIVES. Local state moves only after the
+   * server says the write landed. A badge that decrements on a request that failed hides an
+   * unread item permanently; one that is stale for thirty seconds corrects itself. The panel
+   * is closing and the user is navigating either way, so the optimism would buy nothing
+   * visible and would cost exactly that.
+   *
+   * IT DOES NOT BLOCK NAVIGATION. The caller does not await it. The row is a real <Link>, so
+   * the browser is already navigating while this is in flight, and a failed PATCH must never
+   * be able to hold up or cancel a click that was about going somewhere.
+   */
+  const markOneRead = async (n: NotificationRow) => {
+    if (n.read) return
+    try {
+      const res = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ notificationIds: [n.id] }),
+      })
+      if (!res.ok) return
+      setMore((prev) =>
+        prev ? { ...prev, rows: prev.rows.map((r) => (r.id === n.id ? { ...r, read: true } : r)) } : prev
+      )
+      await mutate()
+    } catch {
+      // Same reasoning as markAllRead: leave the badge alone rather than claim a write landed.
+    }
+  }
+
+  const onRowActivate = (n: NotificationRow) => {
     setOpen(false)
-    if (n.link) router.push(n.link)
+    void markOneRead(n)
   }
 
   const isAgency = variant === "agency"
@@ -448,20 +536,19 @@ export function NotificationBell({ variant }: { variant: BellVariant }) {
               </div>
             ) : (
               <ul>
-                {rows.map((n) => (
-                  <li key={n.id}>
-                    <button
-                      type="button"
-                      onClick={() => openNotification(n)}
-                      className={cn(
-                        "w-full text-left px-4 py-3 border-b last:border-b-0 transition-colors",
-                        isAgency
-                          ? "border-border hover:bg-white/5"
-                          : "border-black/5 hover:bg-black/[0.03]",
-                        !n.read && (isAgency ? "bg-accent/5" : "bg-[#C8F53C]/10")
-                      )}
-                    >
-                      <div className="flex items-start gap-2">
+                {rows.map((n) => {
+                  /**
+                   * WHERE THIS ROW GOES FROM THIS PORTAL, OR NULL.
+                   *
+                   * `variant` decides. It used to be a colour switch and nothing else - every
+                   * other use of `isAgency` in this file is a className - which is precisely
+                   * how the same row came to be clickable in a portal that refuses it. See
+                   * lib/notification-routing.ts and docs/100-phase0-baseline.md section 5.
+                   */
+                  const destination = resolveNotificationDestination(n, variant)
+
+                  const body = (
+                    <div className="flex items-start gap-2">
                         {!n.read && (
                           <span
                             aria-hidden="true"
@@ -503,9 +590,68 @@ export function NotificationBell({ variant }: { variant: BellVariant }) {
                           </div>
                         </div>
                       </div>
-                    </button>
-                  </li>
-                ))}
+                  )
+
+                  /**
+                   * THE SHARED GEOMETRY. Identical for both branches, so a routed row and an
+                   * unrouted one are the same size and the same shape and the difference
+                   * between them is only the affordance.
+                   */
+                  const frame = cn(
+                    "block w-full text-left px-4 py-3 border-b last:border-b-0",
+                    isAgency ? "border-border" : "border-black/5",
+                    !n.read && (isAgency ? "bg-accent/5" : "bg-[#C8F53C]/10")
+                  )
+
+                  /**
+                   * 1b. A ROW THAT IS NOT ROUTED MUST NOT LOOK CLICKABLE.
+                   *
+                   * No hover, no pointer cursor, no focus stop - a plain <div>, not a <div>
+                   * with a handler and not a disabled <button> (which keeps the shape of a
+                   * control and reads to a screen reader as one that is broken). The text is
+                   * byte-identical to the routed branch, so nothing is hidden: the row still
+                   * says what happened, it just does not promise to take you anywhere.
+                   *
+                   * This IS a change from today for the cross-portal rows, which currently
+                   * navigate and get bounced by middleware to this portal's home with no
+                   * message. That is a dead click with a side effect, and 1b is explicit that
+                   * shipping a second set of dead clicks is not the fix for the first. R1 in
+                   * docs/100-phase0-baseline.md puts the alternative to Greg.
+                   */
+                  if (!destination) {
+                    return (
+                      <li key={n.id}>
+                        <div className={frame}>{body}</div>
+                      </li>
+                    )
+                  }
+
+                  /**
+                   * 1e. A LINK, NOT A BUTTON, BECAUSE IT NAVIGATES.
+                   *
+                   * It was a <button type="button"> that called router.push, which is keyboard
+                   * reachable but announces as "button" and cannot be opened in a new tab or
+                   * have its target previewed. <Link> is the right element and the right
+                   * implicit role for a control whose whole job is to go somewhere, and it
+                   * costs nothing: onClick still closes the panel and marks the row read, and
+                   * a cmd-click that opens a new tab marks it read too, which is correct.
+                   */
+                  return (
+                    <li key={n.id}>
+                      <Link
+                        href={destination}
+                        onClick={() => onRowActivate(n)}
+                        className={cn(
+                          frame,
+                          "transition-colors",
+                          isAgency ? "hover:bg-white/5" : "hover:bg-black/[0.03]"
+                        )}
+                      >
+                        {body}
+                      </Link>
+                    </li>
+                  )
+                })}
               </ul>
             )}
 

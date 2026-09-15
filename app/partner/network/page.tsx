@@ -1,7 +1,8 @@
 "use client"
 
 import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { PartnerLayout } from "@/components/partner-layout"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -309,9 +310,24 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   )
 }
 
-export default function AgencyNetworkPage() {
+function AgencyNetworkPageInner() {
   const isDemo = isDemoMode()
-  const [activeTab, setActiveTab] = useState<Tab>("my-agencies")
+  const searchParams = useSearchParams()
+  /**
+   * `?tab=` ADDED 2026-09-14 FOR THE NOTIFICATION BELL.
+   *
+   * `partnership_invitation` links to /partner/invitations, which is a redirect stub to this
+   * page, which opened on "my-agencies" - so the notification announcing an invitation landed
+   * the vendor on a different tab from the invitation. `?tab=invitations` fixes that.
+   *
+   * Validated against the Tab union rather than trusted: an unrecognised value falls through
+   * to today's default instead of selecting nothing and rendering a page with no active tab.
+   */
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const allowed: Tab[] = ["my-agencies", "invitations", "discover"]
+    const requested = (searchParams.get("tab") || "").trim() as Tab
+    return allowed.includes(requested) ? requested : "my-agencies"
+  })
   const [searchQuery, setSearchQuery] = useState("")
 
   // Partnerships (My Agencies + Invitations tabs) — reused from invitations/page.tsx
@@ -1436,5 +1452,17 @@ export default function AgencyNetworkPage() {
         )}
       </div>
     </PartnerLayout>
+  )
+}
+
+/**
+ * Suspense is required, not decorative: useSearchParams() opts the tree into client-side
+ * rendering and Next fails the build without a boundary. Same shape as app/agency/pool/page.tsx.
+ */
+export default function AgencyNetworkPage() {
+  return (
+    <Suspense fallback={null}>
+      <AgencyNetworkPageInner />
+    </Suspense>
   )
 }
