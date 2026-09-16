@@ -806,8 +806,16 @@ function PartnerPaymentsPageLegacy() {
             WAS "Active engagements", AND THE LIST UNDERNEATH NEVER WAS. `engagementsForAgency`
             filters on partnership_id and nothing else, so every project this vendor was ever
             awarded appears here, finished ones included. The unit was always right - one row
-            per awarded scope commitment, which is Greg's ruling - and only the word "Active"
-            was false.
+            per awarded scope commitment, which is Greg's ruling of 2026-09-15, Option B - and
+            only the word "Active" was false.
+
+            THE DATE MATTERS AND IT IS NEWER THAN THIS COMMENT. When this comment first shipped
+            in `670de54` on 2026-08-28 it cited "Greg's ruling" with no date, and there was no
+            such ruling: it was citing a RECOMMENDATION made in
+            docs/active-engagements-one-source.md on 2026-08-27. Greg ruled it properly on
+            2026-09-15, so the unit named here is correct and always was. See section 6a of that
+            document for the primary record. Cite a ruling by date and option letter, never by
+            its wording alone.
 
             >>> THE LIST IS TAGGED, NOT FILTERED, AND THAT IS LOAD-BEARING. Payment milestones
             render ONLY inside these project groups. Dropping finished projects would make a

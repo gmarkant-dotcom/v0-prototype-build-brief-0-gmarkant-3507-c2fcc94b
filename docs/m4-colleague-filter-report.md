@@ -256,7 +256,13 @@ app/partner/payments/page.tsx:414   const engagementsForAgency = useMemo(() => {
 
 **The unit was already right** and did not match yesterday's surface: one `PartnerEngagement` is
 one row from `/api/partner/projects`, which is one **(assignment x awarded response)** pair - an
-awarded scope commitment, exactly Greg's ruling. The rows are then grouped by project for display.
+awarded scope commitment, exactly Greg's ruling of 2026-09-15, Option B.
+
+> **DATE ADDED 2026-09-15 by `feat/engagement-ruling`.** As written, this sentence cited
+> "Greg's ruling" with no date, and at the time it was written no such ruling existed - it was
+> citing a RECOMMENDATION made in `docs/active-engagements-one-source.md` on 2026-08-27. Greg
+> ruled Option B on 2026-09-15, so the unit named here is correct. See section 6a of that
+> document for the primary record. The rows are then grouped by project for display.
 
 **What was wrong was only the word "Active".** The filter is `partnership_id` and nothing else.
 Every project the vendor was ever awarded appeared under a heading claiming it was active.

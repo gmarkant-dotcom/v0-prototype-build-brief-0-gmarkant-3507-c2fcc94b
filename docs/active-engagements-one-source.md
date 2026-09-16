@@ -49,6 +49,10 @@
 > Only comments were added, at six sites, each naming its own unit and cross-referencing the
 > others. `npx tsc --noEmit` and `pnpm build` were re-run and are unchanged. The ruling in
 > section 6 is unanswered, by design.
+>
+> **SUPERSEDED 2026-09-15: THE RULING IS MADE.** Greg ruled **Option B - an engagement is one
+> awarded scope commitment, an assignment** - on 2026-09-15. See section 6a, which now carries
+> the primary record. `feat/engagement-ruling` changed no number either.
 
 # "Active Engagements" is four numbers wearing one name
 
@@ -238,7 +242,48 @@ and can be done before or after them.
 Written in the shape `docs/emitter-rulings-owed.md` uses: the question, the options, and for
 each option what a producer sees. **No option is chosen here.**
 
-## 6a. FIRST, THE THING THAT MAKES THIS AWKWARD: IT MAY ALREADY BE RULED
+## 6a. ANSWERED 2026-09-15. IT WAS NEVER RULED BEFORE TODAY, AND IT IS RULED NOW
+
+> ### GREG'S RULING, 2026-09-15, OPTION B
+>
+> **An engagement is one awarded scope commitment - an assignment.**
+>
+> This paragraph is the PRIMARY RECORD. Before 2026-09-15 there was none, anywhere.
+
+**The question 6a asked was: had this already been ruled? The answer is NO.** Greg has no
+record of ruling it before today. Of the two possibilities set out below, the second is what
+happened: **a recommendation was read as a ruling by the next session and hardened through
+repetition.**
+
+**The chain, now established.** The phrase entered the repository as a RECOMMENDATION written
+by an assistant session on 2026-08-27 at 15:51, under the heading *"What Greg should
+standardise on"* - **line 161 of this document at `HEAD`** (it was line 109 when 6a was
+written, before the 52-line banner at the top of this file shifted everything below it; any
+session citing "line 109" is reading a stale number, which is the same defect the banner
+itself documents about the four surfaces). By 2026-08-28 that recommendation was being cited
+as "Greg's ruling" in shipped code, at three sites:
+
+- `app/partner/payments/page.tsx`
+- `app/partner/projects/[projectId]/page.tsx`
+- `docs/m4-colleague-filter-report.md`
+
+**Nothing built on it was harmful, and the recommendation was right.** Both vendor surfaces
+`670de54` touched were **relabelled, not refiltered** - no vendor stopped being able to see
+anything, and no number moved. Greg has now ruled the same substance properly, with a date and
+an option letter, so those three citations became true on 2026-09-15 rather than being
+withdrawn.
+
+**THE PROCESS FINDING, WHICH IS THE PART WORTH KEEPING.** A ruling without a date is how this
+happened. Every other "Greg's ruling" comment in `app/` and `lib/` carries a date, an option
+letter or a ruling number; these three carried neither, so nothing on their face distinguished
+a citation of a decision from a citation of a suggestion. The three comments have been amended
+by `feat/engagement-ruling` to carry **"Greg's ruling of 2026-09-15, Option B"**. Cite a ruling
+by date and option, never by its wording alone.
+
+---
+
+**The original 6a text follows, as the investigation that raised the question. It is answered
+above; its "THIS IS THE FIRST THING TO ANSWER" no longer stands as an open item.**
 
 **Two code comments and one report say the ruling exists and name it.**
 
@@ -272,6 +317,8 @@ earlier.** Two possibilities and this repository cannot separate them:
 work is to finish applying it; if it is (2) then two vendor-facing surfaces were relabelled
 against a decision nobody made. **Either way nothing built on it is harmful** - both surfaces
 `670de54` touched were relabelled, not refiltered, and nothing stopped being visible.
+
+> **RESOLVED: it was (2).** See the ruling at the top of this section.
 
 ## 6b. THE QUESTION
 

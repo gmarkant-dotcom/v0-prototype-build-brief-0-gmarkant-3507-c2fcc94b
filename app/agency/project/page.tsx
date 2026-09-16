@@ -570,11 +570,21 @@ function GroupSection({ label, rows, defaultOpen, onRowClick, reviewsByPartnersh
                 engagements" counts DISTINCT PARTNERSHIPS over the same work and so reads 1
                 for both of those cases, and it is not wrong: its label says "Vendors".
 
-                NO LIVENESS FILTER IS APPLIED HERE. A completed assignment still counts in
-                this header, even though the status filter directly below can hide it from
-                the list, so the header and its own body can disagree. That is a NUMBER on a
-                customer-visible surface and changing it needs the ruling owed in
-                docs/active-engagements-one-source.md - it is deliberately not touched here. */}
+                THE UNIT IS RULED AND THIS SURFACE ALREADY HELD IT. Greg's ruling of
+                2026-09-15, Option B: an engagement is one awarded scope commitment, which is
+                exactly the (assignmentId, awardedResponseId) pair counted here. NOTHING
+                CHANGED ON THIS LINE as a result - no relabel, no recount. The word
+                "engagement" on this header is now the defined term rather than one of five
+                competing uses. Primary record: section 6a of
+                docs/active-engagements-one-source.md.
+
+                NO LIVENESS FILTER IS APPLIED HERE, AND THE RULING DID NOT SETTLE THAT. A
+                completed assignment still counts in this header, even though the status
+                filter directly below can hide it from the list, so the header and its own
+                body can disagree. Option B fixed the UNIT, not WHERE liveness applies - that
+                is the separate second question in section 6c, still open. Adding the filter
+                is a NUMBER change on a customer-visible surface and is deliberately not
+                touched here. */}
             <span>{rows.length} engagement{rows.length !== 1 ? "s" : ""}</span>
             {totalAlerts > 0 && (
               <span className="flex items-center gap-1 text-amber-400">

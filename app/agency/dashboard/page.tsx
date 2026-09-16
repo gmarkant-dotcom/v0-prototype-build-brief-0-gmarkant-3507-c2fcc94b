@@ -462,9 +462,27 @@ function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
    *                         `:103`). The unit is an ASSIGNMENT: one project awarded to three
    *                         vendors reads 3, and the same vendor winning two scope items reads 2.
    *                         It therefore does NOT share a unit with "Bids Received" beside it,
-   *                         which counts responses. Naming that unit on screen is blocked on the
-   *                         engagement ruling in docs/active-engagements-one-source.md section 6 -
-   *                         an assignment is exactly what Option B calls an engagement.
+   *                         which counts responses.
+   *
+   *                         UNBLOCKED AND NAMED, 2026-09-15. Greg's ruling of 2026-09-15,
+   *                         Option B: an engagement IS one awarded scope commitment, i.e. an
+   *                         assignment. That is exactly what this tile already counted, so the
+   *                         label became "Engagements Awarded (This Quarter)". NO EXPRESSION,
+   *                         QUERY OR UNIT WAS TOUCHED - the number on screen is identical
+   *                         before and after. The previous run left it unnamed pending this
+   *                         ruling; the ruling is in section 6a of
+   *                         docs/active-engagements-one-source.md.
+   *
+   *                         >>> THE DEMO PATH DOES NOT SHARE THIS UNIT, AND IS NOT FIXED HERE.
+   *                         buildDemoDashboardData() at `:784` computes awardedThisQuarter as
+   *                         demoMasterProjects.filter(p => p.workflowStageKey ===
+   *                         "active_engagements").length - a count of PROJECTS, with no quarter
+   *                         window at all. Under the new label that synthetic number is wrong
+   *                         twice over: wrong unit and wrong window. Correcting it would CHANGE
+   *                         A NUMBER, which is arithmetic and out of scope for a naming change,
+   *                         so it is reported in docs/engagement-ruling-report.md and left
+   *                         alone. It affects demo mode only (isDemoMode(), `:876`); no real
+   *                         agency's tile is fed by it.
    *
    * "(This Month)" and "(This Quarter)" replaced "(Month)" and "(Quarter)" on 2026-09-15.
    * COPY ONLY - no expression, query or unit was touched. Both windows are calendar to date and
@@ -493,7 +511,9 @@ function FunnelMetrics({ funnel }: { funnel: DashboardData["funnel"] }) {
     { label: "Active Vendors", value: funnel.activePartners, href: "/agency/pool", icon: Users },
     { label: "Open RFPs", value: funnel.openRfps, href: "/agency/bids", icon: Send },
     { label: "Bids Received (This Month)", value: funnel.bidsReceivedThisMonth, href: "/agency/bids", icon: Gavel },
-    { label: "Awarded (This Quarter)", value: funnel.awardedThisQuarter, href: "/agency/bids", icon: Trophy },
+    // Named by Greg's ruling of 2026-09-15, Option B. Unit unchanged: an assignment. See the
+    // block comment above, including why the demo path's number does not match this label.
+    { label: "Engagements Awarded (This Quarter)", value: funnel.awardedThisQuarter, href: "/agency/bids", icon: Trophy },
   ]
 
   const spendPct =
@@ -781,6 +801,13 @@ function buildDemoDashboardData(): DashboardData {
       activePartners: demoMasterProjects.reduce((sum, p) => sum + p.partnerCount, 0),
       openRfps: demoMasterProjects.reduce((sum, p) => sum + p.activeRfps, 0),
       bidsReceivedThisMonth: demoMasterProjects.reduce((sum, p) => sum + p.pendingBids, 0),
+      // WRONG UNIT AND WRONG WINDOW AGAINST ITS OWN LABEL, AND KNOWN. The tile now reads
+      // "Engagements Awarded (This Quarter)" (Greg's ruling of 2026-09-15, Option B: an
+      // engagement is an assignment). This line counts PROJECTS sitting in the
+      // active_engagements stage, with no quarter window, which the live route at
+      // app/api/agency/dashboard/route.ts:470 does not do - it counts assignments awarded
+      // since quarterStartIso(). Fixing this CHANGES A NUMBER, so the 2026-09-15 naming run
+      // deliberately left it: see docs/engagement-ruling-report.md. Demo mode only.
       awardedThisQuarter: demoMasterProjects.filter((p) => p.workflowStageKey === "active_engagements").length,
       committedPartnerSpend: demoMasterProjects.reduce((sum, p) => sum + p.spent, 0),
       totalClientBudget: demoMasterProjects.reduce((sum, p) => sum + p.budget, 0),

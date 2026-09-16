@@ -1412,6 +1412,18 @@ function PartnerPoolPageInner() {
     ? activePartnerships
     : partnerships.filter((p) => p.status === "active").length
 
+  /**
+   * "Vendors with active engagements" - DISTINCT PARTNERSHIPS with at least one awarded
+   * response on a live project, liveness by projectActiveByEndDate (lib/project-liveness.ts),
+   * computed in app/api/agency/utilization/route.ts.
+   *
+   * UNCHANGED BY GREG'S RULING OF 2026-09-15, OPTION B, AND DELIBERATELY SO. Option B makes an
+   * engagement one awarded scope commitment, so a vendor holding two scope items holds two
+   * engagements and still counts ONCE here. That is not a contradiction: the label says
+   * "Vendors", and a count of vendors is what it is. This tile is the naming discipline the
+   * rest of the phrase was measured against - it never claimed to count engagements. No
+   * relabel and no recount was made here on 2026-09-15.
+   */
   const partnersWithActiveEngagementsStat = isDemo
     ? Math.min(activePartnerships, 2)
     : partnersWithActiveEngagements

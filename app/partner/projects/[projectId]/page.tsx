@@ -314,8 +314,14 @@ function PartnerActiveEngagementInner() {
               ← All projects
             </Link>
             {/* WAS "Active engagements". The unit was never wrong - every row below is one
-                awarded scope commitment, which is Greg's ruling - but nothing on this page or
-                behind it ever tested whether the project was still running. The route selects
+                awarded scope commitment, which is Greg's ruling of 2026-09-15, Option B - but
+                nothing on this page or behind it ever tested whether the project was still
+                running.
+
+                THE DATE IS NEWER THAN THIS COMMENT. As shipped in `670de54` on 2026-08-28 this
+                cited an undated "Greg's ruling" that did not yet exist - it was citing a
+                RECOMMENDATION of 2026-08-27. Greg ruled it on 2026-09-15; see section 6a of
+                docs/active-engagements-one-source.md for the primary record. The route selects
                 the awarded assignment and the awarded response and filters on neither
                 end_date nor status, so a project that finished eighteen months ago rendered
                 under a heading claiming it was active.
