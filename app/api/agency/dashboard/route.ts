@@ -46,18 +46,27 @@ const RECENT_ACTIVITY_LIMIT = 15
 // private to that file) rather than falling back to the raw projects.status column,
 // which is this task's whole point: replace the fake progress bar with the real stage.
 //
-// >>> THIS IS THE LIVE COPY. Of the three "Active Engagements" stage classifiers in this
-// >>> codebase, this is the ONLY one whose label reaches a screen: it renders the stage pill
-// >>> on the agency dashboard at app/agency/dashboard/page.tsx:698, via `stageLabel`.
-// >>> app/api/projects/route.ts's copy and app/api/agency/active-engagements/route.ts's copy
-// >>> both emit their stage fields to no reader at all. Verified 2026-09-15 by grepping every
-// >>> emitted field name over the whole tree. The full comparison is in the header comment
-// >>> above dashboardWorkflowForProject in app/api/projects/route.ts.
+// >>> THIS IS NOW THE ONLY STAGE CLASSIFIER IN THE CODEBASE, and it is the live one: it
+// >>> renders the stage pill on the agency dashboard at app/agency/dashboard/page.tsx:698, via
+// >>> `stageLabel`. There were THREE until 2026-09-15. The other two emitted their stage
+// >>> fields to no reader at all and were deleted after being proved unreferenced:
+// >>>   - app/api/projects/route.ts `dashboardWorkflowForProject` -> `dashboard_workflow_*`,
+// >>>     a hand-copied near-duplicate of this function.
+// >>>   - app/api/agency/active-engagements/route.ts -> `dashboardWorkflow*`, which keyed on
+// >>>     `projects.status` text and DISAGREED with this one, mapping `on_hold` to
+// >>>     active_engagements. That ROUTE is still live and still feeds
+// >>>     app/agency/project/page.tsx; only its dead classifier went.
+// >>> If a stage is ever needed elsewhere, EXPORT AND IMPORT THIS ONE. Do not hand-copy it
+// >>> again - that is what produced the three-way disagreement in the first place.
 //
 // THE UNIT OF THIS LABEL IS ONE PROJECT, and it is a bucket name rather than a count. Anything
 // that groups these projects by stage and shows "Active Engagements (N)" is counting PROJECTS,
 // which disagrees with every other surface wearing the phrase. See
-// docs/active-engagements-one-source.md; the ruling on what the word should mean is still owed.
+// docs/active-engagements-one-source.md. THE RULING IS MADE: Greg ruled Option B on
+// 2026-09-15 - an engagement is one awarded scope commitment, an assignment. That makes
+// "Active Engagements" as a PROJECT-stage bucket name a different unit from the ruled word by
+// definition. The pill is a stage name, not a count, so it was left alone here; renaming it to
+// a project-grain word such as "Awarded" is a product decision, still open.
 type WorkflowStageKey = "active_engagements" | "bid_management" | "rfp_broadcast" | "setup"
 const WORKFLOW_STAGE_LABELS: Record<WorkflowStageKey, string> = {
   active_engagements: "Active Engagements",

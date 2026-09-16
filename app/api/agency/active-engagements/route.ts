@@ -523,42 +523,33 @@ export async function GET(request: NextRequest) {
 
     const projects = Array.from(byProject.entries()).map(([pid, partners]) => {
       const meta = projectMetaById.get(pid)
-      const st = (meta?.status || "").toLowerCase()
       /**
-       * THE THIRD "Active Engagements" STAGE CLASSIFIER, AND THE ONE THAT DISAGREES.
+       * DELETED 2026-09-15: the THIRD "Active Engagements" stage classifier, and the
+       * `dashboardWorkflowStage` / `dashboardWorkflowLabel` fields it emitted.
        *
-       * The other two (app/api/projects/route.ts:dashboardWorkflowForProject and
-       * app/api/agency/dashboard/route.ts:workflowStageForProject) key on whether the project
-       * has an awarded response, a bid, or an inbox row. This one keys on `projects.status`
-       * TEXT, adds `onboarding` and `completed` stages the other two do not have, and maps
-       * `on_hold` to `active_engagements` - a project neither of the others would call active.
+       * >>> THE ROUTE ITSELF IS LIVE AND IS NOT GOING ANYWHERE. It is fetched by
+       * >>> app/agency/project/page.tsx, and its `projects[].partners` ARE the PartnerRow[]
+       * >>> behind the "N engagements" header and the whole engagement list on that page. Only
+       * >>> the two dead stage fields were removed. Do not confuse this route with the dead
+       * >>> near-duplicate that was in app/api/projects/route.ts.
        *
-       * IT IS ALSO BUILT ON THE COLUMN lib/project-liveness.ts EXISTS TO AVOID. That file says
-       * why in its own header: `projects.status` carries an eleven-entry STATUS_LEGACY_MAP
-       * folding ten spellings onto five canonical values, so anything keyed on it is a second
-       * normalization table that has to stay in step with the first. `st` here is a raw
-       * lowercase of the stored string and matches only four exact spellings; every other
-       * legacy spelling falls through to "setup".
+       * The classifier keyed on `projects.status` TEXT, not on awarded/bid/inbox membership
+       * like the other two, added `onboarding` and `completed` stages they do not have, and
+       * mapped `on_hold` to `active_engagements` - a project neither of the others would call
+       * active. It was built on the exact column lib/project-liveness.ts exists to avoid:
+       * `projects.status` carries an eleven-entry STATUS_LEGACY_MAP folding ten spellings onto
+       * five canonical values, so anything keyed on it is a second normalization table that has
+       * to stay in step with the first.
        *
-       * **NOTHING READS EITHER FIELD.** `dashboardWorkflowStage` and `dashboardWorkflowLabel`
-       * are emitted below and `grep -rn` over the whole tree finds no consumer, so the
-       * divergence is currently invisible rather than harmless. Verified 2026-09-15.
+       * NOTHING READ EITHER FIELD. The only other mention in the tree was an optional field on
+       * `ProjectEngagement` in app/agency/project/page.tsx, which DECLARED them and never read
+       * them; that declaration was removed with this. Proved unreferenced across app/, lib/,
+       * components/, hooks/, contexts/ and scripts/ before removal.
        *
-       * DO NOT WIRE THIS UP WITHOUT THE RULING in docs/active-engagements-one-source.md. A
-       * consumer added here would put a third definition of the phrase on a screen.
+       * Greg ruled the unit on 2026-09-15 (Option B). A third, disagreeing, dead definition of
+       * a just-ruled word is how the next contradiction gets written. The LIVE project-stage
+       * classifier is in app/api/agency/dashboard/route.ts and is now the only one.
        */
-      const workflowStage =
-        st === "active" || st === "in_progress" ? "active_engagements" :
-        st === "onboarding" ? "onboarding" :
-        st === "completed" ? "completed" :
-        st === "on_hold" ? "active_engagements" :
-        "setup"
-      const workflowLabel =
-        st === "active" || st === "in_progress" ? "Active Engagements" :
-        st === "onboarding" ? "Onboarding" :
-        st === "completed" ? "Completed" :
-        st === "on_hold" ? "On Hold" :
-        "Setup"
       return {
         id: pid,
         title: meta?.title || "Untitled project",
@@ -567,8 +558,6 @@ export async function GET(request: NextRequest) {
         startDate: meta?.startDate ?? null,
         endDate: meta?.endDate ?? null,
         status: meta?.status ?? null,
-        dashboardWorkflowStage: workflowStage,
-        dashboardWorkflowLabel: workflowLabel,
         partners,
       }
     })

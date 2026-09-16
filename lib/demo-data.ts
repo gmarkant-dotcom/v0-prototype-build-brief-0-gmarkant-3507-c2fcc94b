@@ -409,7 +409,14 @@ export type DashboardDemoProject = {
   progress: number
   lastActivity: string
   stage: string
-  /** Workflow pill on dashboard cards (matches /api/projects dashboard_workflow_*) */
+  /**
+   * Workflow pill on dashboard cards. Fed to the demo dashboard only.
+   *
+   * It used to say this matched `/api/projects dashboard_workflow_*`. Those fields were
+   * DELETED on 2026-09-15 as dead output with no reader. The live equivalent is `stage` /
+   * `stageLabel` from app/api/agency/dashboard/route.ts, which is what the real dashboard
+   * renders; this field mirrors that shape for demo mode.
+   */
   workflowStageKey: "active_engagements" | "bid_management" | "rfp_broadcast" | "setup"
   workflowStageLabel: string
   /** Unresolved partner status updates (excl. on_track / complete) for dashboard demo */

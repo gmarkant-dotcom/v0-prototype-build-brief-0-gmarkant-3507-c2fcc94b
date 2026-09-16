@@ -10,7 +10,6 @@ import {
   type OrgEmbed,
 } from '@/lib/org-contact'
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
-import { projectActiveByEndDate } from '@/lib/project-liveness'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { agencyEntitlementId, hasAgencyEntitlement, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
@@ -37,14 +36,6 @@ function parseClientBudget(raw: unknown): number | null {
   if (!s) return null
   const n = parseFloat(s)
   return Number.isFinite(n) ? n : null
-}
-
-function inboxEmbedProjectId(raw: unknown): string | null {
-  if (!raw) return null
-  const ib = Array.isArray(raw) ? raw[0] : raw
-  if (!ib || typeof ib !== 'object') return null
-  const pid = (ib as { project_id?: string | null }).project_id
-  return pid ? String(pid) : null
 }
 
 const noStoreHeaders = {
@@ -80,53 +71,25 @@ function normalizeAssignmentPartners(project: Record<string, unknown>): Record<s
   return { ...project, project_assignments: assignments }
 }
 
-function unwrapAssignmentRows(raw: unknown): { status?: string }[] {
-  if (!raw) return []
-  const arr = Array.isArray(raw) ? raw : [raw]
-  return arr.filter((a) => a && typeof a === 'object') as { status?: string }[]
-}
-
 /**
- * "ACTIVE ENGAGEMENTS" HERE IS A BUCKET NAME FOR ONE PROJECT. IT COUNTS NOTHING.
+ * DELETED 2026-09-15: `dashboardWorkflowForProject()` and the `dashboard_workflow_stage` /
+ * `dashboard_workflow_label` fields it fed.
  *
- * This classifies a SINGLE project into one of four workflow stages. A project with one
- * awarded bid and a project with nine both return this same label; the function returns
- * before it looks at how many. Anything that groups by `key` and counts the groups produces
- * a number labelled "Active Engagements" whose unit is PROJECTS, which is not the unit any
- * other surface using that phrase counts in. See docs/active-engagements-one-source.md.
+ * It was a hand-copied near-duplicate of the LIVE stage classifier in
+ * app/api/agency/dashboard/route.ts (`workflowStageForProject`), which is the one that renders
+ * the stage pill an agency reads every day. This copy emitted its two fields to NO READER:
+ * `grep -rn 'dashboard_workflow'` over the whole tree returned only the lines that wrote them
+ * plus documentation. Proved unreferenced across app/, lib/, components/, hooks/, contexts/,
+ * scripts/ and every config before removal.
  *
- * >>> THERE ARE THREE OF THESE CLASSIFIERS, NOT ONE, AND THEY DO NOT AGREE. Established by
- * >>> reading all three on 2026-09-15; none of them imports the others.
+ * WHY IT WAS REMOVED RATHER THAN LEFT. It was one of THREE classifiers for a phrase Greg ruled
+ * on 2026-09-15 (Option B: an engagement is one awarded scope commitment). A dead second
+ * definition is how the next contradiction gets written: anyone wiring it up would have put a
+ * PROJECT-grain "Active Engagements" on a screen, disagreeing with the ruled unit.
  *
- *   1. THIS ONE. Keyed on `hasAwarded` / bid / inbox membership. Emitted at
- *      `dashboard_workflow_stage` and `dashboard_workflow_label` below. **NOTHING IN THIS
- *      REPOSITORY READS EITHER FIELD** - `grep -rn 'dashboard_workflow_'` over the whole tree
- *      returns only the two lines that write them. It is dead output.
- *   2. `app/api/agency/dashboard/route.ts:55` `workflowStageForProject()`. Same four keys,
- *      same labels, same rules, copied by hand - its own comment says so and says why it is
- *      not imported. **THIS IS THE LIVE ONE**: it is what renders the stage pill on the
- *      agency dashboard at `app/agency/dashboard/page.tsx:698`.
- *   3. `app/api/agency/active-engagements/route.ts:527`. **DIFFERENT RULES.** It keys on
- *      `projects.status` text rather than on awarded/bid/inbox membership, adds `onboarding`
- *      and `completed` stages, and maps `on_hold` to `active_engagements` - a project this
- *      one and #2 would never call active. Also dead: `dashboardWorkflowStage` and
- *      `dashboardWorkflowLabel` have no reader either.
- *
- * So the phrase enters the vocabulary in three places with two different definitions, and the
- * copy a customer actually sees comes from #2. Renaming the label is a product decision and is
- * NOT made here; the ruling is owed in docs/active-engagements-one-source.md.
+ * THE LIVE CLASSIFIER IS UNTOUCHED, in app/api/agency/dashboard/route.ts. If a stage is ever
+ * needed on this route, import or reuse that one rather than reintroducing a copy.
  */
-function dashboardWorkflowForProject(
-  projectId: string,
-  hasAwarded: boolean,
-  bidProjectIds: Set<string>,
-  inboxProjectIds: Set<string>
-): { key: string; label: string } {
-  if (hasAwarded) return { key: 'active_engagements', label: 'Active Engagements' }
-  if (bidProjectIds.has(projectId)) return { key: 'bid_management', label: 'Bid Management' }
-  if (inboxProjectIds.has(projectId)) return { key: 'rfp_broadcast', label: 'RFP Broadcast' }
-  return { key: 'setup', label: 'Setup' }
-}
 
 /** TEMP: verbose PostgREST / Supabase error logging for debugging 500s on GET /api/projects */
 function logSupabaseError(label: string, err: unknown) {
@@ -174,8 +137,6 @@ export async function GET(request: NextRequest) {
     let agencyDashboardStats:
       | {
           total_unique_clients: number
-          total_active_engagements: number
-          total_awarded_engagements: number
           total_client_budget: number | null
           total_partner_spend_usd: number
         }
@@ -228,47 +189,12 @@ export async function GET(request: NextRequest) {
 
       const agencyProjectIds = (projects || []).map((p: { id: string }) => p.id).filter(Boolean)
 
-      const projectIdsWithAwarded = new Set<string>()
-      for (const p of projects || []) {
-        const row = p as { id?: string; project_assignments?: unknown }
-        const pid = String(row.id || '')
-        if (!pid) continue
-        const assigns = unwrapAssignmentRows(row.project_assignments)
-        if (assigns.some((a) => a.status === 'awarded')) projectIdsWithAwarded.add(pid)
-      }
-
-      const inboxProjectIds = new Set<string>()
-      const bidProjectIds = new Set<string>()
-      if (agencyProjectIds.length > 0) {
-        const [inboxResult, responseResult] = await Promise.all([
-          supabase
-            .from('partner_rfp_inbox')
-            .select('project_id')
-            .in('lead_org_id', callerOrgIds)
-            .in('project_id', agencyProjectIds),
-          supabase
-            .from('partner_rfp_responses')
-            .select('status, partner_rfp_inbox(project_id)')
-            .in('lead_org_id', callerOrgIds)
-            .neq('status', 'draft'),
-        ])
-
-        for (const r of inboxResult.data || []) {
-          const pid = r.project_id as string | null
-          if (pid) inboxProjectIds.add(pid)
-        }
-
-        const idSet = new Set(agencyProjectIds)
-        for (const resp of responseResult.data || []) {
-          const inbox = resp.partner_rfp_inbox as
-            | { project_id?: string | null }
-            | { project_id?: string | null }[]
-            | null
-          const ib = Array.isArray(inbox) ? inbox[0] : inbox
-          const projId = ib?.project_id
-          if (projId && idSet.has(projId)) bidProjectIds.add(projId)
-        }
-      }
+      // The three Sets here (`projectIdsWithAwarded`, `inboxProjectIds`, `bidProjectIds`) and
+      // the two queries that filled them were removed on 2026-09-15 with the dead classifier
+      // they existed to feed. After `dashboardWorkflowForProject()` went, nothing read them:
+      // they were written and never inspected. Removing them drops TWO database round trips per
+      // agency GET (partner_rfp_inbox, and a second pass over partner_rfp_responses) and
+      // changes no field in the response.
 
       const countByProject = new Map<string, number>()
       const firstByProject = new Map<
@@ -310,17 +236,9 @@ export async function GET(request: NextRequest) {
         const pid = p.id as string
         const first = firstByProject.get(pid)
         const notes = (first?.notes as string | null) || ''
-        const wf = dashboardWorkflowForProject(
-          pid,
-          projectIdsWithAwarded.has(pid),
-          bidProjectIds,
-          inboxProjectIds
-        )
         const alertCount = countByProject.get(pid) ?? 0
         return {
           ...p,
-          dashboard_workflow_stage: wf.key,
-          dashboard_workflow_label: wf.label,
           partner_status_alert_count: alertCount,
           partner_status_alert_preview: first
             ? {
@@ -356,76 +274,39 @@ export async function GET(request: NextRequest) {
       }
 
       let total_partner_spend_usd = 0
-      const [engagementResult, spendResult] = await Promise.all([
-        supabase
-          .from('partner_rfp_responses')
-          .select('partner_rfp_inbox(project_id)')
-          .in('lead_org_id', callerOrgIds)
-          .eq('status', 'awarded'),
-        supabase
-          .from('partner_rfp_responses')
-          .select('budget_proposal')
-          .in('lead_org_id', callerOrgIds)
-          .eq('status', 'awarded'),
-      ])
+      // The sibling query that fed the deleted engagement counts went with them. It selected
+      // `partner_rfp_inbox(project_id)` from the SAME table with the SAME filters as the spend
+      // query below, so removing it drops one redundant round trip per agency GET and changes
+      // no output. See the note directly below.
+      const spendResult = await supabase
+        .from('partner_rfp_responses')
+        .select('budget_proposal')
+        .in('lead_org_id', callerOrgIds)
+        .eq('status', 'awarded')
 
       /**
-       * `total_active_engagements` IS A FIFTH UNIT FOR THE SAME PHRASE, AND NOTHING READS IT.
+       * DELETED 2026-09-15: `total_active_engagements` and `total_awarded_engagements`, and the
+       * whole block that computed them.
        *
-       * Unit: one AWARDED `partner_rfp_responses` ROW whose project passes
-       * `projectActiveByEndDate`. `projectIdPerResponse` deliberately keeps duplicates, so a
-       * project with three awarded responses contributes 3, not 1. That is the finest grain of
-       * any surface using this phrase and it is close to - but not the same as - the
-       * (assignment x awarded response) pair counted at `app/agency/project/page.tsx:566`.
+       * They were a FIFTH unit for "engagement" - one awarded `partner_rfp_responses` row,
+       * duplicates kept, the live one filtered by lib/project-liveness - and NOTHING READ
+       * THEM. They reached the client only inside `agency_dashboard_stats`, and
+       * `grep -rn 'agency_dashboard_stats'` over the whole tree returned only the single line
+       * that writes it, never a read. Proved unreferenced before removal.
        *
-       * `total_awarded_engagements` is the same set WITHOUT the liveness filter.
+       * Greg ruled the unit on 2026-09-15 (Option B: an engagement is one awarded scope
+       * commitment - an assignment). This count was close to that grain but not equal to it: it
+       * counted awarded RESPONSES, so an assignment carrying two awarded responses scored 2
+       * here and 1 under the ruling. Keeping a dead near-miss definition of a just-ruled word is
+       * exactly how the next contradiction gets written, so it is gone rather than corrected -
+       * correcting it would have meant wiring a new number to a screen, which is not this
+       * change.
        *
-       * **NO CONSUMER.** These reach the client inside `agency_dashboard_stats` at the foot of
-       * this handler, and `grep -rn 'agency_dashboard_stats'` over the whole tree returns only
-       * the single line that writes it. Verified 2026-09-15. Do not treat the number as
-       * agreeing with any tile: no tile renders it.
-       *
-       * On the error path below, `total_active_engagements` is set to the UNFILTERED total
-       * rather than to 0, so a failed `projects` read overstates rather than silently zeroes.
-       * That is deliberate and is left alone.
+       * NOTE FOR WHOEVER COMES NEXT: the surviving `agency_dashboard_stats` object is ALSO read
+       * by nothing. Its remaining three fields were left because they carry no definition of
+       * "engagement" and were outside the named scope of this deletion. See
+       * docs/engagement-ruling-report.md.
        */
-      let total_awarded_engagements = 0
-      let total_active_engagements = 0
-      const agencyProjectIdSet = new Set(agencyProjectIds)
-      if (engagementResult.error) {
-        logSupabaseError('agency GET awarded partner_rfp_responses for engagement stats', engagementResult.error)
-      } else {
-        const projectIdPerResponse: string[] = []
-        for (const r of engagementResult.data || []) {
-          const pid = inboxEmbedProjectId((r as { partner_rfp_inbox?: unknown }).partner_rfp_inbox)
-          if (!pid || !agencyProjectIdSet.has(pid)) continue
-          projectIdPerResponse.push(pid)
-          total_awarded_engagements++
-        }
-
-        const uniqueForDates = [...new Set(projectIdPerResponse)]
-        if (uniqueForDates.length > 0) {
-          const { data: projRows, error: peErr } = await supabase
-            .from('projects')
-            .select('id, end_date')
-            .in('org_id', callerOrgIds)
-            .in('id', uniqueForDates)
-
-          const endDateByProject = new Map<string, string | null>()
-          if (peErr) {
-            logSupabaseError('agency GET projects end_date for engagement stats', peErr)
-            total_active_engagements = total_awarded_engagements
-          } else {
-            for (const pr of projRows || []) {
-              endDateByProject.set(String(pr.id), (pr.end_date as string | null) ?? null)
-            }
-            for (const pid of projectIdPerResponse) {
-              if (projectActiveByEndDate(endDateByProject.get(pid))) total_active_engagements++
-            }
-          }
-        }
-      }
-
       // Process spend from spendResult
       if (spendResult.error) {
         logSupabaseError('agency GET awarded partner_rfp_responses for dashboard spend', spendResult.error)
@@ -438,8 +319,6 @@ export async function GET(request: NextRequest) {
 
       agencyDashboardStats = {
         total_unique_clients: clientNameSet.size,
-        total_active_engagements,
-        total_awarded_engagements,
         total_client_budget: anyClientBudget ? clientBudgetSum : null,
         total_partner_spend_usd,
       }

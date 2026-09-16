@@ -53,7 +53,10 @@ type ProjectEngagement = {
   id: string; title: string
   clientName?: string | null; budgetRange?: string | null
   startDate?: string | null; endDate?: string | null; status?: string | null
-  dashboardWorkflowStage?: string | null; dashboardWorkflowLabel?: string | null
+  // dashboardWorkflowStage / dashboardWorkflowLabel were DECLARED here and never read. The
+  // route that emitted them (app/api/agency/active-engagements) stopped doing so on
+  // 2026-09-15 when its dead third stage classifier was deleted. The route itself is live and
+  // still feeds everything else on this page.
   partners: PartnerRow[]
 }
 
