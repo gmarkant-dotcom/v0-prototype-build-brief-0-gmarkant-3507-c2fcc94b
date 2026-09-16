@@ -735,7 +735,29 @@ export default function PartnerProjectsPage() {
       <div className="space-y-6">
         <div>
           <h1 className="font-display font-bold text-3xl text-vendor-foreground">Delivery & Projects</h1>
-          <p className="text-vendor-muted-strong mt-1">Your active project engagements and delivery performance</p>
+          {/* WAS "Your active project engagements and delivery performance". THE WORD "ACTIVE"
+              WAS THE FALSE PART, and it had been reported and left unfixed three times -
+              670de54's own commit message names this as the third instance it did not fix.
+
+              WHAT THE LIST ACTUALLY CONTAINS: `allProjects` is every row from
+              /api/partner/projects, which filters `.eq("status", "awarded")` on the assignment
+              and the response and NOTHING ELSE (app/api/partner/projects/route.ts:129,158). It
+              selects end_date and computes `is_active` per row (`:257`) but never filters on
+              it, by an explicit decision documented at `:213-219`. A project that ended
+              eighteen months ago is still in this list.
+
+              ONE ROW IS ONE AWARDED SCOPE COMMITMENT - it carries `scope_item_name` - which is
+              an ENGAGEMENT under Greg's ruling of 2026-09-15, Option B. So "engagements" is
+              the right noun and always was; only "active" was a claim the data does not make.
+
+              RELABELLED, NOT FILTERED, FOLLOWING THE SHIPPED PRECEDENT. 670de54 fixed the two
+              sibling surfaces (app/partner/payments and app/partner/projects/[projectId]) to
+              "Awarded engagements" rather than dropping finished projects, because a vendor
+              must keep reaching finished work - on payments an overdue milestone renders only
+              inside its project group. Filtering here would also be ARITHMETIC on a
+              vendor-facing surface, which this change deliberately does not take. No query,
+              no count and no row set changed; this is copy only. */}
+          <p className="text-vendor-muted-strong mt-1">Your awarded engagements and delivery performance</p>
         </div>
 
         <PerformanceScoresSection reviews={deliveryReviews} projectNameById={projectNameById} />
@@ -764,8 +786,12 @@ export default function PartnerProjectsPage() {
         {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">Failed to load projects. Please refresh.</div>}
         {!isLoading && !error && groups.length===0 && (
           <div className="bg-vendor-surface rounded-xl border border-vendor-border p-12 text-center">
-            <div className="font-display font-bold text-xl text-vendor-foreground mb-2">{search ? "No results" : "No active projects"}</div>
-            <p className="text-vendor-muted-strong">{search ? "Try adjusting your search." : "You don't have any project assignments yet."}</p>
+            {/* WAS "No active projects", which disagreed with both the heading above and the
+                list below it: this branch renders when the vendor has NO awarded rows at all,
+                live or finished, not when they have none that are active. Now it says the
+                same thing the heading says. */}
+            <div className="font-display font-bold text-xl text-vendor-foreground mb-2">{search ? "No results" : "No awarded engagements"}</div>
+            <p className="text-vendor-muted-strong">{search ? "Try adjusting your search." : "You don't have any awarded scope items yet."}</p>
           </div>
         )}
         {!isLoading && groups.length>0 && (

@@ -37,7 +37,7 @@
 > | `app/api/partner/summary/route.ts:100` `active_engagements` | awarded `project_assignments` rows, **no liveness at all** | **A SIXTH UNIT.** The whole route is unfetched anywhere in the repo |
 > | `app/partner/payments/page.tsx:806` | awarded scope commitment | **FIXED in `670de54`**, 2026-08-28. Now "Awarded engagements", finished groups tagged |
 > | `app/partner/projects/[projectId]/page.tsx:316` | awarded scope commitment | **FIXED in `670de54`.** Now "Awarded engagements" |
-> | `app/partner/projects/page.tsx:738` | the full awarded set, no liveness | **STILL WRONG, AND KNOWN.** "Your active project engagements", with an empty state reading "No active projects", over an unfiltered list. `670de54`'s own commit message reports it as the third instance it did not fix. This run did not fix it either - see section 6c |
+> | `app/partner/projects/page.tsx:738` | the full awarded set, no liveness | **FIXED 2026-09-15 by `feat/engagement-ruling`.** Now "Your awarded engagements and delivery performance", empty state "No awarded engagements". Relabelled, NOT filtered, following `670de54`'s precedent. The row set is untouched |
 >
 > **A caution about "dead".** Four of these emit a number or a label that no screen in this
 > repository reads. That is established by grep over this tree and nothing else: it does not
@@ -410,14 +410,22 @@ finished projects makes a vendor's overdue milestone unreachable.** That reason 
 to the agency's own group header, which carries no such payload - so the two sides may not get
 the same answer, and the precedent does not decide it.
 
-**One live instance is unfixed and known.** `app/partner/projects/page.tsx:738` reads *"Your
-active project engagements and delivery performance"* over `allProjects`, the full awarded set
-with no liveness test, and its empty state at `:767` reads *"No active projects"*.
-`670de54`'s commit message reports it as the third instance it did not fix; **this run did not
-fix it either**, because it is a vendor-facing copy change on a page outside this run's stated
-scope and the memory rule on this project is to surface a scope question rather than pick a
-reading. **It is a copy fix with a shipped precedent** - the two sibling surfaces became
-"Awarded engagements" - and it needs no ruling, no query change and no arithmetic.
+**One live instance was unfixed and known. IT IS NOW FIXED.** `app/partner/projects/page.tsx`
+read *"Your active project engagements and delivery performance"* over `allProjects`, the full
+awarded set with no liveness test, with an empty state reading *"No active projects"*.
+`670de54`'s commit message reported it as the third instance it did not fix, and two further
+sessions reported it without fixing it.
+
+**`feat/engagement-ruling` fixed it on 2026-09-15**, as copy only: the heading now reads *"Your
+awarded engagements and delivery performance"* and the empty state *"No awarded engagements"*.
+Each row carries `scope_item_name` and is therefore one awarded scope commitment, which Option
+B makes an engagement - so the noun was always right and only "active" was false. **Relabelled,
+not filtered**, matching what `670de54` did to the two sibling surfaces: no query, no count and
+no row set changed. Filtering would have been arithmetic on a vendor-facing surface.
+
+**Still not done on that page:** finished groups are NOT tagged there the way
+`app/partner/payments` tags them. A vendor can see which rows are finished only from each row's
+own status badge and dates. That is a real gap and it is additive, not a correction.
 
 ### 6d. ANSWER NONE OF THIS BY GUESSING WHICH IS CHEAPEST
 
