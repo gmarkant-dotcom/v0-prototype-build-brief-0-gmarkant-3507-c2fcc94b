@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { ORG_CONTACT_SELECT, resolveOrgContact, type OrgEmbed } from "@/lib/org-contact"
 import { isActivePartnership } from "@/lib/partnership-state"
+import { isRfpClosureStatus } from "@/lib/rfp-closure"
 import { parseDoubleJson } from "@/lib/active-engagement-parse"
 import {
   groupMilestoneRows,
@@ -161,7 +162,7 @@ export async function GET() {
       supabase.from("partnerships").select("id, status, vendor_org_id, partner_email, created_at").in("lead_org_id", callerOrgIds),
       supabase
         .from("partner_rfp_inbox")
-        .select("id, project_id, scope_item_id, scope_item_name, response_deadline, vendor_org_id, recipient_email, viewed_at, created_at")
+        .select("id, project_id, scope_item_id, scope_item_name, response_deadline, vendor_org_id, recipient_email, viewed_at, created_at, status")
         .in("lead_org_id", callerOrgIds),
       supabase
         .from("partner_rfp_responses")
@@ -408,6 +409,10 @@ export async function GET() {
       deadline: string | null
       invited: number
       responded: number
+      // Recipients with no response whose inbox row the agency closed (migration 099:
+      // 'closed' for the whole RFP, 'not_selected' for one vendor). Neither is waiting on
+      // anything, so neither keeps the RFP open.
+      closed: number
     }
     const rfpGroups = new Map<string, RfpGroup>()
     for (const row of inboxRows) {
@@ -417,6 +422,13 @@ export async function GET() {
       const key = `${projectId}:${scopeItemId}`
       const hasRecipient = Boolean(row.vendor_org_id || row.recipient_email)
       const hasResponded = (responsesByInboxId.get(row.id as string) || []).length > 0
+      // STATUS, NOT closed_at. The closure route writes both in one UPDATE and a reopen
+      // would reset both, so they agree; status needs no column added by 099 to be
+      // selectable, so this select cannot 500 the dashboard where 099 is unapplied.
+      // A responded row is counted as responded even if it were ever closed, so no
+      // recipient is counted twice. (Closure never touches a row with a bid: see
+      // RFP_CLOSABLE_STATUSES in lib/rfp-closure.ts.)
+      const isClosed = !hasResponded && isRfpClosureStatus(row.status)
       const existing = rfpGroups.get(key)
       const deadline = (row.response_deadline as string | null) || null
       if (!existing) {
@@ -427,36 +439,38 @@ export async function GET() {
           deadline,
           invited: hasRecipient ? 1 : 0,
           responded: hasRecipient && hasResponded ? 1 : 0,
+          closed: hasRecipient && isClosed ? 1 : 0,
         })
       } else {
         if (hasRecipient) existing.invited += 1
         if (hasRecipient && hasResponded) existing.responded += 1
+        if (hasRecipient && isClosed) existing.closed += 1
         // Every recipient in a broadcast shares the same deadline in practice; keep
         // whichever is earliest if they ever differ, so "closing soon" errs conservative.
         if (deadline && (!existing.deadline || deadline < existing.deadline)) existing.deadline = deadline
       }
     }
     const allRfpGroups = Array.from(rfpGroups.values())
-    const openRfpGroups = allRfpGroups.filter((g) => g.responded < g.invited)
+    // OPEN = at least one recipient is still waiting: neither responded nor closed out.
+    // Before 2026-10-08 this was `g.responded < g.invited`, which could not see closure.
+    const openRfpGroups = allRfpGroups.filter((g) => g.responded + g.closed < g.invited)
 
     // ── Funnel metrics ──────────────────────────────────────────────────────────
     const activePartners = partnerships.filter((p) => isActivePartnership(p)).length
     // Distinct projects with at least one open RFP scope item, not a count of open scope
     // items themselves - a project broadcasting 3 open scopes should read as 1 open RFP.
     //
-    // >>> THIS NUMBER IS WRONG, IN TWO INDEPENDENT WAYS. FOUND 2026-09-15, REPORTED AND NOT
-    // >>> FIXED - it is a customer-visible tile and changing it deserves its own change and
-    // >>> its own walk. Evidence in docs/engagements-and-counts-report.md phase 3.
+    // >>> TWO DEFECTS WERE FOUND IN THIS NUMBER ON 2026-09-15
+    // >>> (docs/engagements-and-counts-report.md phase 3). ONE IS FIXED, ONE IS STILL OPEN.
     //
-    // 1. RFP CLOSURE IS INVISIBLE TO IT. `openRfpGroups` is `allRfpGroups.filter(g =>
-    //    g.responded < g.invited)` (see above) - no status filter, no deadline filter, no
-    //    closure filter. Migration 099 added `partner_rfp_inbox.closed_at` and the 'closed'
-    //    and 'not_selected' statuses, and app/api/agency/rfp-closure/route.ts:190 writes both
-    //    WITHOUT inserting any partner_rfp_responses row. The inbox select in this handler
-    //    fetches NEITHER `status` NOR `closed_at`. So a closed RFP that nobody bid on counts
-    //    as open here permanently, and the count only ever grows.
+    // 1. FIXED 2026-10-08 (docs/nav-restructure-report.md phase 2): RFP CLOSURE WAS
+    //    INVISIBLE TO IT. app/api/agency/rfp-closure/route.ts writes 'closed' / 'not_selected'
+    //    without inserting any partner_rfp_responses row, and this handler did not select
+    //    the inbox status, so a closed RFP nobody bid on counted as open forever. The inbox
+    //    select now carries `status` and a closed-out recipient counts in `closed` above.
     //
-    // 2. IT INHERITS A CEILING FROM A TABLE IT DOES NOT BOUND. `inboxRows` is unbounded;
+    // 2. STILL OPEN: IT INHERITS A CEILING FROM A TABLE IT DOES NOT BOUND. `inboxRows` has no
+    //    .limit() (whether the project's PostgREST max-rows setting caps it was not checked);
     //    `partner_rfp_responses` is capped at 500 newest-first in the same Promise.all, and
     //    `hasResponded` is decided from `responsesByInboxId`, built from that capped array.
     //    Past 500 lifetime responses an old recipient whose response fell outside the window
@@ -467,9 +481,9 @@ export async function GET() {
     // is silently dropped from the numerator while `totalClientBudget` sums every project
     // with no cap. The ratio understates for exactly the agencies that have the most history.
     //
-    // NEITHER DEFECT BITES AN AGENCY UNDER 500 LIFETIME RESPONSES, and whether any agency is
-    // over it was NOT measured - there is no database access in the session that found this.
-    // The settling query is in the report.
+    // THE CEILING DOES NOT BITE AN AGENCY UNDER 500 LIFETIME RESPONSES, and whether any
+    // agency is over it was NOT measured - neither session that looked had database access.
+    // The settling query is in docs/nav-restructure-report.md.
     const openRfps = new Set(openRfpGroups.map((g) => g.projectId)).size
     const monthStart = monthStartIso()
     const quarterStart = quarterStartIso()
@@ -530,7 +544,7 @@ export async function GET() {
         scopeItemName: g.scopeItemName,
         deadline: g.deadline as string,
         invited: g.invited,
-        pending: g.invited - g.responded,
+        pending: g.invited - g.responded - g.closed,
         href: "/agency/bids",
       }))
       .filter((g) => g.pending > 0)
