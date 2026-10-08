@@ -33,6 +33,10 @@ type PartnerInboxRow = {
   scope_item_name: string
   scope_item_description: string | null
   agency_company_name: string | null
+  /** The agency's organization. The route selects every inbox column, so this is present;
+   *  it is the grouping identity, because agency_company_name is a denormalized string
+   *  copied onto the row at send time. */
+  lead_org_id?: string | null
   created_at?: string | null
   response_deadline?: string | null
   partner_intent?: "will_respond" | "has_questions" | "requesting_call" | null
@@ -688,21 +692,38 @@ function PartnerRFPsContent({ surface }: { surface: RfpSurface }) {
         })
       : allRows
 
-    const map = new Map<string, PartnerInboxRow[]>()
+    // BY AGENCY MEANS BY ORGANIZATION, NOT BY NAME. agency_company_name is a string copied
+    // onto each inbox row when the RFP was sent, so keying on it merged two organizations
+    // that share a name and split one organization across its old and new names. The key is
+    // lead_org_id; the label is the name on that organization's NEWEST row, so a renamed
+    // agency shows its current name. A row with no lead_org_id falls back to its name.
+    const map = new Map<string, { label: string; labelAt: string; rows: PartnerInboxRow[] }>()
     for (const r of filtered) {
-      const key = groupBy === "agency"
-        ? (r.agency_company_name || "Unknown Agency").trim()
+      const name = (r.agency_company_name || "Unknown Agency").trim()
+      const label = groupBy === "agency"
+        ? name
         : groupBy === "client"
           ? ((r.client_name || "").trim() || "-")
           : (RFP_STATUSES.find(s => s.key === normaliseForTab(rowStatus(r)))?.label ?? "New")
-      const list = map.get(key) ?? []
-      list.push(r)
-      map.set(key, list)
+      const key = groupBy === "agency"
+        ? (r.lead_org_id ? `org:${r.lead_org_id}` : `name:${name}`)
+        : label
+      const at = r.created_at || ""
+      const group = map.get(key)
+      if (!group) {
+        map.set(key, { label, labelAt: at, rows: [r] })
+      } else {
+        group.rows.push(r)
+        if (at > group.labelAt) {
+          group.label = label
+          group.labelAt = at
+        }
+      }
     }
 
     return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([label, rows]) => ({ label, rows }))
+      .map(([key, g]) => ({ key, label: g.label, rows: g.rows }))
+      .sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key))
   }, [allRows, search, groupBy])
 
   const totalRfps = allRows.length
@@ -915,7 +936,7 @@ function PartnerRFPsContent({ surface }: { surface: RfpSurface }) {
               <div className="space-y-4">
                 {groups.map((g, i) => (
                   <GroupSection
-                    key={g.label}
+                    key={g.key}
                     label={g.label}
                     rows={g.rows}
                     defaultOpen={i === 0}
