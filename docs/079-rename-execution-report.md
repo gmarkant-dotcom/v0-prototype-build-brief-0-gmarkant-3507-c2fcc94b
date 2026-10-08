@@ -1,3 +1,8 @@
+> **STATUS CHECK, 2026-10-08 (`feat/clients-and-projects` run).** "Nothing pushed, nothing
+> merged" below is STALE for the report itself: `git merge-base --is-ancestor 6f54f1c main` was
+> EXECUTED and exited 0, where `6f54f1c` is the commit that added THIS FILE. NOT checked: each of
+> the three branch commits individually. Re-run the command, do not trust this line.
+
 # The 079 rename: execution report
 
 ## State of play

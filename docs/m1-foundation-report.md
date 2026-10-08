@@ -1,3 +1,9 @@
+> **STATUS CHECK, 2026-10-08 (`feat/clients-and-projects` run).** The "not pushed and not
+> merged" line below is STALE. `git merge-base --is-ancestor 65867d6 main` was EXECUTED and
+> exited 0, where `65867d6` is the commit that added THIS FILE. That proves the report is on
+> `main`; it was NOT checked commit by commit that all five branch commits are. Re-run the
+> command, do not trust this line.
+
 # M1 foundation run report
 
 Branch `feat/m1-foundation`, five commits, **not pushed and not merged**.

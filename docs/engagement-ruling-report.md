@@ -1,3 +1,8 @@
+> **STATUS CHECK, 2026-10-08 (`feat/clients-and-projects` run). The header below is STALE.**
+> `git merge-base --is-ancestor 789d879 main` was EXECUTED and exited 0, so its last commit is
+> on `main`. This is the ninth report in `docs/` to declare itself unmerged while merged. To
+> re-check, run that command; do not read this line as current.
+
 # The engagement ruling: recorded, applied, and the dead definitions removed
 
 > ## MERGE STATUS: **NOT MERGED** as of 2026-09-15.

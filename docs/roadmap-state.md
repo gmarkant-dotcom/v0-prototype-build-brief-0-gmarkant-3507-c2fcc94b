@@ -1,3 +1,20 @@
+> # THIRD CORRECTION BANNER, 2026-10-08 (`feat/clients-and-projects` run). READ THIS FIRST.
+>
+> The two banners below stand. Rows are marked **RESOLVED** only where this run checked the code
+> itself, and **DISPROVEN** separately, because a reader of "resolved" goes looking for a fix.
+>
+> | Says | Status now | Verified by |
+> | --- | --- | --- |
+> | Banner D and S3.1 and S6.2: migration 100 is AUTHORED AND NOT APPLIED | **CONTRADICTED BY THE RUN BRIEF, NOT BY THE REPO.** The 2026-10-08 brief states migrations run to 100 and all are applied, 100 verified that morning. Nothing in the repository records this, and no SQL was run here. `docs/nav-restructure-report.md` query 4 settles it | Brief (Greg), not re-derivable |
+> | S4.2 and the spec: `agency-layout.tsx:48` says 00 Budgeting is NOT "COMING SOON" | **RESOLVED** (superseded). The comment was rewritten; 00 now renders as non-navigable "Coming soon" with no href | `components/agency-layout.tsx:48-58` read |
+> | S3 ruling 5: `compare` does not emit | **STILL TRUE.** `compare/route.ts` has no `recordMilestone` call; its two matches are in a comment saying it must not | `grep -c recordMilestone` EXECUTED: compare 2 (both in the header comment), decompose 5 |
+> | Open: "Clients + Projects" destination not built (`docs/nav-restructure-report.md` 4f) | **BUILT ON `feat/clients-and-projects`.** Merge state: `git merge-base --is-ancestor 6c88b1b main` | The page and route read |
+> | Open: 500-row ceiling truncates `committedPartnerSpend` (`docs/nav-restructure-report.md` 5, 2c) | **THE SUM IS FIXED ON THAT BRANCH. The `hasResponded` half is NOT.** See `docs/clients-and-projects-report.md` phase 2 | Code read |
+> | Unlinked routes: `/agency/payments`, `/utilization`, `/msa`, `/cashflow` | **STILL UNLINKED, none new.** The restructure orphaned nothing: the `href` sets of both layouts are identical to `909f76d` | `grep -o 'href'` over both layouts at `909f76d` and `HEAD`, EXECUTED |
+>
+> Also found stale and now marked: `docs/engagement-ruling-report.md` (merged, header says not),
+> `docs/m1-foundation-report.md`, `docs/079-rename-execution-report.md`.
+
 > # SECOND CORRECTION BANNER, 2026-09-15. THERE ARE NOW TWO. READ BOTH, THIS ONE FIRST.
 >
 > Added by the `feat/engagements-one-source` run. The banner below mine was added the same day by

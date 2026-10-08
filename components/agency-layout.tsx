@@ -58,9 +58,9 @@ declare global {
  * in the RFP Broadcast dropdown below, because moving a live feature behind a dead item would
  * orphan it. The move is owed for when 00 becomes navigable.
  *
- * "CLIENT PROFILES" IS NOW "CLIENTS + PROJECTS", AS A RENAME ONLY. Ruled in the same brief,
- * answering OPEN-5. The destination is unchanged: /agency/clients does not yet list a
- * client's projects, and building that repository is separate work.
+ * "CLIENT PROFILES" IS NOW "CLIENTS + PROJECTS". Ruled in the same brief, answering OPEN-5.
+ * The rename shipped first; /agency/clients now lists each client's projects
+ * (docs/clients-and-projects-report.md), so the label and the page agree.
  *
  * NO URL CHANGES IN THIS RESTRUCTURE. Every href below is byte for byte what it was; labels,
  * grouping and numbering are the whole of the diff.
