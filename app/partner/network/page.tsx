@@ -26,6 +26,7 @@ import {
   businessCriteriaHoldsMatchesSelection,
   withBusinessCriteriaDefaults,
 } from "@/lib/business-criteria"
+import { relationshipNotice, relationshipTag } from "@/lib/relationship-copy"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 // Reused verbatim from app/partner/invitations/page.tsx and app/partner/discover/page.tsx.
@@ -1349,6 +1350,14 @@ function AgencyNetworkPageInner() {
                         <div className="text-vendor-muted text-xs">Status</div>
                         <div className="text-vendor-foreground font-medium capitalize">{agencyPartnership.status}</div>
                       </div>
+                      {relationshipTag(agencyPartnership.status) && (
+                        <div className="col-span-2 text-xs text-vendor-muted-strong">
+                          {relationshipNotice(
+                            selectedAgency.company_name || selectedAgency.full_name || "this agency",
+                            relationshipTag(agencyPartnership.status)!
+                          )}
+                        </div>
+                      )}
                       {agencyPartnership.accepted_at && (
                         <div>
                           <div className="text-vendor-muted text-xs">Partnered since</div>

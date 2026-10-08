@@ -98,7 +98,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
               ? `They have not listed themselves in the marketplace, and your partnership is ${partnership.status}.`
               : "They have not listed themselves in the marketplace, and you have no partnership with them.",
             unlock: partnership
-              ? "Their profile opens when they accept your invitation."
+              ? partnership.status === "suspended" || partnership.status === "terminated"
+                ? "Their full profile opens again when the partnership is reinstated."
+                : "Their profile opens when they accept your invitation."
               : "Invite them to your vendor network. Once they accept, their full profile opens to you.",
           },
           { status: 403, headers: noStore }
@@ -132,6 +134,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
         ? "public"
         : "none"
 
+    // A suspended or terminated partnership was accepted once. "When they accept your
+    // invitation" is wrong for it and reads as if the vendor still owed an answer; what opens
+    // the profile again is reinstating the partnership.
+    const endedByAgency = partnership?.status === "suspended" || partnership?.status === "terminated"
     const access =
       tier === "partnership"
         ? { tier, reason: "You have an active partnership with this vendor.", unlock: null as string | null }
@@ -142,13 +148,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
                 ? `This vendor's public marketplace profile. Your partnership is ${partnership.status}, so contact details, rates, documents and delivery history stay closed.`
                 : "This vendor's public marketplace profile. You have no partnership with them, so contact details, rates, documents and delivery history stay closed.",
               unlock: partnership
-                ? "They open when the vendor accepts your invitation."
+                ? endedByAgency
+                  ? "They open again when the partnership is reinstated."
+                  : "They open when the vendor accepts your invitation."
                 : "Invite them to your vendor network. They open when the vendor accepts.",
             }
           : {
               tier,
               reason: `This vendor has not listed themselves in the marketplace, and your partnership is ${partnership?.status ?? "not active"}, so only your own record of them is shown.`,
-              unlock: "Their profile opens when they accept your invitation.",
+              unlock: endedByAgency
+                ? "Their profile opens again when the partnership is reinstated."
+                : "Their profile opens when they accept your invitation.",
             }
 
     // Rate info can be embedded in the bio, so the bio is always parsed - but the parsed rate

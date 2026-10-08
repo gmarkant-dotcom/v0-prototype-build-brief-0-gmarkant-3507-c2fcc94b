@@ -81,3 +81,43 @@ export const RELATIONSHIP_ACT_COPY: Record<RelationshipAct, RelationshipActCopy>
     destructive: false,
   },
 }
+
+
+/**
+ * THE VENDOR-SIDE RELATIONSHIP TAG, SHARED. Moved here from app/partner/payments/page.tsx so
+ * every vendor surface that shows work belonging to a paused or ended relationship uses the
+ * SAME tag and the SAME sentence (commit edff222 set the pattern; a second one would be the
+ * defect). Greg's ruling of 2026-09-14: a vendor who is owed money keeps seeing what they are
+ * owed after the relationship ends, because the counterparty keeps their record. Ruling 1 of
+ * docs/relationship-end-rulings.md extends the same principle to work already awarded.
+ *
+ * SUSPENDED IS NOT TERMINATED AND IS NOT LABELLED AS IF IT WERE. A paused relationship can
+ * resume; telling a vendor it "ended" would be its own false statement. 'pending' returns null
+ * on purpose: a relationship that has not started has not ended either. 'removed' is tagged
+ * "Ended": an agency archived the contact, and the vendor should know something changed.
+ *
+ * NOTHING HERE FILTERS. A tag describes a row; it never removes one.
+ */
+export function relationshipTag(status: string | null | undefined): { label: string; ended: boolean } | null {
+  const s = String(status || "").trim().toLowerCase()
+  if (s === "" || s === "active" || s === "pending") return null
+  if (s === "suspended") return { label: "Paused", ended: false }
+  // 'terminated' and 'removed' both mean the agency ended it. Any status added to the CHECK
+  // constraint later lands here and reads "Ended", which errs toward telling the vendor
+  // something changed rather than staying silent about it.
+  return { label: "Ended", ended: true }
+}
+
+/**
+ * The sentence for a paused or ended relationship. Says what changed and what did not, and
+ * claims nothing about access: the vendor keeps their work, documents and payments today.
+ * "from their vendor pool" is deliberate. Only the pool broadcast checks the partnership; an
+ * RFP sent to a typed address or a Lightning link does not (docs/relationship-end-phase0.md
+ * section 2, rows 7 and 8), so "you will not be sent new RFPs" would overclaim.
+ */
+export function relationshipNotice(agency: string, tag: { label: string; ended: boolean }): string {
+  if (!tag.ended) {
+    return `Your relationship with ${agency} is paused. Your current work, documents and anything you are owed stay available to you. ${agency} cannot choose you for new RFPs from their vendor pool while it is paused.`
+  }
+  return `Your relationship with ${agency} has ended. Work already awarded to you continues, and your record of past work and anything you are owed stays available to you. ${agency} cannot choose you for new RFPs from their vendor pool.`
+}

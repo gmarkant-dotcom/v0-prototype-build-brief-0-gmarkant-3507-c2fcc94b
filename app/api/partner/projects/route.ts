@@ -86,7 +86,7 @@ export async function GET() {
 
     const { data: userPartnerships, error: pErr } = await supabase
       .from("partnerships")
-      .select("id, lead_org_id")
+      .select("id, lead_org_id, status")
       .in("vendor_org_id", callerOrgIds)
 
     if (pErr) throw pErr
@@ -98,8 +98,13 @@ export async function GET() {
 
     const partnershipIdSet = new Set(partnershipIds)
     const agencyByPartnership = new Map<string, string | null>()
+    // The state of each relationship, carried to the page so a paused or ended one is tagged
+    // rather than rendered like an active one. DESCRIPTIVE ONLY: it filters nothing, and a
+    // project is listed whatever this says (ruling 1, in-flight work continues).
+    const statusByPartnership = new Map<string, string | null>()
     for (const s of userPartnerships || []) {
       agencyByPartnership.set(s.id as string, s.lead_org_id != null ? String(s.lead_org_id) : null)
+      statusByPartnership.set(s.id as string, (s.status as string | null) ?? null)
     }
 
     // Fetch agency profiles for display names
@@ -203,6 +208,8 @@ export async function GET() {
       end_date: string | null
       status: string | null
       partnership_id: string
+      /** partnerships.status of this relationship. Descriptive only, never a filter. */
+      relationship_status: string | null
       lead_org_id: string | null
       agency_name: string
       assignment_id: string
@@ -247,6 +254,7 @@ export async function GET() {
         end_date: (proj?.end_date as string | null) ?? null,
         status: (proj?.status as string | null) ?? null,
         partnership_id,
+        relationship_status: statusByPartnership.get(partnership_id) ?? null,
         lead_org_id: agencyId,
         agency_name: agencyId ? (agencyNameById.get(agencyId) ?? "Lead Agency") : "Lead Agency",
         assignment_id: asg?.assignment_id ?? "",
@@ -277,6 +285,7 @@ export async function GET() {
         end_date: (proj?.end_date as string | null) ?? null,
         status: (proj?.status as string | null) ?? null,
         partnership_id,
+        relationship_status: statusByPartnership.get(partnership_id) ?? null,
         lead_org_id: agencyId,
         agency_name: agencyId ? (agencyNameById.get(agencyId) ?? "Lead Agency") : "Lead Agency",
         assignment_id: a.id as string,

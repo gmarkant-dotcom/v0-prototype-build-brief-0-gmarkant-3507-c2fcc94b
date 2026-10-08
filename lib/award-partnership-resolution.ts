@@ -4,6 +4,12 @@ import { notifyPartnershipAccepted } from "@/lib/notifications"
 
 export type PartnershipResolution = { partnershipId: string } | { error: string }
 
+/** A relationship the agency itself paused or ended. Not a ghost or pending row, so the
+ *  claim-and-activate branches below must leave its status alone. */
+function isEndedByAgency(status: string | null | undefined): boolean {
+  return status === "suspended" || status === "terminated"
+}
+
 /**
  * H2 - award is mutual consent: resolves (claiming or creating as needed) the partnership
  * an award's project_assignment row must be keyed to, instead of refusing when one doesn't
@@ -70,11 +76,11 @@ export async function resolvePartnershipForAward(
   const orParts: string[] = []
   if (partnerIdForResolution) orParts.push(`vendor_org_id.eq.${partnerIdForResolution}`)
   if (normalizedEmail) orParts.push(`partner_email.ilike.${normalizedEmail}`)
-  let existingRow: { id: string; vendor_org_id: string | null } | null = null
+  let existingRow: { id: string; vendor_org_id: string | null; status?: string | null } | null = null
   if (orParts.length > 0) {
     const { data: rows, error: findErr } = await supabase
       .from("partnerships")
-      .select("id, vendor_org_id")
+      .select("id, vendor_org_id, status")
       .eq("lead_org_id", agencyId)
       .or(orParts.join(","))
       .limit(1)
@@ -82,6 +88,17 @@ export async function resolvePartnershipForAward(
       return { error: findErr.message }
     }
     existingRow = (rows && rows[0]) || null
+  }
+
+  if (existingRow && isEndedByAgency(existingRow.status)) {
+    // SUSPENDED AND TERMINATED ARE NOT A STATE TO CLAIM AND ACTIVATE. This branch exists for a
+    // ghost or still-pending row the award is promoting. Writing 'active' over a row the
+    // agency deliberately paused or ended would undo that act without the agency asking, and
+    // notifyPartnershipAccepted below would then announce an acceptance that never happened.
+    // The award proceeds against the row as it is; reinstating is a separate, explicit act
+    // (lib/relationship-transitions.ts). Whether an award to such a vendor should be allowed
+    // at all is a product question recorded in docs/relationship-end-report.md.
+    return { partnershipId: existingRow.id }
   }
 
   if (existingRow) {
@@ -116,7 +133,7 @@ export async function resolvePartnershipForAward(
   if (orParts.length > 0) {
     const { data: recheckRows, error: recheckErr } = await supabase
       .from("partnerships")
-      .select("id, vendor_org_id")
+      .select("id, vendor_org_id, status")
       .eq("lead_org_id", agencyId)
       .or(orParts.join(","))
       .limit(1)
@@ -124,6 +141,9 @@ export async function resolvePartnershipForAward(
       return { error: recheckErr.message }
     }
     const recheckRow = recheckRows && recheckRows[0]
+    if (recheckRow && isEndedByAgency(recheckRow.status as string | null | undefined)) {
+      return { partnershipId: recheckRow.id as string }
+    }
     if (recheckRow) {
       const { error: claimErr } = await supabase
         .from("partnerships")

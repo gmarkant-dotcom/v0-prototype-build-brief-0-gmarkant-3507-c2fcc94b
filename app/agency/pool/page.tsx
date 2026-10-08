@@ -1208,6 +1208,17 @@ function PartnerPoolPageInner() {
     [selectedColleagueId, colleagueConnections],
   )
 
+  /** How many rows in the Active vendors column are suspended or terminated. They stay in this
+   *  column on purpose (a new grouping is an owed ruling, docs/relationship-end-report.md), so
+   *  the column says so rather than leaving its header to promise something it does not mean. */
+  const inactiveNetworkCount = useMemo(
+    () =>
+      allNetworkRows.filter(
+        (row) => row.mode === "prod" && (row.p.status === "suspended" || row.p.status === "terminated")
+      ).length,
+    [allNetworkRows]
+  )
+
   const filteredNetworkRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
     return allNetworkRows.filter((row) => {
@@ -1863,7 +1874,9 @@ function PartnerPoolPageInner() {
               <span className="font-mono text-2xs text-foreground-muted">{filteredNetworkRows.length}</span>
             </div>
             <p className="text-xs text-foreground-muted mb-4">
-              Vendors you can send RFPs to and collaborate with directly.
+              {inactiveNetworkCount > 0
+                ? `Vendors you can send RFPs to and collaborate with directly. ${inactiveNetworkCount} ${inactiveNetworkCount === 1 ? "vendor here is" : "vendors here are"} suspended or terminated, tagged below, and cannot be sent RFPs from your pool.`
+                : "Vendors you can send RFPs to and collaborate with directly."}
             </p>
             <div className="space-y-2 md:overflow-y-auto md:max-h-[600px] md:pr-1">
               {filteredNetworkRows.length === 0 ? (
@@ -1978,9 +1991,18 @@ function PartnerPoolPageInner() {
                   const title = p.partnerCompany || p.partnerName || p.partnerEmail
                   // Only two dates are real here: when they accepted, and when the contact
                   // entered the pool. Nothing invents an "active since" out of an invitation.
-                  const subLine = p.acceptedAt
-                    ? `Active since ${new Date(p.acceptedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
-                    : `Added ${new Date(p.partnershipCreatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                  // A suspended or terminated row must not read "Active since": it is not active, and
+                  // that sentence was the card's only statement of state besides the pill.
+                  const acceptedLabel = p.acceptedAt
+                    ? new Date(p.acceptedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : null
+                  const subLine = p.status === "suspended"
+                    ? `Suspended${acceptedLabel ? `. Partnered since ${acceptedLabel}` : ""}`
+                    : p.status === "terminated"
+                      ? `Terminated${acceptedLabel ? `. Partnered since ${acceptedLabel}` : ""}`
+                      : acceptedLabel
+                        ? `Active since ${acceptedLabel}`
+                        : `Added ${new Date(p.partnershipCreatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
                   const badgeLabel = bl
                     ? "Blacklisted"
                     : pending
@@ -2003,7 +2025,11 @@ function PartnerPoolPageInner() {
                             ? "border-amber-500/25"
                             : isActive
                               ? "border-success/25"
-                              : "border-border",
+                              : p.status === "suspended"
+                                ? "border-amber-500/25"
+                                : p.status === "terminated"
+                                  ? "border-red-500/25"
+                                  : "border-border",
                       )}
                     >
                       <div className="flex items-center gap-3 min-w-0">
@@ -2239,7 +2265,11 @@ function PartnerPoolPageInner() {
                                   ? "bg-accent/10 text-accent"
                                   : p.status === "active"
                                     ? "bg-success/10 text-success"
-                                    : "bg-white/10 text-foreground-muted",
+                                    : p.status === "suspended"
+                                      ? "bg-amber-500/10 text-amber-400"
+                                      : p.status === "terminated"
+                                        ? "bg-red-500/10 text-red-400"
+                                        : "bg-white/10 text-foreground-muted",
                           )}
                         >
                           {badgeLabel}

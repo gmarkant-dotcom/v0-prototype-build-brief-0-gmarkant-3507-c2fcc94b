@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils"
 import { isDemoMode } from "@/lib/demo-data"
 import { isMilestoneOverdue, isMilestonePaid } from "@/lib/partner-payments"
+import { relationshipNotice, relationshipTag } from "@/lib/relationship-copy"
 
 
 // Redirect to Active Projects where payments are now managed
@@ -243,42 +244,6 @@ function agencyLabel(p: PartnershipApiRow) {
   const a = p.lead_org
   const name = (a?.name || "").trim() || (a?.contact_name || "").trim()
   return name || "Lead agency"
-}
-
-/**
- * THE RELATIONSHIP TAG. Greg's ruling of 2026-09-14: a vendor who is owed money keeps seeing
- * what they are owed after the relationship ends, because the counterparty keeps their record.
- *
- * WHAT THIS SOLVES. An unpaid milestone from an ended partnership renders identically to one
- * from a live partnership, so a vendor chases it as ordinary business: they invoice, they
- * follow up, and nothing on the screen tells them the relationship behind it is over.
- *
- * SUSPENDED IS NOT TERMINATED AND IS NOT LABELLED AS IF IT WERE. A paused relationship can
- * resume; telling a vendor it "ended" would be its own false statement, and the point of this
- * tag is to stop the screen making one. 'pending' returns null on purpose: a relationship that
- * has not started yet has not ended either.
- *
- * CORRECT IN BOTH WORLDS. Today the route filters to status='active' and the client filters
- * again below, so nothing here can render. It is driven entirely off the row's status, so it
- * starts telling the truth the moment those filters come off and needs no second edit.
- * See docs/pool-counts-and-payments-report.md section 2.
- */
-function relationshipTag(status: string | null | undefined): { label: string; ended: boolean } | null {
-  const s = String(status || "").trim().toLowerCase()
-  if (s === "" || s === "active" || s === "pending") return null
-  if (s === "suspended") return { label: "Paused", ended: false }
-  // 'terminated' and 'removed' both mean the agency ended it. Any status added to the CHECK
-  // constraint later lands here and reads "Ended", which errs toward telling the vendor
-  // something changed rather than staying silent about it.
-  return { label: "Ended", ended: true }
-}
-
-/** The sentence under the agency selector. Says what changed, and what did not. */
-function relationshipNotice(agency: string, tag: { label: string; ended: boolean }): string {
-  if (!tag.ended) {
-    return `Your relationship with ${agency} is paused. Anything you are owed stays on this page, and you will not be sent new RFPs while it is paused.`
-  }
-  return `Your relationship with ${agency} has ended. Anything you are owed stays on this page so you can still see and chase it, and you will not be sent new RFPs.`
 }
 
 function agencyInitials(name: string) {

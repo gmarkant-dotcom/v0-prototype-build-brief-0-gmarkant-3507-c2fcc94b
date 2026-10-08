@@ -13,6 +13,7 @@ import {
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { relationshipNotice, relationshipTag } from "@/lib/relationship-copy"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,8 @@ type PartnerProject = {
   end_date: string | null
   status: string | null
   partnership_id: string
+  /** partnerships.status; drives the Paused / Ended tag. Never a filter. */
+  relationship_status?: string | null
   lead_org_id: string | null
   agency_name: string
   assignment_id: string
@@ -500,6 +503,15 @@ function SlideOverPanel({ project, onClose }: { project: PartnerProject; onClose
           <button type="button" onClick={onClose} className="text-vendor-muted/70 hover:text-vendor-foreground mt-1"><X className="w-5 h-5" /></button>
         </div>
 
+        {/* Same tag and same sentence as /partner/payments (lib/relationship-copy.ts). This
+            panel is where a vendor keeps delivering, so it is where "business as usual" would
+            otherwise be implied. Describes the relationship; hides nothing. */}
+        {relationshipTag(project.relationship_status) && (
+          <div className="px-6 py-3 border-b border-vendor-border bg-vendor-background/60 text-sm text-vendor-muted-strong">
+            {relationshipNotice(project.agency_name, relationshipTag(project.relationship_status)!)}
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex border-b border-vendor-border shrink-0">
           {tabs.map(t => (
@@ -523,6 +535,15 @@ function SlideOverPanel({ project, onClose }: { project: PartnerProject; onClose
 
 // ── Project card (clickable row) ───────────────────────────────────────────────
 
+function RelationshipPill({ tag }: { tag: { label: string; ended: boolean } }) {
+  return (
+    <span className={cn("font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+      tag.ended ? "bg-red-100 text-red-900 border-red-300" : "bg-orange-100 text-orange-900 border-orange-300")}>
+      {tag.label}
+    </span>
+  )
+}
+
 function ProjectCard({ project, onClick }: { project: PartnerProject; onClick: () => void }) {
   const dateRange = formatDateRange(project.start_date, project.end_date)
   const budget = parseBudgetNumber(project.budget_proposal)
@@ -533,6 +554,9 @@ function ProjectCard({ project, onClick }: { project: PartnerProject; onClick: (
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
           <span className="font-display font-bold text-base text-vendor-foreground truncate">{project.scope_item_name || project.project_name}</span>
+          {relationshipTag(project.relationship_status) && (
+            <RelationshipPill tag={relationshipTag(project.relationship_status)!} />
+          )}
           {project.status && (
             <span className={cn("font-mono text-2xs px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
               project.status==="active" ? "bg-success/15 text-success border-success/30" : "bg-gray-100 text-vendor-muted-strong border-vendor-border")}>
@@ -559,6 +583,10 @@ function GroupSection({ label, projects, defaultOpen, onProjectClick }: {
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const totalBudget = projects.reduce((s, p) => s + parseBudgetNumber(p.budget_proposal), 0)
+  // One tag for the group only when every engagement in it shares the same state, which is
+  // always so when grouped by agency. Grouped by client the cards carry their own tags.
+  const groupTags = new Set(projects.map((p) => relationshipTag(p.relationship_status)?.label ?? ""))
+  const groupTag = groupTags.size === 1 ? relationshipTag(projects[0]?.relationship_status) : null
 
   return (
     <div className="rounded-xl border border-vendor-border bg-vendor-background/50 overflow-hidden">
@@ -571,6 +599,7 @@ function GroupSection({ label, projects, defaultOpen, onProjectClick }: {
           <div className="font-display font-bold text-xl text-vendor-foreground">{label}</div>
           <div className="flex items-center gap-3 mt-0.5 font-mono text-2xs text-vendor-muted">
             <span>{projects.length} engagement{projects.length!==1?"s":""}</span>
+            {groupTag && <RelationshipPill tag={groupTag} />}
             {totalBudget>0 && <span>{formatBudgetK(totalBudget)} total</span>}
           </div>
         </div>
