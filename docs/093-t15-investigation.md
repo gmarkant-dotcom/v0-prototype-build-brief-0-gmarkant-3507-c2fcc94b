@@ -241,3 +241,71 @@ ROLLBACK;
 
 Note: C-probe writes inside a rolled-back transaction. It is SQL I'm giving you to run, not SQL I
 ran, and it is marked here as a write so you can decide.
+
+---
+
+## 7. Executed evidence, 2026-10-08 (second query): the dead claim path is in production
+
+**EXECUTED, user, Supabase SQL Editor, read-only, 2026-10-08, live database.** Partnerships with
+`vendor_org_id` NULL, `status` pending, and `partner_email` equal to an existing profile's email
+on `lower(btrim())`: **six**.
+
+| Group | Count | Partnership ids | Account vs invite |
+|---|---|---|---|
+| A. account created AFTER the invite | 5 | `bb11eb12-14e0-45a8-9bdb-486dc21bb3c2`, `636bb47a-66ff-4257-ab39-e80ff807527e`, `55ba0c93-d5f3-4b39-9825-b423dc4456eb`, `59db6474-eb31-4631-a6fb-fb2c5d6de866`, `94cfd20a-a238-44d5-8852-598e5b64cbd8` | the sign-up claim (W4) should have linked these |
+| B. account PREDATES the invite | 1 | `e3d5e1fd-2e4a-44df-baaf-37d682f63e05` | account March 2026, invite July 2026 |
+
+### 7a. Group A is the claim path, dead in production
+
+These five are the rows section 2a predicted: an invitation, then a sign-up with the invited
+address, and the row is still unclaimed. With section 1's executed 0 (the claimer cannot SELECT
+`55ba0c93`, which is one of the five), W4's lookup returns an empty array and returns `ok: true`
+without writing. The user reports this has been live since at least June 2026. Section 2a was an
+inference; group A is the production footprint it predicts. It is not a proof that W4 ran for each
+of the five, since I have no callback logs, but five rows in the predicted state with a confirmed
+invisible-row mechanism is consistent with it.
+
+This is a pre-existing production defect on main. 093 neither causes nor fixes it, and 093's
+claim-policy change does not alter it (both policies sit behind the same SELECT filter).
+
+### 7b. Group B is a SEPARATE defect: the invite was created unlinked
+
+`e3d5e1fd` cannot be explained by the claim path. The account existed four months before the
+invite, so there was a profile, and an organization, to link at invite time. The INSERT policy
+permits it: **READ**, `supabase/migrations/087_partnership_vendor_identity.sql:566-579` admits
+`vendor_org_id IS NULL OR org_has_member_with_email(vendor_org_id, partner_email)`. The link was
+not made because the writing site did not ask for one. Nothing in the database records which
+site wrote the row, so I cannot say which of these did; they are the sites that insert a
+partnerships row with a NULL link, with the reason each leaves it NULL (all **READ**):
+
+| Site | Line | Why `vendor_org_id` is NULL although an account may exist |
+|---|---|---|
+| `lib/server/partner-pool-import.ts` | 267-283 (insert at 314, 325) | It computes `matchedProfileId` (line ~245) for the account, uses it only to set a flag and note, and hard-codes `vendor_org_id: null`, `status: "pending"`, `profile_status: "unclaimed"`. Its comment states the intent: activation only via invite then accept. Profile match is `.in("email", ...)`, exact case, so a differently-cased address is not matched at all. |
+| `app/api/agency/email-scan/import/route.ts` | 113-124 | Same shape: `vendor_org_id: null`, `status: "pending"`, with `matchedProfileId` computed above and used only for a note. Comment at ~103 says never touch `vendor_org_id` here. |
+| `app/api/agency/pool/resend-invitation/route.ts` via `lib/partnership-invitations.ts` | route 96; lib 86-98 | The route calls `markPartnershipInvited` with no `partnerId`; the lib writes `vendor_org_id: partnerId \|\| null`. Reaches the insert only when no row exists for the email. |
+| `app/api/partnerships/route.ts` | 654-679 (insert at 723) | The direct invite. It links when `resolveOrgIdForUser` finds an org, but looks the profile up by `.ilike('email', partnerEmail).maybeSingle()` (line 526), so an invitee address containing `_` or `%`, or two profiles matching, gives no link or an error; and a matched profile with no organization is logged and left NULL (lines 668-674). |
+| `app/api/rfp/guest/[token]/route.ts` | 75-82 | Case 2/3 ghost insert: `vendor_org_id: null`. |
+| `lib/award-partnership-resolution.ts` | 230 | Degraded resolver insert, `vendor_org_id: null`. |
+
+The two bulk-import sites (pool import, email scan) are the likeliest, since they set exactly
+`status: "pending"` with `vendor_org_id: null` for an address they have just matched to a profile,
+and a July invite is consistent with a pool import. That is a reading of the code, not a finding
+about row `e3d5e1fd`. The row's `partnership_notes` (the import sites write the match flag there)
+would distinguish them: a note containing `already_on_ligament` points to the pool import or the
+email scan. That is one read-only SELECT for the owner.
+
+Why it matters beyond the cosmetic: a vendor with an existing account is never prompted to claim,
+because W4 only runs at email confirmation of a new sign-up, and even if it ran it is behind the
+visibility filter (7a). So a group-B row is invisible to the vendor (their "Partners can view"
+policy needs `vendor_org_id`), and nothing will ever link it.
+
+**Not fixed here.** Fixing means either linking at invite time at the import sites (a behaviour
+change to what "activation only via invite then accept" means) or a claim mechanism that runs for
+existing accounts. Both are rulings.
+
+### 7c. Rulings owed from this section
+
+1. Repair the claim path (7a) and how, given section 3d's warning against a claimer SELECT policy.
+2. Whether the import sites should link at insert when an account exists (7b), and if so the
+   case-insensitive profile match they need.
+3. What to do with the six existing rows. This is a data repair, not part of 093.
