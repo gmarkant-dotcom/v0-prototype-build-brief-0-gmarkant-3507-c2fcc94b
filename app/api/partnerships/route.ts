@@ -7,6 +7,7 @@ import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser, call
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
+import { checkRelationshipTransition, relationshipActFor, statusForAct } from '@/lib/relationship-transitions'
 import {
   ORG_CONTACT_SELECT_RICH,
   orgWireShape,
@@ -848,7 +849,7 @@ export async function PATCH(request: NextRequest) {
     // address is the ONLY identity the row carries. Without it the breadcrumb names nobody.
     const { data: partnership, error: partnershipFetchErr } = await supabase
       .from('partnerships')
-      .select('lead_org_id, vendor_org_id, status, partner_email')
+      .select('lead_org_id, vendor_org_id, status, partner_email, accepted_at')
       .eq('id', partnershipId)
       .maybeSingle()
 
@@ -1055,6 +1056,23 @@ export async function PATCH(request: NextRequest) {
 
     if (!['active', 'suspended', 'terminated', 'removed'].includes(status)) {
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
+    }
+
+    // A VENDOR NEVER CHANGES THE STATE OF AN ESTABLISHED PARTNERSHIP. Stated here as a check
+    // rather than left to the fall-through at the bottom of this handler, which is what used to
+    // stop them: a vendor on an active row skipped both branches and received "Invalid
+    // operation" by accident. The only status writes a vendor may make are on a PENDING row
+    // (accept and decline, the branch immediately below). `isAgency` is the lead organization's
+    // membership, so a caller who is a member of both sides is acting as the agency and passes.
+    //
+    // THIS IS THE ROUTE ONLY. The database policy "Partners can update partnership status"
+    // (079) has no column or status predicate, so a vendor writing PostgREST directly is not
+    // stopped by this line. docs/relationship-end-phase0.md section 1.
+    if (!isAgency && partnership.status !== 'pending') {
+      return NextResponse.json(
+        { error: 'Only the lead agency can change the state of an established partnership' },
+        { status: 403 }
+      )
     }
 
     // Partner responding to invitation (accept or decline)
@@ -1315,6 +1333,98 @@ export async function PATCH(request: NextRequest) {
 
     // Agency managing partnership
     if (isAgency) {
+      /**
+       * SUSPEND, TERMINATE AND REINSTATE. The three acts docs/relationship-end-rulings.md
+       * rules on. NONE OF THEM REVOKES ANYTHING: each writes one status and (for the first two)
+       * tells the vendor. What the status then does is in docs/relationship-end-phase0.md
+       * section 2, and document revocation is the migration session's work.
+       *
+       * AN IDENTIFIER FROM THE BODY IS A CLAIM, NOT A GRANT. `partnershipId` came from the
+       * request. The ownership proof is that the caller's ACTING organization
+       * (resolveCallerWriteOrgId, the same resolver every write in this file uses) is the
+       * row's lead organization. `isAgency` above is membership in ANY of the caller's
+       * organizations and is not enough for an act this consequential: a user who belongs to
+       * two companies must act as the one that owns the relationship. The UPDATE below is
+       * then scoped `.eq('lead_org_id', writeOrgId)` and `.eq('status', prior)`, so the proof
+       * is re-checked by the database in the same statement as the write.
+       */
+      const act = relationshipActFor(partnership.status as string | null, status)
+      if (act) {
+        const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
+        if (!writeOrgId || writeOrgId !== partnership.lead_org_id) {
+          return NextResponse.json(
+            { error: 'Only the lead agency that owns this partnership can do that' },
+            { status: 403 }
+          )
+        }
+
+        // `wasLive` only matters for reinstating a TERMINATED row: it separates an agency
+        // termination from a vendor's declined invitation, which also writes 'terminated'.
+        let wasLive = Boolean(partnership.accepted_at)
+        if (act === 'reinstate' && partnership.status === 'terminated' && !wasLive) {
+          const { count, error: asgErr } = await supabase
+            .from('project_assignments')
+            .select('id', { count: 'exact', head: true })
+            .eq('partnership_id', partnershipId)
+          if (asgErr) {
+            console.error('[api] PATCH /partnerships assignment lookup failed', {
+              route, partnershipId, message: asgErr.message, code: asgErr.code,
+            })
+            return NextResponse.json({ error: 'Failed to check this partnership' }, { status: 500 })
+          }
+          wasLive = (count ?? 0) > 0
+        }
+
+        const verdict = checkRelationshipTransition(act, partnership.status as string | null, wasLive)
+        if (!verdict.ok) {
+          return NextResponse.json({ error: verdict.error }, { status: 409 })
+        }
+
+        // IDEMPOTENT. Suspending a suspended row (or terminating a terminated one) is a
+        // success that changes nothing and sends nothing, so a double click or a retry cannot
+        // produce a second notification.
+        if (verdict.noop) {
+          const { data: current } = await supabase
+            .from('partnerships')
+            .select('*')
+            .eq('id', partnershipId)
+            .maybeSingle()
+          return NextResponse.json({ partnership: current, unchanged: true })
+        }
+
+        const priorStatus = partnership.status as string
+        const nextStatus = statusForAct(act)
+        const { data: actUpdated, error: actErr } = await supabase
+          .from('partnerships')
+          .update({ status: nextStatus, updated_at: new Date().toISOString() })
+          .eq('id', partnershipId)
+          .eq('lead_org_id', writeOrgId)
+          .eq('status', priorStatus)
+          .select()
+          .maybeSingle()
+
+        if (actErr) throw actErr
+        if (!actUpdated) {
+          // The row moved between the read and the write (a concurrent act). If it already
+          // reached the requested state this request is a no-op; otherwise report the conflict.
+          const { data: current } = await supabase
+            .from('partnerships')
+            .select('*')
+            .eq('id', partnershipId)
+            .maybeSingle()
+          if (current?.status === nextStatus) {
+            return NextResponse.json({ partnership: current, unchanged: true })
+          }
+          return NextResponse.json(
+            { error: 'This partnership changed while you were working. Reload and try again.' },
+            { status: 409 }
+          )
+        }
+
+        console.log('[api] success', { route, method: 'PATCH', userId: user.id, role: null, recordId: actUpdated.id, status: actUpdated.status, act })
+        return NextResponse.json({ partnership: actUpdated })
+      }
+
       /**
        * THE TRANSITION, NAMED BEFORE THE WRITE. Same shape as `isMarkingPaid`
        * (app/api/agency/msa/milestones/route.ts) and `isShortlisting`

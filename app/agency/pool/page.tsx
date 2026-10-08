@@ -42,6 +42,8 @@ import {
 } from "@/lib/business-criteria"
 import { HelpTerm } from "@/components/help-term"
 import { partnershipPoolColumn, partnershipStateLabel } from "@/lib/partnership-state"
+import { RELATIONSHIP_ACT_COPY } from "@/lib/relationship-copy"
+import { statusForAct, type RelationshipAct } from "@/lib/relationship-transitions"
 import {
   describeColleagueEvidence,
   evidenceIsCurrent,
@@ -390,6 +392,11 @@ function PartnerPoolPageInner() {
   const [resendMsg, setResendMsg] = useState<string | null>(null)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [partnershipToRemove, setPartnershipToRemove] = useState<Partnership | null>(null)
+  // Suspend / terminate / reinstate on an Active vendors card. One dialog, three acts; the
+  // copy for each lives in lib/relationship-copy.ts and is pinned to what the code does.
+  const [relationshipTarget, setRelationshipTarget] = useState<{ row: Partnership; act: RelationshipAct } | null>(null)
+  const [relationshipBusy, setRelationshipBusy] = useState(false)
+  const [relationshipError, setRelationshipError] = useState<string | null>(null)
 
   // Invitation state
   const [invitations, setInvitations] = useState<PartnerInvitation[]>([])
@@ -726,6 +733,36 @@ function PartnerPoolPageInner() {
       alert('Failed to remove contact')
     } finally {
       setRemovingId(null)
+    }
+  }
+
+  /** SUSPEND, TERMINATE OR REINSTATE an established partnership. The route is the authority:
+   *  it proves the caller's acting organization owns the row, checks the prior status, and is
+   *  idempotent. This only sends the status the act maps to. Nothing here revokes access. */
+  const handleRelationshipAct = async () => {
+    if (!relationshipTarget) return
+    const { row, act } = relationshipTarget
+    setRelationshipBusy(true)
+    setRelationshipError(null)
+    try {
+      const res = await fetch('/api/partnerships', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partnershipId: row.id, status: statusForAct(act) }),
+      })
+      if (res.ok) {
+        await loadPartnerships()
+        setRelationshipTarget(null)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setRelationshipError((data?.error as string) || 'That did not go through. Try again.')
+      }
+    } catch (error) {
+      console.error('Error changing partnership state:', error)
+      setRelationshipError('That did not go through. Try again.')
+    } finally {
+      setRelationshipBusy(false)
     }
   }
 
@@ -2125,6 +2162,72 @@ function PartnerPoolPageInner() {
                             )}
                           </div>
                         )}
+                        {/* Relationship acts. Suspend = pause, Terminate = ending, Reinstate = back to
+                            active. Offered by status: an active row can be paused or ended, a
+                            suspended row can be reinstated or ended, a terminated row can be
+                            reinstated only if it was ever accepted (a vendor's declined invitation
+                            also reads 'terminated' and is not a relationship to reinstate; the
+                            route enforces the same rule and is the authority). */}
+                        {p.status === "active" && (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => { setRelationshipError(null); setRelationshipTarget({ row: p, act: "suspend" }) }}
+                              aria-label={`Suspend your partnership with ${title}`}
+                              className="h-6 px-2"
+                            >
+                              Suspend
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive-outline"
+                              onClick={() => { setRelationshipError(null); setRelationshipTarget({ row: p, act: "terminate" }) }}
+                              aria-label={`Terminate your partnership with ${title}`}
+                              className="h-6 px-2"
+                            >
+                              Terminate
+                            </Button>
+                          </>
+                        )}
+                        {p.status === "suspended" && (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => { setRelationshipError(null); setRelationshipTarget({ row: p, act: "reinstate" }) }}
+                              aria-label={`Reinstate your partnership with ${title}`}
+                              className="h-6 px-2"
+                            >
+                              Reinstate
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive-outline"
+                              onClick={() => { setRelationshipError(null); setRelationshipTarget({ row: p, act: "terminate" }) }}
+                              aria-label={`Terminate your partnership with ${title}`}
+                              className="h-6 px-2"
+                            >
+                              Terminate
+                            </Button>
+                          </>
+                        )}
+                        {p.status === "terminated" && p.acceptedAt && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { setRelationshipError(null); setRelationshipTarget({ row: p, act: "reinstate" }) }}
+                            aria-label={`Reinstate your partnership with ${title}`}
+                            className="h-6 px-2"
+                          >
+                            Reinstate
+                          </Button>
+                        )}
                         <span
                           className={cn(
                             "font-mono text-2xs px-2 py-1 rounded-full whitespace-nowrap shrink-0",
@@ -2809,6 +2912,54 @@ function PartnerPoolPageInner() {
                 Remove
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Suspend / terminate / reinstate confirmation. Sits on the Dialog overlay, so
+            bg-card is opaque enough here (the modal rule in CLAUDE.md). The copy comes from
+            lib/relationship-copy.ts and describes only what the code does today. */}
+        <Dialog open={!!relationshipTarget} onOpenChange={(open) => {
+          if (!open && !relationshipBusy) { setRelationshipTarget(null); setRelationshipError(null) }
+        }}>
+          <DialogContent className="bg-card border-border text-foreground">
+            {relationshipTarget && (() => {
+              const { row, act } = relationshipTarget
+              const copy = RELATIONSHIP_ACT_COPY[act]
+              const name = row.partnerCompany || row.partnerName || row.partnerEmail
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="font-display">{copy.title(name)}</DialogTitle>
+                    <DialogDescription asChild>
+                      <div className="space-y-2 text-foreground-muted">
+                        {copy.body(name).map((para) => (
+                          <p key={para}>{para}</p>
+                        ))}
+                      </div>
+                    </DialogDescription>
+                  </DialogHeader>
+                  {relationshipError && (
+                    <p role="alert" className="text-sm text-red-400">{relationshipError}</p>
+                  )}
+                  <DialogFooter className="gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={relationshipBusy}
+                      onClick={() => { setRelationshipTarget(null); setRelationshipError(null) }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant={copy.destructive ? "destructive" : "default"}
+                      disabled={relationshipBusy}
+                      onClick={handleRelationshipAct}
+                    >
+                      {relationshipBusy ? copy.pendingLabel : copy.confirmLabel}
+                    </Button>
+                  </DialogFooter>
+                </>
+              )
+            })()}
           </DialogContent>
         </Dialog>
 
