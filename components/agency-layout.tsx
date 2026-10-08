@@ -41,21 +41,29 @@ declare global {
  * "00 Agency Network" is the same item seen from the other end and loses its number in the
  * same pass, so both portals now agree that a counterparty roster is not a workflow step.
  *
- * SO THE WORKFLOW IS 01 TO 04, WITH NO GAP AT THE FRONT. "BID REQUESTS" described the old
- * grouping - it was the section that happened to contain the bid stages - and "Workflow" is
- * what the section actually is now that the roster has left it.
+ * SO THE MIRRORED WORKFLOW IS 01 TO 04. "BID REQUESTS" described the old grouping - it was
+ * the section that happened to contain the bid stages - and "Workflow" is what the section
+ * actually is now that the roster has left it.
  *
- * 00 BUDGETING IS NOT HERE, NOT AS AN ITEM, NOT AS A STUB, NOT AS "COMING SOON". It waits on
- * a workstream that has not started, and a nav item that names an absent feature is the
- * dishonesty this codebase spent the week removing.
+ * 00 BUDGETING IS RENDERED AND GOES NOWHERE, BY GREG'S RULING (delivered in the 2026-10-08 run
+ * brief; docs/nav-restructure-report.md). This answers OPEN-4 in docs/post-m1-cleanup-report.md,
+ * which had left the item out entirely. It takes 00 because it is preparatory: it happens
+ * before any vendor is in the engagement, so it sits OUTSIDE the 01 to 04 run the vendor
+ * portal mirrors. It cannot ship as a working step until the budget spine
+ * (docs/ligament-00-budgeting-spec.md) is built, so it has NO href, NO route and NO page. It
+ * renders as plain text marked "Coming soon", is not focusable, and is not a link. Do not
+ * give it an href until the spine exists.
  *
- * "CLIENT PROFILES" IS NOT RENAMED. The rename to "Clients + Projects" is ruled but depends
- * on a project repository organised by client, which does not exist. Same reason. It is
- * recorded as owed in the session report rather than shipped early.
+ * CREATIVE TREATMENT ANALYSIS IS RULED TO MOVE UNDER 00 BUDGETING AND HAS NOT MOVED. It stays
+ * in the RFP Broadcast dropdown below, because moving a live feature behind a dead item would
+ * orphan it. The move is owed for when 00 becomes navigable.
+ *
+ * "CLIENT PROFILES" IS NOW "CLIENTS + PROJECTS", AS A RENAME ONLY. Ruled in the same brief,
+ * answering OPEN-5. The destination is unchanged: /agency/clients does not yet list a
+ * client's projects, and building that repository is separate work.
  *
  * NO URL CHANGES IN THIS RESTRUCTURE. Every href below is byte for byte what it was; labels,
- * grouping and numbering are the whole of the diff. That is checked item by item in the
- * report's before/after route table.
+ * grouping and numbering are the whole of the diff.
  */
 const navSections = [
   {
@@ -71,6 +79,9 @@ const navSections = [
   {
     label: "Workflow",
     items: [
+      // NOT A LINK. See the 00 BUDGETING paragraph above. `placeholder` routes this item to
+      // its own branch in NavSectionBlock, which renders text and no anchor.
+      { number: "00", title: "Budgeting", placeholder: true, caption: "Coming soon", tooltip: "Build the client budget before any vendor is briefed. Not available yet." },
       { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Analyze client briefs, build scoped RFPs, and send to your vendor pool or any vendor via Magic Link" },
       { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Compare, evaluate, and score vendor bids with AI-powered analysis and side-by-side cost breakdowns" },
       { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track vendor onboarding across active projects" },
@@ -80,7 +91,7 @@ const navSections = [
   {
     label: "Resources",
     items: [
-      { icon: "◐", title: "Client Profiles", href: "/agency/clients", tooltip: "Reusable end-client records - documents, standing requirements, and internal notes that auto-apply to new RFPs" },
+      { icon: "◐", title: "Clients + Projects", href: "/agency/clients", tooltip: "Reusable end-client records - documents, standing requirements, and internal notes that auto-apply to new RFPs" },
       { icon: "□", title: "Master Documents", href: "/agency/documents", tooltip: "Central repository for project documents and reference files" },
       { icon: "▤", title: "Usage", href: "/agency/usage", tooltip: "Track active-project and AI-analysis usage against your plan" },
       { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
@@ -314,6 +325,34 @@ function NavSectionBlock({
           }
           if ('hasPoolDropdown' in item && item.hasPoolDropdown) {
             return <PoolNavItem key={item.href} pathname={pathname} />
+          }
+          // A STEP THAT IS RULED AND NOT BUILT. Plain text, no anchor, no tabindex, so it is
+          // never a click or keyboard target and can never hold the active state. The caption
+          // is visible text rather than tooltip-only, because a non-focusable element's
+          // tooltip is unreachable from the keyboard.
+          if ('placeholder' in item) {
+            return (
+              <Tooltip key={item.title}>
+                <TooltipTrigger asChild>
+                  <div className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-transparent cursor-default select-none">
+                    <span className="font-mono text-xs font-medium mt-0.5 text-foreground-muted/50">
+                      {item.number}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-display font-bold text-sm leading-tight text-foreground-muted/60">
+                        {item.title}
+                      </div>
+                      <div className="font-mono text-2xs text-foreground-muted/50 mt-0.5">
+                        {item.caption}
+                      </div>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                  <p className="text-xs text-foreground-muted">{item.tooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            )
           }
           const isActive = pathname === item.href ||
             (item.href !== "/agency" && Boolean(pathname?.startsWith(item.href)))

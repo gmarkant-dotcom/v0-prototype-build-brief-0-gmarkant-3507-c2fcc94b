@@ -24,50 +24,60 @@ declare global {
 type NavItem = { icon?: string; number?: string; title: string; href: string; tooltip: string }
 
 /**
- * Grouped to mirror the lead agency's workflow-stage nav (components/agency-layout.tsx):
- * Summary Dashboard, then the 00-03 engagement stages, then Resources. Rendered with a
- * vertical divider between groups instead of inline section labels - horizontal top bar
- * has no room for both step numbers and text labels.
+ * THE SAME THREE SECTIONS AS THE LEAD AGENCY SIDEBAR (components/agency-layout.tsx): HQ,
+ * Workflow, Resources. Greg ruled that the workflow and its NUMBERS mirror across both
+ * portals, because the in-sync workflow is the proposition. The mirror is of the three
+ * sections, not of the whole sidebar: the vendor has no creation block at the top, has no
+ * 00 (Budgeting happens before a vendor is in the engagement), and Resources may differ.
+ *
+ * Rendered with a vertical divider between sections instead of visible section labels - the
+ * horizontal top bar has no room for both step numbers and text labels. The label is still
+ * given to assistive technology, as the aria-label on each section's role="group".
  */
-const navGroups: NavItem[][] = [
-  [
-    { icon: "◇", title: "Summary Dashboard", href: "/partner", tooltip: "Overview of your bid submissions, active projects, and agency relationships" },
-  ],
-  [
-    // NO NUMBER, MIRRORING THE LEAD AGENCY SIDE IN THE SAME PASS. A number in either nav
-    // means a stage of the workflow. A roster of counterparties is not a stage: every stage
-    // draws on it and none of them advances through it. The agency portal's "00 Vendor Pool"
-    // is this same item seen from the other end and lost its number too, so both sides now
-    // agree, and the numbered run on each side is a clean 01 to 04.
-    //
-    // IT STAYS IN THIS GROUP. Moving it up beside Summary Dashboard would be the vendor half
-    // of the agency portal's HQ / Workflow split, and that is deliberately NOT attempted
-    // here: this is a horizontal top nav with no section headers, so it has nowhere to put
-    // one, and converting it is scoped separately. The grouping remains owed.
-    //
-    // href IS UNCHANGED. /partner/network is what it was.
-    { icon: "▣", title: "Agency Network", href: "/partner/network", tooltip: "Your agency partnerships, pending invitations, and discover new agencies" },
-    // THE SPLIT. "Open RFPs & Bids" was one item covering two stages, and it was the only
-    // thing breaking the 1:1 with the lead agency nav. 01 and 02 below are now the two halves
-    // it contained, numbered to match agency 01 RFP Broadcast and 02 Bid Management, and 03
-    // and 04 renumbered to match 03 Onboarding and 04 Delivery Performance.
-    //
-    // /partner/rfps IS UNCHANGED AS A URL. It is the call to action in five vendor emails and
-    // the auth callback default; splitting the nav added /partner/bids beside it rather than
-    // renaming it. See app/partner/rfps/page.tsx for the enumerated list.
-    { number: "01", title: "Open RFPs", href: "/partner/rfps", tooltip: "RFP invitations sent to you by lead agencies, and the bid form for each" },
-    { number: "02", title: "My Bids", href: "/partner/bids", tooltip: "Bids you have submitted, and the history of every outcome including awarded and declined" },
-    { number: "03", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your lead agencies" },
-    { number: "04", title: "Delivery & Projects", href: "/partner/projects", tooltip: "Your active project engagements, status updates, and delivery performance" },
-  ],
-  [
-    { icon: "◎", title: "Legal & Compliance", href: "/partner/legal", tooltip: "Business designations, insurance coverage, and legal entity information" },
-    { icon: "$", title: "Payments", href: "/partner/payments", tooltip: "View payment schedules from your lead agencies and save rate details for each relationship" },
-    { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
-  ],
+const navGroups: { label: string; items: NavItem[] }[] = [
+  {
+    label: "HQ",
+    items: [
+      { icon: "◇", title: "Summary Dashboard", href: "/partner", tooltip: "Overview of your bid submissions, active projects, and agency relationships" },
+      // NO NUMBER, MIRRORING THE LEAD AGENCY SIDE. A number in either nav means a stage of the
+      // workflow. A roster of counterparties is not a stage: every stage draws on it and none
+      // of them advances through it. It sits in HQ beside the dashboard, the same position as
+      // the agency portal's Vendor Pool, which is this item seen from the other end.
+      //
+      // href IS UNCHANGED. /partner/network is what it was.
+      { icon: "▣", title: "Agency Network", href: "/partner/network", tooltip: "Your agency partnerships, pending invitations, and discover new agencies" },
+    ],
+  },
+  {
+    label: "Workflow",
+    items: [
+      // THE SPLIT. "Open RFPs & Bids" was one item covering two stages, and it was the only
+      // thing breaking the 1:1 with the lead agency nav. 01 and 02 below are now the two halves
+      // it contained, numbered to match agency 01 RFP Broadcast and 02 Bid Management, and 03
+      // and 04 renumbered to match 03 Onboarding and 04 Delivery Performance.
+      //
+      // /partner/rfps IS UNCHANGED AS A URL. It is the call to action in five vendor emails and
+      // the auth callback default; splitting the nav added /partner/bids beside it rather than
+      // renaming it. See app/partner/rfps/page.tsx for the enumerated list.
+      { number: "01", title: "Open RFPs", href: "/partner/rfps", tooltip: "RFP invitations sent to you by lead agencies, and the bid form for each" },
+      { number: "02", title: "My Bids", href: "/partner/bids", tooltip: "Bids you have submitted, and the history of every outcome including awarded and declined" },
+      { number: "03", title: "Onboarding", href: "/partner/onboarding", tooltip: "Kickoff packages and documents from your lead agencies" },
+      { number: "04", title: "Delivery & Projects", href: "/partner/projects", tooltip: "Your active project engagements, status updates, and delivery performance" },
+    ],
+  },
+  {
+    label: "Resources",
+    items: [
+      { icon: "◎", title: "Legal & Compliance", href: "/partner/legal", tooltip: "Business designations, insurance coverage, and legal entity information" },
+      { icon: "$", title: "Payments", href: "/partner/payments", tooltip: "View payment schedules from your lead agencies and save rate details for each relationship" },
+      { icon: "?", title: "FAQ", href: "/faq", tooltip: "Help and guidance for using the platform" },
+    ],
+  },
 ]
 
-const navItems = navGroups.flat()
+// The mobile row is flat, and its order is unchanged by the HQ move: Agency Network was
+// already second, directly after Summary Dashboard. Only the desktop divider moved.
+const navItems = navGroups.flatMap((group) => group.items)
 
 interface PartnerLayoutProps {
   children: React.ReactNode
@@ -179,9 +189,9 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               {/* Navigation */}
               <nav className="hidden md:flex items-center gap-1">
                 {navGroups.map((group, groupIndex) => (
-                  <div key={groupIndex} className="flex items-center gap-1">
+                  <div key={group.label} role="group" aria-label={group.label} className="flex items-center gap-1">
                     {groupIndex > 0 && <div className="w-px h-6 bg-white/15 mx-2" aria-hidden="true" />}
-                    {group.map((item) => {
+                    {group.items.map((item) => {
                       const isActive = pathname === item.href ||
                         (item.href !== "/partner" && pathname?.startsWith(item.href))
                       return (
@@ -323,7 +333,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
 
           {/* Mobile nav: the grouped/tooltip nav above is `hidden md:flex` (disappears
               entirely below md) - extend rather than rebuild with a flat, horizontally
-              scrollable row so every item (including the 00-03 step numbers) stays
+              scrollable row so every item (including the 01-04 step numbers) stays
               reachable on small screens. No hover, so no tooltips here. */}
           <nav className="flex md:hidden items-center gap-1 overflow-x-auto -mx-6 px-6 pb-1 mt-3">
             {navItems.map((item) => {
