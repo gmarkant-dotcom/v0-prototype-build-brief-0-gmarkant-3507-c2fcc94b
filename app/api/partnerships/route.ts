@@ -8,6 +8,7 @@ import { actingRole, canActAs } from '@/lib/acting-role'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
 import { checkRelationshipTransition, relationshipActFor, statusForAct } from '@/lib/relationship-transitions'
+import { resolveRelationshipAudience, sendRelationshipEmails, type ResolvedRelationshipAudience } from '@/lib/relationship-notifications'
 import {
   ORG_CONTACT_SELECT_RICH,
   orgWireShape,
@@ -1394,6 +1395,28 @@ export async function PATCH(request: NextRequest) {
 
         const priorStatus = partnership.status as string
         const nextStatus = statusForAct(act)
+
+        // WHO TO TELL, RESOLVED BEFORE THE WRITE. Migration 085 removes a terminated
+        // relationship from the commercial counterparty set, so a recipient lookup made after
+        // the update can return nothing and the email would be skipped under a 200. Same
+        // ordering the vendor's decline path documents. Reinstating tells nobody, so it
+        // resolves nothing. A lookup failure must never stop the act: it is guarded.
+        let audience: ResolvedRelationshipAudience | null = null
+        if (act === 'suspend' || act === 'terminate') {
+          try {
+            audience = await resolveRelationshipAudience(supabase, {
+              leadOrgId: writeOrgId,
+              vendorOrgId: (partnership.vendor_org_id as string | null) ?? null,
+              partnerEmail: (partnership.partner_email as string | null) ?? null,
+              route,
+            })
+          } catch (audienceErr) {
+            console.error('[api] PATCH /partnerships: recipient resolution threw, acting anyway', {
+              route, partnershipId, message: audienceErr instanceof Error ? audienceErr.message : String(audienceErr),
+            })
+          }
+        }
+
         const { data: actUpdated, error: actErr } = await supabase
           .from('partnerships')
           .update({ status: nextStatus, updated_at: new Date().toISOString() })
@@ -1421,7 +1444,16 @@ export async function PATCH(request: NextRequest) {
           )
         }
 
-        console.log('[api] success', { route, method: 'PATCH', userId: user.id, role: null, recordId: actUpdated.id, status: actUpdated.status, act })
+        // The email goes only from the request whose UPDATE matched, so a double click or a
+        // concurrent retry (which matched nothing above) cannot send a second one. In-app is not
+        // attempted: it needs two notification types the CHECK does not permit (a migration).
+        // Reinstate sends nothing.
+        let emailed = 0
+        if (audience && (act === 'suspend' || act === 'terminate')) {
+          emailed = await sendRelationshipEmails(act, audience, route)
+        }
+
+        console.log('[api] success', { route, method: 'PATCH', userId: user.id, role: null, recordId: actUpdated.id, status: actUpdated.status, act, emailed })
         return NextResponse.json({ partnership: actUpdated })
       }
 
