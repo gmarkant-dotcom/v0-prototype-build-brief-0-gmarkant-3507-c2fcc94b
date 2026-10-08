@@ -87,10 +87,8 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: newProject.name,
-          clientName: newProject.client,
-          // Only sent when a profile was actually selected, so a typed-name request is byte-for-
-          // byte what it is today and cannot touch a column migration 077 may not have created.
-          ...(clientSelection.clientId ? { client_id: clientSelection.clientId } : {}),
+          // The profile id is the answer; the server takes client_name from the profile itself.
+          client_id: clientSelection.clientId,
           description: newProject.description || undefined,
           budgetRange: newProject.budget || undefined,
           startDate: newProject.startDate || undefined,
@@ -154,14 +152,15 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
               className="bg-white/5 border-border text-foreground placeholder:text-foreground-muted/50"
             />
           </div>
-          {/* A2: select an existing client profile, create one inline, or type a name exactly as
-              before. The typed name remains the source of truth for projects.client_name; the
-              profile id is an addition, and is dropped the moment the name is edited. */}
+          {/* A PROJECT REQUIRES A CLIENT PROFILE (ruling 2026-10-08): select one, or create one
+              inline without leaving this dialog. There is no typed-name path outside demo mode,
+              and the server refuses a request without a verified client_id regardless. */}
           <div className="grid gap-2">
             <ClientSelector
               id="new-client-name"
-              label="Client name"
+              label="Client"
               placeholder="Legal entity name"
+              requireProfile={!isDemo}
               value={{ clientId: clientSelection.clientId, clientName: newProject.client }}
               onChange={(next) => {
                 setClientSelection(next)
@@ -239,7 +238,7 @@ export function NewProjectDialog({ trigger }: { trigger: ReactNode }) {
           <Button
             className="bg-accent text-accent-foreground hover:bg-accent/90 font-mono"
             onClick={handleCreateProject}
-            disabled={!newProject.name || !newProject.client || isSubmitting}
+            disabled={!newProject.name || !newProject.client || (!isDemo && !clientSelection.clientId) || isSubmitting}
           >
             {isSubmitting ? "Creating..." : "Create Project"}
           </Button>

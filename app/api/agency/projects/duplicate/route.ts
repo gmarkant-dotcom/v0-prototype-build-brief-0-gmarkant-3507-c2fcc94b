@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { carryProjectClientFields } from "@/lib/clients-server"
+import { resolveRequiredProjectClient } from "@/lib/clients-server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { checkUsageLimit, usageLimitResponse } from "@/lib/usage-tracking"
 import { agencyEntitlementId, hasAgencyEntitlement, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
@@ -68,6 +68,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
     }
 
+    // A PROJECT REQUIRES A CLIENT PROFILE (ruling 2026-10-08), and a copy is a creation like any
+    // other. The client is the one the caller names in the body, else the source's own. The
+    // source is NOT trusted as-is any more: every project that predates the ruling is unfiled,
+    // and copying "no client" would mint a new unfiled project. The id is verified against the
+    // organization the copy is attributed to either way.
+    const requestedClientId = (body as Record<string, unknown>)?.client_id
+    const requiredClient = await resolveRequiredProjectClient(
+      supabase,
+      [writeOrgId],
+      typeof requestedClientId === "string" && requestedClientId.trim() ? requestedClientId : sourceProject.client_id
+    )
+    if (!requiredClient.ok) {
+      return NextResponse.json(
+        { error: requiredClient.error, ...(requiredClient.code ? { code: requiredClient.code } : {}) },
+        { status: requiredClient.status }
+      )
+    }
+
     const newName = requestedName || `${sourceProject.name} (Copy)`
 
     const { data: nameCollision } = await supabase
@@ -86,8 +104,9 @@ export async function POST(request: NextRequest) {
         org_id: writeOrgId,
         name: newName,
         status: "draft",
-        // Both fields together or neither, so a duplicate can never be born incoherent.
-        ...carryProjectClientFields(sourceProject as Record<string, unknown>),
+        // Both fields together, from the verified profile, so a duplicate can never be born
+        // incoherent or unfiled.
+        ...requiredClient.fields,
         description: sourceProject.description,
         budget_range: sourceProject.budget_range,
         start_date: null,

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { reconcileProjectClientFields } from '@/lib/clients-server'
+import { resolveRequiredProjectClient } from '@/lib/clients-server'
 import { createClient } from '@/lib/supabase/server'
 import {
   ORG_CONTACT_SELECT,
@@ -483,10 +483,22 @@ export async function POST(request: NextRequest) {
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
     const body = await request.json()
-    const { name, clientName, description, budgetRange, startDate, endDate } = body
+    const { name, description, budgetRange, startDate, endDate } = body
 
     if (!name || typeof name !== 'string') {
       return NextResponse.json({ error: 'Project name required' }, { status: 400 })
+    }
+
+    // A PROJECT REQUIRES A CLIENT PROFILE (ruling 2026-10-08), enforced here and not only in the
+    // dialog. The id is a claim: it is verified against the ONE organization this project is
+    // attributed to, so a profile belonging to another organization is refused. A typed
+    // clientName is not accepted in its place, and the profile's own name becomes client_name.
+    const requiredClient = await resolveRequiredProjectClient(supabase, [writeOrgId], (body as Record<string, unknown>).client_id)
+    if (!requiredClient.ok) {
+      return NextResponse.json(
+        { error: requiredClient.error, ...(requiredClient.code ? { code: requiredClient.code } : {}) },
+        { status: requiredClient.status, headers: noStoreHeaders }
+      )
     }
 
     const safeName = name.trim()
@@ -514,39 +526,13 @@ export async function POST(request: NextRequest) {
       start_date: startDate || null,
       end_date: endDate || null,
     }
-    // Both client fields go through the one reconciler, so a project cannot be CREATED
-    // incoherent either. A selected profile sets client_id and takes client_name from that
-    // profile's own name; a typed name sets client_name with client_id null.
-    const reconciledClient = await reconcileProjectClientFields(supabase, callerOrgIds, {
-      hasClientId: 'client_id' in (body as Record<string, unknown>),
-      clientId: (body as Record<string, unknown>).client_id as string | null,
-      hasClientName: true,
-      clientName: clientName || null,
-    })
-    if (!reconciledClient.ok) {
-      return NextResponse.json({ error: reconciledClient.error }, { status: reconciledClient.status })
-    }
-    Object.assign(insertPayload, reconciledClient.fields)
-    const clientId = (reconciledClient.fields.client_id as string | null) ?? null
+    Object.assign(insertPayload, requiredClient.fields)
 
-    let { data: project, error: insertError } = await supabase
+    const { data: project, error: insertError } = await supabase
       .from('projects')
       .insert(insertPayload)
       .select('*')
       .single()
-
-    // Pre-migration guard: projects.client_id does not exist until 077, and a request carrying
-    // one would 42703 the whole creation. Retry once without it - the project is still created,
-    // with its client name, and only the entity link is lost.
-    if (insertError?.code === '42703' && clientId) {
-      console.warn('[api/projects] client_id column missing (migration 077 not applied) - creating without the entity link')
-      const { client_id: _omit, ...withoutClientId } = insertPayload
-      ;({ data: project, error: insertError } = await supabase
-        .from('projects')
-        .insert(withoutClientId)
-        .select('*')
-        .single())
-    }
 
     if (insertError || !project) {
       const msg = insertError?.message || insertError?.details || insertError?.hint || 'Project creation failed'

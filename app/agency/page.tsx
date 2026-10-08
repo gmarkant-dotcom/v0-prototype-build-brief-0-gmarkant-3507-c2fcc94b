@@ -42,6 +42,7 @@ import {
 import { BusinessCriteriaEditor } from "@/components/business-criteria-editor"
 import { BudgetCategoryEditor } from "@/components/budget-category-editor"
 import { ClientSelector, type ClientSelection } from "@/components/client-selector"
+import { DuplicateProjectClientDialog } from "@/components/duplicate-project-client-dialog"
 import { clientDocumentToReferenceMaterial } from "@/lib/client-attach"
 import { persistProjectClientLink } from "@/lib/client-project-link"
 import { hasClientDefaults, type ClientProfile } from "@/lib/clients"
@@ -160,6 +161,8 @@ function AgencyRFPContent() {
   const { selectedProject, setSelectedProject, isLoadingProjects, projects, refreshProjects } = useSelectedProject()
   const { guardAction, handleUsageLimitError } = useUsageLimitModal()
   const [isDuplicatingProject, setIsDuplicatingProject] = useState(false)
+  /** The server answered client_required: the source project is unfiled, so the copy needs one. */
+  const [duplicateNeedsClient, setDuplicateNeedsClient] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const isDemo = isDemoMode()
@@ -1504,7 +1507,7 @@ function AgencyRFPContent() {
     return existingPartners.filter(p => selectedIds.has(p.id) && !p.ndaSigned).length
   }
 
-  const handleDuplicateProject = async () => {
+  const handleDuplicateProject = async (clientId?: string) => {
     if (!selectedProject?.id || isDuplicatingProject) return
     if (!guardAction("projects")) return
     setIsDuplicatingProject(true)
@@ -1512,15 +1515,22 @@ function AgencyRFPContent() {
       const res = await fetch("/api/agency/projects/duplicate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: selectedProject.id }),
+        body: JSON.stringify({ project_id: selectedProject.id, ...(clientId ? { client_id: clientId } : {}) }),
       })
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}))
         if (handleUsageLimitError(res.status, payload)) return
+        // Unfiled source: ask for a client rather than failing. Only offered when this attempt did
+        // not already carry one; a second refusal is a real error and is shown as one.
+        if (payload?.code === "client_required" && !clientId) {
+          setDuplicateNeedsClient(true)
+          return
+        }
         toast.error(payload?.error || "Failed to duplicate project")
         return
       }
       const payload = await res.json()
+      setDuplicateNeedsClient(false)
       await refreshProjects()
       setSelectedProject(mapDbProjectToMaster(payload.project))
       toast.success("Project duplicated")
@@ -1557,13 +1567,19 @@ function AgencyRFPContent() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={handleDuplicateProject}
+              onClick={() => void handleDuplicateProject()}
               disabled={isDuplicatingProject}
               className="gap-2"
             >
               {isDuplicatingProject ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
               Duplicate this project
             </Button>
+            <DuplicateProjectClientDialog
+              open={duplicateNeedsClient}
+              onOpenChange={setDuplicateNeedsClient}
+              submitting={isDuplicatingProject}
+              onConfirm={(clientId) => void handleDuplicateProject(clientId)}
+            />
           </div>
         )}
         <StageHeader

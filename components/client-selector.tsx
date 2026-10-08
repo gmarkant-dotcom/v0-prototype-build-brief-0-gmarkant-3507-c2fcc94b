@@ -38,6 +38,7 @@ export function ClientSelector({
   placeholder = "Client name",
   id,
   projectId,
+  requireProfile = false,
 }: {
   value: ClientSelection
   onChange: (next: ClientSelection) => void
@@ -51,9 +52,16 @@ export function ClientSelector({
    *  this control INHERIT that project's client read-only instead of offering a choice - see
    *  the inherited branch below. Omitted by "+ New project", which has no project yet. */
   projectId?: string | null
+  /** A PROJECT REQUIRES A CLIENT PROFILE. Set by the flows that CREATE a project: the typed-name
+   *  input and the "type a client name instead" option are not offered, and the answer is a
+   *  profile, picked or created inline. The server refuses anything else regardless. Left false
+   *  by the RFP flows, which run against an existing project and keep the legacy typed path. */
+  requireProfile?: boolean
 }) {
   const [options, setOptions] = useState<ClientOption[]>([])
   const [available, setAvailable] = useState(false)
+  // False until the first list answer lands, so "no profiles yet" is never shown mid-load.
+  const [optionsLoaded, setOptionsLoaded] = useState(false)
   const [applying, setApplying] = useState(false)
   const [applied, setApplied] = useState<string | null>(null)
   /**
@@ -76,6 +84,8 @@ export function ClientSelector({
     } catch {
       setAvailable(false)
       setOptions([])
+    } finally {
+      setOptionsLoaded(true)
     }
   }, [])
 
@@ -183,6 +193,68 @@ export function ClientSelector({
             "This client comes from the project and is changed on the project itself."
           )}
         </p>
+      </div>
+    )
+  }
+
+  // PROFILE REQUIRED. The only answers are an existing profile or a new one made right here;
+  // the New client profile dialog does not navigate away, so a half-filled project form is
+  // never lost. With no profiles yet the creation button is the whole control.
+  if (requireProfile) {
+    const selected = options.find((option) => option.id === value.clientId) ?? null
+    return (
+      <div className="space-y-2">
+        <label htmlFor={id} className="font-mono text-2xs uppercase tracking-wider text-foreground-muted block">
+          {label}
+        </label>
+
+        {available && options.length > 0 && (
+          <select
+            id={id}
+            value={value.clientId ?? ""}
+            onChange={(e) => void applyProfile(e.target.value)}
+            disabled={applying}
+            className="w-full h-10 rounded-md px-3 text-sm bg-background border border-border text-foreground"
+            aria-label="Select a client profile"
+          >
+            <option value="">Select a client profile</option>
+            {options.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {optionsLoaded && available && options.length === 0 && !applying && (
+          <p className="font-mono text-2xs text-foreground-muted">
+            No client profiles yet. Every project belongs to a client, so create the first one here.
+          </p>
+        )}
+        {optionsLoaded && !available && (
+          <p className="font-mono text-2xs text-foreground-muted">
+            Client profiles could not be loaded. Reload the page to try again.
+          </p>
+        )}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <NewClientDialog
+            navigateOnCreate={false}
+            onCreated={(created) => {
+              void loadOptions()
+              void applyProfile(created.id)
+            }}
+            trigger={
+              <button type="button" className={cn("font-mono text-2xs text-foreground-muted underline underline-offset-4", MOMENTARY_LINK_DARK)}>
+                New client profile
+              </button>
+            }
+          />
+          {applying && <span className="font-mono text-2xs text-foreground-muted">Applying...</span>}
+          {!applying && (selected || applied) && (
+            <span className="font-mono text-2xs text-success">{selected?.name ?? applied} selected.</span>
+          )}
+        </div>
       </div>
     )
   }

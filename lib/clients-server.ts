@@ -35,7 +35,13 @@ export type ReconcileInput = {
 
 export type ReconcileResult =
   | { ok: true; fields: Partial<ProjectClientFields> }
-  | { ok: false; error: string; status: number }
+  | { ok: false; error: string; status: number; code?: string }
+
+/** Machine-readable reason a creation path refused for want of a client profile. A caller that
+ *  can offer the user a way to supply one (the duplicate flow) keys on this, not on the text. */
+export const CLIENT_PROFILE_REQUIRED_CODE = "client_required"
+const CLIENT_PROFILE_REQUIRED_MESSAGE = "A project needs a client profile. Select one or create a new client profile."
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Resolves what a writer should actually persist.
@@ -103,26 +109,42 @@ export async function reconcileProjectClientFields(
   return { ok: true, fields }
 }
 
+/**
+ * THE RULING (2026-10-08): a project REQUIRES a client profile. This is the gate every path that
+ * CREATES a project row goes through. It lives at the creation paths, not in the database: the
+ * column stays nullable because existing projects are unfiled and must keep reading.
+ *
+ * The identifier is a CLAIM, never a grant. A missing or malformed value is refused as
+ * "required"; a well-formed one is verified against `orgIds` before it is believed. For a
+ * creation, pass ONLY the organization the new project will be attributed to
+ * (resolveCallerWriteOrgId), not every organization the caller can read, so a project cannot be
+ * created in one organization under another organization's client.
+ *
+ * A typed client_name is NOT accepted in place of a profile. On success both fields are set and
+ * client_name is the profile's own name.
+ */
+export async function resolveRequiredProjectClient(
+  supabase: SupabaseClient,
+  orgIds: readonly OrgId[],
+  rawClientId: unknown
+): Promise<ReconcileResult> {
+  const clientId = typeof rawClientId === "string" ? rawClientId.trim() : ""
+  if (!clientId) {
+    return { ok: false, error: CLIENT_PROFILE_REQUIRED_MESSAGE, status: 400, code: CLIENT_PROFILE_REQUIRED_CODE }
+  }
+  if (!UUID_SHAPE.test(clientId)) {
+    return { ok: false, error: "Unknown client profile", status: 400 }
+  }
+  return reconcileProjectClientFields(supabase, orgIds, {
+    hasClientId: true,
+    clientId,
+    hasClientName: false,
+    clientName: null,
+  })
+}
+
 function normalizeName(value: string | null): string | null {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   return trimmed ? trimmed : null
-}
-
-/**
- * Duplication helper: a copy carries BOTH fields together or neither, so a duplicate can never
- * be born incoherent. The source row is trusted as-is rather than re-reconciled, because
- * re-reconciling would silently repair a bad source row without anyone deciding to.
- */
-export function carryProjectClientFields(source: {
-  client_id?: unknown
-  client_name?: unknown
-}): ProjectClientFields {
-  const clientId = typeof source.client_id === "string" && source.client_id ? source.client_id : null
-  const clientName = typeof source.client_name === "string" && source.client_name.trim() ? source.client_name.trim() : null
-  // Only a coherent pair is carried. A source row with a link but no name, or the reverse, is
-  // copied as the safe half rather than propagated as-is.
-  if (clientId && clientName) return { client_id: clientId, client_name: clientName }
-  if (clientName) return { client_id: null, client_name: clientName }
-  return { client_id: null, client_name: null }
 }
