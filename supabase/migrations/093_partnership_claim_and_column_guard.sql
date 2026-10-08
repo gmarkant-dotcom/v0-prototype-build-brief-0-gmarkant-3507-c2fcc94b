@@ -29,7 +29,7 @@
 --   >>> draft was derived from the files and named two columns that do
 --   >>> not exist on this table. See (b) in THE RECONCILIATION.
 --
---   POLICIES ADDED: NONE. DROPPED: NONE. Count stays at 117.
+--   POLICIES ADDED: NONE. DROPPED: NONE. Count UNCHANGED (117 on 08-25).
 --   HOLE 1 IS AN **ALTER** POLICY, NOT A DROP-THEN-CREATE, AND THAT IS
 --   DELIBERATE - see WHY ALTER below. If the count moves, something
 --   other than this file moved it.
@@ -883,7 +883,7 @@ COMMIT;
 --       AND policyname = 'Partners can claim partnership by email';
 --
 -- V2. THE POLICY COUNT DID NOT MOVE.
---     EXPECTED: 6 on partnerships, 117 across public.
+--     EXPECTED: 6 on partnerships; public_total EQUAL TO WHAT YOU CAPTURED BEFORE APPLYING (117 was true on 2026-08-25; 099 has since added policies, so 117 is now WRONG).
 --     093 ALTERs one policy and adds none. A 7 here means a DROP-then-
 --     CREATE crept in somewhere and there are now two claim policies
 --     OR-ing together, which would close nothing.

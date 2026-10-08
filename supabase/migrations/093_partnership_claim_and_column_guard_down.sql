@@ -201,7 +201,7 @@ COMMIT;
 --     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 --     WHERE n.nspname = 'public' AND p.proname = 'partnerships_guard_identity_columns';
 --
--- D3. The policy count is unchanged. EXPECTED: 6 and 117.
+-- D3. The policy count is unchanged. EXPECTED: 6 on partnerships; public total equal to the count captured before applying 093 (117 on 2026-08-25, stale since 099).
 --
 --     SELECT count(*) FILTER (WHERE tablename = 'partnerships') AS partnerships,
 --            count(*)                                            AS public_total
