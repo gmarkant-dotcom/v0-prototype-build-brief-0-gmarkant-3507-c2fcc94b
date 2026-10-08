@@ -219,13 +219,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
      *
      * `app/api/agency/bids/compare/route.ts` is N bids across N vendors and caches a
      * narrative in `bid_comparisons` keyed on a hash of the response ids (migration 064). It
-     * has no `recordMilestone` import today and must not acquire one. A clean payload would
-     * not save it: `groupMilestoneRows()` in lib/activity-feed.ts groups on an exact shared
-     * `created_at`, one insert is one transaction is one timestamp, and `vendorCount` is
-     * rendered as "to N vendors" - so N rows from one comparison would put THE SIZE OF THE
-     * COMPETITIVE FIELD into the feed line through the GROUPING, with nothing in the payload
-     * at all. That is the `recipient_count` defect arriving by a different road
-     * (docs/broadcast-payload-leak-fix.md). One bid, one vendor, one row: this route only.
+     * emits `bid.compare` since ruling 7, but as ONE row per run with no vendor and no count,
+     * never as N rows: `groupMilestoneRows()` in lib/activity-feed.ts groups on an exact shared
+     * `created_at`, and `vendorCount` is rendered as "to N vendors", so N rows from one
+     * comparison would put THE SIZE OF THE COMPETITIVE FIELD into the feed line through the
+     * GROUPING, with nothing in the payload at all. That is the `recipient_count` defect
+     * arriving by a different road (docs/broadcast-payload-leak-fix.md). Here: one bid, one
+     * vendor, one row.
      *
      * >>> THE TYPE IS SERVER-DETERMINED. `force` NAMES NEITHER EVENT. <<<
      *

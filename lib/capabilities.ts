@@ -100,6 +100,10 @@ export const CAPABILITY_MINIMUM_ROLE = {
   "vendor.note_edit": "member",
   "vendor.remove": "admin",
   "vendor.blacklist": "member",
+  // Lifting a blacklist. Its own name because "vendor.blacklist" would render "blacklisted X"
+  // for the act that un-blacklisted X (docs/emitter-rulings-owed.md section 8). Agency feed
+  // only; never added to vendor_visible_event_types().
+  "vendor.unblacklist": "member",
   "vendor.vouch": "member",
   "vendor.performance_view": "member",
 
@@ -135,6 +139,9 @@ export const CAPABILITY_MINIMUM_ROLE = {
   "bid.view": "member",
   "bid.analyze": "member",
   "bid.analyze_retry": "member",
+  // One comparison run across a set of bids. Emitted once per run with the scope name and
+  // nothing else (docs/emitter-rulings-owed.md section 7). Agency feed only.
+  "bid.compare": "member",
   "bid.score": "member",
   "bid.criteria_edit": "admin",
   "bid.shortlist": "member",

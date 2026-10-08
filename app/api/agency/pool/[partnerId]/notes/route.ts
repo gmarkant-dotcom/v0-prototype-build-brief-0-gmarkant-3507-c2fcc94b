@@ -211,14 +211,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
      * records nothing. A vendor blacklisted, cleared, and blacklisted again records two
      * events, which is correct: those are two acts.
      *
-     * FALSE -> TRUE ONLY. Greg's ruling, 2026-09-14. Lifting a blacklist has no event type,
-     * no wording, and `vendor.blacklist` is the wrong one for it - the feed would render
-     * "blacklisted {vendor}" for the act that UN-blacklisted them, which is worse than
-     * silence. The clear is recorded as an owed ruling in docs/emitter-rulings-owed.md.
+     * TWO TRANSITIONS, EACH A NAMED BOOLEAN READ BEFORE THE WRITE. `isBlacklisting` is false ->
+     * true, Greg's ruling of 2026-09-14. `isLifting` is the opposite direction (ruling 8): lifting
+     * a blacklist records `vendor.unblacklist`, which has its own wording. `vendor.blacklist` is
+     * the wrong type for it - the feed would render "blacklisted {vendor}" for the act that
+     * UN-blacklisted them. Both are tests of a CHANGE, so the flag arriving unchanged on every
+     * notes save records nothing in either direction.
      */
     const wasBlacklisted = prev.blacklisted === true
     const nowBlacklisted = next.blacklisted === true
     const isBlacklisting = !wasBlacklisted && nowBlacklisted
+    const isLifting = wasBlacklisted && !nowBlacklisted
 
     // Append to timestamped log if notes text changed and is non-empty
     if (patch.notes !== undefined && patch.notes.trim()) {
@@ -299,6 +302,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
         subjectType: "partnership",
         subjectId: row.id,
         // Empty. See the block above - this is the ruling, not an omission.
+        payload: {},
+      })
+    }
+
+    /**
+     * Milestone: vendor.unblacklist. RULING 8. The act that lifts a blacklist.
+     *
+     * AGENCY FEED ONLY, OFF THE WHITELIST, for the reason ruling 2 gives and which binds harder
+     * here: a whitelisted lift would tell the vendor there WAS a blacklist to lift, retroactively
+     * disclosing the judgment the original ruling withheld. EMPTY PAYLOAD for the same reason as
+     * vendor.blacklist - nothing in partnership_notes is a fact about the reader. Same shape as
+     * the emit above in every other respect, including that it is last and fire-and-forget.
+     *
+     * Without this the feed permanently says a vendor is blacklisted when they are not.
+     */
+    if (isLifting) {
+      await recordMilestone(supabase, {
+        eventType: "vendor.unblacklist",
+        orgId: orgIdFromColumn(row.lead_org_id),
+        actorId: user.id,
+        vendorOrgId: orgIdFromColumn(partnerId),
+        partnershipId: row.id,
+        subjectType: "partnership",
+        subjectId: row.id,
         payload: {},
       })
     }

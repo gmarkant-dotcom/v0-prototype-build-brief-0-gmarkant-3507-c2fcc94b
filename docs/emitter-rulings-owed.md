@@ -758,3 +758,33 @@ be twelve lines of product voice nobody chose.
 "shape only" is there to show what the ruling changes on screen, not to choose the words.
 A type still needs a `MILESTONE_PREDICATES` entry before it renders at all - gate 3 - and
 that entry is the wording decision, owed separately.
+
+
+---
+
+## RULINGS 7, 8 AND 9 APPLIED, 2026-10-08 (`feat/relationship-end`)
+
+Greg ruled all three on 2026-10-08. What the code does as a result, so the sections above are
+read as the questions they were:
+
+| # | Ruling | Applied as |
+|---|---|---|
+| 7 | `bid.compare` | EMIT, ONE row per run, from `app/api/agency/bids/compare/route.ts`. Payload is the scope name and nothing else, enforced at the emit site by an annotated `{ scope_item_name: string \| null }`. No vendor, no partnership, no subject id. Agency feed only, off the whitelist. The route's header comment, which said it must not emit, is rewritten |
+| 8 | Lifting a blacklist | EMIT `vendor.unblacklist`, its own wording (`lifted the blacklist on {vendor}`), as a named boolean `isLifting = wasBlacklisted && !nowBlacklisted` read before the write, so the flag arriving unchanged on every notes save records nothing. Agency feed only, off the whitelist |
+| 9 | `rfp.regenerate` | **NOT BUILT. NO.** See below |
+
+### Ruling 9: `rfp.regenerate` is not emitted, and why that is a refusal rather than a gap
+
+`app/api/ai/master-brief/route.ts` persists nothing, so the server has no record of a prior
+generation to compare a new one against. The only thing that could tell a first draft from a
+redraft is a flag sent by the browser. **A client-supplied value must never DECIDE which event
+type is recorded.** A client may supply a value the server can check; it may not choose one the
+server cannot. Ruling 4 (`2c2db0f`) refused exactly this for `rfp.generate`, and this is the
+same refusal. `rfp.regenerate` stays a reserved key in `lib/capabilities.ts` with no emitter.
+Revisit only if a generation run is persisted server-side, at which point the discriminator
+becomes a fact rather than a claim.
+
+### What these rulings did NOT change
+
+Neither new type is on `vendor_visible_event_types()`. Adding one is a migration and a separate
+decision, and for `vendor.unblacklist` it would disclose that a blacklist existed.

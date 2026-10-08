@@ -4,34 +4,37 @@ import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, hashResponseIds } from "@/lib/bid-analysis-context"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
 import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { recordMilestone } from "@/lib/milestone-events"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 /**
- * THIS ROUTE EMITS NO MILESTONE, BY RULING, AND THE ABSENCE IS THE DECISION.
+ * THIS ROUTE EMITS ONE MILESTONE PER RUN, AND THE SHAPE OF THAT ROW IS THE WHOLE RULING.
  *
- * RULING 5, 2026-09-14. `bid.analyze` and `bid.analyze_retry` are emitted from
- * app/api/agency/bids/[responseId]/decompose/route.ts and from nowhere else. There is no
- * `recordMilestone` import in this file and there must not be one. Written here because an
- * absence leaves no trace at the site it was decided for, and the next reader comparing the
- * two analysis routes will notice that one emits and this one does not.
+ * It used to say the opposite, and the history is kept because the reasoning still binds:
+ * until ruling 7 this route emitted nothing, by ruling 5 (2026-09-14). A comparison is N bids
+ * belonging to N vendors. N rows from one insert share one `created_at`, `groupMilestoneRows()`
+ * in lib/activity-feed.ts groups on exactly that, and `vendorCount` renders as "to N vendors",
+ * so THE SIZE OF THE COMPETITIVE FIELD WOULD REACH THE FEED LINE THROUGH THE GROUPING with an
+ * empty payload and nothing to scrub. That is `rfp.broadcast.payload.recipient_count`
+ * (docs/broadcast-payload-leak-fix.md) arriving by a road no payload rule watches.
  *
- * WHY. A comparison is N bids belonging to N vendors. One row could carry only one subject,
- * so the shape would be N rows - the `recordMilestones()` broadcast shape - written by one
- * insert. `groupMilestoneRows()` in lib/activity-feed.ts groups on an EXACT shared
- * `created_at`, and one insert is one transaction is one `now()`, so all N land in one group
- * and `vendorCount` renders as "to N vendors". THE SIZE OF THE COMPETITIVE FIELD WOULD REACH
- * THE FEED LINE THROUGH THE GROUPING, with an empty payload and nothing to scrub - which is
- * `rfp.broadcast.payload.recipient_count` (docs/broadcast-payload-leak-fix.md) arriving by a
- * road no payload rule watches.
+ * So the emit below is ONE row, with no vendor, no partnership and no response id: nothing for
+ * the grouping to count, and nothing to resolve a vendor name from. The line reads
+ * "compared bids on {scope}" and nothing more (docs/emitter-rulings-owed.md section 7).
  *
- * Off the whitelist that would be agency-internal today. It would not stay that way for
- * free: the comparison narrative, the ranking and the set size are the fields most likely to
- * be reached for the moment anybody proposes whitelisting these types.
+ * >>> THE PAYLOAD IS THE SCOPE NAME AND NOTHING ELSE, ENFORCED BY THE COMPILER. <<<
+ * `comparisonPayload` is annotated `{ scope_item_name: string | null }`, so a second key is an
+ * excess-property error at `npx tsc --noEmit`, not a review comment. WHY THAT MATTERS HERE:
+ * `bid_comparisons` caches a narrative across a SET of responses (migration 064), so ANY field
+ * drawn from the comparison - a rank, a score relative to others, a set size, a spread, a
+ * winner - is a fact about the competitive field and is the recipient_count defect. The scope
+ * name is the one thing every bid in the set shares by construction.
  *
- * `bid.compare` is recorded as an OWED RULING in docs/emitter-rulings-owed.md. It is not
- * answered here and must not be answered by adding an emitter.
+ * AGENCY FEED ONLY. `bid.compare` is deliberately NOT on `vendor_visible_event_types()`, so
+ * gate 2 fails on the type and no counterparty can read it. Putting it there is a migration and
+ * a separate decision.
  */
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
@@ -187,6 +190,39 @@ export async function POST(req: Request) {
     if (upsertErr) {
       console.error("[api] failure", { route, method: "POST", message: upsertErr.message })
       return NextResponse.json({ error: "Failed to save comparison" }, { status: 500 })
+    }
+
+    // Milestone: bid.compare. ONE row per run that actually produced a comparison, after the
+    // upsert and fire-and-forget: the narrative is already saved, recordMilestone() catches
+    // everything and returns void, and a lost breadcrumb must never cost the agency a result
+    // that took most of a minute to produce. A cache hit returns above and records nothing,
+    // matching bid.analyze, which also records runs and not reads.
+    //
+    // vendorOrgId, partnershipId and subjectId are null ON PURPOSE. A set of bids has no single
+    // vendor, partnership or response to be the subject, and any one of them would be an
+    // arbitrary member of the set.
+    try {
+      // THE ENFORCEMENT. Annotated, so a second key is a compile error.
+      const comparisonPayload: { scope_item_name: string | null } = {
+        scope_item_name: firstCtx?.scopeItemName?.trim() || null,
+      }
+      await recordMilestone(supabase, {
+        eventType: "bid.compare",
+        // 079 PARAMETER CLASS: the acting organization, never user.id. Non-null here: the 403
+        // above refuses a caller without one.
+        orgId: writeOrgId,
+        actorId: user.id,
+        vendorOrgId: null,
+        partnershipId: null,
+        subjectType: "bid",
+        subjectId: null,
+        payload: comparisonPayload,
+      })
+    } catch (milestoneErr) {
+      console.error("[api] compare: bid.compare milestone failed (non-fatal)", {
+        route,
+        message: milestoneErr instanceof Error ? milestoneErr.message : String(milestoneErr),
+      })
     }
 
     await incrementAiAnalysis(await agencyEntitlementId(user.id, supabase), supabase)

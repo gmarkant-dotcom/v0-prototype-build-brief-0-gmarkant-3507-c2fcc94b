@@ -71,6 +71,7 @@ Greg, a migration, or a counterparty's cooperation, it is irreversible.
 | `vendor.note_edit` | Editing partnership notes | Reversible | member |
 | `vendor.remove` | Deleting a partnership row | **Irreversible** - the row and its history go | admin |
 | `vendor.blacklist` | Setting the `{blacklisted}` flag in `partnership_notes` | Reversible - it is a flag | member |
+| `vendor.unblacklist` | Clearing that flag. Added with ruling 8; its own name so the feed does not render "blacklisted X" for the act that lifted it | Reversible | member |
 | `vendor.vouch` | Adding or removing this organization's vouch for a vendor | Reversible | member |
 | `vendor.performance_view` | Reading a vendor's reliability summary and delivery history | Read - not gated by reversibility | member |
 
@@ -118,6 +119,7 @@ Greg, a migration, or a counterparty's cooperation, it is irreversible.
 | `bid.view` | Reading submitted bids | Read | member |
 | `bid.analyze` | Running AI scoring, decomposition, summary or comparison. Consumes AI quota | Reversible | member |
 | `bid.analyze_retry` | Re-running any of those. Overwrites the previous analysis | **Partly irreversible** | member |
+| `bid.compare` | One comparison run across a set of bids. Added with ruling 7. One feed row per run, scope name only | Reversible | member |
 | `bid.score` | Recording a manual evaluation against scoring criteria | Reversible | member |
 | `bid.criteria_edit` | Editing scoring criteria and templates | Reversible | admin |
 | `bid.shortlist` | Marking a bid shortlisted. Vendor-visible | Reversible, though the vendor already saw it | member |
