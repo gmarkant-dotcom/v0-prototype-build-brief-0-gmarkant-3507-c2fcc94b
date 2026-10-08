@@ -125,6 +125,17 @@ Two consequences worth knowing before touching data access:
 > `105_partnership_private_notes{,_down}.sql`, `106_partnership_notes_null{,_down}.sql`, and
 > `105_preapply_test.sql` / `106_preapply_test.sql`.
 
+> **107 and 108: AUTHORED 2026-10-08, NOT APPLIED (branch `fix/107-reliability-split`).** 107 creates
+> `public.partnership_private_reliability` (agency-only; the AI reliability summary and its timestamp,
+> one row, moved together) and backfills it from `partnerships.reliability_summary` and
+> `reliability_summary_generated_at`. 108 nulls both legacy columns (it does NOT drop them), behind a
+> drift guard that accepts a table row newer than the legacy value. **A vendor can still read the
+> summary through PostgREST until 108 runs;** the browser payload is stripped by the code on deploy.
+> Code ships first; apply 107, deploy-and-watch, then 108. No vendor screen renders the summary (073
+> ruled it agency-only). See `docs/107-reliability-split-report.md` and `docs/grant-posture-findings.md`.
+> Files: `107_partnership_private_reliability{,_down}.sql`, `108_partnership_reliability_null{,_down}.sql`,
+> `107_preapply_test.sql`, `108_preapply_test.sql`.
+
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
 2. Run it manually in Supabase SQL Editor
