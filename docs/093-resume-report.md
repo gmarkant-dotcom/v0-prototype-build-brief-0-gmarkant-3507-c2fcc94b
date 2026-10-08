@@ -292,10 +292,10 @@ outcome: **21 PASS, 1 KNOWN LIMIT (T15b), 0 FAIL, 0 INCONCLUSIVE.**
 | Where | What it says | Line |
 |---|---|---|
 | Header, "WHAT THE 22 ASSERTIONS COVER" | 22 | 27 |
-| Header, sample report | `expected 22` / `expected 21` / `KNOWN LIMIT ... 1` | 182-196 |
-| Header, "THREE NUMBERS MOVE TOGETHER" | names 22, 21, and `v_pass + v_limit = 22` | 316-320 |
-| Verdict condition | `v_ran <> 22` breaks it; green needs `v_pass + v_limit = 22` | see `grep -n "= 22" docs/093-preapply-test.sql` |
-| Report literals | `(expected 22)`, `(expected 21; 22 if the claim limit has lifted)`, `(expected 1: T15b ...)` | see the same grep |
+| Header, sample report | `expected 22` / `expected 21` / `KNOWN LIMIT ... 1` | 185-190 |
+| Header, "THREE NUMBERS MOVE TOGETHER" | names 22, 21, and `v_pass + v_limit = 22` | 317-322 |
+| Verdict condition | `v_ran <> 22` breaks it (line 2247); green needs `v_pass + v_limit = 22` (line 2253) | 2247, 2253 |
+| Report literals | `(expected 22)`, `(expected 21; 22 if the claim limit has lifted)`, `(expected 1: T15b ...)` | 2317-2320 |
 | Self-check 1 | `v_logged = v_ran` | verdict block |
 | Self-check 2 (new) | `pass + known limit + fail + inconclusive = v_logged` | verdict block |
 | Self-check 3 (new) | isolation fingerprint unchanged after every probe | verdict block |
