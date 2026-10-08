@@ -20,13 +20,40 @@
 --      unclaimed ghost partnership at that domain. This is OPEN-092-8,
 --      restored.
 --
---   2. LETS THE VENDOR WRITE EVERY COLUMN AGAIN. nda_confirmed_at,
---      msa_confirmed_at, partnership_notes (including the {blacklisted}
---      flag), reliability_summary, partner_email and the four 068 contact
---      columns all become vendor-writable. A vendor can self-confirm
---      their own NDA and MSA, un-blacklist themselves, and rewrite the
---      cached AI narrative about their own delivery performance that the
---      lead agency reads. This is OPEN-092-9, restored.
+--   2. LETS THE VENDOR WRITE EVERY GUARDED COLUMN AGAIN. EIGHTEEN of the
+--      live twenty-four:
+--
+--        id                                invitation_message
+--        invited_at                        created_at
+--        partner_email                     nda_confirmed_at
+--        nda_confirmed_by                  partnership_notes
+--        msa_confirmed_at                  msa_confirmed_by
+--        profile_status                    invitation_sent_at
+--        reliability_summary               reliability_summary_generated_at
+--        contact_name                      company_name
+--        phone                             website
+--
+--      A vendor can self-confirm their own NDA and MSA, un-blacklist
+--      themselves, rewrite the cached AI narrative about their own delivery
+--      performance that the lead agency reads, rewrite the pre-claim
+--      identifier the claim policy keys on, and rename themselves inside
+--      the agency's own pool record. This is OPEN-092-9, restored.
+--
+--      profile_status is in that list because 093 permits it ONLY on the
+--      claim transition; at every other moment it is guarded, and this file
+--      removes the guard entirely.
+--
+--      THE FOUR CONTACT COLUMNS ARE IN THAT LIST NOW AND WERE NOT BEFORE.
+--      An earlier draft of 093 left contact_name, company_name, phone and
+--      website permitted while the question was open, so this file
+--      correctly said it changed nothing about them. Greg ruled on
+--      2026-08-25 that they are guarded (RULED-093-1), so running this file
+--      hands them back to the vendor along with the rest.
+--
+--      18 + 5 permitted (status, accepted_at, updated_at,
+--      payment_terms_requests, vendor_org_id) + 1 still pinned by 087
+--      (lead_org_id) = 24. vendor_org_id stays constrained by 087 in both
+--      states and is counted with the permitted five.
 --
 -- 087 IS NOT UNDONE. lead_org_id stays immutable and vendor_org_id stays
 -- pinned in both directions: those four refusals are reproduced below
@@ -43,13 +70,13 @@
 -- has drifted - which is the correct outcome and the same reasoning 093
 -- gives for using ALTER over DROP-then-CREATE.
 --
--- TRANSACTION CONTROL. Explicit BEGIN; on LINE 56 and explicit COMMIT;
--- on LINE 151. Verify with:
+-- TRANSACTION CONTROL. Explicit BEGIN; on LINE 83 and explicit COMMIT;
+-- on LINE 180. Verify with:
 --
 --     grep -n -i '^begin\|^commit\|^rollback' \
 --       supabase/migrations/093_partnership_claim_and_column_guard_down.sql
 --
--- Three hits: 56 BEGIN;, 87 BEGIN (plpgsql, no semicolon), 151 COMMIT;.
+-- Three hits: 83 BEGIN;, 114 BEGIN (plpgsql, no semicolon), 180 COMMIT;.
 -- =====================================================================
 
 
@@ -146,7 +173,9 @@ COMMENT ON FUNCTION public.partnerships_guard_identity_columns() IS
   'an RLS update that matches no row returns HTTP 200 with no error and this project has '
   'lost real behaviour to exactly that five times. 093''s vendor-side column permit list '
   'has been REMOVED from this function by 093''s down file: every column on this table '
-  'except lead_org_id and vendor_org_id is vendor-writable again.';
+  'except lead_org_id and vendor_org_id is vendor-writable again, including '
+  'nda_confirmed_at, msa_confirmed_at, partnership_notes, reliability_summary, '
+  'partner_email, profile_status, contact_name, company_name, phone and website.';
 
 COMMIT;
 
@@ -172,7 +201,7 @@ COMMIT;
 --     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
 --     WHERE n.nspname = 'public' AND p.proname = 'partnerships_guard_identity_columns';
 --
--- D3. The policy count is unchanged. EXPECTED: 6 and 117.
+-- D3. The policy count is unchanged. EXPECTED: 6 on partnerships; public total equal to the count captured before applying 093 (117 on 2026-08-25, stale since 099).
 --
 --     SELECT count(*) FILTER (WHERE tablename = 'partnerships') AS partnerships,
 --            count(*)                                            AS public_total
