@@ -280,12 +280,12 @@ partnerships row with a NULL link, with the reason each leaves it NULL (all **RE
 
 | Site | Line | Why `vendor_org_id` is NULL although an account may exist |
 |---|---|---|
-| `lib/server/partner-pool-import.ts` | 267-283 (insert at 314, 325) | It computes `matchedProfileId` (line ~245) for the account, uses it only to set a flag and note, and hard-codes `vendor_org_id: null`, `status: "pending"`, `profile_status: "unclaimed"`. Its comment states the intent: activation only via invite then accept. Profile match is `.in("email", ...)`, exact case, so a differently-cased address is not matched at all. |
-| `app/api/agency/email-scan/import/route.ts` | 113-124 | Same shape: `vendor_org_id: null`, `status: "pending"`, with `matchedProfileId` computed above and used only for a note. Comment at ~103 says never touch `vendor_org_id` here. |
-| `app/api/agency/pool/resend-invitation/route.ts` via `lib/partnership-invitations.ts` | route 96; lib 86-98 | The route calls `markPartnershipInvited` with no `partnerId`; the lib writes `vendor_org_id: partnerId \|\| null`. Reaches the insert only when no row exists for the email. |
-| `app/api/partnerships/route.ts` | 654-679 (insert at 723) | The direct invite. It links when `resolveOrgIdForUser` finds an org, but looks the profile up by `.ilike('email', partnerEmail).maybeSingle()` (line 526), so an invitee address containing `_` or `%`, or two profiles matching, gives no link or an error; and a matched profile with no organization is logged and left NULL (lines 668-674). |
-| `app/api/rfp/guest/[token]/route.ts` | 75-82 | Case 2/3 ghost insert: `vendor_org_id: null`. |
-| `lib/award-partnership-resolution.ts` | 230 | Degraded resolver insert, `vendor_org_id: null`. |
+| `lib/server/partner-pool-import.ts` | 246 (match), 299 (`vendor_org_id: null`), inserts at 314 and 325 | It computes `matchedProfileId` (line 246) for the account, uses it only to set a flag and note, and hard-codes `vendor_org_id: null`, `status: "pending"`, `profile_status: "unclaimed"`. Its comment states the intent: activation only via invite then accept. Profile match is `.in("email", ...)`, exact case, so a differently-cased address is not matched at all. |
+| `app/api/agency/email-scan/import/route.ts` | 62 (match), 113-124 (`vendor_org_id: null` at 115) | Same shape: `vendor_org_id: null`, `status: "pending"`, with `matchedProfileId` computed above and used only for a note. Comment at 102 says never touch `vendor_org_id` here. |
+| `app/api/agency/pool/resend-invitation/route.ts` via `lib/partnership-invitations.ts` | route 96; lib 89-97 | The route calls `markPartnershipInvited` with no `partnerId`; the lib writes `vendor_org_id: partnerId \|\| null`. Reaches the insert only when no row exists for the email. |
+| `app/api/partnerships/route.ts` | 516 (lookup), 711 (no-org log), 723 (insert) | The direct invite. It links when `resolveOrgIdForUser` finds an org, but looks the profile up by `.ilike('email', partnerEmail).maybeSingle()` (line 516), so an invitee address containing `_` or `%`, or two profiles matching, gives no link or an error; and a matched profile with no organization is logged and left NULL (line 711). |
+| `app/api/rfp/guest/[token]/route.ts` | 134-141 (null at 136) | Case 3 ghost insert: `vendor_org_id: null`. (The insert at 76 links `matchedProfileId`.) |
+| `lib/award-partnership-resolution.ts` | 230-232 | Degraded resolver insert, `vendor_org_id: null`. |
 
 The two bulk-import sites (pool import, email scan) are the likeliest, since they set exactly
 `status: "pending"` with `vendor_org_id: null` for an address they have just matched to a profile,
@@ -309,3 +309,14 @@ existing accounts. Both are rulings.
 2. Whether the import sites should link at insert when an account exists (7b), and if so the
    case-insensitive profile match they need.
 3. What to do with the six existing rows. This is a data repair, not part of 093.
+
+### 7d. Addendum: a second claim path with the same defect (READ)
+
+`app/api/partnerships/route.ts:268-338` (GET, partner branch, the "079 GHOST CLAIM" block) is a
+second claim path. It reads `partnerships` with `.ilike('partner_email', ...).is('vendor_org_id', null)`
+as the vendor's session client, and claims only if that read returns rows. It names columns, so it
+sits behind the same SELECT filter and returns an empty array for the same reason. Its error
+handling (500 on a failed claim) never fires because there is no error, only no rows. So both
+documented claim paths (W4 at `app/auth/callback/route.ts:176-217` and this one) are inert under the
+live SELECT policies, if those match 079. That is consistent with group A in 7a. Unless a claim runs
+through a client I have not found, nothing links a ghost row to its vendor on the user's side.
