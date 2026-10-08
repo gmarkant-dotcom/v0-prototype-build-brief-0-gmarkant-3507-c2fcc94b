@@ -2,6 +2,8 @@ import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
+import type { OrgId } from "@/lib/entitlements"
+import { readReliabilityCache, resolveReliability, writeReliabilityCache } from "@/lib/server/partnership-private-reliability"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -50,7 +52,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
 
     const { data: partnership, error: partnershipErr } = await supabase
       .from("partnerships")
-      .select("id, reliability_summary, reliability_summary_generated_at")
+      // reliability_summary and its timestamp are read here ONLY as the pre-107 fallback. Once
+      // public.partnership_private_reliability exists its row wins (readReliabilityCache below).
+      .select("id, lead_org_id, reliability_summary, reliability_summary_generated_at")
       .in("lead_org_id", callerOrgIds)
       .eq("vendor_org_id", partnerId)
       // The same single predicate as isActivePartnership() in lib/partnership-state.ts,
@@ -147,8 +151,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
       would_work_again_rate: wouldWorkAgainRate,
     }
 
-    let reliabilitySummary = (partnership.reliability_summary as string | null) ?? null
-    let reliabilitySummaryGeneratedAt = (partnership.reliability_summary_generated_at as string | null) ?? null
+    const cached = resolveReliability(
+      {
+        summary: (partnership.reliability_summary as string | null) ?? null,
+        generatedAt: (partnership.reliability_summary_generated_at as string | null) ?? null,
+      },
+      await readReliabilityCache(supabase, callerOrgIds, partnership.id as string)
+    )
+    let reliabilitySummary = cached.summary
+    let reliabilitySummaryGeneratedAt = cached.generatedAt
 
     const latestCompletedAt = reviews.reduce<string | null>((max, r) => {
       if (!max || r.updated_at > max) return r.updated_at
@@ -210,10 +221,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
       if (result.success) {
         reliabilitySummary = result.text.trim()
         reliabilitySummaryGeneratedAt = new Date().toISOString()
-        const { error: updateErr } = await supabase
-          .from("partnerships")
-          .update({ reliability_summary: reliabilitySummary, reliability_summary_generated_at: reliabilitySummaryGeneratedAt })
-          .eq("id", partnership.id)
+        const { error: updateErr } = await writeReliabilityCache(supabase, {
+          partnershipId: partnership.id as string,
+          leadOrgId: partnership.lead_org_id as OrgId,
+          summary: reliabilitySummary,
+          generatedAt: reliabilitySummaryGeneratedAt,
+        })
         if (updateErr) {
           console.error("[api] failure", { route, method: "GET", message: updateErr.message, code: "cache_reliability_summary" })
         }

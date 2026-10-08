@@ -6,6 +6,7 @@ import { hasLigamentAccount } from '@/lib/server/account-existence'
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { actingRole, canActAs } from '@/lib/acting-role'
 import { attachPrivateNotes, withoutPrivateNotes } from '@/lib/server/partnership-private-notes'
+import { withoutPrivateReliability } from '@/lib/server/partnership-private-reliability'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
 import { checkRelationshipTransition, relationshipActFor, statusForAct } from '@/lib/relationship-transitions'
@@ -398,7 +399,10 @@ export async function GET(request: NextRequest) {
       
       // Attach agency data; strip private lead-agency notes (never exposed to partners).
       partnerships = allPartnerships.map((p) => {
-        const { partnership_notes: _omitNotes, ...rest } = p as Record<string, unknown>
+        // withoutPrivateReliability: the AI reliability narrative is the lead agency's view of the
+        // vendor and was never stripped here (migration 073 S4; the F3 stopgap covered only the
+        // dashboard route). No vendor screen renders it.
+        const { partnership_notes: _omitNotes, ...rest } = withoutPrivateReliability(p) as Record<string, unknown>
         return {
           ...rest,
           lead_org: leadOrgs[p.lead_org_id as string] || null,
@@ -1186,7 +1190,7 @@ export async function PATCH(request: NextRequest) {
           })
         }
         
-        return NextResponse.json({ partnership: withoutPrivateNotes(updated) })
+        return NextResponse.json({ partnership: withoutPrivateReliability(withoutPrivateNotes(updated)) })
       } else if (status === 'terminated') {
         // Decline invitation.
         //
@@ -1334,7 +1338,7 @@ export async function PATCH(request: NextRequest) {
           console.error('Error sending partnership declined email:', emailErr)
         }
 
-        return NextResponse.json({ partnership: withoutPrivateNotes(updated) })
+        return NextResponse.json({ partnership: withoutPrivateReliability(withoutPrivateNotes(updated)) })
       }
     }
 
