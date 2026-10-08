@@ -973,7 +973,7 @@ BEGIN
 
   v_permitted := v_vendor_permitted;
   IF OLD.vendor_org_id IS NULL AND NEW.vendor_org_id IS NOT NULL THEN
-    v_permitted := v_permitted || 'profile_status';
+    v_permitted := v_permitted || ARRAY['profile_status'];
   END IF;
 
   v_old_rest := to_jsonb(OLD) - v_permitted;
