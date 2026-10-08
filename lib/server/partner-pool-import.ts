@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
-import type { OrgId } from "@/lib/entitlements"
+import { resolveOrgIdsForUsers, type OrgId } from "@/lib/entitlements"
 
 /**
  * Shared write path for adding a ghost/unclaimed contact to an agency's partner pool -
@@ -236,6 +236,16 @@ export async function importPartnerRows(
     }
   }
 
+  // existingByPartnerId is keyed by partnerships.vendor_org_id, an ORGANIZATION id (079), but
+  // profileByEmail yields PROFILE ids. They are the same value only for the sixteen accounts whose
+  // organization was backfilled with their founder's user id, so looking one up with the other
+  // matched those sixteen and silently missed every account created since, which then fell
+  // through to the partner_email lookup. Resolve each matched profile's organization (one round
+  // trip) and look THAT up. This is not redundant with the email lookup: a row claimed by this
+  // organization can carry a different partner_email, and only the organization finds it. A
+  // profile with no organization is simply absent from the map, and never falls back to its id.
+  const orgByProfileId = await resolveOrgIdsForUsers(Array.from(profileByEmail.values()), service)
+
   const toInsert: Record<string, unknown>[] = []
   const insertEmailOrder: string[] = []
   const insertFlagByEmail = new Map<string, PartnerImportFlag | undefined>()
@@ -254,8 +264,9 @@ export async function importPartnerRows(
     const flag: PartnerImportFlag | undefined =
       guard === "same_domain_flag" ? "domain_match_flagged" : matchedProfileId ? "already_on_ligament" : undefined
 
-    const existing = matchedProfileId
-      ? existingByPartnerId.get(matchedProfileId) || existingByEmail.get(row.email)
+    const matchedOrgId = matchedProfileId ? orgByProfileId.get(matchedProfileId) ?? null : null
+    const existing = matchedOrgId
+      ? existingByPartnerId.get(matchedOrgId) || existingByEmail.get(row.email)
       : existingByEmail.get(row.email)
 
     if (existing) {
