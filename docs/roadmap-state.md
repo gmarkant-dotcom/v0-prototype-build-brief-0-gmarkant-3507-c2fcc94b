@@ -1,3 +1,21 @@
+> # MIGRATION 100 IS APPLIED. VERIFIED 2026-10-08 11:50 BY CATALOG QUERY.
+>
+> Every line below saying migration 100 is authored and not applied is STALE, including
+> banner D, section 3.1 and section 6.2. The pre-apply test ran first and returned
+> 9 PASS, 0 FAIL, 2 INCONCLUSIVE - the two inconclusive ones were MISSING TEST DATA,
+> not failures, because branch B's population is zero (unblocked_inbox_rows = 0,
+> unblocked_bid_rows = 0, measured the same morning). Every security assertion passed
+> with 42501: T4, T5, T7 and T9.
+>
+> Applied and verified: `with_check LIKE '%partner_rfp_inbox%'` is TRUE on
+> "Vendors insert own company milestone events", and the public policy count is 123,
+> unchanged, because 100 REPLACES 088's policy rather than adding one.
+>
+> SO RULING 6 IS NO LONGER A LIVE SILENT FAILURE. It is also not a repair of anything
+> currently happening: the population is zero, so 100 is PROTECTIVE. The first
+> magic-link vendor who views an RFP or acknowledges an NDA before being added to a
+> pool will now leave a breadcrumb instead of failing silently.
+
 > # THIRD CORRECTION BANNER, 2026-10-08 (`feat/clients-and-projects` run). READ THIS FIRST.
 >
 > The two banners below stand. Rows are marked **RESOLVED** only where this run checked the code
