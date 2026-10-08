@@ -9,6 +9,43 @@ Branch `feat/101-partnership-write-guard`, cut from `main` at `a5e0c20`.
 
 ---
 
+## CORRECTION, 2026-10-08: 093 IS NOT APPLIED TO PRODUCTION
+
+**Finding 2 below ("the brief was stale about three of the five columns: 093 already guards
+them") is WRONG for the live database.** I treated 093 as live because its file is on `main`. A file
+on `main` is not a migration in the database.
+
+Evidence, from a live catalog query Greg ran in the Supabase SQL Editor on 2026-10-08 (reported to
+this session; I did not run or see the query text):
+
+- the policy "Partners can claim partnership by email" still uses `partner_email ~~* (ILIKE)`, which
+  is the pre-093 predicate (093 replaces it with `lower(btrim())` equality);
+- the only trigger on `public.partnerships` is `partnerships_guard_identity_columns`, the 087
+  function, with no 093 permit list in it.
+
+What follows from that, for production today:
+
+1. `nda_confirmed_at`, `msa_confirmed_at`, `partnership_notes`, `reliability_summary*`,
+   `partner_email`, the contact columns and every other column except `lead_org_id` and the
+   `vendor_org_id` transitions are **OPEN to a vendor session**. The brief was right about them.
+   The open set is not "exactly `status` and `accepted_at`"; it is everything.
+2. 101 closes `status` and `accepted_at` only. **Applied alone it leaves the rest open.**
+3. 101's own checks say so: pre-flight **P3** returns `has_093_permit_list` = false (its instruction
+   is STOP), and pre-apply control **C4** is a FAIL. T17 to T19 (expect `LG009`) would FAIL too.
+   That is the test working, not a defect in it.
+4. **Apply order: 093 first, then 101.** 101's trigger does not depend on 093 to function, but its
+   header, its claim that three columns are already guarded, and T17 to T19 do.
+5. The 093 that was on `main` when this report was written is not the 093 to apply: the reconciled
+   version (24 live columns, four ghost-contact columns guarded per RULED-093-1, T17 flipped, T20
+   added) was on `fix/acting-role-read-scope` only. It is carried onto `fix/093-resume`; see
+   `docs/093-resume-report.md` there.
+
+Unchanged by this correction: finding 1 (a trigger, because the claim policy's WITH CHECK ORs
+through), the census, the two permitted transitions, and the 101 migration and test, which are not
+edited. Only this report is.
+
+---
+
 ## THE THREE THINGS TO READ FIRST
 
 ### 1. 101 is a TRIGGER, not a narrowed policy, and the brief's mechanism would have done nothing
