@@ -1,3 +1,7 @@
+> **BANNER, 2026-10-08.** The apply-order paragraph below says "093 stays parked". **STALE:** 093 is on `main`
+> (VERIFIED: `4d8400c`) and was applied 2026-10-08 15:58 (REPORTED). The paragraph described the state on the day it
+> was written and is left as written.
+
 # Bid notification scope - session report
 
 Branch `feat/bid-notification-scope`, five commits on top of `5fa1286`. Nothing pushed.

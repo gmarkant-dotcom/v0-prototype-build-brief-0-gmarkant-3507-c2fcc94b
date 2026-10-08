@@ -1,3 +1,8 @@
+> **BANNER, 2026-10-08.** Section 7 below ("Migration 093 (AUTHORED, NOT APPLIED)") is **STALE**. 093 is on `main`
+> (VERIFIED: `4d8400c`) and was applied 2026-10-08 15:58 (REPORTED). The line counts in that section (699 / 180 / 1,090)
+> described the first authoring; the migration is now 950 lines with BEGIN / COMMIT at 612 / 860, and the test is 2381
+> lines (all by `wc -l` and grep, this run). The body is left as written. See `docs/093-resume-report.md` and `docs/post-093-cleanup-report.md`.
+
 # Read-scope session report
 
 **Branch:** `fix/acting-role-read-scope` (7 commits, `d5a1b26`..`c975df9`)

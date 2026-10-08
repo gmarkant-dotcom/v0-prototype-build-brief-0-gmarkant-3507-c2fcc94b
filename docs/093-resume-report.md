@@ -1,3 +1,32 @@
+> # BANNER, 2026-10-08. MIGRATION 093 IS APPLIED. THE APPLY SEQUENCE BELOW IS HISTORY, NOT INSTRUCTION.
+>
+> **REPORTED (Greg, 2026-10-08), not verifiable from the repository:** 093 was applied and verified at
+> 15:58 after one fix, and 100 was applied earlier the same day. **VERIFIED IN THE REPOSITORY (git, this
+> run):** 093 and its ARRAY patch are on `main` (`4d8400c`, `cf75092`); the migration's BEGIN, plpgsql
+> BEGIN and COMMIT are still 612 / 695 / 860 and the patch is at line 759
+> (`v_permitted := v_permitted || ARRAY['profile_status'];`).
+>
+> **The bug found before apply:** `v_permitted` is `text[]` and the migration appended a bare string,
+> raising 22P02 on every claim transition. **The rebuilt pre-apply test caught it** (T15a returned
+> `ERR:22P02`). The sections below say "parse-checked" and describe the migration as ready; both were
+> true and neither saw this bug, because the parser checks syntax and the failure was a runtime cast.
+> **Final test result (REPORTED): 20 PASS, 1 KNOWN LIMIT (T15b), 0 FAIL, 1 INCONCLUSIVE (T16, no subject
+> exists).** That is a 22-assertion run (the addendum's count).
+>
+> **Do not run the sequence below.** The ordering "093, then 101" is superseded twice: 093 is done, and
+> 101 is superseded by 102 (`docs/101-rescope-after-093.md`). The body is left as written, because a body
+> edited to agree with its corrections stops being evidence of what was believed.
+>
+> ### Stale references in this report, verified 2026-10-08 (the body is NOT edited)
+>
+> | The body says | Now | How checked |
+> |---|---|---|
+> | Verdict condition `v_ran = 20 AND v_pass = 20` at line 1509 (section "Test file") | the condition is `v_pass + v_limit = 22` at line 2253 of `docs/093-preapply-test.sql`; the first self-check branch is at 2247 | grep, this run |
+> | "20 assertions, T1 to T20", `expected 20` literals | 22 assertions; the addendum (below) states it, and the test says `expected 22` | grep, this run |
+> | The test is 1601 lines (the figure given to this run) | **DISPROVEN as a quote of this report: no line count appears in it.** 1601 was the line of the old test's final `ROLLBACK;`. The file is now 2381 lines and its `ROLLBACK;` is the last line | `wc -l`, `grep`, this run |
+> | Section 8 gates table and the commit list | accurate for the commits it names; later commits (`25c2d1c` onward) are in the addendum | git log |
+> | Apply sequence C0 to C2, dry run at "line 860", V1 to V6 | line 860 is still the migration's COMMIT, but the migration is applied; do not rerun | REPORTED + grep |
+
 # 093 resume: getting migration 093 ready to apply, ahead of 101
 
 **Merge status:** not stated here. Check with `git merge-base --is-ancestor <sha> main` using the last

@@ -1,3 +1,17 @@
+> # FOURTH CORRECTION BANNER, 2026-10-08 (`fix/post-093-cleanup` run). READ THIS FIRST.
+>
+> The banners below stand. Status marked **VERIFIED** was checked in the repository this run; **REPORTED**
+> comes from the run brief (Greg) and is not re-derivable here, since no SQL was run.
+>
+> | Says | Status now | Basis |
+> |---|---|---|
+> | Migration 093 is authored / parked / not applied | **APPLIED 2026-10-08 15:58, verified after a fix (REPORTED).** On `main` with the ARRAY patch at line 759 of the migration | merge `4d8400c`, `cf75092`: VERIFIED. Application: REPORTED |
+> | Migration 100 is authored, not applied | **APPLIED AND VERIFIED 2026-10-08 11:50 (REPORTED; see the banner above)** | REPORTED |
+> | Migration 101 | **AUTHORED, NOT APPLIED**, on `feat/101-partnership-write-guard`. **Superseded by 102**, authored and not applied on `fix/post-093-cleanup`; 101 and 102 must never both be applied. See `docs/101-rescope-after-093.md` | VERIFIED (files) |
+> | Four stranded partnership rows | **BACKFILLED BY HAND 2026-10-08** (Caro Creative Inc., Cresce Studio, Marcus Liwag, fredsqueo.com): `vendor_org_id` linked, all four still `pending`, nothing accepted on anyone's behalf. **Not verified from the application's side** - queries in `docs/post-093-cleanup-report.md` | REPORTED |
+> | "The claim path works once 093 matches properly" | **DISPROVEN as a complete fix.** The claim path is unreachable from a user session because of SELECT visibility; 093 fixed matching, not visibility. See `docs/claim-visibility-rulings.md` | VERIFIED by reading the policies; EXECUTED evidence from Greg, 2026-10-08 |
+> | The email-scan import's `.eq("vendor_org_id", matchedProfileId)` can never match | **PARTLY DISPROVEN.** It matches for the sixteen accounts whose organization id equals their founder's user id and misses every account since. **RESOLVED** by resolving the profile's organization first (this branch) | code read |
+
 > # MIGRATION 100 IS APPLIED. VERIFIED 2026-10-08 11:50 BY CATALOG QUERY.
 >
 > Every line below saying migration 100 is authored and not applied is STALE, including
