@@ -2,6 +2,7 @@ import { orgIdFromColumn, resolveCallerOrgIds, type OrgId } from "@/lib/entitlem
 import { recordMilestone } from "@/lib/milestone-events"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { readPrivateNotes, resolveNotes, writePrivateNotes } from "@/lib/server/partnership-private-notes"
 
 export const dynamic = "force-dynamic"
 
@@ -90,7 +91,13 @@ async function assertActiveAgencyPartnership(
     return null
   }
   const rows = (data ?? []) as Array<{ id: string; partnership_notes: unknown; lead_org_id: string | null }>
-  return rows[0] ?? null
+  const row = rows[0]
+  if (!row) return null
+  // 105: the notes live in partnership_private_notes. The column selected above is the legacy
+  // copy, used only while that table is absent or has no row for this partnership. The read is
+  // scoped by the same organization set as the gate.
+  const priv = await readPrivateNotes(supabase, agencyOrgIds, [row.id])
+  return { ...row, partnership_notes: resolveNotes(row.partnership_notes, priv, row.id) }
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ partnerId: string }> }) {
@@ -240,11 +247,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
       next.notes_log = Array.isArray(prev.notes_log) ? prev.notes_log : []
     }
 
-    const { error: upErr } = await supabase
-      .from("partnerships")
-      .update({ partnership_notes: next, updated_at: new Date().toISOString() })
-      .eq("id", row.id)
-      .in("lead_org_id", callerOrgIds)
+    // 105: write the private table (the legacy column only while that table does not exist).
+    // row.lead_org_id came back from a query filtered `.in("lead_org_id", callerOrgIds)`.
+    const leadOrgId = orgIdFromColumn(row.lead_org_id)
+    if (!leadOrgId) {
+      return NextResponse.json({ error: "No active partnership" }, { status: 404, headers: noStore })
+    }
+    const { error: upErr } = await writePrivateNotes(supabase, [
+      { partnershipId: row.id, leadOrgId, notes: next },
+    ])
+    if (!upErr) {
+      // The old UPDATE also stamped partnerships.updated_at. Kept, best-effort.
+      await supabase
+        .from("partnerships")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", row.id)
+        .in("lead_org_id", callerOrgIds)
+    }
 
     if (upErr) {
       console.error("[api/agency/pool/notes] update", upErr)

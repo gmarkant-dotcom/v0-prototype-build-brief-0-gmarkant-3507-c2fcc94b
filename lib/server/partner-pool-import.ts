@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
 import { resolveOrgIdsForUsers, type OrgId } from "@/lib/entitlements"
+import { readPrivateNotes, resolveNotes, writePrivateNotes, type PrivateNotesWrite } from "@/lib/server/partnership-private-notes"
 
 /**
  * Shared write path for adding a ghost/unclaimed contact to an agency's partner pool -
@@ -214,9 +215,23 @@ export async function importPartnerRows(
     for (const r of validRows) results.push({ email: r.email, outcome: "error", reason: "Failed to check existing pool" })
     return results
   }
+  // 105: notes live in partnership_private_notes; the column selected above is the legacy copy,
+  // used only for a row with no table entry. Scoped to agencyOrgId (service role: the scope IS
+  // the permission). A real read error fails the whole request rather than merging into a stale copy.
+  let privateRead
+  try {
+    privateRead = await readPrivateNotes(service, [agencyOrgId], ((existingPoolRows || []) as ExistingPoolRow[]).map((r) => r.id))
+  } catch {
+    for (const r of validRows) results.push({ email: r.email, outcome: "error", reason: "Failed to check existing notes" })
+    return results
+  }
   const existingByEmail = new Map<string, ExistingPoolRow>()
   const existingByPartnerId = new Map<string, ExistingPoolRow>()
-  for (const row of (existingPoolRows || []) as ExistingPoolRow[]) {
+  for (const base of (existingPoolRows || []) as ExistingPoolRow[]) {
+    const row: ExistingPoolRow = {
+      ...base,
+      partnership_notes: resolveNotes(base.partnership_notes, privateRead, base.id) as PartnershipNotesShape | null,
+    }
     const e = String(row.partner_email || "").toLowerCase()
     if (e) existingByEmail.set(e, row)
     if (row.vendor_org_id) existingByPartnerId.set(row.vendor_org_id, row)
@@ -249,6 +264,8 @@ export async function importPartnerRows(
   const toInsert: Record<string, unknown>[] = []
   const insertEmailOrder: string[] = []
   const insertFlagByEmail = new Map<string, PartnerImportFlag | undefined>()
+  // 105: the notes of each new row, written to partnership_private_notes once the row has an id.
+  const notesByEmail = new Map<string, PartnershipNotesShape>()
 
   for (const row of validRows) {
     if (results.some((r) => r.email === row.email)) continue // profile-lookup error already recorded
@@ -281,9 +298,9 @@ export async function importPartnerRows(
         results.push({ email: row.email, outcome: "added", flag })
         continue
       }
+      const mergedNotes = mergeNotes(existing.partnership_notes, row, source, matchedProfileId, flag)
       const patch: Record<string, unknown> = {
         updated_at: new Date().toISOString(),
-        partnership_notes: mergeNotes(existing.partnership_notes, row, source, matchedProfileId, flag),
       }
       if (!existing.contact_name && row.contactName) patch.contact_name = row.contactName
       if (!existing.company_name && row.companyName) patch.company_name = row.companyName
@@ -291,10 +308,15 @@ export async function importPartnerRows(
       if (!existing.website && row.website) patch.website = row.website
 
       const { error } = await service.from("partnerships").update(patch).eq("id", existing.id)
+      const { error: noteErr } = error || !mergedNotes
+        ? { error: null }
+        : await writePrivateNotes(service, [{ partnershipId: existing.id, leadOrgId: agencyOrgId, notes: mergedNotes }])
       results.push(
         error
           ? { email: row.email, outcome: "error", reason: "Failed to update existing contact" }
-          : { email: row.email, outcome: "added", flag }
+          : noteErr
+            ? { email: row.email, outcome: "error", reason: "Contact updated but its notes could not be saved" }
+            : { email: row.email, outcome: "added", flag }
       )
       continue
     }
@@ -315,30 +337,52 @@ export async function importPartnerRows(
       company_name: row.companyName,
       phone: row.phone,
       website: row.website,
-      partnership_notes: notes,
     })
+    if (notes) notesByEmail.set(row.email, notes)
     insertEmailOrder.push(row.email)
     insertFlagByEmail.set(row.email, flag)
   }
 
+  // Writes the private notes for rows that were just inserted. A row whose notes fail to save is
+  // reported as an error rather than "added", so the caller does not believe its notes landed.
+  const saveInsertedNotes = async (inserted: { id: string; partner_email: string }[]) => {
+    const writes: PrivateNotesWrite[] = []
+    for (const r of inserted) {
+      const notes = notesByEmail.get(String(r.partner_email))
+      if (notes) writes.push({ partnershipId: r.id, leadOrgId: agencyOrgId, notes })
+    }
+    return writes.length > 0 ? (await writePrivateNotes(service, writes)).error : null
+  }
+
   for (const insertChunk of chunk(toInsert, CHUNK_SIZE)) {
-    const { error: insertErr } = await service.from("partnerships").insert(insertChunk)
+    const { data: insertedRows, error: insertErr } = await service
+      .from("partnerships")
+      .insert(insertChunk)
+      .select("id, partner_email")
     if (!insertErr) {
+      const noteErr = await saveInsertedNotes((insertedRows || []) as { id: string; partner_email: string }[])
       for (const record of insertChunk) {
         const email = String((record as { partner_email: string }).partner_email)
-        results.push({ email, outcome: "added", flag: insertFlagByEmail.get(email) })
+        results.push(
+          noteErr && notesByEmail.has(email)
+            ? { email, outcome: "error", reason: "Contact added but its notes could not be saved" }
+            : { email, outcome: "added", flag: insertFlagByEmail.get(email) }
+        )
       }
       continue
     }
     // Batch insert failed - fall back to one-at-a-time within this chunk only, so we can
     // report exactly which row(s) failed and why instead of failing the whole chunk.
     for (const record of insertChunk) {
-      const { error } = await service.from("partnerships").insert(record)
+      const { data: one, error } = await service.from("partnerships").insert(record).select("id, partner_email").single()
       const email = String((record as { partner_email: string }).partner_email)
+      const noteErr = !error && one ? await saveInsertedNotes([one as { id: string; partner_email: string }]) : null
       results.push(
         error
           ? { email, outcome: "error", reason: error.message }
-          : { email, outcome: "added", flag: insertFlagByEmail.get(email) }
+          : noteErr && notesByEmail.has(email)
+            ? { email, outcome: "error", reason: "Contact added but its notes could not be saved" }
+            : { email, outcome: "added", flag: insertFlagByEmail.get(email) }
       )
     }
   }

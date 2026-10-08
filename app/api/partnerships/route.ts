@@ -5,6 +5,7 @@ import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactio
 import { hasLigamentAccount } from '@/lib/server/account-existence'
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { actingRole, canActAs } from '@/lib/acting-role'
+import { attachPrivateNotes, withoutPrivateNotes } from '@/lib/server/partnership-private-notes'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
 import { recordMilestone } from '@/lib/milestone-events'
 import { checkRelationshipTransition, relationshipActFor, statusForAct } from '@/lib/relationship-transitions'
@@ -163,6 +164,11 @@ export async function GET(request: NextRequest) {
         if (simple.error) throw simple.error
         partnerships = simple.data
       }
+
+      // 105: the agency's private notes live in partnership_private_notes. The `*` above carries
+      // only the legacy column, so replace it with the resolved value before anything below
+      // (the ghost-row loop, the response) reads it. Scoped by callerOrgIds; throws on a real error.
+      partnerships = await attachPrivateNotes(supabase, callerOrgIds, partnerships as Record<string, unknown>[] | null)
 
       // Ghost/unclaimed rows (vendor_org_id IS NULL - the Invited/Discovered sections on
       // /agency/pool) carry no rfp_magic_tokens link of their own, so pool_status and
@@ -1180,7 +1186,7 @@ export async function PATCH(request: NextRequest) {
           })
         }
         
-        return NextResponse.json({ partnership: updated })
+        return NextResponse.json({ partnership: withoutPrivateNotes(updated) })
       } else if (status === 'terminated') {
         // Decline invitation.
         //
@@ -1328,7 +1334,7 @@ export async function PATCH(request: NextRequest) {
           console.error('Error sending partnership declined email:', emailErr)
         }
 
-        return NextResponse.json({ partnership: updated })
+        return NextResponse.json({ partnership: withoutPrivateNotes(updated) })
       }
     }
 

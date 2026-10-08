@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { OrgId } from "@/lib/entitlements"
 import { broadcastCuesPartnership } from "@/lib/feature-flags"
 import type { BroadcastCueNote } from "@/lib/broadcast-cue-shape"
+import { writePrivateNotes } from "@/lib/server/partnership-private-notes"
 
 /**
  * BROADCASTING AN RFP CUES AN INVITATION TO PARTNER. It does not create the partnership.
@@ -202,7 +203,7 @@ export async function cuePartnershipInvitations(
       continue
     }
 
-    const { error: insertErr } = await supabase.from("partnerships").insert({
+    const { data: inserted, error: insertErr } = await supabase.from("partnerships").insert({
       lead_org_id: leadOrgId,
       // Case (ii) sets this; case (iii) leaves it null and the row is a GHOST, granting the
       // vendor nothing until the claim path fills it in on signup.
@@ -213,13 +214,23 @@ export async function cuePartnershipInvitations(
       // DELIBERATELY NOT STAMPED. This column is what lib/partnership-state.ts reads to put a
       // row in the pool's Invited column, and nobody deliberately invited anybody here.
       invitation_sent_at: null,
-      partnership_notes: { cued_by_broadcast: note },
       created_at: now,
       updated_at: now,
-    })
+    }).select("id").single()
 
     if (!insertErr) {
       outcome.created += 1
+      // 105: the cue is the agency's private note on the row, so it goes to
+      // partnership_private_notes (the legacy column only while that table does not exist).
+      // A failed note write does not undo the row: the invitation is the point of the cue.
+      if (inserted?.id) {
+        const { error: noteErr } = await writePrivateNotes(supabase, [
+          { partnershipId: String(inserted.id), leadOrgId, notes: { cued_by_broadcast: note } },
+        ])
+        if (noteErr) {
+          console.error("[broadcast-cue] cue note write failed", { leadOrgId, code: noteErr.code, message: noteErr.message })
+        }
+      }
       continue
     }
 

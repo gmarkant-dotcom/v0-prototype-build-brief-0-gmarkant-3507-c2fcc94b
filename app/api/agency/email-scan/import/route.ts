@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { readPrivateNotes, resolveNotes, writePrivateNotes } from "@/lib/server/partnership-private-notes"
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
-import { agencyEntitlementId, resolveOrgIdForUser } from "@/lib/entitlements"
+import { agencyEntitlementId, orgIdFromColumn, resolveOrgIdForUser } from "@/lib/entitlements"
 import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
 
 export const dynamic = "force-dynamic"
@@ -97,6 +98,18 @@ async function importContact(
     existing = byEmail.data as typeof existing
   }
 
+  // 105: the notes live in partnership_private_notes; the column selected above is the legacy
+  // copy. Scoped to this agency organization (service role, so the scope IS the permission).
+  const leadOrgId = orgIdFromColumn(agencyOrgId)
+  if (!leadOrgId) throw new Error("email-scan import: agency organization id is not a valid organization id")
+  if (existing) {
+    const priv = await readPrivateNotes(service, [leadOrgId], [existing.id])
+    existing = {
+      ...existing,
+      partnership_notes: resolveNotes(existing.partnership_notes, priv, existing.id) as Record<string, unknown> | null,
+    }
+  }
+
   const mergedNotes = (): Record<string, unknown> | null => {
     const base: Record<string, unknown> = { ...(existing?.partnership_notes || {}) }
     if (matchedProfileId) base.matched_profile_id = matchedProfileId
@@ -109,25 +122,35 @@ async function importContact(
     // Existing Discovered/pending ghost row - link the matched profile id (if any) and
     // flag, but never touch status/profile_status/vendor_org_id here.
     if (matchedProfileId || poolFlag) {
-      const { error } = await service
-        .from("partnerships")
-        .update({ partnership_notes: mergedNotes(), updated_at: new Date().toISOString() })
-        .eq("id", existing.id)
+      const { error } = await writePrivateNotes(service, [
+        { partnershipId: existing.id, leadOrgId, notes: mergedNotes() },
+      ])
       if (error) throw error
+      await service.from("partnerships").update({ updated_at: new Date().toISOString() }).eq("id", existing.id)
     }
     return "added"
   }
 
-  const { error } = await service.from("partnerships").insert({
-    lead_org_id: agencyOrgId,
-    vendor_org_id: null,
-    partner_email: email,
-    profile_status: "unclaimed",
-    status: "pending",
-    contact_name: name,
-    partnership_notes: mergedNotes(),
-  })
+  const { data: inserted, error } = await service
+    .from("partnerships")
+    .insert({
+      lead_org_id: agencyOrgId,
+      vendor_org_id: null,
+      partner_email: email,
+      profile_status: "unclaimed",
+      status: "pending",
+      contact_name: name,
+    })
+    .select("id")
+    .single()
   if (error) throw error
+  const notes = mergedNotes()
+  if (notes && inserted?.id) {
+    const { error: noteErr } = await writePrivateNotes(service, [
+      { partnershipId: String(inserted.id), leadOrgId, notes },
+    ])
+    if (noteErr) throw noteErr
+  }
   return "added"
 }
 
