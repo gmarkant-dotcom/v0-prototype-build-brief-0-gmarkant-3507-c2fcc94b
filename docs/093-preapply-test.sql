@@ -49,6 +49,15 @@
 -- WAS REPORTED AS A MIGRATION FAILURE. T15 now selects its own claimable
 -- subject; T16 tests the already-claimed case ON PURPOSE.
 --
+-- T15 AND THE SHARED-CLAIMS BUG. On main before this revision, v_claims was
+-- built once from the T1-T12 subject's uid and T15 reused it, so its UPDATE
+-- ran with auth.uid() = that subject, not the claimer, and a header sentence
+-- said T15 "impersonates that profile directly" when it did not. T15 now
+-- builds its own claims (v_ghost_claims, from the claimer's uid), proves
+-- auth.uid() equals the claimer before it writes (LG098 on mismatch), and
+-- clears the claims after it. Every other assertion's identity is listed in
+-- docs/093-resume-report.md.
+--
 -- T17 was FLIPPED on 2026-08-25 from "these four are permitted" to "these
 -- four are refused" when Greg ruled RULED-093-1. T20 was added in the same
 -- pass, because that ruling is the first time a name has been REMOVED from
@@ -350,6 +359,7 @@ DECLARE
   v_ghost_claims text;
   v_claimed_other uuid;
   v_claims       text;
+  v_seen_uid     uuid;
   v_agency_claims text;
   v_rows         integer;
   v_uses_btrim   boolean;
@@ -1127,11 +1137,24 @@ BEGIN
       PERFORM set_config('request.jwt.claims',    v_ghost_claims,    true);
       PERFORM set_config('request.jwt.claim.sub', v_ghost_uid::text, true);
       SET LOCAL ROLE authenticated;
+      -- PROOF THE IMPERSONATION TOOK AS THE CLAIMER. The Aug 25 bug was a
+      -- T15 that ran with auth.uid() = the T1-T12 subject because every
+      -- set_config in the file passed one shared claims string. Reading
+      -- auth.uid() back inside the role switch makes that failure LOUD: a
+      -- wrong uid is a FAIL naming both ids, never a quiet pass or a
+      -- misleading refusal.
+      v_seen_uid := auth.uid();
+      IF v_seen_uid IS DISTINCT FROM v_ghost_uid THEN
+        RAISE EXCEPTION 'T15 impersonation mismatch: auth.uid() is %, the claimer is %', v_seen_uid, v_ghost_uid
+          USING ERRCODE = 'LG098';
+      END IF;
       UPDATE public.partnerships
          SET vendor_org_id = v_ghost_org, profile_status = 'active', updated_at = now()
        WHERE id = v_ghost;
       GET DIAGNOSTICS v_rows = ROW_COUNT;
       RESET ROLE;
+      PERFORM set_config('request.jwt.claims',    '', true);
+      PERFORM set_config('request.jwt.claim.sub', '', true);
       IF v_rows = 1 THEN
         v_logged := v_logged + 1;
         v_lines := v_lines || E'\n  ' || rpad('T15 legitimate claim still works', 40) || rpad('PASS', 14) || '(1 row, profile_status permitted on the transition)';
@@ -1160,9 +1183,14 @@ BEGIN
       WHEN OTHERS THEN
         RESET ROLE;
         v_logged := v_logged + 1;
-        v_lines := v_lines || E'\n  ' || rpad('T15 legitimate claim still works', 40) || rpad('FAIL', 14) || format('%s %s', SQLSTATE, SQLERRM);
+        v_lines := v_lines || E'\n  ' || rpad('T15 legitimate claim still works', 40) || rpad('FAIL', 14) || format('%s %s%s', SQLSTATE, SQLERRM,
+          CASE WHEN SQLSTATE = 'LG098' THEN ' - the claims did not take; the claim path was NOT exercised as the claimer.' ELSE '' END);
         v_fail := v_fail + 1;
     END;
+    -- Claims are scoped to this assertion: nothing after T15 inherits the
+    -- claimer's identity if an arm above forgot to clear it.
+    PERFORM set_config('request.jwt.claims',    '', true);
+    PERFORM set_config('request.jwt.claim.sub', '', true);
   END IF;
 
   -- T16. THE NEGATIVE CONTROL THAT PAIRS WITH T15.
