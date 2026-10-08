@@ -476,10 +476,10 @@ export async function GET() {
     //    Past 500 lifetime responses an old recipient whose response fell outside the window
     //    reads as invited-and-not-responded, which reopens an RFP that was answered.
     //
-    // THE SAME CEILING ALSO TRUNCATES `committedPartnerSpend` BELOW, and there it is worse:
-    // that sum has no time window at all, so every awarded response older than the newest 500
-    // is silently dropped from the numerator while `totalClientBudget` sums every project
-    // with no cap. The ratio understates for exactly the agencies that have the most history.
+    // THE SAME CEILING USED TO TRUNCATE `committedPartnerSpend` BELOW. FIXED 2026-10-08
+    // (docs/clients-and-projects-report.md phase 2): the sum, and the per-project
+    // committedSpend column, now read every awarded response through their own paged query.
+    // `hasResponded` above is STILL decided from the capped array.
     //
     // THE CEILING DOES NOT BITE AN AGENCY UNDER 500 LIFETIME RESPONSES, and whether any
     // agency is over it was NOT measured - neither session that looked had database access.
@@ -494,10 +494,52 @@ export async function GET() {
       (a) => a.status === "awarded" && typeof a.awarded_at === "string" && (a.awarded_at as string) >= quarterStart
     ).length
 
+    // EVERY awarded response, read on its own and paged, instead of the awarded subset of the
+    // newest-500 array above. The 500 cap bounds what the activity feed and the response index
+    // need; it must not bound a money sum with no time window. Scoped by
+    // `.in("lead_org_id", callerOrgIds)`, the same organization check as every read here. If
+    // this read fails the sum falls back to the capped array (today's behaviour, now logged)
+    // rather than 500ing the dashboard over a figure it has always been able to render.
+    type AwardedRow = { id: string; inbox_item_id: string | null; budget_proposal: unknown }
+    let awardedResponses: AwardedRow[] = (responses as unknown as (AwardedRow & { status?: string })[]).filter(
+      (r) => r.status === "awarded"
+    )
+    {
+      const AWARDED_PAGE = 1000
+      const AWARDED_MAX_PAGES = 50
+      const collected: AwardedRow[] = []
+      let complete = false
+      for (let page = 0; page < AWARDED_MAX_PAGES; page++) {
+        const from = page * AWARDED_PAGE
+        const { data: batch, error: awardedErr } = await supabase
+          .from("partner_rfp_responses")
+          .select("id, inbox_item_id, budget_proposal")
+          .in("lead_org_id", callerOrgIds)
+          .eq("status", "awarded")
+          .order("id", { ascending: true })
+          .range(from, from + AWARDED_PAGE - 1)
+        if (awardedErr) {
+          console.error("[api] failure", {
+            route,
+            method: "GET",
+            table: "partner_rfp_responses (awarded, paged)",
+            message: awardedErr.message,
+          })
+          break
+        }
+        collected.push(...((batch || []) as unknown as AwardedRow[]))
+        if ((batch || []).length < AWARDED_PAGE) {
+          complete = true
+          break
+        }
+      }
+      if (complete) awardedResponses = collected
+      else console.warn("[dashboard] awarded responses not fully read; spend falls back to the newest 500", { route })
+    }
+
     let committedPartnerSpend = 0
-    for (const r of responses) {
-      if (r.status !== "awarded") continue
-      const amount = parsePartnerBudgetProposal((r as { budget_proposal?: unknown }).budget_proposal)
+    for (const r of awardedResponses) {
+      const amount = parsePartnerBudgetProposal(r.budget_proposal)
       if (amount != null) committedPartnerSpend += amount
     }
     let totalClientBudget = 0
@@ -862,12 +904,11 @@ export async function GET() {
     }
 
     const spendByProject = new Map<string, number>()
-    for (const r of responses) {
-      if (r.status !== "awarded") continue
-      const inbox = r.inbox_item_id ? inboxById.get(r.inbox_item_id as string) : null
+    for (const r of awardedResponses) {
+      const inbox = r.inbox_item_id ? inboxById.get(r.inbox_item_id) : null
       const projectId = inbox?.project_id as string | undefined
       if (!projectId) continue
-      const amount = parsePartnerBudgetProposal((r as { budget_proposal?: unknown }).budget_proposal)
+      const amount = parsePartnerBudgetProposal(r.budget_proposal)
       if (amount != null) spendByProject.set(projectId, (spendByProject.get(projectId) || 0) + amount)
     }
 
