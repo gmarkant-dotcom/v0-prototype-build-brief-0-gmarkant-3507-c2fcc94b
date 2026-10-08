@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
-import { agencyEntitlementId } from "@/lib/entitlements"
+import { agencyEntitlementId, resolveOrgIdForUser } from "@/lib/entitlements"
 import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
 
 export const dynamic = "force-dynamic"
@@ -65,12 +65,20 @@ async function importContact(
   if (guard === "self_account") return "self"
   const poolFlag = guard === "same_domain_flag" ? "domain_match_flagged" : matchedProfileId ? "already_on_ligament" : null
 
-  const byId = matchedProfileId
+  // vendor_org_id is an ORGANIZATION id (079). matchedProfileId is a PROFILE id. They are the same
+  // value only for the sixteen accounts whose organization was backfilled with their founder's id,
+  // so comparing them found those sixteen and silently missed every account created since, which
+  // then fell through to the partner_email lookup below. Resolve the matched profile's
+  // organization and compare THAT. This lookup is not redundant with the email one: a row claimed
+  // by this organization can carry a different partner_email (another member's address, or a
+  // contact address that changed), and the email lookup cannot find it.
+  const matchedOrgId = matchedProfileId ? await resolveOrgIdForUser(matchedProfileId, service) : null
+  const byId = matchedOrgId
     ? await service
         .from("partnerships")
         .select("id, vendor_org_id, status, partnership_notes")
         .eq("lead_org_id", agencyOrgId)
-        .eq("vendor_org_id", matchedProfileId)
+        .eq("vendor_org_id", matchedOrgId)
         .limit(1)
         .maybeSingle()
     : { data: null }

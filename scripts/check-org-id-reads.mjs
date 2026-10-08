@@ -376,13 +376,6 @@ const KNOWN_OPEN_MIRROR = [
       "existingProfile.id filtered against and written into vendor_org_id for a manually typed recipient, plus the partnerId local. Needs a counterparty user-to-organization resolver.",
   },
   {
-    file: "app/api/agency/email-scan/import/route.ts",
-    count: 1,
-    tiers: "PARAM",
-    why:
-      "matchedProfileId written into vendor_org_id on the pool-import path. Same counterparty class.",
-  },
-  {
     file: "app/api/agency/pool/[partnerId]/notes/route.ts",
     count: 1,
     tiers: "PARAM",
