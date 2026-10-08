@@ -252,3 +252,217 @@ are unexecuted SQL. Nothing was opened in a browser.
 
 Commits on `fix/093-resume`, oldest first: `d4f44ca`, `43dadd4` (cherry-picks), `5664150` (T15),
 then `3b48582` (policy-count wording), then this report. `305d9da` is on `feat/101-partnership-write-guard`.
+
+---
+
+# ADDENDUM 2026-10-08 (second pass): the claim assertions were rebuilt
+
+This section supersedes the earlier sections of this report on three points only: the assertion
+count (20 is now **22**), T15 (now T15a, T15b, T15c), and T14 and T16 (rebuilt). Everything else above
+stands. Merge state is not asserted here; check it with
+`git merge-base --is-ancestor <sha> main`.
+
+Commits, oldest first: `25c2d1c` (investigation doc, as it stood), `61c1808` (executed evidence of
+the six stranded invitations), `01bed21` (corrected line numbers, second dead claim path), `c5fbf8c`
+(the test rebuild). The test file is `docs/093-preapply-test.sql`.
+
+## A. Read this first
+
+1. **The test has been parse-checked and never run.** I parsed it with `pglast` (libpg_query, the
+   real PostgreSQL parser) in a scratch virtualenv: the top-level script parses, the DO block body
+   parses as PL/pgSQL, and the two statements inside the EXECUTE strings parse. That proves syntax
+   and nothing else. No identifier, type, or runtime behaviour has been checked by Postgres. The
+   first run is the real test of this file, and a clean first run is not guaranteed.
+2. **Several behaviours it rests on are RECALLED, not executed.** See section H. The first run
+   confirms or refutes each of them; the report prints the evidence for the main one.
+3. **While reading 101's test I found a risk, not fixed.** `101_preapply_test.sql` (on
+   `feat/101-partnership-write-guard`) creates `pg_temp.t_log`, `pg_temp.t_try`, `pg_temp.t_state`,
+   `pg_temp.t_whoami` and others, 106 references to `pg_temp.` in all. `docs/091-preapply-test.sql`
+   (line 42) and `docs/092-preapply-test.sql` (line 53) record that the Supabase SQL Editor session
+   returns `3F000 schema "pg_temp" does not exist`. If that still holds, the 101 test fails at its
+   first `CREATE FUNCTION pg_temp...` and says nothing about 101. I did not edit 101's test. It
+   needs a ruling and a rebuild along the lines used here (inline, no helper functions) before 101's
+   pre-apply run can be trusted.
+
+## B. Assertion count, and the three places that must agree
+
+**22 assertions** (was 20): T1 to T13, **T14, T15a, T15b, T15c, T16**, T17 to T20. Expected clean
+outcome: **21 PASS, 1 KNOWN LIMIT (T15b), 0 FAIL, 0 INCONCLUSIVE.**
+
+| Where | What it says | Line |
+|---|---|---|
+| Header, "WHAT THE 22 ASSERTIONS COVER" | 22 | 27 |
+| Header, sample report | `expected 22` / `expected 21` / `KNOWN LIMIT ... 1` | 182-196 |
+| Header, "THREE NUMBERS MOVE TOGETHER" | names 22, 21, and `v_pass + v_limit = 22` | 316-320 |
+| Verdict condition | `v_ran <> 22` breaks it; green needs `v_pass + v_limit = 22` | see `grep -n "= 22" docs/093-preapply-test.sql` |
+| Report literals | `(expected 22)`, `(expected 21; 22 if the claim limit has lifted)`, `(expected 1: T15b ...)` | see the same grep |
+| Self-check 1 | `v_logged = v_ran` | verdict block |
+| Self-check 2 (new) | `pass + known limit + fail + inconclusive = v_logged` | verdict block |
+| Self-check 3 (new) | isolation fingerprint unchanged after every probe | verdict block |
+
+Counted by file scan, not by eye: **22** `v_ran := v_ran + 1;`, and the 22 distinct labels
+T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15a T15b T15c T16 T17 T18 T19 T20 each appear in a
+verdict line. No literal `20` assertion count remains (grep for `expected 20`, `= 20`, `20 assert`
+returns nothing). Any of the three self-checks failing overrides every verdict with
+"THE TEST ITSELF IS BROKEN".
+
+## C. What each claim assertion does, and the before/after table I expect
+
+Each claim probe runs **twice in one transaction**: BEFORE 093 (the policy and function live when the
+paste starts) and AFTER (093's two statements applied by `EXECUTE`, then the same probes again). Only
+AFTER decides a verdict. These are **expectations, not results**; nothing has run.
+
+| Probe | Statement | BEFORE (old `~~*` policy, 087 trigger) | AFTER (093) | Verdict rule |
+|---|---|---|---|---|
+| **T14** wildcard | claimer's profile email set to `%` by the owner inside the probe; `UPDATE partnerships SET vendor_org_id = <own org>`, no WHERE | **reached**: `%` matches every unclaimed row, 087's trigger refuses the first (23514). Or rows claimed | **nothing reached, 0 newly claimed** | PASS only if AFTER nothing AND BEFORE reached. BEFORE also nothing = INCONCLUSIVE "not discriminating". If `~~*` was not live at paste time = INCONCLUSIVE "no contrast" |
+| **T15a** policy admits a claim | no-WHERE `SET vendor_org_id, profile_status, updated_at` as the claimer | claimed N of N expected (N from the owner's ILIKE count); subject row claimed | claimed N of N expected (owner's equality count); subject row claimed (55ba0c93 if it qualifies) | PASS needs completed, count equal to expected, subject claimed. LG009 = FAIL (guard refused the claim write). 23514 = INCONCLUSIVE |
+| **T15b** production shape | `... WHERE id = <subject>` | 0 rows | 0 rows | 0 = **KNOWN LIMIT** (neither PASS nor FAIL, never "DO NOT APPLY"). 1 row = PASS "limit lifted". LG009 = FAIL |
+| **T15c** visibility control | `count(*)` of the subject row and of the table, as the claimer | 0 and 0 | 0 and 0 | 0 = PASS. Non-zero = INCONCLUSIVE (the SELECT policies are not what the investigation recorded) |
+| **T16** claimed row not claimable | owner rewrites a third-org row's `partner_email` to the claimer's, then the claimer runs a no-WHERE claim | row untouched | row untouched | PASS if untouched, the email term was made true, and nothing reached it. REACHED or MOVED = FAIL |
+
+Differences from what you specified, stated so they are not a surprise:
+
+- **T14 observes "reached", not "claimed every row", for the old policy.** Under the old policy `%`
+  admits every unclaimed row, but 087's trigger then raises 23514 on the first row that is not the
+  claimer's and the whole statement aborts, so ROW_COUNT is never produced. A trigger error proves
+  the policy's USING had already admitted a row (USING runs before BEFORE ROW triggers), so I count it
+  as admission. If 087 were absent the statement would claim rows and `newly claimed` would show it.
+- **"Newly claimed" is counted by the owner**, as the fall in `count(*) WHERE vendor_org_id IS NULL`
+  across the probe, not by ROW_COUNT, because a no-WHERE UPDATE also counts the claimer's own rows
+  (rewritten to the same value).
+- **T16's "expected 0 before and after" is stated as "third-org row untouched, before and after".** A
+  no-WHERE statement cannot aim at one row, so the figure is measured by the owner on that row.
+- **T15a's subject has two extra conditions**: the claimer is in exactly one organization and in no
+  lead organization, because the no-WHERE probe also touches every row the claimer's other policies
+  admit (the agency update policy, a second vendor organization). 55ba0c93 is preferred (ORDER BY)
+  but only used if it qualifies. If no subject qualifies T15a, T15b, T15c are INCONCLUSIVE and the
+  message gives the count of looser candidates.
+- **T14 and T16 are INCONCLUSIVE if the claimer is a member of a lead organization**, for the same
+  reason, and T1's subject selection now prefers a vendor who is not a lead anywhere.
+
+## D. Isolation: how it is guaranteed, and how it is checked
+
+Guaranteed by construction: every probe sits in its own nested `BEGIN ... EXCEPTION` block and always
+ends in `RAISE EXCEPTION ... ERRCODE 'LG097'`, swallowed by that block's own handler. A handler that
+catches an error rolls back everything the block did to the database: the UPDATE, T14's owner write to
+`profiles.email`, `SET LOCAL ROLE` and the `set_config` claims. Local variables survive, which is how
+measurements get out. **Checked at run time, not assumed:** a fingerprint (md5 over every
+`partnerships` row text plus the two impersonated profiles' emails) is taken before the first probe
+and recomputed after each of the 10 probe runs (5 probes x 2 phases). Any change counts as an
+isolation failure and ends the run with "THE TEST ITSELF IS BROKEN". That the fingerprint and the
+rollback behave as described is RECALLED until the first run; the check exists so a wrong recollection
+cannot pass silently.
+
+## E. Identity: every role switch is read back
+
+After every `SET LOCAL ROLE authenticated` the test reads `auth.uid()` and raises `LG098` on mismatch:
+**54 mentions of LG098 in the file; every switch, not only T15.** After every claims reset at owner
+level it checks `auth.uid()` is NULL (the loop probes, the start of the block, T20). LG098 is reported
+as INCONCLUSIVE with the words "TEST FAULT", never as a verdict on 093. T19 counts faults inside its
+loop and reports one INCONCLUSIVE line instead of seven.
+
+| Assertion | Identity | Read back |
+|---|---|---|
+| T1 to T11, T13 (no role), T17, T18, T19, T20 | vendor subject `v_uid` | yes, expected `v_uid` |
+| T12 | lead agency member `v_agency_uid` | yes, expected `v_agency_uid` |
+| T14, T16 | vendor subject `v_uid` | yes; owner state also checked clean |
+| T15a, T15b, T15c | the claimer `v_ghost_uid` | yes, expected `v_ghost_uid` |
+
+## F. FAIL messages: each now names what it detects
+
+- `matched N rows, expected 1` (T1 to T5): now says the write did not reach the subject row and to
+  check visibility, instead of implying 093 broke it.
+- `NO ERROR - wrote N row(s)` (T6 to T10, T11, T17, T18, T20; nine arms): when N = 0 it is now
+  INCONCLUSIVE ("matched 0 rows and raised nothing, the guard was never reached"); the FAIL wording
+  survives only for N > 0.
+- `... DO NOT APPLY 093.` attached to any unclassified error (T1 to T4): replaced by "unexpected error
+  <code> from a write that must succeed ... it is not LG009".
+- T15's old FAIL for 0 rows ("093 BREAKS THE CLAIM PATH. DO NOT APPLY") no longer exists. A zero-row
+  production-shaped claim is a KNOWN LIMIT. The policy-level FAILs in T15a name the policy or guard
+  that refused.
+
+## G. 093's migration and down file are unchanged
+
+`git diff --stat -- supabase/` after the rebuild is empty. Line numbers, re-grepped:
+
+| File | BEGIN | plpgsql BEGIN | COMMIT |
+|---|---|---|---|
+| `supabase/migrations/093_partnership_claim_and_column_guard.sql` | 612 | 695 | 860 |
+| `supabase/migrations/093_partnership_claim_and_column_guard_down.sql` | 83 | 114 | 180 |
+
+The test's copy of 093 now lives inside `EXECUTE` strings. Compared with the migration's code, with
+comments and whitespace stripped: the ALTER POLICY is identical (also byte-identical), and the
+function is identical modulo comments. The test's header says "the migration's code, comments left
+out" rather than "verbatim", which the earlier text overstated.
+
+## H. What I did NOT verify (read this before trusting a green run)
+
+All RECALLED from Postgres documentation or source, none executed:
+
+1. A no-WHERE, no-RETURNING UPDATE is governed by the UPDATE policies alone. If false, T15a reads 0
+   and FAILs ("admitted NONE of N"), the same wrong signal as the old T15. This is the assumption
+   with the most weight. The investigation doc's section 6 has a standalone probe (`C-probe`) you can
+   run first.
+2. A caught error in a nested block rolls back `SET LOCAL ROLE` and `set_config(..., true)`. Used to
+   restore the owner state after every probe; the fingerprint covers data only, and
+   the owner-state check at each probe's start (LG098 if `auth.uid()` is not NULL) would catch a
+   leaked claim.
+3. PL/pgSQL array-element assignment into `text[]`/`integer[]` initialised with NULL elements, and
+   that local variable assignments survive the subtransaction rollback.
+4. UPDATE policies' USING runs before BEFORE ROW triggers, WITH CHECK after. The REACHED
+   classification depends on it.
+5. The SQL Editor accepts a 134 KB paste and a DO block with UPDATE statements that have no WHERE
+   (some editor versions prompt). Header says so.
+6. Whether the real data has a qualifying subject (a claimer in exactly one organization and no lead
+   organization, with 55ba0c93 or another unclaimed row addressed to them). Without one, T15a to T15c
+   are INCONCLUSIVE and say why.
+7. 084's unique index and T16's partner_email rewrite: the T16 subject is chosen to avoid a collision,
+   but 23505 is still possible and is reported as INCONCLUSIVE.
+
+## I. Gates (each its own unpiped command)
+
+| Gate | Phase 0 baseline (before this pass) | After |
+|---|---|---|
+| tsc | 0 | 0 |
+| build (`next build`, invoked directly) | 0 | 0 |
+| eslint | 1, 182 / 154 / 28 | 1, 182 / 154 / 28, output byte-identical to the baseline |
+| identity-columns --guard | 0, TOTAL 0 | 0, TOTAL 0 |
+| org-id-reads --guard | 0, class A 14 open, class B 60 open, 0 regressions | 0, same |
+| embed-targets | 0, TOTAL 0 | 0, TOTAL 0 |
+| policy-audit --guard | 1 (known), FLAGGED 53 | 1, FLAGGED 53 |
+| verify-rls | NOT RUN (credentials; known 2) | NOT RUN |
+
+No movement. Only `docs/` changed, so none was expected.
+
+## J. Copy the test to the clipboard (explicit filename; macOS)
+
+```bash
+cd /Users/gam/dev/v0-prototype-build-brief-0-gmarkant-3507-c2fcc94b
+git branch --show-current                      # expect: fix/093-resume
+pbcopy < docs/093-preapply-test.sql
+pbpaste | wc -l                                # expect: 2381
+pbpaste | head -1                              # expect: -- =====...
+pbpaste | tail -1                              # expect: ROLLBACK;
+```
+
+From any branch, without a checkout:
+
+```bash
+git show fix/093-resume:docs/093-preapply-test.sql | pbcopy
+```
+
+Paste the whole thing into ONE SQL Editor tab and run it once. The expected result is a red error
+box whose first line starts `SAFE TO APPLY 093.` and which shows `KNOWN LIMIT : 1`. If the editor asks
+you to confirm an UPDATE without WHERE, confirm: it is inside a rolled-back DO block. If it says
+"Success. No rows returned", the run did not work (see the header).
+
+## K. Findings carried from the investigation doc (not part of 093, not fixed)
+
+- Both documented claim paths (`app/auth/callback/route.ts:176-217` and the GET auto-claim at
+  `app/api/partnerships/route.ts:268-338`) name columns in a SELECT-then-UPDATE, so under the SELECT
+  policies in 079 they return no rows and no error. EXECUTED: the claimer sees 0 rows
+  (2026-10-08). Five live invitations are in the predicted stranded state.
+- A sixth (`e3d5e1fd`) was created unlinked for an account that already existed. Candidate write sites
+  and reasons are in the investigation doc section 7b.
+- **Rulings owed:** repair the claim path (not by a claimer SELECT policy); link-at-insert for the
+  import sites; what to do with the six rows; whether 101's test is rebuilt without `pg_temp`.
