@@ -90,6 +90,8 @@ SELECT attname, attacl FROM pg_attribute
 
 If `relacl` shows `authenticated=arwdDxt` (or any `r`), the column revoke is a no-op, as stated above. If `attacl` is null, the grant is table-level only.
 
-## Stopped here
+## Stopped here (SUPERSEDED)
+
+Greg ruled the same day: the split table is the only mechanism that works (his catalog query: `attacl` NULL, `relacl` table-wide for `authenticated`). Built in `docs/105-notes-split-report.md`. The paragraph below is the state at the end of Phase 0.
 
 Phase 1 is not started. The choice between the split table, the service-role route and the view is a scope decision about a roughly fifteen-site code change and a two-migration sequence; the brief assumed one revoke. Per the standing rule, I am asking rather than picking a reading.

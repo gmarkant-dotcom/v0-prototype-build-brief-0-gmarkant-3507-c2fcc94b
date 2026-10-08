@@ -116,6 +116,14 @@ Two consequences worth knowing before touching data access:
 >
 > **This migration log stops at 078 and is incomplete.** 079, 080, 082 and 087 are applied and
 > have no row here. Recorded as a known gap rather than silently left.
+>
+> **105 and 106: AUTHORED 2026-10-08, NOT APPLIED (branch `fix/105-notes-column-revoke`).** 105
+> creates `partnership_private_notes` (agency-only, no vendor policy, `anon` revoked by name) and
+> backfills it from `partnerships.partnership_notes`. 106 nulls the legacy column (it does NOT drop
+> it). **A vendor can still read the lead agency's private notes until 106 runs.** Code ships
+> first; apply 105, deploy-and-watch, then 106. See `docs/105-notes-split-report.md`. Files:
+> `105_partnership_private_notes{,_down}.sql`, `106_partnership_notes_null{,_down}.sql`, and
+> `105_preapply_test.sql` / `106_preapply_test.sql`.
 
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
