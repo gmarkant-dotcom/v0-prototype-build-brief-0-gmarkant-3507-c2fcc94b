@@ -313,6 +313,10 @@ export function orgIdFromColumn(value: unknown): OrgId | null {
  *                                                     argument IS the whole scoping
  *   app/api/partner/partnerships/claim/route.ts:43 -> partnerships.vendor_org_id, which
  *                                                     REFERENCES organizations(id)
+ *                                                     (NO LONGER A CALLER: it resolves the
+ *                                                     claimant with resolveCallerWriteOrgId()
+ *                                                     and fails closed, so the userId
+ *                                                     fallback cannot reach this column)
  * All three get a BETTER value after this change in the branch that differs, because the
  * acting organization is the right answer for all three. None of them gets a worse one:
  * the fallback they receive in every other branch is the same `userId` they got before.
