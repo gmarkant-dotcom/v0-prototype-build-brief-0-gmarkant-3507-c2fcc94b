@@ -1,3 +1,56 @@
+# CURRENT STATE, 2026-10-09 (read this instead of every banner below)
+
+Owner-verified 2026-10-09 by catalog query in the Supabase SQL Editor, unless marked "per owner".
+Anything not listed here is **unverified**. Every banner below this section is history.
+
+## Migrations
+
+| Migrations | Status |
+|---|---|
+| 072, 105, 106, 107, 108, 109, 110, 111, 112 | **Applied, catalog-verified 2026-10-09.** (072: its jsonb columns exist on `partner_rfp_responses`.) |
+| 079-100, 102 | **Applied per owner.** |
+| 103, 104 | **NOT applied** (budget spine schema; their tables do not exist). Their grants revoke `anon` but not `authenticated`: **fix before apply.** |
+| 101 | **Never applied. Must never be applied.** Exists only on the unmerged branch `feat/101-partnership-write-guard`; superseded by 102. |
+| 073 | **Never applied. Must never be applied.** `delivery_reviews` has no `shared_with_vendor` column. Superseded by 111/112 for column privacy. Its "shared with vendor" idea is a separate product decision that has not been ruled on. |
+| 071, 074-078 | Unverified. |
+
+**Next free migration number: 113.**
+
+## Closed leaks
+
+Pattern for each: agency-only split table, code shipped first, then a nulling migration with a drift
+guard and a legacy-write guard.
+
+- `partnerships.partnership_notes` -> `partnership_private_notes` (105/106)
+- `partnerships.reliability_summary`, `reliability_summary_generated_at` -> `partnership_private_reliability` (107/108)
+- `partner_rfp_responses.composite_score`, `ai_summary_short`, `ai_summary_detailed`, `ai_summary_generated_at`
+  -> `partner_rfp_response_private` (109/110). Verified: 15 rows in the table, 0 legacy rows hold a value, guard
+  trigger `partner_rfp_responses_private_columns_guard` enabled BEFORE INSERT/UPDATE.
+- `delivery_reviews.on_time_notes`, `on_budget_notes`, `client_feedback`, `ai_delta_summary`, `would_work_again`,
+  `budget_variance_pct` -> `delivery_review_private` (111/112). Verified: 2 rows in the table, 0 legacy rows hold a
+  value, guard trigger `delivery_reviews_private_columns_guard` enabled BEFORE INSERT/UPDATE.
+
+All nulled legacy columns are deliberately empty. Do not repopulate or drop them until a quiet period has
+passed; the 42P01/PGRST205 fallback code is removed in the same change as the drop.
+
+Pre-apply tests for 109-112 each reported 0 FAIL. The only INCONCLUSIVE rows were the NO SUBJECT
+cross-agency checks (A6, B1, B2), accepted on the 105 precedent because m a r k a n t is the only lead
+organization with members.
+
+## Open, pre-existing, not fixed
+
+- A vendor can insert its own `delivery_reviews` row. It lands under the vendor's own org and is invisible to the agency.
+- A vendor can reach agency routes by switching its own `active_role`. Each route returns only the caller's own org
+  rows (inferred, untested).
+- The policy audit script reads a frozen 2026-08-13 snapshot and cannot see any later table.
+- 103/104 grants revoke `anon` but not `authenticated` (fix before apply).
+
+## In-flight Claude Code work
+
+None.
+
+---
+
 > # FOURTH CORRECTION BANNER, 2026-10-08 (`fix/post-093-cleanup` run). READ THIS FIRST.
 >
 > The banners below stand. Status marked **VERIFIED** was checked in the repository this run; **REPORTED**
