@@ -214,7 +214,7 @@ Files: `113_role_columns_guard.sql` (BEGIN line 115, COMMIT line 287),
   definer/search_path as authored; P4 no other public function calls `set_config` (INCONCLUSIVE, not
   FAIL, if one does: read it); M migration ran.
 
-**Gates:** `pnpm exec tsc --noEmit` exit 0. `pnpm lint` (whole repo) fails on many pre-existing
+**Gates (WS1):** `pnpm exec tsc --noEmit` exit 0. `pnpm lint` (whole repo) fails on many pre-existing
 messages; in touched files the only messages are pre-existing (`contexts/paid-user-context.tsx:96`
 set-state-in-effect, `lib/entitlements.ts:163` unused directive). One new message in a new file was
 fixed before commit.
