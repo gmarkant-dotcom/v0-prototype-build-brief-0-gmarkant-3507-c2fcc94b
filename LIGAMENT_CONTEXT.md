@@ -136,6 +136,19 @@ Two consequences worth knowing before touching data access:
 > Files: `107_partnership_private_reliability{,_down}.sql`, `108_partnership_reliability_null{,_down}.sql`,
 > `107_preapply_test.sql`, `108_preapply_test.sql`.
 
+> **109-112: AUTHORED 2026-10-09, NOT APPLIED (branch `fix/109-112-scoring-and-reviews-split`).** Two
+> independent pairs, same pattern as 107/108. 109 creates `public.partner_rfp_response_private` (agency-only:
+> `composite_score`, `ai_summary_short`, `ai_summary_detailed`, `ai_summary_generated_at`; keyed on `lead_org_id`,
+> set from the parent by a guard trigger); 110 nulls those four on `partner_rfp_responses` and adds a guard
+> refusing any non-null write (it also closes a vendor WRITE path: "Partners update own RFP responses" has no
+> column limit). 111 creates `public.delivery_review_private` (`on_time_notes`, `on_budget_notes`,
+> `client_feedback`, `ai_delta_summary`, `would_work_again`, `budget_variance_pct`; keyed on `org_id`, which is
+> delivery_reviews' agency key, not `lead_org_id`); 112 nulls and guards them. **111 supersedes the never-applied
+> 073 for column privacy; 073 must never be applied.** Code ships first (vendor and guest routes stop returning
+> whole rows on deploy). See `docs/109-112-split-report.md`. Files: `109_partner_rfp_response_private{,_down}.sql`,
+> `110_partner_rfp_response_private_null{,_down}.sql`, `111_delivery_review_private{,_down}.sql`,
+> `112_delivery_review_private_null{,_down}.sql`, and `109`-`112_preapply_test.sql`.
+
 **When applying a new migration:**
 1. Create the SQL file at supabase/migrations/[number]_[description].sql
 2. Run it manually in Supabase SQL Editor
