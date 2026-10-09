@@ -1,7 +1,7 @@
 import { get } from "@vercel/blob"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { isVercelBlobStorageUrl, parseAgencyLibraryBlobPathFromUrl } from "@/lib/vercel-blob-url"
+import { ourBlobStoreAccess, parseLibraryBlobPath } from "@/lib/vercel-blob-url"
 import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 
 export const dynamic = "force-dynamic"
@@ -42,29 +42,36 @@ export async function GET(request: NextRequest) {
     }
 
     const url = row.blob_url as string | null
-    if (!url || !isVercelBlobStorageUrl(url)) {
+    const access = url ? ourBlobStoreAccess(url) : null
+    const parsed = url ? parseLibraryBlobPath(url) : null
+    if (!url || !access || !parsed) {
       return NextResponse.json({ error: "No file" }, { status: 404 })
     }
 
-    // blob_url is written by library-documents POST/PATCH from the request body, so the row can
-    // point at ANY private blob, including another tenant's. Stream it only if it is this
-    // record's own kind of blob: an agency-library upload (the only folder the library UI uses)
-    // whose uploader, the user id `/api/upload` puts in the path, is a member of the row's own
-    // organization. The roster read runs on the session client, so RLS ("Members read their
-    // organization roster", 086) decides it.
-    const parsed = parseAgencyLibraryBlobPathFromUrl(url)
-    if (!parsed) return NextResponse.json({ error: "Not found" }, { status: 404 })
-    const { data: uploaderMembership, error: memberErr } = await supabase
-      .from("org_members")
-      .select("user_id")
-      .eq("org_id", row.org_id)
-      .eq("user_id", parsed.uploaderId)
-      .maybeSingle()
-    if (memberErr || !uploaderMembership) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    // Stream only a blob that belongs to the organization that OWNS THIS ROW.
+    //   - Organization-prefixed paths (`{folder}/org/{orgId}/...`, written by /api/upload since
+    //     fix/route-boundary-urgent): the orgId in the path must be row.org_id.
+    //   - Legacy paths (written before that, no org in them): the uploader user id in the path
+    //     must be a member of row.org_id. That keeps every legitimately uploaded row serving and
+    //     still refuses a row that was pointed at another tenant's file through the old
+    //     unvalidated POST/PATCH. The roster read is on the session client, so RLS ("Members
+    //     read their organization roster", 086) decides it.
+    // Anything else (another folder, another store, another org) is a 404.
+    if (parsed.scope === "org") {
+      if (parsed.orgId !== row.org_id) return NextResponse.json({ error: "Not found" }, { status: 404 })
+    } else {
+      const { data: uploaderMembership, error: memberErr } = await supabase
+        .from("org_members")
+        .select("user_id")
+        .eq("org_id", row.org_id)
+        .eq("user_id", parsed.uploaderId)
+        .maybeSingle()
+      if (memberErr || !uploaderMembership) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 })
+      }
     }
 
-    const result = await get(url, { access: "private" })
+    const result = await get(url, { access })
     if (!result?.stream) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
     const name = (row.label as string).replace(/[^\w.\- ()]+/g, "_").slice(0, 200) || "document"

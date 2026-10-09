@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
+import { libraryBlobPathForOrg } from "@/lib/vercel-blob-url"
 import {
   fetchScopedLibraryDocuments,
   isValidLibraryKind,
@@ -72,7 +73,6 @@ export async function POST(request: NextRequest) {
       source_type = "file",
       external_url = null,
       blob_url = null,
-      blob_path = null,
       file_name = null,
       file_type = null,
       file_size = null,
@@ -98,8 +98,19 @@ export async function POST(request: NextRequest) {
     if (source_type === "url" && (!external_url || typeof external_url !== "string")) {
       return NextResponse.json({ error: "external_url required for url source" }, { status: 400 })
     }
+    if (source_type !== "url" && source_type !== "file") {
+      return NextResponse.json({ error: "Invalid source_type" }, { status: 400 })
+    }
     if (source_type === "file" && (!blob_url || typeof blob_url !== "string")) {
       return NextResponse.json({ error: "blob_url required for file source" }, { status: 400 })
+    }
+    // The blob must be one /api/upload issued for THIS row's organization: our store, under
+    // `{folder}/org/{writeOrgId}/`. Anything else - another tenant's file, another folder,
+    // another store, a pre-prefix path - is refused. blob_path is derived here, never taken
+    // from the body. See lib/vercel-blob-url.ts, libraryBlobPathForOrg.
+    const blobPath = source_type === "file" ? libraryBlobPathForOrg(blob_url, writeOrgId) : null
+    if (source_type === "file" && !blobPath) {
+      return NextResponse.json({ error: "That file was not uploaded for your organization" }, { status: 400 })
     }
 
     const { data: row, error } = await supabase
@@ -112,7 +123,7 @@ export async function POST(request: NextRequest) {
         source_type,
         external_url: source_type === "url" ? external_url : null,
         blob_url: source_type === "file" ? blob_url : null,
-        blob_path: source_type === "file" ? blob_path : null,
+        blob_path: blobPath,
         file_name,
         file_type,
         file_size,

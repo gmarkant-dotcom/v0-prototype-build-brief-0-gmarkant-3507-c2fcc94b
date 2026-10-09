@@ -136,7 +136,7 @@ This bypassed every path check in `blob-download` (`app/api/agency/blob-download
   attachments, project docs, guest uploads, other folders, and another org's library uploads.
 - `external_url` rows still redirect, unchanged. They hold no private blob.
 
-### Residual, not fixed here (outside the files this brief allowed)
+### Residual after the first commit (items 1 and 3 are closed by the follow-up below)
 
 1. **POST/PATCH still store any `blob_url`.** The read side now refuses foreign blobs, but the
    write side should refuse them too (same prefix + membership check, or derive `blob_url`
@@ -161,6 +161,74 @@ This bypassed every path check in `blob-download` (`app/api/agency/blob-download
    That fails closed and is the intended direction.
 
 ---
+
+## Follow-up: closing the write side (second commit on this branch)
+
+### How uploads work, and the writer the first pass missed
+
+The client sends the file to **our** `/api/upload`, which calls `put()`. The client then sends
+the returned URL to `library-documents` POST. That is a hybrid: the server does the upload,
+in a separate request. There are three writers of library file rows:
+
+1. Master Documents: `components/agency-document-library-manager.tsx:160-180`, folder `agency-library`.
+2. Client Documents panel: `components/client-documents-panel.tsx:130-147`, folder `agency-library`.
+3. **Broadcast copies reference materials into the library by URL:** `app/agency/page.tsx:1175-1218`
+   and `app/agency/magic-rfp/page.tsx:637-680`. These are **public** blobs that
+   `components/reference-materials-input.tsx:143` uploads to
+   `reference-materials/{agencyId}[/{projectId}]`, where `agencyId` is client-set
+   (`user.id`, `app/agency/page.tsx:261`, `magic-rfp/page.tsx:289`). The page dedupes on URL.
+
+**The first commit broke writer 3.** Its file-route check accepted only `agency-library/...`, so
+every library row copied from a reference material would have returned 404. This commit fixes it.
+
+### Existing path shapes (the step-2 finding)
+
+`/api/upload` builds `${folder}/${user.id}/${timestamp}-${file.name}`, so existing rows have:
+
+| Shape | Written by | Org in path? |
+|---|---|---|
+| `agency-library/{uploaderUserId}/{ts}-{name}` (private) | writers 1, 2 | **no** |
+| `reference-materials/{userId}[/{projectId}]/{uploaderUserId}/{ts}-{name}` (public) | writer 3 | **no** (the first segment is the client-supplied `agencyId`) |
+| anything else | only a hand-crafted POST/PATCH (the hole) | n/a |
+
+**No existing legitimate row would pass a per-organization prefix check.** Per the owner's
+ruling, the file route therefore uses two rules:
+
+- **New, org-prefixed paths** (`{folder}/org/{orgId}/...`): the org in the path must be the row's `org_id`.
+- **Legacy paths:** serve only if the uploader user id in the path (always the second-to-last
+  segment) is a member of the row's `org_id`, read on the session client under RLS.
+  Legitimate rows keep working. A foreign URL planted before the fix stays blocked. Cost: rows
+  whose uploader has left the org stop serving. The crosscheck SQL lists them as
+  `uploader_not_member`.
+
+**Write side, per the owner's ruling (prefix plus URL validation).** The library POST keeps
+accepting a URL, because the upload happens in an earlier request and the reference-material
+dedupe needs the URL. It accepts only URLs `/api/upload` issued for the row's organization:
+
+- `/api/upload` now writes `agency-library/org/{orgId}/{userId}/...` and
+  `reference-materials/org/{orgId}[/{projectId}]/{userId}/...`. `orgId` comes from
+  `resolveCallerWriteOrgId` (org_members, acting org), not the request, and the client's
+  `agencyId` is ignored. No other route writes under these folders. All other `put()` callers
+  use fixed, distinct prefixes.
+- POST and PATCH accept a `blob_url` only if its host is **exactly**
+  `{storeId}.{public|private}.blob.vercel-storage.com` for this deployment's store (store id
+  from `BLOB_READ_WRITE_TOKEN`, the same derivation `@vercel/blob` uses) **and** its path is
+  `{folder}/org/{that row's org}/...`. Otherwise the response is 400. `blob_path` is derived on
+  the server and never taken from the body: PATCH with `blob_path` returns 400.
+- `get()` sends the app token to any `*.blob.vercel-storage.com` host it is given, so the old
+  hostname-suffix check was never "our store". The file route now uses the exact-host check too.
+
+**Behaviour change to know about:** a reference material uploaded **before** this deploy and
+still held in a draft has a legacy URL. Copying it into the library at broadcast now returns
+400. That loop is fire-and-forget and logs to the console. The broadcast itself is unaffected;
+only that library copy is skipped.
+
+### Read-only crosscheck
+
+`supabase/sql-checks/library-blob-crosscheck.sql`: one SELECT. It lists rows with
+`wrong_org_prefix`, `unrecognized_shape`, `uploader_not_member`, `non_store_host`,
+`blob_path_mismatch` or `multi_org` (the same blob path on rows of more than one org).
+Legitimate legacy rows are not listed. **Not parsed or run:** no database access here.
 
 ## Service role with a caller-supplied id: the defect class
 

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAgencyRole } from "@/lib/api-auth"
 import { resolveCallerOrgIds } from "@/lib/entitlements"
+import { libraryBlobPathForOrg } from "@/lib/vercel-blob-url"
 
 export const dynamic = "force-dynamic"
 
@@ -21,11 +22,41 @@ export async function PATCH(
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
     if (typeof body.label === "string") patch.label = body.label.trim()
     if (body.external_url !== undefined) patch.external_url = body.external_url
-    if (body.blob_url !== undefined) patch.blob_url = body.blob_url
-    if (body.blob_path !== undefined) patch.blob_path = body.blob_path
     if (body.file_name !== undefined) patch.file_name = body.file_name
     if (body.file_type !== undefined) patch.file_type = body.file_type
     if (body.file_size !== undefined) patch.file_size = body.file_size
+    if (body.source_type !== undefined && body.source_type !== "url" && body.source_type !== "file") {
+      return NextResponse.json({ error: "Invalid source_type" }, { status: 400 })
+    }
+
+    // blob_path is never accepted: it is derived from a validated blob_url. A new blob_url, and
+    // a switch to source_type "file", must name a blob /api/upload issued for the organization
+    // that OWNS THIS ROW - read here on the session client, scoped to the caller's own orgs.
+    if (body.blob_path !== undefined) {
+      return NextResponse.json({ error: "blob_path cannot be set directly" }, { status: 400 })
+    }
+    if (body.blob_url !== undefined || body.source_type === "file") {
+      const { data: current, error: currentErr } = await supabase
+        .from("agency_library_documents")
+        .select("id, org_id")
+        .eq("id", id)
+        .in("org_id", callerOrgIds)
+        .maybeSingle()
+      if (currentErr || !current) {
+        return NextResponse.json({ error: "Not found or update failed" }, { status: 404 })
+      }
+      if (body.blob_url === null && body.source_type !== "file") {
+        patch.blob_url = null
+        patch.blob_path = null
+      } else {
+        const blobPath = libraryBlobPathForOrg(body.blob_url, String(current.org_id))
+        if (!blobPath) {
+          return NextResponse.json({ error: "That file was not uploaded for your organization" }, { status: 400 })
+        }
+        patch.blob_url = body.blob_url
+        patch.blob_path = blobPath
+      }
+    }
     if (body.source_type === "url" || body.source_type === "file") patch.source_type = body.source_type
 
     const { data: row, error } = await supabase

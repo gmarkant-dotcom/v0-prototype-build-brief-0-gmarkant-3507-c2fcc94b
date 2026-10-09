@@ -2,7 +2,8 @@ import { put } from '@vercel/blob'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { validateUploadFile } from '@/lib/upload-validation'
-import { canUploadFiles } from '@/lib/entitlements'
+import { canUploadFiles, resolveCallerWriteOrgId } from '@/lib/entitlements'
+import { orgScopedLibraryFolder } from '@/lib/vercel-blob-url'
 
 // Folders routed to the public Supabase 'avatars' bucket (images only, public by design)
 const SUPABASE_AVATAR_FOLDERS = new Set(['avatars', 'logos', 'agency-logos', 'partner-logos'])
@@ -23,6 +24,7 @@ const PRIVATE_BLOB_FOLDERS = new Set([
 // response page, so they need a publicly-fetchable blob URL (no signed token),
 // unlike NDAs/contracts/other agency documents, which stay private by default.
 // Callers pass "reference-materials/{agencyId}" or "reference-materials/{agencyId}/{projectId}".
+// The client's {agencyId} is NOT used in the stored path: see the per-organization prefix below.
 const REFERENCE_MATERIALS_PREFIX = 'reference-materials'
 const REFERENCE_MATERIALS_PATTERN = /^reference-materials\/[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)?$/
 
@@ -111,7 +113,25 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const filename = `${folder}/${user.id}/${timestamp}-${file.name}`
+    // Library blobs are written under the caller's ACTING ORGANIZATION, resolved from org_members
+    // on the session and never from the request. agency_library_documents POST/PATCH accept a
+    // blob URL only under `{folder}/org/{that org}/`, so this prefix is what stops a row from
+    // pointing at another tenant's file (lib/vercel-blob-url.ts, libraryBlobPathForOrg).
+    let storedFolder = folder
+    let storedName = file.name
+    const isReferenceMaterials = routing.storage === 'blob-public'
+    if (folder === 'agency-library' || isReferenceMaterials) {
+      const orgId = await resolveCallerWriteOrgId(user.id, supabase)
+      if (!orgId) {
+        return NextResponse.json({ error: 'Your account is not linked to an organization yet' }, { status: 403 })
+      }
+      const projectId = isReferenceMaterials ? folder.split('/')[2] ?? null : null
+      storedFolder = orgScopedLibraryFolder(isReferenceMaterials ? 'reference-materials' : 'agency-library', orgId, projectId)
+      // A separator in the name would shift the uploader segment the path rules read.
+      storedName = file.name.replace(/[\\/]/g, '_')
+    }
+
+    const filename = `${storedFolder}/${user.id}/${timestamp}-${storedName}`
     const blob = await put(filename, file, { access: routing.storage === 'blob-public' ? 'public' : 'private' })
 
     console.log('[api] success', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, pathname: blob.pathname })
