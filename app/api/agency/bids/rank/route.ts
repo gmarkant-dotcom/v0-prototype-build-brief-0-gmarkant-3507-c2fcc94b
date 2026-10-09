@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { resolveResponseScope, hashScopeGroup } from "@/lib/bid-analysis-context"
+import { attachResponsePrivate } from "@/lib/server/rfp-response-private"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "At least 2 response_ids are required" }, { status: 400 })
     }
 
-    const { data: owned, error: ownedErr } = await supabase
+    const { data: ownedRows, error: ownedErr } = await supabase
       .from("partner_rfp_responses")
       .select("id, partner_display_name, composite_score")
       .in("lead_org_id", callerOrgIds)
@@ -55,6 +56,8 @@ export async function POST(req: Request) {
       console.error("[api] failure", { route, method: "POST", message: ownedErr.message })
       return NextResponse.json({ error: "Failed to load bids" }, { status: 500 })
     }
+    // 109: composite_score comes from partner_rfp_response_private once it exists.
+    const owned = await attachResponsePrivate(supabase, callerOrgIds, (ownedRows || []) as Record<string, unknown>[])
     if ((owned || []).length !== responseIds.length) {
       return NextResponse.json({ error: "One or more bids were not found" }, { status: 404 })
     }

@@ -15,6 +15,7 @@ import {
   toSyntheticCriterionId,
   type RfpEvaluationCriterion,
 } from "@/lib/rfp-evaluation-criteria"
+import { writeResponsePrivate } from "@/lib/server/rfp-response-private"
 
 export const dynamic = "force-dynamic"
 
@@ -380,10 +381,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
       return NextResponse.json({ error: "Failed to save evaluation" }, { status: 500 })
     }
 
-    const { error: responseUpdateErr } = await supabase
-      .from("partner_rfp_responses")
-      .update({ composite_score: composite })
-      .eq("id", responseId)
+    // 109: the bid's copy of the composite lives in partner_rfp_response_private (agency-only).
+    const { error: responseUpdateErr } = await writeResponsePrivate(supabase, callerOrgIds, responseId, {
+      composite_score: composite,
+    })
     if (responseUpdateErr) {
       console.error("[api] failure", { route, method: "PUT", message: responseUpdateErr.message, code: "sync_response_composite" })
     }

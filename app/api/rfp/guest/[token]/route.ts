@@ -9,6 +9,7 @@ import { isBiddingClosed, BIDDING_CLOSED_API_MESSAGE } from "@/lib/bid-close"
 import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
 import { generateAndSaveBidSummary } from "@/lib/bid-summary-generation"
+import { selectVendorResponse } from "@/lib/server/rfp-response-private"
 import { validateTermsDisclosure } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
 import { recordMilestone } from "@/lib/milestone-events"
@@ -270,11 +271,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
         : []
 
     if (tokenRow.status === "submitted" && tokenRow.response_id) {
-      const { data: response, error: responseErr } = await supabase
-        .from("partner_rfp_responses")
-        .select("*")
-        .eq("id", tokenRow.response_id)
-        .maybeSingle()
+      // 109: an explicit guest column list, never "*". The whole row carried the lead agency's
+      // composite_score and AI bid summaries to anyone holding the token.
+      const { data: response, error: responseErr } = await selectVendorResponse<Record<string, unknown>>((columns) =>
+        supabase.from("partner_rfp_responses").select(columns).eq("id", tokenRow.response_id).maybeSingle()
+      )
       if (responseErr) {
         console.error("[api] failure", { route, method: "GET", code: 500, message: responseErr.message })
         return NextResponse.json({ error: "Failed to load submitted bid" }, { status: 500 })
@@ -616,7 +617,7 @@ export async function POST(req: Request) {
       ...(budget_lines ? { budget_lines } : {}),
     }
     const { data: saved, error: insertErr } = await saveGuestResponseRow<{ id: string; [key: string]: unknown }>(
-      (attemptRow) => supabase.from("partner_rfp_responses").insert(attemptRow).select().single(),
+      (attemptRow) => supabase.from("partner_rfp_responses").insert(attemptRow).select("id").single(),
       insertRow
     )
 

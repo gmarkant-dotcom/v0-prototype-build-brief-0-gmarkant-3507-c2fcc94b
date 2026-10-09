@@ -5,6 +5,7 @@ import { computeCompositeScore } from "@/lib/bid-scoring"
 import { loadBidDeltaComparison } from "@/lib/delivery-review"
 import { checkUsageLimit, incrementAiAnalysis } from "@/lib/usage-tracking"
 import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { attachReviewPrivate, writeReviewPrivate } from "@/lib/server/delivery-review-private"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 45
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ reviews: reviews || [] })
   }
 
-  const { data: review, error: reviewErr } = await supabase
+  const { data: reviewRow, error: reviewErr } = await supabase
     .from("delivery_reviews")
     .select(
       "id, status, composite_score, on_time, on_time_notes, on_budget, budget_variance_pct, on_budget_notes, would_work_again, overall_satisfaction, client_feedback, ai_delta_summary, response_id, assignment_id, updated_at"
@@ -79,7 +80,10 @@ export async function GET(req: NextRequest) {
     console.error("[api] failure", { route, method: "GET", message: reviewErr.message })
     return NextResponse.json({ error: "Failed to load delivery review" }, { status: 500 })
   }
-  if (!review) return NextResponse.json({ review: null, scores: [], comparison: null })
+  if (!reviewRow) return NextResponse.json({ review: null, scores: [], comparison: null })
+  // 111: the six agency-only fields come from delivery_review_private once it exists. The legacy
+  // columns stay in the select above as the pre-111 fallback; the helper overwrites them.
+  const [review] = await attachReviewPrivate(supabase, callerOrgIds, [reviewRow as Record<string, unknown>])
 
   const { data: scores, error: scoresErr } = await supabase
     .from("delivery_review_scores")
@@ -191,14 +195,18 @@ export async function POST(req: Request) {
       assignment_id: assignment?.id ?? null,
       status,
       on_time: pickEnum(summaryInput.on_time, ON_TIME_VALUES),
-      on_time_notes: pickText(summaryInput.on_time_notes),
       on_budget: pickEnum(summaryInput.on_budget, ON_BUDGET_VALUES),
+      overall_satisfaction: pickNumber(summaryInput.overall_satisfaction, 1, 10),
+      updated_at: new Date().toISOString(),
+    }
+    // 111: the agency-only fields are NOT written to delivery_reviews, whose whole completed row
+    // the vendor can read. They go to delivery_review_private once the review row exists below.
+    const privatePatch = {
+      on_time_notes: pickText(summaryInput.on_time_notes),
       budget_variance_pct: pickNumber(summaryInput.budget_variance_pct, -999, 999),
       on_budget_notes: pickText(summaryInput.on_budget_notes),
       would_work_again: pickEnum(summaryInput.would_work_again, WORK_AGAIN_VALUES),
-      overall_satisfaction: pickNumber(summaryInput.overall_satisfaction, 1, 10),
       client_feedback: pickText(summaryInput.client_feedback),
-      updated_at: new Date().toISOString(),
     }
     // response_id: only overwrite when the caller sent one this agency owns, or explicitly
     // cleared it - otherwise keep whatever the review already has (won't be set on brand
@@ -216,6 +224,12 @@ export async function POST(req: Request) {
       .single()
     if (reviewUpsertErr) {
       console.error("[api] failure", { route, method: "POST", message: reviewUpsertErr.message })
+      return NextResponse.json({ error: "Failed to save delivery review" }, { status: 500 })
+    }
+
+    const { error: privateErr } = await writeReviewPrivate(supabase, callerOrgIds, review.id as string, privatePatch)
+    if (privateErr) {
+      console.error("[api] failure", { route, method: "POST", message: privateErr.message, code: "delivery_review_private" })
       return NextResponse.json({ error: "Failed to save delivery review" }, { status: 500 })
     }
 
@@ -323,9 +337,17 @@ export async function POST(req: Request) {
     }
 
     const reviewPatch2: Record<string, unknown> = { composite_score: composite, updated_at: new Date().toISOString() }
-    if (aiDeltaSummary) reviewPatch2.ai_delta_summary = aiDeltaSummary
+    if (aiDeltaSummary) {
+      // 111: agency-only, so it goes to delivery_review_private, never to delivery_reviews.
+      const { error: deltaErr } = await writeReviewPrivate(supabase, callerOrgIds, review.id as string, {
+        ai_delta_summary: aiDeltaSummary,
+      })
+      if (deltaErr) {
+        console.error("[api] failure", { route, method: "POST", message: deltaErr.message, code: "delivery_review_private_delta" })
+      }
+    }
 
-    const { data: updatedReview, error: finalUpdateErr } = await supabase
+    const { data: updatedReviewRow, error: finalUpdateErr } = await supabase
       .from("delivery_reviews")
       .update(reviewPatch2)
       .eq("id", review.id)
@@ -338,6 +360,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to save delivery review" }, { status: 500 })
     }
 
+    const [updatedReview] = await attachReviewPrivate(supabase, callerOrgIds, [updatedReviewRow as Record<string, unknown>])
     return NextResponse.json({ review: updatedReview, scores: allScores || [], comparison })
   } catch (error) {
     console.error("[api] failure", {

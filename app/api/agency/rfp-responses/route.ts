@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { parseBudgetProposal, parseTimelineProposal } from "@/lib/rfp-response-fields"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { isRfpClosureStatus as isClosedInboxStatus } from "@/lib/rfp-closure"
+import { attachResponsePrivate } from "@/lib/server/rfp-response-private"
 
 export const dynamic = "force-dynamic"
 
@@ -108,7 +109,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const list = responses || []
+    // 109: the four agency-only fields (composite_score, ai_summary_*) come from
+    // partner_rfp_response_private once it exists. The legacy columns stay in the select above
+    // as the pre-109 fallback; attachResponsePrivate overwrites them either way.
+    const list = await attachResponsePrivate(supabase, callerOrgIds, responses)
 
     // P2-1/P2-2 pre-migration safety: budget_lines (072) and proposal_sections (076) are NOT
     // added to the explicit column list above on purpose - selecting a column that does not

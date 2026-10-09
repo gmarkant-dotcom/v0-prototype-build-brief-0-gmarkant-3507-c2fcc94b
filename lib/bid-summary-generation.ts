@@ -4,6 +4,12 @@ import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-ana
 import { resolveRfpRubricForResponse } from "@/lib/rfp-evaluation-criteria-server"
 import { formatRubricForPrompt } from "@/lib/rfp-evaluation-criteria"
 import type { OrgId } from "@/lib/entitlements"
+import {
+  readResponsePrivate,
+  resolveResponsePrivate,
+  writeResponsePrivate,
+  type ResponsePrivate,
+} from "@/lib/server/rfp-response-private"
 
 const ANALYST_SYSTEM_PROMPT =
   "You are a procurement analyst helping a creative or production agency evaluate a vendor bid. Be specific and concrete, always grounded in the bid content provided. Never use markdown formatting in your response - plain prose only. Never use a long dash of any kind; use a plain hyphen, a comma, or rewrite."
@@ -30,6 +36,10 @@ export type BidSummaryGenerationResult =
  * Shared by the agency-facing generate-summary endpoint AND the fire-and-forget
  * calls from the partner/guest bid submission handlers - callers are responsible
  * for their own auth (this function does not re-check it).
+ *
+ * 109: the summary is written to partner_rfp_response_private, which has no vendor policy.
+ * The client passed in must therefore be the agency's session or the service role, never a
+ * vendor session: app/api/partner/rfps/[id]/response passes the service role for that reason.
  */
 export async function generateAndSaveBidSummary(
   supabase: SupabaseClient,
@@ -82,19 +92,38 @@ export async function generateAndSaveBidSummary(
     })
   }
 
-  const patch: Record<string, unknown> = { ai_summary_generated_at: new Date().toISOString() }
+  // 109: the summary is the lead agency's, and lives in partner_rfp_response_private. Written
+  // through the helper (legacy columns only while that table does not exist), then read back so
+  // a key that failed this time keeps its previous value, as the old single UPDATE did.
+  const patch: Partial<ResponsePrivate> = { ai_summary_generated_at: new Date().toISOString() }
   if (shortResult.success) patch.ai_summary_short = shortResult.text.trim()
   if (detailedResult.success) patch.ai_summary_detailed = detailedResult.text.trim()
 
-  const { data: updated, error: updateErr } = await supabase
-    .from("partner_rfp_responses")
-    .update(patch)
-    .eq("id", responseId)
-    .in("lead_org_id", orgIds)
-    .select("ai_summary_short, ai_summary_detailed, ai_summary_generated_at")
-    .single()
+  const { error: updateErr } = await writeResponsePrivate(supabase, orgIds, responseId, patch)
   if (updateErr) {
     console.error("[bid-summary-generation] failed to save summary", { responseId, message: updateErr.message })
+    return { ok: false, reason: "save_failed" }
+  }
+
+  let updated: ResponsePrivate
+  try {
+    const read = await readResponsePrivate(supabase, orgIds, [responseId])
+    let legacy: Record<string, unknown> | null = null
+    if (!read.available) {
+      const { data } = await supabase
+        .from("partner_rfp_responses")
+        .select("ai_summary_short, ai_summary_detailed, ai_summary_generated_at")
+        .eq("id", responseId)
+        .in("lead_org_id", orgIds)
+        .maybeSingle()
+      legacy = (data as Record<string, unknown> | null) ?? null
+    }
+    updated = resolveResponsePrivate(legacy, read, responseId)
+  } catch (readErr) {
+    console.error("[bid-summary-generation] saved, but reading it back failed", {
+      responseId,
+      message: readErr instanceof Error ? readErr.message : String(readErr),
+    })
     return { ok: false, reason: "save_failed" }
   }
 

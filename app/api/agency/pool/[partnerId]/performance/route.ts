@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import type { OrgId } from "@/lib/entitlements"
 import { readReliabilityCache, resolveReliability, writeReliabilityCache } from "@/lib/server/partnership-private-reliability"
+import { attachReviewPrivate } from "@/lib/server/delivery-review-private"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -86,7 +87,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ part
       console.error("[api] failure", { route, method: "GET", message: reviewsErr.message })
       return NextResponse.json({ error: "Failed to load delivery reviews" }, { status: 500 })
     }
-    const reviews = (reviewRows || []) as DeliveryReviewRow[]
+    // 111: would_work_again is agency-only and comes from delivery_review_private once it exists.
+    // It stays in the select above as the pre-111 fallback; the helper overwrites it either way.
+    const reviews = (await attachReviewPrivate(
+      supabase,
+      callerOrgIds,
+      (reviewRows || []) as unknown as Record<string, unknown>[]
+    )) as unknown as DeliveryReviewRow[]
 
     const projectIds = [...new Set(reviews.map((r) => r.project_id))]
     const projectNameById = new Map<string, string>()

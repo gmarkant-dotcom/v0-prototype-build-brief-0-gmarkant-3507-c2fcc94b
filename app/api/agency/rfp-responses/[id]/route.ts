@@ -8,6 +8,7 @@ import { resolvePartnershipForAward } from "@/lib/award-partnership-resolution"
 import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
 import { can, capabilityDeniedMessage } from "@/lib/capabilities"
 import { recordMilestone } from "@/lib/milestone-events"
+import { attachResponsePrivate } from "@/lib/server/rfp-response-private"
 
 export const dynamic = "force-dynamic"
 
@@ -1250,7 +1251,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       toStatus: nextStatus,
       feedbackUpdated: body.agency_feedback !== undefined || !!declineReason,
     })
-    return NextResponse.json({ response: updated })
+    // 109: the agency's bid UI merges this row into its state, so the four agency-only fields
+    // must come from partner_rfp_response_private, not the legacy columns "*" returned.
+    const [responseOut] = await attachResponsePrivate(supabase, callerOrgIds, [updated as Record<string, unknown>])
+    return NextResponse.json({ response: responseOut })
   } catch (error) {
     console.error("[api] failure", {
       route,

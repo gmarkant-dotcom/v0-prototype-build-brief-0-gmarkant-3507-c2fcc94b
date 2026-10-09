@@ -1,6 +1,8 @@
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdsFromColumns, orgIdFromColumn } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
+import { selectVendorResponse } from "@/lib/server/rfp-response-private"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { isBudgetValidForSubmit, isTimelineValidForSubmit, formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-response-fields"
 import { buildAgencyBidNotificationEmail, resolveOrgNotificationRecipients, sendTransactionalEmail } from "@/lib/email"
@@ -15,6 +17,14 @@ import { recordMilestone } from "@/lib/milestone-events"
 import { isRfpClosureStatus } from "@/lib/rfp-closure"
 
 export const dynamic = "force-dynamic"
+
+/** Service role, for the one write this vendor route makes on the agency's behalf (the AI summary). */
+function getServiceClient(): SupabaseClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return null
+  return createServiceClient(url, key, { auth: { persistSession: false } })
+}
 
 type Body = {
   proposal_text?: string
@@ -332,7 +342,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (existing?.id) {
       wasUpdate = true
       const { data, error } = await saveResponseRow(
-        (attemptRow) => supabase.from("partner_rfp_responses").update(attemptRow).eq("id", existing.id).select().single(),
+        (attemptRow) =>
+          selectVendorResponse((columns) =>
+            supabase.from("partner_rfp_responses").update(attemptRow).eq("id", existing.id).select(columns).single()
+          ),
         row
       )
       if (error) {
@@ -345,7 +358,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       saved = data
     } else {
       const { data, error } = await saveResponseRow(
-        (attemptRow) => supabase.from("partner_rfp_responses").insert(attemptRow).select().single(),
+        (attemptRow) =>
+          selectVendorResponse((columns) => supabase.from("partner_rfp_responses").insert(attemptRow).select(columns).single()),
         insertRow
       )
       if (error) {
@@ -404,13 +418,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
 
       // Fire-and-forget: AI summary generation must never fail the bid submission itself.
-      void generateAndSaveBidSummary(supabase, saved.id, orgIdsFromColumns(inbox.lead_org_id)).catch((err) => {
-        console.error("[api] fire-and-forget summary generation failed", {
+      // 109: the summary is the LEAD AGENCY's and is written to partner_rfp_response_private,
+      // which has no vendor policy, so it cannot be written with this vendor's session. The
+      // service role writes it, scoped to the inbox's lead organization, exactly as the guest
+      // route already does. This route has already proved the vendor owns `saved` (it was
+      // written under the vendor's own session above).
+      const summaryClient = getServiceClient()
+      if (!summaryClient) {
+        console.error("[api] summary generation skipped: SUPABASE_SERVICE_ROLE_KEY is not configured", {
           route,
           responseId: saved.id,
-          message: err instanceof Error ? err.message : String(err),
         })
-      })
+      } else {
+        void generateAndSaveBidSummary(summaryClient, saved.id, orgIdsFromColumns(inbox.lead_org_id)).catch((err) => {
+          console.error("[api] fire-and-forget summary generation failed", {
+            route,
+            responseId: saved.id,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        })
+      }
 
       // Agency notification (email + in-app) on every submitted transition - initial
       // submission previously sent nothing at all here (only revisions did); both now

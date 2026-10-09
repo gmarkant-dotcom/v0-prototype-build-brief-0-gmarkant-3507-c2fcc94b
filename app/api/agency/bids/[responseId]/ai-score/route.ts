@@ -7,6 +7,7 @@ import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-ana
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
 import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { writeResponsePrivate } from "@/lib/server/rfp-response-private"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -373,10 +374,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       }))
     )
 
-    await Promise.all([
+    // 109: the bid's copy of the composite lives in partner_rfp_response_private (agency-only),
+    // not on partner_rfp_responses, whose whole row the vendor can read and write.
+    const [, responseSync] = await Promise.all([
       supabase.from("bid_evaluations").update({ composite_score: composite, updated_at: now }).eq("id", evaluation.id),
-      supabase.from("partner_rfp_responses").update({ composite_score: composite }).eq("id", responseId),
+      writeResponsePrivate(supabase, callerOrgIds, responseId, { composite_score: composite }),
     ])
+    if (responseSync.error) {
+      console.error("[api] failure", { route, method: "POST", message: responseSync.error.message, code: "sync_response_composite" })
+    }
 
     await incrementAiAnalysis(await agencyEntitlementId(user.id, supabase), supabase)
     return NextResponse.json({ scores: allScores || [], composite_score: composite })

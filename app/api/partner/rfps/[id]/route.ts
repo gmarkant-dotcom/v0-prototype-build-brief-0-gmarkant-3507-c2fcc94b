@@ -4,6 +4,7 @@ import { ORG_CONTACT_SELECT_MEETING, resolveOrgContact, type OrgEmbed } from "@/
 import { NextResponse } from "next/server"
 import { partnerCanAccessPartnerRfpInbox } from "@/lib/partner-inbox-access"
 import { requirePartnerRole } from "@/lib/api-auth"
+import { selectVendorResponse } from "@/lib/server/rfp-response-private"
 
 export const dynamic = "force-dynamic"
 
@@ -185,12 +186,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
 
     let response: unknown = null
-    const respQ = await supabase
-      .from("partner_rfp_responses")
-      .select("*")
-      .eq("inbox_item_id", id)
-      .in("vendor_org_id", callerOrgIds)
-      .maybeSingle()
+    // 109: an explicit vendor column list, never "*". The whole row carried the lead agency's
+    // composite_score and AI bid summaries to the vendor's browser (no vendor screen renders them).
+    const respQ = await selectVendorResponse((columns) =>
+      supabase
+        .from("partner_rfp_responses")
+        .select(columns)
+        .eq("inbox_item_id", id)
+        .in("vendor_org_id", callerOrgIds)
+        .maybeSingle()
+    )
 
     if (respQ.error) {
       if (respQ.error.code !== "42P01" && !/does not exist/i.test(respQ.error.message || "")) {
