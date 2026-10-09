@@ -1,8 +1,8 @@
 # Agency gate, hardening and RFP leaks, 2026-10-09
 
 Branch `fix/agency-gate-and-leaks`, cut from `main` at `c988820`. Unattended session. Not pushed, not
-merged. This file is updated and committed after each workstream; the final section is the
-consolidated report.
+merged. This file was updated and committed after each workstream. **The consolidated report
+(sections 0-9) is at the end.**
 
 ## Workstream 0: lockout check
 
@@ -333,3 +333,158 @@ out to every member of the vendor's organization, and it reaches the vendor brow
    unauthenticated link holder, including `reference_materials.output_template_config`,
    `evaluation_criteria`, `budget_categories` and `domain_match_profile_id`. That fix touches no
    inbox copy and no agency reader; it is held back here only because this workstream is stopped.
+
+## Workstream 4: profiles / organizations exposure (design only)
+
+`docs/profiles-exposure-design.md`. Headline: RLS on `profiles` admits whole rows, so every
+discoverable profile's `legal_ein`, `legal_address`, `rate_info`, `default_terms` and authority flags
+are readable by any signed-in user through PostgREST, and by any non-terminated counterparty for
+every profile; `organizations.is_paid` is readable by every counterparty at any status. Proposed:
+self-only `profile_private` and member-only `organization_private` split tables, with SECURITY
+DEFINER read functions for the ruled counterparty tier, built code-first in 105-112's order. A
+cheaper interim: replace the discoverable whole-row policy with a column-limited function. The doc
+carries the read-only count query.
+
+---
+
+# CONSOLIDATED REPORT
+
+## 0. Branch and commits
+
+Branch `fix/agency-gate-and-leaks` from `main` `c988820`. Not pushed, not merged.
+
+| SHA | Workstream |
+|---|---|
+| `939e95f` | WS0 lockout check SQL + report |
+| `0caf6a0` | WS1 code (gate, routes, pages, middleware, switch) + migration 113 files |
+| `3e40f6b` | WS1 report |
+| `eccfd17` | WS2 migration 114 files |
+| `fdb7a2e` | WS2 report |
+| `e5ce184` | WS3 stop report |
+| `002a306` | WS4 design doc |
+| (this commit) | consolidated report |
+
+## 1. Lockout check
+
+`supabase/sql-checks/agency-gate-lockout-check.sql`, one read-only SELECT. Before merging confirm:
+section `0 ALERT` row 1 (gmarkant@gmail.com / m a r k a n t) reads `OK`, not
+`>>> ALERT: m a r k a n t FAILS G1 - DO NOT MERGE <<<`; row 4 lists only accounts you mean to lock
+out; section `4 SWITCH` lists only accounts that may lose a portal switch. Fix route/SQL in section
+`9 HOWTO`: `organizations.is_paid` by `/admin/users` (PATCH `/api/admin/users/<id>/flags`), the
+grant-access magic link, or SQL; `organizations.is_lead_agency` by SQL only (no route writes it).
+**Finding:** `profiles.is_paid` already admits nobody on `main` (092 moved every gate to the
+organization; its last reader is the vendor-side `canUploadVendorFiles`). `profiles.demo_access` only
+governs the demo host's pages; agency APIs there now 402 unless that deployment sets
+`NEXT_PUBLIC_IS_DEMO=true`. `profiles.is_admin` was a live bypass and is removed for the agency side.
+
+## 2. G1
+
+Helper **extended** from `main`'s `resolveAgencyEntitlement` (feat/m1-entitlements is docs-only):
+`resolveAgencyGate` (`lib/entitlements.ts:556`), wrappers in `lib/api-auth.ts:86/101/112/133`. Every
+gated route with file:line is in the WS1 table above (46 `app/api/agency/*` files plus 22 other
+handlers). Upgrade screen: `components/agency-upgrade-screen.tsx`, via `app/agency-access/page.tsx`
+(middleware rewrite, `middleware.ts:131-140`) and the in-shell wall. 113: role/secondary_role
+unwritable by a session; active_role only through `set_active_role`, which passes its guard by 090's
+row invariant **plus** a transaction-local marker (the deliberate exemption 091:251-260 anticipates;
+090's shape alone cannot refuse a direct write by an entitled user). Test IDs R1-R4, F1-F6, S1-S2,
+Z1, O1-O3, P1-P4, M.
+
+## 3. 114
+
+Four WITH CHECK rewrites (delivery_reviews, delivery_review_scores, msa_agreements,
+rfp_magic_tokens); clients and usage_tracking skipped (no foreign reference; usage_tracking
+self-tamper noted). TRUNCATE/REFERENCES/TRIGGER revoked from anon and authenticated on every public
+table at apply time (dynamic; the NOTICE and V2 give the list). Default privileges altered per
+table-owning role, reported by NOTICE if not permitted; outcome unknown until run. Six helpers lose
+anon EXECUTE unless an anon/PUBLIC policy names them (checked in the migration). Reliability guard on
+partnerships, 110's shape. Test IDs D1-D4, M1-M2, T1-T2, G1-G3, H1-H3, L1-L3, S1-S3, M.
+
+## 4. RFP leaks
+
+**STOPPED** on the brief's own check: the agency has no source-of-truth RFP record and reads the
+vendor inbox copies for the scoring rubric, bid comparison, award/decline and the guest-bid join
+(table in WS3 above). `_magic_token` is the receiving vendor's own guest token, not another's;
+same-organization exposures only. Nothing stripped, no toggle, no 115. The unauthenticated guest
+route returning the whole token row is the most urgent independent fix.
+
+## 5. Profiles design
+
+`docs/profiles-exposure-design.md`. Headline in WS4 above.
+
+## 6. SECURITY REVIEW LIST (read only these)
+
+- `lib/entitlements.ts:511-530` resolveAgencyEntitlement: is_admin bypass removed; delegates to the gate.
+- `lib/entitlements.ts:556-630` resolveAgencyGate: active org must be is_lead_agency AND is_paid; faults refuse.
+- `lib/entitlements.ts:707-716` canUseAgencyAi: admin bypass and role test removed.
+- `lib/entitlements.ts:637`, `:656` hasAnyEntitledOrganization / hasVendorOrganization: display only.
+- `lib/api-auth.ts:86-104` agencyGateRefusal / agencyGateResponse: 402 / 500 bodies.
+- `lib/api-auth.ts:112-135` requireAgencyEntitlement; requireAgencyRole now aliases it (18 importers).
+- Every route gate in the WS1 table (one line per handler, file:line given there).
+- `app/api/projects/route.ts:148`, `messages/route.ts:54,201`, `agreements/[agreementId]/route.ts:84`, `assignments/route.ts:389`, `partnerships/route.ts:106,897`: active_role selects the branch, gate authorizes it.
+- `app/api/auth/google-email/route.ts:23`, `microsoft-email/route.ts:23`: gate instead of role (redirect).
+- `middleware.ts:93` isAgencyRoute boundary-checked; `:131-140` page gate + rewrite + billing escape; `:152` /partner bounce only when entitled.
+- `components/agency-subscription-gate.tsx:52` is_admin bypass removed (client UI only).
+- `contexts/paid-user-context.tsx:193-194` gate resolved on agency pages regardless of role.
+- `components/role-toggle.tsx:53` hides a switch the server would refuse (display only).
+- `lib/server/active-role-switch.ts:61-95` the switch: RPC, then same-rule fallback write of active_role only.
+- `app/api/profile/switch-role/route.ts:30`, `app/api/user/active-role/route.ts:27`, `app/api/partner/rfps/claim/route.ts:113`: role/secondary_role/is_admin no longer admit.
+- `app/auth/callback/route.ts:113-139` role correction written with the service role (fixed literals, verified user id).
+- `supabase/migrations/113_role_columns_guard.sql:156-225` guard; `:227` trigger; `:232-270` set_active_role; `:279-285` grants.
+- `supabase/migrations/114_hardening.sql:148`, `:159`, `:169`, `:178` the four WITH CHECKs; `:188` grant revokes; `:203` default privileges; `:221` helper EXECUTE; `:253-287` reliability guard and grants.
+
+## 7. Screens that change, and the account that checks each
+
+| Screen | gmarkant@gmail.com (m a r k a n t, lead) | gmarkant@icloud.com (April Partner Test Agency, vendor) |
+|---|---|---|
+| Every `/agency/*` page | unchanged if the lockout check row 1 is OK | upgrade screen at the same URL ("Agency access requires a paid lead-agency account", Contact us, Go to the vendor portal) |
+| `/agency-access` | n/a | the same screen, reached by rewrite |
+| Sidebar "Switch to Lead Agency" (partner layout) | shown while in vendor mode only if a vendor org membership exists for "Switch to Vendor Mode" (see lockout section 4) | **hidden** |
+| Sidebar "Switch to Vendor Mode" (agency layout) | **hidden unless m a r k a n t's user also belongs to an is_vendor org** | n/a |
+| Agency API calls from the console | 200 as before | **402** `agency_entitlement_required` (e.g. `fetch('/api/agency/dashboard')`) |
+| `/partner/*` | unchanged | unchanged |
+| AI buttons on `/agency` (master brief, templates, interpret) | unchanged | 402 |
+
+## 8. Owner order
+
+1. Run `supabase/sql-checks/agency-gate-lockout-check.sql`; fix any flag with section 9.
+2. Merge and deploy the branch. Check section 7 with both accounts.
+3. **113**: pre-apply test (first line "SAFE TO APPLY 113."), dry run (`113_role_columns_guard.sql`
+   COMMIT at **line 287** -> ROLLBACK), catalog proof (V1-V4 in the file header), apply, verify.
+4. **114**: pre-apply test, dry run (`114_hardening.sql` COMMIT at **line 305**), catalog proof
+   (P1, P2, then V1-V5 after), apply, verify; read its NOTICEs for the default-privileges outcome.
+5. **115**: not authored (WS3 stopped).
+Down files: 113 COMMIT line 30, 114 COMMIT line 85.
+
+## 9. REFUSED, ASSUMPTIONS, STOPPED ON
+
+**REFUSED / NOT DONE**
+- No database access, no applying, no network, no install, no push/merge. No `.env*` read.
+- Shell composition was not permitted: `diff`/`node` to prove the pre-apply tests' inlined migration
+  bodies are byte-identical to the migration files was denied. They were copied by hand from the
+  files; **compare them before the first run**.
+- `pnpm exec eslint <files>` needed approval; whole-repo `pnpm lint` was used and filtered to touched
+  files (it fails on many pre-existing messages). `pnpm build` was not run (not required by the brief).
+- No browser verification.
+
+**ASSUMPTIONS**
+- G1 is strict: `profiles.is_admin`, `profiles.is_paid`, `demo_access` admit nobody to the agency
+  side; `/admin` keeps `is_admin`. The `NEXT_PUBLIC_IS_DEMO` deployment bypass is kept.
+- No active organization (no membership, ambiguous) is reported as `not_lead_agency`; a lookup error
+  or missing org row is a 500 fault, never "upgrade".
+- The switch-role response for a refused switch stays 403 `upgrade_required` (what `RoleToggle`
+  reads); agency data routes use 402.
+- set_active_role's 'agency' rule follows the brief (any lead+paid membership); the app gate is
+  stricter (the active org). 'partner' needs an `is_vendor` membership, as briefed: lead-agency-only
+  users lose "Switch to Vendor Mode" (lockout section 4 lists them).
+- The middleware lets `/agency/settings/billing` through for the client wall's R6 owner/admin rule.
+- `brief/save`, `documents/extract-text`, `onboarding-partners` and `assignments` GET/POST are agency
+  surfaces and are gated (the route-boundary report's "vendor, no project, expect 200" for brief/save
+  becomes 402).
+- 114's reliability guard refuses the service role too (110's shape); "allows the service role" is
+  read as "the service role's other partnerships writes still work" (L3).
+- 114's table list is the apply-time catalog; no table list is hard-coded.
+- `canUploadFiles` (`lib/entitlements.ts`) keeps its `is_admin` line: `/api/upload` is a shared
+  upload route, not an agency route; noted as residual.
+
+**STOPPED ON**
+- Workstream 3, at its first check: agency screens read `master_rfp_json` from `partner_rfp_inbox`.
