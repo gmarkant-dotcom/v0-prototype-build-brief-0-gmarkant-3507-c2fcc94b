@@ -40,6 +40,49 @@ For each of 103 and 104, in this order (the full procedure is in each file's hea
 not exist answers 42P01 and a page built on it renders an error. That is the intended behaviour (097's
 header argues for it) and not something to paper over with a fallback.
 
+## RULINGS 2026-10-09
+
+The owner ruled on these on 2026-10-09. 103 and 104 were amended to match on branch
+`fix/103-104-rulings` (still **not applied**). The full account, with file and line references, is in
+`docs/103-104-rulings-report.md`. **Where this section and anything below it disagree, this section wins.**
+
+- **R1 Delete vs archive.** A budget line may be hard-deleted only while its estimate is NULL or 0 and
+  nothing references it. The estimate rule is the USING clause of `budget_lines_org_delete`; the NO ACTION
+  foreign keys refuse a line with any ledger entry, voided or not. Categories may be hard-deleted only while
+  nothing references them (the existing foreign keys). Everything else is archived: `archived_at` on
+  `budget_lines`, `budget_project_categories` and `budget_template_categories`. **A DELETE refused by the
+  USING clause deletes 0 rows silently**; callers must check the affected count.
+- **R2 Duplicates.** Ledger entries are never deleted (no DELETE policy, no DELETE grant). A duplicate is
+  voided: `ledger_entries.voided_at`, `void_reason`, and `duplicate_of` (composite FK to an entry in the same
+  project). `duplicate_of` requires `voided_at` and may not be the entry itself. Voided entries stay readable
+  to everyone who could read them. **Actual excludes voided entries.**
+- **R3 Archive.** Archiving hides and keeps every file, is reversible, and changes no one's access.
+  `source_documents.archived_at` is kept; `budget_archive_project_documents(p_project_id)` and
+  `budget_unarchive_project_documents(p_project_id)` set and clear it for a whole project (SECURITY INVOKER,
+  pinned search_path, return a row count, touch only `archived_at`, never storage, 42501 unless the caller
+  is the project's agency). The vendor read policy does not consider `archived_at`.
+- **R4 Vendor document access.** An ALLOW-list of accepted relationships: `active` and `suspended`.
+  `pending` (invitation not accepted) gets no agency documents and cannot upload; `terminated` and `removed`
+  revoke. The authorship exception stays: a vendor can always read a document its own side uploaded. The
+  same allow-list is enforced on the trusted (service role) path that files a vendor document, in
+  `source_documents_guard()`.
+- **R5 Four states.** Only Estimate is stored. Actual is derived from non-voided ledger entries. Committed
+  and Paid are deferred to later migrations; no columns were added for them.
+- **R6 Copy-on-create.** `budget_copy_template_to_project(p_project_id) RETURNS integer` in 103: SECURITY
+  INVOKER, pinned search_path; 42501 if the caller is not the project's agency (a vendor who can read the
+  project is refused); 23505 if the project already has any category; copies only non-archived template
+  categories of the project's agency, with the fee-or-cost flag; an empty template copies 0 and succeeds.
+  This replaces the "INSERT ... SELECT from a route" advice in Phase A step 2.
+- **R7 Grants** (matching 105 and 109). Every new table: REVOKE ALL FROM PUBLIC, anon, authenticated by
+  name. authenticated then gets: `budget_template_categories`, `budget_project_categories`, `budget_lines`
+  SELECT/INSERT/UPDATE/DELETE; `budget_category_merges` SELECT/INSERT; `source_documents`, `ledger_entries`
+  SELECT/INSERT/UPDATE. service_role gets ALL. authenticated holds no TRUNCATE, REFERENCES or TRIGGER
+  anywhere. No function in 103 or 104 is SECURITY DEFINER; every one pins search_path.
+
+This answers Q1 (deletion: refuse, archive instead), Q2 (stored vs derived: Estimate stored, Actual
+derived, Committed and Paid deferred) and the "does archiving change access" question in Phase D step 5
+(it does not).
+
 ## 1. The rulings that still block, and what each blocks
 
 None of these is answered in this repository. The build must not answer them by shipping code.
@@ -141,14 +184,16 @@ the master line.
 4. **The toggle control** (any agency member may flip it; who may is not ruled): an UPDATE of
    `visible_to_vendor`. Turning it on needs a `partnership_id`; `source_documents_toggle_needs_partnership`
    refuses otherwise, and sharing an unshared document is `partnership_id` NULL to a value.
-5. **Archive control** (R5): set `archived_at`. Archiving does not change who can read it (not ruled; ask).
+5. **Archive control** (R3, RULINGS 2026-10-09): call `budget_archive_project_documents` /
+   `budget_unarchive_project_documents`. Archiving does not change who can read it.
 6. **The vendor's view** of its documents lists what `source_documents_vendor_select` returns. Do not
    re-implement the predicate in application code; select and let the policy decide.
-7. **Termination and removal** are already handled by the policy: `terminated` and `removed` revoke the
-   toggle branch and not the authorship branch; `suspended` revokes nothing. Note this reads "ended" as both
-   `terminated` and `removed`, which is narrower than the brief's literal "not terminated" (see the report).
+7. **Relationship status** is handled by the policy (R4, RULINGS 2026-10-09): the toggle branch admits
+   only `active` and `suspended`; `pending`, `terminated` and `removed` get no agency documents. The
+   authorship branch ignores status. A vendor document cannot be filed while the partnership is pending,
+   terminated or removed (the guard trigger refuses with 42501).
 8. Ingestion state, a content hash for convergent re-ingest, and an uploader user are **not columns** and
-   will need the next free migration number at authoring time (109 or later; 105 is partnership_private_notes) once their values are ruled. The findings document requires all three
+   will need the next free migration number at authoring time (113 or later; 105 to 112 are taken) once their values are ruled. The findings document requires all three
    behaviours; the schema deliberately does not guess.
 
 ## 6. Phase E. Extraction and the ledger
@@ -174,8 +219,8 @@ the master line.
 
 **Blocked by:** Q2, Q3, Q4.
 
-- Actual per line = the sum of `ledger_entries.amount` where `budget_line_id` = the line (signed). Whether
-  that is computed on read or cached is Q2. `budget_line_id` is nullable: an unreconciled entry counts
+- Actual per line = the sum of `ledger_entries.amount` where `budget_line_id` = the line (signed) and
+  `voided_at IS NULL` (R2, R5: derived on read, never stored). `budget_line_id` is nullable: an unreconciled entry counts
   against its category and no line.
 - Paid is the existing cash-flow data. Nothing joins it to a budget line yet.
 - Versions and the movement report against an approved baseline need Q3 first.
