@@ -438,7 +438,7 @@ route returning the whole token row is the most urgent independent fix.
 |---|---|---|
 | Every `/agency/*` page | unchanged if the lockout check row 1 is OK | upgrade screen at the same URL ("Agency access requires a paid lead-agency account", Contact us, Go to the vendor portal) |
 | `/agency-access` | n/a | the same screen, reached by rewrite |
-| Sidebar "Switch to Lead Agency" (partner layout) | shown while in vendor mode only if a vendor org membership exists for "Switch to Vendor Mode" (see lockout section 4) | **hidden** |
+| Sidebar "Switch to Lead Agency" (partner layout) | shown (m a r k a n t is a paid lead agency) | **hidden** |
 | Sidebar "Switch to Vendor Mode" (agency layout) | **hidden unless m a r k a n t's user also belongs to an is_vendor org** | n/a |
 | Agency API calls from the console | 200 as before | **402** `agency_entitlement_required` (e.g. `fetch('/api/agency/dashboard')`) |
 | `/partner/*` | unchanged | unchanged |
