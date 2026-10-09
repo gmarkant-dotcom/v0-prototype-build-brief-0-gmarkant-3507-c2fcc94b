@@ -281,3 +281,55 @@ authenticated keeps SELECT/INSERT/UPDATE/DELETE; H1 anon helper count (6 before,
 H2 authenticated keeps all six, H3 anon calling `current_user_org_ids()` (42501 after); L1 service
 role and L2 agency refused LG114 on reliability, L3 service role's ordinary write still works; S1
 USING unchanged; S2 guard shape; S3 default privileges (PASS, or INCONCLUSIVE "reported"); M.
+
+## Workstream 3: RFP leaks. STOPPED ON ITS FIRST CHECK. Nothing changed, no migration 115.
+
+The brief's first step: "If any agency screen reads master_rfp_json FROM partner_rfp_inbox (the
+vendor copies), STOP this workstream and report; strip nothing the agency depends on." **It does.**
+
+**There is no agency-side source of truth for RFP content in the database.** The wizard's master RFP
+is React state (`app/agency/page.tsx:396-413`, assembled at `:895-909`) plus a `localStorage` draft
+(`:685-700`). The only server copies are the per-recipient `partner_rfp_inbox.master_rfp_json`
+snapshots written at broadcast (`app/api/agency/broadcast-rfp/route.ts:257`, `:402`) and, for the
+magic-link flow, `rfp_magic_tokens` plus live `projects` columns. No migration or script creates a
+master-RFP table or column.
+
+**Agency readers of the vendor copies (re-read on this branch):**
+
+| Agency surface | Reads from `partner_rfp_inbox.master_rfp_json` |
+|---|---|
+| Bid rubric for scoring: `lib/rfp-evaluation-criteria-server.ts:76-82`, used by `bids/[responseId]/evaluation` (`:98`, `:176`), `ai-score` (`:198`), `lib/bid-summary-generation.ts:55` | `evaluation_criteria` |
+| Bid list and compare: `app/api/agency/rfp-responses/route.ts:213` (select), `:293-297`, `:316`; `components/bid-compare-view.tsx:606`, `bid-detail-sheet.tsx:130` | `business_criteria_required`, `budget_categories` |
+| Award and decline: `app/api/agency/rfp-responses/[id]/route.ts:369`, `:740`, `:1050`, `:1151`, `:1182` | `projectName`, whole object |
+| Guest-bid join: `app/api/agency/rfp-responses/[id]/route.ts:90-92`, `:413-415`; `lib/magic-token-attach.ts:108` | `_magic_token` (the JOIN KEY) |
+| Engagement history: `app/api/agency/pool/[partnerId]/route.ts` via `lib/engagement-history.ts:47-49` | `projectName` |
+
+Stripping `evaluation_criteria` would blank every rubric the agency scores against; stripping
+`budget_categories` breaks bid comparison; stripping `_magic_token` breaks award/decline of guest
+bids. So nothing is stripped, the G5 toggle is not added (it needs a source-of-truth row to live on),
+and 115 is not authored.
+
+**`_magic_token` finding (not flagged at the top: it is not cross-vendor).** It holds
+`rfp_magic_tokens.token`, the bearer credential behind `/rfp/respond/{token}`, written only at
+`lib/magic-token-attach.ts:319` into the inbox row created for the vendor whose email the token was
+issued to. So it is the receiving vendor's OWN token: holding it lets that vendor act as the guest for
+its own invitation, which it already can. It does not let one vendor act as another. Two exposures
+remain: the token is copied into notification `data` (`lib/magic-token-attach.ts:421`), which fans
+out to every member of the vendor's organization, and it reaches the vendor browser through
+`select("*")` (`app/api/partner/rfps/route.ts:233`, `[id]/route.ts:25`). Both are same-organization.
+
+**What a follow-up needs, in order (not done):**
+1. An agency-only source-of-truth row for each broadcast RFP (a table keyed on project and broadcast,
+   holding the master JSON, the rubric, budget categories and the G5 `show_client_to_vendors boolean
+   NOT NULL DEFAULT false`), written by broadcast-rfp and magic-link, code first.
+2. Move the five agency readers above to it, keeping the inbox read as a fallback for rows written
+   before it existed. `_magic_token` needs its own non-JSON join key first (an inbox column, or the
+   existing `scope_item_id = magic:<token>` form `lib/magic-token-attach.ts:62-64` already writes).
+3. Only then build per-vendor copies (own scope line and budget only; no `totalBudget`,
+   `budget_categories`, other lines, rubric; client only when the toggle is on) and author 115 to
+   scrub existing copies, with the source-of-truth fingerprint guard.
+4. **Independent of all three and the most urgent item found:** `app/api/rfp/guest/[token]/route.ts`
+   returns the whole `rfp_magic_tokens` row (`token: tokenRow`, `:293`, `:314`) to an
+   unauthenticated link holder, including `reference_materials.output_template_config`,
+   `evaluation_criteria`, `budget_categories` and `domain_match_profile_id`. That fix touches no
+   inbox copy and no agency reader; it is held back here only because this workstream is stopped.
