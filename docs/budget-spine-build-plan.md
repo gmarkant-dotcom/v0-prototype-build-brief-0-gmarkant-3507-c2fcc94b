@@ -54,7 +54,7 @@ None of these is answered in this repository. The build must not answer them by 
 | **Q10** The chart-of-accounts composition step and the shipped templates | The accuracy lever (spec 5b). Templates are content, and "the quality of the shipped templates largely determines the quality of the product". |
 | **Q1** Deletion of a document with entries beneath it | A "delete this upload" control. 104 has **no DELETE policy** and NO ACTION keys, which is the "refuse" behaviour as a default. |
 | **Q6** Partial refunds against a reconciled entry | Refund handling past "a credit is a negative entry". |
-| **Retention** after a project closes (spec section 6 question 4) | Any scheduled purge. Nothing may delete in the meantime. |
+| **Retention** after a project closes (spec section 6 question 4) — ANSWERED 2026-10-08, see `supabase/migrations/104_budget_ledger.sql:44-70` (R5: nothing is destroyed on close; archive is a separate agency action) | Any scheduled purge. Nothing may delete in the meantime. |
 | **Currency** | Any display or total. No currency is stored anywhere in 103 or 104. |
 
 ## 2. Phase A. The chart of accounts
@@ -148,7 +148,7 @@ the master line.
    toggle branch and not the authorship branch; `suspended` revokes nothing. Note this reads "ended" as both
    `terminated` and `removed`, which is narrower than the brief's literal "not terminated" (see the report).
 8. Ingestion state, a content hash for convergent re-ingest, and an uploader user are **not columns** and
-   will need a migration 105 once their values are ruled. The findings document requires all three
+   will need the next free migration number at authoring time (109 or later; 105 is partnership_private_notes) once their values are ruled. The findings document requires all three
    behaviours; the schema deliberately does not guess.
 
 ## 6. Phase E. Extraction and the ledger
@@ -167,7 +167,7 @@ the master line.
    merges**. Neither a duplicate flag nor a review state exists in the schema.
 6. "Add a Storage category?" (finding 3): cluster low-confidence entries by reasoning and suggest a
    category. Needs Phase A's add-category path.
-7. Every colleague in the organization reads every entry (R3). Do not add per-member scoping.
+7. Every colleague in the organization reads every entry (R3, 104's local numbering). Do not add per-member scoping.
 8. **No vendor ever reads `ledger_entries`.** The Phase C guard covers it.
 
 ## 7. Phase F. Actual, Paid, versions, export

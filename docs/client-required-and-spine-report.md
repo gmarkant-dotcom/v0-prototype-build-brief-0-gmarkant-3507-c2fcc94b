@@ -1,5 +1,7 @@
 # Client required, and the budget spine: run report
 
+> **CORRECTION 2026-10-09:** merged into main (verified by `git branch --merged`). Applied status is recorded in `docs/roadmap-state.md`, not here.
+
 **Merge status: not stated here.** Check with `git merge-base --is-ancestor 47d8c1b main`, where `47d8c1b` is
 the last code commit before this report. Branch `feat/client-required-and-spine`, cut from `main` at `dbe1a10`.
 **Nothing was pushed, merged or applied.** No SQL was run by me. Nothing here has been opened in a browser.

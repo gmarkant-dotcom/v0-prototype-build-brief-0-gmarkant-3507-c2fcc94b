@@ -54,7 +54,7 @@ Two separate portals share one Supabase auth system. Users are differentiated by
 
 ### Middleware (`middleware.ts`)
 
-Protects `/agency`, `/partner`, `/admin` routes. **Critical:** The matcher excludes `api/` — server Supabase clients inside API routes cannot read session cookies.
+Protects `/agency`, `/partner`, `/admin` routes. **Critical:** The matcher excludes `api/`, so middleware never refreshes the session for API requests. API routes still authenticate: they call `createClient()` from `lib/supabase/server` (which builds a `@supabase/ssr` server client over `cookies()` from `next/headers`) and then `supabase.auth.getUser()`, as `app/api/partnerships/route.ts:36-37` does. They read the session cookies the browser already holds; they do not get a middleware refresh, so an expired access token is not renewed on that request. Create the client inside each handler, never in a module-level variable.
 
 **For new data fetching, prefer the browser Supabase client directly from components:**
 ```typescript
@@ -83,14 +83,16 @@ Upload routing lives in `app/api/upload/route.ts` — it directs to Supabase Sto
 
 ### AI routes
 
-All three AI routes use `@ai-sdk/anthropic` directly with `ANTHROPIC_API_KEY`. Do NOT use the Vercel AI Gateway string format — it will 500.
+Seven AI routes use `@ai-sdk/anthropic` directly with `ANTHROPIC_API_KEY`. Do NOT use the Vercel AI Gateway string format — it will 500.
 
 ```typescript
 import { anthropic } from "@ai-sdk/anthropic"
-model: anthropic("claude-sonnet-4-20250514")
+model: anthropic("claude-sonnet-4-6")
 ```
 
-Routes: `app/api/ai/master-brief/route.ts`, `app/api/ai/rfp-output-template/route.ts`, `app/api/ai/route.ts`
+Routes: `app/api/ai/route.ts`, `app/api/ai/master-brief/route.ts`, `app/api/ai/rfp-output-template/route.ts`, `app/api/interpret/budget/route.ts`, `app/api/interpret/campaigns/route.ts`, `app/api/interpret/directors/route.ts`, `app/api/interpret/timeline/route.ts`
+
+**Known exceptions, unverified:** two call sites pass a gateway-style string (`"anthropic/claude-sonnet-4-6" as any`) instead of the provider package: `app/api/agency/msa/ai-schedule/route.ts:271` and `app/api/agency/payment-synthesis/route.ts:369`. Whether they work in production has not been verified, and the "it will 500" rule above has not been re-tested against them. Do not copy their pattern.
 
 ### Email
 

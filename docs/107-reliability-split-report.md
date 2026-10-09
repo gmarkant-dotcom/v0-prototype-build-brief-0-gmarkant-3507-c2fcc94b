@@ -1,5 +1,7 @@
 # 107 / 108: the reliability summary moves to a table no vendor can read
 
+> **CORRECTION 2026-10-09:** merged into main (verified by `git branch --merged`). Applied status is recorded in `docs/roadmap-state.md`, not here.
+
 **Merge status:** NOT MERGED, NOT PUSHED, NOT APPLIED. Checked 2026-10-08 with `git merge-base --is-ancestor HEAD origin/main`, exit 1, at commit 387f93a on branch `fix/107-reliability-split`. Re-run that check before trusting this line; it is never updated by hand. (105 and 106 are ancestors of this branch, so they are on `main` locally.)
 
 ## THE 1B ANSWER, FIRST: a security fix, not a product change. I built it.

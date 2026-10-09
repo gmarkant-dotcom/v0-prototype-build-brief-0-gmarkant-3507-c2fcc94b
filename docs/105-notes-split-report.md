@@ -1,5 +1,7 @@
 # 105 / 106: the lead agency's private notes move to a table no vendor can read
 
+> **CORRECTION 2026-10-09:** merged into main (verified by `git branch --merged`). Applied status is recorded in `docs/roadmap-state.md`, not here.
+
 **Merge status:** NOT MERGED, NOT PUSHED, NOT APPLIED. Checked 2026-10-08 with `git merge-base --is-ancestor HEAD origin/main`, exit 1 (the branch `fix/105-notes-column-revoke` is not an ancestor of origin/main). Re-run that check before trusting this line; it is never updated by hand.
 
 **THE LEAK WINDOW, IN ONE SENTENCE: a vendor with a claimed partnership can still read the lead agency's private notes, the blacklist flag included, from the moment the code deploys until 106 is applied; 105 alone does not close it, and only 106 does.**

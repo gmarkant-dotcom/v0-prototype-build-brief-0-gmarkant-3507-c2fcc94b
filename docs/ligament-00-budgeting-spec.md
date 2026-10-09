@@ -1,5 +1,7 @@
 # Ligament 00 Budgeting: the specification
 
+> **ANSWERED 2026-10-08:** (1) vendor visibility of a source document is a per-document toggle set by the lead agency, and a vendor can always see a document it uploaded; (2) every colleague in a lead agency reads every receipt; (3) termination revokes vendor access to agency documents, suspension does not; (4) nothing is destroyed when a project closes, and archive is a separate deliberate agency action. The BLOCKING status below is superseded.
+
 **Status:** specification. Nothing in it is built.
 **Created:** 2026-09-14, branch `feat/budgeting-spec`.
 **Supersedes:** a version drafted in conversation on 2026-08-28 that was never written to a

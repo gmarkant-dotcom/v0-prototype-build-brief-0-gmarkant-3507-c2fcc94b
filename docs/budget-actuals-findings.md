@@ -1,5 +1,7 @@
 # Budget actuals: what a throwaway extraction test established
 
+> **ANSWERED 2026-10-08:** (1) vendor visibility of a source document is a per-document toggle set by the lead agency, and a vendor can always see a document it uploaded; (2) every colleague in a lead agency reads every receipt; (3) termination revokes vendor access to agency documents, suspension does not; (4) nothing is destroyed when a project closes, and archive is a separate deliberate agency action. The BLOCKING status below is superseded.
+
 **Date:** 2026-09-14
 **Branch:** `feat/budgeting-findings`
 **Status:** input to a future specification session. **This is not a specification.**

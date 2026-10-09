@@ -1,5 +1,7 @@
 # Migrations
 
+> Migrations are applied manually by the owner in the Supabase SQL Editor behind: pre-apply test, dry run with ROLLBACK, catalog-query proof of rollback, real apply, catalog-query verification. A success message is never evidence.
+
 ## Sequence for every migration
 
 1. Create the SQL file at `supabase/migrations/[number]_[description].sql`
@@ -8,7 +10,7 @@
 4. Update `LIGAMENT_CONTEXT.md` with the new migration number and description
 5. If the migration creates a new table with RLS or modifies policies, run:
    ```
-   npm run verify-rls
+   pnpm run verify-rls
    ```
    and confirm output shows `PASS` before deploying dependent code
 
@@ -39,7 +41,7 @@ Supabase dashboard get auto-grants; tables created via raw SQL do not. Both will
 ## Verify after every RLS migration
 
 ```bash
-npm run verify-rls
+pnpm run verify-rls
 ```
 
 This script queries `pg_class` and `pg_policy` and prints a warning for any table
