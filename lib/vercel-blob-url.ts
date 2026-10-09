@@ -75,3 +75,22 @@ export function parseGuestUploadBlobPathFromUrl(blobUrl: string): {
     return null
   }
 }
+
+/** Path shape from agency library upload (`/api/upload`, folder `agency-library`): `agency-library/{uploaderUserId}/{timestamp}-{name}` */
+export function parseAgencyLibraryBlobPathFromUrl(blobUrl: string): {
+  uploaderId: string
+  fileSegment: string
+} | null {
+  try {
+    const pathname = new URL(blobUrl).pathname.replace(/^\//, "")
+    const parts = pathname.split("/").filter(Boolean)
+    if (parts.length < 3 || parts[0] !== "agency-library") return null
+    if (parts.some((p) => p === "." || p === "..")) return null
+    return {
+      uploaderId: parts[1],
+      fileSegment: parts.slice(2).join("/"),
+    }
+  } catch {
+    return null
+  }
+}
