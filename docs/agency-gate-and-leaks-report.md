@@ -218,3 +218,66 @@ Files: `113_role_columns_guard.sql` (BEGIN line 115, COMMIT line 287),
 messages; in touched files the only messages are pre-existing (`contexts/paid-user-context.tsx:96`
 set-state-in-effect, `lib/entitlements.ts:163` unused directive). One new message in a new file was
 fixed before commit.
+
+## Workstream 2: hardening (migration 114, authored, not applied)
+
+Files: `114_hardening.sql` (BEGIN line 93, COMMIT line 305), `114_hardening_down.sql` (BEGIN 21,
+COMMIT 85), `114_preapply_test.sql`. No application code changes. Independent of 113 and 115.
+
+**1. WITH CHECK (USING unchanged), by ALTER POLICY.** Verified against the policy text as last
+defined (079; no later migration touches these four; 073 never applied):
+
+| Table / policy | Before (079) | After |
+|---|---|---|
+| `delivery_reviews` "Agencies manage own delivery reviews" (079:1202-1205) | `org_id IN current_user_org_ids()` | plus the partnership's `lead_org_id = org_id` AND the project's `org_id = org_id` |
+| `delivery_review_scores` "Agencies manage own delivery review scores" (079:1216-1225) | parent's `org_id IN current_user_org_ids()` | plus the same two tests on the parent review |
+| `msa_agreements` "Agency can manage their MSAs" (079:1239-1242) | `org_id IN ...` | plus `partnership_id IS NULL OR` the partnership's `lead_org_id = org_id` |
+| `rfp_magic_tokens` "Agency can manage their own tokens" (079:1666-1668) | USING only (no WITH CHECK) | `org_id IN ...` plus `project_id IS NULL OR` the project's `org_id = org_id` |
+
+**Skipped, the sweep's description does not hold:**
+- `clients`: no `partnership_id` or `project_id` column (`077:36-55`); nothing foreign to name.
+- `usage_tracking`: no foreign reference (`067:1-11`). **Separate observation, not fixed:** its ALL
+  policy lets any member write its own organization's row, so an agency member could reset its own
+  `ai_analyses_count` or raise `analyses_limit` by PostgREST. That is quota tampering within one's own
+  organization, not a cross-tenant write. It needs a write guard or a service-role-only write path.
+
+Pre-flight LG114 refuses if any existing row already names another organization's partnership or
+project (P1 in the file lists them), because its next UPDATE would be refused. The owner-verified
+count of forged delivery reviews is 0.
+
+**2. TRUNCATE, REFERENCES, TRIGGER revoked from anon and authenticated on every `public` table**
+(relkind `r` and `p`), by a loop over `pg_class` at apply time; SELECT/INSERT/UPDATE/DELETE
+untouched. **The table list is the apply-time catalog, not a list in this file**: the migration
+raises a NOTICE with the count and V2 must return 0. Views and sequences are not touched.
+
+**3. Default privileges.** `ALTER DEFAULT PRIVILEGES FOR ROLE <owner> IN SCHEMA public REVOKE
+TRUNCATE, REFERENCES, TRIGGER ON TABLES FROM anon, authenticated` for every role that owns a public
+table (expected: `postgres`). Each runs in its own exception block: `insufficient_privilege` is
+RAISE NOTICE "REPORTED, NOT CHANGED", never a failure. Outcome is unknown until applied; the test's
+S3 reads `pg_default_acl` and reports INCONCLUSIVE with the role name if anything remains.
+
+**4. Helper EXECUTE.** For `current_user_org_ids`, `current_user_admin_org_ids`,
+`current_user_counterparty_org_ids`, `current_user_visible_profile_ids`,
+`current_user_active_counterparty_user_ids`, `current_user_commercial_counterparty_org_ids` (the
+six: 089, 094 and 096 already revoked `current_user_email`, `current_user_org_member_user_ids`,
+`current_user_commercial_counterparty_user_ids` from anon): GRANT to authenticated, REVOKE from anon
+and PUBLIC. **The "no anon/PUBLIC policy calls them" confirmation is done in the migration itself**,
+per function, against `pg_policies` (`roles && {public,anon}` and the name in `qual`/`with_check`);
+a helper that fails the check is kept and reported by NOTICE. From the repository, every policy
+since 079 that calls them is `TO authenticated`, so none is expected to be kept; the test's H1
+expectation is computed the same way.
+
+**5. Reliability guard.** `partnerships_reliability_columns_guard`, BEFORE INSERT OR UPDATE, 110's
+shape: refuses (LG114) any write leaving `reliability_summary` or `reliability_summary_generated_at`
+non-null, for every caller including the service role (as 110 does). The only code writer is
+`writeReliabilityCache`'s legacy fallback (`lib/server/partnership-private-reliability.ts:123-127`),
+reachable only if 107's table is missing, which it is not. Every other partnerships write passes.
+
+**Test assertion IDs** (`114_preapply_test.sql`): D1 vendor delivery review on the agency's
+partnership (OK before, 42501 after); D2 agency review still works; D3 vendor score on its forged
+review (42501 after); D4 agency score still works; M1/M2 the same for MSA rows; T1/T2 the same for
+magic tokens; G1 anon and G2 authenticated lose TRUNCATE/REFERENCES/TRIGGER on six sample tables; G3
+authenticated keeps SELECT/INSERT/UPDATE/DELETE; H1 anon helper count (6 before, kept count after),
+H2 authenticated keeps all six, H3 anon calling `current_user_org_ids()` (42501 after); L1 service
+role and L2 agency refused LG114 on reliability, L3 service role's ordinary write still works; S1
+USING unchanged; S2 guard shape; S3 default privileges (PASS, or INCONCLUSIVE "reported"); M.
