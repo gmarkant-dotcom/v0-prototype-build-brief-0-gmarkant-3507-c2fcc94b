@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { createClient as createTokenClient, type SupabaseClient } from "@supabase/supabase-js"
 import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
+import { agencyGateResponse } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -41,6 +42,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const { supabase, userId } = caller
+
+    // G1: brief interpretation is an agency feature (app/agency/brief, app/agency). The active
+    // organization must be a paid lead agency; no role column is read.
+    const refused = await agencyGateResponse(userId, supabase)
+    if (refused) return refused
 
     const body = await req.json().catch(() => ({}))
     const { brief_text, brief_title, analyses_requested, project_id } = body as {

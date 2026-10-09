@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateResponse } from "@/lib/api-auth"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { checkUsageLimit, incrementAiAnalysis, usageLimitResponse } from "@/lib/usage-tracking"
@@ -61,14 +62,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ respons
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role")
-      .eq("id", user.id)
-      .single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     const { data: existing } = await supabase
       .from("bid_decompositions")
@@ -113,14 +109,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role")
-      .eq("id", user.id)
-      .single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     const body = await req.json().catch(() => ({}))
     const force = body?.force === true

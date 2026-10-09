@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { resolveRfpRubricForResponse, writeRfpCriterionScores } from "@/lib/rfp-evaluation-criteria-server"
 import { parseSyntheticCriterionId, toSyntheticCriterionId } from "@/lib/rfp-evaluation-criteria"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateResponse } from "@/lib/api-auth"
 import { callAnthropicAnalysis, tryParseJsonObject } from "@/lib/ai-bid-analysis"
 import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-analysis-context"
 import { computeCompositeScore } from "@/lib/bid-scoring"
@@ -158,14 +159,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
       return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role")
-      .eq("id", user.id)
-      .single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)

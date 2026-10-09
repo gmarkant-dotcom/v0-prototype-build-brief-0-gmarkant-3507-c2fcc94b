@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { randomUUID } from "crypto"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
 import { refreshGoogleToken } from "@/lib/google-email"
 import { refreshMicrosoftToken } from "@/lib/microsoft-email"
@@ -38,15 +39,10 @@ async function requireAgency() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { ok: false as const, status: 401, error: "Unauthorized" }
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, active_role")
-    .eq("id", user.id)
-    .maybeSingle()
-  if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-    return { ok: false as const, status: 403, error: "Agency only" }
-  }
+  if (!user) return { ok: false as const, status: 401, body: { error: "Unauthorized" } as Record<string, unknown> }
+  // G1: the active organization must be a paid lead agency. No role column is read.
+  const refusal = await agencyGateRefusal(user.id, supabase)
+  if (refusal) return { ok: false as const, status: refusal.status, body: refusal.body as Record<string, unknown> }
   return { ok: true as const, userId: user.id }
 }
 
@@ -54,7 +50,7 @@ export async function POST(request: NextRequest) {
   const route = "/api/agency/email-scan"
   try {
     const auth = await requireAgency()
-    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+    if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status })
 
     const body = await request.json().catch(() => ({}))
     const requestedProvider = String(body.provider || "")
@@ -163,7 +159,7 @@ export async function GET(request: NextRequest) {
   const route = "/api/agency/email-scan"
   try {
     const auth = await requireAgency()
-    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+    if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status })
 
     const provider = request.nextUrl.searchParams.get("provider") || "google"
 

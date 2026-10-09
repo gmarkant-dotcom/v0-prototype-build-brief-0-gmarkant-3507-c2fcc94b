@@ -1,15 +1,11 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, type OrgId } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 
 const noStore = { "Cache-Control": "private, no-store, no-cache, must-revalidate" } as const
 
-async function requireAgency(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
-  const { data: profile, error } = await supabase.from("profiles").select("role, active_role").eq("id", userId).single()
-  if (error) return false
-  return profile?.role === "agency" || profile?.active_role === "agency"
-}
 
 /**
  * 079 PARAMETER CLASS, BRANDED. `projects.org_id` REFERENCES organizations(id), and both
@@ -47,9 +43,9 @@ export async function GET(req: Request) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
-    if (!(await requireAgency(supabase, user.id))) {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStore })
 
     // 079: an organization column is not a user id. Scope by membership.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
@@ -93,9 +89,9 @@ export async function POST(req: Request) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
-    if (!(await requireAgency(supabase, user.id))) {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStore })
 
     // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
     const writeOrgId = await resolveCallerWriteOrgId(user.id, supabase)
@@ -167,9 +163,9 @@ export async function PATCH(req: Request) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
-    if (!(await requireAgency(supabase, user.id))) {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStore })
 
     // 079: an organization column is not a user id. Scope by membership.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)

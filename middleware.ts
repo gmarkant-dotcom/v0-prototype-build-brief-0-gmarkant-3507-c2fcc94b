@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@/lib/supabase/middleware'
+import { resolveAgencyGate } from '@/lib/entitlements'
+import { isEntitlementEscapeRoute } from '@/lib/entitlement-escape'
 
 // Check if request is to demo subdomain
 function isDemoRequest(request: NextRequest): boolean {
@@ -90,7 +92,8 @@ export async function middleware(request: NextRequest) {
   }
   
   // Production: protect all non-public app routes.
-  const isAgencyRoute = pathname.startsWith('/agency')
+  // Boundary-checked, so /agency-access (the upgrade screen) is not itself an agency route.
+  const isAgencyRoute = pathname === '/agency' || pathname.startsWith('/agency/')
   const isPartnerRoute = pathname.startsWith('/partner')
   const isAdminRoute = pathname.startsWith('/admin')
 
@@ -119,7 +122,24 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    // Allow dual-role users to access both portals based on active_role
+    // G1 (owner ruling, 2026-10-09): /agency requires the ACTIVE organization to be a paid
+    // lead agency. The same resolver the API routes call; no role column decides it. A
+    // refused caller gets the upgrade screen (a rewrite, so the URL is kept). The one
+    // exemption is the billing page, where the client wall still applies R6 (owner/admin of
+    // the organization only). API routes are not matched here and gate themselves.
+    if (isAgencyRoute) {
+      const gate = await resolveAgencyGate(user.id, supabase)
+      if (!gate.entitled && !isEntitlementEscapeRoute(pathname)) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/agency-access'
+        url.search = ''
+        url.searchParams.set('reason', gate.fault ? 'unavailable' : gate.gate)
+        return NextResponse.rewrite(url)
+      }
+    }
+
+    // Portal PREFERENCE routing, unchanged in shape: active_role chooses which side an entitled
+    // dual-role user lands on. It grants nothing; the gate above already ran for /agency.
     if (isAgencyRoute && activeRole === 'partner') {
       const url = request.nextUrl.clone()
       url.pathname = '/partner'
@@ -127,9 +147,14 @@ export async function middleware(request: NextRequest) {
     }
 
     if (isPartnerRoute && activeRole === 'agency') {
-      const url = request.nextUrl.clone()
-      url.pathname = '/agency/dashboard'
-      return NextResponse.redirect(url)
+      // Only bounce to /agency when the agency side would admit them; otherwise a caller left
+      // with active_role 'agency' and no entitlement could reach neither portal.
+      const gate = await resolveAgencyGate(user.id, supabase)
+      if (gate.entitled) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/agency/dashboard'
+        return NextResponse.redirect(url)
+      }
     }
 
     return supabaseResponse

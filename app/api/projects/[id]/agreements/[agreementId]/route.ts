@@ -2,6 +2,7 @@ import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { actingRole } from '@/lib/acting-role'
+import { agencyGateResponse } from '@/lib/api-auth'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 
 /** Partner marks NDA or SOW as signed (or lead agency updates status). */
@@ -77,6 +78,11 @@ export async function PATCH(
 
     if (!isPartner && !isAgency) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (isAgency) {
+      // G1: the agency branch needs the active organization to be a paid lead agency.
+      const refused = await agencyGateResponse(user.id, supabase)
+      if (refused) return refused
     }
 
     const updates: Record<string, unknown> = {

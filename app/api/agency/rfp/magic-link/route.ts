@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient as createAnonClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser } from "@/lib/entitlements"
 import { buildVendorInvitationEmail, sendTransactionalEmail } from "@/lib/email"
@@ -57,14 +58,15 @@ async function requireAgency() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { ok: false as const, status: 401, error: "Unauthorized" }
+  if (!user) return { ok: false as const, status: 401, body: { error: "Unauthorized" } as Record<string, unknown> }
+  // G1: the active organization must be a paid lead agency. No role column is read.
+  const refusal = await agencyGateRefusal(user.id, supabase)
+  if (refusal) return { ok: false as const, status: refusal.status, body: refusal.body as Record<string, unknown> }
   const { data: profile } = await supabase
     .from("profiles")
     .select("role, active_role, company_name, full_name, display_name")
     .eq("id", user.id)
     .single()
-  if (profile?.role !== "agency" && profile?.active_role !== "agency")
-    return { ok: false as const, status: 403, error: "Agency only" }
   return { ok: true as const, userId: user.id, profile }
 }
 
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
   const route = "/api/agency/rfp/magic-link"
   try {
     const auth = await requireAgency()
-    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+    if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status })
 
     const service = getServiceSupabase()
     if (!service) {
@@ -369,7 +371,7 @@ export async function POST(request: NextRequest) {
     }
 
     const agencyName =
-      auth.profile.company_name?.trim() || auth.profile.full_name?.trim() || auth.profile.display_name?.trim() || "A lead agency"
+      auth.profile?.company_name?.trim() || auth.profile?.full_name?.trim() || auth.profile?.display_name?.trim() || "A lead agency"
     const scopeSummary = [
       `${agencyName} has invited you to bid on ${project.name}${project.client_name ? ` for ${project.client_name}` : ""}.`,
       project.budget_range ? `Budget range: ${project.budget_range}.` : null,
@@ -525,7 +527,7 @@ export async function GET(request: NextRequest) {
   const route = "/api/agency/rfp/magic-link"
   try {
     const auth = await requireAgency()
-    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+    if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status })
 
     const service = getServiceSupabase()
     if (!service) {

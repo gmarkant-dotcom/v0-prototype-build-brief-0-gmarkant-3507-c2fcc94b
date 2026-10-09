@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { switchActiveRole } from "@/lib/server/active-role-switch"
 
 type InboxClaimRow = {
   id: string
@@ -107,9 +108,11 @@ async function switchActiveRoleToPartner(supabase: Awaited<ReturnType<typeof cre
     return
   }
   if (profile?.active_role === "partner") return
-  const { error: switchErr } = await supabase.from("profiles").update({ active_role: "partner" }).eq("id", userId)
-  if (switchErr) {
-    console.error("[api] partner/rfps/claim: active_role switch failed", { userId, message: switchErr.message })
+  // Through the one sanctioned writer (113's set_active_role, or the same-rule fallback before
+  // 113). Refused when the caller belongs to no vendor organization; logged, not surfaced.
+  const outcome = await switchActiveRole(supabase, userId, "partner")
+  if (!outcome.ok) {
+    console.error("[api] partner/rfps/claim: active_role switch failed", { userId, status: outcome.status, error: outcome.body.error })
   }
 }
 

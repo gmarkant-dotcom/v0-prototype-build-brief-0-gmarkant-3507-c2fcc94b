@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateResponse } from "@/lib/api-auth"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { resolveResponseScope, hashScopeGroup } from "@/lib/bid-analysis-context"
 import { attachResponsePrivate } from "@/lib/server/rfp-response-private"
@@ -24,14 +25,9 @@ export async function POST(req: Request) {
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role")
-      .eq("id", user.id)
-      .single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     const body = await req.json().catch(() => ({}))
     const responseIds: string[] = Array.isArray(body?.response_ids)

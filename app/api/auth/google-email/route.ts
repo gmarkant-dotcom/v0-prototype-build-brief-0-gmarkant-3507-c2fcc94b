@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { randomUUID } from "crypto"
 import { createClient } from "@/lib/supabase/server"
+import { resolveAgencyGate } from "@/lib/entitlements"
 import { buildGoogleAuthUrl, GOOGLE_OAUTH_NONCE_COOKIE } from "@/lib/google-email"
 
 export const dynamic = "force-dynamic"
@@ -17,12 +18,10 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL("/auth/login?redirect=%2Fagency%2Fpool", url.origin))
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role")
-      .eq("id", user.id)
-      .maybeSingle()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
+    // G1: the active organization must be a paid lead agency. No role column is read. A
+    // refused caller is sent back to the agency portal, which shows the upgrade screen.
+    const gate = await resolveAgencyGate(user.id, supabase)
+    if (!gate.entitled) {
       return NextResponse.redirect(new URL("/agency/pool", url.origin))
     }
 

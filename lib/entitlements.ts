@@ -464,12 +464,18 @@ export async function resolveCallerWriteOrgId(
 export type EntitlementReason =
   /** NEXT_PUBLIC_IS_DEMO. Nothing is gated on the demo deployment. */
   | "demo-deployment"
-  /** profiles.is_admin. Platform staff bypass, as they do everywhere else in this file. */
+  /**
+   * profiles.is_admin. NO LONGER RETURNED as of the G1 ruling (2026-10-09): the agency
+   * side requires the ACTIVE organization to be a paid lead agency, and a profile flag
+   * admits nobody. Kept in the union so a stale client bundle's string still type-checks.
+   */
   | "platform-admin"
-  /** The acting organization resolved and organizations.is_paid is true. The paid path. */
+  /** The acting organization resolved, is a lead agency, and organizations.is_paid is true. */
   | "org-entitled"
-  /** The acting organization resolved and organizations.is_paid is false. THE LAPSE. */
+  /** The acting organization resolved, is a lead agency, and organizations.is_paid is false. THE LAPSE. */
   | "org-not-entitled"
+  /** G1: the acting organization resolved but organizations.is_lead_agency is false (a vendor organization). */
+  | "org-not-lead-agency"
   /** No profile row was passed. Fails closed. */
   | "no-profile"
   /** resolveActingOrgId() refused. `actingOrgReason` carries which of its six branches. */
@@ -514,45 +520,79 @@ export async function resolveAgencyEntitlement(
     console.error("[entitlements] entitlement asked for with no profile row, refusing", { userId })
     return { entitled: false, orgId: null, reason: "no-profile", actingOrgReason: null }
   }
-  if (profile.is_admin === true) {
-    return { entitled: true, orgId: null, reason: "platform-admin", actingOrgReason: null }
+  // G1 (owner ruling, 2026-10-09): THE profiles.is_admin BYPASS THAT STOOD HERE IS GONE.
+  // The agency side requires the caller's ACTIVE organization to be a lead agency AND paid,
+  // and nothing on the profile row admits anybody - not is_admin, not is_paid, not
+  // demo_access, not role / active_role / secondary_role. /admin and /api/admin/* still
+  // gate on is_admin; that is a different question. The profile argument is kept so the
+  // four callers did not have to change shape, and for the no-profile refusal above.
+  return resolveAgencyGate(userId, client)
+}
+
+/**
+ * G1, THE AGENCY GATE. The one answer to "may this caller use the agency side".
+ *
+ * Owner ruling, 2026-10-09: the caller's ACTIVE organization (resolveActingOrgId: the sole
+ * membership, or profiles.active_org_id when it names one of several, which 090 guards)
+ * must have organizations.is_lead_agency = true AND organizations.is_paid = true.
+ * Otherwise agency pages show the upgrade screen and agency API routes refuse with 402.
+ *
+ * EXTENDS resolveAgencyEntitlement() rather than standing beside it: that function now
+ * delegates here, so the page wall (PaidUserContext), the four older gates and every API
+ * route read the same predicate. `gate` is the three-valued answer the routes return;
+ * `reason` keeps the finer EntitlementReason the wall's copy forks on.
+ *
+ * NO ROLE COLUMN IS READ. role / active_role / secondary_role are self-writable until
+ * migration 113, and are a portal preference after it, never a grant.
+ */
+export type AgencyGate = "entitled" | "not_lead_agency" | "not_paid"
+
+export type AgencyGateDecision = EntitlementDecision & {
+  gate: AgencyGate
+  /** True when the refusal is a fault (lookup error, missing row), not a billing fact. */
+  fault: boolean
+}
+
+export async function resolveAgencyGate(userId: string, client: OrgLookupClient): Promise<AgencyGateDecision> {
+  if (isDemoDeployment()) {
+    return { entitled: true, orgId: null, reason: "demo-deployment", actingOrgReason: null, gate: "entitled", fault: false }
   }
 
   const { resolveActingOrgId } = await import("@/lib/acting-org")
   const acting = await resolveActingOrgId(userId, client)
   if (!acting.orgId) {
     // resolveActingOrgId has already logged at error in every branch that is not a definite
-    // answer. Nothing is re-logged here; the reason is carried out instead, because
-    // "ambiguous" and "no-membership" want different copy and a route deciding between 403
-    // and 500 needs to tell them apart.
-    return { entitled: false, orgId: null, reason: "org-unresolved", actingOrgReason: acting.reason }
+    // answer. Nothing is re-logged here; the reason is carried out instead. No active
+    // organization means no lead agency to be entitled through, so the route answer is
+    // not_lead_agency; the wall's copy keys on reason "org-unresolved".
+    return {
+      entitled: false, orgId: null, reason: "org-unresolved", actingOrgReason: acting.reason,
+      gate: "not_lead_agency", fault: acting.reason === "lookup-failed",
+    }
   }
 
-  // 092. THE COLUMN THIS READS DOES NOT EXIST UNTIL THAT MIGRATION IS APPLIED, and a
-  // PostgREST 42703 lands in the `error` branch below - refused, and LOUDLY, rather than
-  // swallowed into a false. That is the intended behaviour for a deploy that got ahead of
-  // its migration: it is visible in the logs on the first request instead of presenting as
-  // "everybody's subscription lapsed".
+  // is_lead_agency exists since 079 and is_paid since 092, both applied. A 42703 here means
+  // a column was dropped under a running deployment: refused, and LOUDLY.
   const { data, error } = await client
     .from("organizations")
-    .select("is_paid")
+    .select("is_paid, is_lead_agency")
     .eq("id", acting.orgId)
     .maybeSingle()
 
   if (error) {
-    console.error("[entitlements] organizations.is_paid read failed, refusing", {
+    console.error("[entitlements] organizations gate read failed, refusing", {
       userId,
       orgId: acting.orgId,
       code: error.code,
       message: error.message,
-      hint: error.code === "42703"
-        ? "42703 is undefined_column: migration 092 has not been applied to this database, but the code that reads it is deployed. Apply supabase/migrations/092_org_entitlement.sql."
-        : undefined,
     })
-    return { entitled: false, orgId: acting.orgId, reason: "lookup-failed", actingOrgReason: null }
+    return {
+      entitled: false, orgId: acting.orgId, reason: "lookup-failed", actingOrgReason: null,
+      gate: "not_paid", fault: true,
+    }
   }
 
-  const row = data as { is_paid?: boolean | null } | null
+  const row = data as { is_paid?: boolean | null; is_lead_agency?: boolean | null } | null
   if (!row) {
     // The caller is a member of an organization whose row cannot be read. Either it was
     // deleted underneath a live membership, or the SELECT policy filtered it - and
@@ -562,17 +602,71 @@ export async function resolveAgencyEntitlement(
       userId,
       orgId: acting.orgId,
     })
-    return { entitled: false, orgId: acting.orgId, reason: "org-row-missing", actingOrgReason: null }
+    return {
+      entitled: false, orgId: acting.orgId, reason: "org-row-missing", actingOrgReason: null,
+      gate: "not_lead_agency", fault: true,
+    }
   }
 
-  // `=== true` rather than `!== false`. A null entitlement is not an entitlement, and the
-  // two spellings had already drifted apart across routes when this lived on profiles. The
-  // 092 column is NOT NULL, so a null cannot arise from the table - the strict spelling is
-  // kept because it is the one that survives somebody relaxing that.
-  if (row.is_paid === true) {
-    return { entitled: true, orgId: acting.orgId, reason: "org-entitled", actingOrgReason: null }
+  // `=== true` on both: a null flag is not a grant. Lead agency is tested FIRST, so a vendor
+  // organization is told it is not a lead agency rather than that it is unpaid.
+  if (row.is_lead_agency !== true) {
+    return {
+      entitled: false, orgId: acting.orgId, reason: "org-not-lead-agency", actingOrgReason: null,
+      gate: "not_lead_agency", fault: false,
+    }
   }
-  return { entitled: false, orgId: acting.orgId, reason: "org-not-entitled", actingOrgReason: null }
+  if (row.is_paid === true) {
+    return {
+      entitled: true, orgId: acting.orgId, reason: "org-entitled", actingOrgReason: null,
+      gate: "entitled", fault: false,
+    }
+  }
+  return {
+    entitled: false, orgId: acting.orgId, reason: "org-not-entitled", actingOrgReason: null,
+    gate: "not_paid", fault: false,
+  }
+}
+
+/**
+ * Does the user belong to ANY organization that passes G1? For the "Switch to Lead Agency"
+ * control only, which must not be offered to someone the gate would refuse. Reads org_members
+ * then organizations on the caller's own client, both self-scoped by RLS. A display decision,
+ * never an authorization one: the switch route and every agency route decide again.
+ */
+export async function hasAnyEntitledOrganization(userId: string, client: OrgLookupClient): Promise<boolean> {
+  if (isDemoDeployment()) return true
+  const orgIds = await resolveCallerOrgIds(userId, client)
+  if (orgIds.length === 0) return false
+  const { data, error } = await client
+    .from("organizations")
+    .select("id")
+    .in("id", orgIds as string[])
+    .eq("is_lead_agency", true)
+    .eq("is_paid", true)
+    .limit(1)
+  if (error) {
+    console.error("[entitlements] hasAnyEntitledOrganization read failed", { userId, code: error.code, message: error.message })
+    return false
+  }
+  return Array.isArray(data) && data.length > 0
+}
+
+/** Does the user belong to an organization flagged is_vendor? The rule set_active_role('partner') applies (113). */
+export async function hasVendorOrganization(userId: string, client: OrgLookupClient): Promise<boolean> {
+  const orgIds = await resolveCallerOrgIds(userId, client)
+  if (orgIds.length === 0) return false
+  const { data, error } = await client
+    .from("organizations")
+    .select("id")
+    .in("id", orgIds as string[])
+    .eq("is_vendor", true)
+    .limit(1)
+  if (error) {
+    console.error("[entitlements] hasVendorOrganization read failed", { userId, code: error.code, message: error.message })
+    return false
+  }
+  return Array.isArray(data) && data.length > 0
 }
 
 /**
@@ -617,9 +711,8 @@ export async function canUseAgencyAi(
 ): Promise<boolean> {
   if (isDemoDeployment()) return true
   if (!profile) return false
-  if (profile.is_admin === true) return true
-  if (actingRole(profile) !== "agency") return false
-  return (await resolveAgencyEntitlement(profile, userId, client)).entitled
+  // G1: no is_admin bypass and no role test. The gate alone decides.
+  return (await resolveAgencyGate(userId, client)).entitled
 }
 
 /**

@@ -2,6 +2,7 @@ import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { Resend } from "resend"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateResponse } from "@/lib/api-auth"
 import { buildBrandedEmailHtml, siteBaseUrl } from "@/lib/email"
 
 export async function POST(request: Request) {
@@ -12,10 +13,10 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { data: profile } = await supabase.from("profiles").select("role, active_role, company_name, full_name").eq("id", user.id).maybeSingle()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
+    const { data: profile } = await supabase.from("profiles").select("company_name, full_name").eq("id", user.id).maybeSingle()
 
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)

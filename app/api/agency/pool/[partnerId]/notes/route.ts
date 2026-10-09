@@ -2,6 +2,7 @@ import { orgIdFromColumn, resolveCallerOrgIds, type OrgId } from "@/lib/entitlem
 import { recordMilestone } from "@/lib/milestone-events"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import { readPrivateNotes, resolveNotes, writePrivateNotes } from "@/lib/server/partnership-private-notes"
 
 export const dynamic = "force-dynamic"
@@ -115,10 +116,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
     }
 
-    const { data: me, error: meErr } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
-    if (meErr || (me?.role !== "agency" && me?.active_role !== "agency")) {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStore })
 
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     // The POST below already resolved this; the GET did not, so its gate was reading
@@ -156,10 +156,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ partner
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore })
     }
 
-    const { data: me, error: meErr } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
-    if (meErr || (me?.role !== "agency" && me?.active_role !== "agency")) {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStore })
 
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)

@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateResponse } from "@/lib/api-auth"
 import { parseBudgetProposal, parseTimelineProposal } from "@/lib/rfp-response-fields"
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { isRfpClosureStatus as isClosedInboxStatus } from "@/lib/rfp-closure"
@@ -36,10 +37,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Failed to load profile" }, { status: 500 })
     }
 
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
-    console.log("[api] start", { route, method: "GET", userId: user.id, role: profile.role, projectId: projectIdParam || null })
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
+    console.log("[api] start", { route, method: "GET", userId: user.id, role: profile?.role, projectId: projectIdParam || null })
 
     // RLS: policy "Agencies select RFP responses they own" — USING (lead_org_id = auth.uid())
     // Optional project-scoped filtering is applied via partner_rfp_inbox.project_id, unioned with

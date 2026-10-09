@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateResponse } from "@/lib/api-auth"
 import {
   ORG_CONTACT_SELECT,
   orgWireShape,
@@ -33,6 +34,10 @@ export async function GET(
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
@@ -137,14 +142,15 @@ export async function POST(
       return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
     }
 
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
+
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("role, active_role, company_name, full_name, meeting_url")
+      .select("company_name, full_name, meeting_url")
       .eq("id", user.id)
       .single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    }
 
     const {
       data: projectById,
@@ -406,7 +412,7 @@ export async function POST(
     const partnerProfile = partnerRecipients[0] ?? null
 
     const partnerEmail = partnerProfile?.email
-    const agencyName = profile.company_name || profile.full_name || "Your lead agency"
+    const agencyName = profile?.company_name || profile?.full_name || "Your lead agency"
     const projectTitle = project.name || "Project"
     const packageSubject = projectTitle
       ? `Your onboarding documents are ready - ${projectTitle}`

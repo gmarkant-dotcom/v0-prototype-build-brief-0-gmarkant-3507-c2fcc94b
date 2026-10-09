@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import { parseDoubleJson } from "@/lib/active-engagement-parse"
 import { projectActiveByEndDate } from "@/lib/project-liveness"
 
@@ -66,14 +67,9 @@ export async function GET() {
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("role, active_role")
-      .eq("id", user.id)
-      .single()
-    if (profileErr || (profile?.role !== "agency" && profile?.active_role !== "agency")) {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStoreHeaders })
 
     const { data: respRows, error: respErr } = await supabase
       .from("partner_rfp_responses")

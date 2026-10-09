@@ -3,8 +3,8 @@ import * as Sentry from "@sentry/nextjs"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
-import { canActAs } from "@/lib/acting-role"
-import { hasAgencyEntitlement, resolveCallerOrgIds } from "@/lib/entitlements"
+import { agencyGateRefusal } from "@/lib/api-auth"
+import { resolveCallerOrgIds } from "@/lib/entitlements"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
 
@@ -63,27 +63,17 @@ export async function POST(req: Request) {
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
+    // G1: the active organization must be a paid lead agency. This replaces the 092
+    // entitlement gate and the canActAs() portal gate that stood here: no role column and
+    // no profile flag is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStore })
+
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, active_role, is_admin, payment_terms, payment_terms_custom")
+      .select("payment_terms, payment_terms_custom")
       .eq("id", user.id)
       .single()
-
-    // Subscription gate. It no longer carries a `role === 'agency'` conjunct: entitlement
-    // is a billing fact about the paying entity, not a fact about the signup role column,
-    // and folding the two together would deny a paying dual-role account its own agency
-    // tools the moment migration 078's role correction lands.
-    // 092: entitlement is read from the ACTING ORGANIZATION's organizations.is_paid, not
-    // from this member's profile flag. Fails closed with no fallback.
-    if (!(await hasAgencyEntitlement(profile, user.id, supabase))) {
-      return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403, headers: noStore })
-    }
-
-    // Portal gate. Separate question from the entitlement gate above - see
-    // lib/acting-role.ts and lib/entitlements.ts.
-    if (!canActAs(profile, "agency")) {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStore })
-    }
 
     const body = await req.json().catch(() => ({}))
     const project_id = (body.project_id as string | undefined)?.trim()

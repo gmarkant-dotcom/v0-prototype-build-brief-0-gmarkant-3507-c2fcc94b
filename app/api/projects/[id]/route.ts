@@ -1,7 +1,7 @@
 import { resolveCallerOrgIds } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { canActAs } from '@/lib/acting-role'
+import { agencyGateResponse } from '@/lib/api-auth'
 import { reconcileProjectClientFields } from '@/lib/clients-server'
 
 export const dynamic = 'force-dynamic'
@@ -23,15 +23,9 @@ export async function GET(
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, active_role')
-      .eq('id', user.id)
-      .single()
-
-    if (!canActAs(profile, 'agency')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     const { data: project, error } = await supabase
       .from('projects')
@@ -63,15 +57,9 @@ export async function PATCH(
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, active_role')
-      .eq('id', user.id)
-      .single()
-
-    if (!canActAs(profile, 'agency')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     const body = await req.json()
     // client_name is deliberately OUT of the allow-list now. Both client fields go through the

@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds, orgIdFromColumn, resolveOrgIdForUser, type OrgId } from "@/lib/entitlements"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateResponse } from "@/lib/api-auth"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from "@/lib/email"
 import { notifyProjectAwarded } from "@/lib/notifications"
@@ -198,9 +199,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       })
       return NextResponse.json({ error: "Failed to load profile" }, { status: 500 })
     }
-    if (profile?.role !== "agency" && profile?.active_role !== "agency")
-      return NextResponse.json({ error: "Agency only" }, { status: 403 })
-    console.log("[api] start", { route, method: "PATCH", userId: user.id, role: profile.role, responseId: id })
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
+    console.log("[api] start", { route, method: "PATCH", userId: user.id, role: profile?.role, responseId: id })
 
     const { data: existing, error: existingErr } = await supabase
       .from("partner_rfp_responses")

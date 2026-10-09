@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
-import { SupabaseClient, User } from "@supabase/supabase-js"
+import { SupabaseClient, User, createClient as createServiceClient } from "@supabase/supabase-js"
 import { resolveCallerWriteOrgId } from "@/lib/entitlements"
 import { normalizeCompanyName } from "@/lib/company-identity"
 
@@ -111,6 +111,29 @@ async function syncUserProfile(supabase: any, user: any) {
       // reach this branch and does not behave one bit differently than it did before.
       updatePayload.role = role
       updatePayload.active_role = role
+    }
+    // MIGRATION 113 MAKES role AND active_role UNWRITABLE BY A SIGNED-IN SESSION, and this
+    // client has just been signed in by the confirmation link. So the two role columns are
+    // written through the SERVICE ROLE (auth.uid() IS NULL, the exemption 091 and 113 share),
+    // keyed on the user id the confirmation itself returned and carrying only the fixed
+    // literals above - nothing from the request. Without the key it falls back to the session
+    // client, which is exactly the pre-113 behaviour. Role columns grant nothing after G1;
+    // this keeps a vendor signup landing in the vendor portal.
+    const roleColumns: Record<string, unknown> = {}
+    if ('role' in updatePayload) roleColumns.role = updatePayload.role
+    if ('active_role' in updatePayload) roleColumns.active_role = updatePayload.active_role
+    delete updatePayload.role
+    delete updatePayload.active_role
+    if (Object.keys(roleColumns).length > 0) {
+      const serviceUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      const writer = serviceUrl && serviceKey
+        ? createServiceClient(serviceUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
+        : supabase
+      const { error: roleErr } = await writer.from('profiles').update(roleColumns).eq('id', user.id)
+      if (roleErr) {
+        console.error('[auth/callback] role correction failed', { userId: user.id, code: roleErr.code, message: roleErr.message })
+      }
     }
     if (metadata.company_linkedin_url) updatePayload.company_linkedin_url = metadata.company_linkedin_url
     // No access flags are written here. This branch previously re-granted is_paid and

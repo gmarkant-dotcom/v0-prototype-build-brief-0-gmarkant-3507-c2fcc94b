@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import mammoth from "mammoth"
 import { createClient } from "@/lib/supabase/server"
 import { extractPdfTextFromBuffer } from "@/lib/extract-pdf-text"
-import { canUseAgencyAi } from "@/lib/entitlements"
+import { agencyGateResponse } from "@/lib/api-auth"
 
 export const runtime = "nodejs"
 
@@ -26,16 +26,10 @@ export async function POST(req: Request) {
     // app/agency/magic-rfp/page.tsx). No vendor page extracts document text.
     // 079: entitlement moves onto the organization. Read the org's entitlement here rather
     // than this member's profile flag, and key it with agencyEntitlementId(user.id).
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role, is_admin")
-      .eq("id", user.id)
-      .single()
-
-    // 092: the billing half reads the ACTING ORGANIZATION's organizations.is_paid.
-    if (!(await canUseAgencyAi(profile, user.id, supabase))) {
-      return NextResponse.json({ error: "Upgrade to extract document text" }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column or profile
+    // flag is read (this replaces canUseAgencyAi's admin bypass and portal test).
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     const formData = await req.formData()
     const file = formData.get("file") as File | null

@@ -8,7 +8,7 @@ import {
   unwrapOne,
   type OrgEmbed,
 } from '@/lib/org-contact'
-import { canActAs } from '@/lib/acting-role'
+import { agencyGateResponse } from '@/lib/api-auth'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { createOrgNotification } from '@/lib/notifications'
 import { recordMilestone } from '@/lib/milestone-events'
@@ -34,15 +34,15 @@ export async function POST(
       return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
     }
 
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
+
     const { data: profile } = await supabase
       .from('profiles')
-      .select('role, active_role, company_name, full_name')
+      .select('company_name, full_name')
       .eq('id', user.id)
       .single()
-
-    if (!canActAs(profile, 'agency')) {
-      return NextResponse.json({ error: 'Only lead agencies can deploy onboarding' }, { status: 403 })
-    }
 
     const body = await request.json()
     const {

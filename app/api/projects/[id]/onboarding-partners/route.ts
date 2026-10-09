@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import {
   ORG_CONTACT_SELECT,
   orgWireShape,
@@ -35,6 +36,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
+
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStoreHeaders })
 
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)

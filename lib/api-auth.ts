@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import type { User } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/server"
+import { resolveAgencyGate, type OrgLookupClient } from "@/lib/entitlements"
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
@@ -58,9 +59,79 @@ async function requireRole(requiredRole: "agency" | "partner", forbiddenMessage:
   return { authorized: true, user: auth.user, supabase: auth.supabase, profile: profile as Profile }
 }
 
-/** Usage: `const auth = await requireAgencyRole(); if (!auth.authorized) return auth.response` */
+/**
+ * G1, THE AGENCY GATE FOR API ROUTES (owner ruling, 2026-10-09).
+ *
+ * The caller's ACTIVE organization must be a lead agency AND paid
+ * (organizations.is_lead_agency AND organizations.is_paid), resolved from the session by
+ * resolveAgencyGate() in lib/entitlements.ts. role / active_role / secondary_role are NOT
+ * read: until migration 113 a vendor can write them from a browser. The middleware skips
+ * /api, so every agency route calls this itself.
+ *
+ * Refusal: 402 with a stable body, `code: "agency_entitlement_required"` and
+ * `reason: "not_lead_agency" | "not_paid"`. A lookup FAULT (database error, missing org
+ * row) is 500 `code: "agency_entitlement_unavailable"`, so a transient failure is never
+ * presented to a paying customer as "upgrade".
+ *
+ * Returns null when the caller may proceed.
+ */
+export const AGENCY_ENTITLEMENT_REQUIRED = "agency_entitlement_required" as const
+
+export type AgencyGateRefusal = {
+  status: 402 | 500
+  body: { error: string; code: string; reason?: "not_lead_agency" | "not_paid" | "entitled" }
+}
+
+/** The refusal as plain data, for route-local helpers that build their own response. Null = proceed. */
+export async function agencyGateRefusal(userId: string, supabase: OrgLookupClient): Promise<AgencyGateRefusal | null> {
+  const decision = await resolveAgencyGate(userId, supabase)
+  if (decision.entitled) return null
+  if (decision.fault) {
+    return {
+      status: 500,
+      body: { error: "We could not confirm your company's access. Please try again.", code: "agency_entitlement_unavailable" },
+    }
+  }
+  return {
+    status: 402,
+    body: { error: "Agency access requires a paid lead-agency account.", code: AGENCY_ENTITLEMENT_REQUIRED, reason: decision.gate },
+  }
+}
+
+export async function agencyGateResponse(userId: string, supabase: OrgLookupClient): Promise<NextResponse | null> {
+  const refusal = await agencyGateRefusal(userId, supabase)
+  return refusal ? NextResponse.json(refusal.body, { status: refusal.status }) : null
+}
+
+/**
+ * Session check plus G1. Usage:
+ * `const auth = await requireAgencyEntitlement(); if (!auth.authorized) return auth.response`
+ *
+ * `profile` is still returned for callers that read it for display; it decides nothing.
+ */
+export async function requireAgencyEntitlement(_request?: Request): Promise<RoleAuthResult> {
+  const auth = await requireAuth()
+  if (!auth.authorized) return auth
+
+  const refused = await agencyGateResponse(auth.user.id, auth.supabase)
+  if (refused) return { authorized: false, response: refused }
+
+  const { data: profile } = await auth.supabase
+    .from("profiles")
+    .select("role, active_role, is_admin")
+    .eq("id", auth.user.id)
+    .maybeSingle()
+
+  return { authorized: true, user: auth.user, supabase: auth.supabase, profile: (profile ?? { role: null, active_role: null, is_admin: null }) as Profile }
+}
+
+/**
+ * KEPT AS AN ALIAS SO THE 18 IMPORTERS DID NOT CHANGE. It used to admit
+ * `role === 'agency' || active_role === 'agency'`, which any vendor could set on itself.
+ * It is now exactly requireAgencyEntitlement().
+ */
 export async function requireAgencyRole(_request?: Request): Promise<RoleAuthResult> {
-  return requireRole("agency", "Agency only")
+  return requireAgencyEntitlement()
 }
 
 /** Usage: `const auth = await requirePartnerRole(); if (!auth.authorized) return auth.response` */

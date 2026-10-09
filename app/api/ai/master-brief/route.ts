@@ -4,7 +4,8 @@ import { generateText, Output } from "ai"
 import { anthropic } from "@ai-sdk/anthropic"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
-import { canUseAgencyAi, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { agencyGateResponse } from "@/lib/api-auth"
 import { recordMilestone } from "@/lib/milestone-events"
 
 const scopeItemSchema = z.object({
@@ -42,20 +43,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // 079: entitlement moves onto the organization. Read the org's entitlement here rather
-    // than this member's profile flag, and key it with agencyEntitlementId(user.id).
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, active_role, is_admin")
-      .eq("id", user.id)
-      .single()
-
-    // 092: the billing half reads the ACTING ORGANIZATION's organizations.is_paid. The
-    // portal half is unchanged and is still checked first, so a vendor-side caller never
-    // causes an organizations read.
-    if (!(await canUseAgencyAi(profile, user.id, supabase))) {
-      return NextResponse.json({ error: "Subscription required for AI features" }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. No role column or profile
+    // flag is read (this replaces canUseAgencyAi's admin bypass and portal test).
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     const body = await req.json()
     const requestedProjectId =

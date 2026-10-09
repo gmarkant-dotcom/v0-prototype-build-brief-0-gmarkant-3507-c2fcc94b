@@ -4,7 +4,8 @@ import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/no
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
-import { actingRole, canActAs } from '@/lib/acting-role'
+import { actingRole } from '@/lib/acting-role'
+import { agencyGateRefusal, agencyGateResponse } from '@/lib/api-auth'
 import { attachPrivateNotes, withoutPrivateNotes } from '@/lib/server/partnership-private-notes'
 import { withoutPrivateReliability } from '@/lib/server/partnership-private-reliability'
 import { can, capabilityDeniedMessage } from '@/lib/capabilities'
@@ -101,6 +102,9 @@ export async function GET(request: NextRequest) {
     // whose role columns resolve to nothing at all: that branch only ever returns rows keyed
     // to the caller's own id or email, so it is the safe default.
     if (acting === 'agency') {
+      // G1: active_role only CHOOSES this branch; the gate decides whether it is served.
+      const refusal = await agencyGateRefusal(user.id, supabase)
+      if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStoreHeaders })
       // Agency sees rows where they are lead_org_id (not vendor_org_id). 'removed' rows are
       // hidden by default - the agency explicitly dismissed them from the pool, but the row
       // is kept (not deleted) for any associated rfp_magic_tokens/bid history. `?include=removed`
@@ -467,9 +471,10 @@ export async function POST(request: NextRequest) {
     }
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null, activeRole: profile?.active_role ?? null })
 
-    if (!canActAs(profile, 'agency')) {
-      return NextResponse.json({ error: 'Only agencies can invite vendors' }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. Replaces the canActAs() role
+    // test that stood here; no role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     // Capability gate. canActAs() above answers WHICH SIDE; this answers MAY THEY. Sending a
     // partnership invitation is irreversible - the email cannot be unsent - so it defaults to
@@ -886,6 +891,11 @@ export async function PATCH(request: NextRequest) {
     
     if (!isAgency && !isPartner) {
       return NextResponse.json({ error: 'Access denied - you are not part of this partnership' }, { status: 403 })
+    }
+    if (isAgency && !isPartner) {
+      // G1: acting on the lead side needs the active organization to be a paid lead agency.
+      const refused = await agencyGateResponse(user.id, supabase)
+      if (refused) return refused
     }
 
     if (action === 'confirm_nda') {
@@ -1634,6 +1644,9 @@ export async function DELETE(request: NextRequest) {
     if (!callerOwnsOrg(callerOrgIds, partnership.lead_org_id)) {
       return NextResponse.json({ error: 'Only the agency can delete this partnership' }, { status: 403 })
     }
+    // G1: the active organization must be a paid lead agency.
+    const refusedDelete = await agencyGateResponse(user.id, supabase)
+    if (refusedDelete) return refusedDelete
 
     // =================================================================
     // THE DELETE. .select() IS NOT DECORATION - IT IS THE WHOLE FIX.

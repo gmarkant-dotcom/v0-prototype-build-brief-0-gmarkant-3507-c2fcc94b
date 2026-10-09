@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { buildBrandedEmailHtml, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { actingRole } from '@/lib/acting-role'
+import { agencyGateResponse } from '@/lib/api-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,9 @@ export async function GET(
     let vendorAssignmentId: string | null = null
 
     if (acting === 'agency') {
+      // G1: active_role only CHOOSES this branch; the gate decides whether it is served.
+      const refused = await agencyGateResponse(user.id, supabase)
+      if (refused) return refused
       const { data: project } = await supabase
         .from('projects')
         .select('id')
@@ -193,6 +197,9 @@ export async function POST(
     projectMeta = projectForEmail
 
     if (acting === 'agency') {
+      // G1: active_role only CHOOSES this branch; the gate decides whether it is served.
+      const refused = await agencyGateResponse(user.id, supabase)
+      if (refused) return refused
       // Agency must own the project
       const { data: project } = await supabase
         .from('projects')

@@ -2,6 +2,7 @@ import { resolveCallerOrgIds, orgIdFromColumn } from "@/lib/entitlements"
 import { recordMilestone } from "@/lib/milestone-events"
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import {
   ORG_CONTACT_SELECT,
   logOrgContactGap,
@@ -29,10 +30,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ projectI
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStoreHeaders })
 
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
@@ -132,10 +132,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ projec
       return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStoreHeaders })
     }
 
-    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
-    }
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStoreHeaders })
 
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
@@ -302,8 +301,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ project
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
 
-    const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).single()
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") return NextResponse.json({ error: "Agency only" }, { status: 403, headers: noStoreHeaders })
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refusal = await agencyGateRefusal(user.id, supabase)
+    if (refusal) return NextResponse.json(refusal.body, { status: refusal.status, headers: noStoreHeaders })
 
     const { data: project } = await supabase
       .from("projects").select("id, org_id").eq("id", projectId).in("org_id", callerOrgIds).maybeSingle()

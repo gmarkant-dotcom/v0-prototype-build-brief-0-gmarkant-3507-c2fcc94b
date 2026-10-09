@@ -1,6 +1,6 @@
 import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from "@/lib/api-auth"
+import { agencyGateResponse, requireAgencyEntitlement, requireAuth } from "@/lib/api-auth"
 import { createClient } from '@/lib/supabase/server'
 import {
   ORG_CONTACT_SELECT,
@@ -32,7 +32,8 @@ export async function GET(
   try {
     const route = '/api/projects/[id]/assignments'
     const { id: projectId } = await params
-    const auth = await requireAuth()
+    // G1: agency-only read. Session plus the paid-lead-agency gate.
+    const auth = await requireAgencyEntitlement()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
@@ -110,7 +111,8 @@ export async function POST(
 ) {
   try {
     const { id: projectId } = await params
-    const auth = await requireAuth()
+    // G1: agency-only write. Session plus the paid-lead-agency gate.
+    const auth = await requireAgencyEntitlement()
     if (!auth.authorized) return auth.response
     const { user, supabase } = auth
 
@@ -383,6 +385,9 @@ export async function PATCH(
     }
 
     if (isAgency) {
+      // G1: the agency branch needs the active organization to be a paid lead agency.
+      const refused = await agencyGateResponse(user.id, supabase)
+      if (refused) return refused
       if (!['awarded', 'completed', 'declined'].includes(status)) {
         return NextResponse.json({ error: 'Invalid status for agency' }, { status: 400 })
       }

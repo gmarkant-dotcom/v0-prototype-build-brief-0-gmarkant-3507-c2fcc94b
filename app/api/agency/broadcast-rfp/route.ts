@@ -1,6 +1,7 @@
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, orgIdFromColumn, resolveOrgIdForUser, type OrgId } from "@/lib/entitlements"
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateResponse } from "@/lib/api-auth"
 import {
   ORG_CONTACT_SELECT,
   logOrgContactGap,
@@ -72,6 +73,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // G1: the active organization must be a paid lead agency. No role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
+
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
     // 079: a write is attributed to the caller's OWN organization. Never a visibility set.
@@ -85,10 +90,6 @@ export async function POST(request: NextRequest) {
       .select("role, active_role, company_name, full_name, is_admin")
       .eq("id", user.id)
       .single()
-
-    if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-      return NextResponse.json({ error: "Only lead agencies can broadcast RFPs" }, { status: 403 })
-    }
 
     // Capability gate. The question above is WHICH SIDE; this one is MAY THEY. Broadcasting
     // is irreversible - the mail leaves the building and cannot be unsent - so it defaults to
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
     }
 
     const agencyDisplay =
-      profile.company_name?.trim() || profile.full_name?.trim() || "Lead agency"
+      profile?.company_name?.trim() || profile?.full_name?.trim() || "Lead agency"
     const baseUrl = siteBaseUrl()
 
     const rows: Record<string, unknown>[] = []

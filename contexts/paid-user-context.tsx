@@ -187,7 +187,11 @@ export function PaidUserProvider({ children }: { children: ReactNode }) {
           // checkFeatureAccess uses below would have skipped the read for that account and
           // walled it. Same predicate, same reasoning, as canUploadFiles() on the server.
           // ===============================================================
-          if (actingRole(profile) === 'partner') {
+          // G1: on an AGENCY page the gate is resolved whatever the role columns say (they
+          // decide nothing). Elsewhere the old vendor-side skip stands, to spare vendors the
+          // two queries and the refusal log lines.
+          const onAgencyPage = pathname === '/agency' || (pathname ?? '').startsWith('/agency/')
+          if (!onAgencyPage && actingRole(profile) === 'partner') {
             setIsPaid(false)
             setEntitlementReason('vendor-free')
             setOrgRole(null)

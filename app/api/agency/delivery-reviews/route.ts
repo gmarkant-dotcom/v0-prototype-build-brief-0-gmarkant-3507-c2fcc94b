@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import { callAnthropicAnalysis } from "@/lib/ai-bid-analysis"
 import { computeCompositeScore } from "@/lib/bid-scoring"
 import { loadBidDeltaComparison } from "@/lib/delivery-review"
@@ -25,11 +26,10 @@ async function requireAgency() {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { ok: false as const, status: 401, error: "Unauthorized" }
-  const { data: profile } = await supabase.from("profiles").select("role, active_role").eq("id", user.id).maybeSingle()
-  if (profile?.role !== "agency" && profile?.active_role !== "agency") {
-    return { ok: false as const, status: 403, error: "Agency only" }
-  }
+  if (!user) return { ok: false as const, status: 401, body: { error: "Unauthorized" } as Record<string, unknown> }
+  // G1: the active organization must be a paid lead agency. No role column is read.
+  const refusal = await agencyGateRefusal(user.id, supabase)
+  if (refusal) return { ok: false as const, status: refusal.status, body: refusal.body as Record<string, unknown> }
   return { ok: true as const, supabase, userId: user.id }
 }
 
@@ -39,7 +39,7 @@ async function requireAgency() {
 export async function GET(req: NextRequest) {
   const route = "/api/agency/delivery-reviews"
   const auth = await requireAgency()
-  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+  if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status })
   const { supabase, userId } = auth
 
   // 079: an organization column is not a user id. Reads scope to the caller's memberships.
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
   const route = "/api/agency/delivery-reviews"
   try {
     const auth = await requireAgency()
-    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
+    if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status })
     const { supabase, userId } = auth
 
     // 079: an organization column is not a user id. Reads scope to the caller's memberships.

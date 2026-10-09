@@ -11,8 +11,9 @@ import {
 } from '@/lib/org-contact'
 import { parseDoubleJson } from '@/lib/active-engagement-parse'
 import { checkUsageLimit, usageLimitResponse } from '@/lib/usage-tracking'
-import { actingRole, canActAs } from '@/lib/acting-role'
-import { agencyEntitlementId, hasAgencyEntitlement, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { actingRole } from '@/lib/acting-role'
+import { agencyEntitlementId, resolveCallerOrgIds, resolveCallerWriteOrgId } from "@/lib/entitlements"
+import { agencyGateResponse } from '@/lib/api-auth'
 import { recordMilestone } from "@/lib/milestone-events"
 export const dynamic = 'force-dynamic'
 
@@ -143,6 +144,9 @@ export async function GET(request: NextRequest) {
       | undefined
 
     if (acting === 'agency') {
+      // G1: active_role only CHOOSES this branch; the gate decides whether it is served.
+      const refused = await agencyGateResponse(user.id, supabase)
+      if (refused) return refused
       // Try rich query first (with relationships), then fallback to plain projects query.
       const rich = await supabase
         // 079-EMBED: rewritten from `partner:profiles!partnerships_partner_id_fkey(...)`.
@@ -462,19 +466,10 @@ export async function POST(request: NextRequest) {
       .single()
     console.log('[api] start', { route, method: 'POST', userId: user.id, role: profile?.role ?? null })
 
-    if (!canActAs(profile, 'agency')) {
-      return NextResponse.json({ error: 'Only agencies can create projects' }, { status: 403 })
-    }
-
-    // 092: ENTITLEMENT IS NOW READ FROM THE ACTING ORGANIZATION, not from this member's
-    // profile flag. This is the refusal OPEN-1 named: a colleague of a paying owner used to
-    // land here with "Active subscription required" while their own company was paid up,
-    // because the flag sat on the wrong row. It reads organizations.is_paid for the
-    // organization resolveActingOrgId() returns, and it fails CLOSED with no fallback -
-    // see resolveAgencyEntitlement().
-    if (!(await hasAgencyEntitlement(profile, user.id, supabase))) {
-      return NextResponse.json({ error: 'Active subscription required' }, { status: 403 })
-    }
+    // G1: the active organization must be a paid lead agency. This replaces the canActAs()
+    // role test and the 092 entitlement test that stood here; no role column is read.
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     // 079: agencyEntitlementId() starts resolving auth.uid() to organizations.id, so a
     // colleague's project counts against the organization's quota rather than opening a

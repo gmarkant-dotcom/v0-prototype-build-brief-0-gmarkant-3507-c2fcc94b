@@ -15,6 +15,9 @@ type Profile = {
 export function RoleToggle() {
   const router = useRouter()
   const [profile, setProfile] = useState<Profile | null>(null)
+  // G1: which switches the server would honour. Display only; /api/profile/switch-role and
+  // set_active_role (113) decide again. Null until loaded, so nothing renders early.
+  const [canSwitch, setCanSwitch] = useState<{ agency: boolean; partner: boolean } | null>(null)
   const [switching, setSwitching] = useState(false)
   const [upgradeRequired, setUpgradeRequired] = useState(false)
 
@@ -28,16 +31,26 @@ export function RoleToggle() {
         .select("role, secondary_role, active_role")
         .eq("id", user.id)
         .single()
+      const { hasAnyEntitledOrganization, hasVendorOrganization } = await import("@/lib/entitlements")
+      const [agency, partner] = await Promise.all([
+        hasAnyEntitledOrganization(user.id, supabase),
+        hasVendorOrganization(user.id, supabase),
+      ])
+      setCanSwitch({ agency, partner })
       if (data) setProfile(data as Profile)
     }
     load()
   }, [])
 
-  if (!profile) return null
+  if (!profile || !canSwitch) return null
 
   const activeRole = profile.active_role || profile.role
   const targetRole = activeRole === "agency" ? "partner" : "agency"
   const label = activeRole === "agency" ? "Switch to Vendor Mode" : "Switch to Lead Agency"
+
+  // Hidden, not disabled, for a user with no organization the target side would admit: the
+  // "Switch to Lead Agency" control is not offered to anyone without a paid lead agency.
+  if (!canSwitch[targetRole]) return null
 
   const handleSwitch = async () => {
     setSwitching(true)
@@ -90,11 +103,11 @@ export function RoleToggle() {
       {upgradeRequired && (
         <div className="mt-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
           <p className="font-mono text-2xs text-amber-200 leading-relaxed">
-            Lead Agency access requires an active subscription. Contact us at{" "}
-            <a href="mailto:hello@withligament.com" className="underline">
-              hello@withligament.com
+            Agency access requires a paid lead-agency account.{" "}
+            <a href="/contact" className="underline">
+              Contact us
             </a>{" "}
-            to upgrade.
+            to set one up.
           </p>
         </div>
       )}

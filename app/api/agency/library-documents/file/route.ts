@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { ourBlobStoreAccess, parseLibraryBlobPath } from "@/lib/vercel-blob-url"
 import { resolveCallerOrgIds, callerOwnsOrg } from "@/lib/entitlements"
+import { agencyGateResponse } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 
@@ -22,6 +23,11 @@ export async function GET(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    // G1: the active organization must be a paid lead agency. Only the agency's own library
+    // manager links here (components/agency-document-library-manager.tsx).
+    const refused = await agencyGateResponse(user.id, supabase)
+    if (refused) return refused
 
     // 079: an organization column is not a user id. Scope by membership.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
