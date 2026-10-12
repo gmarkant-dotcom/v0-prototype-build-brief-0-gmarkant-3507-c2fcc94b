@@ -14,6 +14,7 @@ import { LeadAgencyFilterProvider } from "@/contexts/lead-agency-filter-context"
 import { RoleToggle } from "./role-toggle"
 import { OrganizationSwitcher } from "@/components/organization-switcher"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useBudgetSpineEnabled } from "@/lib/budget/use-spine-enabled"
 
 declare global {
   interface Window {
@@ -79,6 +80,20 @@ const navGroups: { label: string; items: NavItem[] }[] = [
 // already second, directly after Summary Dashboard. Only the desktop divider moved.
 const navItems = navGroups.flatMap((group) => group.items)
 
+// BUDGET DOCUMENTS, SHOWN ONLY WHEN THE SPINE IS ENABLED. Unnumbered, in Resources: it is a
+// read-only list of documents a lead agency shared with this vendor (and the vendor's own
+// uploads), not a workflow stage, and the vendor side still has no 00.
+const budgetDocumentsItem: NavItem = {
+  icon: "▤",
+  title: "Budget Documents",
+  href: "/partner/budget-documents",
+  tooltip: "Project documents your lead agencies have shared with you, and documents you provided",
+}
+const navGroupsWithBudgetDocuments = navGroups.map((group) =>
+  group.label === "Resources" ? { ...group, items: [...group.items.slice(0, -1), budgetDocumentsItem, ...group.items.slice(-1)] } : group
+)
+const navItemsWithBudgetDocuments = navGroupsWithBudgetDocuments.flatMap((group) => group.items)
+
 interface PartnerLayoutProps {
   children: React.ReactNode
 }
@@ -97,6 +112,12 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
   useEffect(() => {
     setIsDemo(isDemoMode())
   }, [])
+
+  // Budget Documents appears only once source_documents (104) exists. The probe never throws;
+  // any failure keeps the item hidden. See lib/budget/use-spine-enabled.ts.
+  const budgetDocsEnabled = useBudgetSpineEnabled("documents")
+  const groups = budgetDocsEnabled ? navGroupsWithBudgetDocuments : navGroups
+  const flatItems = budgetDocsEnabled ? navItemsWithBudgetDocuments : navItems
 
   const loadUser = async () => {
     try {
@@ -188,7 +209,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               
               {/* Navigation */}
               <nav className="hidden md:flex items-center gap-1">
-                {navGroups.map((group, groupIndex) => (
+                {groups.map((group, groupIndex) => (
                   <div key={group.label} role="group" aria-label={group.label} className="flex items-center gap-1">
                     {groupIndex > 0 && <div className="w-px h-6 bg-white/15 mx-2" aria-hidden="true" />}
                     {group.items.map((item) => {
@@ -336,7 +357,7 @@ export function PartnerChrome({ children }: PartnerLayoutProps) {
               scrollable row so every item (including the 01-04 step numbers) stays
               reachable on small screens. No hover, so no tooltips here. */}
           <nav className="flex md:hidden items-center gap-1 overflow-x-auto -mx-6 px-6 pb-1 mt-3">
-            {navItems.map((item) => {
+            {flatItems.map((item) => {
               const isActive = pathname === item.href ||
                 (item.href !== "/partner" && pathname?.startsWith(item.href))
               return (

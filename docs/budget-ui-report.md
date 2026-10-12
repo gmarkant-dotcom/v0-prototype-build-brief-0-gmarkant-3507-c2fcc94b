@@ -14,7 +14,7 @@ is the consolidated report.
 | U3 budget import + AI suggest route | committed (workstream 1) |
 | U4 agency nav | committed (workstream 1) |
 | U2 templates + starter library + composition | committed (workstream 2) |
-| U4 vendor nav + U5 vendor documents view | pending |
+| U4 vendor nav + U5 vendor documents view | committed (workstream 3) |
 | U6 plans | pending |
 | Test script, final report | pending |
 
@@ -41,6 +41,17 @@ is the consolidated report.
   picked), adjust fee or cost, preview, then one POST per category with a fresh duplicate re-check and
   a per-category added / skipped / failed result.
 - Gates: tsc exit 0; zero lint messages in the new files.
+
+## Workstream 3 (U4 vendor, U5)
+
+- `GET /api/partner/budget-documents` (`app/api/partner/budget-documents/route.ts`,
+  `lib/server/budget/vendor-documents.ts`): caller's session only, not under the agency gate, no role
+  read; source_documents_vendor_select decides; metadata only.
+- `/partner/budget-documents` (`app/partner/budget-documents/page.tsx`), light theme.
+- Budget Documents appears in the vendor Resources nav only when `useBudgetSpineEnabled("documents")`
+  says 104 is applied (`components/partner-layout.tsx`).
+- Gates: tsc exit 0; zero lint messages in new files; the three messages in
+  `components/partner-layout.tsx` are in code this run did not change.
 
 Gates (workstream 1): `tsc --noEmit` exit 0. `pnpm lint` exit 1 (pre-existing); zero messages in any new file; the
 three messages in `components/agency-layout.tsx` (two react-hooks/set-state-in-effect, one
