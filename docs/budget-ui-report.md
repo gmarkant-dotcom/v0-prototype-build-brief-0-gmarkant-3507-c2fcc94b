@@ -15,7 +15,7 @@ is the consolidated report.
 | U4 agency nav | committed (workstream 1) |
 | U2 templates + starter library + composition | committed (workstream 2) |
 | U4 vendor nav + U5 vendor documents view | committed (workstream 3) |
-| U6 plans | pending |
+| U6 plans | committed (workstream 4): `docs/budget-actuals-feeder-plan.md`, `docs/budget-116-plus-plan.md` |
 | Test script, final report | pending |
 
 ## Workstream 1 (U1, U3, U4 agency)
