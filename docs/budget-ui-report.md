@@ -13,7 +13,7 @@ is the consolidated report.
 | U1 project budget screens + finance export | committed (workstream 1) |
 | U3 budget import + AI suggest route | committed (workstream 1) |
 | U4 agency nav | committed (workstream 1) |
-| U2 templates + starter library + composition | pending |
+| U2 templates + starter library + composition | committed (workstream 2) |
 | U4 vendor nav + U5 vendor documents view | pending |
 | U6 plans | pending |
 | Test script, final report | pending |
@@ -31,6 +31,17 @@ is the consolidated report.
   `GET .../partnerships`, `POST .../suggest-categories` (AI).
 - 00 Budgeting links to `/agency/budgeting` when `useBudgetSpineEnabled("core")` says 103 is applied.
 
-Gates: `tsc --noEmit` exit 0. `pnpm lint` exit 1 (pre-existing); zero messages in any new file; the
+## Workstream 2 (U2)
+
+- `/agency/budgeting/templates` (`app/agency/budgeting/templates/page.tsx`): add, rename, fee-or-cost,
+  archive / restore, delete (R1: template rows are referenced by nothing, so delete is allowed).
+- Starter library in code, `lib/budget/starter-templates.ts`: eight starters.
+- Composition step, `components/budgeting/template-composer.tsx`: choose starters, check categories
+  (duplicates across starters shown once; names already in the template, live or archived, cannot be
+  picked), adjust fee or cost, preview, then one POST per category with a fresh duplicate re-check and
+  a per-category added / skipped / failed result.
+- Gates: tsc exit 0; zero lint messages in the new files.
+
+Gates (workstream 1): `tsc --noEmit` exit 0. `pnpm lint` exit 1 (pre-existing); zero messages in any new file; the
 three messages in `components/agency-layout.tsx` (two react-hooks/set-state-in-effect, one
 no-img-element) are in code this run did not change.
