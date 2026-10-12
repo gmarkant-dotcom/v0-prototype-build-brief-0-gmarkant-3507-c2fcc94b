@@ -90,15 +90,12 @@ import { HelpTerm } from "@/components/help-term"
 // billing in a currency outside the top ten could submit here but not in the portal.
 const CURRENCY_OPTIONS = BUDGET_CURRENCY_OPTIONS
 
+/** Exactly the token fields the guest GET returns (guestTokenView in app/api/rfp/guest/[token]/route.ts). */
 type TokenRow = {
-  token: string
-  /** P2-1/P2-4. The guest GET selects * on rfp_magic_tokens, so these arrive automatically
-   *  once migrations 072/076 are applied, and are simply undefined before them. */
+  /** P2-1/P2-4. Null when migrations 072/076 are not applied. */
   budget_categories?: unknown
   close_bidding_at_deadline?: boolean | null
   vendor_email: string
-  vendor_name: string | null
-  status: string
   submitted_at: string | null
   created_at: string
   require_terms_disclosure?: boolean
@@ -107,10 +104,11 @@ type TokenRow = {
 }
 
 type ProjectData = {
-  id: string
   name: string
-  client_name: string | null
-  budget_range: string | null
+  /** Not sent to guests (client name hidden by default; no per-RFP toggle exists yet). */
+  client_name?: string | null
+  /** Not sent to guests (vendors see only the budget released for their own scope line). */
+  budget_range?: string | null
   description: string | null
   start_date: string | null
   end_date: string | null

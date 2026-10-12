@@ -104,7 +104,9 @@ async function enrichWithLigamentData(
     return {
       ...contact,
       has_ligament_account: Boolean(profileId),
-      profile_id: profileId,
+      // Never sent to the browser (2026-10-12): another person's profile id is not the agency's,
+      // and the import route ignores a client-sent profile_id anyway (import/route.ts:42-46).
+      profile_id: null,
       already_in_pool: alreadyInPool,
       is_self_account: guard === "self_account",
       is_same_domain_flag: guard === "same_domain_flag",

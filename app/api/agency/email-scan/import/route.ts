@@ -5,6 +5,7 @@ import { readPrivateNotes, resolveNotes, writePrivateNotes } from "@/lib/server/
 import { createClient as createServiceClient, type SupabaseClient } from "@supabase/supabase-js"
 import { agencyEntitlementId, orgIdFromColumn, resolveOrgIdForUser } from "@/lib/entitlements"
 import { evaluateImportGuard, resolveAgencyOwnDomains } from "@/lib/server/partner-import-guard"
+import { exactEmailIlike } from "@/lib/server/account-existence"
 
 export const dynamic = "force-dynamic"
 
@@ -55,7 +56,12 @@ async function importContact(
   email: string,
   name: string | null
 ): Promise<ImportOutcome> {
-  const { data: matchedProfile } = await service.from("profiles").select("id").ilike("email", email).maybeSingle()
+  const { data: matchedProfile } = await service
+    .from("profiles")
+    .select("id")
+    .ilike("email", exactEmailIlike(email))
+    .limit(1)
+    .maybeSingle()
   const matchedProfileId = (matchedProfile?.id as string | undefined) || null
 
   const guard = evaluateImportGuard({ callerUserId, agencyOwnDomains, matchedProfileId, contactEmail: email })

@@ -4,7 +4,7 @@ import { createClient as createServiceClient, SupabaseClient } from "@supabase/s
 import { serializeBudget, formatBudgetForDisplay } from "@/lib/rfp-response-fields"
 import { buildAgencyBidNotificationEmail, buildAgencyPoolNotificationEmail, buildVendorConfirmationEmail, resolveOrgNotificationRecipients, sendTransactionalEmail } from "@/lib/email"
 import { normalizeBusinessCriteriaRequired, withBusinessCriteriaDefaults, normalizeAcknowledgments } from "@/lib/business-criteria"
-import { normalizeBudgetLines } from "@/lib/budget-categories"
+import { normalizeBudgetCategories, normalizeBudgetLines } from "@/lib/budget-categories"
 import { isBiddingClosed, BIDDING_CLOSED_API_MESSAGE } from "@/lib/bid-close"
 import { buildProposalSectionsForSave, normalizeProposalSections } from "@/lib/proposal-sections"
 import { isFreeEmailDomain, getEmailDomain } from "@/lib/email-domains"
@@ -13,6 +13,7 @@ import { selectVendorResponse } from "@/lib/server/rfp-response-private"
 import { validateTermsDisclosure } from "@/lib/terms-disclosure"
 import { notifyBidSubmitted } from "@/lib/notifications"
 import { recordMilestone } from "@/lib/milestone-events"
+import { exactEmailIlike } from "@/lib/server/account-existence"
 
 export const dynamic = "force-dynamic"
 
@@ -152,6 +153,137 @@ function getServiceSupabase() {
   return createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
 }
 
+// ---------------------------------------------------------------------------------------------
+// WHAT A GUEST RECEIVES. A guest is a vendor holding a bearer link, with no session.
+//
+// rfp_magic_tokens is read by an explicit column list, never "*", and the GET answers with
+// explicitly built objects, never a spread row. The token row also carries agency-only data the
+// guest screen (app/rfp/respond/[token]/page.tsx) never reads: evaluation_criteria (the rubric),
+// reference_materials.output_template_config, org_id, project_id, response_id, pool_status,
+// domain_match_profile_id (another company's profile id), and the token itself.
+//
+// Owner rulings applied here (2026-10-12): the client name is hidden from vendors unless an RFP
+// turns it on, and no per-RFP toggle exists yet, so it is never sent. A vendor sees only the
+// budget released for its own scope line; projects.budget_range is the whole project's figure
+// and no per-line release exists on the token, so it is never sent either.
+// ---------------------------------------------------------------------------------------------
+
+/** Base token columns, present since before the migration log (057-070). */
+const GUEST_TOKEN_BASE_COLUMNS = [
+  "token",
+  "org_id",
+  "project_id",
+  "vendor_email",
+  "vendor_name",
+  "scope_item_name",
+  "scope_item_description",
+  "reference_materials",
+  "business_criteria_required",
+  "require_terms_disclosure",
+  "status",
+  "response_id",
+  "expires_at",
+  "submitted_at",
+  "created_at",
+] as const
+
+/** 072, 074, 076. Applied, but dropped on 42703 so a database without them still serves the link. */
+const GUEST_TOKEN_OPTIONAL_COLUMNS = ["budget_categories", "response_deadline", "close_bidding_at_deadline"] as const
+
+type GuestTokenRow = {
+  token: string
+  org_id: string
+  project_id: string | null
+  vendor_email: string | null
+  vendor_name: string | null
+  scope_item_name: string | null
+  scope_item_description: string | null
+  reference_materials: unknown
+  business_criteria_required: unknown
+  require_terms_disclosure: boolean | null
+  status: string | null
+  response_id: string | null
+  expires_at: string
+  submitted_at: string | null
+  created_at: string | null
+  budget_categories?: unknown
+  response_deadline?: string | null
+  close_bidding_at_deadline?: boolean | null
+}
+
+async function selectGuestToken(
+  supabase: SupabaseClient,
+  token: string
+): Promise<{ data: GuestTokenRow | null; error: { code?: string; message: string } | null }> {
+  const run = (columns: readonly string[]) =>
+    supabase.from("rfp_magic_tokens").select(columns.join(", ")).eq("token", token).maybeSingle()
+  const first = await run([...GUEST_TOKEN_BASE_COLUMNS, ...GUEST_TOKEN_OPTIONAL_COLUMNS])
+  if (!first.error || first.error.code !== "42703") {
+    return { data: (first.data as unknown as GuestTokenRow | null) ?? null, error: first.error }
+  }
+  const second = await run(GUEST_TOKEN_BASE_COLUMNS)
+  return { data: (second.data as unknown as GuestTokenRow | null) ?? null, error: second.error }
+}
+
+/** The token fields the guest screen reads. Its own vendor_email drives the account-match and sign-up links. */
+function guestTokenView(row: GuestTokenRow) {
+  return {
+    vendor_email: row.vendor_email,
+    require_terms_disclosure: row.require_terms_disclosure,
+    created_at: row.created_at,
+    submitted_at: row.submitted_at,
+    budget_categories: normalizeBudgetCategories(row.budget_categories),
+    response_deadline: row.response_deadline ?? null,
+    close_bidding_at_deadline: row.close_bidding_at_deadline ?? null,
+  }
+}
+
+/** Reference materials: only the three keys the screen renders, from either stored shape. */
+function guestReferenceMaterials(raw: unknown): { type: string; label: string; url: string }[] {
+  const list = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && Array.isArray((raw as { materials?: unknown }).materials)
+      ? ((raw as { materials: unknown[] }).materials)
+      : []
+  const out: { type: string; label: string; url: string }[] = []
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue
+    const m = item as Record<string, unknown>
+    const url = typeof m.url === "string" ? m.url : ""
+    if (!url) continue
+    out.push({
+      type: m.type === "file" ? "file" : "link",
+      label: typeof m.label === "string" ? m.label : "",
+      url,
+    })
+  }
+  return out
+}
+
+/** The submitted bid, minus its row id and updated_at, which the screen never reads. */
+const GUEST_RESPONSE_KEYS = [
+  "proposal_text",
+  "budget_proposal",
+  "timeline_proposal",
+  "payment_terms",
+  "terms_disclosure",
+  "attachments",
+  "business_criteria_responses",
+  "business_criteria_acknowledgments",
+  "budget_lines",
+  "proposal_sections",
+  "status",
+  "agency_feedback",
+  "feedback_updated_at",
+  "submitted_at",
+] as const
+
+function guestResponseView(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of GUEST_RESPONSE_KEYS) if (key in row) out[key] = row[key]
+  return out
+}
+
 function labelFromUrl(url: string): string {
   try {
     const pathname = new URL(url).pathname
@@ -195,11 +327,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       return NextResponse.json({ error: "Missing Supabase service configuration" }, { status: 500 })
     }
 
-    const { data: tokenRow, error: tokenErr } = await supabase
-      .from("rfp_magic_tokens")
-      .select("*")
-      .eq("token", token)
-      .maybeSingle()
+    const { data: tokenRow, error: tokenErr } = await selectGuestToken(supabase, token)
 
     if (tokenErr) {
       console.error("[api] failure", { route, method: "GET", code: 500, message: tokenErr.message })
@@ -230,10 +358,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
 
     // Project/agency/scope-item context is needed for the "RFP Details" tab regardless of
     // whether a bid has already been submitted, so fetch it up front for both branches.
+    // No id, client_name or budget_range: see "WHAT A GUEST RECEIVES" above.
     const [{ data: project, error: projectErr }, { data: agency, error: agencyErr }] = await Promise.all([
       supabase
         .from("projects")
-        .select("id, name, client_name, budget_range, description, start_date, end_date")
+        .select("name, description, start_date, end_date")
         .eq("id", tokenRow.project_id)
         .maybeSingle(),
       supabase
@@ -263,12 +392,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     // reference_materials is stored as { materials, output_template_config } — output_template_config
     // is an internal agency-side setting and is intentionally not exposed to guests. Older rows may
     // still hold a bare array from before that shape existed, so support both.
-    const rawReferenceMaterials = tokenRow.reference_materials
-    const referenceMaterials = Array.isArray(rawReferenceMaterials)
-      ? rawReferenceMaterials
-      : Array.isArray(rawReferenceMaterials?.materials)
-        ? rawReferenceMaterials.materials
-        : []
+    const referenceMaterials = guestReferenceMaterials(tokenRow.reference_materials)
+    const projectView = project
+      ? {
+          name: project.name ?? null,
+          description: project.description ?? null,
+          start_date: project.start_date ?? null,
+          end_date: project.end_date ?? null,
+        }
+      : null
+    const agencyView = agency
+      ? {
+          company_name: agency.company_name ?? null,
+          display_name: agency.display_name ?? null,
+          company_logo_url: agency.company_logo_url ?? null,
+        }
+      : null
 
     if (tokenRow.status === "submitted" && tokenRow.response_id) {
       // 109: an explicit guest column list, never "*". The whole row carried the lead agency's
@@ -284,22 +423,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       const { data: matchedProfile } = await supabase
         .from("profiles")
         .select("id")
-        .ilike("email", vendorEmail)
+        .ilike("email", exactEmailIlike(vendorEmail))
+        .limit(1)
         .maybeSingle()
-      const is_existing_partner = Boolean(matchedProfile?.id)
+      const is_existing_partner = Boolean(vendorEmail && matchedProfile?.id)
       console.log("[api] success", { route, method: "GET", token, status: "submitted" })
       return NextResponse.json({
         status: "submitted",
-        token: tokenRow,
-        project,
+        token: guestTokenView(tokenRow),
+        project: projectView,
         scopeItem,
-        agency,
+        agency: agencyView,
         reference_materials: referenceMaterials,
         business_criteria_required: normalizeBusinessCriteriaRequired(tokenRow.business_criteria_required),
         is_existing_partner,
         response: response
           ? {
-              ...response,
+              ...guestResponseView(response),
               // partner_rfp_responses may not carry its own submitted_at; the token row's
               // submitted_at (set on every (re)submission) is the reliable source.
               submitted_at: response.submitted_at || tokenRow.submitted_at,
@@ -311,10 +451,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     console.log("[api] success", { route, method: "GET", token, status: "active" })
     return NextResponse.json({
       status: "active",
-      token: tokenRow,
-      project,
+      token: guestTokenView(tokenRow),
+      project: projectView,
       scopeItem,
-      agency,
+      agency: agencyView,
       reference_materials: referenceMaterials,
       business_criteria_required: normalizeBusinessCriteriaRequired(tokenRow.business_criteria_required),
     })
@@ -388,11 +528,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing token" }, { status: 400 })
     }
 
-    const { data: tokenRow, error: tokenErr } = await supabase
-      .from("rfp_magic_tokens")
-      .select("*")
-      .eq("token", token)
-      .maybeSingle()
+    const { data: tokenRow, error: tokenErr } = await selectGuestToken(supabase, token)
     if (tokenErr) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: tokenErr.message })
       return NextResponse.json({ error: "Failed to load invitation" }, { status: 500 })
@@ -404,11 +540,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "expired" }, { status: 400 })
     }
     // P2-4 trust boundary: the form disables its own submit, so this is the check that actually
-    // enforces it. tokenRow comes from select("*"), so the flag is simply undefined before
-    // migration 076 and reads as "open", which is today's behavior.
+    // enforces it. selectGuestToken drops the optional columns on 42703, so the flag is simply
+    // undefined before migration 076 and reads as "open", which is today's behavior.
     if (isBiddingClosed({
-      close_bidding_at_deadline: tokenRow.close_bidding_at_deadline as boolean | null | undefined,
-      response_deadline: tokenRow.response_deadline as string | null | undefined,
+      close_bidding_at_deadline: tokenRow.close_bidding_at_deadline,
+      response_deadline: tokenRow.response_deadline,
     })) {
       return NextResponse.json({ error: BIDDING_CLOSED_API_MESSAGE }, { status: 403 })
     }
@@ -456,7 +592,8 @@ export async function POST(req: Request) {
     const { data: matchedProfile, error: matchedProfileErr } = await supabase
       .from("profiles")
       .select("id, company_name, full_name, display_name")
-      .ilike("email", vendorEmail)
+      .ilike("email", exactEmailIlike(vendorEmail))
+      .limit(1)
       .maybeSingle()
     if (matchedProfileErr) {
       console.error("[api] failure", { route, method: "POST", code: 500, message: matchedProfileErr.message })

@@ -11,6 +11,7 @@ import { markPartnershipInvited } from "@/lib/partnership-invitations"
 import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/magic-token-attach"
 import { recordMilestones, type MilestoneEvent } from "@/lib/milestone-events"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
+import { exactEmailIlike } from "@/lib/server/account-existence"
 
 export const dynamic = "force-dynamic"
 
@@ -179,8 +180,10 @@ export async function POST(request: NextRequest) {
     const { data: matchedProfile } = await service
       .from("profiles")
       .select("id")
-      .ilike("email", vendorEmail)
+      .ilike("email", exactEmailIlike(vendorEmail))
+      .limit(1)
       .maybeSingle()
+    // Internal only: chooses the portal attach and the email copy. Not returned (2026-10-12).
     const is_existing_partner = Boolean(matchedProfile?.id)
 
     // Look up any existing row for this (agency, project, vendor) triple before deciding
@@ -511,7 +514,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("[api] success", { route, method: "POST", userId: auth.userId, projectId, is_existing_partner, emailSent, attached })
-    return NextResponse.json({ token: tokenRow.token, is_existing_partner, expires_at, email_sent: emailSent, attached })
+    // is_existing_partner is not returned: no client reads it, and it answered "does this address
+    // have a Ligament account" for any email the caller typed.
+    return NextResponse.json({ token: tokenRow.token, expires_at, email_sent: emailSent, attached })
   } catch (error) {
     console.error("[api] failure", {
       route,
@@ -552,7 +557,7 @@ export async function GET(request: NextRequest) {
 
     if (checkEmail) {
       const [{ data: matchedProfile }, { data: existingInvite }] = await Promise.all([
-        service.from("profiles").select("id").ilike("email", checkEmail).maybeSingle(),
+        service.from("profiles").select("id").ilike("email", exactEmailIlike(checkEmail)).limit(1).maybeSingle(),
         projectId
           ? service
               .from("rfp_magic_tokens")

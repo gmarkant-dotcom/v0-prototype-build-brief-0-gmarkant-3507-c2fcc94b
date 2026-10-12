@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       code: 500,
       message: error instanceof Error ? error.message : String(error),
     })
-    const message = error instanceof Error ? error.message : "Upload failed"
-    return NextResponse.json({ error: message }, { status: 500 })
+    // A fixed message: the raw storage error is logged above and is not for an unauthenticated caller.
+    return NextResponse.json({ error: "Upload failed" }, { status: 500 })
   }
 }
