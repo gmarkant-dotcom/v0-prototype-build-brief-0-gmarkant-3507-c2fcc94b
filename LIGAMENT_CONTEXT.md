@@ -109,6 +109,12 @@ applied and verified. **Next free migration number: 116.** Full record:
 `docs/state-of-record-2026-10-12.md` (identical to the CURRENT STATE section of
 `docs/roadmap-state.md`).
 
+**Later on 2026-10-12 (owner-verified by catalog query): 115, 103 and 104 are applied and verified.**
+That supersedes "NOT applied" above for those three. **The budget spine is live in the database.**
+The budget UI is being built on `feat/budget-ui`, which is not merged. After 104: 155 public policies;
+no DELETE policy on `ledger_entries` or `source_documents`; the vendor document policy allow-list is
+`active` and `suspended`. Next free migration number is still **116**.
+
 **Default privileges:** `postgres`'s default privileges in `public` no longer grant TRUNCATE,
 REFERENCES or TRIGGER to anon or authenticated; `supabase_admin`'s still do but do not apply to
 tables created by migrations. New tables still REVOKE ALL by name and grant only what their policies use.
@@ -152,8 +158,8 @@ older notes are quoted as prior evidence only, not as current status).
 | 100 | applied per owner | Milestone inbox pin (replaces 088's vendor INSERT policy). |
 | 101 | **never applied - do not apply** | Partnership write guard. Exists only on the unmerged branch `feat/101-partnership-write-guard`; superseded by 102. |
 | 102 | applied per owner | Partnership status transitions (vendor status-transition guard). Supersedes 101. |
-| 103 | **not applied** (re-confirmed 2026-10-12) | Budget spine: core tables. Its tables do not exist. The grant defect (anon revoked, authenticated not) is **fixed** on `fix/103-104-rulings` (R7) and re-verified on `feat/budget-spine-integrated`; its pre-apply test copy was diffed against the migration (no drift). COMMIT at line 823. |
-| 104 | **not applied** (re-confirmed 2026-10-12) | Budget spine: source documents and ledger. Same: grant defect fixed (R7), test copy diffed (no drift). COMMIT at line 882. |
+| 103 | **applied and verified 2026-10-12** (pre-apply test 73 PASS, 0 FAIL, 23 INCONCLUSIVE, all NO SUBJECT: no second agency with a project) | Budget spine: core tables. Catalog after apply: four tables with RLS, 14 policies, ruled grants exact. The grant defect (anon revoked, authenticated not) was fixed on `fix/103-104-rulings` (R7) before apply. |
+| 104 | **applied and verified 2026-10-12** (pre-apply test 91 PASS, 13 INCONCLUSIVE all NO SUBJECT, 4 FAIL accepted by the owner as test-expectation errors) | Budget spine: source documents and ledger. W1 and PE3: the vendor insert was refused by 104's guard trigger (23514, its invoker-rights lookup cannot see the project) before the RLS check (42501). AA1 and AA3: archive and unarchive returned 7, not 5, because the live subject's second partnership is on the same project; archiving all of a project's documents is the ruled behaviour. `104_preapply_test.sql` corrected for both (2026-10-12); the migration is unchanged. Catalog after apply: 155 public policies; no DELETE policy on `ledger_entries` or `source_documents`; vendor document policy allow-list `active`, `suspended`. |
 | 105 | applied, catalog-verified 2026-10-09 | `partnership_private_notes` (agency-only), backfilled from `partnerships.partnership_notes`. |
 | 106 | applied, catalog-verified 2026-10-09 | Nulls `partnerships.partnership_notes` (does not drop it). |
 | 107 | applied, catalog-verified 2026-10-09 | `partnership_private_reliability` (agency-only), backfilled from `partnerships.reliability_summary` and `reliability_summary_generated_at`. |
@@ -164,7 +170,7 @@ older notes are quoted as prior evidence only, not as current status).
 | 112 | applied, catalog-verified 2026-10-09 | Nulls those six on `delivery_reviews` and adds guard trigger `delivery_reviews_private_columns_guard` (enabled, BEFORE INSERT/UPDATE). 0 legacy rows hold a value. |
 | 113 | **applied and verified 2026-10-12** (pre-apply test 21/21) | Role columns guard: a session cannot write `profiles.role`, `secondary_role`; `active_role` only through `set_active_role()` (SECURITY DEFINER, pinned, anon revoked). The paid lead-agency gate (G1) is live in code on `main` (`1a6f53b`). |
 | 114 | **applied and verified 2026-10-12** (pre-apply test 21/21) | Hardening: TRUNCATE/REFERENCES/TRIGGER revoked from anon and authenticated on every public table; anon EXECUTE revoked on the six `current_user_*` helpers; WITH CHECK tightened on `delivery_reviews`, `delivery_review_scores`, `msa_agreements`, `rfp_magic_tokens`; `partnerships.reliability_*` guard. |
-| 115 | **authored, NOT applied** (branch `fix/guest-profiles-records`) | `public.discoverable_profiles(p_role, p_ids)`: public discovery fields only (SECURITY DEFINER, pinned, EXECUTE revoked from PUBLIC and anon); drops the whole-row policy "Authenticated users can read discoverable profiles". Code ships first. COMMIT at line 204. |
+| 115 | **applied and verified 2026-10-12** (pre-apply test 16/16 PASS) | `public.discoverable_profiles(p_role, p_ids)`: public discovery fields only; drops the whole-row policy "Authenticated users can read discoverable profiles". Catalog after apply: that policy is gone; the function is SECURITY DEFINER, search_path pinned, and anon cannot execute it. |
 
 **Nulled legacy columns (106, 108, 110, 112) are deliberately empty.** Do not repopulate them and
 do not drop them until a quiet period has passed; the 42P01/PGRST205 fallback code is removed in
@@ -173,7 +179,7 @@ INCONCLUSIVE rows were the NO SUBJECT cross-agency checks (A6, B1, B2), accepted
 precedent because m a r k a n t is the only lead organization with members.
 
 
-> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 116** (2026-10-12; 115 is authored on `fix/guest-profiles-records`).
+> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 116** (2026-10-12; 115 is applied).
 > Older notes that reserve 078 for M1 are superseded - see `docs/schema-truth.md` section 2.
 >
 > **THE PER-ACCOUNT ROLE BACKFILL IS RETIRED. 2026-08-20. It has no members.**
