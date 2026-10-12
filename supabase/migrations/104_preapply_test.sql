@@ -20,6 +20,22 @@
 -- it, which the ruling forbids. Both raise nothing at apply time. This file
 -- writes first, inside a transaction that rolls back.
 --
+-- CORRECTED 2026-10-12, AFTER THE RUN. 104 WAS APPLIED ON 2026-10-12 with the
+-- four FAIL rows below understood and accepted by the owner as test-expectation
+-- errors (91 PASS, 13 INCONCLUSIVE all NO SUBJECT, 4 FAIL). 104_budget_ledger.sql
+-- is unchanged; only this file's expectations were corrected:
+--   * W1 and PE3 now accept 42501 OR 23514 (written 'E:42501|23514'; the E:
+--     judgement now splits on '|', and a single code behaves as before). The vendor
+--     insert WAS refused, but by 104's guard trigger with 23514 ("partnership
+--     does not belong to the organization that owns project": its invoker-rights
+--     lookup cannot see the project as the vendor) before the RLS check could
+--     raise 42501. Either code is a refusal. The UNVERIFIED note below predates this.
+--   * AA1 and AA3 now expect the number of documents the seed puts on the subject
+--     project, computed after seed_need, not a fixed 5. On the live data ps2 is on
+--     the same project, so seed 2 adds two documents there and archive and
+--     unarchive return 7. Archiving every document of the project is the ruled
+--     behaviour (R3). The AA1 and AA3 labels still say "five".
+--
 -- =====================================================================
 -- HOW TO RUN IT
 -- =====================================================================
@@ -672,13 +688,19 @@ BEGIN
     $q$$q$,
     $q$$q$,
     $q$$q$];
-  sc_expect := ARRAY['N:4', 'N:3', 'N:1', 'N:1', 'N:1', 'N:0', 'N:0', 'N:2', 'N:1', 'N:1', 'N:0', 'N:1', 'N:0', 'N:1', 'N:1', 'N:0', 'N:0', 'N:1', 'N:1', 'N:0', 'N:0', 'N:2', 'N:2', 'E:42501', 'N:0', 'E:42501', 'N:0', 'E:42501', 'N:0', 'E:42501', 'N:0', 'N:0', 'N:4', 'N:4', 'N:3', 'N:3', 'N:1', 'E:42501', 'E:23514', 'E:23514', 'E:23514', 'E:23514', 'N:1', 'N:1', 'N:1', 'E:42501', 'E:42501', 'N:1', 'E:23514', 'N:1', 'N:1', 'E:23514', 'N:1', 'N:1', 'E:23503', 'E:23503', 'N:0', 'N:0', 'E:42501', 'E:42501', 'N:0', 'N:1', 'N:0', 'N:0', 'N:0', 'N:1', 'E:42501', 'E:42501', 'N:1', 'N:1', 'E:42501', 'E:42501', 'N:1', 'N:5', 'N:5', 'N:5', 'N:0', 'N:2', 'E:42501', 'E:42501', 'N:5', 'E:42501', 'N:1', 'N:1', 'E:23514', 'E:23514', 'E:23503', 'N:1', 'N:0', 'N:25', 'E:23503', 'N:1', 'E:23503'];
+  sc_expect := ARRAY['N:4', 'N:3', 'N:1', 'N:1', 'N:1', 'N:0', 'N:0', 'N:2', 'N:1', 'N:1', 'N:0', 'N:1', 'N:0', 'N:1', 'N:1', 'N:0', 'N:0', 'N:1', 'N:1', 'N:0', 'N:0', 'N:2', 'N:2', 'E:42501|23514', 'N:0', 'E:42501', 'N:0','E:42501', 'N:0', 'E:42501', 'N:0', 'N:0', 'N:4', 'N:4', 'N:3', 'N:3', 'N:1', 'E:42501', 'E:23514', 'E:23514', 'E:23514', 'E:23514', 'N:1', 'N:1', 'N:1', 'E:42501', 'E:42501', 'N:1', 'E:23514', 'N:1', 'N:1', 'E:23514', 'N:1', 'N:1', 'E:23503', 'E:23503', 'N:0', 'N:0', 'E:42501', 'E:42501', 'N:0', 'N:1', 'N:0', 'N:0', 'N:0', 'N:1', 'E:42501|23514', 'E:42501', 'N:1', 'N:1', 'E:42501', 'E:42501', 'N:1', 'N:5','N:5', 'N:5', 'N:0', 'N:2', 'E:42501', 'E:42501', 'N:5', 'E:42501', 'N:1', 'N:1', 'E:23514', 'E:23514', 'E:23503', 'N:1', 'N:0', 'N:25', 'E:23503', 'N:1', 'E:23503'];
   sc_twin := ARRAY[false, false, false, false, false, true, true, false, false, false, true, false, true, false, false, true, true, false, false, true, true, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, false, false, false, false, false, true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false]::boolean[];
   seed_sql := ARRAY[
     $q$UPDATE public.partnerships SET status = 'active' WHERE id = %5$L~|~INSERT INTO public.budget_project_categories (id, project_id, name, fee_or_cost) VALUES (%9$L, %2$L, 'C1', 'cost'), (%10$L, %2$L, 'C2', 'fee')~|~INSERT INTO public.budget_lines (id, project_id, category_id, name, estimate) VALUES (%11$L, %2$L, %9$L, 'L1', 100.00)~|~INSERT INTO public.source_documents (id, project_id, partnership_id, uploader_side, visible_to_vendor, file_name, blob_path) VALUES (%12$L, %2$L, %5$L, 'agency', false, 'da.pdf', 'test/da'), (%13$L, %2$L, %5$L, 'agency', true, 'db.pdf', 'test/db'), (%14$L, %2$L, %5$L, 'vendor', false, 'dv.pdf', 'test/dv'), (%15$L, %2$L, NULL, 'agency', false, 'dn.pdf', 'test/dn'), (%16$L, %2$L, NULL, 'agency', false, 'dz.pdf', 'test/dz')~|~INSERT INTO public.ledger_entries (id, project_id, source_document_id, category_id, amount) VALUES (%19$L, %2$L, %12$L, %9$L, 25.00), (%20$L, %2$L, %14$L, %9$L, -10.00), (%21$L, %2$L, %15$L, %10$L, 5.00)$q$,
     $q$UPDATE public.partnerships SET status = 'active' WHERE id = %6$L~|~INSERT INTO public.source_documents (id, project_id, partnership_id, uploader_side, visible_to_vendor, file_name, blob_path) VALUES (%17$L, %7$L, %6$L, 'agency', true, 'dfo.pdf', 'test/dfo'), (%18$L, %7$L, %6$L, 'vendor', false, 'dfv.pdf', 'test/dfv')$q$,
     $q$INSERT INTO public.budget_project_categories (id, project_id, name, fee_or_cost) VALUES (%24$L, %4$L, 'CX', 'cost')~|~INSERT INTO public.source_documents (id, project_id, partnership_id, uploader_side, visible_to_vendor, file_name, blob_path) VALUES (%25$L, %4$L, NULL, 'agency', false, 'dx.pdf', 'test/dx')~|~INSERT INTO public.ledger_entries (id, project_id, source_document_id, category_id, amount) VALUES (%26$L, %4$L, %25$L, %24$L, 7.00)$q$];
   seed_need := ARRAY['', 'ps2', 'o2'];
+
+  -- 2026-10-12: AA1 and AA3 expect every document the seed puts on %2: the five of seed 1, plus
+  -- seed 2's two when ps2 exists and its project is %2 (v_pj2 prefers the same lead and the lowest
+  -- project id, so it usually is). See the header note of 2026-10-12.
+  sc_expect[array_position(sc_id, 'AA1')] := 'N:' || (5 + CASE WHEN v_ps2 IS NOT NULL AND v_pj2 = v_p1 THEN 2 ELSE 0 END);
+  sc_expect[array_position(sc_id, 'AA3')] := 'N:' || (5 + CASE WHEN v_ps2 IS NOT NULL AND v_pj2 = v_p1 THEN 2 ELSE 0 END);
 
   v_n := array_length(sc_id, 1);
   IF v_n <> 93 OR array_length(sc_label, 1) <> v_n OR array_length(sc_actor, 1) <> v_n
@@ -1650,9 +1672,11 @@ $$$t104_33$;
         v_verdict := 'FAIL';  v_note := format('expected at least %s, got %s.', v_expn, v_ac);
       END IF;
     ELSIF v_exp LIKE 'E:%' THEN
-      IF r_cls[v_n + v_i] LIKE 'ERR:' || substring(v_exp from 3) || '%' THEN
+      -- E:a|b accepts either SQLSTATE (2026-10-12, W1 and PE3).
+      IF EXISTS (SELECT 1 FROM unnest(string_to_array(substring(v_exp from 3), '|')) AS c
+                 WHERE r_cls[v_n + v_i] LIKE 'ERR:' || c || '%') THEN
         IF v_twin_ok THEN
-          v_verdict := 'PASS';  v_note := format('(refused %s)', substring(v_exp from 3));
+          v_verdict := 'PASS';  v_note := format('(refused %s)', substring(r_cls[v_n + v_i] from 5 for 5));
         ELSE
           v_verdict := 'INCONCLUSIVE';
           v_note := format('NOT DISCRIMINATING. The actor was refused, but the OWNER could not do it either (%s), so the refusal cannot be credited to the policy.', v_tc);
