@@ -182,3 +182,17 @@ fields of the other side; `organizations.is_paid` is still readable by every cou
 the `profile_private` / `organization_private` split (design doc section 3), not this run.
 
 **Gates (WS-B):** `pnpm exec tsc --noEmit` exit 0; lint in touched files: no new message.
+
+## WS-E: agency-owned RFP record (design only)
+
+`docs/rfp-source-of-truth-design.md`. Two agency-only tables, `rfp_records` (master, rubric,
+categories, requirements, output template, total budget, **`show_client_to_vendors boolean NOT
+NULL DEFAULT false`**) and `rfp_record_lines` (one per scope line, with `released_budget`), plus
+nullable link columns on `partner_rfp_inbox` and `rfp_magic_tokens` (`rfp_line_id`,
+`client_name_released`, and `rfp_magic_tokens.attached_inbox_id` replacing the `_magic_token` JSON
+join). RLS TO authenticated only, no vendor/anon/DELETE policy, grants per 113/114. Sequence: code A
+(write the record at broadcast, fallbacks) -> 116 (tables) -> code B (every agency reader onto the
+record, inbox fallback) -> 117 (backfill from inbox copies, refuses ambiguous groups) -> code C
+(per-vendor copies, vendor routes read `client_name_released`) -> 118 (scrub old copies behind a
+no-data-loss fingerprint, guard trigger) -> code D (drop fallbacks). Owner decisions D1-D9 are
+listed in section 6 of the doc. No code, no migration.
