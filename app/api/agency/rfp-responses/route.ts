@@ -6,6 +6,7 @@ import { parseBudgetProposal, parseTimelineProposal } from "@/lib/rfp-response-f
 import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { isRfpClosureStatus as isClosedInboxStatus } from "@/lib/rfp-closure"
 import { attachResponsePrivate } from "@/lib/server/rfp-response-private"
+import { readDiscoverableProfiles } from "@/lib/server/discoverable-profiles"
 
 export const dynamic = "force-dynamic"
 
@@ -247,6 +248,15 @@ export async function GET(request: Request) {
       profileById = Object.fromEntries(
         (partnerProfiles || []).map((p) => [p.id as string, { full_name: p.full_name, company_name: p.company_name, email: p.email }])
       )
+      // 115: a discoverable bidder with no partnership is read through the discovery path,
+      // which carries the name and not the email (as for a non-discoverable one today).
+      const unresolved = partnerIds.filter((id) => !profileById[id])
+      if (unresolved.length > 0) {
+        const discovered = await readDiscoverableProfiles(supabase, { ids: unresolved })
+        for (const d of discovered.data) {
+          profileById[d.id] = { full_name: d.full_name, company_name: d.company_name, email: null }
+        }
+      }
     }
 
     const projectIdsFromInbox = [

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { isActivePartnership } from "@/lib/partnership-state"
 import { canActAs } from "@/lib/acting-role"
 import { buildEngagementHistory, unwrapInbox } from "@/lib/engagement-history"
+import { readDiscoverableProfiles } from "@/lib/server/discoverable-profiles"
 
 // The reciprocal of app/api/agency/pool/[partnerId]/route.ts. That route tiers what a lead
 // agency may see of a vendor; this one tiers what a vendor may see of a lead agency. It is a
@@ -139,11 +140,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ agencyI
     // on profiles; 079 gives organizations a name and a designated contact and nothing else.
     // So the organization is the identity and the contact's profile is where the content is,
     // which is the same two-hop shape lib/org-contact.ts uses at every other org-to-org read.
-    const prof = await supabase
+    let prof = await supabase
       .from("profiles")
       .select(`${PUBLIC_COLUMNS}, ${PARTNERSHIP_COLUMNS}`)
       .eq("id", agencyProfileId)
       .maybeSingle()
+
+    // 115: a discoverable agency with no partnership is no longer readable as a whole row. Its
+    // public tier comes from the discovery path, public fields only; the partnership-tier
+    // columns are null, which is what this route sends below the partnership tier anyway.
+    if (!prof.error && !prof.data) {
+      const discovered = await readDiscoverableProfiles(supabase, { ids: [agencyProfileId] })
+      if (discovered.error) {
+        console.error("[api/partner/network/agency] discovery read", discovered.error)
+      }
+      const d = discovered.data[0]
+      if (d) {
+        prof = {
+          ...prof,
+          data: { ...d, email: null, meeting_url: null, payment_terms: null, payment_terms_custom: null },
+        } as unknown as typeof prof
+      }
+    }
 
     // The refusal sits on the EMPTY-SELECT path, not after the tier decision, for the same
     // reason it does in the agency-to-vendor route: with no claimed partnership row and

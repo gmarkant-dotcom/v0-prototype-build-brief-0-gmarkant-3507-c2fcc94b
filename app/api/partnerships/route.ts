@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notifyPartnershipInvitation, notifyPartnershipAccepted } from '@/lib/notifications'
 import { buildBrandedEmailHtml, resolveOrgNotificationRecipients, sendTransactionalEmail, siteBaseUrl } from '@/lib/email'
 import { hasLigamentAccount } from '@/lib/server/account-existence'
+import { readDiscoverableProfiles, resolveDiscoverableInvitee } from '@/lib/server/discoverable-profiles'
 import { resolveCallerOrgIds, resolveCallerWriteOrgId, resolveOrgIdForUser, callerOwnsOrg, orgIdFromColumn } from "@/lib/entitlements"
 import { actingRole } from '@/lib/acting-role'
 import { agencyGateRefusal, agencyGateResponse } from '@/lib/api-auth'
@@ -233,6 +234,15 @@ export async function GET(request: NextRequest) {
             .in('id', domainProfileIds)
           for (const p of domainProfiles || []) {
             domainProfileById.set(p.id as string, p as { id: string; company_name: string | null; full_name: string | null })
+          }
+          // 115: a discoverable match with no relationship is read through the discovery path
+          // (public fields; the name is one of them), as it was readable before by the policy.
+          const unresolved = domainProfileIds.filter((id) => !domainProfileById.has(id))
+          if (unresolved.length > 0) {
+            const discovered = await readDiscoverableProfiles(supabase, { ids: unresolved })
+            for (const d of discovered.data) {
+              domainProfileById.set(d.id, { id: d.id, company_name: d.company_name, full_name: d.full_name })
+            }
           }
         }
 
@@ -519,10 +529,14 @@ export async function POST(request: NextRequest) {
         })
         return NextResponse.json({ error: 'Failed to look up vendor' }, { status: 500 })
       }
-      if (!partnerById) {
+      // 115: the marketplace "Invite to Pool" sends a DISCOVERABLE profile's id, and after 115 the
+      // session can no longer read a stranger's row. resolveDiscoverableInvitee() reads id and
+      // email only, only for a discoverable profile, and the email only addresses the invitation.
+      const invitee = partnerById ?? (await resolveDiscoverableInvitee(partnerId))
+      if (!invitee) {
         return NextResponse.json({ error: 'Vendor not found' }, { status: 404 })
       }
-      partner = partnerById
+      partner = invitee
     } else {
       // Backward-compatible path: look up by email and resolve to profile.
       const { data: partnerByEmail, error: partnerLookupErr } = await supabase

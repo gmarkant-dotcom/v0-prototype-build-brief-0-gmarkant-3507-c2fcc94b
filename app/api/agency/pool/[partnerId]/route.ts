@@ -8,6 +8,7 @@ import {
   resolveRateInfoForPartnership,
 } from "@/lib/partner-rate-info-read"
 import { buildEngagementHistory, unwrapInbox } from "@/lib/engagement-history"
+import { readDiscoverableProfiles } from "@/lib/server/discoverable-profiles"
 
 export const dynamic = "force-dynamic"
 
@@ -80,6 +81,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
         .select(`${PUBLIC_COLUMNS}, email, meeting_url`)
         .eq("id", partnerId)
         .maybeSingle()
+    }
+
+    // 115: a discoverable vendor with no partnership is no longer readable as a whole row. Its
+    // public tier comes from the discovery path, public fields only; the partnership-tier
+    // columns are null, which is what this route sends below the partnership tier anyway.
+    if (!prof.error && !prof.data) {
+      const discovered = await readDiscoverableProfiles(supabase, { ids: [partnerId] })
+      if (discovered.error) {
+        console.error("[api/agency/pool/partner] discovery read", discovered.error)
+      }
+      const d = discovered.data[0]
+      if (d) {
+        prof = {
+          ...prof,
+          data: {
+            ...d,
+            email: null,
+            meeting_url: null,
+            rate_info: null,
+          },
+        } as typeof prof
+      }
     }
 
     // The one refusal that is still correct, and the one cell of the matrix where Postgres

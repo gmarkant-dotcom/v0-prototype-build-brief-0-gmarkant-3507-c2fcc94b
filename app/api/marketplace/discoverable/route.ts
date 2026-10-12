@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { isActivePartnership } from "@/lib/partnership-state"
 import { fetchVouchCounts } from "@/lib/vouch-counts"
+import { readDiscoverableProfiles } from "@/lib/server/discoverable-profiles"
 
 export const dynamic = "force-dynamic"
 
@@ -26,17 +27,13 @@ export async function GET(req: NextRequest) {
     // Dual-role accounts keep their original `role` forever - a partner-primary user granted
     // agency access never becomes role="agency", only active_role="agency" while they're using
     // that portal. Discoverability must include both, or dual-role agencies/partners who are
-    // is_discoverable never surface to the other side at all.
-    let discoverableQuery = supabase
-      .from("profiles")
-      .select(
-        "id, role, active_role, company_name, full_name, bio, location, company_website, avatar_url, company_logo_url, company_linkedin_url, agency_type, email, reel_url, capabilities, work_examples, business_criteria"
-      )
-      .eq("is_discoverable", true)
-      .order("company_name", { ascending: true })
-    discoverableQuery = discoverableQuery.or(`role.eq.${role},active_role.eq.${role}`)
-
-    const { data, error } = await discoverableQuery
+    // is_discoverable never surface to the other side at all. The role match happens inside
+    // the discovery path; role and active_role are not returned.
+    //
+    // 115: PUBLIC DISCOVERY FIELDS ONLY, through public.discoverable_profiles(). No email, legal,
+    // billing, rate, terms or authority field of a stranger is read here any more (see
+    // lib/server/discoverable-profiles.ts).
+    const { data, error } = await readDiscoverableProfiles(supabase, { role })
 
     if (error) {
       console.error("[marketplace/discoverable] query failed", {
@@ -80,14 +77,23 @@ export async function GET(req: NextRequest) {
       if (isActivePartnership(p)) activePartnerIds.add(otherId)
     }
 
-    // Unmask email for self + anyone with an active partnership (bidirectional)
-    const maskedProfiles = (data ?? []).map((row) => {
-      const isOwn = row.id === user.id
-      const hasPartnership = activePartnerIds.has(row.id as string)
-      return isOwn || hasPartnership
-        ? { ...row, has_partnership: partnerIdsWithPartnership.has(row.id as string) }
-        : { ...row, email: null as string | null, has_partnership: partnerIdsWithPartnership.has(row.id as string) }
-    })
+    // Unmask email for self + anyone with an active partnership (bidirectional). The email is
+    // read with the session client, so it arrives only where the partnership-members policy
+    // already admits the row; the discovery path never carries it.
+    const unmaskIds = (data ?? []).map((row) => row.id).filter((id) => id === user.id || activePartnerIds.has(id))
+    const emailById = new Map<string, string | null>()
+    if (unmaskIds.length > 0) {
+      const { data: emailRows, error: emailErr } = await supabase.from("profiles").select("id, email").in("id", unmaskIds)
+      if (emailErr) {
+        console.error("[marketplace/discoverable] email read failed", { code: emailErr.code, message: emailErr.message })
+      }
+      for (const r of emailRows || []) emailById.set(String(r.id), (r.email as string | null) ?? null)
+    }
+    const maskedProfiles = (data ?? []).map((row) => ({
+      ...row,
+      email: emailById.get(row.id) ?? (null as string | null),
+      has_partnership: partnerIdsWithPartnership.has(row.id),
+    }))
 
     // Fetch vouch counts (aggregate only — never expose individual voucher identities).
     // Routed through lib/vouch-counts.ts so the number arrives as a projection rather

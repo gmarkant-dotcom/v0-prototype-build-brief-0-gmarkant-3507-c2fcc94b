@@ -79,3 +79,106 @@ from `lib/server/claim-partnership-invites.ts`.
 **Gates (WS-A):** `pnpm exec tsc --noEmit` exit 0. `pnpm lint` (whole repo) exits 1 on pre-existing
 messages; in touched files the only message is pre-existing (`app/rfp/respond/[token]/page.tsx:337`
 set-state-in-effect, a line not touched).
+
+## WS-B: profiles exposure, interim fix (code + migration 115)
+
+### What the design doc proposed, and where it did not hold
+
+`docs/profiles-exposure-design.md` section 3 ("cheaper interim"): replace scripts/016's whole-row
+policy with a SECURITY DEFINER `discoverable_profiles()` returning the marketplace columns, and
+point `app/api/marketplace/discoverable` at it, "one migration plus one route".
+
+**Verified against the code, it does not hold as written.** Six more session-client paths read
+strangers' profiles through that policy without saying so, and three of them are discovery
+screens. Dropping the policy with only the marketplace route moved would have turned the agency
+public-tier vendor page and the vendor Discover-tab agency page into "profile is private", and
+made marketplace "Invite to Pool" return 404. So the narrowest SAFE version moves every reader
+that a discovery screen needs, and reports the rest:
+
+| Reader | Today | After this branch |
+|---|---|---|
+| `app/api/marketplace/discoverable` | session select, whole row, 17 columns incl. email (masked in code), role columns | `readDiscoverableProfiles(supabase, { role })` (`:36`): public fields only. Email for self and active partners is read separately with the session (`:83-95`), which the partnership policy already admits. `role`/`active_role` no longer sent (no client reads them) |
+| `app/api/agency/pool/[partnerId]` (public tier) | session select; discoverable policy admitted strangers | same select first (self/counterparty unchanged); if empty, the discovery path (`:90`), partnership-tier columns null |
+| `app/api/partner/network/[agencyId]` (public tier) | same | same pattern (`:153`) |
+| `app/api/partnerships` POST invite by id (marketplace "Invite to Pool") | session select `id, email` | session select first; if empty, `resolveDiscoverableInvitee()` (`:535`): **service role**, `id, email` only, only `is_discoverable = true`; the email addresses the invitation and is not returned |
+| `app/api/partnerships` GET domain-match names | session select | plus the discovery path for unresolved ids (`:242`) |
+| `app/api/agency/rfp-responses` bidder names | session select | plus the discovery path for unresolved ids (`:255`), name only (email null, as for a non-discoverable bidder today) |
+
+Helper: `lib/server/discoverable-profiles.ts`: `readDiscoverableProfiles` (`:94`) calls
+`rpc("discoverable_profiles")`; on PGRST202/42883 (115 not applied) it runs today's direct select
+with the same allow-list. Both paths pass through `toPublic` (`:62`), so the output is identical
+before and after 115: unknown keys never pass, the bio loses its legacy rate block
+(`stripRateFromBio`, `:45`, the same marker `lib/partner-rate-info-read.ts` parses), and
+`business_criteria` loses `insurance.coi_document_url` (`publicBusinessCriteria`, `:52`).
+
+**Reported, not moved** (each loses a discoverable stranger after 115, exactly as it already misses
+a non-discoverable one; none is a discovery screen):
+- `app/api/partnerships/route.ts:540-551` invite **by typed email**, and
+  `app/api/agency/broadcast-rfp/route.ts:329-333` manual recipient: the `ilike` match on email no
+  longer links a discoverable stranger's account at send time; the row is a ghost and links at claim
+  (093), as for every non-discoverable account.
+- `resolveOrgNotificationRecipients` (`lib/email.ts:413`, `:424`) profiles fallback for a bidder with
+  no partnership (`app/api/agency/rfp-responses/[id]/route.ts:514`, `:845`, `:1039`, `:1146` and
+  four others): its comment at `[id]/route.ts:523-531` already says it resolves non-partnered
+  vendors only when discoverable. After 115 it resolves none; the in-app/email notice to such a
+  vendor is skipped and logged. Proposed fix: a SECURITY DEFINER recipient resolver keyed on the
+  bid, not on profile visibility.
+
+### Every discovery screen and how it reads now
+
+| Screen | API | Reads |
+|---|---|---|
+| `/agency/pool` "Discover Vendors" sheet (`components/marketplace-content.tsx:107`, `?role=partner`) | `/api/marketplace/discoverable` | discovery path; email only for self/active partners |
+| `/partner/marketplace` (`app/partner/marketplace/page.tsx:90`, `?role=agency`) | same | same |
+| `/partner/network` Discover tab (`app/partner/network/page.tsx:504`) and its detail (`:580`) | same, then `/api/partner/network/[agencyId]` | list: discovery path; detail: session row if self/counterparty, else discovery path |
+| `/agency/pool/[partnerId]` public tier (`app/agency/pool/[partnerId]/page.tsx:183`; also opened from bid detail and access requests) | `/api/agency/pool/[partnerId]` | session row if counterparty, else discovery path |
+| Marketplace "Invite to Pool" (`components/marketplace-content.tsx:195-198`) | `POST /api/partnerships` | session row, else service-role id+email of a discoverable profile |
+
+Visible change on discovery screens: the marketplace modal's business criteria no longer carry the
+COI document link (none of the three screens renders it; `coi_on_file` still shows), and a legacy
+rate block can no longer appear in a stranger's bio. Field set otherwise the same; `website` and
+`display_name` are now also present on the list (public fields the detail routes already sent).
+
+### Migration 115 (authored, not applied)
+
+Files: `115_discoverable_profiles.sql` (BEGIN line 94, **COMMIT line 204**),
+`115_discoverable_profiles_down.sql` (BEGIN 26, COMMIT 37), `115_preapply_test.sql`.
+
+- Pre-flight (LG115): refuses if the function exists; if the discoverable policy is not exactly
+  `FOR SELECT TO authenticated USING (is_discoverable = true)`; if "Users can view profiles of
+  partnership members" (079/085, calls `current_user_visible_profile_ids`) is missing; **if any
+  other SELECT/ALL policy exists on profiles** (dropping one policy would then not close the
+  exposure); if any allow-listed column is missing.
+- `public.discoverable_profiles(p_role text DEFAULT NULL, p_ids uuid[] DEFAULT NULL) RETURNS SETOF
+  jsonb`, `LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, pg_temp`. Allow-list by
+  `jsonb_build_object` (a later column is not exposed by default); `is_discoverable = true` only;
+  nothing without `auth.uid()`; `p_role` matches role OR active_role.
+- `REVOKE ALL ... FROM PUBLIC`, `REVOKE ALL ... FROM anon`, `GRANT EXECUTE ... TO authenticated`.
+- `DROP POLICY "Authenticated users can read discoverable profiles" ON public.profiles`.
+- **Unchanged:** every other policy on profiles (self, colleague and counterparty reads are exactly
+  today's), every grant, every trigger.
+
+**Pre-apply test** (`115_preapply_test.sql`, 113's format; 15 assertions plus M):
+X1 stranger reads the discoverable profile's row (1 before, 0 after); X2 stranger reads its
+legal/billing/rate/terms/flag columns (1, 0; the column list comes from the live catalog); X4
+discovery path returns it with no private key; X5 its key set is exactly the public list; X6 never
+carries the COI URL; X7 omits a non-discoverable profile; X8 role filter finds it; O1 owner reads its
+own sensitive columns (1, 1); C1 agency reads its counterparty vendor's, C2 vendor reads its
+counterparty agency's (1, 1; gmarkant@gmail.com / gmarkant@icloud.com, NO SUBJECT unless each sees
+the other); Z1 anon reads the profile (0 rows or 42501, both phases); Z2 anon cannot execute the
+function (42501 after); P1 only the discoverable policy left profiles; P2 no grant on profiles
+changed; P3 definer, stable, search_path, ACL as authored; M migration ran. The stranger is found
+by impersonation (`current_user_visible_profile_ids()` must not contain the profile), never inferred.
+**NO SUBJECT if no profile is discoverable** (then 115 closes nothing live; `docs/invitation-diagnosis.md:519`
+recorded 2).
+
+The inlined migration body (test lines 390-496) was **machine-compared** with the migration's lines
+96-202 (`sed -n '390,496p' test | diff - migration`: the only differences are the migration's
+header and its BEGIN/COMMIT lines). Not run against Postgres.
+
+**Residual, by design of the interim:** colleagues in the same organization and live
+counterparties (pending, active, suspended) still read whole rows, including legal and billing
+fields of the other side; `organizations.is_paid` is still readable by every counterparty. That is
+the `profile_private` / `organization_private` split (design doc section 3), not this run.
+
+**Gates (WS-B):** `pnpm exec tsc --noEmit` exit 0; lint in touched files: no new message.
