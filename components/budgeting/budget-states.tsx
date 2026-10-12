@@ -29,13 +29,13 @@ export function BudgetNotice({ title, children }: { title: string; children?: Re
 }
 
 /** Renders the right notice for a failed budget read. Returns null for no error. */
-export function BudgetErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+export function BudgetErrorState({ error, onRetry, feature = "Budgeting" }: { error: unknown; onRetry?: () => void; feature?: string }) {
   if (!error) return null
   const e = error instanceof BudgetApiError ? error : null
   switch (e?.kind) {
     case "not_enabled":
       return (
-        <BudgetNotice title="Budgeting is not enabled yet">
+        <BudgetNotice title={`${feature} is not enabled yet`}>
           <p>The budget tables have not been set up for this workspace. Nothing is lost; this page will work as soon as they are.</p>
         </BudgetNotice>
       )

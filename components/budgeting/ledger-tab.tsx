@@ -62,7 +62,7 @@ export function LedgerTab({ projectId }: { projectId: string }) {
 
   if (ledger.isLoading || chart.isLoading || lines.isLoading || documents.isLoading) return <BudgetLoading label="Loading ledger" />
   const error = ledger.error ?? chart.error ?? lines.error ?? documents.error
-  if (error) return <BudgetErrorState error={error} onRetry={() => refresh()} />
+  if (error) return <BudgetErrorState error={error} onRetry={() => refresh()} feature="The ledger" />
 
   const entryLabel = (e: LedgerEntry) =>
     [formatDateOnly(e.entry_date), e.payee_name || "No payee", formatCents(toCentsFromApi(e.amount))].join(" · ")

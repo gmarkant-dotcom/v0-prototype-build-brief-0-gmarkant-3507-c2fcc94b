@@ -59,7 +59,7 @@ export function DocumentsTab({ projectId }: { projectId: string }) {
   }, [documents.data, partnerships.data, showArchived])
 
   if (documents.isLoading || partnerships.isLoading) return <BudgetLoading label="Loading documents" />
-  if (documents.error) return <BudgetErrorState error={documents.error} onRetry={() => refresh()} />
+  if (documents.error) return <BudgetErrorState error={documents.error} onRetry={() => refresh()} feature="Budget documents" />
 
   async function setVisible(doc: SourceDocument, visible: boolean, partnershipId?: string) {
     setBusy(true)

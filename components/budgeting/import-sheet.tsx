@@ -478,7 +478,9 @@ export function ImportSheet({
                         </td>
                         <td className="px-2 py-2 text-xs">
                           {!r.include ? (
-                            <span className="text-foreground-muted">Excluded</span>
+                            <span className="text-foreground-muted">
+                              Excluded{rowProblem({ ...r, include: true }) ? `: ${rowProblem({ ...r, include: true })}` : ""}
+                            </span>
                           ) : problem ? (
                             <span className="text-warning">{problem}</span>
                           ) : (
