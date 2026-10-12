@@ -62,7 +62,7 @@ Two consequences worth knowing before touching data access:
 
 ---
 
-## Migration Log (001-112)
+## Migration Log (001-115)
 
 | Migration | Description |
 |-----------|-------------|
@@ -99,24 +99,35 @@ Two consequences worth knowing before touching data access:
 | 069 | Bid action timestamps (P14): added shortlisted_at, declined_at, meeting_requested_at (all timestamptz, nullable) to partner_rfp_responses. Set going forward in app/api/agency/rfp-responses/[id]/route.ts's PATCH handler, the only write site for these status transitions, on the transition into each status only. No backfill - historical transitions have no known time. APPLIED. |
 | 070 | Terms Alignment Phase 1: added require_terms_disclosure boolean NOT NULL DEFAULT true to partner_rfp_inbox and rfp_magic_tokens (the two RFP creation flows have no shared config record, so each gets its own column; default is intentionally retroactive - every already-broadcast RFP starts requiring disclosure from the next bid/edit onward). Added terms_disclosure jsonb NULL to partner_rfp_responses (structured four-term disclosure: payment, kill_fee, ip_rights, rate_validity - shape in lib/terms-disclosure.ts) and default_terms jsonb NULL to profiles (partner's saved defaults, prefilled on future bids). Supersedes the ad-hoc partner_rfp_responses.payment_terms block in both bid forms going forward; that column and its legacy display are left untouched for old bids. No RLS changes - existing policies on all four tables are row-level. APPLIED. |
 
-### Migrations 071-112: status of record, 2026-10-09
+### Migrations 071-115: status of record, 2026-10-12
 
-Statuses: **applied, catalog-verified 2026-10-09** (owner ran a catalog query in the Supabase SQL
+**2026-10-12: the owner ran a catalog query. Applied: 071-072, 074-100, 102, 105-114. NOT applied:
+103, 104 (and 115, authored this run). Never applied, never apply: 073, 101.** That supersedes every
+"unverified" and "applied per owner" status in the table below, which is kept as written on
+2026-10-09 with the 2026-10-12 status in the Status column. 113 and 114: pre-apply tests 21/21 PASS,
+applied and verified. **Next free migration number: 116.** Full record:
+`docs/state-of-record-2026-10-12.md` (identical to the CURRENT STATE section of
+`docs/roadmap-state.md`).
+
+**Default privileges:** `postgres`'s default privileges in `public` no longer grant TRUNCATE,
+REFERENCES or TRIGGER to anon or authenticated; `supabase_admin`'s still do but do not apply to
+tables created by migrations. New tables still REVOKE ALL by name and grant only what their policies use.
+
+Statuses (2026-10-09 wording): **applied, catalog-verified 2026-10-09** (owner ran a catalog query in the Supabase SQL
 Editor that day) / **applied per owner** (owner's statement, no catalog query recorded) / **not
 applied** / **never applied - do not apply** / **unverified** (no 2026-10-09 evidence either way;
-older notes are quoted as prior evidence only, not as current status). **Next free migration
-number: 113.**
+older notes are quoted as prior evidence only, not as current status).
 
 | Migration | Status | Description |
 |-----------|--------|-------------|
-| 071 | unverified | Requirement tiers (S4-1): required/preferred priority per business criterion, with a recorded reason when a vendor cannot meet a required item. |
+| 071 | applied, catalog-verified 2026-10-12 | Requirement tiers (S4-1): required/preferred priority per business criterion, with a recorded reason when a vendor cannot meet a required item. |
 | 072 | applied, catalog-verified 2026-10-09 | Budget structure (Phase 2), re-authored Aug 11, 2026: jsonb budget columns on `partner_rfp_responses` (they exist live). |
 | 073 | **never applied - do not apply** | Delivery review sharing (`shared_with_vendor` flag on `delivery_reviews`). Never applied: `delivery_reviews` has no `shared_with_vendor` column. **SUPERSEDED by 111/112 for column privacy and MUST NEVER BE APPLIED.** Its "shared with vendor" idea is a separate product decision that has not been ruled on. Files kept as history: `073_delivery_review_sharing{,_down}.sql`. |
-| 074 | unverified | Response deadline on `rfp_magic_tokens` for the magic-link / Lightning RFP flow (F2). Prior evidence: confirmed against live data Aug 11, 2026 (live token rows held real `response_deadline` values). The 42703 retry guards in the reading/writing code are kept. |
-| 075 | unverified | Per-RFP evaluation criteria (Phase 2, P2-3). File header says NOT APPLIED and not settled by the snapshot. |
-| 076 | unverified | Structured proposal sub-fields + close-bidding-at-deadline (Phase 2, P2-2, P2-4). File header says NOT APPLIED and not settled by the snapshot. |
-| 077 | unverified | Client profiles (Workstream A). Prior evidence: the "Agencies manage own clients" policy appears in `docs/schema-snapshot-2026-08-13.md`. |
-| 078 | unverified | Signup role trigger: `handle_new_user()` reads `raw_user_meta_data->>'role'`. **SUPERSEDED - DO NOT RUN** (2026-08-20): 079 PHASE 12 `CREATE OR REPLACE`s the same function with the organization creation added, so running 078 now would remove that and lock out new accounts. Kept as a record of the 056 defect. |
+| 074 | applied, catalog-verified 2026-10-12 | Response deadline on `rfp_magic_tokens` for the magic-link / Lightning RFP flow (F2). Prior evidence: confirmed against live data Aug 11, 2026 (live token rows held real `response_deadline` values). The 42703 retry guards in the reading/writing code are kept. |
+| 075 | applied, catalog-verified 2026-10-12 | Per-RFP evaluation criteria (Phase 2, P2-3). File header says NOT APPLIED and not settled by the snapshot. |
+| 076 | applied, catalog-verified 2026-10-12 | Structured proposal sub-fields + close-bidding-at-deadline (Phase 2, P2-2, P2-4). File header says NOT APPLIED and not settled by the snapshot. |
+| 077 | applied, catalog-verified 2026-10-12 | Client profiles (Workstream A). Prior evidence: the "Agencies manage own clients" policy appears in `docs/schema-snapshot-2026-08-13.md`. |
+| 078 | applied, catalog-verified 2026-10-12 (do not run again) | Signup role trigger: `handle_new_user()` reads `raw_user_meta_data->>'role'`. **SUPERSEDED - DO NOT RUN** (2026-08-20): 079 PHASE 12 `CREATE OR REPLACE`s the same function with the organization creation added, so running 078 now would remove that and lock out new accounts. Kept as a record of the 056 defect. |
 | 079 | applied per owner | Organizations (M1): company identity stops being a user id; also replaces `handle_new_user()` (PHASE 12). |
 | 080 | applied per owner | `milestone_events` (the breadcrumb table). |
 | 081 | applied per owner | `project_documents` / `project_messages` INSERT policies gain project scoping. |
@@ -141,8 +152,8 @@ number: 113.**
 | 100 | applied per owner | Milestone inbox pin (replaces 088's vendor INSERT policy). |
 | 101 | **never applied - do not apply** | Partnership write guard. Exists only on the unmerged branch `feat/101-partnership-write-guard`; superseded by 102. |
 | 102 | applied per owner | Partnership status transitions (vendor status-transition guard). Supersedes 101. |
-| 103 | **not applied** | Budget spine: core tables. Its tables do not exist. **Fix before apply:** its grants revoke `anon` but not `authenticated`. |
-| 104 | **not applied** | Budget spine: source documents and ledger. Its tables do not exist. **Fix before apply:** same grant defect as 103. |
+| 103 | **not applied** (re-confirmed 2026-10-12) | Budget spine: core tables. Its tables do not exist. The grant defect (anon revoked, authenticated not) is **fixed** on `fix/103-104-rulings` (R7) and re-verified on `feat/budget-spine-integrated`; its pre-apply test copy was diffed against the migration (no drift). COMMIT at line 823. |
+| 104 | **not applied** (re-confirmed 2026-10-12) | Budget spine: source documents and ledger. Same: grant defect fixed (R7), test copy diffed (no drift). COMMIT at line 882. |
 | 105 | applied, catalog-verified 2026-10-09 | `partnership_private_notes` (agency-only), backfilled from `partnerships.partnership_notes`. |
 | 106 | applied, catalog-verified 2026-10-09 | Nulls `partnerships.partnership_notes` (does not drop it). |
 | 107 | applied, catalog-verified 2026-10-09 | `partnership_private_reliability` (agency-only), backfilled from `partnerships.reliability_summary` and `reliability_summary_generated_at`. |
@@ -151,6 +162,9 @@ number: 113.**
 | 110 | applied, catalog-verified 2026-10-09 | Nulls those four on `partner_rfp_responses` and adds guard trigger `partner_rfp_responses_private_columns_guard` (enabled, BEFORE INSERT/UPDATE). 0 legacy rows hold a value. |
 | 111 | applied, catalog-verified 2026-10-09 | `delivery_review_private` (agency-only): `on_time_notes`, `on_budget_notes`, `client_feedback`, `ai_delta_summary`, `would_work_again`, `budget_variance_pct`. 2 rows. Supersedes 073 for column privacy. |
 | 112 | applied, catalog-verified 2026-10-09 | Nulls those six on `delivery_reviews` and adds guard trigger `delivery_reviews_private_columns_guard` (enabled, BEFORE INSERT/UPDATE). 0 legacy rows hold a value. |
+| 113 | **applied and verified 2026-10-12** (pre-apply test 21/21) | Role columns guard: a session cannot write `profiles.role`, `secondary_role`; `active_role` only through `set_active_role()` (SECURITY DEFINER, pinned, anon revoked). The paid lead-agency gate (G1) is live in code on `main` (`1a6f53b`). |
+| 114 | **applied and verified 2026-10-12** (pre-apply test 21/21) | Hardening: TRUNCATE/REFERENCES/TRIGGER revoked from anon and authenticated on every public table; anon EXECUTE revoked on the six `current_user_*` helpers; WITH CHECK tightened on `delivery_reviews`, `delivery_review_scores`, `msa_agreements`, `rfp_magic_tokens`; `partnerships.reliability_*` guard. |
+| 115 | **authored, NOT applied** (branch `fix/guest-profiles-records`) | `public.discoverable_profiles(p_role, p_ids)`: public discovery fields only (SECURITY DEFINER, pinned, EXECUTE revoked from PUBLIC and anon); drops the whole-row policy "Authenticated users can read discoverable profiles". Code ships first. COMMIT at line 204. |
 
 **Nulled legacy columns (106, 108, 110, 112) are deliberately empty.** Do not repopulate them and
 do not drop them until a quiet period has passed; the 42P01/PGRST205 fallback code is removed in
@@ -159,7 +173,7 @@ INCONCLUSIVE rows were the NO SUBJECT cross-agency checks (A6, B1, B2), accepted
 precedent because m a r k a n t is the only lead organization with members.
 
 
-> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied per owner). **Next free number: 113.**
+> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 116** (2026-10-12; 115 is authored on `fix/guest-profiles-records`).
 > Older notes that reserve 078 for M1 are superseded - see `docs/schema-truth.md` section 2.
 >
 > **THE PER-ACCOUNT ROLE BACKFILL IS RETIRED. 2026-08-20. It has no members.**
@@ -172,7 +186,7 @@ precedent because m a r k a n t is the only lead organization with members.
 > trigger by 079 PHASE 12; the stale comment in `app/auth/callback/route.ts` that described
 > 056 as current was corrected in the same pass.
 >
-> **The log above now has one row per migration from 071 through 112 (2026-10-09).** 001-070 rows are unchanged from earlier passes.
+> **The log above now has one row per migration from 071 through 115 (2026-10-12; 113-115 added).** 001-070 rows are unchanged from earlier passes.
 >
 > **105 and 106: APPLIED, catalog-verified 2026-10-09.** (Authored 2026-10-08 on `fix/105-notes-column-revoke`; text below is the pre-apply note, kept as history.) 105
 > creates `partnership_private_notes` (agency-only, no vendor policy, `anon` revoked by name) and
