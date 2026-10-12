@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { agencyGateRefusal } from "@/lib/api-auth"
 import { budgetSession, requireAgencyProject, type AgencyProject, type BudgetSession } from "./scope"
 import type { BudgetFail, BudgetResult } from "./result"
 
@@ -7,15 +8,17 @@ import type { BudgetFail, BudgetResult } from "./result"
  * Shared plumbing for app/api/agency/budget/**. AGENCY ONLY, AND THE GATE IS THE SESSION:
  *
  *   1. authenticate (401);
- *   2. resolve the caller's own organizations from org_members (403 if none);
- *   3. for project routes, require the project's org_id to be one of them (404 otherwise).
+ *   2. G1, the paid lead-agency gate from main (agencyGateRefusal, lib/api-auth.ts): the active
+ *      organization must be is_lead_agency AND is_paid, else 402 agency_entitlement_required;
+ *   3. resolve the caller's own organizations from org_members (403 if none);
+ *   4. for project routes, require the project's org_id to be one of them (404 otherwise).
  *
- * profiles.role / active_role are NOT read: a vendor can set active_role itself, so it is not a
- * security boundary (docs/leak-sweep-2026-10-09.md, finding 2). A vendor who reaches these routes
- * fails step 3 for every agency project and, on template routes, sees only its own
- * organization's template rows, which is its own data.
+ * profiles.role / active_role / secondary_role are NOT read: they are not a security boundary
+ * (docs/leak-sweep-2026-10-09.md, finding 2; owner ruling G1). A vendor who reaches these routes
+ * is refused at step 2.
  *
- * While 103 / 104 are not applied every route answers 404 { error: "Budget spine not enabled" }.
+ * While 103 / 104 are not applied every route answers 404 { error: "Budget spine not enabled" }
+ * to a caller who passes steps 1-4.
  */
 
 export const noStore = { "Cache-Control": "private, no-store, no-cache, must-revalidate" } as const
@@ -30,6 +33,12 @@ export async function budgetRouteSession(): Promise<Gate<BudgetSession>> {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { ok: false, response: NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: noStore }) }
+  // G1, main's paid lead-agency gate (lib/api-auth.ts): the caller's ACTIVE organization must be
+  // is_lead_agency AND is_paid, else 402 agency_entitlement_required (500 on a lookup fault).
+  // Every route under app/api/agency/budget/** reaches this, directly or through
+  // budgetRouteProject(). The session-scoped org and project checks below still run after it.
+  const refusal = await agencyGateRefusal(user.id, supabase)
+  if (refusal) return { ok: false, response: NextResponse.json(refusal.body, { status: refusal.status, headers: noStore }) }
   const session = await budgetSession(supabase, user.id)
   if (session.orgIds.length === 0) {
     return {
