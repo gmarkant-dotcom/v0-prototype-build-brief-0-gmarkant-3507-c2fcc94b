@@ -21,6 +21,7 @@ import { OrganizationSwitcher } from "@/components/organization-switcher"
 import { NotificationBell } from "@/components/notification-bell"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { useBudgetSpineEnabled } from "@/lib/budget/use-spine-enabled"
 
 declare global {
   interface Window {
@@ -49,10 +50,9 @@ declare global {
  * brief; docs/nav-restructure-report.md). This answers OPEN-4 in docs/post-m1-cleanup-report.md,
  * which had left the item out entirely. It takes 00 because it is preparatory: it happens
  * before any vendor is in the engagement, so it sits OUTSIDE the 01 to 04 run the vendor
- * portal mirrors. It cannot ship as a working step until the budget spine
- * (docs/ligament-00-budgeting-spec.md) is built, so it has NO href, NO route and NO page. It
- * renders as plain text marked "Coming soon", is not focusable, and is not a link. Do not
- * give it an href until the spine exists.
+ * portal mirrors. Until the budget spine (103) is applied it renders as plain text marked
+ * "Coming soon", is not focusable, and is not a link. Once the spine answers, it links to
+ * /agency/budgeting (feat/budget-ui; see the item's own comment below).
  *
  * CREATIVE TREATMENT ANALYSIS IS RULED TO MOVE UNDER 00 BUDGETING AND HAS NOT MOVED. It stays
  * in the RFP Broadcast dropdown below, because moving a live feature behind a dead item would
@@ -79,9 +79,12 @@ const navSections = [
   {
     label: "Workflow",
     items: [
-      // NOT A LINK. See the 00 BUDGETING paragraph above. `placeholder` routes this item to
-      // its own branch in NavSectionBlock, which renders text and no anchor.
-      { number: "00", title: "Budgeting", placeholder: true, caption: "Coming soon", tooltip: "Build the client budget before any vendor is briefed. Not available yet." },
+      // A LINK ONLY WHEN THE SPINE IS ENABLED. `placeholder` routes this item to its own branch
+      // in NavSectionBlock. That branch renders a link to `enabledHref` when
+      // useBudgetSpineEnabled("core") says 103 is applied (lib/budget/use-spine-enabled.ts, the
+      // server layer's isBudgetSpineMissing() on a one-row probe), and otherwise the original
+      // non-focusable "Coming soon" text. The probe never throws, so the layout never errors.
+      { number: "00", title: "Budgeting", placeholder: true, enabledHref: "/agency/budgeting", enabledTooltip: "Build and track each project's budget: estimates, actuals, fee versus cost and margin.", caption: "Coming soon", tooltip: "Build the client budget before any vendor is briefed. Not available yet." },
       { number: "01", title: "RFP Broadcast", href: "/agency", hasRfpDropdown: true, tooltip: "Analyze client briefs, build scoped RFPs, and send to your vendor pool or any vendor via Magic Link" },
       { number: "02", title: "Bid Management", href: "/agency/bids", tooltip: "Compare, evaluate, and score vendor bids with AI-powered analysis and side-by-side cost breakdowns" },
       { number: "03", title: "Onboarding", href: "/agency/onboarding", tooltip: "Send kickoff packages and track vendor onboarding across active projects" },
@@ -313,6 +316,7 @@ function NavSectionBlock({
   pathname: string | null
   className?: string
 }) {
+  const budgetEnabled = useBudgetSpineEnabled("core")
   return (
     <div className={className ?? "mb-6"}>
       <div className="font-mono text-2xs text-foreground-muted/60 uppercase tracking-wider px-3 mb-2">
@@ -330,6 +334,36 @@ function NavSectionBlock({
           // never a click or keyboard target and can never hold the active state. The caption
           // is visible text rather than tooltip-only, because a non-focusable element's
           // tooltip is unreachable from the keyboard.
+          if ('placeholder' in item && budgetEnabled && item.enabledHref) {
+            const href = item.enabledHref
+            const isActive = Boolean(pathname?.startsWith(href))
+            return (
+              <Tooltip key={item.title}>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={href}
+                    className={cn(
+                      "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
+                      isActive ? "bg-accent/10 border border-accent/30" : "hover:bg-white/5 border border-transparent"
+                    )}
+                  >
+                    <span className={cn("font-mono text-xs font-medium mt-0.5", isActive ? "text-accent" : "text-foreground-muted")}>
+                      {item.number}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className={cn("font-display font-bold text-sm leading-tight", isActive ? "text-accent" : "text-foreground group-hover:text-white")}>
+                        {item.title}
+                      </div>
+                    </div>
+                    {isActive && <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />}
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                  <p className="text-xs text-foreground-muted">{item.enabledTooltip}</p>
+                </TooltipContent>
+              </Tooltip>
+            )
+          }
           if ('placeholder' in item) {
             return (
               <Tooltip key={item.title}>
