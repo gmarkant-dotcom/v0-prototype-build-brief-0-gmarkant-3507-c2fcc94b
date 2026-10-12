@@ -1,9 +1,16 @@
 -- =====================================================================
 -- 103 PRE-APPLY TEST. ONE PASTE. APPLIES 103, WRITES, THEN ROLLS BACK.
 --
--- AUTHORED 2026-10-08 on feat/client-required-and-spine. PARSE-CHECKED ONLY.
--- NOT RUN. GENERATED FROM 103_budget_core.sql: the DDL this file applies is the
--- migration's own, statement by statement, so the two cannot drift.
+-- AUTHORED 2026-10-08 on feat/client-required-and-spine. REGENERATED 2026-10-09
+-- on fix/103-104-rulings for the owner's rulings R1, R6 and R7. NOT RUN. NO SQL
+-- PARSER WAS AVAILABLE: THIS RUN IN THE SQL EDITOR IS THE PARSE CHECK FOR BOTH
+-- THIS FILE AND 103_budget_core.sql.
+--
+-- THE DDL BELOW IS 103_budget_core.sql, STATEMENT BY STATEMENT. On 2026-10-09
+-- the generator script could not be run in the authoring session (the
+-- interpreter was refused), so the statements were TRANSCRIBED from the
+-- migration by hand. Before the first run, diff each EXECUTE $t103_NN$ body
+-- against the migration; a difference is a test fault.
 --
 -- WHY THIS FILE EXISTS. 103 creates money tables and the only thing keeping a
 -- vendor out of them is the ABSENCE of a policy. A policy that admits too
@@ -50,7 +57,17 @@
 --     itself, across projects, twice, or into something already merged away
 --   * nothing with money against it can be deleted silently
 --   * the fee-or-cost flag is mandatory and constrained
+--   * R1: a line deletes only at estimate 0 (A10 INVERTED: at 100 it is
+--     refused; D1, D2); archived_at works on all three tables (AR1 to AR6)
+--   * R6: copy-on-create copies exactly the non-archived template, refuses a
+--     second call (23505), refuses a vendor who can read the project and
+--     another agency (42501), and copies 0 from an empty template (CC1 to CC8)
+--   * R7: the grant matrix (S4, S11, S12); no SECURITY DEFINER, every function
+--     pinned (S14, S15)
 --   * 103 changed no pre-existing policy
+--
+-- (R1's "a line with a ledger entry cannot be deleted" needs 104's table: it is
+-- asserted in 104_preapply_test.sql, scenario D3.)
 --
 -- =====================================================================
 -- IT IMPERSONATES, AND PROVES IT DID
@@ -72,6 +89,9 @@
 -- switch and the claims. A fingerprint of the four tables is recomputed after
 -- EACH scenario; any difference ends the run with "THE TEST ITSELF IS BROKEN".
 --
+-- sc_sql and sc_chk may hold several statements separated by ~|~; each runs in
+-- order as the actor and the LAST one's integer is the value judged.
+--
 -- SUBJECTS. Chosen from live data, read-only apart from the rolled-back seed:
 --   * an organization with a project, a member, and a partnership whose vendor
 --     organization has a member who does NOT belong to it (the vendor),
@@ -79,30 +99,30 @@
 --     project row (VI1 reports whether that held);
 --   * a second member of the same organization (the colleague), if any;
 --   * a second organization with a project and a member (the other agency).
+--     LIVE FACT 2026-10-09: only one lead organization has members, so every
+--     scenario needing the other agency reports NO SUBJECT = INCONCLUSIVE.
 -- A SUBJECT THAT CANNOT BE FOUND IS REPORTED AS NO SUBJECT, NEVER PASSED.
 --
 -- UNVERIFIED UNTIL THE FIRST RUN (recalled from the PostgreSQL documentation,
 -- not executed):
 --   * EXECUTE of each migration statement inside the DO block, then use of the
---     new tables in the same transaction, is accepted. Each statement is its
---     own EXECUTE; no multi-statement string is used.
---   * Row level security WITH CHECK is evaluated before NOT NULL / CHECK
---     constraints, so an insert into another organization raises 42501 and an
---     insert into your own with a bad flag raises 23514 / 23502.
+--     new tables in the same transaction, is accepted.
+--   * A DELETE whose row fails the DELETE policy's USING clause deletes 0 rows
+--     and raises nothing (A10, D2).
 --   * A NO ACTION foreign key fails at the end of the statement with 23503,
 --     inside the EXECUTE, so it is catchable per scenario.
---   * The default ACL grants a table created here to authenticated (S4
---     measures it rather than assuming it).
+--   * A command with no table privilege raises 42501 (MG5, MG6).
+--   * The role running the SQL Editor can SET ROLE authenticated.
 --
--- THE NUMBER OF ASSERTIONS is c_expected below (75 = 65 scenarios + 10
--- structural). Change it with the scenario list.
+-- THE NUMBER OF ASSERTIONS is c_expected below (96 = 81 counted scenarios + 15
+-- structural; VI1 is informational). Change it with the scenario list.
 -- =====================================================================
 
 BEGIN;
 
 DO $test$
 DECLARE
-  c_expected     CONSTANT integer := 75;
+  c_expected     CONSTANT integer := 96;
   v_ids          text[];
   v_actor_keys   text[]  := ARRAY[]::text[];
   v_actor_uids   uuid[]  := ARRAY[]::uuid[];
@@ -149,6 +169,7 @@ DECLARE
   v_u1 uuid; v_u1b uuid; v_u2 uuid; v_uv uuid; v_ov uuid;
   v_a integer; v_b integer; v_c integer; v_d integer; v_t text;
   v_tables text[] := ARRAY['budget_template_categories', 'budget_project_categories', 'budget_lines', 'budget_category_merges'];
+  v_privs  text[] := ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
   v_pol_before text; v_pol_after text; v_pol_cnt_before integer;
 
   sc_id     text[];
@@ -231,10 +252,14 @@ BEGIN
     ORDER BY m.user_id LIMIT 1;
   END IF;
 
+  -- %1 o1, %2 p1, %3 o2, %4 p2, %5 template T-ORIG (o1), %6 template TX (o2), %7 %8 %9 categories of
+  -- p1, %10 %11 categories of p2, %12 line L1 (p1), %13 line LX (p2), %14 a merge id, %15 a copied
+  -- category id, %16 template T2 (o1, fee), %17 template T3 (o1, ARCHIVED).
   v_ids := ARRAY[v_o1::text, v_p1::text, v_o2::text, v_p2::text,
                  gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text,
                  gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text,
-                 gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text];
+                 gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text, gen_random_uuid()::text,
+                 gen_random_uuid()::text];
   v_actor_keys := ARRAY['m1', 'm1b', 'm2', 'vendor'];
   v_actor_uids := ARRAY[v_u1, v_u1b, v_u2, v_uv];
   v_have := jsonb_build_object('m1', v_u1 IS NOT NULL, 'm1b', v_u1b IS NOT NULL,
@@ -249,13 +274,14 @@ BEGIN
 
   ---------------------------------------------------------------------
   -- THE SCENARIOS. Parallel arrays; position i describes scenario i.
-  -- sc_sql returns ONE integer. %N$L placeholders are the subject and
-  -- seed ids (v_ids). sc_expect: N:k exact, G:k at least, E:code an
-  -- error with that SQLSTATE, I informational (not counted).
+  -- sc_sql returns ONE integer (the last statement's, when ~|~ separates
+  -- several). %N$L placeholders are the subject and seed ids (v_ids).
+  -- sc_expect: N:k exact, G:k at least, E:code an error with that
+  -- SQLSTATE, I informational (not counted).
   -- sc_twin: also run it as the OWNER first; an expected zero or an
   -- expected 42501 is only evidence if the owner can see / write the row.
   ---------------------------------------------------------------------
-  sc_id := ARRAY['K1', 'K2', 'K3', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'X1', 'X2', 'X3', 'X4', 'X5', 'X6', 'X7', 'X8', 'X9', 'X10', 'X11', 'X12', 'X13', 'X14', 'X15', 'X16', 'VK1', 'VI1', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', 'CP1', 'CP2', 'CP3', 'CP4', 'MG1', 'MG2', 'MG3', 'MG4', 'MG5', 'MG6', 'MG7', 'MG8', 'MG9', 'MG10', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6'];
+  sc_id := ARRAY['K1', 'K2', 'K3', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'X1', 'X2', 'X3', 'X4', 'X5', 'X6', 'X7', 'X8', 'X9', 'X10', 'X11', 'X12', 'X13', 'X14', 'X15', 'X16', 'VK1', 'VI1', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', 'CP1', 'CP2', 'CP3', 'CP4', 'MG1', 'MG2', 'MG3', 'MG4', 'MG5', 'MG6', 'MG7', 'MG8', 'MG9', 'MG10', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'D1', 'D2', 'AR1', 'AR2', 'AR3', 'AR4', 'AR5', 'AR6', 'CC1', 'CC2', 'CC3', 'CC4', 'CC5', 'CC6', 'CC7', 'CC8'];
   sc_label := ARRAY[
     $q$K1 control: owner sees both seeded lines$q$,
     $q$K2 control: owner sees all five categories$q$,
@@ -269,7 +295,7 @@ BEGIN
     $q$A7  member inserts a project category$q$,
     $q$A8  member inserts a budget line$q$,
     $q$A9  member updates a line's estimate$q$,
-    $q$A10 member deletes own line$q$,
+    $q$A10 R1: member CANNOT delete a line at estimate 100$q$,
     $q$A11 member records a merge$q$,
     $q$A12 member reads a merge record$q$,
     $q$A13 colleague reads the member's line$q$,
@@ -283,7 +309,7 @@ BEGIN
     $q$X7  insert a line on the other project$q$,
     $q$X8  insert a merge on the other project$q$,
     $q$X9  other agency's line: update$q$,
-    $q$X10 other agency's line: delete$q$,
+    $q$X10 other agency's line at estimate 0: delete$q$,
     $q$X11 other agency's template: update$q$,
     $q$X12 other agency's template: delete$q$,
     $q$X13 move own template row to the other org$q$,
@@ -301,7 +327,7 @@ BEGIN
     $q$V7  vendor inserts a category on the project$q$,
     $q$V8  vendor inserts a merge on the project$q$,
     $q$V9  vendor updates a line$q$,
-    $q$V10 vendor deletes a line$q$,
+    $q$V10 vendor deletes a line at estimate 0$q$,
     $q$V11 vendor reads every seeded line at once$q$,
     $q$CP1 copy template to project (INSERT ... SELECT)$q$,
     $q$CP2 editing the template leaves the project copy$q$,
@@ -311,8 +337,8 @@ BEGIN
     $q$MG2 merge into another project's category$q$,
     $q$MG3 merge INTO a category already merged away$q$,
     $q$MG4 merge the same category away twice$q$,
-    $q$MG5 member rewrites a merge record$q$,
-    $q$MG6 member deletes a merge record$q$,
+    $q$MG5 member rewrites a merge record (no grant)$q$,
+    $q$MG6 member deletes a merge record (no grant)$q$,
     $q$MG7 delete a category a merge record names$q$,
     $q$MG8 delete a category that has a line$q$,
     $q$MG9 file a line under another project's category$q$,
@@ -322,9 +348,25 @@ BEGIN
     $q$F3  template category with no flag$q$,
     $q$F4  project category with no flag$q$,
     $q$F5  category with a blank name$q$,
-    $q$F6  line with no estimate$q$];
-  sc_actor := ARRAY['owner', 'owner', 'owner', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1b', 'm1b', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm2', 'm2', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1'];
-  sc_need := ARRAY['o2', 'o2', 'o2', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1b', 'm1b', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm2,o2', 'm2,o2', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor,o2', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1,o2', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1,o2', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1'];
+    $q$F6  line with no estimate$q$,
+    $q$D1  R1: member deletes a line at estimate 0$q$,
+    $q$D2  R1: member CANNOT delete a line at estimate -5$q$,
+    $q$AR1 R1: member archives a line$q$,
+    $q$AR2 R1: member archives a project category$q$,
+    $q$AR3 R1: member archives a template category$q$,
+    $q$AR4 R1: member un-archives a line$q$,
+    $q$AR5 R1: an archived line stays readable$q$,
+    $q$AR6 R1: vendor archives a line$q$,
+    $q$CC1 R6: copy returns the non-archived template count$q$,
+    $q$CC2 R6: the copy carries names and fee-or-cost$q$,
+    $q$CC3 R6: an archived template category is not copied$q$,
+    $q$CC4 R6: a second copy call is refused$q$,
+    $q$CC5 R6: copy into a project with a chart is refused$q$,
+    $q$CC6 R6: vendor who can read the project is refused$q$,
+    $q$CC7 R6: another agency is refused$q$,
+    $q$CC8 R6: an empty template copies 0 and succeeds$q$];
+  sc_actor := ARRAY['owner', 'owner', 'owner', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1b', 'm1b', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm2', 'm2', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'vendor', 'm1', 'm1', 'm1', 'm1', 'm1', 'vendor', 'm2', 'm1'];
+  sc_need := ARRAY['o2', 'o2', 'o2', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1b', 'm1b', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm1,o2', 'm2,o2', 'm2,o2', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor,o2', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1,o2', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1,o2', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'vendor', 'm1', 'm1', 'm1', 'm1', 'm1', 'vendor', 'm2,o2', 'm1'];
   sc_setup := ARRAY[
     $q$$q$,
     $q$$q$,
@@ -352,7 +394,7 @@ BEGIN
     $q$$q$,
     $q$$q$,
     $q$$q$,
-    $q$$q$,
+    $q$UPDATE public.budget_lines SET estimate = 0 WHERE id = %13$L$q$,
     $q$$q$,
     $q$$q$,
     $q$$q$,
@@ -370,7 +412,7 @@ BEGIN
     $q$$q$,
     $q$$q$,
     $q$$q$,
-    $q$$q$,
+    $q$UPDATE public.budget_lines SET estimate = 0 WHERE id = %12$L$q$,
     $q$$q$,
     $q$$q$,
     $q$INSERT INTO public.budget_project_categories (id, project_id, name, fee_or_cost) VALUES (%15$L, %2$L, 'T-ORIG', 'cost')$q$,
@@ -391,7 +433,23 @@ BEGIN
     $q$$q$,
     $q$$q$,
     $q$$q$,
-    $q$$q$];
+    $q$$q$,
+    $q$UPDATE public.budget_lines SET estimate = 0 WHERE id = %12$L$q$,
+    $q$UPDATE public.budget_lines SET estimate = -5 WHERE id = %12$L$q$,
+    $q$$q$,
+    $q$$q$,
+    $q$$q$,
+    $q$UPDATE public.budget_lines SET archived_at = now() WHERE id = %12$L$q$,
+    $q$UPDATE public.budget_lines SET archived_at = now() WHERE id = %12$L$q$,
+    $q$$q$,
+    $q$DELETE FROM public.budget_lines WHERE project_id = %2$L~|~DELETE FROM public.budget_project_categories WHERE project_id = %2$L$q$,
+    $q$DELETE FROM public.budget_lines WHERE project_id = %2$L~|~DELETE FROM public.budget_project_categories WHERE project_id = %2$L$q$,
+    $q$DELETE FROM public.budget_lines WHERE project_id = %2$L~|~DELETE FROM public.budget_project_categories WHERE project_id = %2$L$q$,
+    $q$DELETE FROM public.budget_lines WHERE project_id = %2$L~|~DELETE FROM public.budget_project_categories WHERE project_id = %2$L$q$,
+    $q$$q$,
+    $q$DELETE FROM public.budget_lines WHERE project_id = %2$L~|~DELETE FROM public.budget_project_categories WHERE project_id = %2$L$q$,
+    $q$DELETE FROM public.budget_lines WHERE project_id = %2$L~|~DELETE FROM public.budget_project_categories WHERE project_id = %2$L$q$,
+    $q$DELETE FROM public.budget_lines WHERE project_id = %2$L~|~DELETE FROM public.budget_project_categories WHERE project_id = %2$L~|~DELETE FROM public.budget_template_categories WHERE org_id = %1$L$q$];
   sc_sql := ARRAY[
     $q$SELECT count(*)::int FROM public.budget_lines WHERE id IN (%12$L, %13$L)$q$,
     $q$SELECT count(*)::int FROM public.budget_project_categories WHERE id IN (%7$L, %8$L, %9$L, %10$L, %11$L)$q$,
@@ -458,7 +516,23 @@ BEGIN
     $q$WITH x AS (INSERT INTO public.budget_template_categories (org_id, name) VALUES (%1$L, 'no-flag') RETURNING 1) SELECT count(*)::int FROM x$q$,
     $q$WITH x AS (INSERT INTO public.budget_project_categories (project_id, name) VALUES (%2$L, 'no-flag') RETURNING 1) SELECT count(*)::int FROM x$q$,
     $q$WITH x AS (INSERT INTO public.budget_project_categories (project_id, name, fee_or_cost) VALUES (%2$L, '  ', 'cost') RETURNING 1) SELECT count(*)::int FROM x$q$,
-    $q$WITH x AS (INSERT INTO public.budget_lines (project_id, category_id, name) VALUES (%2$L, %7$L, 'no-estimate') RETURNING 1) SELECT count(*)::int FROM x$q$];
+    $q$WITH x AS (INSERT INTO public.budget_lines (project_id, category_id, name) VALUES (%2$L, %7$L, 'no-estimate') RETURNING 1) SELECT count(*)::int FROM x$q$,
+    $q$WITH x AS (DELETE FROM public.budget_lines WHERE id = %12$L RETURNING 1) SELECT count(*)::int FROM x$q$,
+    $q$WITH x AS (DELETE FROM public.budget_lines WHERE id = %12$L RETURNING 1) SELECT count(*)::int FROM x$q$,
+    $q$WITH x AS (UPDATE public.budget_lines SET archived_at = now() WHERE id = %12$L RETURNING 1) SELECT count(*)::int FROM x$q$,
+    $q$WITH x AS (UPDATE public.budget_project_categories SET archived_at = now() WHERE id = %7$L RETURNING 1) SELECT count(*)::int FROM x$q$,
+    $q$WITH x AS (UPDATE public.budget_template_categories SET archived_at = now() WHERE id = %5$L RETURNING 1) SELECT count(*)::int FROM x$q$,
+    $q$WITH x AS (UPDATE public.budget_lines SET archived_at = NULL WHERE id = %12$L RETURNING 1) SELECT count(*)::int FROM x$q$,
+    $q$SELECT count(*)::int FROM public.budget_lines WHERE id = %12$L$q$,
+    $q$WITH x AS (UPDATE public.budget_lines SET archived_at = now() WHERE id = %12$L RETURNING 1) SELECT count(*)::int FROM x$q$,
+    $q$SELECT public.budget_copy_template_to_project(%2$L::uuid)$q$,
+    $q$SELECT public.budget_copy_template_to_project(%2$L::uuid)$q$,
+    $q$SELECT public.budget_copy_template_to_project(%2$L::uuid)$q$,
+    $q$SELECT public.budget_copy_template_to_project(%2$L::uuid)~|~SELECT public.budget_copy_template_to_project(%2$L::uuid)$q$,
+    $q$SELECT public.budget_copy_template_to_project(%2$L::uuid)$q$,
+    $q$SELECT public.budget_copy_template_to_project(%2$L::uuid)$q$,
+    $q$SELECT public.budget_copy_template_to_project(%2$L::uuid)$q$,
+    $q$SELECT public.budget_copy_template_to_project(%2$L::uuid)$q$];
   sc_chk := ARRAY[
     $q$$q$,
     $q$$q$,
@@ -525,16 +599,32 @@ BEGIN
     $q$$q$,
     $q$$q$,
     $q$$q$,
-    $q$$q$];
-  sc_expect := ARRAY['N:2', 'N:5', 'N:2', 'N:1', 'N:1', 'N:3', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:0', 'N:0', 'N:0', 'N:0', 'E:42501', 'E:42501', 'E:42501', 'E:42501', 'N:0', 'N:0', 'N:0', 'N:0', 'E:42501', 'E:42501', 'N:1', 'N:0', 'G:1', 'I', 'N:0', 'N:0', 'N:0', 'N:0', 'E:42501', 'E:42501', 'E:42501', 'E:42501', 'N:0', 'N:0', 'N:0', 'N:1', 'N:1', 'N:1', 'N:1', 'E:23514', 'E:23503', 'E:23514', 'E:23505', 'N:0', 'N:0', 'E:23503', 'E:23503', 'E:23503', 'N:1', 'E:23514', 'E:23514', 'E:23502', 'E:23502', 'E:23514', 'E:23502'];
-  sc_twin := ARRAY[false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false, false, false, false, false, false]::boolean[];
+    $q$$q$,
+    $q$$q$,
+    $q$$q$,
+    $q$SELECT count(*)::int FROM public.budget_lines WHERE id = %12$L AND archived_at IS NOT NULL$q$,
+    $q$SELECT count(*)::int FROM public.budget_project_categories WHERE id = %7$L AND archived_at IS NOT NULL$q$,
+    $q$SELECT count(*)::int FROM public.budget_template_categories WHERE id = %5$L AND archived_at IS NOT NULL$q$,
+    $q$SELECT count(*)::int FROM public.budget_lines WHERE id = %12$L AND archived_at IS NULL$q$,
+    $q$$q$,
+    $q$$q$,
+    $q$$q$,
+    $q$SELECT count(*)::int FROM public.budget_project_categories WHERE project_id = %2$L AND ((name = 'T-ORIG' AND fee_or_cost = 'cost') OR (name = 'T2' AND fee_or_cost = 'fee'))$q$,
+    $q$SELECT count(*)::int FROM public.budget_project_categories WHERE project_id = %2$L AND name = 'T3'$q$,
+    $q$$q$,
+    $q$$q$,
+    $q$$q$,
+    $q$$q$,
+    $q$SELECT count(*)::int FROM public.budget_project_categories WHERE project_id = %2$L$q$];
+  sc_expect := ARRAY['N:2', 'N:5', 'N:2', 'N:1', 'N:1', 'N:3', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:0', 'N:1', 'N:1', 'N:1', 'N:1', 'N:0', 'N:0', 'N:0', 'N:0', 'E:42501', 'E:42501', 'E:42501', 'E:42501', 'N:0', 'N:0', 'N:0', 'N:0', 'E:42501', 'E:42501', 'N:1', 'N:0', 'G:1', 'I', 'N:0', 'N:0', 'N:0', 'N:0', 'E:42501', 'E:42501', 'E:42501', 'E:42501', 'N:0', 'N:0', 'N:0', 'N:1', 'N:1', 'N:1', 'N:1', 'E:23514', 'E:23503', 'E:23514', 'E:23505', 'E:42501', 'E:42501', 'E:23503', 'E:23503', 'E:23503', 'N:1', 'E:23514', 'E:23514', 'E:23502', 'E:23502', 'E:23514', 'E:23502', 'N:1', 'N:0', 'N:1', 'N:1', 'N:1', 'N:1', 'N:1', 'N:0', 'N:2', 'N:2', 'N:0', 'E:23505', 'E:23505', 'E:42501', 'E:42501', 'N:0'];
+  sc_twin := ARRAY[false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, true, true, true, true, true, true, true, true, true, false, true, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, true, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false]::boolean[];
   seed_sql := ARRAY[
-    $q$INSERT INTO public.budget_template_categories (id, org_id, name, fee_or_cost) VALUES (%5$L, %1$L, 'T-ORIG', 'cost')~|~INSERT INTO public.budget_project_categories (id, project_id, name, fee_or_cost) VALUES (%7$L, %2$L, 'C1', 'cost'), (%8$L, %2$L, 'C2', 'fee'), (%9$L, %2$L, 'C3', 'cost')~|~INSERT INTO public.budget_lines (id, project_id, category_id, name, estimate) VALUES (%12$L, %2$L, %7$L, 'L1', 100.00)$q$,
+    $q$INSERT INTO public.budget_template_categories (id, org_id, name, fee_or_cost) VALUES (%5$L, %1$L, 'T-ORIG', 'cost')~|~INSERT INTO public.budget_template_categories (id, org_id, name, fee_or_cost, archived_at) VALUES (%16$L, %1$L, 'T2', 'fee', NULL), (%17$L, %1$L, 'T3', 'cost', now())~|~INSERT INTO public.budget_project_categories (id, project_id, name, fee_or_cost) VALUES (%7$L, %2$L, 'C1', 'cost'), (%8$L, %2$L, 'C2', 'fee'), (%9$L, %2$L, 'C3', 'cost')~|~INSERT INTO public.budget_lines (id, project_id, category_id, name, estimate) VALUES (%12$L, %2$L, %7$L, 'L1', 100.00)$q$,
     $q$INSERT INTO public.budget_template_categories (id, org_id, name, fee_or_cost) VALUES (%6$L, %3$L, 'TX-ORIG', 'cost')~|~INSERT INTO public.budget_project_categories (id, project_id, name, fee_or_cost) VALUES (%10$L, %4$L, 'CX', 'cost'), (%11$L, %4$L, 'CX2', 'fee')~|~INSERT INTO public.budget_lines (id, project_id, category_id, name, estimate) VALUES (%13$L, %4$L, %10$L, 'LX', 200.00)$q$];
   seed_need := ARRAY['', 'o2'];
 
   v_n := array_length(sc_id, 1);
-  IF v_n <> 66 OR array_length(sc_label, 1) <> v_n OR array_length(sc_actor, 1) <> v_n
+  IF v_n <> 82 OR array_length(sc_label, 1) <> v_n OR array_length(sc_actor, 1) <> v_n
      OR array_length(sc_need, 1) <> v_n OR array_length(sc_setup, 1) <> v_n
      OR array_length(sc_sql, 1) <> v_n OR array_length(sc_chk, 1) <> v_n
      OR array_length(sc_expect, 1) <> v_n OR array_length(sc_twin, 1) <> v_n THEN
@@ -552,7 +642,8 @@ BEGIN
   ---------------------------------------------------------------------
   SELECT count(*) INTO v_a FROM unnest(v_tables) AS t WHERE to_regclass('public.' || t) IS NOT NULL;
   v_present := (v_a = 4);
-  v_partial := (v_a BETWEEN 1 AND 3);
+  v_partial := (v_a BETWEEN 1 AND 3)
+               OR (v_a = 0 AND to_regprocedure('public.budget_copy_template_to_project(uuid)') IS NOT NULL);
 
   SELECT md5(coalesce(string_agg(tablename || '|' || policyname || '|' || cmd || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''),
                                  E'\n' ORDER BY tablename, policyname), ''))
@@ -565,14 +656,16 @@ BEGIN
   END IF;
 
   IF NOT v_present THEN
-    -- 103 ITSELF, statement by statement, TAKEN FROM THE MIGRATION FILE BY A SCRIPT. The
-    -- migration's own fail-closed pre-flight DO block is not repeated: the checks above report
-    -- the same facts instead of raising.
+    -- 103 ITSELF, statement by statement, TRANSCRIBED FROM THE MIGRATION FILE. The migration's own
+    -- fail-closed pre-flight DO block and its closing NOTIFY are not repeated: the checks above
+    -- report the same facts instead of raising, and a NOTIFY in a rolled-back transaction is
+    -- never delivered.
         EXECUTE $t103_00$CREATE TABLE public.budget_template_categories (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id      uuid        NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   name        text        NOT NULL,
   fee_or_cost text        NOT NULL,
+  archived_at timestamptz NULL,
   created_at  timestamptz NOT NULL DEFAULT now(),
 
   CONSTRAINT budget_template_categories_name_present
@@ -583,23 +676,29 @@ BEGIN
 
         EXECUTE $t103_01$COMMENT ON TABLE public.budget_template_categories IS
   'An agency''s house-standard chart of accounts: the categories every new project''s chart is '
-  'COPIED from (ruling 2f). Copy-on-create, not a pointer: budget_project_categories carries no '
-  'reference to a row here, so editing or deleting a template category changes no project. '
-  'Agency-scoped; no vendor policy exists or may be added (ruling 2e).'$t103_01$;
+  'COPIED from (ruling 2f, R6: budget_copy_template_to_project). Copy-on-create, not a pointer: '
+  'budget_project_categories carries no reference to a row here, so editing, archiving or deleting '
+  'a template category changes no project. Agency-scoped; no vendor policy exists or may be added '
+  '(ruling 2e).'$t103_01$;
 
         EXECUTE $t103_02$COMMENT ON COLUMN public.budget_template_categories.fee_or_cost IS
   'fee or cost (ruling 2b). NOT NULL with no default on purpose: margin is only computable '
   'because every category carries this flag, and a default would misclassify silently. '
   'A fee is what the agency earns; a cost is what it passes through or spends.'$t103_02$;
 
-        EXECUTE $t103_03$CREATE INDEX budget_template_categories_org_idx
-  ON public.budget_template_categories (org_id)$t103_03$;
+        EXECUTE $t103_03$COMMENT ON COLUMN public.budget_template_categories.archived_at IS
+  'R1 (2026-10-09). NULL = live. An archived template category is kept on record and is NOT '
+  'copied into new projects by budget_copy_template_to_project. Reversible: set it back to NULL.'$t103_03$;
 
-        EXECUTE $t103_04$CREATE TABLE public.budget_project_categories (
+        EXECUTE $t103_04$CREATE INDEX budget_template_categories_org_idx
+  ON public.budget_template_categories (org_id)$t103_04$;
+
+        EXECUTE $t103_05$CREATE TABLE public.budget_project_categories (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id  uuid        NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   name        text        NOT NULL,
   fee_or_cost text        NOT NULL,
+  archived_at timestamptz NULL,
   created_at  timestamptz NOT NULL DEFAULT now(),
 
   CONSTRAINT budget_project_categories_project_id_id_key
@@ -608,21 +707,28 @@ BEGIN
     CHECK (btrim(name) <> ''),
   CONSTRAINT budget_project_categories_fee_or_cost_check
     CHECK (fee_or_cost IN ('fee', 'cost'))
-)$t103_04$;
+)$t103_05$;
 
-        EXECUTE $t103_05$COMMENT ON TABLE public.budget_project_categories IS
+        EXECUTE $t103_06$COMMENT ON TABLE public.budget_project_categories IS
   'A project''s chart of accounts, created as a COPY of the agency template and then owned by '
   'the project (ruling 2f). It starts equal to the template and diverges freely; nothing here '
   'points back at a template row. A category that has been merged away is NEVER deleted: it is '
   'named by a budget_category_merges row, which is what makes a ledger entry''s original '
-  'category resolvable after the merge. Categories may be added at any time.'$t103_05$;
+  'category resolvable after the merge. Categories may be added at any time. R1: a category is '
+  'hard-deletable only while nothing references it (the NO ACTION foreign keys refuse otherwise); '
+  'everything else is archived.'$t103_06$;
 
-        EXECUTE $t103_06$CREATE TABLE public.budget_lines (
+        EXECUTE $t103_07$COMMENT ON COLUMN public.budget_project_categories.archived_at IS
+  'R1 (2026-10-09). NULL = live. Archiving keeps the category and everything filed under it; it '
+  'deletes nothing and is reversible.'$t103_07$;
+
+        EXECUTE $t103_08$CREATE TABLE public.budget_lines (
   id          uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id  uuid          NOT NULL REFERENCES public.projects(id),
   category_id uuid          NOT NULL,
   name        text          NOT NULL,
   estimate    numeric(14,2) NOT NULL,
+  archived_at timestamptz   NULL,
   created_at  timestamptz   NOT NULL DEFAULT now(),
 
   CONSTRAINT budget_lines_category_fkey
@@ -630,28 +736,32 @@ BEGIN
     REFERENCES public.budget_project_categories (project_id, id),
   CONSTRAINT budget_lines_name_present
     CHECK (btrim(name) <> '')
-)$t103_06$;
+)$t103_08$;
 
-        EXECUTE $t103_07$COMMENT ON TABLE public.budget_lines IS
+        EXECUTE $t103_09$COMMENT ON TABLE public.budget_lines IS
   'The master budget, one row per line, belonging to a PROJECT. The master budget is the working '
   'artifact the agency owns (ruling 2a), never a mirror of a spreadsheet. Agency-scoped; NO '
   'vendor policy exists or may be added: a vendor never sees the master budget (ruling 2e), and '
   'what a vendor sees travels in the RFP payload, which is a released artifact distinct from '
-  'this row. THIS TABLE HOLDS THE ESTIMATE ONLY. Committed, Actual and Paid (ruling 2c) are not '
-  'columns: each has a source elsewhere (awards and purchase orders, the ledger, payments) and '
-  'whether they are stored or derived is open question 2 in docs/ligament-00-budgeting-spec.md. '
-  'Nothing here links to an RFP, a bid or an award: that join is open question 4.'$t103_07$;
+  'this row. THIS TABLE STORES THE ESTIMATE ONLY (R5). Actual is derived from the non-voided '
+  'ledger_entries on the line (104); Committed and Paid are deferred to later migrations. '
+  'R1: a line is hard-deletable only while its estimate is NULL or 0 and nothing references it; '
+  'otherwise it is archived. Nothing here links to an RFP, a bid or an award (open question 4).'$t103_09$;
 
-        EXECUTE $t103_08$COMMENT ON COLUMN public.budget_lines.estimate IS
-  'What the line was budgeted at (ruling 2c, state one of four). numeric(14,2), the precision '
-  'scripts/037-client-cash-flow.sql uses for money. NOT NULL with no default, and not constrained '
-  'to be non-negative: a discount line is a real budget line. The currency is NOT recorded; see '
-  'the report.'$t103_08$;
+        EXECUTE $t103_10$COMMENT ON COLUMN public.budget_lines.estimate IS
+  'What the line was budgeted at (ruling 2c, state one of four; R5: the only stored state). '
+  'numeric(14,2), the precision scripts/037-client-cash-flow.sql uses for money. NOT NULL with no '
+  'default, and not constrained to be non-negative: a discount line is a real budget line. The '
+  'currency is NOT recorded.'$t103_10$;
 
-        EXECUTE $t103_09$CREATE INDEX budget_lines_project_category_idx
-  ON public.budget_lines (project_id, category_id)$t103_09$;
+        EXECUTE $t103_11$COMMENT ON COLUMN public.budget_lines.archived_at IS
+  'R1 (2026-10-09). NULL = live. A line with a non-zero estimate, or with anything referencing it, '
+  'cannot be deleted; it is archived instead. Reversible.'$t103_11$;
 
-        EXECUTE $t103_10$CREATE TABLE public.budget_category_merges (
+        EXECUTE $t103_12$CREATE INDEX budget_lines_project_category_idx
+  ON public.budget_lines (project_id, category_id)$t103_12$;
+
+        EXECUTE $t103_13$CREATE TABLE public.budget_category_merges (
   id               uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id       uuid        NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   from_category_id uuid        NOT NULL,
@@ -668,22 +778,23 @@ BEGIN
     CHECK (from_category_id <> into_category_id),
   CONSTRAINT budget_category_merges_from_once
     UNIQUE (from_category_id)
-)$t103_10$;
+)$t103_13$;
 
-        EXECUTE $t103_11$COMMENT ON TABLE public.budget_category_merges IS
+        EXECUTE $t103_14$COMMENT ON TABLE public.budget_category_merges IS
   'Append-only record that one category of a project was merged into another (ruling 2f). The '
   'merged-away category row is kept so a ledger entry''s original category still resolves. No '
-  'UPDATE and no DELETE policy exists, so history cannot be rewritten by an agency member. A '
-  'category appears as from_category_id at most once and never as an into_category_id once it '
-  'has been merged away (budget_category_merges_guard), so the chain has no cycle.'$t103_11$;
+  'UPDATE and no DELETE policy, and no UPDATE or DELETE grant (R7), so history cannot be '
+  'rewritten by an agency member. A category appears as from_category_id at most once and never '
+  'as an into_category_id once it has been merged away (budget_category_merges_guard), so the '
+  'chain has no cycle.'$t103_14$;
 
-        EXECUTE $t103_12$CREATE INDEX budget_category_merges_into_idx
-  ON public.budget_category_merges (into_category_id)$t103_12$;
+        EXECUTE $t103_15$CREATE INDEX budget_category_merges_into_idx
+  ON public.budget_category_merges (into_category_id)$t103_15$;
 
-        EXECUTE $t103_13$CREATE INDEX budget_category_merges_project_idx
-  ON public.budget_category_merges (project_id)$t103_13$;
+        EXECUTE $t103_16$CREATE INDEX budget_category_merges_project_idx
+  ON public.budget_category_merges (project_id)$t103_16$;
 
-        EXECUTE $t103_14$CREATE FUNCTION public.budget_category_merges_guard()
+        EXECUTE $t103_17$CREATE FUNCTION public.budget_category_merges_guard()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = public, pg_temp
@@ -701,125 +812,202 @@ BEGIN
 
   RETURN NEW;
 END;
-$$$t103_14$;
+$$$t103_17$;
 
-        EXECUTE $t103_15$CREATE TRIGGER budget_category_merges_guard
+        EXECUTE $t103_18$CREATE TRIGGER budget_category_merges_guard
   BEFORE INSERT ON public.budget_category_merges
   FOR EACH ROW
-  EXECUTE FUNCTION public.budget_category_merges_guard()$t103_15$;
+  EXECUTE FUNCTION public.budget_category_merges_guard()$t103_18$;
 
-        EXECUTE $t103_16$REVOKE EXECUTE ON FUNCTION public.budget_category_merges_guard() FROM PUBLIC$t103_16$;
+        EXECUTE $t103_19$REVOKE EXECUTE ON FUNCTION public.budget_category_merges_guard() FROM PUBLIC$t103_19$;
 
-        EXECUTE $t103_17$REVOKE EXECUTE ON FUNCTION public.budget_category_merges_guard() FROM anon$t103_17$;
+        EXECUTE $t103_20$REVOKE EXECUTE ON FUNCTION public.budget_category_merges_guard() FROM anon$t103_20$;
 
-        EXECUTE $t103_18$REVOKE EXECUTE ON FUNCTION public.budget_category_merges_guard() FROM authenticated$t103_18$;
+        EXECUTE $t103_21$REVOKE EXECUTE ON FUNCTION public.budget_category_merges_guard() FROM authenticated$t103_21$;
 
-        EXECUTE $t103_19$REVOKE ALL ON TABLE public.budget_template_categories FROM PUBLIC$t103_19$;
+        EXECUTE $t103_22$CREATE FUNCTION public.budget_copy_template_to_project(p_project_id uuid)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_org    uuid;
+  v_copied integer;
+BEGIN
+  SELECT pr.org_id INTO v_org
+  FROM public.projects pr
+  WHERE pr.id = p_project_id
+    AND pr.org_id IN (SELECT public.current_user_org_ids());
 
-        EXECUTE $t103_20$REVOKE ALL ON TABLE public.budget_template_categories FROM anon$t103_20$;
+  IF v_org IS NULL THEN
+    RAISE EXCEPTION 'budget_copy_template_to_project: project % is not visible to the caller as its agency', p_project_id
+      USING ERRCODE = '42501';
+  END IF;
 
-        EXECUTE $t103_21$REVOKE ALL ON TABLE public.budget_project_categories  FROM PUBLIC$t103_21$;
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_project_id::text, 1036));
 
-        EXECUTE $t103_22$REVOKE ALL ON TABLE public.budget_project_categories  FROM anon$t103_22$;
+  IF EXISTS (SELECT 1 FROM public.budget_project_categories c WHERE c.project_id = p_project_id) THEN
+    RAISE EXCEPTION 'budget_copy_template_to_project: project % already has a chart of accounts', p_project_id
+      USING ERRCODE = '23505';
+  END IF;
 
-        EXECUTE $t103_23$REVOKE ALL ON TABLE public.budget_lines               FROM PUBLIC$t103_23$;
+  INSERT INTO public.budget_project_categories (project_id, name, fee_or_cost)
+  SELECT p_project_id, t.name, t.fee_or_cost
+  FROM public.budget_template_categories t
+  WHERE t.org_id = v_org
+    AND t.archived_at IS NULL
+  ORDER BY t.created_at, t.id;
 
-        EXECUTE $t103_24$REVOKE ALL ON TABLE public.budget_lines               FROM anon$t103_24$;
+  GET DIAGNOSTICS v_copied = ROW_COUNT;
+  RETURN v_copied;
+END;
+$$$t103_22$;
 
-        EXECUTE $t103_25$REVOKE ALL ON TABLE public.budget_category_merges     FROM PUBLIC$t103_25$;
+        EXECUTE $t103_23$COMMENT ON FUNCTION public.budget_copy_template_to_project(uuid) IS
+  'R6 (2026-10-09). Copies the project''s agency''s non-archived template categories (name and '
+  'fee_or_cost, by value) into the project''s chart and returns the number copied. SECURITY INVOKER. '
+  '42501 unless the caller is a member of the organization that owns the project. 23505 if the '
+  'project already has any category. An empty template copies 0 and succeeds.'$t103_23$;
 
-        EXECUTE $t103_26$REVOKE ALL ON TABLE public.budget_category_merges     FROM anon$t103_26$;
+        EXECUTE $t103_24$REVOKE EXECUTE ON FUNCTION public.budget_copy_template_to_project(uuid) FROM PUBLIC$t103_24$;
 
-        EXECUTE $t103_27$ALTER TABLE public.budget_template_categories ENABLE ROW LEVEL SECURITY$t103_27$;
+        EXECUTE $t103_25$REVOKE EXECUTE ON FUNCTION public.budget_copy_template_to_project(uuid) FROM anon$t103_25$;
 
-        EXECUTE $t103_28$ALTER TABLE public.budget_project_categories  ENABLE ROW LEVEL SECURITY$t103_28$;
+        EXECUTE $t103_26$GRANT  EXECUTE ON FUNCTION public.budget_copy_template_to_project(uuid) TO authenticated$t103_26$;
 
-        EXECUTE $t103_29$ALTER TABLE public.budget_lines               ENABLE ROW LEVEL SECURITY$t103_29$;
+        EXECUTE $t103_27$REVOKE ALL ON TABLE public.budget_template_categories FROM PUBLIC$t103_27$;
 
-        EXECUTE $t103_30$ALTER TABLE public.budget_category_merges     ENABLE ROW LEVEL SECURITY$t103_30$;
+        EXECUTE $t103_28$REVOKE ALL ON TABLE public.budget_template_categories FROM anon$t103_28$;
 
-        EXECUTE $t103_31$CREATE POLICY "budget_template_categories_org_select"
+        EXECUTE $t103_29$REVOKE ALL ON TABLE public.budget_template_categories FROM authenticated$t103_29$;
+
+        EXECUTE $t103_30$REVOKE ALL ON TABLE public.budget_project_categories  FROM PUBLIC$t103_30$;
+
+        EXECUTE $t103_31$REVOKE ALL ON TABLE public.budget_project_categories  FROM anon$t103_31$;
+
+        EXECUTE $t103_32$REVOKE ALL ON TABLE public.budget_project_categories  FROM authenticated$t103_32$;
+
+        EXECUTE $t103_33$REVOKE ALL ON TABLE public.budget_lines               FROM PUBLIC$t103_33$;
+
+        EXECUTE $t103_34$REVOKE ALL ON TABLE public.budget_lines               FROM anon$t103_34$;
+
+        EXECUTE $t103_35$REVOKE ALL ON TABLE public.budget_lines               FROM authenticated$t103_35$;
+
+        EXECUTE $t103_36$REVOKE ALL ON TABLE public.budget_category_merges     FROM PUBLIC$t103_36$;
+
+        EXECUTE $t103_37$REVOKE ALL ON TABLE public.budget_category_merges     FROM anon$t103_37$;
+
+        EXECUTE $t103_38$REVOKE ALL ON TABLE public.budget_category_merges     FROM authenticated$t103_38$;
+
+        EXECUTE $t103_39$GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.budget_template_categories TO authenticated$t103_39$;
+
+        EXECUTE $t103_40$GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.budget_project_categories  TO authenticated$t103_40$;
+
+        EXECUTE $t103_41$GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.budget_lines               TO authenticated$t103_41$;
+
+        EXECUTE $t103_42$GRANT SELECT, INSERT                 ON TABLE public.budget_category_merges     TO authenticated$t103_42$;
+
+        EXECUTE $t103_43$GRANT ALL ON TABLE public.budget_template_categories TO service_role$t103_43$;
+
+        EXECUTE $t103_44$GRANT ALL ON TABLE public.budget_project_categories  TO service_role$t103_44$;
+
+        EXECUTE $t103_45$GRANT ALL ON TABLE public.budget_lines               TO service_role$t103_45$;
+
+        EXECUTE $t103_46$GRANT ALL ON TABLE public.budget_category_merges     TO service_role$t103_46$;
+
+        EXECUTE $t103_47$ALTER TABLE public.budget_template_categories ENABLE ROW LEVEL SECURITY$t103_47$;
+
+        EXECUTE $t103_48$ALTER TABLE public.budget_project_categories  ENABLE ROW LEVEL SECURITY$t103_48$;
+
+        EXECUTE $t103_49$ALTER TABLE public.budget_lines               ENABLE ROW LEVEL SECURITY$t103_49$;
+
+        EXECUTE $t103_50$ALTER TABLE public.budget_category_merges     ENABLE ROW LEVEL SECURITY$t103_50$;
+
+        EXECUTE $t103_51$CREATE POLICY "budget_template_categories_org_select"
   ON public.budget_template_categories AS PERMISSIVE FOR SELECT TO authenticated
-  USING (org_id IN (SELECT public.current_user_org_ids()))$t103_31$;
+  USING (org_id IN (SELECT public.current_user_org_ids()))$t103_51$;
 
-        EXECUTE $t103_32$CREATE POLICY "budget_template_categories_org_insert"
+        EXECUTE $t103_52$CREATE POLICY "budget_template_categories_org_insert"
   ON public.budget_template_categories AS PERMISSIVE FOR INSERT TO authenticated
-  WITH CHECK (org_id IN (SELECT public.current_user_org_ids()))$t103_32$;
+  WITH CHECK (org_id IN (SELECT public.current_user_org_ids()))$t103_52$;
 
-        EXECUTE $t103_33$CREATE POLICY "budget_template_categories_org_update"
+        EXECUTE $t103_53$CREATE POLICY "budget_template_categories_org_update"
   ON public.budget_template_categories AS PERMISSIVE FOR UPDATE TO authenticated
   USING      (org_id IN (SELECT public.current_user_org_ids()))
-  WITH CHECK (org_id IN (SELECT public.current_user_org_ids()))$t103_33$;
+  WITH CHECK (org_id IN (SELECT public.current_user_org_ids()))$t103_53$;
 
-        EXECUTE $t103_34$CREATE POLICY "budget_template_categories_org_delete"
+        EXECUTE $t103_54$CREATE POLICY "budget_template_categories_org_delete"
   ON public.budget_template_categories AS PERMISSIVE FOR DELETE TO authenticated
-  USING (org_id IN (SELECT public.current_user_org_ids()))$t103_34$;
+  USING (org_id IN (SELECT public.current_user_org_ids()))$t103_54$;
 
-        EXECUTE $t103_35$CREATE POLICY "budget_project_categories_org_select"
+        EXECUTE $t103_55$CREATE POLICY "budget_project_categories_org_select"
   ON public.budget_project_categories AS PERMISSIVE FOR SELECT TO authenticated
   USING (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_35$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_55$;
 
-        EXECUTE $t103_36$CREATE POLICY "budget_project_categories_org_insert"
+        EXECUTE $t103_56$CREATE POLICY "budget_project_categories_org_insert"
   ON public.budget_project_categories AS PERMISSIVE FOR INSERT TO authenticated
   WITH CHECK (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_36$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_56$;
 
-        EXECUTE $t103_37$CREATE POLICY "budget_project_categories_org_update"
+        EXECUTE $t103_57$CREATE POLICY "budget_project_categories_org_update"
   ON public.budget_project_categories AS PERMISSIVE FOR UPDATE TO authenticated
   USING      (project_id IN (
     SELECT pr.id FROM public.projects pr
     WHERE pr.org_id IN (SELECT public.current_user_org_ids())))
   WITH CHECK (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_37$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_57$;
 
-        EXECUTE $t103_38$CREATE POLICY "budget_project_categories_org_delete"
+        EXECUTE $t103_58$CREATE POLICY "budget_project_categories_org_delete"
   ON public.budget_project_categories AS PERMISSIVE FOR DELETE TO authenticated
   USING (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_38$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_58$;
 
-        EXECUTE $t103_39$CREATE POLICY "budget_lines_org_select"
+        EXECUTE $t103_59$CREATE POLICY "budget_lines_org_select"
   ON public.budget_lines AS PERMISSIVE FOR SELECT TO authenticated
   USING (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_39$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_59$;
 
-        EXECUTE $t103_40$CREATE POLICY "budget_lines_org_insert"
+        EXECUTE $t103_60$CREATE POLICY "budget_lines_org_insert"
   ON public.budget_lines AS PERMISSIVE FOR INSERT TO authenticated
   WITH CHECK (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_40$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_60$;
 
-        EXECUTE $t103_41$CREATE POLICY "budget_lines_org_update"
+        EXECUTE $t103_61$CREATE POLICY "budget_lines_org_update"
   ON public.budget_lines AS PERMISSIVE FOR UPDATE TO authenticated
   USING      (project_id IN (
     SELECT pr.id FROM public.projects pr
     WHERE pr.org_id IN (SELECT public.current_user_org_ids())))
   WITH CHECK (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_41$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_61$;
 
-        EXECUTE $t103_42$CREATE POLICY "budget_lines_org_delete"
+        EXECUTE $t103_62$CREATE POLICY "budget_lines_org_delete"
   ON public.budget_lines AS PERMISSIVE FOR DELETE TO authenticated
-  USING (project_id IN (
-    SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_42$;
+  USING (
+    (estimate IS NULL OR estimate = 0)
+    AND project_id IN (
+      SELECT pr.id FROM public.projects pr
+      WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_62$;
 
-        EXECUTE $t103_43$CREATE POLICY "budget_category_merges_org_select"
+        EXECUTE $t103_63$CREATE POLICY "budget_category_merges_org_select"
   ON public.budget_category_merges AS PERMISSIVE FOR SELECT TO authenticated
   USING (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_43$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_63$;
 
-        EXECUTE $t103_44$CREATE POLICY "budget_category_merges_org_insert"
+        EXECUTE $t103_64$CREATE POLICY "budget_category_merges_org_insert"
   ON public.budget_category_merges AS PERMISSIVE FOR INSERT TO authenticated
   WITH CHECK (project_id IN (
     SELECT pr.id FROM public.projects pr
-    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_44$;
+    WHERE pr.org_id IN (SELECT public.current_user_org_ids())))$t103_64$;
 
   END IF;
 
@@ -886,9 +1074,13 @@ $$$t103_14$;
             END IF;
           END IF;
 
-          EXECUTE format(sc_sql[v_i], VARIADIC v_ids) INTO v_val;
+          FOREACH v_stmt IN ARRAY string_to_array(sc_sql[v_i], '~|~') LOOP
+            EXECUTE format(v_stmt, VARIADIC v_ids) INTO v_val;
+          END LOOP;
           IF sc_chk[v_i] <> '' THEN
-            EXECUTE format(sc_chk[v_i], VARIADIC v_ids) INTO v_val;
+            FOREACH v_stmt IN ARRAY string_to_array(sc_chk[v_i], '~|~') LOOP
+              EXECUTE format(v_stmt, VARIADIC v_ids) INTO v_val;
+            END LOOP;
           END IF;
 
           RESET ROLE;
@@ -1069,51 +1261,52 @@ $$$t103_14$;
     v_fail := v_fail + 1;
   END IF;
 
-  -- S4. anon has no privilege, authenticated has table access
+  -- S4. R7: anon holds no privilege of any kind on any of the four tables
   v_ran := v_ran + 1;
   v_logged := v_logged + 1;
   BEGIN
-    SELECT count(*) INTO v_a FROM unnest(v_tables) AS t, unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) AS p
+    SELECT count(*) INTO v_a FROM unnest(v_tables) AS t, unnest(v_privs) AS p
     WHERE has_table_privilege('anon', 'public.' || t, p);
-    SELECT count(*) INTO v_b FROM unnest(v_tables) AS t, unnest(ARRAY['SELECT', 'INSERT']) AS p
-    WHERE has_table_privilege('authenticated', 'public.' || t, p);
-    v_ok := (v_a = 0 AND v_b = 8);
-    v_detail := format('(anon privileges %s, expected 0; authenticated SELECT/INSERT grants %s, expected 8)', v_a, v_b);
+    v_ok := (v_a = 0);
+    v_detail := format('(anon holds %s of 28 table privileges; expected 0)', v_a);
   EXCEPTION WHEN OTHERS THEN
     v_ok := false;
     v_detail := 'the check itself raised ' || SQLSTATE || ': ' || left(SQLERRM, 160);
   END;
   IF v_ok IS NULL THEN
-    v_lines := v_lines || E'\n  ' || rpad('S4  anon has no privilege, authenticated has table access', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
+    v_lines := v_lines || E'\n  ' || rpad('S4  R7: anon holds nothing on the four tables', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
     v_inconc := v_inconc + 1;
   ELSIF v_ok THEN
-    v_lines := v_lines || E'\n  ' || rpad('S4  anon has no privilege, authenticated has table access', 56) || rpad('PASS', 14) || v_detail;
+    v_lines := v_lines || E'\n  ' || rpad('S4  R7: anon holds nothing on the four tables', 56) || rpad('PASS', 14) || v_detail;
     v_pass := v_pass + 1;
   ELSE
-    v_lines := v_lines || E'\n  ' || rpad('S4  anon has no privilege, authenticated has table access', 56) || rpad('FAIL', 14) || v_detail;
+    v_lines := v_lines || E'\n  ' || rpad('S4  R7: anon holds nothing on the four tables', 56) || rpad('FAIL', 14) || v_detail;
     v_fail := v_fail + 1;
   END IF;
 
-  -- S5. budget_lines holds the estimate and no invented column
+  -- S5. budget_lines holds the estimate, archived_at and no invented column; archived_at on all three
   v_ran := v_ran + 1;
   v_logged := v_logged + 1;
   BEGIN
     SELECT string_agg(column_name, ',' ORDER BY column_name) INTO v_t
     FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'budget_lines';
-    v_ok := (v_t = 'category_id,created_at,estimate,id,name,project_id');
-    v_detail := format('(columns: %s)', v_t);
+    SELECT count(*) INTO v_a FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name = 'archived_at' AND data_type = 'timestamp with time zone' AND is_nullable = 'YES'
+      AND table_name IN ('budget_lines', 'budget_project_categories', 'budget_template_categories');
+    v_ok := (v_t = 'archived_at,category_id,created_at,estimate,id,name,project_id' AND v_a = 3);
+    v_detail := format('(budget_lines columns: %s; nullable timestamptz archived_at on %s of 3 tables)', v_t, v_a);
   EXCEPTION WHEN OTHERS THEN
     v_ok := false;
     v_detail := 'the check itself raised ' || SQLSTATE || ': ' || left(SQLERRM, 160);
   END;
   IF v_ok IS NULL THEN
-    v_lines := v_lines || E'\n  ' || rpad('S5  budget_lines holds the estimate and no invented column', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
+    v_lines := v_lines || E'\n  ' || rpad('S5  R1/R5: estimate stored, archived_at on all three', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
     v_inconc := v_inconc + 1;
   ELSIF v_ok THEN
-    v_lines := v_lines || E'\n  ' || rpad('S5  budget_lines holds the estimate and no invented column', 56) || rpad('PASS', 14) || v_detail;
+    v_lines := v_lines || E'\n  ' || rpad('S5  R1/R5: estimate stored, archived_at on all three', 56) || rpad('PASS', 14) || v_detail;
     v_pass := v_pass + 1;
   ELSE
-    v_lines := v_lines || E'\n  ' || rpad('S5  budget_lines holds the estimate and no invented column', 56) || rpad('FAIL', 14) || v_detail;
+    v_lines := v_lines || E'\n  ' || rpad('S5  R1/R5: estimate stored, archived_at on all three', 56) || rpad('FAIL', 14) || v_detail;
     v_fail := v_fail + 1;
   END IF;
 
@@ -1246,6 +1439,144 @@ $$$t103_14$;
     v_pass := v_pass + 1;
   ELSE
     v_lines := v_lines || E'\n  ' || rpad('S10 merge trigger present, BEFORE INSERT; function callable by nobody', 56) || rpad('FAIL', 14) || v_detail;
+    v_fail := v_fail + 1;
+  END IF;
+
+  -- S11. R7: authenticated holds exactly the ruled grants; no TRUNCATE, REFERENCES, TRIGGER;
+  --      no UPDATE or DELETE on budget_category_merges
+  v_ran := v_ran + 1;
+  v_logged := v_logged + 1;
+  BEGIN
+    SELECT count(*) FILTER (WHERE has_table_privilege('authenticated', 'public.' || t, p)
+                              AND CASE WHEN t = 'budget_category_merges' THEN p IN ('SELECT', 'INSERT')
+                                       ELSE p IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') END),
+           count(*) FILTER (WHERE has_table_privilege('authenticated', 'public.' || t, p)
+                              AND NOT CASE WHEN t = 'budget_category_merges' THEN p IN ('SELECT', 'INSERT')
+                                           ELSE p IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') END)
+      INTO v_a, v_b
+    FROM unnest(v_tables) AS t, unnest(v_privs) AS p;
+    SELECT string_agg(t || ':' || p, ' ' ORDER BY t, p) INTO v_t
+    FROM unnest(v_tables) AS t, unnest(v_privs) AS p
+    WHERE has_table_privilege('authenticated', 'public.' || t, p)
+      AND NOT CASE WHEN t = 'budget_category_merges' THEN p IN ('SELECT', 'INSERT')
+                   ELSE p IN ('SELECT', 'INSERT', 'UPDATE', 'DELETE') END;
+    v_ok := (v_a = 14 AND v_b = 0);
+    v_detail := format('(ruled grants held %s of 14; extra privileges %s, expected 0: %s)', v_a, v_b, coalesce(v_t, 'none'));
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false;
+    v_detail := 'the check itself raised ' || SQLSTATE || ': ' || left(SQLERRM, 160);
+  END;
+  IF v_ok IS NULL THEN
+    v_lines := v_lines || E'\n  ' || rpad('S11 R7: authenticated holds exactly the ruled grants', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
+    v_inconc := v_inconc + 1;
+  ELSIF v_ok THEN
+    v_lines := v_lines || E'\n  ' || rpad('S11 R7: authenticated holds exactly the ruled grants', 56) || rpad('PASS', 14) || v_detail;
+    v_pass := v_pass + 1;
+  ELSE
+    v_lines := v_lines || E'\n  ' || rpad('S11 R7: authenticated holds exactly the ruled grants', 56) || rpad('FAIL', 14) || v_detail;
+    v_fail := v_fail + 1;
+  END IF;
+
+  -- S12. R7: service_role reads every table (SELECT granted and row level security bypassed)
+  v_ran := v_ran + 1;
+  v_logged := v_logged + 1;
+  BEGIN
+    SELECT count(*) INTO v_a FROM unnest(v_tables) AS t, unnest(v_privs) AS p
+    WHERE has_table_privilege('service_role', 'public.' || t, p);
+    SELECT count(*) INTO v_b FROM pg_roles WHERE rolname = 'service_role' AND rolbypassrls;
+    v_ok := (v_a = 28 AND v_b = 1);
+    v_detail := format('(service_role holds %s of 28 table privileges, bypasses RLS: %s; expected 28 and 1)', v_a, v_b);
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false;
+    v_detail := 'the check itself raised ' || SQLSTATE || ': ' || left(SQLERRM, 160);
+  END;
+  IF v_ok IS NULL THEN
+    v_lines := v_lines || E'\n  ' || rpad('S12 R7: service_role reads every table', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
+    v_inconc := v_inconc + 1;
+  ELSIF v_ok THEN
+    v_lines := v_lines || E'\n  ' || rpad('S12 R7: service_role reads every table', 56) || rpad('PASS', 14) || v_detail;
+    v_pass := v_pass + 1;
+  ELSE
+    v_lines := v_lines || E'\n  ' || rpad('S12 R7: service_role reads every table', 56) || rpad('FAIL', 14) || v_detail;
+    v_fail := v_fail + 1;
+  END IF;
+
+  -- S13. R1: the line DELETE policy carries the estimate rule
+  v_ran := v_ran + 1;
+  v_logged := v_logged + 1;
+  BEGIN
+    SELECT qual INTO v_t FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'budget_lines' AND policyname = 'budget_lines_org_delete';
+    v_ok := (v_t IS NOT NULL AND v_t ~ 'estimate IS NULL' AND v_t ~ 'estimate = ' AND v_t ~ 'current_user_org_ids');
+    v_detail := format('(predicate: %s)', left(coalesce(v_t, 'MISSING'), 300));
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false;
+    v_detail := 'the check itself raised ' || SQLSTATE || ': ' || left(SQLERRM, 160);
+  END;
+  IF v_ok IS NULL THEN
+    v_lines := v_lines || E'\n  ' || rpad('S13 R1: line DELETE policy carries the estimate rule', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
+    v_inconc := v_inconc + 1;
+  ELSIF v_ok THEN
+    v_lines := v_lines || E'\n  ' || rpad('S13 R1: line DELETE policy carries the estimate rule', 56) || rpad('PASS', 14) || v_detail;
+    v_pass := v_pass + 1;
+  ELSE
+    v_lines := v_lines || E'\n  ' || rpad('S13 R1: line DELETE policy carries the estimate rule', 56) || rpad('FAIL', 14) || v_detail;
+    v_fail := v_fail + 1;
+  END IF;
+
+  -- S14. R6: the copy function is INVOKER, pinned, executable by authenticated only
+  v_ran := v_ran + 1;
+  v_logged := v_logged + 1;
+  BEGIN
+    SELECT count(*) INTO v_a FROM pg_proc p
+    WHERE p.oid = to_regprocedure('public.budget_copy_template_to_project(uuid)')
+      AND NOT p.prosecdef
+      AND p.prorettype = 'integer'::regtype
+      AND coalesce(array_to_string(p.proconfig, ','), '') LIKE 'search_path=%'
+      AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+      AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+      AND NOT EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                      WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE');
+    v_ok := (v_a = 1);
+    v_detail := format('(%s of 1 function rows match INVOKER, returns integer, pinned search_path, no anon, no PUBLIC, authenticated EXECUTE)', v_a);
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false;
+    v_detail := 'the check itself raised ' || SQLSTATE || ': ' || left(SQLERRM, 160);
+  END;
+  IF v_ok IS NULL THEN
+    v_lines := v_lines || E'\n  ' || rpad('S14 R6: copy function invoker, pinned, authenticated only', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
+    v_inconc := v_inconc + 1;
+  ELSIF v_ok THEN
+    v_lines := v_lines || E'\n  ' || rpad('S14 R6: copy function invoker, pinned, authenticated only', 56) || rpad('PASS', 14) || v_detail;
+    v_pass := v_pass + 1;
+  ELSE
+    v_lines := v_lines || E'\n  ' || rpad('S14 R6: copy function invoker, pinned, authenticated only', 56) || rpad('FAIL', 14) || v_detail;
+    v_fail := v_fail + 1;
+  END IF;
+
+  -- S15. R7: no 103 function is SECURITY DEFINER and every one pins search_path
+  v_ran := v_ran + 1;
+  v_logged := v_logged + 1;
+  BEGIN
+    SELECT count(*),
+           count(*) FILTER (WHERE p.prosecdef OR coalesce(array_to_string(p.proconfig, ','), '') NOT LIKE '%search_path=%')
+      INTO v_a, v_b
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname IN ('budget_category_merges_guard', 'budget_copy_template_to_project');
+    v_ok := (v_a = 2 AND v_b = 0);
+    v_detail := format('(%s functions, %s SECURITY DEFINER or unpinned; expected 2 and 0)', v_a, v_b);
+  EXCEPTION WHEN OTHERS THEN
+    v_ok := false;
+    v_detail := 'the check itself raised ' || SQLSTATE || ': ' || left(SQLERRM, 160);
+  END;
+  IF v_ok IS NULL THEN
+    v_lines := v_lines || E'\n  ' || rpad('S15 R7: no SECURITY DEFINER; every function pinned', 56) || rpad('INCONCLUSIVE', 14) || v_detail;
+    v_inconc := v_inconc + 1;
+  ELSIF v_ok THEN
+    v_lines := v_lines || E'\n  ' || rpad('S15 R7: no SECURITY DEFINER; every function pinned', 56) || rpad('PASS', 14) || v_detail;
+    v_pass := v_pass + 1;
+  ELSE
+    v_lines := v_lines || E'\n  ' || rpad('S15 R7: no SECURITY DEFINER; every function pinned', 56) || rpad('FAIL', 14) || v_detail;
     v_fail := v_fail + 1;
   END IF;
 
