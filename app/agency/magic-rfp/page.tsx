@@ -45,6 +45,12 @@ import type { ClientDocument } from "@/components/client-documents-panel"
 import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-editor"
 import { BidFormCollapsibleSection } from "@/components/bid-form-collapsible-section"
 import { HelpTerm } from "@/components/help-term"
+import {
+  RELEASE_BUDGET_HINT,
+  RELEASE_BUDGET_LABEL,
+  SHOW_CLIENT_TO_VENDORS_HINT,
+  SHOW_CLIENT_TO_VENDORS_LABEL,
+} from "@/lib/rfp-record-copy"
 import { MAX_RFP_EVALUATION_CRITERIA, type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
 import { type BudgetCategory } from "@/lib/budget-categories"
 
@@ -163,6 +169,9 @@ function MagicRfpContent() {
   // Step 1: Require term disclosures with bids (wizard-level, applies to every recipient)
   const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
   const [responseDeadlineDate, setResponseDeadlineDate] = useState("")
+  // Migration 118 (D3, D2): stored on each send's RFP record. Both default off.
+  const [showClientToVendors, setShowClientToVendors] = useState(false)
+  const [releaseBudget, setReleaseBudget] = useState(false)
 
   const updateRequiredDesignation = (key: DesignationKey, required: boolean) => {
     setBusinessCriteriaRequired((prev) => {
@@ -601,6 +610,9 @@ function MagicRfpContent() {
             close_bidding_at_deadline: closeBiddingAtDeadline,
             require_terms_disclosure: requireTermsDisclosure,
             response_deadline: responseDeadline,
+            show_client_to_vendors: showClientToVendors,
+            release_budget: releaseBudget,
+            estimated_budget: brief.budgetRange.trim().slice(0, 200) || undefined,
             output_template_config: {
               mode: templateMode,
               templateStyle,
@@ -1031,6 +1043,31 @@ function MagicRfpContent() {
                   <p className="font-mono text-2xs text-foreground-muted">
                     Vendors state payment, cancellation, IP, and rate-validity terms up front.
                   </p>
+                </div>
+
+                <div className="p-4 rounded-lg border border-border bg-white/5 space-y-3">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={showClientToVendors}
+                        onCheckedChange={(v) => setShowClientToVendors(v === true)}
+                        className="border-border"
+                      />
+                      <span className="font-mono text-xs text-foreground">{SHOW_CLIENT_TO_VENDORS_LABEL}</span>
+                    </label>
+                    <p className="font-mono text-2xs text-foreground-muted">{SHOW_CLIENT_TO_VENDORS_HINT}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={releaseBudget}
+                        onCheckedChange={(v) => setReleaseBudget(v === true)}
+                        className="border-border"
+                      />
+                      <span className="font-mono text-xs text-foreground">{RELEASE_BUDGET_LABEL}</span>
+                    </label>
+                    <p className="font-mono text-2xs text-foreground-muted">{RELEASE_BUDGET_HINT}</p>
+                  </div>
                 </div>
 
                 <div className="p-4 rounded-lg border border-border bg-white/5 space-y-2">

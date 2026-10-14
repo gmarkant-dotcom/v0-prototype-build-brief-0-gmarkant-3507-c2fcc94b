@@ -51,6 +51,12 @@ import { EvaluationCriteriaEditor } from "@/components/evaluation-criteria-edito
 import { normalizeRfpEvaluationCriteria, type RfpEvaluationCriterion } from "@/lib/rfp-evaluation-criteria"
 import { normalizeBudgetCategories, type BudgetCategory } from "@/lib/budget-categories"
 import { HelpTerm } from "@/components/help-term"
+import {
+  RELEASE_BUDGET_HINT,
+  RELEASE_BUDGET_LABEL,
+  SHOW_CLIENT_TO_VENDORS_HINT,
+  SHOW_CLIENT_TO_VENDORS_LABEL,
+} from "@/lib/rfp-record-copy"
 
 // Types
 type UploadMethod = "file" | "google" | "paste" | null
@@ -629,6 +635,10 @@ function AgencyRFPContent() {
   // agency deliberately opts in.
   const [closeBiddingAtDeadline, setCloseBiddingAtDeadline] = useState(false)
   const [requireTermsDisclosure, setRequireTermsDisclosure] = useState(true)
+  // Migration 118 (D3, D2): stored on the agency's RFP record. Both default off: the client is
+  // hidden and every line's budget is hidden unless the agency releases it.
+  const [showClientToVendors, setShowClientToVendors] = useState(false)
+  const [releaseBudgetByScope, setReleaseBudgetByScope] = useState<Record<string, boolean>>({})
   const [agencyId, setAgencyId] = useState<string | null>(null)
   const [referenceMaterials, setReferenceMaterials] = useState<ReferenceMaterial[]>([])
   /** A2 client profile selection at the start of the flow. */
@@ -1272,6 +1282,7 @@ function AgencyRFPContent() {
         scopeItem: item,
         partnerIds: selectedPartners[item.id] || [],
         newRecipients: normalizedNewRecipientsByScope[item.id] || [],
+        releaseBudget: releaseBudgetByScope[item.id] === true,
       }))
       // If every recipient across every scope item was routed to the magic-link queue above,
       // there's nothing left for the standard broadcast-rfp endpoint to send — calling it would
@@ -1292,6 +1303,7 @@ function AgencyRFPContent() {
             requireTermsDisclosure,
             response_deadline: responseDeadline,
             close_bidding_at_deadline: closeBiddingAtDeadline,
+            show_client_to_vendors: showClientToVendors,
             newRecipientsByScope: normalizedNewRecipientsByScope,
             items,
           }),
@@ -1320,6 +1332,10 @@ function AgencyRFPContent() {
                 // F2: same responseDeadline computed above for the standard-broadcast body -
                 // was captured by the wizard but never sent on this path at all.
                 response_deadline: responseDeadline,
+                // Migration 118: the same two choices, for this send's own RFP record.
+                show_client_to_vendors: showClientToVendors,
+                release_budget: releaseBudgetByScope[recipient.scopeItem.id] === true,
+                estimated_budget: (recipient.scopeItem.estimatedBudget || "").slice(0, 200) || undefined,
               }),
             })
           } catch (magicLinkErr) {
@@ -1344,6 +1360,8 @@ function AgencyRFPContent() {
     setBroadcastComplete(false)
     setBroadcastError(null)
     setRequireTermsDisclosure(true)
+    setShowClientToVendors(false)
+    setReleaseBudgetByScope({})
     setRfpTemplateMode("upload")
     setAiTemplateError(null)
     setAiTemplateGenerated(false)
@@ -2883,6 +2901,21 @@ function AgencyRFPContent() {
                         </span>
                       ))}
                     </div>
+                    {item.estimatedBudget && (
+                      <div className="mt-3 space-y-1">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox
+                            checked={releaseBudgetByScope[item.id] === true}
+                            onCheckedChange={(v) =>
+                              setReleaseBudgetByScope((prev) => ({ ...prev, [item.id]: v === true }))
+                            }
+                            className="border-border"
+                          />
+                          <span className="font-mono text-xs text-foreground">{RELEASE_BUDGET_LABEL}</span>
+                        </label>
+                        <p className="font-mono text-2xs text-foreground-muted">{RELEASE_BUDGET_HINT}</p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2932,6 +2965,18 @@ function AgencyRFPContent() {
                 <p className="font-mono text-2xs text-foreground-muted">
                   Vendors state payment, cancellation, IP, and rate-validity terms up front.
                 </p>
+              </div>
+
+              <div className="mt-6 p-4 rounded-lg border border-border bg-white/5 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    checked={showClientToVendors}
+                    onCheckedChange={(v) => setShowClientToVendors(v === true)}
+                    className="border-border"
+                  />
+                  <span className="font-mono text-xs text-foreground">{SHOW_CLIENT_TO_VENDORS_LABEL}</span>
+                </label>
+                <p className="font-mono text-2xs text-foreground-muted">{SHOW_CLIENT_TO_VENDORS_HINT}</p>
               </div>
 
               <div className="mt-6 p-4 rounded-lg border border-border bg-white/5 space-y-3">
