@@ -46,7 +46,11 @@ const AI_BATCH_ROWS = 200
 const AI_BATCH_CHARS = 18_000 // under the route's 20,000 including category names and JSON overhead
 const PAGE = 100
 
-/** A new category is created once with one flag: every row naming it takes the first row's flag. */
+/**
+ * A new category is created once with one flag: every row naming it takes the first row's flag.
+ * R-D1: when no row gives one (an empty or unreadable "Category fee or cost" cell, or no such
+ * column), the new category is cost. Fee is always a deliberate choice.
+ */
 function sameFlagPerNewCategory(rows: ReviewRow[]): ReviewRow[] {
   const first = new Map<string, FeeOrCost | null>()
   for (const r of rows) {
@@ -54,7 +58,7 @@ function sameFlagPerNewCategory(rows: ReviewRow[]): ReviewRow[] {
     const key = categoryNameKey(r.target.name)
     if (!first.has(key) || (first.get(key) === null && r.feeOrCost)) first.set(key, r.feeOrCost)
   }
-  return rows.map((r) => (r.target?.kind === "new" ? { ...r, feeOrCost: first.get(categoryNameKey(r.target.name)) ?? r.feeOrCost } : r))
+  return rows.map((r) => (r.target?.kind === "new" ? { ...r, feeOrCost: first.get(categoryNameKey(r.target.name)) ?? r.feeOrCost ?? "cost" } : r))
 }
 
 export function ImportSheet({
@@ -136,8 +140,10 @@ export function ImportSheet({
       if (c) updateRow(row.index, { target: { kind: "existing", categoryId: c.id }, feeOrCost: c.fee_or_cost })
       return
     }
-    if (value === "new:source") return updateRow(row.index, { target: { kind: "new", name: row.sourceCategory }, feeOrCost: flagForNew(row.sourceCategory) ?? row.feeOrCost })
-    if (value === "new:custom") return updateRow(row.index, { target: { kind: "new", name: "" }, feeOrCost: row.feeOrCost })
+    // R-D1: a new category with no flag yet starts as cost.
+    if (value === "new:source")
+      return updateRow(row.index, { target: { kind: "new", name: row.sourceCategory }, feeOrCost: flagForNew(row.sourceCategory) ?? row.feeOrCost ?? "cost" })
+    if (value === "new:custom") return updateRow(row.index, { target: { kind: "new", name: "" }, feeOrCost: row.feeOrCost ?? "cost" })
   }
 
   /** The flag already chosen for another row creating the same new category, if any. */
@@ -192,7 +198,8 @@ export function ImportSheet({
           }
           if (s.category.kind === "new") {
             touched.add(r.index)
-            return { ...r, target: { kind: "new" as const, name: s.category.name }, feeOrCost: s.feeOrCost }
+            // R-D1: anything but an explicit "fee" from the model is cost.
+            return { ...r, target: { kind: "new" as const, name: s.category.name }, feeOrCost: s.feeOrCost === "fee" ? "fee" : "cost" }
           }
           return r
         })
@@ -502,7 +509,8 @@ export function ImportSheet({
                               onChange={(e) => updateRow(r.index, { target: { kind: "new", name: e.target.value } })}
                               onBlur={(e) => {
                                 const flag = flagForNew(e.target.value)
-                                if (flag && !r.feeOrCost) updateRow(r.index, { feeOrCost: flag })
+                                // Every row creating the same new category agrees on its flag.
+                                if (flag && flag !== r.feeOrCost) updateRow(r.index, { feeOrCost: flag })
                               }}
                               className="h-8 bg-background border-border text-foreground"
                             />
@@ -516,12 +524,11 @@ export function ImportSheet({
                             <select
                               aria-label="Fee or cost"
                               className={`${selectClass} h-8`}
-                              value={r.feeOrCost ?? ""}
-                              onChange={(e) => updateRow(r.index, { feeOrCost: (e.target.value || null) as FeeOrCost | null })}
+                              value={r.feeOrCost ?? "cost"}
+                              onChange={(e) => updateRow(r.index, { feeOrCost: e.target.value as FeeOrCost })}
                             >
-                              <option value="">Choose...</option>
-                              <option value="fee">Fee</option>
                               <option value="cost">Cost</option>
+                              <option value="fee">Fee</option>
                             </select>
                           )}
                         </td>

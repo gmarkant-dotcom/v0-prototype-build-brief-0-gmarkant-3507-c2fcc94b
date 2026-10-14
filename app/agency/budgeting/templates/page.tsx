@@ -30,7 +30,8 @@ function TemplateEditor() {
   const [message, setMessage] = useState<Msg>(null)
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState("")
-  const [flag, setFlag] = useState<FeeOrCost | "">("")
+  // R-D1: a new category starts as cost; fee is always a deliberate choice.
+  const [flag, setFlag] = useState<FeeOrCost>("cost")
   const [deleting, setDeleting] = useState<TemplateCategory | null>(null)
 
   const all = (() => {
@@ -59,7 +60,7 @@ function TemplateEditor() {
 
   async function add() {
     const n = name.trim()
-    if (!n || !flag) return setMessage({ tone: "error", text: "Name the category and mark it fee or cost." })
+    if (!n) return setMessage({ tone: "error", text: "Name the category." })
     const dup = all.find((c) => categoryNameKey(c.name) === categoryNameKey(n))
     if (dup) return setMessage({ tone: "error", text: dup.archived_at ? `${dup.name} is already in the template, archived. Restore it instead.` : `${dup.name} is already in the template.` })
     const ok = await act(async () => {
@@ -68,7 +69,7 @@ function TemplateEditor() {
     })
     if (ok) {
       setName("")
-      setFlag("")
+      setFlag("cost")
     }
   }
 
@@ -139,10 +140,9 @@ function TemplateEditor() {
                   className="bg-background border-border text-foreground max-w-xs"
                   onKeyDown={(e) => e.key === "Enter" && add()}
                 />
-                <select aria-label="Fee or cost" className={selectClass} value={flag} onChange={(e) => setFlag(e.target.value as FeeOrCost | "")}>
-                  <option value="">Fee or cost?</option>
-                  <option value="fee">Fee (the agency earns it)</option>
+                <select aria-label="Fee or cost" className={selectClass} value={flag} onChange={(e) => setFlag(e.target.value as FeeOrCost)}>
                   <option value="cost">Cost (third-party spend)</option>
+                  <option value="fee">Fee (the agency earns it)</option>
                 </select>
                 <Button variant="outline" className="border-border font-mono" disabled={busy} onClick={add}>
                   Add category

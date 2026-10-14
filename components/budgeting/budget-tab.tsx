@@ -55,7 +55,8 @@ export function BudgetTab({ projectId }: { projectId: string }) {
   const [renameText, setRenameText] = useState("")
   const [mergeInto, setMergeInto] = useState("")
   const [newCatName, setNewCatName] = useState("")
-  const [newCatFlag, setNewCatFlag] = useState<FeeOrCost | "">("")
+  // R-D1: a new category starts as cost; fee is always a deliberate choice.
+  const [newCatFlag, setNewCatFlag] = useState<FeeOrCost>("cost")
   const [importOpen, setImportOpen] = useState(false)
   const [mergeNeedsFinish, setMergeNeedsFinish] = useState<string | null>(null)
 
@@ -128,8 +129,8 @@ export function BudgetTab({ projectId }: { projectId: string }) {
   }
 
   async function addCategory() {
-    if (!newCatName.trim() || !newCatFlag) {
-      setMessage({ tone: "error", text: "Name the category and mark it fee or cost." })
+    if (!newCatName.trim()) {
+      setMessage({ tone: "error", text: "Name the category." })
       return
     }
     const ok = await run(async () => {
@@ -138,7 +139,7 @@ export function BudgetTab({ projectId }: { projectId: string }) {
     })
     if (ok) {
       setNewCatName("")
-      setNewCatFlag("")
+      setNewCatFlag("cost")
     }
   }
 
@@ -371,10 +372,9 @@ export function BudgetTab({ projectId }: { projectId: string }) {
             className="bg-background border-border text-foreground max-w-xs"
             onKeyDown={(e) => e.key === "Enter" && addCategory()}
           />
-          <select aria-label="Fee or cost" className={selectClass} value={newCatFlag} onChange={(e) => setNewCatFlag(e.target.value as FeeOrCost | "")}>
-            <option value="">Fee or cost?</option>
-            <option value="fee">Fee (the agency earns it)</option>
+          <select aria-label="Fee or cost" className={selectClass} value={newCatFlag} onChange={(e) => setNewCatFlag(e.target.value as FeeOrCost)}>
             <option value="cost">Cost (third-party spend)</option>
+            <option value="fee">Fee (the agency earns it)</option>
           </select>
           <Button variant="outline" className="border-border font-mono" disabled={busy} onClick={addCategory}>
             Add category
