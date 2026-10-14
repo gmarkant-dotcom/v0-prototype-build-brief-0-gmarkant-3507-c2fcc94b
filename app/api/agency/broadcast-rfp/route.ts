@@ -18,6 +18,16 @@ import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { normalizeBudgetCategories } from "@/lib/budget-categories"
 import { normalizeRfpEvaluationCriteria } from "@/lib/rfp-evaluation-criteria"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
+import {
+  broadcastRecordFieldsSchema,
+  createRfpRecordDraft,
+  logColumnMissingOnce,
+  markRfpRecordBroadcast,
+  missingColumnName,
+  type RfpRecordLineInput,
+} from "@/lib/server/rfp-record"
+
+const RECORD_SITE = "POST /api/agency/broadcast-rfp"
 
 type ScopeItemPayload = {
   id: string
@@ -101,6 +111,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
+    // Step A (migration 118): the two new request fields, validated. Everything else on the RFP
+    // record is taken from what this route already validates below, or derived on the server.
+    const recordFields = broadcastRecordFieldsSchema.safeParse(body)
+    if (!recordFields.success) {
+      return NextResponse.json({ error: "Invalid request: show_client_to_vendors and releaseBudget must be true or false" }, { status: 400 })
+    }
+    const showClientToVendors = recordFields.data.show_client_to_vendors === true
     const projectId =
       typeof body.projectId === "string" && body.projectId.length > 0 ? body.projectId : null
     // P2-4. Never trust the client payload: an explicit true is the only thing that closes an
@@ -162,11 +179,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No broadcast items" }, { status: 400 })
     }
 
+    // Step A: the project is SERVER-VERIFIED before anything is written or sent. It must belong to
+    // the organization this broadcast is written as, because the RFP record's RLS (118) refuses any
+    // other, and an inbox row pointing at another organization's project is wrong anyway.
+    let verifiedProject: { id: string; client_name: string | null } | null = null
+    if (projectId) {
+      const { data: projectRow, error: projectErr } = await supabase
+        .from("projects")
+        .select("id, client_name")
+        .eq("id", projectId)
+        .eq("org_id", writeOrgId)
+        .maybeSingle()
+      if (projectErr) {
+        console.error("[broadcast-rfp] project lookup failed", { projectId, code: projectErr.code, message: projectErr.message })
+        return NextResponse.json({ error: "Could not verify the project" }, { status: 500 })
+      }
+      if (!projectRow) {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      }
+      verifiedProject = projectRow as { id: string; client_name: string | null }
+    }
+
     const agencyDisplay =
       profile?.company_name?.trim() || profile?.full_name?.trim() || "Lead agency"
     const baseUrl = siteBaseUrl()
 
     const rows: Record<string, unknown>[] = []
+    // Step A: one RFP record line per scope item, in the order the agency arranged them.
+    const recordLines: RfpRecordLineInput[] = []
 
     // PHASE 2: broadcasting cues an invitation to partner. Collected here and acted on once,
     // after the inbox rows are safely in - a cue must never be the reason a broadcast fails,
@@ -204,6 +244,17 @@ export async function POST(request: NextRequest) {
       const scopeItemDescription = (si.description || "").toString()
       const estimatedBudget = (si.estimatedBudget || "").toString()
       const timeline = (si.timeline || "").toString()
+
+      // D2: hidden unless the agency released this line. Only an explicit true releases it.
+      const releaseBudget = (item as BroadcastItem & { releaseBudget?: unknown }).releaseBudget === true
+      recordLines.push({
+        scopeItemKey: scopeItemId,
+        scopeItemName,
+        scopeItemDescription: scopeItemDescription || null,
+        estimatedBudget: estimatedBudget || null,
+        releasedBudget: releaseBudget && estimatedBudget ? estimatedBudget : null,
+        sortOrder: recordLines.length,
+      })
 
       for (const partnerId of item.partnerIds || []) {
         if (typeof partnerId !== "string" || !partnerId.length) continue
@@ -488,13 +539,67 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No recipients to broadcast to" }, { status: 400 })
     }
 
+    // Step A, write order (1) and (2): the RFP record WITHOUT broadcast_at, then its lines, on the
+    // caller's session client so 118's RLS (paid lead agency, D1) applies. FAIL CLOSED: any error
+    // other than the two fallbacks in lib/server/rfp-record.ts sends nothing to any vendor. A
+    // missing table (118 not applied) skips the record and this route behaves exactly as before.
+    const normalizedMaster = masterRfp as Record<string, unknown>
+    const recordDraft = await createRfpRecordDraft(
+      supabase,
+      RECORD_SITE,
+      {
+        leadOrgId: writeOrgId,
+        projectId: verifiedProject?.id ?? null,
+        source: "wizard",
+        createdBy: user.id,
+        masterRfp: normalizedMaster,
+        evaluationCriteria: normalizedMaster.evaluation_criteria,
+        budgetCategories: normalizedMaster.budget_categories,
+        businessCriteriaRequired: normalizedMaster.business_criteria_required,
+        outputTemplateConfig: null,
+        totalBudget: typeof normalizedMaster.totalBudget === "string" ? normalizedMaster.totalBudget : null,
+        showClientToVendors,
+        clientNameSnapshot:
+          verifiedProject?.client_name ?? (typeof normalizedMaster.client === "string" ? normalizedMaster.client : null),
+        responseDeadline,
+        closeBiddingAtDeadline,
+        requireTermsDisclosure,
+        ndaLink: ndaLink || null,
+      },
+      recordLines
+    )
+    if (recordDraft.status === "failed") {
+      return NextResponse.json(
+        { error: "Could not save the RFP record, so nothing was sent. Please try again." },
+        { status: 500 }
+      )
+    }
+    // Write order (3): every inbox row carries the line it was sent from.
+    if (recordDraft.status === "created") {
+      for (const row of rows) {
+        const lineId = recordDraft.lineIdByKey.get(row.scope_item_id as string)
+        if (lineId) row.rfp_line_id = lineId
+      }
+    }
+
+    // Step A fallback: rfp_line_id does not exist before 118. Dropped and retried, logged once.
+    let insertRows = rows
+    let { error: insertError } = await supabase.from("partner_rfp_inbox").insert(insertRows)
+    if (missingColumnName(insertError) === "rfp_line_id") {
+      logColumnMissingOnce(RECORD_SITE, "partner_rfp_inbox", "rfp_line_id")
+      insertRows = insertRows.map((row) => {
+        const { rfp_line_id: _omitted, ...rest } = row
+        return rest
+      })
+      ;({ error: insertError } = await supabase.from("partner_rfp_inbox").insert(insertRows))
+    }
+
     // P2-4 pre-migration safety: close_bidding_at_deadline does not exist until 076. Retry once
     // without it on Postgres undefined_column (42703) so a broadcast never fails for a column
     // the schema has not gained yet - the RFP simply behaves as it does today, staying open.
-    let { error: insertError } = await supabase.from("partner_rfp_inbox").insert(rows)
     if (insertError?.code === "42703") {
       console.warn("[api] broadcast-rfp: close_bidding_at_deadline column missing, retrying without it")
-      const rowsWithoutClose = rows.map((row) => {
+      const rowsWithoutClose = insertRows.map((row) => {
         const { close_bidding_at_deadline: _omitted, ...rest } = row as Record<string, unknown>
         return rest
       })
@@ -502,6 +607,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (insertError) {
+      // The record, if one was written, stays an unsent draft: broadcast_at is not set.
       console.error("partner_rfp_inbox insert:", insertError)
       return NextResponse.json(
         {
@@ -510,6 +616,13 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 }
       )
+    }
+
+    // Step A, write order (5): broadcast_at LAST, now that every inbox row is in (one insert, so
+    // all of them or none). This freezes the record (118, D5). A failure here is logged and does
+    // not fail the broadcast: the vendors already have it.
+    if (recordDraft.status === "created") {
+      await markRfpRecordBroadcast(supabase, RECORD_SITE, recordDraft.recordId)
     }
 
     // PHASE 2: cue a partnership invitation per recipient who does not already have one.

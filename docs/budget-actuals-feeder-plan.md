@@ -1,5 +1,10 @@
 # The actuals feeder: receipt and invoice digester (plan only)
 
+> **UPDATED 2026-10-14.** **Migration number: 121 or later.** 116 and 117 are the budget line math and
+> line kind migrations (applied 2026-10-14) and the agency-owned RFP record holds 118 to 120; ruling 9
+> below puts the RFP record first. Wherever this file says "116" for the feeder's migration, read "121
+> or later, the next free number at authoring time". Section 7 now records the owner's rulings.
+
 **Written:** 2026-10-12, branch `feat/budget-ui`. Unattended session. **No code and no migration in this
 file is built or applied.** The next free migration number at the time of writing is 116 (state of
 record 2026-10-12), **but `docs/rfp-source-of-truth-design.md` also claims 116 to 118** for the RFP
@@ -56,7 +61,7 @@ is not the accounting ledger of record.
    DEFAULT 'file' CHECK (kind IN ('file','manual'))` and `blob_path` nullable only for `manual`.
    Migrate existing placeholder rows by prefix.
 
-## 4. Migration 116 sketch (not authored)
+## 4. Migration sketch (not authored; 121 or later, written as "116" before 2026-10-14)
 
 ```sql
 BEGIN;
@@ -131,6 +136,25 @@ Pre-apply test in the 103 / 104 style: impersonation control, a NOT DISCRIMINATI
 signed sum of non-voided entries (R2, R5); a refund lowers Actual on its line.
 
 ## 7. Owner decisions owed
+
+**RULED 2026-10-14: approved as recommended, EXCEPT 2b, a new item the owner added as an
+exception:**
+
+1. `partial` is its own ingest state (not `extracted` plus a count).
+2. The `needs_review` confidence threshold is **0.7**.
+   - **2b (owner exception).** Entries pending review **DO count toward Actual**. **Proposed display
+     note for the feeder build, NOT YET RULED:** label the pending portion, for example "Actual X,
+     including Y pending review".
+3. An accepted entry may be re-categorised; `original_category_id` stays frozen.
+4. Keep receipt images; no purge for now.
+5. Vendor submissions: **invoices only** to start.
+6. A partial refund is a **separate negative entry linked to the original**, never an edit.
+7. The `'manual'` `source_documents` kind is accepted.
+8. New files use the new org-prefixed storage path; existing `budget/<projectId>/` rows are
+   grandfathered (not moved).
+9. The RFP record ships before the feeder (RFP record 118-120 first; the feeder is 121 or later).
+
+The questions as they were put to the owner:
 
 1. The ingestion state values and whether `partial` is a state or `extracted` plus a count.
 2. The confidence threshold for `needs_review` (the test used 0.7; not ruled).

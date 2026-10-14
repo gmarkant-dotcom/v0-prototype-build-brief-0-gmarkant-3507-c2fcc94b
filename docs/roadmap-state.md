@@ -1,5 +1,22 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (feat/rfp-record-a). THIS BANNER SUPERSEDES THE MIGRATION AND ORDER LINES
+> BELOW.** Applied and catalog-verified: everything through **117** (116 and 117 on 2026-10-14; 103,
+> 104, 115 on 2026-10-12). R-D3 re-tag applied 2026-10-14 (data-fix v2, pinned to categories
+> `e57719fe` and `42a8ab0a`, after v1 failed 42P01; v2 is not in the repository). **118 is authored on
+> `feat/rfp-record-a`, not applied.** Next free number: 118 until it is applied; next to author: 119.
+> The full record is `docs/state-of-record-2026-10-12.md` (its 2026-10-14 banners).
+>
+> **CURRENT ORDER OF WORK:**
+> 1. **RFP record step A + 118** (`feat/rfp-record-a`, this run): pre-apply test, dry run, apply,
+>    then deploy the step A code (it works on either side of 118). Report `docs/rfp-record-a-report.md`.
+> 2. **RFP record step B + 119**: agency readers onto the record (inbox fallback kept), then the
+>    backfill, which must follow the 118 write order (record, lines, links, broadcast_at last).
+> 3. **RFP record step C + 120**: per-vendor copies, `client_name_released` written and read,
+>    `_magic_token` stripped (D8), `RFP_VENDOR_COPY_SCRUBBED` flipped to true; then the scrub.
+> 4. **The actuals feeder** (`docs/budget-actuals-feeder-plan.md`, section 7 ruled 2026-10-14),
+>    migration 121 or later.
+
 Migration status is **owner-verified 2026-10-12 by catalog query** in the Supabase SQL Editor.
 Branch facts were checked in the repository on 2026-10-12. Anything not listed here is
 **unverified**. Every section below this one is history.

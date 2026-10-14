@@ -1,5 +1,21 @@
 # Agency-owned RFP record: design only, 2026-10-12
 
+> **UPDATED 2026-10-14 (feat/rfp-record-a).** **The owner ruled D1-D9 on 2026-10-14, all as proposed**
+> (section 6 now records the rulings). **Step A and migration 118 are authored on `feat/rfp-record-a`:**
+> `supabase/migrations/118_rfp_records{,_down}.sql`, `118_preapply_test.sql` (82 assertions; NOT
+> applied, NOT run), `lib/server/rfp-record.ts`, the two routes and the two pages. Numbering: **118
+> (tables, RLS, guards, link columns), 119 (backfill), 120 (scrub)**; the actuals feeder is 121 or
+> later. Steps B, 119, C, 120 and D are not started. Section 7 below states the D5 enforcement, the
+> write order every writer (119 included) must follow, and the link-column guard as authored. Run
+> report: `docs/rfp-record-a-report.md`; test script: `docs/rfp-record-test-script.md`.
+>
+> **References re-verified 2026-10-14** against `main` (`f47dc61`): all of section 0 and section 5
+> hold except `app/api/agency/pool/[partnerId]/route.ts:176`, which is now `:199` (the select) and
+> `:239` (the `buildEngagementHistory` call); `app/api/agency/rfp/magic-link/route.ts:283-328` is
+> `:286-331` before step A (the inbox row itself is written by the attach call at `:361`); and
+> `app/api/agency/rfp-responses/route.ts:301-325` runs to `:326`. Line numbers in the two step A
+> routes moved again with step A; the report has the new ones.
+
 Branch `fix/guest-profiles-records`. **Design, not implemented.** No migration, no code change.
 Built from the repository at `ed6fa95` (migrations, route code, the WS3 stop in
 `docs/agency-gate-and-leaks-report.md` sections WS3 and 4). **Renumbered 2026-10-14:** 115 is
@@ -196,6 +212,24 @@ Inputs: `partner_rfp_inbox` rows with non-null `master_rfp_json`, `rfp_magic_tok
 
 ## 6. Decisions the owner must make
 
+**RULED 2026-10-14, all approved as proposed:**
+
+- **D1** Paid gate at RLS on the new tables, through `current_user_entitled_lead_org_ids()`.
+- **D2** A per-line "release budget" choice. For NEW RFPs it defaults to hidden. For RFPs already
+  broadcast, the 119 backfill sets `released_budget = estimated_budget`, so bids in progress keep
+  their number.
+- **D3** Backfilled records get `show_client_to_vendors = false` (client hidden by default, per the
+  Oct 9 ruling).
+- **D4** One record per broadcast send.
+- **D5** The record is a snapshot after broadcast: only `show_client_to_vendors`,
+  `response_deadline`, `close_bidding_at_deadline` and `archived_at` may change.
+- **D6** Lightning (magic-link) and wizard RFPs are separate records.
+- **D7** `project_id ON DELETE SET NULL`.
+- **D8** Strip `_magic_token` from notifications and vendor reads in step C (not before).
+- **D9** `output_template_config` lives on the record.
+
+The questions as they were put to the owner:
+
 - **D1. Paid gate at the database?** RLS on the new tables admits only members of a paid lead agency
   (`current_user_entitled_lead_org_ids()`), or any member of the lead org like every other agency
   table today (G1 then lives in the routes only). Recommended: paid at RLS for new tables.
@@ -219,3 +253,43 @@ Inputs: `partner_rfp_inbox` rows with non-null `master_rfp_json`, `rfp_magic_tok
   credential, fanned out to every member of that org: strip in step C (proposed) or keep.
 - **D9.** Whether `output_template_config` moves off `rfp_magic_tokens.reference_materials` onto the
   record (proposed) so the token row carries no agency-only setting at all.
+
+## 7. As authored in 118 (2026-10-14): D5, the write order, the link-column guard
+
+**D5 enforcement** (`rfp_records_guard`, BEFORE INSERT OR UPDATE, every caller including the service
+role, SQLSTATE `LG118`): `lead_org_id` is immutable from insert. Once `broadcast_at` is set it cannot
+be cleared or changed, and the row is compared WHOLE (`to_jsonb(OLD)` against `to_jsonb(NEW)`) minus an
+allow-list of `show_client_to_vendors`, `response_deadline`, `close_bidding_at_deadline`, `archived_at`
+and `updated_at`, so a column added later is frozen by default. The one exception is the foreign keys'
+own `ON DELETE SET NULL` (D7 for `project_id`; also `created_by`): going to NULL is admitted only when
+the referenced row no longer exists. `updated_at` is set by the trigger on every update.
+`rfp_record_lines_guard` (BEFORE INSERT OR UPDATE, `LG118`) copies `lead_org_id` from the parent,
+refuses a change of `rfp_id`, and refuses any insert or update of a line whose parent has
+`broadcast_at` set.
+
+**The write order. Step A follows it; 119 MUST follow it:**
+
+1. insert the `rfp_records` row with `broadcast_at` NULL;
+2. insert its `rfp_record_lines`;
+3. write the vendor rows carrying `rfp_line_id` (`partner_rfp_inbox`, `rfp_magic_tokens`);
+4. set `rfp_magic_tokens.attached_inbox_id` where an inbox row is attached;
+5. set `broadcast_at` LAST.
+
+A writer that sets `broadcast_at` before step 2 can never add a line. For 119 that means: insert each
+reconstructed record with `broadcast_at` NULL, its lines, link the inbox rows and tokens, then set
+`broadcast_at` (to the reconstructed send time) as the final statement for that record.
+
+**The link-column guard** (`partner_rfp_inbox_link_columns_guard`, `rfp_magic_tokens_link_columns_guard`,
+110's shape: BEFORE INSERT OR UPDATE, plpgsql, SECURITY INVOKER, search_path pinned, EXECUTE revoked):
+
+1. `rfp_line_id`, `client_name_released` (and on tokens `attached_inbox_id`) may be set or changed only
+   by a member of the row's lead organization (`partner_rfp_inbox.lead_org_id`,
+   `rfp_magic_tokens.org_id`), checked before AND after the write, or by a trusted path with no session
+   (`auth.uid() IS NULL AND current_user NOT IN ('anon','authenticated')`: the service role, migrations,
+   foreign-key actions). Anyone else, including the vendor that owns the inbox row, gets 42501.
+2. `rfp_line_id` must reference a line with the same `lead_org_id` (23514).
+3. `attached_inbox_id` must reference an inbox row of the same lead organization (23514).
+
+Rules 2 and 3 run when the column is set or changed, or when the lead organization of a row that
+already carries one changes. Every other vendor write passes untouched, so vendors keep every update
+they have today (099's policy still decides those).
