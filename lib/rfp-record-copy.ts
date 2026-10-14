@@ -16,7 +16,14 @@ export const SHOW_CLIENT_TO_VENDORS_HINT = RFP_VENDOR_COPY_SCRUBBED
   ? "Off by default. When on, vendors see this RFP's client name."
   : "Off by default and saved on your RFP record. Vendors still see the client name in this release; this setting takes effect for vendors in the next release."
 
-export const RELEASE_BUDGET_LABEL = "Release budget to this line's vendors"
+/** Step B: the same toggle on an RFP that has already been sent (bids page). */
+export const SHOW_CLIENT_TO_VENDORS_EXISTING_HINT = RFP_VENDOR_COPY_SCRUBBED
+  ? "Vendors on this RFP see the client name only while this is on."
+  : "Saved on your RFP record now. Vendors still see the client name in this release; this setting takes effect for vendors in the next release."
+
+export const SHOW_CLIENT_TO_VENDORS_NOT_ENABLED = "This setting cannot be changed yet. Nothing was changed."
+
+export const RELEASE_BUDGET_LABEL ="Release budget to this line's vendors"
 
 export const RELEASE_BUDGET_HINT = RFP_VENDOR_COPY_SCRUBBED
   ? "Hidden by default. When on, vendors on this line see its budget and nothing else of yours."

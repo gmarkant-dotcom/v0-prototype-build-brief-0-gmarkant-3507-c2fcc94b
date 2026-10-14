@@ -9,8 +9,11 @@ import {
 } from "@/lib/partner-rate-info-read"
 import { buildEngagementHistory, unwrapInbox } from "@/lib/engagement-history"
 import { readDiscoverableProfiles } from "@/lib/server/discoverable-profiles"
+import { readInboxLineIds, readRecordLines, readTokenLinksByResponse, resolutionFor } from "@/lib/server/rfp-record"
 
 export const dynamic = "force-dynamic"
+
+const RECORD_READ_SITE = "GET /api/agency/pool/[partnerId]"
 
 const noStore = {
   "Cache-Control": "private, no-store, no-cache, must-revalidate, max-age=0",
@@ -196,7 +199,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
     const { data: respRows, error: respErr } = hasActivePartnership
       ? await supabase
           .from("partner_rfp_responses")
-          .select("id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
+          .select("id, inbox_item_id, status, budget_proposal, partner_rfp_inbox(scope_item_name, project_id, master_rfp_json)")
           .in("lead_org_id", callerOrgIds)
           .eq("vendor_org_id", partnerId)
           .eq("status", "awarded")
@@ -236,7 +239,29 @@ export async function GET(_req: Request, { params }: { params: Promise<{ partner
       }
     }
 
-    const engagement_history = buildEngagementHistory(respRows as unknown[] | null, projectMeta)
+    // STEP B. The project name falls back to the agency's own RFP record (not the vendor's copy)
+    // for every engagement whose inbox row or token is linked to one; session client, after G1.
+    const engagementRows = (respRows || []) as Array<{ id: string; inbox_item_id: string | null }>
+    const [inboxLineIds, tokenLinks] = await Promise.all([
+      readInboxLineIds(supabase, RECORD_READ_SITE, engagementRows.map((r) => r.inbox_item_id), callerOrgIds),
+      readTokenLinksByResponse(supabase, RECORD_READ_SITE, engagementRows.map((r) => r.id), callerOrgIds),
+    ])
+    const recordViews = await readRecordLines(
+      supabase,
+      RECORD_READ_SITE,
+      [...inboxLineIds.values(), ...[...tokenLinks.values()].map((t) => t.lineId)],
+      callerOrgIds
+    )
+    const recordByResponseId = new Map<string, { linked: boolean; projectName: string | null }>()
+    for (const r of engagementRows) {
+      const record = resolutionFor(
+        (r.inbox_item_id ? inboxLineIds.get(r.inbox_item_id) : undefined) ?? tokenLinks.get(r.id)?.lineId,
+        recordViews
+      )
+      recordByResponseId.set(r.id, record.linked ? { linked: true, projectName: record.view?.projectName ?? null } : { linked: false, projectName: null })
+    }
+
+    const engagement_history = buildEngagementHistory(respRows as unknown[] | null, projectMeta, recordByResponseId)
 
     // Tiering happens HERE, server-side. A field the caller is not entitled to is never put
     // on the wire for a component to hide - row level security hands this route the whole

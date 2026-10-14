@@ -26,7 +26,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     // Deliberately NOT agencyEntitlementId() above it: that resolver falls back to the user id
     // when membership does not resolve, which is right for a quota row and wrong for a filter.
     const callerOrgIds = await resolveCallerOrgIds(user.id, supabase)
-    const result = await generateAndSaveBidSummary(supabase, responseId, callerOrgIds)
+    // Step B: the agency's session, after G1 (requireAgencyRole), reads its own RFP record.
+    const result = await generateAndSaveBidSummary(supabase, responseId, callerOrgIds, "session")
     if (!result.ok) {
       const status = result.reason === "not_found" ? 404 : 502
       const error = result.reason === "not_found" ? "Bid not found" : "Analysis unavailable"

@@ -7,8 +7,11 @@ import { normalizeBusinessCriteriaRequired } from "@/lib/business-criteria"
 import { isRfpClosureStatus as isClosedInboxStatus } from "@/lib/rfp-closure"
 import { attachResponsePrivate } from "@/lib/server/rfp-response-private"
 import { readDiscoverableProfiles } from "@/lib/server/discoverable-profiles"
+import { readInboxLineIds, readRecordLines, readTokenLinksByResponse, resolutionFor } from "@/lib/server/rfp-record"
 
 export const dynamic = "force-dynamic"
+
+const RECORD_READ_SITE = "GET /api/agency/rfp-responses"
 
 export async function GET(request: Request) {
   try {
@@ -229,6 +232,21 @@ export async function GET(request: Request) {
     }
 
     const inboxIds = [...new Set((allInboxes || []).map((r) => r.id as string))]
+
+    // STEP B. Requirements and budget categories come from the agency's own RFP record wherever
+    // the bid's inbox row (or, failing that, its token) carries rfp_line_id. The vendor copy
+    // (master_rfp_json) and the token columns below are read only for unlinked rows. Session
+    // client, after G1, filtered to the caller's organizations (lib/server/rfp-record.ts).
+    const [inboxLineIds, tokenLinks] = await Promise.all([
+      readInboxLineIds(supabase, RECORD_READ_SITE, inboxIds, callerOrgIds),
+      readTokenLinksByResponse(supabase, RECORD_READ_SITE, list.map((r) => r.id as string), callerOrgIds),
+    ])
+    const recordViews = await readRecordLines(
+      supabase,
+      RECORD_READ_SITE,
+      [...inboxLineIds.values(), ...[...tokenLinks.values()].map((t) => t.lineId)],
+      callerOrgIds
+    )
     const partnerIds = [...new Set((allInboxes || []).map((r) => r.vendor_org_id).filter(Boolean) as string[])]
     let profileById: Record<string, { full_name: string | null; company_name: string | null; email: string | null }> = {}
     if (partnerIds.length > 0) {
@@ -303,9 +321,15 @@ export async function GET(request: Request) {
       const inboxMasterRfp = inboxRow
         ? ((inboxRow as Record<string, unknown>).master_rfp_json as Record<string, unknown> | null)
         : null
-      const businessCriteriaRequiredSource = inboxRow
-        ? inboxMasterRfp?.business_criteria_required ?? null
-        : magicToken?.business_criteria_required ?? null
+      const record = resolutionFor(
+        (r.inbox_item_id ? inboxLineIds.get(r.inbox_item_id as string) : undefined) ?? tokenLinks.get(r.id as string)?.lineId,
+        recordViews
+      )
+      const businessCriteriaRequiredSource = record.linked
+        ? record.view?.businessCriteriaRequired ?? null
+        : inboxRow
+          ? inboxMasterRfp?.business_criteria_required ?? null
+          : magicToken?.business_criteria_required ?? null
       return {
         ...r,
         response_id: r.id,
@@ -323,7 +347,7 @@ export async function GET(request: Request) {
         // budget_categories to it would 500 this route before 072 is applied - guest bids
         // therefore fall back to the union of what their own budget lines carry, which the
         // comparison component already handles.
-        budget_categories: inboxMasterRfp?.budget_categories ?? null,
+        budget_categories: record.linked ? record.view?.budgetCategories ?? null : inboxMasterRfp?.budget_categories ?? null,
         rfp_sent_at: inboxRow
           ? ((inboxRow as Record<string, unknown>).created_at as string | null) ?? null
           : magicToken?.created_at ?? null,

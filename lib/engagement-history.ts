@@ -40,10 +40,14 @@ export function unwrapInbox(raw: unknown): {
 // whole query and silently degrades every project name to the master_rfp_json fallback.
 export function projectNameFromInbox(
   inbox: NonNullable<ReturnType<typeof unwrapInbox>>,
-  projectRow: { name?: string | null } | undefined
+  projectRow: { name?: string | null } | undefined,
+  /** STEP B, agency direction only: the response's RFP record when its row is linked. `linked`
+   *  with a null name answers "Project", never the vendor's copy. Absent: today's fallback. */
+  record?: { linked: boolean; projectName: string | null }
 ): string {
   const fromProj = (projectRow?.name || "").trim()
   if (fromProj) return fromProj
+  if (record?.linked) return record.projectName?.trim() || "Project"
   const j = inbox.master_rfp_json as Record<string, unknown> | null
   const n = j?.projectName
   return typeof n === "string" && n.trim() ? n.trim() : "Project"
@@ -65,18 +69,22 @@ export type EngagementHistoryEntry = {
  */
 export function buildEngagementHistory(
   respRows: unknown[] | null,
-  projectMeta: Map<string, { name: string | null }>
+  projectMeta: Map<string, { name: string | null }>,
+  /** STEP B, agency direction only (app/api/agency/pool/[partnerId]): keyed by response id. The
+   *  vendor direction passes nothing and keeps its current behaviour. */
+  recordByResponseId?: Map<string, { linked: boolean; projectName: string | null }>
 ): EngagementHistoryEntry[] {
   return (respRows || []).map((r) => {
     const inbox = unwrapInbox((r as { partner_rfp_inbox?: unknown }).partner_rfp_inbox)
     const pid = inbox?.project_id ?? null
     const meta = pid ? projectMeta.get(pid) : undefined
     const parsed = parseAwardedBudget((r as { budget_proposal?: unknown }).budget_proposal)
+    const responseId = String((r as { id: string }).id)
     return {
-      id: String((r as { id: string }).id),
+      id: responseId,
       status: String((r as { status?: string }).status || "awarded"),
       scope_item_name: inbox?.scope_item_name?.trim() || "Scope",
-      project_name: inbox ? projectNameFromInbox(inbox, meta) : "Project",
+      project_name: inbox ? projectNameFromInbox(inbox, meta, recordByResponseId?.get(responseId)) : "Project",
       awarded_amount: parsed?.amount ?? null,
       currency: parsed?.currency ?? "USD",
     }

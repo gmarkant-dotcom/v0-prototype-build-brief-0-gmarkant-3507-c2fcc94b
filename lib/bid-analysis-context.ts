@@ -4,6 +4,7 @@ import { formatBudgetForDisplay, formatTimelineForDisplay } from "@/lib/rfp-resp
 import { formatProposalSectionsForPrompt } from "@/lib/proposal-sections"
 import { normalizeBudgetLines, categorySubtotal } from "@/lib/budget-categories"
 import type { OrgId } from "@/lib/entitlements"
+import { resolveRecordForResponse, type RecordReadMode } from "@/lib/server/rfp-record"
 
 // Accepts either the cookie-scoped server client (@/lib/supabase/server) or a
 // service-role client (@supabase/supabase-js) - both are SupabaseClient instances,
@@ -42,7 +43,11 @@ export type BidAnalysisContext = {
 export async function loadBidAnalysisContext(
   supabase: SupabaseServerClient,
   responseId: string,
-  orgIds: readonly OrgId[]
+  orgIds: readonly OrgId[],
+  /** STEP B. "session": an agency route after G1, on the session client; the scope name and
+   *  description come from the agency's RFP record when the bid's row is linked. "skip" (the
+   *  default; the vendor- and guest-triggered summary on the service role) keeps today's reads. */
+  recordMode: RecordReadMode = "skip"
 ): Promise<BidAnalysisContext | null> {
   const { data: response } = await supabase
     .from("partner_rfp_responses")
@@ -76,7 +81,15 @@ export async function loadBidAnalysisContext(
   let scopeItemName: string | null = null
   let scopeItemDescription: string | null = null
 
-  if (response.inbox_item_id) {
+  const record = await resolveRecordForResponse(supabase, "bid-analysis-context", recordMode, {
+    responseId,
+    inboxItemId: (response.inbox_item_id as string | null) ?? null,
+    orgIds,
+  })
+  if (record.linked) {
+    scopeItemName = record.view?.scopeItemName ?? null
+    scopeItemDescription = record.view?.scopeItemDescription ?? null
+  } else if (response.inbox_item_id) {
     const { data: inbox } = await supabase
       .from("partner_rfp_inbox")
       .select("scope_item_name, scope_item_description")
@@ -155,7 +168,12 @@ export type ResponseScope = {
 
 /** Same partner_rfp_inbox / rfp_magic_tokens resolution as loadBidAnalysisContext, but
  *  also returns project_id - needed to hash a ranking group, which loadBidAnalysisContext
- *  has no reason to expose. */
+ *  has no reason to expose.
+ *
+ *  STEP B: deliberately NOT moved onto the RFP record. The ranking group hash must equal the
+ *  key the bids page builds in the browser (lib/bid-shared.ts scopeKeyForRow, from the row's own
+ *  project_id and scope_item_name columns), so both sides read the same row columns. Neither is
+ *  a vendor-copy key; step C does not scrub them. */
 export async function resolveResponseScope(
   supabase: SupabaseServerClient,
   responseId: string,

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { OrgId } from "@/lib/entitlements"
+import { resolveRecordForResponse, type RecordReadMode } from "@/lib/server/rfp-record"
 import {
   normalizeRfpEvaluationCriteria,
   readRfpEvaluationCriteriaFromMasterRfpJson,
@@ -57,10 +58,17 @@ export async function rfpScoreColumnsAvailable(supabase: SupabaseClient): Promis
  * user id. `.in()` on an empty array matches nothing, so a caller with no membership
  * fails closed rather than silently reading another organization's rows.
  */
+/**
+ * STEP B: `recordMode` "session" (an agency route, after G1, on the session client) reads the
+ * rubric from the agency's RFP record when the bid's inbox row or token carries rfp_line_id; the
+ * reads below are then the fallback for unlinked rows only. "skip" (the default, for the
+ * vendor- and guest-triggered summary on the service role) keeps today's reads exactly.
+ */
 export async function resolveRfpRubricForResponse(
   supabase: SupabaseClient,
   responseId: string,
-  orgIds: readonly OrgId[]
+  orgIds: readonly OrgId[],
+  recordMode: RecordReadMode = "skip"
 ): Promise<RfpEvaluationCriterion[]> {
   if (!(await rfpScoreColumnsAvailable(supabase))) return []
 
@@ -71,6 +79,13 @@ export async function resolveRfpRubricForResponse(
     .in("lead_org_id", orgIds)
     .maybeSingle()
   if (!response) return []
+
+  const record = await resolveRecordForResponse(supabase, "rubric", recordMode, {
+    responseId,
+    inboxItemId: (response.inbox_item_id as string | null) ?? null,
+    orgIds,
+  })
+  if (record.linked) return normalizeRfpEvaluationCriteria(record.view?.evaluationCriteria)
 
   if (response.inbox_item_id) {
     const { data: inbox } = await supabase

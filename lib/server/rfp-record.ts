@@ -297,6 +297,251 @@ export async function markRfpRecordBroadcast(client: RfpRecordClient, site: stri
   return true
 }
 
+// ---------------------------------------------------------------------------------------------
+// THE READS (step B). The agency reads its own record where a vendor row is linked to one.
+//
+// RULES:
+//  1. THE RECORD WINS WHEN THE ROW IS LINKED. An inbox row (or, for a guest bid, its token) that
+//     carries rfp_line_id is answered from rfp_records / rfp_record_lines. The vendor's copy
+//     (partner_rfp_inbox.master_rfp_json) is read ONLY when rfp_line_id is NULL: rows sent before
+//     step A that 119 has not backfilled. A linked row whose record cannot be read is answered
+//     with nothing, never with the vendor's copy.
+//  2. "Unknown" IS NOT "linked". When the link column itself cannot be read (42703 / PGRST204 /
+//     42P01 / PGRST205 before 118, or any other error, logged) the row is treated as unlinked and
+//     the caller keeps today's read. That is exactly the behaviour before step B.
+//  3. ONLY THE SIGNED-IN AGENCY SESSION READS THE RECORD. Every read here runs on the client the
+//     caller passes, under 118's RLS (paid lead agency, D1), and also filters lead_org_id to the
+//     caller's own organizations. Callers state their mode: "session" (an agency route, after the
+//     G1 gate, on the session client) or "skip" (anything else: a vendor- or guest-triggered
+//     background job on the service role keeps its current behaviour). No read here may be given
+//     a service-role client in "session" mode.
+// ---------------------------------------------------------------------------------------------
+export type RecordReadMode = "session" | "skip"
+
+/** What an agency reader takes from the record for one scope line. */
+export type RfpRecordLineView = {
+  lineId: string
+  recordId: string
+  scopeItemKey: string
+  scopeItemName: string | null
+  scopeItemDescription: string | null
+  masterRfp: Record<string, unknown>
+  /** master_rfp.projectName as broadcast, or null. */
+  projectName: string | null
+  evaluationCriteria: unknown
+  budgetCategories: unknown
+  businessCriteriaRequired: unknown
+  ndaLink: string | null
+}
+
+/** A linked row answers from the record (view null when it cannot be read); an unlinked one does not. */
+export type RecordResolution = { linked: false } | { linked: true; lineId: string; view: RfpRecordLineView | null }
+
+const loggedReadGaps = new Set<string>()
+
+function logReadGapOnce(site: string, what: string, err: DbError) {
+  const key = `${site}:${what}:${err?.code ?? ""}`
+  if (loggedReadGaps.has(key)) return
+  loggedReadGaps.add(key)
+  console.warn("[rfp-record] link read unavailable; using the inbox copy as before step B", {
+    site,
+    what,
+    code: err?.code,
+    message: err?.message,
+  })
+}
+
+function nonEmptyIds(ids: readonly (string | null | undefined)[]): string[] {
+  return [...new Set(ids.filter((v): v is string => typeof v === "string" && v.length > 0))]
+}
+
+function trimmedOrNull(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null
+}
+
+/** rfp_line_id of each of the caller's own inbox rows that carries one. */
+export async function readInboxLineIds(
+  client: RfpRecordClient,
+  site: string,
+  inboxIds: readonly (string | null | undefined)[],
+  orgIds: readonly OrgId[]
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const ids = nonEmptyIds(inboxIds)
+  if (ids.length === 0 || orgIds.length === 0) return out
+  const { data, error } = await client
+    .from("partner_rfp_inbox")
+    .select("id, rfp_line_id")
+    .in("id", ids)
+    .in("lead_org_id", orgIds as OrgId[])
+  if (error) {
+    logReadGapOnce(site, "partner_rfp_inbox.rfp_line_id", error)
+    return out
+  }
+  for (const row of (data || []) as Array<{ id: string; rfp_line_id: string | null }>) {
+    if (row.rfp_line_id) out.set(row.id, row.rfp_line_id)
+  }
+  return out
+}
+
+export type TokenLink = { lineId: string | null; attachedInboxId: string | null }
+
+/** rfp_line_id and attached_inbox_id of the caller's own tokens, keyed by response_id. */
+export async function readTokenLinksByResponse(
+  client: RfpRecordClient,
+  site: string,
+  responseIds: readonly (string | null | undefined)[],
+  orgIds: readonly OrgId[]
+): Promise<Map<string, TokenLink>> {
+  const out = new Map<string, TokenLink>()
+  const ids = nonEmptyIds(responseIds)
+  if (ids.length === 0 || orgIds.length === 0) return out
+  const { data, error } = await client
+    .from("rfp_magic_tokens")
+    .select("response_id, rfp_line_id, attached_inbox_id")
+    .in("response_id", ids)
+    .in("org_id", orgIds as OrgId[])
+  if (error) {
+    logReadGapOnce(site, "rfp_magic_tokens link columns", error)
+    return out
+  }
+  for (const row of (data || []) as Array<{ response_id: string; rfp_line_id: string | null; attached_inbox_id: string | null }>) {
+    out.set(row.response_id, { lineId: row.rfp_line_id ?? null, attachedInboxId: row.attached_inbox_id ?? null })
+  }
+  return out
+}
+
+/**
+ * The guest-bid join (step B): the inbox row a token is attached to, from
+ * rfp_magic_tokens.attached_inbox_id. Null when the token has none or the column cannot be read;
+ * the caller then keeps the master_rfp_json._magic_token join as the fallback.
+ */
+export async function readTokenAttachedInboxId(
+  client: RfpRecordClient,
+  site: string,
+  token: string,
+  orgIds: readonly OrgId[]
+): Promise<string | null> {
+  if (!token || orgIds.length === 0) return null
+  const { data, error } = await client
+    .from("rfp_magic_tokens")
+    .select("attached_inbox_id")
+    .eq("token", token)
+    .in("org_id", orgIds as OrgId[])
+    .maybeSingle()
+  if (error) {
+    logReadGapOnce(site, "rfp_magic_tokens.attached_inbox_id", error)
+    return null
+  }
+  return (data?.attached_inbox_id as string | null | undefined) ?? null
+}
+
+/** The record view of each line, read under the caller's RLS and org filter. */
+export async function readRecordLines(
+  client: RfpRecordClient,
+  site: string,
+  lineIds: readonly (string | null | undefined)[],
+  orgIds: readonly OrgId[]
+): Promise<Map<string, RfpRecordLineView>> {
+  const out = new Map<string, RfpRecordLineView>()
+  const ids = nonEmptyIds(lineIds)
+  if (ids.length === 0 || orgIds.length === 0) return out
+
+  const lines = await client
+    .from(LINES)
+    .select("id, rfp_id, scope_item_key, scope_item_name, scope_item_description")
+    .in("id", ids)
+    .in("lead_org_id", orgIds as OrgId[])
+  if (lines.error) {
+    console.error("[rfp-record] record line read failed; linked rows answer with nothing", {
+      site,
+      code: lines.error.code,
+      message: lines.error.message,
+    })
+    return out
+  }
+  type LineRow = { id: string; rfp_id: string; scope_item_key: string; scope_item_name: string | null; scope_item_description: string | null }
+  const lineRows = (lines.data || []) as LineRow[]
+  const recordIds = nonEmptyIds(lineRows.map((l) => l.rfp_id))
+  if (recordIds.length === 0) return out
+
+  const records = await client
+    .from(RECORDS)
+    .select("id, master_rfp, evaluation_criteria, budget_categories, business_criteria_required, nda_link")
+    .in("id", recordIds)
+    .in("lead_org_id", orgIds as OrgId[])
+  if (records.error) {
+    console.error("[rfp-record] record read failed; linked rows answer with nothing", {
+      site,
+      code: records.error.code,
+      message: records.error.message,
+    })
+    return out
+  }
+  type RecordRow = {
+    id: string
+    master_rfp: unknown
+    evaluation_criteria: unknown
+    budget_categories: unknown
+    business_criteria_required: unknown
+    nda_link: string | null
+  }
+  const recordById = new Map(((records.data || []) as RecordRow[]).map((r) => [r.id, r]))
+
+  for (const line of lineRows) {
+    const record = recordById.get(line.rfp_id)
+    if (!record) continue
+    const master =
+      record.master_rfp && typeof record.master_rfp === "object" && !Array.isArray(record.master_rfp)
+        ? (record.master_rfp as Record<string, unknown>)
+        : {}
+    out.set(line.id, {
+      lineId: line.id,
+      recordId: record.id,
+      scopeItemKey: line.scope_item_key,
+      scopeItemName: trimmedOrNull(line.scope_item_name),
+      scopeItemDescription: trimmedOrNull(line.scope_item_description),
+      masterRfp: master,
+      projectName: trimmedOrNull(master.projectName),
+      evaluationCriteria: record.evaluation_criteria ?? null,
+      budgetCategories: record.budget_categories ?? null,
+      businessCriteriaRequired: record.business_criteria_required ?? null,
+      ndaLink: trimmedOrNull(record.nda_link),
+    })
+  }
+  return out
+}
+
+/** Resolves a resolution from a line id and the views already read. */
+export function resolutionFor(lineId: string | null | undefined, views: Map<string, RfpRecordLineView>): RecordResolution {
+  if (!lineId) return { linked: false }
+  return { linked: true, lineId, view: views.get(lineId) ?? null }
+}
+
+/**
+ * One bid's record: its inbox row's line when the bid has an inbox row that carries one, else its
+ * token's line (a guest bid, or a magic-link row attached before it was linked). "skip" never reads.
+ */
+export async function resolveRecordForResponse(
+  client: RfpRecordClient,
+  site: string,
+  mode: RecordReadMode,
+  params: { responseId: string; inboxItemId: string | null; orgIds: readonly OrgId[] }
+): Promise<RecordResolution> {
+  if (mode !== "session") return { linked: false }
+  const { responseId, inboxItemId, orgIds } = params
+  let lineId: string | null = null
+  if (inboxItemId) {
+    lineId = (await readInboxLineIds(client, site, [inboxItemId], orgIds)).get(inboxItemId) ?? null
+  }
+  if (!lineId) {
+    lineId = (await readTokenLinksByResponse(client, site, [responseId], orgIds)).get(responseId)?.lineId ?? null
+  }
+  if (!lineId) return { linked: false }
+  const views = await readRecordLines(client, site, [lineId], orgIds)
+  return resolutionFor(lineId, views)
+}
+
 /**
  * Steps 3 and 4 on rows that already exist: one link column set on one row by id, with the
  * missing-column fallback. Returns true when written (or when the column does not exist yet,

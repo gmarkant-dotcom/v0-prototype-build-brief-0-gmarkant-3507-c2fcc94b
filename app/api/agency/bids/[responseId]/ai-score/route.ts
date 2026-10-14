@@ -191,7 +191,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     // P2-3. The model must score against the rubric the agency actually wrote for this RFP,
     // not against the seven built-in dimensions. Empty rubric means the global criteria above,
     // which is every legacy RFP and every RFP before migration 075.
-    const rubric = await resolveRfpRubricForResponse(supabase, responseId, callerOrgIds)
+    const rubric = await resolveRfpRubricForResponse(supabase, responseId, callerOrgIds, "session")
     const usingRfpRubric = rubric.length > 0
     const activeCriteria: Criterion[] = usingRfpRubric
       ? rubric.map((c) => ({
@@ -229,7 +229,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
         .eq("id", evaluation.id)
     }
 
-    const ctx = await loadBidAnalysisContext(supabase, responseId, callerOrgIds)
+    const ctx = await loadBidAnalysisContext(supabase, responseId, callerOrgIds, "session")
     if (!ctx) return NextResponse.json({ error: "Bid not found" }, { status: 404 })
     const bidContext = formatBidContextForPrompt(ctx)
 

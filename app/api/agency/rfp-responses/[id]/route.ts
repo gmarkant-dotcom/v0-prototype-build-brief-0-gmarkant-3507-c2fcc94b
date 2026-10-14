@@ -10,6 +10,7 @@ import { mapResponseStatusToInboxStatus } from "@/lib/bid-status"
 import { can, capabilityDeniedMessage } from "@/lib/capabilities"
 import { recordMilestone } from "@/lib/milestone-events"
 import { attachResponsePrivate } from "@/lib/server/rfp-response-private"
+import { readTokenAttachedInboxId, resolveRecordForResponse } from "@/lib/server/rfp-record"
 
 export const dynamic = "force-dynamic"
 
@@ -54,14 +55,53 @@ function getServiceSupabase() {
 type GuestBidContext = {
   scopeItemName: string | null
   partnershipId: string | null
-  masterRfpJson: unknown
+  /** STEP B: the agency's RFP record's projectName when the bid is linked to one; otherwise the
+   *  G1-synthesized row's master_rfp_json.projectName, as before. */
+  projectName: string | null
+}
+
+const RECORD_READ_SITE = "PATCH /api/agency/rfp-responses/[id]"
+
+function projectNameFromMaster(master: unknown): string | null {
+  const n = (master as Record<string, unknown> | null)?.projectName
+  return typeof n === "string" && n.trim() ? n.trim() : null
+}
+
+/**
+ * STEP B, the guest-bid join. The G1-synthesized inbox row for an invitation, found through
+ * rfp_magic_tokens.attached_inbox_id first; the master_rfp_json._magic_token marker is the
+ * fallback for a token that carries no attached_inbox_id (sent before step A and not backfilled,
+ * or attached by a vendor-side path that does not set it yet). Session client, caller's
+ * organizations only, on both reads.
+ */
+async function findSynthesizedInboxForToken<T>(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  { token, callerOrgIds, columns }: { token: string; callerOrgIds: OrgId[]; columns: string }
+): Promise<{ data: T | null; error: { message: string; code?: string } | null }> {
+  const attachedInboxId = await readTokenAttachedInboxId(supabase, RECORD_READ_SITE, token, callerOrgIds)
+  if (attachedInboxId) {
+    const { data, error } = await supabase
+      .from("partner_rfp_inbox")
+      .select(columns)
+      .eq("id", attachedInboxId)
+      .in("lead_org_id", callerOrgIds)
+      .maybeSingle()
+    if (error || data) return { data: (data as T | null) ?? null, error }
+  }
+  const { data, error } = await supabase
+    .from("partner_rfp_inbox")
+    .select(columns)
+    .in("lead_org_id", callerOrgIds)
+    .contains("master_rfp_json", { _magic_token: token })
+    .maybeSingle()
+  return { data: (data as T | null) ?? null, error }
 }
 
 async function resolveGuestBidContext(
   supabase: Awaited<ReturnType<typeof createClient>>,
   { responseId, callerOrgIds, route }: { responseId: string; callerOrgIds: OrgId[]; route: string }
 ): Promise<GuestBidContext> {
-  const empty: GuestBidContext = { scopeItemName: null, partnershipId: null, masterRfpJson: null }
+  const empty: GuestBidContext = { scopeItemName: null, partnershipId: null, projectName: null }
 
   const { data: tokenRow, error: tokenErr } = await supabase
     .from("rfp_magic_tokens")
@@ -85,12 +125,16 @@ async function resolveGuestBidContext(
   // the only source of `partnership_id` - and partnership_id is what makes a milestone
   // reachable by the vendor the milestone is about. Scoped to the caller's organizations,
   // matching the identical lookup on the award path.
-  const { data: synthesized, error: synthErr } = await supabase
-    .from("partner_rfp_inbox")
-    .select("scope_item_name, master_rfp_json, partnership_id")
-    .in("lead_org_id", callerOrgIds)
-    .contains("master_rfp_json", { _magic_token: tokenRow.token })
-    .maybeSingle()
+  const { data: synthesized, error: synthErr } = await findSynthesizedInboxForToken<{
+    id: string
+    scope_item_name: string | null
+    master_rfp_json: unknown
+    partnership_id: string | null
+  }>(supabase, {
+    token: tokenRow.token as string,
+    callerOrgIds,
+    columns: "id, scope_item_name, master_rfp_json, partnership_id",
+  })
   if (synthErr) {
     console.error("[api] guest bid context: G1-synthesized inbox lookup failed (falling back to the token)", {
       route,
@@ -101,10 +145,18 @@ async function resolveGuestBidContext(
     return { ...empty, scopeItemName: tokenScopeItemName }
   }
 
+  // STEP B: the agency's own record answers when the synthesized row or the token is linked.
+  const record = await resolveRecordForResponse(supabase, RECORD_READ_SITE, "session", {
+    responseId,
+    inboxItemId: synthesized?.id ?? null,
+    orgIds: callerOrgIds,
+  })
+  const rowScopeItemName = (synthesized?.scope_item_name || "").trim() || tokenScopeItemName
+
   return {
-    scopeItemName: ((synthesized?.scope_item_name as string | null) || "").trim() || tokenScopeItemName,
-    partnershipId: (synthesized?.partnership_id as string | null) ?? null,
-    masterRfpJson: synthesized?.master_rfp_json ?? null,
+    scopeItemName: record.linked ? record.view?.scopeItemName || rowScopeItemName : rowScopeItemName,
+    partnershipId: synthesized?.partnership_id ?? null,
+    projectName: record.linked ? record.view?.projectName ?? null : projectNameFromMaster(synthesized?.master_rfp_json),
   }
 }
 
@@ -343,6 +395,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       projectId: string
       partnershipId: string
+      /** STEP B: from the agency's RFP record when the bid is linked, else the inbox copy. */
+      projectName: string | null
+      scopeItemName: string | null
     }
     let awardContext: AwardContext | null = null
     // Tracks which inbox row (if any) status-sync below should target - starts as whatever
@@ -408,12 +463,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
 
         if (tokenRow?.token) {
-          const { data: synthesized, error: synthErr } = await supabase
-            .from("partner_rfp_inbox")
-            .select("id, project_id, vendor_org_id, partnership_id, recipient_email, scope_item_name, master_rfp_json")
-            .in("lead_org_id", callerOrgIds)
-            .contains("master_rfp_json", { _magic_token: tokenRow.token })
-            .maybeSingle()
+          // STEP B: attached_inbox_id first, the _magic_token marker as the fallback.
+          const { data: synthesized, error: synthErr } = await findSynthesizedInboxForToken<InboxForAward>(supabase, {
+            token: tokenRow.token as string,
+            callerOrgIds,
+            columns: "id, project_id, vendor_org_id, partnership_id, recipient_email, scope_item_name, master_rfp_json",
+          })
           if (synthErr) {
             console.error("[api] bid award: G1-synthesized inbox lookup failed", {
               route,
@@ -733,6 +788,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         partnershipId = resolution.partnershipId
       }
 
+      // STEP B: the project and scope names the award mail, notification and milestone carry come
+      // from the agency's own RFP record when the bid's inbox row or token is linked to one. The
+      // inbox copy (master_rfp_json.projectName) is read only for an unlinked row.
+      const awardRecord = await resolveRecordForResponse(supabase, RECORD_READ_SITE, "session", {
+        responseId: id,
+        inboxItemId: inboxRow.id,
+        orgIds: callerOrgIds,
+      })
+      const rowScopeItemName = inboxRow.scope_item_name?.trim?.() || null
+
       awardContext = {
         inbox: {
           id: inboxRow.id,
@@ -741,6 +806,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         },
         projectId,
         partnershipId,
+        projectName: awardRecord.linked ? awardRecord.view?.projectName ?? null : projectNameFromMaster(inboxRow.master_rfp_json),
+        scopeItemName: awardRecord.linked ? awardRecord.view?.scopeItemName || rowScopeItemName : rowScopeItemName,
       }
     }
 
@@ -1046,9 +1113,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         })
       }
 
-      const rawProjectName =
-        (awardContext.inbox.master_rfp_json as Record<string, unknown> | null)?.projectName?.toString?.() || ""
-      const rawScopeItemName = awardContext.inbox.scope_item_name?.trim?.() || ""
+      const rawProjectName = awardContext.projectName || ""
+      const rawScopeItemName = awardContext.scopeItemName || ""
       const projectName = rawProjectName || "Project"
       const scopeItemName = rawScopeItemName || "Scope item"
       const leadAgencyName = profile.company_name || profile.full_name || "Lead agency"
@@ -1178,9 +1244,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // its rfp_magic_tokens row. Same resolution the award path has always used.
       const guest = inbox ? null : await resolveGuestBidContext(supabase, { responseId: id, callerOrgIds, route })
 
+      // STEP B: for a bid with an inbox row, the agency's own RFP record answers when the row (or
+      // the bid's token) is linked; the inbox copy only when it is not. A guest bid's names come
+      // from resolveGuestBidContext, which applies the same rule.
+      const declineRecord = inbox
+        ? await resolveRecordForResponse(supabase, RECORD_READ_SITE, "session", {
+            responseId: id,
+            inboxItemId: (existing.inbox_item_id as string | null) ?? null,
+            orgIds: callerOrgIds,
+          })
+        : ({ linked: false } as const)
+      const inboxScopeItemName = (inbox?.scope_item_name as string | null | undefined)?.trim?.() || null
       const rawProjectName =
-        ((inbox?.master_rfp_json ?? guest?.masterRfpJson) as Record<string, unknown> | null)?.projectName?.toString?.() || ""
-      const rawScopeItemName = (inbox?.scope_item_name ?? guest?.scopeItemName)?.trim?.() || ""
+        (declineRecord.linked
+          ? declineRecord.view?.projectName
+          : inbox
+            ? projectNameFromMaster(inbox.master_rfp_json)
+            : guest?.projectName) || ""
+      const rawScopeItemName =
+        (declineRecord.linked ? declineRecord.view?.scopeItemName || inboxScopeItemName : inboxScopeItemName ?? guest?.scopeItemName) || ""
       const projectName = rawProjectName || "Project"
       const scopeItemName = rawScopeItemName || "Scope item"
       const partnerName = partner?.company_name || partner?.full_name || partner?.email || "Vendor"

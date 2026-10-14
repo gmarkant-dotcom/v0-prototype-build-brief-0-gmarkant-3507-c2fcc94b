@@ -151,7 +151,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ respons
     const usageCheck = await checkUsageLimit(await agencyEntitlementId(user.id, supabase), supabase, "ai_analyses")
     if (!usageCheck.allowed) return usageLimitResponse(usageCheck)
 
-    const ctx = await loadBidAnalysisContext(supabase, responseId, callerOrgIds)
+    const ctx = await loadBidAnalysisContext(supabase, responseId, callerOrgIds, "session")
     if (!ctx) return NextResponse.json({ error: "Bid not found" }, { status: 404 })
 
     const bidContext = formatBidContextForPrompt(ctx)

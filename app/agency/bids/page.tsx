@@ -8,6 +8,7 @@ import { AgencyLayout } from "@/components/agency-layout"
 import { BidDetailSheet } from "@/components/bid-detail-sheet"
 import { BidCompareView } from "@/components/bid-compare-view"
 import { ScoringSettingsSheet } from "@/components/scoring-settings-sheet"
+import { RfpRecordClientToggle } from "@/components/rfp-record-client-toggle"
 import { useFetch } from "@/hooks/useFetch"
 import { useUsageLimitModal } from "@/contexts/usage-limit-modal-context"
 import { cn, formatSubmittedAt } from "@/lib/utils"
@@ -830,6 +831,9 @@ function AgencyBidsPageInner() {
             <Settings className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Step B: the client toggle on RFPs already sent. Renders nothing before 118 or with no records. */}
+        <RfpRecordClientToggle />
 
         {/* Search + group-by toggle */}
         <div className="flex items-center gap-4 flex-wrap">

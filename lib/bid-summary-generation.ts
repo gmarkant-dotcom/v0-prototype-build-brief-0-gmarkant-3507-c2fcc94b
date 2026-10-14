@@ -4,6 +4,7 @@ import { loadBidAnalysisContext, formatBidContextForPrompt } from "@/lib/bid-ana
 import { resolveRfpRubricForResponse } from "@/lib/rfp-evaluation-criteria-server"
 import { formatRubricForPrompt } from "@/lib/rfp-evaluation-criteria"
 import type { OrgId } from "@/lib/entitlements"
+import type { RecordReadMode } from "@/lib/server/rfp-record"
 import {
   readResponsePrivate,
   resolveResponsePrivate,
@@ -44,15 +45,19 @@ export type BidSummaryGenerationResult =
 export async function generateAndSaveBidSummary(
   supabase: SupabaseClient,
   responseId: string,
-  orgIds: readonly OrgId[]
+  orgIds: readonly OrgId[],
+  /** STEP B. "session" only from the agency generate-summary route (G1, session client). The
+   *  vendor- and guest-triggered calls pass nothing: they run on the service role after a request
+   *  the agency gate never saw, so they stay on today's reads ("skip"). */
+  recordMode: RecordReadMode = "skip"
 ): Promise<BidSummaryGenerationResult> {
-  const ctx = await loadBidAnalysisContext(supabase, responseId, orgIds)
+  const ctx = await loadBidAnalysisContext(supabase, responseId, orgIds, recordMode)
   if (!ctx) return { ok: false, reason: "not_found" }
 
   // S1: the analysis is told which dimensions this RFP is actually judged on, so it can speak
   // to the agency's own rubric rather than to generic procurement dimensions. Empty for an RFP
   // using the global criteria, in which case the prompt is exactly what it was before.
-  const rubric = await resolveRfpRubricForResponse(supabase, responseId, orgIds)
+  const rubric = await resolveRfpRubricForResponse(supabase, responseId, orgIds, recordMode)
   const rubricText = formatRubricForPrompt(rubric)
   const bidContext = rubricText
     ? `${formatBidContextForPrompt(ctx)}\n\nThis RFP is scored against its own criteria:\n${rubricText}`

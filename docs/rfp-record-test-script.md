@@ -1,7 +1,8 @@
 # RFP record step A and migration 118: test script
 
 **For:** branch `feat/rfp-record-a` (step A code) and `supabase/migrations/118_rfp_records.sql`. Run on
-a preview or local build of the branch. Steps B, C and D are not built; nothing here tests them.
+a preview or local build of the branch. Parts A to D are step A and 118 (118 is applied and verified,
+2026-10-14). **Parts E to G are step B and 119** (`feat/rfp-record-b`). Steps C and D are not built.
 **Accounts:** agency `gmarkant@gmail.com` (the paid m a r k a n t lead agency); vendor
 `gmarkant@icloud.com` (April Partner Test Agency); a magic-link address with no account
 (`gmarkant+rfpa1@gmail.com`, lands in the agency inbox).
@@ -150,3 +151,84 @@ The code must behave exactly as `main` does, apart from the two new controls.
   RECORD AND EVERY LINK. Part A then holds again.
 - **RD3** Rolling back also drops the vendor allow-list with the inbox guard: F1 is open again until 118
   is re-applied.
+
+---
+
+## Part E. Step B code deployed, 119 NOT applied
+
+Step B reads the record only where a row carries `rfp_line_id`. Before 119 that is only rows sent since
+step A (e.g. the smoke-test record `21f9d17d-6b6c-471c-8cfb-931d631b6ca4`); every older bid must look
+exactly as on `main`.
+
+- **RE1** Agency `/agency/bids`: every bid you knew before still shows its requirements, budget
+  categories, rubric (Evaluate tab) and AI summary exactly as before. No errors in the browser console.
+- **RE2** A panel **Client name on sent RFPs** sits under the header (closed). It is absent if the
+  organization has no sent record. Open it: each sent record shows the project name, its source
+  ("RFP wizard" or "Lightning RFP"), "Sent" with date and time, the client name on the record (or "No
+  client name on this RFP"), and the checkbox **Show client name to vendors** (unticked), under the note
+  "Saved on your RFP record now. Vendors still see the client name in this release; this setting takes
+  effect for vendors in the next release." No em dashes.
+- **RE3** Tick the box on any record: the message "This setting cannot be changed yet. Nothing was
+  changed." appears under that record and the box stays unticked after the list refreshes (the route
+  answered 503: 119's function does not exist yet). SQL: the record's `show_client_to_vendors` is still
+  false.
+- **RE4** Send a fresh wizard RFP (two lines, one vendor) and a Lightning RFP to the vendor's account
+  address. Have the vendor bid on both. On `/agency/bids`: requirements and categories show for both;
+  Evaluate shows the RFP's own rubric; Generate AI Summary works; award one bid and decline the other.
+  The award mail's subject reads "You've been awarded <scope> - <project>"; the decline mail is titled
+  for the scope. These now come from the record (both rows are linked by step A).
+- **RE5** Vendor `/partner/rfps`: nothing changed for the vendor (step C is not built).
+- **RE6** Agency vendor profile (`/agency/pool/<vendor>`), Engagement history: the awarded project from
+  RE4 is listed by its project name.
+- **RE7** Route checks (browser console on the agency, signed in):
+  ```js
+  await fetch('/api/agency/rfp-records/not-a-uuid', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({show_client_to_vendors:true})}).then(r => r.status)          // 404
+  await fetch('/api/agency/rfp-records/<a record id>', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({show_client_to_vendors:'yes'})}).then(r => r.status)     // 400
+  await fetch('/api/agency/rfp-records/<a record id>', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({show_client_to_vendors:true, extra:1})}).then(r => r.status) // 400
+  await fetch('/api/agency/rfp-records/00000000-0000-4000-8000-000000000000', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({show_client_to_vendors:true})}).then(r => r.status) // 404
+  ```
+  As the vendor (signed in to the partner portal), the same call with a real record id answers 402.
+
+## Part F. Apply 119 (owner)
+
+- **RF1** Run `119_rfp_records_backfill.sql`'s P1 to P4. P1: four non-null values. P2: null, 0. Write
+  down P3 and P4: P4 rows with `rubric_variants` 2 or more will be refused; rows with `copies` 1 will be
+  built and marked unverified.
+- **RF2** Paste `119_preapply_test.sql`, run once. First line: **"SAFE TO APPLY 119."**; 33 assertions;
+  0 FAIL; the only INCONCLUSIVE rows are U1 and X1 (NO SUBJECT, by design). Read the **BACKFILL**
+  lines: they list every refused group, every unverified single-copy group and every client-name
+  correction the real apply will make. Anything else: stop.
+- **RF3** Dry run (COMMIT at line 748 changed to ROLLBACK), then P2 still answers null, 0.
+- **RF4** Real run. Then V1 to V6: V1 has a `backfill` row with drafts 0, client_shown 0, no_lines 0, and
+  the `wizard` / `magic_link` rows unchanged; V2 lists exactly the refused rows from RF2; V3 and V4 match
+  RF2's lists; V5 answers f, `{"search_path=public, pg_temp"}`, f, t and 161 policies; V6 answers 0.
+
+## Part G. Step B code, 119 applied
+
+- **RG1** `/agency/bids`: every bid still shows the same requirements, categories and rubric as in RE1
+  (now from the backfilled records; the provenance rule guarantees they equal the copies they came
+  from). A bid listed as refused in RF2 still shows them from the inbox copy.
+- **RG2** The panel now lists the backfilled records too ("Sent" at their original send time), every
+  one unticked (D3).
+- **RG3** Tick **Show client name to vendors** on one record. The box stays ticked after refresh. SQL:
+  ```sql
+  SELECT r.show_client_to_vendors, r.client_name_snapshot,
+         (SELECT count(*) FROM public.partner_rfp_inbox i JOIN public.rfp_record_lines l ON l.id = i.rfp_line_id
+           WHERE l.rfp_id = r.id AND i.client_name_released IS NOT DISTINCT FROM nullif(btrim(r.client_name_snapshot), '')) AS inbox_following,
+         (SELECT count(*) FROM public.partner_rfp_inbox i JOIN public.rfp_record_lines l ON l.id = i.rfp_line_id
+           WHERE l.rfp_id = r.id) AS inbox_linked
+  FROM public.rfp_records r WHERE r.id = '<record id>';
+  ```
+  `show_client_to_vendors` true; `inbox_following` equals `inbox_linked`. Untick it: the same query
+  answers false and every linked row's `client_name_released` is NULL.
+- **RG4** Vendor `/partner/rfps`: unchanged by RG3. Vendors do not read `client_name_released` until step
+  C, which is what the panel's note says.
+- **RG5** Repeat RE4's award and decline on two pre-step-A bids (rows the backfill linked): the mail
+  subjects carry the project and scope names as before.
+
+## Part H. 119 down file (only if rolling back)
+
+- **RH1** `119_rfp_records_backfill_down.sql`: unlinks and deletes `source = 'backfill'` records only and
+  drops the function. Then 119's P2 answers null, 0; V1's `wizard` and `magic_link` rows are unchanged;
+  the toggle route answers 503 again (Part E holds). Lightning inbox rows 119 linked to an existing step
+  A line keep that link (the down file's header says why).

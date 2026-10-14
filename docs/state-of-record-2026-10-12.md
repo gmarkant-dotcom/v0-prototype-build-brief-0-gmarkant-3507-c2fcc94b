@@ -1,5 +1,21 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (feat/rfp-record-b). 118 IS APPLIED AND CATALOG-VERIFIED (2026-10-14). F1 IS
+> CLOSED IN PRODUCTION.** This supersedes "PENDING APPLY" and "F1 stays OPEN" in the banner below.
+> 118 pre-apply test: 96 PASS, 0 FAIL, 1 INCONCLUSIVE by design (C3: no user outside the lead
+> agency belongs to two organizations). Catalog after apply: 161 public policies; RLS on
+> `rfp_records` and `rfp_record_lines`, 3 policies each (authenticated SELECT, INSERT, UPDATE); four
+> guards enabled (`rfp_records_guard`, `rfp_record_lines_guard`, `partner_rfp_inbox_link_columns_guard`
+> with the F1 vendor deny-by-default rule, `rfp_magic_tokens_link_columns_guard`); 97 inbox rows, none
+> linked. Smoke test 2026-10-14: a Lightning send wrote record `21f9d17d-6b6c-471c-8cfb-931d631b6ca4`
+> (source magic_link, client hidden, broadcast_at set), 1 line, its token linked and attached.
+> **119 (`119_rfp_records_backfill.sql`: the backfill and `rfp_record_set_client_visibility`) is
+> authored on `feat/rfp-record-b`, NOT applied**; its pre-apply test (33 assertions; U1 and X1
+> INCONCLUSIVE by design) has not been run. Step B code (agency readers on the record, the toggle
+> route and panel) is on the same branch. **Next free migration number: 119 until it is applied;
+> then 120.** Order: B / 119, C / 120, then the actuals feeder (121 or later). Report:
+> `docs/rfp-record-b-report.md`.
+
 > **UPDATED 2026-10-14 (feat/rfp-record-a2): F1 closed in 118, PENDING APPLY.** F1 (found 2026-10-14):
 > the 099 vendor UPDATE policy on `partner_rfp_inbox` let a vendor rewrite every column of its own row
 > except `vendor_org_id` and `status` (lead_org_id, master_rfp_json and its rubric, estimated_budget,
