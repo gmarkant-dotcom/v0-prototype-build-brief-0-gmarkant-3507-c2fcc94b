@@ -176,3 +176,26 @@ recorded the ruling "move under 00 Budgeting when 00 becomes navigable".
   the spine probe answers, plain "Coming soon" text otherwise), so the probe can never orphan the
   feature. Same markup as the existing mobile sub-lists, plus an active state on `/agency/brief*`.
 - No href, route, middleware or page changed. Header comment rewritten to record the move.
+
+---
+
+## Part 5. Docs
+
+- `docs/rfp-source-of-truth-design.md`: the RFP record's migrations renumbered **116, 117, 118 -> 117,
+  118, 119** (schema sketch comment, the section 3 table, LG117 -> LG118, the "116 tests" paragraph,
+  section 4's heading and text, the section 5 file names). The intro now says 115 and 116 are taken.
+  The `backfill_note` comment said "118 only" while the backfill was 117 (an existing slip); it now
+  says "the backfill (118) only".
+- `docs/budget-116-plus-plan.md`: the Numbering paragraph rewritten: 116 is budget line math; the RFP
+  record claims 117 to 119; B0 to B5 take the next free numbers from 120 (or from 117 if the owner
+  authors budget work first, moving the RFP record up). Decision 8 (margin formula) and 9 (numbering)
+  updated. The file name keeps "116" so existing links still resolve.
+- `docs/state-of-record-2026-10-12.md`: a CORRECTED 2026-10-14 banner; the 103/104 row split into
+  **103** and **104**, both "Applied and verified 2026-10-12" with their test figures; **115** "Applied
+  and verified 2026-10-12, 16/16 PASS"; a **116** row (authored, not applied); next free number 117;
+  "Not yet applied: 115, 103, 104" corrected; open items 2 and 4 struck through as done; item 5's
+  numbers updated; item 7 wording. Figures taken from `docs/roadmap-state.md` (commit `b63618b`).
+- `docs/budget-ui-test-script.md`: step 1 (the sub-link under 00), step 46 (both margins), step 51
+  (CSV columns and margin rows), and a new **Part D**: LM0 to LM13 (line math before and after 116,
+  keyboard, refusals, clearing the rate, R1, import with math, export, vendor), MG1 to MG5 (margin both
+  ways, "-" on a zero denominator, CSV parity), NV1 to NV4 (nav).

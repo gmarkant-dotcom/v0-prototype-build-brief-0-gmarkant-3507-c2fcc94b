@@ -3,11 +3,15 @@
 **Written:** 2026-10-12, branch `feat/budget-ui`. Unattended session. **Nothing here is authored as a
 migration, applied, or built.**
 
-**Numbering.** The state of record (2026-10-12) gives 116 as the next free number, but
-`docs/rfp-source-of-truth-design.md` section 3 also claims **116, 117 and 118** for `rfp_records`. The
-numbers below are therefore written **B1 to B5** (budget migration 1 to 5) and take the next free numbers
-at authoring time, in the order given in section 6. `docs/budget-actuals-feeder-plan.md` is **B0** for
-the same reason (it says "116"; read that as "the next free number").
+**Numbering (renumbered 2026-10-14).** **116 is taken** by `116_budget_line_math.sql` (quantity x
+unit rate x multiplier, `feat/budget-line-math`), so every migration planned here starts at **117** or
+later. `docs/rfp-source-of-truth-design.md` section 3 now claims **117, 118 and 119** for `rfp_records`
+(renumbered from 116 to 118 the same day). The budget migrations below stay written **B1 to B5**
+(budget migration 1 to 5) and `docs/budget-actuals-feeder-plan.md` is **B0** (it says "116"; read that
+as "the next free number, 117 or later"). They take the next free numbers at authoring time, in the
+order of section 6: **from 120** if the RFP record keeps 117 to 119, or **from 117** if the owner
+authors budget work first, in which case the RFP record moves up by the same count. The file name of
+this plan keeps "116" for its links; its content is "117 and later".
 
 **Read with:** `docs/ligament-00-budgeting-spec.md` (2b, 2c, 2d, 2e, section 4), the RULINGS 2026-10-09
 section of `docs/budget-spine-build-plan.md`, `docs/budget-ui-report.md`.
@@ -218,7 +222,8 @@ Committed (section 2) then defaults its line from this column on award.
 6. Whether Committed and Paid exports join the finance CSV now or wait for B2 and B3 together.
 7. The RFP hand-off waits on `docs/rfp-source-of-truth-design.md` D1 to D9, especially D2 (what is
    "released").
-8. The margin formula. The UI uses the run brief's fallback, margin amount = fee total and margin
-   percent = fee / (fee + cost), because the spec states no formula (build plan Phase B step 4 says to get
-   it from the owner). Confirm or replace.
-9. Migration numbering against the RFP record's claim on 116 to 118.
+8. The margin formula. Since 2026-10-14 the UI and the CSV show both readings: margin (share of total)
+   = fee / (fee + cost) and markup on cost = fee / cost, with margin amount = fee total. Confirm which
+   one the client-facing documents use.
+9. Migration numbering: 116 is budget line math; the RFP record claims 117 to 119; B0 to B5 follow from
+   120 unless the owner orders budget work first (see Numbering above).
