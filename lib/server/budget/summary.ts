@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { BUDGET_TABLES } from "./schema"
+import { BUDGET_TABLES, isFeeOrCost, type FeeOrCost } from "./schema"
 import { fromDbError, isBudgetSpineMissing, ok, toCents, type BudgetResult } from "./result"
+import { missingLineColumns } from "./lines"
 import type { AgencyProject } from "./scope"
 
 /**
@@ -10,6 +11,12 @@ import type { AgencyProject } from "./scope"
  *
  * If 103 is applied and 104 is not, the summary still answers with `ledgerEnabled: false` and
  * every actual 0, because a missing ledger means "no spend recorded", not an error.
+ *
+ * LINE KIND (117, R-K1). Each line carries its override (`kind`, null = inherit). Archived lines are
+ * listed too (`archivedLines`), with their category and override, so an entry on an archived line
+ * can take that line's effective kind. This file splits nothing into fee and cost: the split by
+ * effective kind is computed once, in lib/budget/summary-view.ts. Before 117, `lineKind` is false
+ * and every kind is null (every line inherits).
  */
 
 export type LineSummary = {
@@ -20,12 +27,18 @@ export type LineSummary = {
   actual: number
   variance: number
   entryCount: number
+  /** 117. The line's override; null = inherit the category's kind. */
+  kind: FeeOrCost | null
 }
 
 export type EstimateVsActual = {
   projectId: string
   ledgerEnabled: boolean
+  /** 117 applied: line overrides are read. False = every line inherits. */
+  lineKind: boolean
   lines: LineSummary[]
+  /** Archived lines: not in `lines`, but an entry on one is placed by that line's effective kind. */
+  archivedLines: Array<{ lineId: string; categoryId: string; kind: FeeOrCost | null }>
   totals: { estimate: number; actual: number; variance: number }
   /**
    * Non-voided entries not on a live line: entries with no line yet (they count against a category
@@ -34,14 +47,27 @@ export type EstimateVsActual = {
   unassigned: { actual: number; entryCount: number }
 }
 
+type LineRow = { id: string; name: string; category_id: string; estimate: unknown; archived_at: string | null; fee_or_cost?: unknown }
+
 export async function getEstimateVsActual(client: SupabaseClient, project: AgencyProject): Promise<BudgetResult<EstimateVsActual>> {
-  const { data: lineRows, error: linesErr } = await client
-    .from(BUDGET_TABLES.lines)
-    .select("id, name, category_id, estimate")
-    .eq("project_id", project.projectId)
-    .is("archived_at", null)
-    .order("created_at", { ascending: true })
-  if (linesErr) return fromDbError(linesErr)
+  // Every line, live and archived, with its override when 117 is applied.
+  const readLines = (withKind: boolean) =>
+    client
+      .from(BUDGET_TABLES.lines)
+      .select(`id, name, category_id, estimate, archived_at${withKind ? ", fee_or_cost" : ""}`)
+      .eq("project_id", project.projectId)
+      .order("created_at", { ascending: true })
+  let lineKind = true
+  let linesRes = await readLines(true)
+  if (linesRes.error && missingLineColumns(linesRes.error)?.kind) {
+    lineKind = false
+    linesRes = await readLines(false)
+  }
+  if (linesRes.error) return fromDbError(linesRes.error)
+  const allLines = (linesRes.data ?? []) as unknown as LineRow[]
+  const kindOf = (l: LineRow): FeeOrCost | null => (isFeeOrCost(l.fee_or_cost) ? l.fee_or_cost : null)
+  const lineRows = allLines.filter((l) => !l.archived_at)
+  const archivedLines = allLines.filter((l) => l.archived_at).map((l) => ({ lineId: l.id, categoryId: l.category_id, kind: kindOf(l) }))
 
   let ledgerEnabled = true
   const actualByLine = new Map<string, { cents: number; count: number }>()
@@ -73,7 +99,7 @@ export async function getEstimateVsActual(client: SupabaseClient, project: Agenc
 
   let estimateTotal = 0
   let actualTotal = 0
-  const lines: LineSummary[] = ((lineRows ?? []) as Array<{ id: string; name: string; category_id: string; estimate: unknown }>).map((l) => {
+  const lines: LineSummary[] = lineRows.map((l) => {
     const estimateCents = toCents(l.estimate)
     const actual = actualByLine.get(l.id) ?? { cents: 0, count: 0 }
     estimateTotal += estimateCents
@@ -86,6 +112,7 @@ export async function getEstimateVsActual(client: SupabaseClient, project: Agenc
       actual: actual.cents / 100,
       variance: (estimateCents - actual.cents) / 100,
       entryCount: actual.count,
+      kind: kindOf(l),
     }
   })
 
@@ -102,7 +129,9 @@ export async function getEstimateVsActual(client: SupabaseClient, project: Agenc
   return ok({
     projectId: project.projectId,
     ledgerEnabled,
+    lineKind,
     lines,
+    archivedLines,
     totals: {
       estimate: estimateTotal / 100,
       actual: (actualTotal + unassignedCents) / 100,

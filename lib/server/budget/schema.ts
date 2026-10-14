@@ -48,6 +48,12 @@ export const LINE_COLUMNS = ["id", "project_id", "category_id", "name", "estimat
  * drops them from the select and the payload on 42703 / PGRST204, so the code runs before 116.
  */
 export const LINE_MATH_COLUMNS = ["quantity", "unit_rate", "multiplier", "unit_label"] as const
+/**
+ * 117 (budget line kind, R-K1). The line's own fee or cost; NULL inherits the category's. Read and
+ * written only when the column exists: lines.ts and summary.ts drop it on 42703 / PGRST204, so the
+ * code runs before 117 with every line inherited.
+ */
+export const LINE_KIND_COLUMNS = ["fee_or_cost"] as const
 export const MERGE_COLUMNS = ["id", "project_id", "from_category_id", "into_category_id", "merged_at"] as const
 export const SOURCE_DOCUMENT_COLUMNS = [
   "id",
@@ -119,6 +125,17 @@ export type BudgetLine = {
   unit_rate: number | null
   multiplier: number | null
   unit_label: string | null
+  /** 117. The line's override; NULL = inherit the category's fee_or_cost (and always NULL before 117). */
+  fee_or_cost: FeeOrCost | null
+}
+
+/** R-K1: the line's override if set, else its category's kind. */
+export function effectiveKind(lineKind: FeeOrCost | null | undefined, categoryKind: FeeOrCost): FeeOrCost {
+  return lineKind ?? categoryKind
+}
+
+export function isFeeOrCost(value: unknown): value is FeeOrCost {
+  return value === "fee" || value === "cost"
 }
 
 export type CategoryMerge = {
