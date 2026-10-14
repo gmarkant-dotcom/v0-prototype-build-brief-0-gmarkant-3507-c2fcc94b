@@ -1,6 +1,7 @@
 # Budget UI: browser test script
 
-**For:** branch `feat/budget-ui`. Run on a preview or local build of the branch.
+**For:** branch `feat/budget-ui`. Run on a preview or local build of the branch. Part D is
+`feat/budget-line-math` (116, applied 2026-10-14); Part E is `feat/budget-line-kind` (117).
 **Accounts:** agency `gmarkant@gmail.com` (the paid m a r k a n t lead agency); vendor
 `gmarkant@icloud.com` (April Partner Test Agency). Use two browsers or a private window for the vendor.
 **Data:** generic examples only. Create a throwaway project named `Budget test - spring launch` (client
@@ -177,14 +178,16 @@ Hard drive shuttle,Shipping and drives,85,
 51. Header **Budget CSV**: a file `budget-test-spring-launch-budget.csv` downloads; message "Budget
     exported: N lines". Open it in a text editor (not a spreadsheet first):
     - every field is wrapped in double quotes;
-    - columns are Category, Line, Fee or cost, Qty, Rate, Multiplier, Unit, Estimate, Actual (the four
-      math columns are empty before 116 and for lines without a rate);
-    - the imported row 6 appears as `"Editorial","'=HYPERLINK(""http://example.com"",""click"")","cost","100.00",...`
+    - columns are Category, Line, Fee or cost, Kind, Kind source, Qty, Rate, Multiplier, Unit,
+      Estimate, Actual, Estimate % of total, Actual % of total (the four math columns are empty for
+      lines without a rate; Kind and Kind source are described in Part E, KE14);
+    - the imported row 6 appears as `"Editorial","'=HYPERLINK(""http://example.com"",""click"")","cost","cost","inherited",...`
       (a leading single quote, quotes doubled);
     - the credit line's estimate is `"'-250.00"` (every cell starting with `-` is prefixed, including
       numbers);
-    - the last rows are Fee total, Cost total, Project total, Margin (fee total), "Margin (share of
-      total) %, fee / (fee + cost)" and "Markup on cost %, fee / cost".
+    - after the lines come Fee total, Cost total, Project total, Margin (fee total), "Margin (share of
+      total) %, fee / (fee + cost)" and "Markup on cost %, fee / cost"; then, after a blank row, one
+      "(category total)" row per category (Part E, KE15).
 52. Open the same file in Excel or Google Sheets: row 6 shows the text `=HYPERLINK(...)`, **not** a
     clickable link, and no formula runs.
 53. **Ledger CSV**: `budget-test-spring-launch-ledger.csv` downloads, "Ledger exported: 3 entries,
@@ -218,25 +221,32 @@ Hard drive shuttle,Shipping and drives,85,
 
 ### Before 116 is applied (code deployed, columns missing)
 
-LM0. Budget tab: lines look exactly as before (name, typed estimate, archive, delete); there is no Qty,
-     Rate, x or Unit column and no formula hint. Adding and editing a typed estimate works as in steps
-     21 to 24. Budget CSV: Qty, Rate, Multiplier and Unit columns are present and empty.
-LM0b. Import a file with a Rate column (LM10's file): the mapping step shows the note "Line math is not
-     enabled yet ... the quantity, rate and multiplier are not kept". Imported lines get the computed
-     totals as typed estimates.
+LM0. **Not run - 116 applied before the browser test; covered by 116 pre-apply C19/C20.** (Was: Budget
+     tab lines look exactly as before, with no Qty, Rate, x or Unit column and no formula hint; Budget
+     CSV math columns present and empty.)
+LM0b. **Not run - 116 applied before the browser test; covered by 116 pre-apply C19/C20.** (Was: import
+     with a Rate column shows the "Line math is not enabled yet" note and saves computed totals as typed
+     estimates.)
 
 ### After 116 is applied
 
 LM1. Reload the Budget tab. Under the stop line a one-line hint reads "Total = Qty x Rate x multiplier,
      rounded to the cent. An empty Qty or x counts as 1. Leave Rate empty to type the total yourself."
-     Each category shows column heads Line, Qty, Rate, x, Unit, Total.
+     Each category shows column heads **Line, Qty, Unit, Rate, x, Total** in that order (F2: Unit sits
+     directly after Qty), in the line rows and in the new-line row alike. After 117, a **Kind** head
+     follows Total (Part E).
 LM2. Existing lines show empty Qty, Rate, x and Unit and their typed Total, editable as before.
 LM3. **Rate only:** in the new-line row type `Producer day`, Rate `950`, press Enter. Total 950.00
      (read-only, computed).
-LM4. **Qty x rate:** new line `Shoot crew`, Qty `3`, Rate `1250.50`, Unit `day`: the Total cell shows
-     3,751.50 while typing; Enter saves it. Hover the Total: "3 day x 1,250.50 = 3,751.50".
-LM5. **Qty x rate x multiplier:** on `Shoot crew` set x to `1.5` and press Tab: Total 5,627.25. Tab moves
-     on to Unit without losing what you type there.
+LM4. **Qty x rate:** new line `Shoot crew`, Qty `3`, Unit `day`, Rate `1250.50`: the Total cell shows
+     3,751.50 while typing; Enter saves it. After the save the Rate cell reads **1,250.50** (F1: thousands
+     separators, like Total; typing `1250.50` or `1,250.50` are both accepted). Hover the Total:
+     "3 day x 1,250.50 = 3,751.50".
+LM5. **Qty x rate x multiplier, and Tab order:** click `Shoot crew`'s Qty and press Tab repeatedly:
+     focus moves **Unit, Rate, x** in that order (F2: Tab follows the visual order), then past the
+     computed Total to the Kind chip (after 117) or the Archive button. Set x to `1.5` and press Tab:
+     Total 5,627.25. Click Unit, type `shoot day`, press Tab: focus moves to Rate and Unit keeps `shoot
+     day` (it saves on blur).
 LM6. **Rounding:** new line `Rounding check`, Qty `0.125`, Rate `0.20`: Total 0.03 (half away from zero).
 LM7. **Discount:** new line `Volume discount`, Qty `2`, Rate `-150`, x `1.5`: Total -450.00.
 LM8. **Refusals:** on any line type Qty `0` -> "Quantity must be greater than 0" and the cell reverts; x
@@ -272,11 +282,13 @@ LM13. **Vendor:** as `gmarkant@icloud.com`, any `/api/agency/budget/...` URL sti
 
 ### Margin both ways
 
-MG1. Summary tab: each margin card reads "x% share of total · y% markup on cost".
+MG1. Summary tab: each margin card reads "x% share of total · y% markup on cost" (or "...: n/a", MG4).
 MG2. Totals table: rows **Margin (share of total)** and **Markup on cost**, with Estimate and Actual.
 MG3. By hand from Fee total F and Cost total C: share = F / (F + C); markup = F / C; one decimal.
-MG4. In a project whose budget has only fee categories (cost 0): Markup on cost shows `-` in the card
-     and the table; share of total shows 100.0%. A project with no lines shows `-` for both.
+MG4. In a project whose budget has only fee categories (cost 0): the card reads "100.0% share of total ·
+     markup on cost: n/a" (F3: an undefined ratio reads "<name>: n/a" in a card, never a leading "-"
+     that looks like a bullet); the table's Markup on cost shows `-`. A project with no lines: the card
+     reads "share of total: n/a · markup on cost: n/a" and the table shows `-` for both.
 MG5. Budget CSV: rows "Margin (share of total) %, fee / (fee + cost)" and "Markup on cost %, fee /
      cost", the same numbers as the Summary tab; `-` (written `'-`) where the tab shows `-`; Actual empty
      when there is no ledger.
@@ -291,6 +303,124 @@ NV3. Mobile width (under 768px): the same sub-link sits under 00 Budgeting; the 
      shows only Lightning RFP Magic Link.
 NV4. With the spine probe failing (Part A conditions), 00 Budgeting is "Coming soon" text and the
      Creative Treatment Analysis sub-link still works.
+
+## Part E. Line kind (117), percentages, F1-F3 (feat/budget-line-kind)
+
+Rulings R-K1 (a line inherits its category's fee or cost unless it overrides it; every total sums by
+the line's effective kind), R-K2 (percentages of the project total, never a line computed from other
+lines) and R-K3 (each category's share of the project total).
+
+**Use a fresh throwaway project** so the numbers below are exact: `Budget test - line kind` (client
+`Example Client`). Percentages are one decimal.
+
+KE0. **Setup.** Budget tab, empty chart: add category `Creative development` (Fee) and `Production
+     crew` (Cost). Lines: Creative development `Concept`, no rate, Total `3000`. Production crew
+     `Crew day`, Qty `2`, Rate `1000` (Total 2,000.00); `Producer markup`, no rate, Total `500`.
+
+### Before 117 is applied (code deployed, column missing)
+
+KB1. Budget tab: column heads Line, Qty, Unit, Rate, x, Total; **no Kind column, no chip**; the hint has
+     no sentence about chips. Nothing errors.
+KB2. Summary: Fee total 3,000.00 (54.5%), Cost total 2,500.00 (45.5%), Project total 5,500.00 (100.0%),
+     in the Estimate "% of total" column. By category: Creative development FEE 3,000.00 54.5%;
+     Production crew COST 2,500.00 45.5%. No line chip, no Mixed.
+KB3. Import: the mapping step has **no** "Kind, per line" select. "Category fee or cost (optional)" is
+     still there.
+KB4. Budget CSV: every line's Kind equals its category's Fee or cost, Kind source `inherited`.
+KB5. (Optional, DevTools console) `fetch(location.origin + "/api/agency/budget/projects/<project id>/lines/<Producer markup id>", {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind: "fee"})}).then(r => r.json())`
+     answers 400 "Fee or cost per line is not enabled yet. The line follows its category." and
+     nothing changes.
+
+### After 117 is applied
+
+KE1. **The chip.** Reload. A **Kind** head follows Total. Each line shows its effective kind as a small
+     chip, **dashed outline, no fill** (inherited): Concept FEE (lime), Crew day and Producer markup
+     COST. The new-line row shows a dashed chip of its category's kind. The hint ends "Each line follows
+     its category's fee or cost (dashed chip); click the chip to set the line to the other kind (solid
+     chip)."
+KE2. **Override.** Click Producer markup's chip: it turns **solid FEE**, and a small reset icon appears
+     beside it (hover: "Reset to category (cost)"). The Production crew header total stays **2,500.00**
+     (the sum of all its lines, whatever their kind).
+KE3. **Summary by effective kind.** Fee total 3,500.00, **63.6%**; Cost total 2,000.00, **36.4%**;
+     Project total 5,500.00, **100.0%**. Margin (estimate) 3,500.00, "63.6% share of total · 175.0%
+     markup on cost"; the table's Margin (share of total) 63.6% and Markup on cost 175.0%. By
+     category: Production crew shows **MIXED**, 2,500.00, 45.5%, then rows **Fee part** 500.00 and
+     **Cost part** 2,000.00, then its lines: Crew day dashed COST, Producer markup solid FEE. Creative
+     development: FEE, 3,000.00, 54.5%, Concept dashed FEE.
+KE4. **Toggle again.** Click Producer markup's solid FEE chip: **solid COST** (an override that happens
+     to equal the category; the reset icon stays). Summary: Fee 3,000.00 (54.5%), Cost 2,500.00 (45.5%);
+     Production crew is COST, not Mixed; Producer markup's chip is solid COST.
+KE5. **Reset to category.** Click the reset icon: the chip is **dashed COST** and the icon is gone.
+     Budget CSV: Producer markup Kind source `inherited`.
+KE6. **A kind change never moves a number.** Click Crew day's chip (it has a rate): solid FEE. Its
+     Qty 2, Rate 1,000.00 and Total 2,000.00 are unchanged (116's trigger recomputes the same
+     estimate; 117 pre-apply K10/K11). Reset it.
+KE7. **Category flip.** Set Producer markup to FEE again (solid). On Production crew click the switch
+     icon ("Mark as fee") and confirm. Crew day's chip is now **dashed FEE** (an inherited line moves
+     with its category); Producer markup stays **solid FEE** (an override is kept). Summary: Fee
+     5,500.00 (100.0%), Cost 0.00 (0.0%); the Margin (estimate) card reads "100.0% share of total ·
+     markup on cost: n/a" (F3) and the table's Markup on cost shows `-`. Switch Production crew back
+     to cost: Crew day dashed COST, Producer markup solid FEE, Production crew Mixed, Fee 3,500.00 and
+     Cost 2,000.00 again.
+KE8. **Actual by effective kind.** Ledger tab: add a manual entry 600.00, payee `Example Talent Co`,
+     category Production crew, line **Producer markup**; and one of 200.00, payee `Example Rentals Co`,
+     category Production crew, no line. Summary: Actual Fee 600.00 (**75.0%**), Cost 200.00
+     (**25.0%**), Project total 800.00 (100.0%). Margin (actual) 600.00, "75.0% share of total ·
+     300.0% markup on cost". Production crew Actual 800.00, 100.0%; Fee part Actual 600.00, Cost part
+     Actual 200.00. Creative development Actual 0.00, 0.0%.
+KE9. **An entry on an archived line keeps that line's kind.** Archive Producer markup. Summary
+     Estimate: Fee 3,000.00, Cost 2,000.00, total 5,000.00. Actual is unchanged: Fee 600.00, Cost 200.00;
+     Production crew shows "Not on a line (2 entries)" 800.00 and is still Mixed (Fee part Actual
+     600.00). Restore Producer markup (it is still solid FEE).
+KE10. **Negative share.** Add category `Discounts` (Cost) with line `Volume discount`, Total `-1000`.
+     Summary Estimate: Fee 3,500.00 (77.8%), Cost 1,000.00 (22.2%), Project total 4,500.00 (100.0%). By
+     category: Discounts -1,000.00, **-22.2%** (negative, not hidden); Production crew 2,500.00, 55.6%;
+     Creative development 3,000.00, 66.7%.
+KE11. **"-" only on a zero total.** In a second throwaway project with categories and no lines (or all
+     lines at 0): every "% of total" cell, Project total's included, shows `-`. In this project no
+     percentage shows `-` while the total is not 0.
+KE12. **Import with a Kind column.** Save as `budget-kind-sample.csv`:
+
+```csv
+Description,Category,Amount,Kind
+Retouching,Production crew,400,
+Account lead,Production crew,700,FEE
+Usage buyout,Production crew,900,Cost
+Bad kind row,Production crew,100,margin
+```
+
+     Import: the mapping guesses **Kind, per line: fee or cost** = Kind (and does not use it for
+     "Category fee or cost"); a note explains the difference. Review has a **Line kind** column:
+     Retouching "Category"; Account lead solid FEE; Usage buyout solid COST; Bad kind row **excluded**,
+     status "Excluded: Kind "margin" is not fee or cost" (ticking it shows the same reason and blocks
+     Import). Import the three: Budget tab chips Retouching dashed COST, Account lead solid FEE, Usage
+     buyout solid COST.
+KE13. **Budget CSV, per line.** Columns Category, Line, Fee or cost, Kind, Kind source, Qty, Rate,
+     Multiplier, Unit, Estimate, Actual, Estimate % of total, Actual % of total. Concept `fee`, `fee`,
+     `inherited`; Producer markup `cost`, `fee`, `override`; Usage buyout `cost`, `cost`, `override`;
+     Retouching `cost`, `cost`, `inherited`; Volume discount estimate `"'-1000.00"`. Production crew's
+     "(not on a line)" row: Kind `cost`, Actual 200.00. Line rows leave both % cells empty.
+KE14. **Budget CSV, totals and categories (same numbers as the Summary tab).** Fee total 4,200.00,
+     `64.6`, Actual 600.00, `75.0`; Cost total 2,300.00, `35.4`, 200.00, `25.0`; Project total
+     6,500.00, `100.0`, 800.00, `100.0`. After a blank row, one "(category total)" row per category:
+     Production crew `mixed`, 4,500.00, `69.2`, 800.00, `100.0`, followed by "(fee part)" 1,200.00 /
+     600.00 and "(cost part)" 3,300.00 / 200.00; Creative development `fee`, 3,000.00, `46.2`;
+     Discounts `cost`, -1,000.00 (written `"'-1000.00"`), `'-15.4`. Compare each with the Summary tab.
+KE15. **Ledger CSV.** "Fee or cost" is the entry's effective kind: the 600.00 entry on Producer markup
+     reads `fee`; the 200.00 entry reads `cost`.
+KE16. **F1, Rate formatting.** On any rated line type Rate `1250.50` and press Enter: the cell reads
+     **1,250.50**; hover the Total: the formula shows 1,250.50. Import review (any file with a Rate of
+     `1250.50` and no Qty; cancel after review): the formula under the amount reads "1 x 1,250.50".
+     Typing `1,250.50` into a Rate cell is accepted.
+KE17. **F2, column order and Tab.** Line rows and the new-line row both read Line, Qty, Unit, Rate, x,
+     Total, Kind. In the new-line row, Tab from the name goes Qty, Unit, Rate, x, Total (when no rate),
+     then Add.
+KE18. **F3, margin cards.** Covered by KE7 and MG4: an undefined ratio in a card reads "markup on cost:
+     n/a" or "share of total: n/a"; the tables keep `-`.
+KE19. **Vendor and anon.** As the vendor, `/api/agency/budget/projects/<id>/lines` answers 402 (or
+     403/404), never lines or kinds. The database side is 117 pre-apply KV1-KV3 and KA1-KA3.
+KE20. **Rollback (do not run in the test).** `117_budget_line_kind_down.sql` refuses while any override
+     exists; forced, it deletes every override and every line follows its category again.
 
 ## Cleanup
 
