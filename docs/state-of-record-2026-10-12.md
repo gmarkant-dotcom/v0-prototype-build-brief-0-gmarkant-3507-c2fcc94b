@@ -1,5 +1,17 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (feat/rfp-record-a2): F1 closed in 118, PENDING APPLY.** F1 (found 2026-10-14):
+> the 099 vendor UPDATE policy on `partner_rfp_inbox` let a vendor rewrite every column of its own row
+> except `vendor_org_id` and `status` (lead_org_id, master_rfp_json and its rubric, estimated_budget,
+> project_id, scope_item_id, ...). The owner found **no sign of exploitation across the 97 inbox rows**.
+> Owner rulings O1 (vendor allow-list: status, updated_at, viewed_at, partner_intent, intent_set_at,
+> agency_nda_notified_at; deny by default) and O2 (claim only an unclaimed row, for the caller's own
+> organization, with claimed_at) are now rule (4) of 118's inbox guard; this also closes the
+> 099:783-790 re-claim gap. **F1 stays OPEN in production until 118 is applied.** 118 is still NOT
+> applied; `COMMIT;` is now line 924; the pre-apply test now has **97 assertions** (INCONCLUSIVE by
+> design: U1, U2, X1, X2, and C3 when no two-organization user exists). Next free migration number:
+> still 118 until it is applied; next to author: 119. Report: `docs/rfp-record-a-report.md` section 8g.
+
 > **UPDATED 2026-10-14 (feat/rfp-record-a).** **117 is applied and catalog-verified 2026-10-14**
 > (unchanged from the banner below). **R-D3 re-tag APPLIED 2026-10-14** (owner): the data-fix that
 > ran is **v2, pinned to project category `e57719fe` and template category `42a8ab0a`**, after **v1
@@ -60,7 +72,7 @@ Branch facts were checked in the repository on 2026-10-12. Anything not listed h
 | **115** | **Applied and verified 2026-10-12.** Pre-apply test 16/16 PASS. `115_discoverable_profiles.sql`. |
 | **116** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 40/40 PASS. `116_budget_line_math.sql`: 4 nullable columns; trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW; SECURITY INVOKER; search_path pinned; anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4 policies. |
 | **117** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 29/29 PASS. `117_budget_line_kind.sql`: nullable text `budget_lines.fee_or_cost` (NULL inherits the category); CHECK NULL/fee/cost; 0 lines given a kind; 155 policies; `budget_lines` 4 policies; 116 trigger intact. |
-| **118** | **Authored 2026-10-14 on `feat/rfp-record-a`, NOT applied, pre-apply test NOT run.** `118_rfp_records.sql`: `rfp_records`, `rfp_record_lines` (paid-lead-agency RLS, 6 policies, no DELETE), `current_user_entitled_lead_org_ids()`, D5 snapshot and line guards, five nullable link columns on `partner_rfp_inbox` / `rfp_magic_tokens` with the link-column guard. COMMIT at line 845. Expected after apply: 161 public policies. |
+| **118** | **Authored 2026-10-14 on `feat/rfp-record-a`, NOT applied, pre-apply test NOT run.** `118_rfp_records.sql`: `rfp_records`, `rfp_record_lines` (paid-lead-agency RLS, 6 policies, no DELETE), `current_user_entitled_lead_org_ids()`, D5 snapshot and line guards, five nullable link columns on `partner_rfp_inbox` / `rfp_magic_tokens` with the link-column guard; the inbox guard also carries the vendor allow-list (rulings O1/O2, closes F1, `feat/rfp-record-a2`). COMMIT at line 924 (was 845). Pre-apply test 97 assertions (was 82). Expected after apply: 161 public policies. |
 | 073 | **Never applied. Must never be applied.** Superseded by 111/112. |
 | 101 | **Never applied. Must never be applied.** Superseded by 102. |
 

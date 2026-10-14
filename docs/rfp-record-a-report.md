@@ -291,6 +291,9 @@ above are recorded for the owner to overrule.
 
 ## 8. Addendum 2026-10-14 (branch `feat/rfp-record-a2`): closing F1 in 118 - STOPPED AT STEP 0
 
+**SUPERSEDED BY 8g (same day): the owner ruled O1 and O2 and 118 now closes F1, pending apply. The
+text below records the first run as it stopped.**
+
 **Result: STOP CONDITION HIT. Migration 118 and its down file and pre-apply test are UNCHANGED. F1 is
 still OPEN.** 118 is still unapplied, `COMMIT;` is still on line 845, the expected assertion count is
 still 82, and no `-- >>> 118 BODY START` / `-- <<< 118 BODY END` markers were added. This section is
@@ -406,3 +409,117 @@ Also for the owner: whether `partner_intent` (V2) and `agency_nda_notified_at` (
 No change to 118, its down file or its test; no markers; no assertion count or COMMIT line change;
 `docs/rfp-record-test-script.md`, the state of record and `LIGAMENT_CONTEXT.md` were not updated
 because they would describe F1 as closed, and it is not. No application code changed.
+
+### 8g. Addendum 2, 2026-10-14: owner rulings O1 and O2; F1 CLOSED IN 118, PENDING APPLY
+
+**Result: 118 now closes F1 and the 099:783-790 re-claim gap. 118 is still NOT applied; F1 stays open
+in production until it is.** F1 was found 2026-10-14; the owner found no sign of exploitation across
+the 97 inbox rows.
+
+**Owner rulings 2026-10-14 (authoritative):**
+
+- **O1 Vendor UPDATE allow-list** on `partner_rfp_inbox`: `status`, `updated_at`, `viewed_at`,
+  `partner_intent`, `intent_set_at`, `agency_nda_notified_at`. Everything else is refused for a vendor
+  (deny by default), plus the conditional claim in O2.
+- **O2 Conditional claim** (option 1 of 8e): a vendor may change `vendor_org_id` and `claimed_at` ONLY
+  when `OLD.vendor_org_id IS NULL`, `NEW.vendor_org_id` is one of the caller's organizations (099
+  clause B's test, `current_user_org_ids()`), and `claimed_at` is set in the same update. Once a row has
+  a `vendor_org_id`, a vendor can never change `vendor_org_id` or `claimed_at` again.
+
+**Re-verification (before any change): the stop condition was NOT hit.** The 8a inventory is complete
+for vendor sessions: V1 to V5 are still the only vendor-session writes to `partner_rfp_inbox`, none is an
+INSERT, and every column they write is in O1 or O2. Searched: every `.from("partner_rfp_inbox")` /
+`.from('partner_rfp_inbox')` in `app/`, `lib/`, `components/` (writes: the five V rows, the agency
+routes, the service-role helpers in 8b), every SQL `UPDATE` / `INSERT INTO` / `DELETE FROM
+partner_rfp_inbox` in `supabase/migrations/` and `scripts/` (only test files and comments), and RPC
+calls from vendor routes (none touches the inbox). Two corrections to 8a, neither a vendor write:
+
+1. `nda_confirmed_at` has a second writer 8a missed: `app/api/partnerships/route.ts:940-945`
+   (PATCH `confirm_nda`) updates `nda_confirmed_at, updated_at` on the session client. It is
+   agency-only (`:916` refuses unless the caller is a member of the partnership's lead organization), and
+   the rows it can reach pass RLS through 099's agency UPDATE policy (`lead_org_id IN
+   current_user_org_ids()`), so the caller is a member of the row's lead organization and rule (4)
+   does not apply. The one way it could reach rule (4): a caller who is also the vendor on a row whose
+   `lead_org_id` differs from the partnership's lead organization. Then the update is refused, which is
+   the safe direction (it would be a vendor confirming its own NDA).
+2. **Foreign-key actions.** `partner_rfp_inbox.project_id REFERENCES projects ON DELETE SET NULL`
+   (`scripts/013-partner-rfp-inbox.sql:10`). A project delete runs on the session of a member of the
+   project's organization (079 policy `projects` FOR DELETE, `079_organizations.sql:1654`). If an inbox
+   row points at a project of ANOTHER organization than its own `lead_org_id`, the SET NULL runs under
+   a session rule (4) treats as a vendor, `project_id` is not on the list, and the project delete fails
+   with 42501. The broadcast route refuses another organization's project since step A, and the
+   magic-link path inherits 114's project check, so no current path creates such a row; older rows
+   could. `partnership_id ... ON DELETE SET NULL` is not reachable (no DELETE policy on partnerships for
+   authenticated; the service role is trusted). The pre-apply test prints the count of such rows on an
+   INFO line (expected 0). If it is not 0, the owner decides before applying; nothing is exempted.
+   The INFO line also counts unclaimed invitation rows that already carry a `vendor_org_id`: O2 admits
+   no vendor claim on them (expected 0: the broadcast route sets `vendor_org_id` and `claimed_at`
+   together from the same `existingProfileOrgId`, `broadcast-rfp/route.ts:436-443`).
+
+**The guard.** Rule (4) of `partner_rfp_inbox_link_columns_guard()` (the existing inbox guard,
+extended; plpgsql, SECURITY INVOKER, `search_path` pinned, EXECUTE revoked from PUBLIC, anon,
+authenticated; no new function or trigger):
+
+- `supabase/migrations/118_rfp_records.sql:754-758` the allow-list (`v_vendor_ok`).
+- `:792-819` the rule. It applies on UPDATE when the caller is not on the trusted path (`auth.uid() IS
+  NULL AND current_user NOT IN ('anon', 'authenticated')`, the same test as rule (1)) and is not a
+  member of the row's lead organization BEFORE and AFTER the write (`current_user_org_ids()`, the same
+  test as rule (1)).
+- `:799-804` the O2 claim conditions, all four: `OLD.vendor_org_id IS NULL`; `NEW.vendor_org_id IN
+  current_user_org_ids()`; `NEW.claimed_at IS NOT NULL`; `NEW.claimed_at IS DISTINCT FROM
+  OLD.claimed_at`. Only then are `vendor_org_id` and `claimed_at` added to the list.
+- `:806-818` compares `to_jsonb(OLD)` and `to_jsonb(NEW)` minus the list; the first differing column
+  (alphabetical) raises 42501 "A vendor cannot change partner_rfp_inbox.<column>." Columns added later
+  are refused for vendors automatically.
+- The 099 policy text is not touched; its status rule (clause C) and 118's link-column rules still
+  apply. Header section "THE VENDOR ALLOW-LIST" at `:124-159`.
+- Down file: no new object, so nothing new to drop; its header now says the rollback drops the
+  allow-list with the guard and reopens F1.
+
+**Migration 118 now:** `BEGIN;` line 320, `-- >>> 118 BODY START` line 321, `-- <<< 118 BODY END` line
+923, **`COMMIT;` line 924** (was 845). In `118_preapply_test.sql` the inlined copy carries the same
+markers at lines 865 and 1467; the two marked blocks are byte-identical (603 lines each; checked with
+`git diff --no-index`, no hunk falls between the markers).
+
+**Pre-apply test now: 87 scenarios + 9 self-checks + M = 97 assertions** (was 82). New scenarios:
+
+| Id | Actor | Write | Phase 1 (before 118) | Phase 2 (after) |
+|---|---|---|---|---|
+| A1 | vendor | own row `lead_org_id` | OK:1 | E:42501 |
+| A2 | vendor | `master_rfp_json` replaced | OK:1 | E:42501 |
+| A3 | vendor | `master_rfp_json` `evaluation_criteria` only | OK:1 | E:42501 |
+| A4 | vendor | `estimated_budget` | OK:1 | E:42501 |
+| A5 | vendor | `project_id` | OK:1 | E:42501 |
+| A6 | vendor | `scope_item_id` | OK:1 | E:42501 |
+| P1 | vendor | `viewed_at` (as `[id]/route.ts:71-78`) | OK:1 | OK:1 |
+| P2 | vendor | `agency_nda_notified_at, updated_at` (as nda-notify) | OK:1 | OK:1 |
+| P3 | vendor | `status 'bid_submitted', updated_at` (as response, row set to 'new' first) | OK:1 | OK:1 |
+| C1 | vendor | claim of an unclaimed row to own org with `claimed_at` (as claim/route.ts) | OK:1 | OK:1 |
+| C2 | vendor | claim to an org the vendor is not in | E:42501 | E:42501 |
+| C3 | two-org user | re-claim a claimed row to its other org | OK:1 | E:42501 |
+| C4 | vendor | `claimed_at` alone on its claimed row | OK:1 | E:42501 |
+| C5 | vendor | `vendor_org_id` on an unclaimed row WITHOUT `claimed_at` | OK:1 | E:42501 |
+| Y1 | agency member | `estimated_budget` (not on the vendor list) | OK:1 | OK:1 |
+
+The intent route's write (`partner_intent, intent_set_at`) is the existing K4. NOT DISCRIMINATING by
+design: P1-P3, C1, C2 (099 clause B refuses before, rule (4) after), Y1, and the existing K3, K4.
+**INCONCLUSIVE by design:** U1, U2, X1, X2 as before, and **C3** when no user outside the lead
+organization belongs to two organizations (NO SUBJECT, not FAIL). C1, C2 and C5 need the vendor's
+profile email (the throwaway unclaimed row is addressed to it); without one they are NO SUBJECT and the
+headline reads "DO NOT APPLY 118 YET". All new writes run inside the existing per-scenario
+`BEGIN ... EXCEPTION` (LG097) rollback; no temp tables; the one final RAISE carries the result.
+
+**Assumptions:**
+
+1. "claimed_at is set in the same update" means `NEW.claimed_at` is non-NULL and differs from
+   `OLD.claimed_at`. The claim route always writes `now()` on a row it filtered `claimed_at IS NULL`.
+2. "The first offending column" is the first in alphabetical order.
+3. The membership test is the link-column rule's: member of `lead_org_id` before AND after. An agency
+   member moving a row to an organization they are not in is therefore judged as a vendor (and RLS
+   refuses it anyway).
+4. The rule is UPDATE only. Vendors have no INSERT policy on the table; INSERT is unchanged.
+5. A BEFORE UPDATE trigger on `partner_rfp_inbox` that sorts before `partner_rfp_inbox_link_columns_guard`
+   and changes a column outside the list would make every vendor write fail. No migration in the
+   repository creates one; P3 records the live list and P1 to P3 / C1 in the pre-apply test would show it.
+
+**Not done:** 118 not applied, the test not run (no database here). No application code changed.
