@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { BudgetErrorState, BudgetLoading, FeeCostBadge, QuietEmpty } from "./budget-states"
+import { BudgetErrorState, BudgetLoading, FeeCostBadge, KindChip, MixedBadge, QuietEmpty } from "./budget-states"
 import { useChart, useLedger, useSummary } from "@/lib/budget/hooks"
 import { useRefreshProject } from "@/lib/budget/use-refresh"
 import { BudgetApiError } from "@/lib/budget/client-api"
@@ -9,6 +9,9 @@ import { formatCents, formatPercent } from "@/lib/budget/money"
 import { buildSummaryView } from "@/lib/budget/summary-view"
 
 const th = "px-3 py-2 font-mono text-2xs uppercase tracking-wider text-foreground-muted"
+
+/** A margin card's ratio: "12.5% share of total", or "share of total: n/a" when undefined (F3). */
+const ratio = (p: number | null, label: string) => (p === null ? `${label}: n/a` : `${formatPercent(p)} ${label}`)
 
 export function SummaryTab({ projectId }: { projectId: string }) {
   const chart = useChart(projectId, true)
@@ -48,14 +51,14 @@ export function SummaryTab({ projectId }: { projectId: string }) {
         <Metric
           label="Margin (estimate)"
           value={formatCents(view.margin.estimate.amountCents)}
-          basis={`${formatPercent(view.margin.estimate.shareOfTotalPercent)} share of total · ${formatPercent(view.margin.estimate.markupOnCostPercent)} markup on cost`}
+          basis={`${ratio(view.margin.estimate.shareOfTotalPercent, "share of total")} · ${ratio(view.margin.estimate.markupOnCostPercent, "markup on cost")}`}
         />
         <Metric
           label="Margin (actual)"
           value={hasActual ? formatCents(view.margin.actual.amountCents) : "No ledger yet"}
           basis={
             hasActual
-              ? `${formatPercent(view.margin.actual.shareOfTotalPercent)} share of total · ${formatPercent(view.margin.actual.markupOnCostPercent)} markup on cost`
+              ? `${ratio(view.margin.actual.shareOfTotalPercent, "share of total")} · ${ratio(view.margin.actual.markupOnCostPercent, "markup on cost")}`
               : undefined
           }
         />
@@ -67,28 +70,34 @@ export function SummaryTab({ projectId }: { projectId: string }) {
             <tr className="text-left">
               <th className={th}>Totals</th>
               <th className={`${th} text-right`}>Estimate</th>
+              <th className={`${th} text-right`}>% of total</th>
               <th className={`${th} text-right`}>Actual</th>
+              <th className={`${th} text-right`}>% of total</th>
               <th className={`${th} text-right`}>Variance</th>
             </tr>
           </thead>
           <tbody>
             {(
               [
-                ["Fee total", view.fee],
-                ["Cost total", view.cost],
+                ["Fee total", view.fee, view.percentOfTotal.fee],
+                ["Cost total", view.cost, view.percentOfTotal.cost],
               ] as const
-            ).map(([label, t]) => (
+            ).map(([label, t, pct]) => (
               <tr key={label} className="border-t border-border">
                 <td className="px-3 py-2 text-foreground">{label}</td>
                 <td className="px-3 py-2 text-right font-mono text-foreground">{formatCents(t.estimateCents)}</td>
+                <td className="px-3 py-2 text-right font-mono text-foreground-muted">{formatPercent(pct.estimate)}</td>
                 <td className="px-3 py-2 text-right font-mono text-foreground">{actual(t.actualCents)}</td>
+                <td className="px-3 py-2 text-right font-mono text-foreground-muted">{hasActual ? formatPercent(pct.actual) : "-"}</td>
                 <td className="px-3 py-2 text-right font-mono text-foreground-muted">{hasActual ? formatCents(t.estimateCents - t.actualCents) : "-"}</td>
               </tr>
             ))}
             <tr className="border-t border-border font-bold">
               <td className="px-3 py-2 text-foreground">Project total</td>
               <td className="px-3 py-2 text-right font-mono text-foreground">{formatCents(view.totals.estimateCents)}</td>
+              <td className="px-3 py-2 text-right font-mono text-foreground">{formatPercent(view.percentOfTotal.total.estimate)}</td>
               <td className="px-3 py-2 text-right font-mono text-foreground">{actual(view.totals.actualCents)}</td>
+              <td className="px-3 py-2 text-right font-mono text-foreground">{hasActual ? formatPercent(view.percentOfTotal.total.actual) : "-"}</td>
               <td className="px-3 py-2 text-right font-mono text-foreground">{hasActual ? formatCents(view.totals.estimateCents - view.totals.actualCents) : "-"}</td>
             </tr>
             {(
@@ -100,15 +109,19 @@ export function SummaryTab({ projectId }: { projectId: string }) {
               <tr key={label} className="border-t border-border">
                 <td className="px-3 py-2 text-foreground">{label}</td>
                 <td className="px-3 py-2 text-right font-mono text-foreground">{formatPercent(estimate)}</td>
+                <td />
                 <td className="px-3 py-2 text-right font-mono text-foreground">{hasActual ? formatPercent(actualPercent) : "-"}</td>
+                <td />
                 <td />
               </tr>
             ))}
           </tbody>
         </table>
         <p className="px-3 py-2 border-t border-border text-xs text-foreground-muted">
-          Margin is the fee total. Margin (share of total) is fee divided by fee plus cost; markup on cost is fee divided by cost. Each shows
-          &quot;-&quot; when what it divides by is 0. Variance is estimate minus actual. Voided ledger entries are excluded.
+          Fee and cost are summed by each line&apos;s own kind: the line&apos;s setting if it has one, otherwise its category&apos;s. % of total is
+          the share of the project total, and is negative for a net discount. Margin is the fee total. Margin (share of total) is fee divided by
+          fee plus cost; markup on cost is fee divided by cost. Each shows &quot;-&quot; when what it divides by is 0. Variance is estimate minus
+          actual. Voided ledger entries are excluded.
         </p>
       </section>
 
@@ -121,21 +134,23 @@ export function SummaryTab({ projectId }: { projectId: string }) {
                 <th className={th}>Category / line</th>
                 <th className={th}>Fee or cost</th>
                 <th className={`${th} text-right`}>Estimate</th>
+                <th className={`${th} text-right`}>% of total</th>
                 <th className={`${th} text-right`}>Actual</th>
+                <th className={`${th} text-right`}>% of total</th>
                 <th className={`${th} text-right`}>Variance</th>
               </tr>
             </thead>
             <tbody>
               {view.categories.map((c) => (
-                <CategoryRows key={c.categoryId} c={c} hasActual={hasActual} />
+                <CategoryRows key={c.categoryId} c={c} hasActual={hasActual} lineKind={view.lineKind} />
               ))}
               {view.unplacedActualCents !== 0 ? (
                 <tr className="border-t border-border">
-                  <td className="px-3 py-2 text-foreground-muted" colSpan={3}>
+                  <td className="px-3 py-2 text-foreground-muted" colSpan={4}>
                     Entries in a category not shown
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-foreground">{actual(view.unplacedActualCents)}</td>
-                  <td />
+                  <td colSpan={2} />
                 </tr>
               ) : null}
             </tbody>
@@ -146,7 +161,15 @@ export function SummaryTab({ projectId }: { projectId: string }) {
   )
 }
 
-function CategoryRows({ c, hasActual }: { c: ReturnType<typeof buildSummaryView>["categories"][number]; hasActual: boolean }) {
+function CategoryRows({
+  c,
+  hasActual,
+  lineKind,
+}: {
+  c: ReturnType<typeof buildSummaryView>["categories"][number]
+  hasActual: boolean
+  lineKind: boolean
+}) {
   const money = (cents: number) => (hasActual ? formatCents(cents) : "-")
   return (
     <>
@@ -155,21 +178,42 @@ function CategoryRows({ c, hasActual }: { c: ReturnType<typeof buildSummaryView>
           {c.name}
           {c.archived ? <span className="ml-2 font-mono text-2xs uppercase tracking-wider text-foreground-muted">Archived</span> : null}
         </td>
-        <td className="px-3 py-2">
-          <FeeCostBadge value={c.feeOrCost} />
-        </td>
+        <td className="px-3 py-2">{c.mixed ? <MixedBadge /> : <FeeCostBadge value={c.feeOrCost} />}</td>
         <td className="px-3 py-2 text-right font-mono font-bold text-foreground">{formatCents(c.estimateCents)}</td>
+        <td className="px-3 py-2 text-right font-mono text-foreground-muted">{formatPercent(c.percentOfTotal.estimate)}</td>
         <td className="px-3 py-2 text-right font-mono font-bold text-foreground">{money(c.actualCents)}</td>
+        <td className="px-3 py-2 text-right font-mono text-foreground-muted">{hasActual ? formatPercent(c.percentOfTotal.actual) : "-"}</td>
         <td className={`px-3 py-2 text-right font-mono font-bold ${hasActual && c.estimateCents - c.actualCents < 0 ? "text-destructive" : "text-foreground"}`}>
           {hasActual ? formatCents(c.estimateCents - c.actualCents) : "-"}
         </td>
       </tr>
+      {c.mixed
+        ? (
+            [
+              ["fee", "Fee part", c.fee],
+              ["cost", "Cost part", c.cost],
+            ] as const
+          ).map(([kind, label, a]) => (
+            <tr key={kind} className="border-t border-border/50">
+              <td className="px-3 py-1.5 pl-8 text-foreground">{label}</td>
+              <td className="px-3 py-1.5">
+                <FeeCostBadge value={kind} />
+              </td>
+              <td className="px-3 py-1.5 text-right font-mono text-foreground">{formatCents(a.estimateCents)}</td>
+              <td />
+              <td className="px-3 py-1.5 text-right font-mono text-foreground">{money(a.actualCents)}</td>
+              <td colSpan={2} />
+            </tr>
+          ))
+        : null}
       {c.lines.map((l) => (
         <tr key={l.lineId} className="border-t border-border/50">
           <td className="px-3 py-1.5 pl-8 text-foreground-muted">{l.name}</td>
-          <td />
+          <td className="px-3 py-1.5">{lineKind ? <KindChip kind={l.kind} source={l.kindSource} /> : null}</td>
           <td className="px-3 py-1.5 text-right font-mono text-foreground-muted">{formatCents(l.estimateCents)}</td>
+          <td />
           <td className="px-3 py-1.5 text-right font-mono text-foreground-muted">{money(l.actualCents)}</td>
+          <td />
           <td className={`px-3 py-1.5 text-right font-mono ${hasActual && l.varianceCents < 0 ? "text-destructive" : "text-foreground-muted"}`}>
             {hasActual ? formatCents(l.varianceCents) : "-"}
           </td>
@@ -177,11 +221,11 @@ function CategoryRows({ c, hasActual }: { c: ReturnType<typeof buildSummaryView>
       ))}
       {c.offLineCount > 0 ? (
         <tr className="border-t border-border/50">
-          <td className="px-3 py-1.5 pl-8 text-foreground-muted italic" colSpan={3}>
+          <td className="px-3 py-1.5 pl-8 text-foreground-muted italic" colSpan={4}>
             Not on a line ({c.offLineCount} {c.offLineCount === 1 ? "entry" : "entries"})
           </td>
           <td className="px-3 py-1.5 text-right font-mono text-foreground-muted">{money(c.offLineActualCents)}</td>
-          <td />
+          <td colSpan={2} />
         </tr>
       ) : null}
     </>
