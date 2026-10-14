@@ -199,3 +199,71 @@ recorded the ruling "move under 00 Budgeting when 00 becomes navigable".
   (CSV columns and margin rows), and a new **Part D**: LM0 to LM13 (line math before and after 116,
   keyboard, refusals, clearing the rate, R1, import with math, export, vendor), MG1 to MG5 (margin both
   ways, "-" on a zero denominator, CSV parity), NV1 to NV4 (nav).
+
+---
+
+## Security review list
+
+| Where | What to check |
+|---|---|
+| `supabase/migrations/116_budget_line_math.sql:240-263` | Trigger function: SECURITY INVOKER, `search_path = public, pg_temp`, reads nothing, writes only NEW; 22003 above 1e12. |
+| `supabase/migrations/116_budget_line_math.sql:270-277` | Trigger BEFORE INSERT OR UPDATE; EXECUTE revoked from PUBLIC, anon, authenticated. |
+| `supabase/migrations/116_budget_line_math.sql:196-228` | Four nullable columns and three CHECKs. No policy, no GRANT/REVOKE on any table. |
+| `supabase/migrations/116_budget_line_math_down.sql:33-50` | Down refuses while math exists unless explicitly overridden. |
+| `lib/server/budget/lines.ts:56` | `isLineMathMissing`: only 42703 / PGRST204 that name a 116 column are treated as "columns absent"; anything else still goes to `fromDbError`. |
+| `lib/server/budget/lines.ts:64` | `lineDbFail`: 22003 and the three CHECK names mapped to fixed messages (no raw database text for those). |
+| `lib/server/budget/lines.ts:112` | zod `LineMathInput` over the shared parsers; unknown keys stripped; type mismatch gives a fixed message. |
+| `lib/server/budget/lines.ts:209`, `:241` | create / update: name, category and estimate checks unchanged; the session client (RLS) does every write; no service role; explicit column lists. |
+| `lib/server/budget/lines.ts:276-282` | Before-116 fallback: drops the four columns, recomputes the estimate from the sent rate, refuses an update that carries only math (`LINE_MATH_DISABLED`). |
+| `lib/budget/line-math.ts:42`, `:61`, `:78`, `:88` | Shared parsers: no floats for money, 3-decimal and 2-decimal limits, unit label trimmed, 1 to 24 code points, no control characters (`:69`); BigInt product. |
+| `app/api/agency/budget/projects/[projectId]/lines/route.ts:17`, `:32` | GET and POST still behind `budgetRouteProject` (auth, paid gate, org, project). GET adds only `lineMath`. |
+| `app/api/agency/budget/projects/[projectId]/lines/[lineId]/route.ts:16` | PATCH still behind `budgetRouteProject`; passes the four fields to the validator. |
+| `lib/budget/export.ts:41`, `:80` | New CSV cells (Qty, Rate, Multiplier, Unit, the two percentages) all go through `toCsv` (quote + formula neutralisation); unit label is user text. |
+| `components/budgeting/budget-tab.tsx:927`, `components/budgeting/import-sheet.tsx:456` | Unit label rendered as React text (escaped), never as HTML. |
+| `components/agency-layout.tsx:282-298` | Nav sub-link: static href `/agency/brief`, no new route. |
+
+Vendor reach: unchanged by construction (no policy added; 116's test V1 to V6 and A1, A2 assert it).
+
+## REFUSED (by the permission layer)
+
+- `cat` of the memory files and of `eslint.config.mjs` (used the Read tool instead).
+- `pnpm exec tsc --noEmit 2>&1 | tail; echo "exit=${PIPESTATUS[0]}"` and `...; echo "exit=$?"` (ran
+  `pnpm exec tsc --noEmit` alone; it completed with no output).
+- `sed -n ... > /tmp/...` and a chained `sed` + `diff` + `shasum`, then a read-only `awk` line
+  comparison: the machine diff of the inlined 116 DDL. Compared by reading instead.
+- `pnpm exec eslint <files>` (single and multiple files). Used `pnpm lint --format json --output-file`
+  plus `jq`.
+- A `cat >> report <<EOF` append (used the Edit tool).
+- `git diff --stat; git log; git status; git branch` chained (ran `git log` and `git status` singly).
+
+## ASSUMPTIONS
+
+1. Body field names are camelCase (`quantity`, `unitRate`, `multiplier`, `unitLabel`), matching
+   `categoryId`; the line object returned keeps the column names (`unit_rate`, `unit_label`).
+2. A rate of 0 is allowed (the ruling only constrains quantity and multiplier); it makes a computed
+   line at 0, which R1 lets you delete (test C23).
+3. Before 116, a request carrying a rate still sets the estimate (computed server-side, stored typed);
+   the breakdown is dropped. An update carrying only math is refused with `LINE_MATH_DISABLED`
+   rather than silently doing nothing.
+4. Server-side, an empty unit label string is refused (send null to clear); the UI turns an empty
+   cell into null. Length is counted in code points, as Postgres `char_length` does.
+5. Rounding is half away from zero, matching Postgres `round(numeric, 2)`.
+6. Import: quantity, multiplier and unit apply only to rows with a rate; a row without a rate imports
+   its amount and ignores those cells. When both a rate and an amount are present the computed total
+   wins and the review says so.
+7. The budget CSV's percentage cells show "-" for a zero denominator, and the existing neutraliser
+   writes that as `'-` (the formula-injection rule was kept rather than special-cased).
+8. Nav: "under 00 Budgeting" is an always-visible sub-link beneath the 00 item in both of its states,
+   so the feature stays reachable if the spine probe fails; Creative Treatment Analysis left the RFP
+   Broadcast dropdown. An active state was added to the sub-link.
+9. Renumbering: the RFP record (written first) moves 116-118 -> 117-119; the budget B-migrations keep
+   their labels and take numbers from 120, or from 117 if the owner orders budget work first.
+   `docs/budget-actuals-feeder-plan.md` still says "116" and is covered by the plan's note (not edited:
+   not in the brief's list).
+10. 116's pre-apply test applies 116 only (103 and 104 are live) and uses 104's subject selection with a
+    fallback to any org with a member and a project.
+
+## STOPPED ON
+
+Nothing. Not done, by rule: no database run (the pre-apply test, dry run and apply are the owner's), no
+push, no merge, no browser run of the UI.
