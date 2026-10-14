@@ -1,5 +1,18 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (feat/budget-kind-defaults).** **117 is applied and catalog-verified
+> 2026-10-14**: pre-apply test 29/29 PASS; `budget_lines.fee_or_cost` is a nullable text column; CHECK
+> allows NULL, 'fee', 'cost'; 0 lines were given a kind; 155 public policies; `budget_lines` has its 4
+> policies; 116's trigger is intact. The owner's first run of the pre-apply test failed with 42725
+> (`text || "char"` on `pg_trigger.tgenabled`); the repository copy now casts it to text (F4). **No
+> migration in this run. Next free number: still 118**; the RFP record claims 118 to 120.
+> **Owner rulings 2026-10-14:** R-K1 line-level kind (NULL inherits), R-K2 aggregate percentages only,
+> R-K3 category % of total, R-K4 an override equal to the category's kind is stored as NULL (server
+> enforced), R-D1 cost is the default for every new category, R-D2 starter re-tag (10 fee to cost,
+> `brand_design` keeps fee), R-D3 re-tag the test project `e533075f-...` and its organization's
+> template (data-fix scripts in `supabase/data-fixes/`, NOT run). Report:
+> `docs/budget-kind-defaults-report.md`.
+
 > **UPDATED 2026-10-14 (feat/budget-line-kind).** **116 is applied and catalog-verified
 > 2026-10-14**: pre-apply test 40/40 PASS (after the subject-selection fix in `4d3fa5a`: the vendor
 > is found through `partnerships.vendor_org_id`; `partner_id` was renamed in 079). Catalog after
@@ -33,11 +46,11 @@ Branch facts were checked in the repository on 2026-10-12. Anything not listed h
 | **104** | **Applied and verified 2026-10-12.** Pre-apply test 91 PASS, 13 INCONCLUSIVE (all NO SUBJECT), 4 FAIL accepted by the owner as test-expectation errors (W1, PE3, AA1, AA3; see `docs/roadmap-state.md`). The migration is unchanged. |
 | **115** | **Applied and verified 2026-10-12.** Pre-apply test 16/16 PASS. `115_discoverable_profiles.sql`. |
 | **116** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 40/40 PASS. `116_budget_line_math.sql`: 4 nullable columns; trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW; SECURITY INVOKER; search_path pinned; anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4 policies. |
-| **117** | **Authored 2026-10-14, NOT applied.** `117_budget_line_kind.sql`, on `feat/budget-line-kind`: nullable `budget_lines.fee_or_cost` (NULL inherits the category). Pre-apply test expects 29 assertions. |
+| **117** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 29/29 PASS. `117_budget_line_kind.sql`: nullable text `budget_lines.fee_or_cost` (NULL inherits the category); CHECK NULL/fee/cost; 0 lines given a kind; 155 policies; `budget_lines` 4 policies; 116 trigger intact. |
 | 073 | **Never applied. Must never be applied.** Superseded by 111/112. |
 | 101 | **Never applied. Must never be applied.** Superseded by 102. |
 
-**Next free migration number: 118** (2026-10-14: 116 is applied; 117 is taken by `117_budget_line_kind.sql`).
+**Next free migration number: 118** (2026-10-14: 116 and 117 are applied).
 
 **Default privileges (finding, 2026-10-12).** `postgres`'s default privileges in `public` no longer
 grant TRUNCATE, REFERENCES or TRIGGER to anon or authenticated. `supabase_admin`'s still do, but they do
@@ -78,7 +91,7 @@ feat/budget-spine-server` = `020432a`, no conflicts), report `docs/budget-spine-
   for cherry-picking onto `fix/guest-profiles-records`).
 
 **Applied and verified 2026-10-12 (corrected):** 115, 103, 104. **Applied and verified 2026-10-14:**
-116. **Not yet applied:** 117.
+116, 117.
 
 ## Closed since 2026-10-09
 
