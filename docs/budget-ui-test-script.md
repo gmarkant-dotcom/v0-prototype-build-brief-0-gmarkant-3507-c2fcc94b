@@ -313,8 +313,8 @@ lines) and R-K3 (each category's share of the project total).
 **Use a fresh throwaway project** so the numbers below are exact: `Budget test - line kind` (client
 `Example Client`). Percentages are one decimal.
 
-KE0. **Setup.** Budget tab, empty chart: add category `Creative development` (Fee) and `Production
-     crew` (Cost). Lines: Creative development `Concept`, no rate, Total `3000`. Production crew
+KE0. **Setup.** Budget tab, empty chart: add category `Creative development` (choose **Fee**
+     deliberately; the select starts at Cost under R-D1) and `Production crew` (leave Cost). Lines: Creative development `Concept`, no rate, Total `3000`. Production crew
      `Crew day`, Qty `2`, Rate `1000` (Total 2,000.00); `Producer markup`, no rate, Total `500`.
 
 ### Before 117 is applied (code deployed, column missing)
@@ -336,8 +336,8 @@ KB5. (Optional, DevTools console) `fetch(location.origin + "/api/agency/budget/p
 KE1. **The chip.** Reload. A **Kind** head follows Total. Each line shows its effective kind as a small
      chip, **dashed outline, no fill** (inherited): Concept FEE (lime), Crew day and Producer markup
      COST. The new-line row shows a dashed chip of its category's kind. The hint ends "Each line follows
-     its category's fee or cost (dashed chip); click the chip to set the line to the other kind (solid
-     chip)."
+     its category's fee or cost (dashed chip). Click a dashed chip to set the line to the other kind
+     (solid chip); click a solid chip to follow the category again." (R-K4 wording.)
 KE2. **Override.** Click Producer markup's chip: it turns **solid FEE**, and a small reset icon appears
      beside it (hover: "Reset to category (cost)"). The Production crew header total stays **2,500.00**
      (the sum of all its lines, whatever their kind).
@@ -347,21 +347,23 @@ KE3. **Summary by effective kind.** Fee total 3,500.00, **63.6%**; Cost total 2,
      category: Production crew shows **MIXED**, 2,500.00, 45.5%, then rows **Fee part** 500.00 and
      **Cost part** 2,000.00, then its lines: Crew day dashed COST, Producer markup solid FEE. Creative
      development: FEE, 3,000.00, 54.5%, Concept dashed FEE.
-KE4. **Toggle again.** Click Producer markup's solid FEE chip: **solid COST** (an override that happens
-     to equal the category; the reset icon stays). Summary: Fee 3,000.00 (54.5%), Cost 2,500.00 (45.5%);
-     Production crew is COST, not Mixed; Producer markup's chip is solid COST.
-KE5. **Reset to category.** Click the reset icon: the chip is **dashed COST** and the icon is gone.
-     Budget CSV: Producer markup Kind source `inherited`.
+KE4. **Toggle again (R-K4).** Click Producer markup's solid FEE chip: it returns to **dashed COST**
+     (inherit; an override can never equal its category) and the reset icon is gone. Summary: Fee
+     3,000.00 (54.5%), Cost 2,500.00 (45.5%); Production crew is COST, not Mixed.
+KE5. **Reset to category.** Click the chip again (solid FEE), then click the reset icon: the chip is
+     **dashed COST** and the icon is gone. Budget CSV: Producer markup Kind source `inherited`.
 KE6. **A kind change never moves a number.** Click Crew day's chip (it has a rate): solid FEE. Its
      Qty 2, Rate 1,000.00 and Total 2,000.00 are unchanged (116's trigger recomputes the same
      estimate; 117 pre-apply K10/K11). Reset it.
 KE7. **Category flip.** Set Producer markup to FEE again (solid). On Production crew click the switch
      icon ("Mark as fee") and confirm. Crew day's chip is now **dashed FEE** (an inherited line moves
-     with its category); Producer markup stays **solid FEE** (an override is kept). Summary: Fee
-     5,500.00 (100.0%), Cost 0.00 (0.0%); the Margin (estimate) card reads "100.0% share of total ·
+     with its category); Producer markup is also **dashed FEE**: R-K4 cleared its FEE override because
+     it now equals the category (the switch is a merge, and the server sweeps the survivor). Summary:
+     Fee 5,500.00 (100.0%), Cost 0.00 (0.0%); the Margin (estimate) card reads "100.0% share of total ·
      markup on cost: n/a" (F3) and the table's Markup on cost shows `-`. Switch Production crew back
-     to cost: Crew day dashed COST, Producer markup solid FEE, Production crew Mixed, Fee 3,500.00 and
-     Cost 2,000.00 again.
+     to cost: Crew day **and Producer markup** dashed COST (the override did not survive the round
+     trip, by design), Production crew COST, not Mixed. Click Producer markup's chip: solid FEE;
+     Production crew Mixed, Fee 3,500.00 and Cost 2,000.00 again.
 KE8. **Actual by effective kind.** Ledger tab: add a manual entry 600.00, payee `Example Talent Co`,
      category Production crew, line **Producer markup**; and one of 200.00, payee `Example Rentals Co`,
      category Production crew, no line. Summary: Actual Fee 600.00 (**75.0%**), Cost 200.00
@@ -394,10 +396,12 @@ Bad kind row,Production crew,100,margin
      Retouching "Category"; Account lead solid FEE; Usage buyout solid COST; Bad kind row **excluded**,
      status "Excluded: Kind "margin" is not fee or cost" (ticking it shows the same reason and blocks
      Import). Import the three: Budget tab chips Retouching dashed COST, Account lead solid FEE, Usage
-     buyout solid COST.
+     buyout **dashed COST** (R-K4: the server stores a Kind equal to the category as inherit; the
+     review still shows the file's value).
 KE13. **Budget CSV, per line.** Columns Category, Line, Fee or cost, Kind, Kind source, Qty, Rate,
      Multiplier, Unit, Estimate, Actual, Estimate % of total, Actual % of total. Concept `fee`, `fee`,
-     `inherited`; Producer markup `cost`, `fee`, `override`; Usage buyout `cost`, `cost`, `override`;
+     `inherited`; Producer markup `cost`, `fee`, `override`; Usage buyout `cost`, `cost`, `inherited`
+     (R-K4);
      Retouching `cost`, `cost`, `inherited`; Volume discount estimate `"'-1000.00"`. Production crew's
      "(not on a line)" row: Kind `cost`, Actual 200.00. Line rows leave both % cells empty.
 KE14. **Budget CSV, totals and categories (same numbers as the Summary tab).** Fee total 4,200.00,
@@ -421,6 +425,124 @@ KE19. **Vendor and anon.** As the vendor, `/api/agency/budget/projects/<id>/line
      403/404), never lines or kinds. The database side is 117 pre-apply KV1-KV3 and KA1-KA3.
 KE20. **Rollback (do not run in the test).** `117_budget_line_kind_down.sql` refuses while any override
      exists; forced, it deletes every override and every line follows its category again.
+
+### Kind defaults, R-K4, R-D3, F5 (feat/budget-kind-defaults)
+
+Owner rulings 2026-10-14: **R-D1** cost is the default for every new category; **R-D2** starter
+re-tag; **R-K4** an override equal to the category's kind is stored as NULL (inherit), on the server;
+**R-D3** re-tag the owner's test project and its organization's template. Use the KE project unless
+stated.
+
+**R-D1, one entry point at a time (a new category starts as cost):**
+
+KD1. **Template editor** (`/agency/budgeting/templates`, Add a category): the Fee or cost select shows
+     **Cost (third-party spend)** before anything is touched, and there is no empty "Fee or cost?"
+     choice. Type `KD template cost`, press Add category: it is listed as Cost. Add `KD template fee`
+     after choosing Fee: Fee. After each add the select is back at Cost. Delete both.
+KD2. **Project chart** (Budget tab, Add a category): the select starts at **Cost**; adding
+     `KD chart cost` without touching it gives a COST category; the select returns to Cost after an
+     add. Name empty: "Name the category." Archive the category afterwards.
+KD3. **Import, empty category cell.** Save as `budget-kd-defaults.csv`:
+
+```csv
+Description,Category,Amount,Fee or cost
+Kd a,KD new empty,100,
+Kd b,KD new junk,100,maybe
+Kd c,KD new fee,100,fee
+Kd d,KD new fee,100,
+Kd e,KD new nocol,100,
+```
+
+     Map "Category fee or cost" to the Fee or cost column. Review: KD new empty **Cost**, KD new junk
+     **Cost** (an unreadable cell is treated as empty), KD new fee **Fee** on both rows (a deliberate fee
+     on any row of a new category wins), KD new nocol **Cost**. The Fee or cost select on new-category
+     rows has no "Choose..." option. Run it again with the "Category fee or cost" mapping left empty:
+     every new category is Cost. Choose "New category..." on a row and type a name: Cost; type the
+     name `KD new fee`: the row adopts **Fee** on blur. Cancel without importing (or import and
+     archive).
+KD4. **Composer** (`/agency/budgeting/templates`, Compose from starters): see R-D2 below; every
+     pre-selected flag is the starter's, so only deliberate starter fees arrive as fee.
+KD5. **AI suggestions** (import review, Suggest categories; needs the AI entitlement): rows such as
+     `Agency management fee 10%`, `Producer (agency staff) 3 days`, `Concept and scripting`,
+     `Photographer day rate`, `Stock music licence`. Expect FEE only for the first two; everything else,
+     and anything ambiguous, COST. Rows suggested into an existing category take that category's flag.
+     (The instruction text is in `suggest-categories/route.ts`; a model may still disagree, so this is
+     a spot check, not an exact assertion.)
+
+**R-D2, composer fee counts.** In "Compose from starters", each starter card reads:
+
+| Starter | Card |
+|---|---|
+| Live-action video production | 21 categories · 2 fee |
+| Experiential and live event | 19 categories · 2 fee |
+| Digital and social campaign | 12 categories · 1 fee |
+| Photo shoot | 14 categories · 1 fee |
+| Animation and post-production | 14 categories · 1 fee |
+| Agency retainer | 6 categories · 2 fee |
+| Brand identity and design | 9 categories · 5 fee |
+| Audio and podcast production | 9 categories · 1 fee |
+
+KD6. Tick all eight, Choose categories: Creative development, Event strategy and creative, Strategy
+     and planning, Creative and copywriting, Design and art direction, Community management, Reporting
+     and analytics, Art direction, Creative direction and Series development show **Cost**. Agency
+     production fee, Producer and production management, Agency management fee, On-site event staff
+     (agency), Paid media management fee, Agency project management, Monthly retainer fee, Additional
+     scope fees, Producer and showrunner (agency), Research and discovery, Brand strategy, Identity
+     design, Brand guidelines and Copywriting and naming show **Fee** (names already in your template
+     are greyed with their stored badge instead). Preview: "N categories ... F fee, C cost" matches.
+     Back out without adding.
+
+**R-K4, chip behaviour (KE project, Production crew is COST, Creative development is FEE):**
+
+KD7. **Dashed sets the other kind.** Crew day dashed COST: click it, **solid FEE**, reset icon shown.
+KD8. **Solid returns to inherit.** Click the solid FEE chip: **dashed COST**, icon gone. Hover title
+     on a solid chip: "fee, set on this line. Click: Follow the category (cost)."
+KD9. **Reset to category kept.** Make Crew day solid FEE again and use the reset icon: dashed COST.
+KD10. **The server refuses to store a redundant override.** DevTools console:
+     `fetch(location.origin + "/api/agency/budget/projects/<project id>/lines/<Crew day id>", {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({kind: "cost"})}).then(r => r.json())`
+     answers 200 with `line.fee_or_cost: null`. Same with POST `/lines` and `kind: "cost"` into
+     Production crew: the new line has `fee_or_cost: null`.
+KD11. **Category of another project is 404.** PATCH Crew day with `{categoryId: "<a category id of a
+     different project of yours>"}` and, separately, POST `/lines` with that categoryId: both **404
+     "Category not found"**; nothing changes in either project.
+KD12. **Move.** Make Producer markup solid FEE. Using DevTools, PATCH it with
+     `{categoryId: "<Creative development id>"}`: it lands in Creative development (FEE) as **dashed
+     FEE** (`fee_or_cost: null`). Move it back with `{categoryId: "<Production crew id>"}`: dashed COST
+     (the override is gone, as R-K4 requires). Make it solid FEE again.
+KD13. **Merge.** Add category `KD merge source` (Fee) with line `KD fee line` and click its chip to
+     solid COST; add line `KD plain line` (dashed FEE). Merge KD merge source into **Production crew**
+     (COST): `KD fee line` arrives **dashed COST** (its COST override equalled the survivor and was
+     cleared); `KD plain line` arrives dashed COST (inherits). The merge response carries
+     `lineKindsReset: 1`. Archive the two lines.
+KD14. **Rename and switch** are merges, so KE7 above covers the switch; a rename leaves every chip as
+     it was (same kind, nothing to clear).
+
+**F5, typed Total:**
+
+KD15. On a line with no rate type Total `3751.5` and press Tab: the cell reads **3,751.50**. Click
+     into it: **3751.50** (raw, editable). Escape: back to 3,751.50. Typing `1,234.5` is accepted and
+     shows 1,234.50. A rated line's Total (computed, not editable) and Rate are unchanged (F1).
+
+**R-D3, data fix for the owner's test project** (`e533075f-95f0-414e-bbca-742c7d344aad`, organization
+`79a82f92-c2bd-42ab-90a8-0b4d54f9e043`). Supabase SQL Editor, in this order:
+
+KD16. **Preview** `supabase/data-fixes/2026-10-14-retag-categories_preview.sql` (read only). Check:
+     the scope row says "equals ...: YES"; the category rows are only the ten R-D2 names, each `fee` ->
+     `cost`, in `budget_project_categories` (this project) and `budget_template_categories` (this
+     organization); the count rows are at most 10 per category table; the "outside" rows show the
+     other projects and organizations that match, untouched. **Save the whole output** (download CSV):
+     the override rows are the only record of what the apply clears.
+KD17. **Dry run.** In `2026-10-14-retag-categories_apply.sql` change line **181** `COMMIT;` to
+     `ROLLBACK;` and run. The summary rows must equal the preview counts (project categories, template
+     categories, overrides cleared). Any RAISE (F1-F7) means stop. Restore line 181 to `COMMIT;`.
+KD18. **Apply.** Run the apply unchanged. Same summary as the dry run.
+KD19. **Verify.** Run the preview again: no category rows, no override rows, counts 0, the outside
+     counts unchanged. Budget tab of the test project: the ten names show COST, no solid chip equals
+     its category. Template page: the same names show Cost. Another project and another
+     organization's template are unchanged.
+KD20. **Revert (only if needed).** `2026-10-14-retag-categories_revert.sql` (COMMIT line 181) sets the
+     same names in scope back to fee; it does NOT restore cleared overrides (use the saved preview
+     output) and also sets to fee any of those names that were cost before the apply.
 
 ## Cleanup
 
