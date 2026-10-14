@@ -44,7 +44,9 @@ export async function readImportFile(file: File, firstRowIsHeaders: boolean): Pr
 /**
  * Which file column feeds which field. quantity, rate, multiplier and unit are optional (line math,
  * migration 116): a row with a rate imports as qty x rate x multiplier, and when rate is mapped the
- * amount column is optional.
+ * amount column is optional. feeOrCost is the CATEGORY's flag (used when the row creates a new
+ * category). kind is the LINE's own fee or cost (migration 117, R-K1): "fee" or "cost", any case,
+ * sets an override; empty inherits the category; anything else excludes the row with the reason.
  */
 export type ColumnMapping = {
   description: number | null
@@ -55,6 +57,7 @@ export type ColumnMapping = {
   rate: number | null
   multiplier: number | null
   unit: number | null
+  kind: number | null
 }
 
 export const EMPTY_MAPPING: ColumnMapping = {
@@ -66,17 +69,19 @@ export const EMPTY_MAPPING: ColumnMapping = {
   rate: null,
   multiplier: null,
   unit: null,
+  kind: null,
 }
 
 const HEADER_HINTS: Record<keyof ColumnMapping, RegExp> = {
   description: /^(description|line|item|line item|name|detail|details)$/i,
   category: /^(category|section|group|account|bucket|department)$/i,
   amount: /^(amount|estimate|budget|total|cost|price|value|subtotal)$/i,
-  feeOrCost: /^(fee.?or.?cost|fee\/cost|type|kind)$/i,
+  feeOrCost: /^(fee.?or.?cost|fee\/cost|type|category kind|category type)$/i,
   quantity: /^(qty|quantity|count|no\.? of units|number of units)$/i,
   rate: /^(rate|unit rate|unit price|unit cost|price per unit|day rate|hourly rate)$/i,
   multiplier: /^(x|multiplier|factor|mult)$/i,
   unit: /^(unit|units|uom|unit label|per)$/i,
+  kind: /^(kind|line kind|line type)$/i,
 }
 
 export function guessMapping(headers: string[]): ColumnMapping {
@@ -93,7 +98,19 @@ export function guessMapping(headers: string[]): ColumnMapping {
     rate: find("rate"),
     multiplier: find("multiplier"),
     unit: find("unit"),
+    kind: find("kind"),
   }
+}
+
+/**
+ * A line's Kind cell (117): exactly "fee" or "cost", case-insensitive, after trimming. Empty is
+ * inherit (null). Anything else is refused with a reason, never guessed.
+ */
+export function parseLineKindCell(value: string): { ok: true; kind: FeeOrCost | null } | { ok: false; reason: string } {
+  const v = value.trim().toLowerCase()
+  if (!v) return { ok: true, kind: null }
+  if (v === "fee" || v === "cost") return { ok: true, kind: v }
+  return { ok: false, reason: `Kind "${value.trim().slice(0, 40)}" is not fee or cost` }
 }
 
 /** Both are needed: a description, and either an amount or a rate to compute one from. */
@@ -130,6 +147,10 @@ export type ReviewRow = {
   sourceCategory: string
   target: CategoryTarget
   feeOrCost: FeeOrCost | null
+  /** 117: the line's own kind from the Kind column; null = inherit the category. */
+  kind: FeeOrCost | null
+  /** Set when the Kind cell is not fee, cost or empty. The row is excluded. */
+  kindError: string | null
   include: boolean
 }
 
@@ -198,6 +219,8 @@ export function buildReviewRows(
     } else if (money.ok) amountCents = money.cents
     else amountError = mapping.rate !== null && !amountText ? "No rate or amount" : money.reason
 
+    const kindCell = mapping.kind === null ? ({ ok: true, kind: null } as const) : parseLineKindCell(cell(mapping.kind))
+
     return {
       index,
       description,
@@ -208,7 +231,9 @@ export function buildReviewRows(
       sourceCategory,
       target,
       feeOrCost: match ? match.fee_or_cost : fromColumn,
-      include: Boolean(description) && amountError === null,
+      kind: kindCell.ok ? kindCell.kind : null,
+      kindError: kindCell.ok ? null : kindCell.reason,
+      include: Boolean(description) && amountError === null && kindCell.ok,
     }
   })
 }
@@ -227,6 +252,7 @@ export function rowAmountBody(row: ReviewRow): Record<string, unknown> {
 export function rowProblem(row: ReviewRow): string | null {
   if (!row.description) return "No description"
   if (row.amountError) return row.amountError
+  if (row.kindError) return row.kindError
   if (row.amountCents === null) return "No amount"
   if (!row.target) return "Choose a category"
   if (row.target.kind === "new" && !row.target.name.trim()) return "Name the new category"
