@@ -155,7 +155,7 @@ DECLARE
        FROM public.budget_lines$f$;
   -- 116's trigger and its function body, so "116 unchanged" is exact.
   v_trg_sql      CONSTANT text :=
-    $f$SELECT md5(coalesce(string_agg(t.tgname || ':' || t.tgenabled || ':' || t.tgtype || ':' || p.oid::regprocedure::text || ':' || p.prosrc
+    $f$SELECT md5(coalesce(string_agg(t.tgname || ':' || t.tgenabled::text || ':' || t.tgtype || ':' || p.oid::regprocedure::text || ':' || p.prosrc
                                       || ':' || p.prosecdef || ':' || coalesce(array_to_string(p.proconfig, ','), '') || ':' || coalesce(p.proacl::text, ''),
                                       E'\n' ORDER BY t.tgname), ''))
        FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid

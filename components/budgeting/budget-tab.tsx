@@ -55,7 +55,8 @@ export function BudgetTab({ projectId }: { projectId: string }) {
   const [renameText, setRenameText] = useState("")
   const [mergeInto, setMergeInto] = useState("")
   const [newCatName, setNewCatName] = useState("")
-  const [newCatFlag, setNewCatFlag] = useState<FeeOrCost | "">("")
+  // R-D1: a new category starts as cost; fee is always a deliberate choice.
+  const [newCatFlag, setNewCatFlag] = useState<FeeOrCost>("cost")
   const [importOpen, setImportOpen] = useState(false)
   const [mergeNeedsFinish, setMergeNeedsFinish] = useState<string | null>(null)
 
@@ -128,8 +129,8 @@ export function BudgetTab({ projectId }: { projectId: string }) {
   }
 
   async function addCategory() {
-    if (!newCatName.trim() || !newCatFlag) {
-      setMessage({ tone: "error", text: "Name the category and mark it fee or cost." })
+    if (!newCatName.trim()) {
+      setMessage({ tone: "error", text: "Name the category." })
       return
     }
     const ok = await run(async () => {
@@ -138,7 +139,7 @@ export function BudgetTab({ projectId }: { projectId: string }) {
     })
     if (ok) {
       setNewCatName("")
-      setNewCatFlag("")
+      setNewCatFlag("cost")
     }
   }
 
@@ -302,7 +303,7 @@ export function BudgetTab({ projectId }: { projectId: string }) {
         <p className="text-xs text-foreground-muted">
           Total = Qty x Rate x multiplier, rounded to the cent. An empty Qty or x counts as 1. Leave Rate empty to type the total yourself.
           {lineKind
-            ? " Each line follows its category's fee or cost (dashed chip); click the chip to set the line to the other kind (solid chip)."
+            ? " Each line follows its category's fee or cost (dashed chip). Click a dashed chip to set the line to the other kind (solid chip); click a solid chip to follow the category again."
             : ""}
         </p>
       ) : null}
@@ -371,10 +372,9 @@ export function BudgetTab({ projectId }: { projectId: string }) {
             className="bg-background border-border text-foreground max-w-xs"
             onKeyDown={(e) => e.key === "Enter" && addCategory()}
           />
-          <select aria-label="Fee or cost" className={selectClass} value={newCatFlag} onChange={(e) => setNewCatFlag(e.target.value as FeeOrCost | "")}>
-            <option value="">Fee or cost?</option>
-            <option value="fee">Fee (the agency earns it)</option>
+          <select aria-label="Fee or cost" className={selectClass} value={newCatFlag} onChange={(e) => setNewCatFlag(e.target.value as FeeOrCost)}>
             <option value="cost">Cost (third-party spend)</option>
+            <option value="fee">Fee (the agency earns it)</option>
           </select>
           <Button variant="outline" className="border-border font-mono" disabled={busy} onClick={addCategory}>
             Add category
@@ -780,13 +780,21 @@ function readMath(qty: string, rate: string, mult: string, unit: string): { ok: 
   return { ok: true, body }
 }
 
+/** A typed amount shown with thousands separators; text that does not parse is shown as typed. */
+function moneyDisplay(raw: string): string {
+  const money = parseMoneyToCents(raw)
+  return money.ok ? formatCents(money.cents) : raw
+}
+
 function formulaText(qty: number | null, rate: number, mult: number | null, unit: string | null, total: number): string {
   return `${formatMilli(qty ?? 1000)}${unit ? ` ${unit}` : ""} x ${formatCents(rate)}${mult !== null ? ` x ${formatMilli(mult)}` : ""} = ${formatCents(total)}`
 }
 
 /**
- * A line's effective kind (117, R-K1): the chip toggles the line to the other kind (an override);
- * an override also offers Reset to category, which clears it so the line follows its category again.
+ * A line's effective kind (117, R-K1). R-K4: an inherited (dashed) chip sets the other kind as an
+ * override (solid); a solid chip returns the line to its category (null), because an override's
+ * other kind is always the category's. Reset to category does the same and is kept as the explicit
+ * control.
  */
 function LineKindCell({
   lineName,
@@ -813,8 +821,12 @@ function LineKindCell({
         kind={kind}
         source={source}
         disabled={busy}
-        label={`${lineName}: ${kind}${source === "override" ? ", set on this line" : ", from the category"}. Mark ${other}`}
-        onClick={() => onSet(other)}
+        label={
+          source === "override"
+            ? `${lineName}: ${kind}, set on this line. Follow the category (${categoryKind})`
+            : `${lineName}: ${kind}, from the category. Mark ${other}`
+        }
+        onClick={() => onSet(source === "override" ? null : other)}
       />
       {source === "override" ? (
         <Button
@@ -1051,7 +1063,16 @@ function MathLineRow({
               {preview === null ? formatCents(saved.cents) : "error" in preview ? "-" : formatCents(preview.cents)}
             </span>
           ) : (
-            <Input aria-label={`${line.name} total`} inputMode="decimal" className={num} title={formula} {...cellProps("estimate")} />
+            // F5: thousands separators when not focused (the formatter the Total and Rate use), the
+            // raw number while focused.
+            <Input
+              aria-label={`${line.name} total`}
+              inputMode="decimal"
+              className={num}
+              title={formula}
+              {...cellProps("estimate")}
+              value={focused === "estimate" ? values.estimate : moneyDisplay(values.estimate)}
+            />
           )}
         </>
       )}

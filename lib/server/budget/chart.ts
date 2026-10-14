@@ -13,6 +13,7 @@ import {
   type ProjectCategory,
   type TemplateCategory,
 } from "./schema"
+import { clearRedundantLineKinds } from "./lines"
 import { fail, fromDbError, isBudgetSpineMissing, ok, type BudgetResult } from "./result"
 import type { AgencyProject, BudgetSession } from "./scope"
 import type { OrgId } from "@/lib/entitlements"
@@ -239,6 +240,8 @@ export type MergeOutcome = {
   linesMoved: number
   /** null when 104 is not applied: there is no ledger to re-point. */
   entriesMoved: number | null
+  /** R-K4: lines in the survivor whose override equalled its kind, reset to inherit (0 before 117). */
+  lineKindsReset: number
 }
 
 /**
@@ -284,7 +287,12 @@ export async function repointMergedCategory(
     entriesMoved = entries?.length ?? 0
   }
 
-  return ok({ merge, linesMoved: lines?.length ?? 0, entriesMoved })
+  // R-K4: a moved line whose override equals the survivor's kind inherits again. This is also how a
+  // rename and a fee/cost switch (both a merge into a new category) reach the lines.
+  const reset = await clearRedundantLineKinds(client, project, merge.into_category_id)
+  if (!reset.ok) return reset
+
+  return ok({ merge, linesMoved: lines?.length ?? 0, entriesMoved, lineKindsReset: reset.data })
 }
 
 /**

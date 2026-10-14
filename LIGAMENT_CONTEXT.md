@@ -118,9 +118,29 @@ no DELETE policy on `ledger_entries` or `source_documents`; the vendor document 
 **2026-10-14: 116 is applied and catalog-verified** (pre-apply test 40/40 PASS; 4 nullable columns;
 trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW; SECURITY INVOKER;
 search_path pinned; anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4
-policies). **117** (`117_budget_line_kind.sql`, per-line fee or cost) is authored on
-`feat/budget-line-kind`, NOT applied. **Next free migration number: 118.** Full record:
-`docs/state-of-record-2026-10-12.md`.
+policies). **Next free migration number: 118.** Full record: `docs/state-of-record-2026-10-12.md`.
+
+**2026-10-14: 117 is applied and catalog-verified** (`117_budget_line_kind.sql`; pre-apply test 29/29
+PASS; `budget_lines.fee_or_cost` text, nullable; CHECK allows NULL, 'fee', 'cost'; 0 lines given a
+kind; 155 public policies; `budget_lines` 4 policies; 116's trigger intact). The owner's first run of
+the pre-apply test failed with 42725 (`text || "char"` on `pg_trigger.tgenabled`); the repository
+copy now casts it to text (F4, `feat/budget-kind-defaults`). **Next free migration number: still 118.** RFP record: 118 to 120.
+
+**Budget fee/cost owner rulings (2026-10-14):**
+- **R-K1** A line may carry its own kind (`budget_lines.fee_or_cost`), overriding its category; NULL
+  inherits. Every total, margin and export goes by the effective kind.
+- **R-K2** Percentages are aggregates; no line is computed from other lines.
+- **R-K3** Each category shows its % of the project total.
+- **R-K4** An override equal to the category's kind is stored as NULL (inherit), enforced on the server
+  in every path that writes a line's kind, moves a line, merges categories or changes a category's
+  kind. A dashed (inherited) chip click sets the other kind; a solid chip click returns to inherit.
+- **R-D1** Cost is the default. Every new category starts as cost unless a user deliberately marks it
+  fee (template editor, project chart, import, composer, AI suggestions).
+- **R-D2** Starter templates: 10 categories re-tagged fee to cost; 14 stay fee, including the five
+  `brand_design` categories (owner ruled brand-keep).
+- **R-D3** Re-tag existing data for test project `e533075f-95f0-414e-bbca-742c7d344aad` and its
+  organization's template only, then normalise that project's lines per R-K4
+  (`supabase/data-fixes/2026-10-14-retag-categories_*.sql`).
 
 **Default privileges:** `postgres`'s default privileges in `public` no longer grant TRUNCATE,
 REFERENCES or TRIGGER to anon or authenticated; `supabase_admin`'s still do but do not apply to
@@ -179,7 +199,7 @@ older notes are quoted as prior evidence only, not as current status).
 | 114 | **applied and verified 2026-10-12** (pre-apply test 21/21) | Hardening: TRUNCATE/REFERENCES/TRIGGER revoked from anon and authenticated on every public table; anon EXECUTE revoked on the six `current_user_*` helpers; WITH CHECK tightened on `delivery_reviews`, `delivery_review_scores`, `msa_agreements`, `rfp_magic_tokens`; `partnerships.reliability_*` guard. |
 | 115 | **applied and verified 2026-10-12** (pre-apply test 16/16 PASS) | `public.discoverable_profiles(p_role, p_ids)`: public discovery fields only; drops the whole-row policy "Authenticated users can read discoverable profiles". Catalog after apply: that policy is gone; the function is SECURITY DEFINER, search_path pinned, and anon cannot execute it. |
 | 116 | **applied and catalog-verified 2026-10-14** (pre-apply test 40/40 PASS) | Budget line math: `budget_lines.quantity`, `unit_rate`, `multiplier`, `unit_label` (4 nullable columns); trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW sets estimate = round(qty x rate x multiplier, 2) when a rate is set; SECURITY INVOKER, search_path pinned, anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4 policies. |
-| 117 | **authored 2026-10-14, NOT applied** (pre-apply test expects 29 assertions) | Budget line kind (R-K1): nullable `budget_lines.fee_or_cost` text, CHECK NULL or 'fee' or 'cost'. NULL inherits the category's kind; effective kind = coalesce(line, category). No backfill, no policy or grant change. Down file drops the column and every override with it. |
+| 117 | **applied and catalog-verified 2026-10-14** (pre-apply test 29/29 PASS; the owner's first run failed with 42725, and the repository copy of the test now carries the F4 `tgenabled::text` cast) | Budget line kind (R-K1): nullable `budget_lines.fee_or_cost` text, CHECK NULL or 'fee' or 'cost'. NULL inherits the category's kind; effective kind = coalesce(line, category). No backfill, no policy or grant change. Down file drops the column and every override with it. Catalog after apply: text nullable column; CHECK NULL/fee/cost; 0 lines given a kind; 155 policies; `budget_lines` 4 policies; 116 trigger intact. |
 
 **Nulled legacy columns (106, 108, 110, 112) are deliberately empty.** Do not repopulate them and
 do not drop them until a quiet period has passed; the 42P01/PGRST205 fallback code is removed in
@@ -188,7 +208,7 @@ INCONCLUSIVE rows were the NO SUBJECT cross-agency checks (A6, B1, B2), accepted
 precedent because m a r k a n t is the only lead organization with members.
 
 
-> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 118** (2026-10-14; 116 is applied, 117 is authored). The agency-owned RFP record claims 118 to 120 (`docs/rfp-source-of-truth-design.md`).
+> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 118** (2026-10-14; 116 and 117 are applied). The agency-owned RFP record claims 118 to 120 (`docs/rfp-source-of-truth-design.md`).
 > Older notes that reserve 078 for M1 are superseded - see `docs/schema-truth.md` section 2.
 >
 > **THE PER-ACCOUNT ROLE BACKFILL IS RETIRED. 2026-08-20. It has no members.**

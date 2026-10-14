@@ -32,6 +32,13 @@ import { centsToDecimalString } from "@/lib/budget/money"
  * create that sent a kind is stored without it, and an update that changes only the kind is refused
  * with LINE_KIND_DISABLED. The two optional sets (116's math, 117's kind) are dropped independently.
  *
+ * R-K4 (owner ruling, 2026-10-14). AN OVERRIDE EQUAL TO THE CATEGORY'S KIND IS STORED AS NULL. Create
+ * and update look up the line's category IN THIS PROJECT (a category of any other project is 404,
+ * never a lookup elsewhere); a sent kind equal to it is written as null. After any write that sets a
+ * kind or moves a line, clearRedundantLineKinds() resets every line in that category whose override
+ * equals the category's kind. chart.ts runs the same sweep after a merge (which is also how a rename
+ * and a fee/cost switch reach the lines).
+ *
  * R1, DELETE vs ARCHIVE. A line deletes only while its estimate is 0 (the DELETE policy's USING
  * clause) and nothing references it (the NO ACTION foreign key from ledger_entries answers 23503).
  * A USING refusal is SILENT in Postgres: the DELETE affects 0 rows and raises nothing. deleteLine
@@ -213,6 +220,56 @@ const kindPayload = (kind: FeeOrCost | null | undefined): Row => (kind === undef
 
 type Row = Record<string, unknown>
 
+// ---- R-K4: an override equal to the category's kind is stored as NULL ----
+
+/** The kind of one of THIS project's categories. A category of any other project is not found (404). */
+async function readCategoryKind(client: SupabaseClient, project: AgencyProject, categoryId: string): Promise<BudgetResult<FeeOrCost>> {
+  const { data, error } = await client
+    .from(BUDGET_TABLES.projectCategories)
+    .select("fee_or_cost")
+    .eq("project_id", project.projectId)
+    .eq("id", categoryId)
+    .maybeSingle()
+  if (error) return fromDbError(error)
+  const kind = (data as { fee_or_cost?: unknown } | null)?.fee_or_cost
+  if (!isFeeOrCost(kind)) return fail("not_found", "Category not found")
+  return ok(kind)
+}
+
+/** R-K4: a sent override equal to the category's kind is written as null (inherit). */
+const inheritIfSame = (kind: FeeOrCost | null | undefined, categoryKind: FeeOrCost) => (kind === categoryKind ? null : kind)
+
+/**
+ * R-K4. Resets to inherit every line of this project's category `categoryId` (archived included)
+ * whose override equals the category's kind. Returns how many were reset. Before 117 there is no
+ * override to reset, so it returns 0.
+ */
+export async function clearRedundantLineKinds(client: SupabaseClient, project: AgencyProject, categoryId: string): Promise<BudgetResult<number>> {
+  const category = await readCategoryKind(client, project, categoryId)
+  if (!category.ok) return category
+  const { data, error } = await client
+    .from(BUDGET_TABLES.lines)
+    .update({ fee_or_cost: null })
+    .eq("project_id", project.projectId)
+    .eq("category_id", categoryId)
+    .eq("fee_or_cost", category.data)
+    .select("id")
+  if (error) {
+    if (missingLineColumns(error)?.kind) return ok(0)
+    return fromDbError(error)
+  }
+  return ok(data?.length ?? 0)
+}
+
+/** After a line write that already succeeded: run the R-K4 sweep, and say plainly if only it failed. */
+async function sweepAfterWrite(client: SupabaseClient, project: AgencyProject, categoryId: string, line: BudgetLine): Promise<BudgetResult<BudgetLine>> {
+  const swept = await clearRedundantLineKinds(client, project, categoryId)
+  if (!swept.ok) {
+    return fail("error", "The line was saved, but other lines that repeat their category's fee or cost were not reset. Refresh and try again.", swept.code)
+  }
+  return ok(line)
+}
+
 /** `lineMath`: 116's columns exist. `lineKind`: 117's column exists (false = every line inherits). */
 export type LineList = { lines: BudgetLine[]; lineMath: boolean; lineKind: boolean }
 
@@ -255,13 +312,13 @@ export type LineInput = {
 async function writeLine(
   write: (payload: Row, select: string) => PromiseLike<{ data: unknown; error: DbError }>,
   build: (sets: LineColumnSets) => BudgetResult<Row>
-): Promise<{ data: Row | null; error: DbError } | BudgetFail> {
+): Promise<{ data: Row | null; error: DbError; sets: LineColumnSets } | BudgetFail> {
   const out = await withLineColumns((sets) => {
     const payload = build(sets)
     return payload.ok ? write(payload.data, lineColumns(sets)) : payload
   })
   if (isFail(out)) return out
-  return { data: out.res.data as Row | null, error: out.res.error }
+  return { data: out.res.data as Row | null, error: out.res.error, sets: out.sets }
 }
 
 export async function createLine(client: SupabaseClient, project: AgencyProject, input: LineInput): Promise<BudgetResult<BudgetLine>> {
@@ -273,6 +330,10 @@ export async function createLine(client: SupabaseClient, project: AgencyProject,
   if (!math.ok) return math
   const kind = parseLineKind(input.kind)
   if (!kind.ok) return kind
+  // The category must be this project's (404 otherwise). R-K4: a kind equal to it is stored as null.
+  const category = await readCategoryKind(client, project, category_id)
+  if (!category.ok) return category
+  const lineKind = inheritIfSame(kind.data, category.data)
 
   // With a rate, the estimate is the product (the trigger would overwrite anything else). Without
   // one, it is the typed estimate, exactly as before 116.
@@ -291,11 +352,13 @@ export async function createLine(client: SupabaseClient, project: AgencyProject,
   const base: Row = { project_id: project.projectId, category_id, name, estimate }
   const res = await writeLine(
     (payload, select) => client.from(BUDGET_TABLES.lines).insert(payload).select(select).single(),
-    (sets) => ok({ ...base, ...(sets.math ? mathPayload(math.data) : {}), ...(sets.kind ? kindPayload(kind.data) : {}) })
+    (sets) => ok({ ...base, ...(sets.math ? mathPayload(math.data) : {}), ...(sets.kind ? kindPayload(lineKind) : {}) })
   )
   if ("ok" in res) return res
   if (res.error) return lineDbFail(res.error)
-  return ok(normalizeLine(res.data ?? {}))
+  const line = normalizeLine(res.data ?? {})
+  // R-K4: a create that wrote a kind sweeps its category.
+  return res.sets.kind && kind.data !== undefined ? sweepAfterWrite(client, project, category_id, line) : ok(line)
 }
 
 export async function updateLine(
@@ -330,6 +393,29 @@ export async function updateLine(
   const mathSent = Object.keys(mathPayload(math.data)).length > 0
   if (Object.keys(patch).length === 0 && !mathSent && kind.data === undefined) return fail("invalid", "Nothing to change")
 
+  // R-K4. A write that sets the kind or moves the line resolves the category the line ends up in, in
+  // this project only: the one it moves to, else the one it is in. That category's kind turns a
+  // matching override into null, and the category is swept after the write.
+  let lineKind = kind.data
+  let sweepCategory: string | null = null
+  if (typeof patch.category_id === "string" || kind.data !== undefined) {
+    if (typeof patch.category_id === "string") sweepCategory = patch.category_id
+    else {
+      const { data: current, error: currentErr } = await client
+        .from(BUDGET_TABLES.lines)
+        .select("category_id")
+        .eq("project_id", project.projectId)
+        .eq("id", lineId)
+        .maybeSingle()
+      if (currentErr) return fromDbError(currentErr)
+      if (!current) return fail("not_found", "Line not found")
+      sweepCategory = String((current as { category_id: unknown }).category_id)
+    }
+    const category = await readCategoryKind(client, project, sweepCategory)
+    if (!category.ok) return category
+    lineKind = inheritIfSame(kind.data, category.data)
+  }
+
   const res = await writeLine(
     (payload, select) =>
       client.from(BUDGET_TABLES.lines).update(payload).eq("project_id", project.projectId).eq("id", lineId).select(select).maybeSingle(),
@@ -343,7 +429,7 @@ export async function updateLine(
         if (!implied.ok) return implied
         if (implied.data !== null) payload.estimate = implied.data
       }
-      if (sets.kind) payload = { ...payload, ...kindPayload(kind.data) }
+      if (sets.kind) payload = { ...payload, ...kindPayload(lineKind) }
       if (Object.keys(payload).length === 0) {
         if (kind.data !== undefined && !sets.kind) {
           return fail("invalid", "Fee or cost per line is not enabled yet. The line follows its category.", "LINE_KIND_DISABLED")
@@ -356,7 +442,8 @@ export async function updateLine(
   if ("ok" in res) return res
   if (res.error) return lineDbFail(res.error)
   if (!res.data) return fail("not_found", "Line not found")
-  return ok(normalizeLine(res.data))
+  const line = normalizeLine(res.data)
+  return res.sets.kind && sweepCategory ? sweepAfterWrite(client, project, sweepCategory, line) : ok(line)
 }
 
 export const archiveLine = (client: SupabaseClient, project: AgencyProject, lineId: string, archived = true) =>

@@ -134,6 +134,8 @@ const kindChipBase = "inline-flex items-center justify-center rounded-full borde
 /**
  * A line's EFFECTIVE kind (117, R-K1). Inherited from the category: outlined and dashed, no fill.
  * Overridden on the line: solid. With onClick it is the toggle (a button); without, a label.
+ * R-K4: an override always differs from its category, so clicking a dashed chip sets the other
+ * kind and clicking a solid chip returns the line to its category (the other kind again).
  */
 export function KindChip({
   kind,
@@ -157,6 +159,8 @@ export function KindChip({
         ? "border-dashed border-accent/50 bg-transparent text-accent"
         : "border-dashed border-foreground/40 bg-transparent text-foreground"
   const title = source === "override" ? `${kind}, set on this line` : `${kind}, from the category`
+  const other = kind === "fee" ? "cost" : "fee"
+  const action = source === "override" ? `Follow the category (${other})` : `Mark ${other}`
   if (!onClick) {
     return (
       <span className={`${kindChipBase} ${tone}`} title={title}>
@@ -168,8 +172,8 @@ export function KindChip({
     <button
       type="button"
       className={`${kindChipBase} ${tone} min-w-[3.25rem] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50`}
-      title={`${title}. Click to mark ${kind === "fee" ? "cost" : "fee"}.`}
-      aria-label={label ?? `${title}. Mark ${kind === "fee" ? "cost" : "fee"}`}
+      title={`${title}. Click: ${action}.`}
+      aria-label={label ?? `${title}. ${action}`}
       onClick={onClick}
       disabled={disabled}
     >

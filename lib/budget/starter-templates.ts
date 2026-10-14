@@ -12,6 +12,14 @@ import type { FeeOrCost } from "@/lib/server/budget/schema"
  * A category that is sometimes either is listed as cost, the conservative reading (it never
  * inflates margin), and the note says so.
  *
+ * R-D1 (owner ruling, 2026-10-14): COST IS THE DEFAULT. Every new category starts as cost unless a
+ * user deliberately marks it fee, and this library follows the same rule: only the agency's own
+ * fees and its own staff billed as fee are tagged fee. R-D2 (same date) re-tagged ten creative,
+ * strategy, design and reporting categories from fee to cost; a user who bills such work as fee
+ * marks it fee deliberately.
+ * EXCEPTION, brand_design (owner ruled brand-keep): Research and discovery, Brand strategy,
+ * Identity design, Brand guidelines, and Copywriting and naming stay fee.
+ *
  * Lessons from lib/budget-categories.ts (R3 there): a category must be a MONEY bucket. "Included
  * hours", "overage rate", "number of rounds" are terms, not categories, and are left out on purpose.
  */
@@ -31,7 +39,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: "Live-action video production",
     description: "Commercial or branded film shoot, from pre-production through delivery.",
     categories: [
-      { name: "Creative development", feeOrCost: "fee", note: "Concept, scripting and treatment by the agency." },
+      { name: "Creative development", feeOrCost: "cost", note: "Concept, scripting and treatment by the agency." },
       { name: "Agency production fee", feeOrCost: "fee" },
       { name: "Producer and production management", feeOrCost: "fee", note: "The agency's own producers." },
       { name: "Director", feeOrCost: "cost" },
@@ -59,7 +67,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: "Experiential and live event",
     description: "Brand activation, launch event, pop-up or conference presence.",
     categories: [
-      { name: "Event strategy and creative", feeOrCost: "fee" },
+      { name: "Event strategy and creative", feeOrCost: "cost" },
       { name: "Agency management fee", feeOrCost: "fee" },
       { name: "On-site event staff (agency)", feeOrCost: "fee" },
       { name: "Venue rental", feeOrCost: "cost" },
@@ -85,12 +93,12 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: "Digital and social campaign",
     description: "Always-on or flighted social and digital campaign, content plus paid media.",
     categories: [
-      { name: "Strategy and planning", feeOrCost: "fee" },
-      { name: "Creative and copywriting", feeOrCost: "fee" },
-      { name: "Design and art direction", feeOrCost: "fee" },
-      { name: "Community management", feeOrCost: "fee" },
+      { name: "Strategy and planning", feeOrCost: "cost" },
+      { name: "Creative and copywriting", feeOrCost: "cost" },
+      { name: "Design and art direction", feeOrCost: "cost" },
+      { name: "Community management", feeOrCost: "cost" },
       { name: "Paid media management fee", feeOrCost: "fee" },
-      { name: "Reporting and analytics", feeOrCost: "fee" },
+      { name: "Reporting and analytics", feeOrCost: "cost" },
       { name: "Content production", feeOrCost: "cost" },
       { name: "Creator and influencer fees", feeOrCost: "cost" },
       { name: "Paid media spend", feeOrCost: "cost", note: "Media bought on the client's behalf." },
@@ -104,7 +112,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: "Photo shoot",
     description: "Stills campaign or product photography, studio or location.",
     categories: [
-      { name: "Art direction", feeOrCost: "fee" },
+      { name: "Art direction", feeOrCost: "cost" },
       { name: "Agency production fee", feeOrCost: "fee" },
       { name: "Photographer", feeOrCost: "cost" },
       { name: "Photo assistants and digital tech", feeOrCost: "cost" },
@@ -125,7 +133,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: "Animation and post-production",
     description: "Motion design, 2D or 3D animation, VFX and finishing.",
     categories: [
-      { name: "Creative direction", feeOrCost: "fee" },
+      { name: "Creative direction", feeOrCost: "cost" },
       { name: "Agency project management", feeOrCost: "fee" },
       { name: "Storyboards and animatic", feeOrCost: "cost" },
       { name: "Design and style frames", feeOrCost: "cost" },
@@ -175,7 +183,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
     name: "Audio and podcast production",
     description: "Branded podcast series, radio spots or audio content.",
     categories: [
-      { name: "Series development", feeOrCost: "fee" },
+      { name: "Series development", feeOrCost: "cost" },
       { name: "Producer and showrunner (agency)", feeOrCost: "fee" },
       { name: "Hosts and talent", feeOrCost: "cost" },
       { name: "Studio and recording", feeOrCost: "cost" },
