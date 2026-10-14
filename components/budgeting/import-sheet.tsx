@@ -142,14 +142,17 @@ export function ImportSheet({
     }
     // R-D1: a new category with no flag yet starts as cost.
     if (value === "new:source")
-      return updateRow(row.index, { target: { kind: "new", name: row.sourceCategory }, feeOrCost: flagForNew(row.sourceCategory) ?? row.feeOrCost ?? "cost" })
+      return updateRow(row.index, { target: { kind: "new", name: row.sourceCategory }, feeOrCost: flagForNew(row.sourceCategory, row.index) ?? row.feeOrCost ?? "cost" })
     if (value === "new:custom") return updateRow(row.index, { target: { kind: "new", name: "" }, feeOrCost: row.feeOrCost ?? "cost" })
   }
 
-  /** The flag already chosen for another row creating the same new category, if any. */
-  function flagForNew(name: string): FeeOrCost | null {
+  /** The flag already chosen for another row (not `exceptIndex`) creating the same new category, if any. */
+  function flagForNew(name: string, exceptIndex?: number): FeeOrCost | null {
     const key = categoryNameKey(name)
-    return rows.find((r) => r.target?.kind === "new" && categoryNameKey(r.target.name) === key && r.feeOrCost)?.feeOrCost ?? null
+    return (
+      rows.find((r) => r.index !== exceptIndex && r.target?.kind === "new" && categoryNameKey(r.target.name) === key && r.feeOrCost)?.feeOrCost ??
+      null
+    )
   }
 
   async function suggest() {
@@ -508,7 +511,7 @@ export function ImportSheet({
                               placeholder="New category name"
                               onChange={(e) => updateRow(r.index, { target: { kind: "new", name: e.target.value } })}
                               onBlur={(e) => {
-                                const flag = flagForNew(e.target.value)
+                                const flag = flagForNew(e.target.value, r.index)
                                 // Every row creating the same new category agrees on its flag.
                                 if (flag && flag !== r.feeOrCost) updateRow(r.index, { feeOrCost: flag })
                               }}
