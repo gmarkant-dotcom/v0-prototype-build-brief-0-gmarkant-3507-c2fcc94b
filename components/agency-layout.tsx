@@ -54,9 +54,12 @@ declare global {
  * "Coming soon", is not focusable, and is not a link. Once the spine answers, it links to
  * /agency/budgeting (feat/budget-ui; see the item's own comment below).
  *
- * CREATIVE TREATMENT ANALYSIS IS RULED TO MOVE UNDER 00 BUDGETING AND HAS NOT MOVED. It stays
- * in the RFP Broadcast dropdown below, because moving a live feature behind a dead item would
- * orphan it. The move is owed for when 00 becomes navigable.
+ * CREATIVE TREATMENT ANALYSIS SITS UNDER 00 BUDGETING, AS RULED (moved 2026-10-14 on
+ * feat/budget-line-math, now that 00 is navigable in production). It is an always-visible sub-link
+ * directly beneath the 00 item (BudgetingSubItems below), rendered in BOTH of 00's states: when the
+ * spine probe says "not enabled" the 00 item is plain text, and the sub-link must stay reachable or
+ * the move would orphan a live feature. It has left the RFP Broadcast dropdown. Its href
+ * (/agency/brief) is unchanged; navigation only.
  *
  * "CLIENT PROFILES" IS NOW "CLIENTS + PROJECTS". Ruled in the same brief, answering OPEN-5.
  * The rename shipped first; /agency/clients now lists each client's projects
@@ -103,9 +106,10 @@ const navSections = [
 ]
 
 /**
- * RFP Broadcast nav item: desktop shows a HoverCard with the two RFP paths;
+ * RFP Broadcast nav item: desktop shows a HoverCard with the Lightning RFP path;
  * mobile (<768px) skips the hover interaction (no hover on touch) and lists
- * both options inline instead. Clicking the row itself always goes to /agency.
+ * it inline instead. Clicking the row itself always goes to /agency.
+ * (Creative Treatment Analysis used to be listed here too; it now sits under 00 Budgeting.)
  */
 function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
   const isActive = pathname === "/agency"
@@ -151,14 +155,6 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
               Analyze client briefs, build scoped RFPs, and send to your vendor pool or any vendor via Magic Link
             </p>
             <Link
-              href="/agency/brief"
-              className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
-            >
-              <span className="text-sm">◆</span>
-              Creative Treatment Analysis
-            </Link>
-            <div className="border-b border-border my-1" />
-            <Link
               href="/agency/magic-rfp"
               className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors text-sm text-foreground"
             >
@@ -169,18 +165,10 @@ function RfpBroadcastNavItem({ pathname }: { pathname: string | null }) {
         </HoverCard>
       </div>
 
-      {/* Mobile: no hover, list both options inline */}
+      {/* Mobile: no hover, list the option inline */}
       <div className="md:hidden">
         {link}
         <div className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
-          <Link
-            href="/agency/brief"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
-          >
-            <span className="text-sm">◆</span>
-            Creative Treatment Analysis
-          </Link>
-          <div className="border-b border-border" />
           <Link
             href="/agency/magic-rfp"
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-foreground-muted hover:bg-white/5 hover:text-foreground transition-colors"
@@ -287,6 +275,29 @@ function PoolNavItem({ pathname }: { pathname: string | null }) {
 }
 
 /**
+ * The items filed under 00 Budgeting. Always visible and always a link, on desktop and mobile alike,
+ * whether or not 00 itself is a link yet, so nothing listed here can be orphaned by the spine probe.
+ * Same markup as the RFP Broadcast mobile sub-list, plus an active state.
+ */
+function BudgetingSubItems({ pathname }: { pathname: string | null }) {
+  const isActive = Boolean(pathname?.startsWith("/agency/brief"))
+  return (
+    <div className="ml-6 mt-1 space-y-1 border-l border-border pl-3">
+      <Link
+        href="/agency/brief"
+        className={cn(
+          "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors",
+          isActive ? "bg-accent/10 text-accent" : "text-foreground-muted hover:bg-white/5 hover:text-foreground"
+        )}
+      >
+        <span className="text-sm">◆</span>
+        Creative Treatment Analysis
+      </Link>
+    </div>
+  )
+}
+
+/**
  * ONE RENDERER FOR EVERY NAV SECTION, WHICH IS WHAT MAKES THE RESTRUCTURE SAFE.
  *
  * The HQ section used to be a HAND-WRITTEN COPY of this markup, sitting above the loop that
@@ -338,54 +349,60 @@ function NavSectionBlock({
             const href = item.enabledHref
             const isActive = Boolean(pathname?.startsWith(href))
             return (
-              <Tooltip key={item.title}>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={href}
-                    className={cn(
-                      "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
-                      isActive ? "bg-accent/10 border border-accent/30" : "hover:bg-white/5 border border-transparent"
-                    )}
-                  >
-                    <span className={cn("font-mono text-xs font-medium mt-0.5", isActive ? "text-accent" : "text-foreground-muted")}>
-                      {item.number}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className={cn("font-display font-bold text-sm leading-tight", isActive ? "text-accent" : "text-foreground group-hover:text-white")}>
-                        {item.title}
+              <div key={item.title}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      href={href}
+                      className={cn(
+                        "flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all group",
+                        isActive ? "bg-accent/10 border border-accent/30" : "hover:bg-white/5 border border-transparent"
+                      )}
+                    >
+                      <span className={cn("font-mono text-xs font-medium mt-0.5", isActive ? "text-accent" : "text-foreground-muted")}>
+                        {item.number}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className={cn("font-display font-bold text-sm leading-tight", isActive ? "text-accent" : "text-foreground group-hover:text-white")}>
+                          {item.title}
+                        </div>
                       </div>
-                    </div>
-                    {isActive && <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />}
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
-                  <p className="text-xs text-foreground-muted">{item.enabledTooltip}</p>
-                </TooltipContent>
-              </Tooltip>
+                      {isActive && <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5" />}
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                    <p className="text-xs text-foreground-muted">{item.enabledTooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+                <BudgetingSubItems pathname={pathname} />
+              </div>
             )
           }
           if ('placeholder' in item) {
             return (
-              <Tooltip key={item.title}>
-                <TooltipTrigger asChild>
-                  <div className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-transparent cursor-default select-none">
-                    <span className="font-mono text-xs font-medium mt-0.5 text-foreground-muted/50">
-                      {item.number}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-display font-bold text-sm leading-tight text-foreground-muted/60">
-                        {item.title}
-                      </div>
-                      <div className="font-mono text-2xs text-foreground-muted/50 mt-0.5">
-                        {item.caption}
+              <div key={item.title}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-start gap-3 px-3 py-2.5 rounded-lg border border-transparent cursor-default select-none">
+                      <span className="font-mono text-xs font-medium mt-0.5 text-foreground-muted/50">
+                        {item.number}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-display font-bold text-sm leading-tight text-foreground-muted/60">
+                          {item.title}
+                        </div>
+                        <div className="font-mono text-2xs text-foreground-muted/50 mt-0.5">
+                          {item.caption}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
-                  <p className="text-xs text-foreground-muted">{item.tooltip}</p>
-                </TooltipContent>
-              </Tooltip>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" showArrow={false} className="w-64 p-3 bg-background border-border">
+                    <p className="text-xs text-foreground-muted">{item.tooltip}</p>
+                  </TooltipContent>
+                </Tooltip>
+                <BudgetingSubItems pathname={pathname} />
+              </div>
             )
           }
           const isActive = pathname === item.href ||

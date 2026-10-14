@@ -5,7 +5,11 @@ export const dynamic = "force-dynamic"
 
 type Ctx = { params: Promise<{ projectId: string; lineId: string }> }
 
-/** PATCH { name?, estimate?, categoryId?, archived? }. Archive is R1's alternative to delete. */
+/**
+ * PATCH { name?, estimate?, categoryId?, archived?, quantity?, unitRate?, multiplier?, unitLabel? }.
+ * Archive is R1's alternative to delete. A math field sent as null is cleared; clearing unitRate
+ * keeps the last estimate, which is typed from then on.
+ */
 export async function PATCH(req: Request, { params }: Ctx) {
   try {
     const { projectId, lineId } = await params
@@ -19,6 +23,10 @@ export async function PATCH(req: Request, { params }: Ctx) {
         estimate: body.estimate,
         categoryId: body.categoryId,
         archived: body.archived,
+        quantity: body.quantity,
+        unitRate: body.unitRate,
+        multiplier: body.multiplier,
+        unitLabel: body.unitLabel,
       }),
       "line",
       "line PATCH"

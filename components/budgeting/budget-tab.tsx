@@ -12,6 +12,17 @@ import { useChart, useLines } from "@/lib/budget/hooks"
 import { useRefreshProject, useRefreshTemplate } from "@/lib/budget/use-refresh"
 import { BudgetApiError, budgetDelete, budgetFetch, budgetPatch, budgetPost, errorMessage, projectBase } from "@/lib/budget/client-api"
 import { centsToDecimalString, formatCents, parseMoneyToCents, toCentsFromApi } from "@/lib/budget/money"
+import {
+  computeEstimateCents,
+  formatMilli,
+  milliToDecimalString,
+  milliToPlain,
+  parseDecimal3ToMilli,
+  parseRateToCents,
+  parseUnitLabel,
+  rateCentsFromApi,
+  toMilliFromApi,
+} from "@/lib/budget/line-math"
 import { categoryNameKey } from "@/lib/budget/starter-templates"
 import { formatDateTime } from "@/lib/utils"
 import type { BudgetLine, FeeOrCost, ProjectCategory, TemplateCategory } from "@/lib/server/budget/schema"
@@ -76,6 +87,8 @@ export function BudgetTab({ projectId }: { projectId: string }) {
     return { categories, merges, retired, live, linesByCategory, nameById, liveLineCount, totalCents }
   }, [chart.data, lines.data])
 
+  // 116 applied: quantity, rate, multiplier and unit exist. Until then every line is typed only.
+  const lineMath = lines.data?.lineMath === true
   const visibleCategories = model.live.filter((c) => showArchived || !c.archived_at)
   const activeCategories = model.live.filter((c) => !c.archived_at)
 
@@ -282,6 +295,12 @@ export function BudgetTab({ projectId }: { projectId: string }) {
         </div>
       </div>
 
+      {lineMath && hasChart ? (
+        <p className="text-xs text-foreground-muted">
+          Total = Qty x Rate x multiplier, rounded to the cent. An empty Qty or x counts as 1. Leave Rate empty to type the total yourself.
+        </p>
+      ) : null}
+
       <ActionMessage message={message} />
       {mergeNeedsFinish ? (
         <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm text-foreground flex flex-wrap items-center gap-3">
@@ -313,6 +332,7 @@ export function BudgetTab({ projectId }: { projectId: string }) {
             projectId={projectId}
             category={c}
             lines={(model.linesByCategory.get(c.id) ?? []).filter((l) => showArchived || !l.archived_at)}
+            lineMath={lineMath}
             busy={busy}
             onMessage={setMessage}
             onRefresh={refresh}
@@ -455,6 +475,7 @@ export function BudgetTab({ projectId }: { projectId: string }) {
         <ImportSheet
           projectId={projectId}
           categories={activeCategories}
+          lineMath={lineMath}
           open={importOpen}
           onOpenChange={setImportOpen}
           onFinished={() => refresh()}
@@ -468,6 +489,7 @@ function CategoryCard({
   projectId,
   category,
   lines,
+  lineMath,
   busy,
   onMessage,
   onRefresh,
@@ -482,6 +504,7 @@ function CategoryCard({
   projectId: string
   category: ProjectCategory
   lines: BudgetLine[]
+  lineMath: boolean
   busy: boolean
   onMessage: (m: Msg) => void
   onRefresh: () => Promise<unknown>
@@ -495,19 +518,37 @@ function CategoryCard({
 }) {
   const [name, setName] = useState("")
   const [estimate, setEstimate] = useState("")
+  const [qty, setQty] = useState("")
+  const [rate, setRate] = useState("")
+  const [mult, setMult] = useState("")
+  const [unit, setUnit] = useState("")
   const [adding, setAdding] = useState(false)
   const subtotal = lines.filter((l) => !l.archived_at).reduce((a, l) => a + toCentsFromApi(l.estimate), 0)
   const archived = Boolean(category.archived_at)
+  const preview = lineMath ? previewTotal(qty, rate, mult) : null
 
   async function addLine() {
-    const money = parseMoneyToCents(estimate || "0")
     if (!name.trim()) return onMessage({ tone: "error", text: "Name the line." })
-    if (!money.ok) return onMessage({ tone: "error", text: `Estimate: ${money.reason}` })
+    const body: Record<string, unknown> = { categoryId: category.id, name: name.trim() }
+    if (lineMath) {
+      const math = readMath(qty, rate, mult, unit)
+      if (!math.ok) return onMessage({ tone: "error", text: math.reason })
+      Object.assign(body, math.body)
+    }
+    if (!("unitRate" in body) || body.unitRate === null) {
+      const money = parseMoneyToCents(estimate || "0")
+      if (!money.ok) return onMessage({ tone: "error", text: `Estimate: ${money.reason}` })
+      body.estimate = centsToDecimalString(money.cents)
+    }
     setAdding(true)
     try {
-      await budgetPost(`${projectBase(projectId)}/lines`, { categoryId: category.id, name: name.trim(), estimate: centsToDecimalString(money.cents) })
+      await budgetPost(`${projectBase(projectId)}/lines`, body)
       setName("")
       setEstimate("")
+      setQty("")
+      setRate("")
+      setMult("")
+      setUnit("")
       onMessage(null)
       await onRefresh()
     } catch (e) {
@@ -557,13 +598,62 @@ function CategoryCard({
           </Button>
         </div>
       </header>
-      <div className="divide-y divide-border">
-        {lines.length === 0 ? <p className="px-4 py-3 text-sm text-foreground-muted">No lines yet.</p> : null}
-        {lines.map((l) => (
-          <LineRow key={`${l.id}:${l.name}:${l.estimate}:${l.archived_at ?? ""}`} projectId={projectId} line={l} onMessage={onMessage} onRefresh={onRefresh} onDelete={() => onDeleteLine(l)} />
-        ))}
-      </div>
-      {!archived ? (
+      {lineMath ? (
+        <div className="overflow-x-auto">
+          <div className="min-w-[44rem] divide-y divide-border">
+            {lines.length === 0 ? <p className="px-4 py-3 text-sm text-foreground-muted">No lines yet.</p> : null}
+            {lines.length > 0 ? (
+              <div className={`${MATH_GRID} px-4 pt-2 pb-1 font-mono text-2xs uppercase tracking-wider text-foreground-muted`} aria-hidden>
+                <span>Line</span>
+                <span className="text-right">Qty</span>
+                <span className="text-right">Rate</span>
+                <span className="text-right">x</span>
+                <span>Unit</span>
+                <span className="text-right">Total</span>
+                <span />
+              </div>
+            ) : null}
+            {lines.map((l) => (
+              <MathLineRow key={l.id} projectId={projectId} line={l} onMessage={onMessage} onRefresh={onRefresh} onDelete={() => onDeleteLine(l)} />
+            ))}
+            {!archived ? (
+              <div className={`${MATH_GRID} px-4 py-3`}>
+                <Input
+                  aria-label="New line name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="New line"
+                  maxLength={300}
+                  className="bg-background border-border text-foreground h-8"
+                  onKeyDown={(e) => e.key === "Enter" && addLine()}
+                />
+                <Input aria-label="New line quantity" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="1" inputMode="decimal" className={newCell} onKeyDown={(e) => e.key === "Enter" && addLine()} />
+                <Input aria-label="New line rate" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="Rate" inputMode="decimal" className={newCell} onKeyDown={(e) => e.key === "Enter" && addLine()} />
+                <Input aria-label="New line multiplier" value={mult} onChange={(e) => setMult(e.target.value)} placeholder="1" inputMode="decimal" className={newCell} onKeyDown={(e) => e.key === "Enter" && addLine()} />
+                <Input aria-label="New line unit" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="day" maxLength={24} className="bg-background border-border text-foreground h-8" onKeyDown={(e) => e.key === "Enter" && addLine()} />
+                {preview ? (
+                  <span className={`text-right font-mono text-sm ${"error" in preview ? "text-destructive" : "text-foreground"}`} title={"error" in preview ? preview.error : "Computed: Qty x Rate x multiplier"}>
+                    {"error" in preview ? "-" : formatCents(preview.cents)}
+                  </span>
+                ) : (
+                  <Input aria-label="New line total" value={estimate} onChange={(e) => setEstimate(e.target.value)} placeholder="0.00" inputMode="decimal" className={newCell} onKeyDown={(e) => e.key === "Enter" && addLine()} />
+                )}
+                <Button size="sm" variant="outline" className="border-border font-mono h-8 px-2" disabled={adding} onClick={addLine}>
+                  {adding ? "..." : "Add"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {lines.length === 0 ? <p className="px-4 py-3 text-sm text-foreground-muted">No lines yet.</p> : null}
+          {lines.map((l) => (
+            <LineRow key={`${l.id}:${l.name}:${l.estimate}:${l.archived_at ?? ""}`} projectId={projectId} line={l} onMessage={onMessage} onRefresh={onRefresh} onDelete={() => onDeleteLine(l)} />
+          ))}
+        </div>
+      )}
+      {!archived && !lineMath ? (
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-t border-border">
           <Input
             value={name}
@@ -587,6 +677,288 @@ function CategoryCard({
         </div>
       ) : null}
     </section>
+  )
+}
+
+// ---- Line math (116). Same rules as the server: lib/budget/line-math.ts. ----
+
+const MATH_GRID = "grid grid-cols-[minmax(11rem,1fr)_5rem_7.5rem_4.5rem_5.5rem_8rem_4.75rem] items-center gap-2"
+const newCell = "bg-background border-border text-foreground h-8 text-right font-mono"
+const inlineCell = "h-8 bg-transparent border-transparent hover:border-border focus:border-border text-foreground"
+
+type Read<T> = { ok: true; value: T } | { ok: false; reason: string }
+
+/** An empty cell is "not set" (null); anything else must parse. */
+function readMilli(text: string, label: string): Read<number | null> {
+  if (!text.trim()) return { ok: true, value: null }
+  const r = parseDecimal3ToMilli(text, label)
+  return r.ok ? { ok: true, value: r.milli } : r
+}
+
+function readRate(text: string): Read<number | null> {
+  if (!text.trim()) return { ok: true, value: null }
+  const r = parseRateToCents(text)
+  return r.ok ? { ok: true, value: r.cents } : r
+}
+
+function readUnit(text: string): Read<string | null> {
+  if (!text.trim()) return { ok: true, value: null }
+  const r = parseUnitLabel(text)
+  return r.ok ? { ok: true, value: r.label } : r
+}
+
+/** The total a row's cells imply, null when there is no rate (the total is typed). */
+function previewTotal(qty: string, rate: string, mult: string): { cents: number } | { error: string } | null {
+  const r = readRate(rate)
+  if (!r.ok) return { error: r.reason }
+  if (r.value === null) return null
+  const q = readMilli(qty, "Quantity")
+  if (!q.ok) return { error: q.reason }
+  const m = readMilli(mult, "Multiplier")
+  if (!m.ok) return { error: m.reason }
+  const c = computeEstimateCents(q.value, r.value, m.value)
+  return c.ok ? { cents: c.cents } : { error: c.reason }
+}
+
+/** A new line's math fields for the API, validated; empty cells are left out. */
+function readMath(qty: string, rate: string, mult: string, unit: string): { ok: true; body: Record<string, unknown> } | { ok: false; reason: string } {
+  const q = readMilli(qty, "Quantity")
+  if (!q.ok) return q
+  const r = readRate(rate)
+  if (!r.ok) return r
+  const m = readMilli(mult, "Multiplier")
+  if (!m.ok) return m
+  const u = readUnit(unit)
+  if (!u.ok) return u
+  if (r.value !== null) {
+    const c = computeEstimateCents(q.value, r.value, m.value)
+    if (!c.ok) return { ok: false, reason: c.reason }
+  }
+  const body: Record<string, unknown> = {}
+  if (q.value !== null) body.quantity = milliToDecimalString(q.value)
+  if (r.value !== null) body.unitRate = centsToDecimalString(r.value)
+  if (m.value !== null) body.multiplier = milliToDecimalString(m.value)
+  if (u.value !== null) body.unitLabel = u.value
+  return { ok: true, body }
+}
+
+function formulaText(qty: number | null, rate: number, mult: number | null, unit: string | null, total: number): string {
+  return `${formatMilli(qty ?? 1000)}${unit ? ` ${unit}` : ""} x ${formatCents(rate)}${mult !== null ? ` x ${formatMilli(mult)}` : ""} = ${formatCents(total)}`
+}
+
+type MathField = "name" | "quantity" | "rate" | "multiplier" | "unit" | "estimate"
+
+/**
+ * One line with math. Each cell saves on blur or Enter (one field per request, so tabbing on while a
+ * save is in flight loses nothing); Escape reverts the cell. With a rate the Total is read-only and
+ * shows the product live; without one it is the typed estimate, as before 116.
+ */
+function MathLineRow({
+  projectId,
+  line,
+  onMessage,
+  onRefresh,
+  onDelete,
+}: {
+  projectId: string
+  line: BudgetLine
+  onMessage: (m: Msg) => void
+  onRefresh: () => Promise<unknown>
+  onDelete: () => void
+}) {
+  const saved = {
+    name: line.name,
+    quantity: toMilliFromApi(line.quantity),
+    rate: rateCentsFromApi(line.unit_rate),
+    multiplier: toMilliFromApi(line.multiplier),
+    unit: line.unit_label,
+    cents: toCentsFromApi(line.estimate),
+  }
+  const text = {
+    name: saved.name,
+    quantity: saved.quantity === null ? "" : milliToPlain(saved.quantity),
+    rate: saved.rate === null ? "" : centsToDecimalString(saved.rate),
+    multiplier: saved.multiplier === null ? "" : milliToPlain(saved.multiplier),
+    unit: saved.unit ?? "",
+    estimate: centsToDecimalString(saved.cents),
+  }
+  const [values, setValues] = useState(text)
+  const [focused, setFocused] = useState<MathField | null>(null)
+  const [busy, setBusy] = useState(false)
+  const archived = Boolean(line.archived_at)
+
+  // A refresh after any save brings new saved values: adopt them in every cell but the one being
+  // typed in (adjusting state during render, not in an effect).
+  const savedKey = `${line.name}|${line.quantity}|${line.unit_rate}|${line.multiplier}|${line.unit_label}|${line.estimate}`
+  const [syncedKey, setSyncedKey] = useState(savedKey)
+  if (syncedKey !== savedKey) {
+    setSyncedKey(savedKey)
+    setValues((v) => {
+      const next = { ...text }
+      if (focused) next[focused] = v[focused]
+      return next
+    })
+  }
+
+  const set = (field: MathField, value: string) => setValues((v) => ({ ...v, [field]: value }))
+  const revert = (field: MathField) => set(field, text[field])
+
+  async function save(field: MathField, patch: Record<string, unknown>) {
+    try {
+      await budgetPatch(`${projectBase(projectId)}/lines/${line.id}`, patch)
+      onMessage(null)
+      await onRefresh()
+    } catch (e) {
+      onMessage({ tone: "error", text: `${line.name}: ${errorMessage(e)}` })
+      revert(field)
+    }
+  }
+
+  function refuse(field: MathField, reason: string) {
+    onMessage({ tone: "error", text: `${line.name}: ${reason}` })
+    revert(field)
+  }
+
+  /** Would this change make the product unrepresentable? Checked before sending. */
+  function productFits(next: { quantity?: number | null; rate?: number | null; multiplier?: number | null }): string | null {
+    const r = next.rate !== undefined ? next.rate : saved.rate
+    if (r === null) return null
+    const c = computeEstimateCents(
+      next.quantity !== undefined ? next.quantity : saved.quantity,
+      r,
+      next.multiplier !== undefined ? next.multiplier : saved.multiplier
+    )
+    return c.ok ? null : c.reason
+  }
+
+  function commit(field: MathField) {
+    setFocused(null)
+    const raw = values[field]
+    if (field === "name") {
+      const next = raw.trim()
+      if (!next) return revert("name")
+      if (next !== saved.name) void save("name", { name: next })
+      return
+    }
+    if (field === "quantity" || field === "multiplier") {
+      const r = readMilli(raw, field === "quantity" ? "Quantity" : "Multiplier")
+      if (!r.ok) return refuse(field, r.reason)
+      if (r.value === saved[field]) return revert(field)
+      const tooLarge = productFits({ [field]: r.value })
+      if (tooLarge) return refuse(field, tooLarge)
+      void save(field, { [field]: r.value === null ? null : milliToDecimalString(r.value) })
+      return
+    }
+    if (field === "rate") {
+      const r = readRate(raw)
+      if (!r.ok) return refuse("rate", r.reason)
+      if (r.value === saved.rate) return revert("rate")
+      const tooLarge = productFits({ rate: r.value })
+      if (tooLarge) return refuse("rate", tooLarge)
+      // Clearing the rate keeps the last total, which is typed from then on.
+      void save("rate", { unitRate: r.value === null ? null : centsToDecimalString(r.value) })
+      return
+    }
+    if (field === "unit") {
+      const r = readUnit(raw)
+      if (!r.ok) return refuse("unit", r.reason)
+      if (r.value === saved.unit) return revert("unit")
+      void save("unit", { unitLabel: r.value })
+      return
+    }
+    const money = parseMoneyToCents(raw)
+    if (!money.ok) return refuse("estimate", money.reason)
+    set("estimate", centsToDecimalString(money.cents))
+    if (money.cents !== saved.cents) void save("estimate", { estimate: centsToDecimalString(money.cents) })
+  }
+
+  const cellProps = (field: MathField) => ({
+    value: values[field],
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(field, e.target.value),
+    onFocus: () => setFocused(field),
+    onBlur: () => commit(field),
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") (e.target as HTMLInputElement).blur()
+      if (e.key === "Escape") {
+        revert(field)
+        setFocused(null)
+        // Blur after the revert has rendered, so the blur commits the saved value (a no-op).
+        const el = e.target as HTMLInputElement
+        setTimeout(() => el.blur(), 0)
+      }
+    },
+  })
+
+  const preview = previewTotal(values.quantity, values.rate, values.multiplier)
+  const showComputed = values.rate.trim() !== "" || saved.rate !== null
+  const formula =
+    saved.rate !== null ? formulaText(saved.quantity, saved.rate, saved.multiplier, saved.unit, saved.cents) : "Typed total (no rate)"
+
+  async function toggleArchive() {
+    setBusy(true)
+    try {
+      await budgetPatch(`${projectBase(projectId)}/lines/${line.id}`, { archived: !archived })
+      onMessage(null)
+      await onRefresh()
+    } catch (e) {
+      onMessage({ tone: "error", text: `${line.name}: ${errorMessage(e)}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const num = `${inlineCell} text-right font-mono`
+  const plain = "text-right font-mono text-sm text-foreground-muted truncate"
+
+  return (
+    <div className={`${MATH_GRID} px-4 py-2 ${archived ? "opacity-60" : ""}`}>
+      {archived ? (
+        <span className="min-w-0 text-sm text-foreground-muted truncate">
+          {line.name} <span className="font-mono text-2xs uppercase tracking-wider">· Archived</span>
+        </span>
+      ) : (
+        <Input aria-label="Line name" maxLength={300} className={inlineCell} {...cellProps("name")} />
+      )}
+      {archived ? (
+        <>
+          <span className={plain}>{saved.quantity === null ? "" : formatMilli(saved.quantity)}</span>
+          <span className={plain}>{saved.rate === null ? "" : formatCents(saved.rate)}</span>
+          <span className={plain}>{saved.multiplier === null ? "" : formatMilli(saved.multiplier)}</span>
+          <span className="text-sm text-foreground-muted truncate">{saved.unit ?? ""}</span>
+          <span className={plain} title={formula}>
+            {formatCents(saved.cents)}
+          </span>
+        </>
+      ) : (
+        <>
+          <Input aria-label={`${line.name} quantity`} inputMode="decimal" placeholder="1" className={num} {...cellProps("quantity")} />
+          <Input aria-label={`${line.name} rate`} inputMode="decimal" placeholder="-" className={num} {...cellProps("rate")} />
+          <Input aria-label={`${line.name} multiplier`} inputMode="decimal" placeholder="1" className={num} {...cellProps("multiplier")} />
+          <Input aria-label={`${line.name} unit`} maxLength={24} placeholder="-" className={inlineCell} {...cellProps("unit")} />
+          {showComputed ? (
+            <span
+              className={`text-right font-mono text-sm ${preview && "error" in preview ? "text-destructive" : "text-foreground"}`}
+              title={preview && "error" in preview ? preview.error : formula}
+              aria-label={`${line.name} total, computed`}
+            >
+              {preview === null ? formatCents(saved.cents) : "error" in preview ? "-" : formatCents(preview.cents)}
+            </span>
+          ) : (
+            <Input aria-label={`${line.name} total`} inputMode="decimal" className={num} title={formula} {...cellProps("estimate")} />
+          )}
+        </>
+      )}
+      <div className="flex items-center justify-end">
+        <Button variant="ghost" size="sm" className="h-8 px-2 text-foreground-muted hover:text-foreground" title={archived ? "Restore" : "Archive"} disabled={busy} onClick={toggleArchive}>
+          {archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+          <span className="sr-only">{archived ? "Restore" : "Archive"}</span>
+        </Button>
+        <Button variant="ghost" size="sm" className="h-8 px-2 text-destructive/80 hover:text-destructive" title="Delete" disabled={busy} onClick={onDelete}>
+          <Trash2 className="w-4 h-4" />
+          <span className="sr-only">Delete</span>
+        </Button>
+      </div>
+    </div>
   )
 }
 

@@ -13,7 +13,8 @@ Each step says what to do and what you must see. Record a step as failed if what
 ## Part A. Before 103 is applied (spine not enabled)
 
 1. Sign in as the agency. In the sidebar, **00 Budgeting** shows "Coming soon", is not a link and is
-   not focusable with Tab.
+   not focusable with Tab. Directly beneath it, **◆ Creative Treatment Analysis** IS a link (to
+   `/agency/brief`) and is reachable with Tab (moved 2026-10-14; see Part D, NV1 to NV4).
 2. Visit `/agency/budgeting` directly. The page loads with the title Budgeting and a card
    "Budgeting is not enabled yet". No error page, no spinner that never ends.
 3. Visit `/agency/budgeting/templates`. Same "not enabled" card.
@@ -154,8 +155,9 @@ Hard drive shuttle,Shipping and drives,85,
 ### Summary
 
 46. Summary tab. Metrics: Estimate (sum of all live lines), Actual 3,100.00, Margin (estimate) with "x%
-    of fee plus cost", Margin (actual). Totals table: Fee total, Cost total, Project total. Check by hand:
-    margin amount = Fee total; percent = fee / (fee + cost).
+    share of total · y% markup on cost", Margin (actual) likewise. Totals table: Fee total, Cost total,
+    Project total, Margin (share of total), Markup on cost. Check by hand: margin amount = Fee total;
+    share of total = fee / (fee + cost); markup on cost = fee / cost (see Part D, MG1 to MG5).
 47. By category: **Camera, lighting and grip** shows the Gaffer line Actual 3,250.00 and "Not on a line (1
     entry)" -150.00; the category Actual is 3,100.00. The voided entry is not counted anywhere.
 
@@ -175,12 +177,14 @@ Hard drive shuttle,Shipping and drives,85,
 51. Header **Budget CSV**: a file `budget-test-spring-launch-budget.csv` downloads; message "Budget
     exported: N lines". Open it in a text editor (not a spreadsheet first):
     - every field is wrapped in double quotes;
-    - columns are Category, Line, Fee or cost, Estimate, Actual;
+    - columns are Category, Line, Fee or cost, Qty, Rate, Multiplier, Unit, Estimate, Actual (the four
+      math columns are empty before 116 and for lines without a rate);
     - the imported row 6 appears as `"Editorial","'=HYPERLINK(""http://example.com"",""click"")","cost","100.00",...`
       (a leading single quote, quotes doubled);
     - the credit line's estimate is `"'-250.00"` (every cell starting with `-` is prefixed, including
       numbers);
-    - the last rows are Fee total, Cost total, Project total, Margin (fee total) and Margin percent.
+    - the last rows are Fee total, Cost total, Project total, Margin (fee total), "Margin (share of
+      total) %, fee / (fee + cost)" and "Markup on cost %, fee / cost".
 52. Open the same file in Excel or Google Sheets: row 6 shows the text `=HYPERLINK(...)`, **not** a
     clickable link, and no formula runs.
 53. **Ledger CSV**: `budget-test-spring-launch-ledger.csv` downloads, "Ledger exported: 3 entries,
@@ -209,6 +213,84 @@ Hard drive shuttle,Shipping and drives,85,
     `/api/agency/budget/projects` in the browser: 402 with code `agency_entitlement_required`. The pages
     themselves are normally unreachable for that account (the middleware redirects `/agency` to the access
     page); if reached, they show "Budgeting is part of the lead agency plan" with a link to the plan page.
+
+## Part D. Line math (116), margin both ways, nav (feat/budget-line-math)
+
+### Before 116 is applied (code deployed, columns missing)
+
+LM0. Budget tab: lines look exactly as before (name, typed estimate, archive, delete); there is no Qty,
+     Rate, x or Unit column and no formula hint. Adding and editing a typed estimate works as in steps
+     21 to 24. Budget CSV: Qty, Rate, Multiplier and Unit columns are present and empty.
+LM0b. Import a file with a Rate column (LM10's file): the mapping step shows the note "Line math is not
+     enabled yet ... the quantity, rate and multiplier are not kept". Imported lines get the computed
+     totals as typed estimates.
+
+### After 116 is applied
+
+LM1. Reload the Budget tab. Under the stop line a one-line hint reads "Total = Qty x Rate x multiplier,
+     rounded to the cent. An empty Qty or x counts as 1. Leave Rate empty to type the total yourself."
+     Each category shows column heads Line, Qty, Rate, x, Unit, Total.
+LM2. Existing lines show empty Qty, Rate, x and Unit and their typed Total, editable as before.
+LM3. **Rate only:** in the new-line row type `Producer day`, Rate `950`, press Enter. Total 950.00
+     (read-only, computed).
+LM4. **Qty x rate:** new line `Shoot crew`, Qty `3`, Rate `1250.50`, Unit `day`: the Total cell shows
+     3,751.50 while typing; Enter saves it. Hover the Total: "3 day x 1,250.50 = 3,751.50".
+LM5. **Qty x rate x multiplier:** on `Shoot crew` set x to `1.5` and press Tab: Total 5,627.25. Tab moves
+     on to Unit without losing what you type there.
+LM6. **Rounding:** new line `Rounding check`, Qty `0.125`, Rate `0.20`: Total 0.03 (half away from zero).
+LM7. **Discount:** new line `Volume discount`, Qty `2`, Rate `-150`, x `1.5`: Total -450.00.
+LM8. **Refusals:** on any line type Qty `0` -> "Quantity must be greater than 0" and the cell reverts; x
+     `-1` -> refused; Qty `1.2345` -> "more than three decimal places"; Unit `abcdefghijklmnopqrstuvwxy`
+     (25 characters) cannot be typed past 24; Rate `999999999999.99` with Qty `2` -> "The line total is
+     too large...". Escape in any cell reverts it without saving.
+LM9. **Clearing the rate keeps the total:** clear `Shoot crew`'s Rate and press Enter. Total stays
+     5,627.25 and becomes an editable input; Qty, x and Unit stay. Type `5000` in Total: it saves
+     5000.00. Set Rate `1250.50` again: Total returns to 5,627.25.
+LM10. **R1 on a computed line:** bin icon on `Producer day` (950.00): refused with the R1 text and
+     **Archive instead**. Set its Rate to `0`: Total 0.00; delete it: it is gone.
+LM11. **Import with math:** save as `budget-math-sample.csv`:
+
+```csv
+Description,Category,Qty,Unit,Rate,x,Amount
+Gaffer,"Camera, lighting and grip",3,day,850,1.5,
+Grip truck,"Camera, lighting and grip",2,day,400,,800
+Location permit,Locations and permits,,,,,1200
+Overtime check,"Camera, lighting and grip",1.2345,hour,100,,
+Agency fee,Creative development,1,flat,5000,,4000
+```
+
+     Import: the mapping guesses Quantity (Qty), Unit, Rate, Multiplier (x) and Amount; Amount reads
+     "Amount (optional with a rate)". Review: Gaffer 3,825.00 with "3 day x 850.00 x 1.5"; Grip truck
+     800.00; Location permit 1,200.00 (no rate, amount used); Overtime check excluded with "Quantity has
+     more than three decimal places"; Agency fee 5,000.00 with "File amount 4,000.00 replaced by Qty x
+     Rate x multiplier". Import the four included rows; the Budget tab shows their Qty, Rate, x and Unit.
+LM12. **Export:** Budget CSV now has Qty, Rate, Multiplier, Unit filled for the computed lines
+     (`"3"`, `"850.00"`, `"1.5"`, `"day"` for Gaffer) and empty for typed ones; the discount line's rate
+     reads `"'-150.00"` (formula neutralisation, as for every cell starting with `-`).
+LM13. **Vendor:** as `gmarkant@icloud.com`, any `/api/agency/budget/...` URL still answers 402 (or
+     403/404) and the vendor UI shows no budget lines anywhere.
+
+### Margin both ways
+
+MG1. Summary tab: each margin card reads "x% share of total · y% markup on cost".
+MG2. Totals table: rows **Margin (share of total)** and **Markup on cost**, with Estimate and Actual.
+MG3. By hand from Fee total F and Cost total C: share = F / (F + C); markup = F / C; one decimal.
+MG4. In a project whose budget has only fee categories (cost 0): Markup on cost shows `-` in the card
+     and the table; share of total shows 100.0%. A project with no lines shows `-` for both.
+MG5. Budget CSV: rows "Margin (share of total) %, fee / (fee + cost)" and "Markup on cost %, fee /
+     cost", the same numbers as the Summary tab; `-` (written `'-`) where the tab shows `-`; Actual empty
+     when there is no ledger.
+
+### Nav
+
+NV1. Agency sidebar, desktop: **00 Budgeting** has **◆ Creative Treatment Analysis** indented directly
+     beneath it. Hover **01 RFP Broadcast**: its dropdown lists only Lightning RFP Magic Link.
+NV2. Click **Creative Treatment Analysis**: `/agency/brief` opens exactly as before; the sub-link shows
+     the active (lime) state.
+NV3. Mobile width (under 768px): the same sub-link sits under 00 Budgeting; the RFP Broadcast inline list
+     shows only Lightning RFP Magic Link.
+NV4. With the spine probe failing (Part A conditions), 00 Budgeting is "Coming soon" text and the
+     Creative Treatment Analysis sub-link still works.
 
 ## Cleanup
 

@@ -1,4 +1,5 @@
-import { parseMoneyToCents } from "./money"
+import { centsToDecimalString, formatCents, parseMoneyToCents } from "./money"
+import { computeEstimateCents, milliToDecimalString, parseDecimal3ToMilli, parseRateToCents, parseUnitLabel } from "./line-math"
 import type { FeeOrCost } from "@/lib/server/budget/schema"
 import { categoryNameKey } from "./starter-templates"
 
@@ -40,11 +41,31 @@ export async function readImportFile(file: File, firstRowIsHeaders: boolean): Pr
   }
 }
 
+/**
+ * Which file column feeds which field. quantity, rate, multiplier and unit are optional (line math,
+ * migration 116): a row with a rate imports as qty x rate x multiplier, and when rate is mapped the
+ * amount column is optional.
+ */
 export type ColumnMapping = {
   description: number | null
   category: number | null
   amount: number | null
   feeOrCost: number | null
+  quantity: number | null
+  rate: number | null
+  multiplier: number | null
+  unit: number | null
+}
+
+export const EMPTY_MAPPING: ColumnMapping = {
+  description: null,
+  category: null,
+  amount: null,
+  feeOrCost: null,
+  quantity: null,
+  rate: null,
+  multiplier: null,
+  unit: null,
 }
 
 const HEADER_HINTS: Record<keyof ColumnMapping, RegExp> = {
@@ -52,6 +73,10 @@ const HEADER_HINTS: Record<keyof ColumnMapping, RegExp> = {
   category: /^(category|section|group|account|bucket|department)$/i,
   amount: /^(amount|estimate|budget|total|cost|price|value|subtotal)$/i,
   feeOrCost: /^(fee.?or.?cost|fee\/cost|type|kind)$/i,
+  quantity: /^(qty|quantity|count|no\.? of units|number of units)$/i,
+  rate: /^(rate|unit rate|unit price|unit cost|price per unit|day rate|hourly rate)$/i,
+  multiplier: /^(x|multiplier|factor|mult)$/i,
+  unit: /^(unit|units|uom|unit label|per)$/i,
 }
 
 export function guessMapping(headers: string[]): ColumnMapping {
@@ -59,8 +84,20 @@ export function guessMapping(headers: string[]): ColumnMapping {
     const i = headers.findIndex((h) => HEADER_HINTS[key].test(h.trim()))
     return i >= 0 ? i : null
   }
-  return { description: find("description"), category: find("category"), amount: find("amount"), feeOrCost: find("feeOrCost") }
+  return {
+    description: find("description"),
+    category: find("category"),
+    amount: find("amount"),
+    feeOrCost: find("feeOrCost"),
+    quantity: find("quantity"),
+    rate: find("rate"),
+    multiplier: find("multiplier"),
+    unit: find("unit"),
+  }
 }
+
+/** Both are needed: a description, and either an amount or a rate to compute one from. */
+export const mappingReady = (m: ColumnMapping) => m.description !== null && (m.amount !== null || m.rate !== null)
 
 export function parseFeeOrCost(value: string): FeeOrCost | null {
   const v = value.trim().toLowerCase()
@@ -78,15 +115,50 @@ export function parseFeeOrCost(value: string): FeeOrCost | null {
  */
 export type CategoryTarget = { kind: "existing"; categoryId: string } | { kind: "new"; name: string } | null
 
+/** A row's line math, validated: thousandths, cents, text. Present only when the row has a rate. */
+export type RowMath = { quantityMilli: number | null; rateCents: number; multiplierMilli: number | null; unitLabel: string | null }
+
 export type ReviewRow = {
   index: number
   description: string
+  /** The line's total: the computed product when the row has a rate, else the amount column. */
   amountCents: number | null
   amountError: string | null
+  /** Set when the file's amount differs from the computed total that replaces it. */
+  amountNote: string | null
+  math: RowMath | null
   sourceCategory: string
   target: CategoryTarget
   feeOrCost: FeeOrCost | null
   include: boolean
+}
+
+type Cell<T> = { ok: true; value: T } | { ok: false; reason: string }
+
+const emptyOr = <T>(text: string, parse: (t: string) => Cell<T>): Cell<T | null> => (text ? parse(text) : { ok: true, value: null })
+
+/** The row's math from its quantity, rate, multiplier and unit cells, or why it is refused. */
+function readRowMath(qty: string, rate: string, mult: string, unit: string): Cell<RowMath & { totalCents: number }> {
+  const r = parseRateToCents(rate)
+  if (!r.ok) return r
+  const q = emptyOr(qty, (t) => {
+    const p = parseDecimal3ToMilli(t, "Quantity")
+    return p.ok ? { ok: true, value: p.milli } : p
+  })
+  if (!q.ok) return q
+  const m = emptyOr(mult, (t) => {
+    const p = parseDecimal3ToMilli(t, "Multiplier")
+    return p.ok ? { ok: true, value: p.milli } : p
+  })
+  if (!m.ok) return m
+  const u = emptyOr(unit, (t) => {
+    const p = parseUnitLabel(t)
+    return p.ok ? { ok: true, value: p.label } : p
+  })
+  if (!u.ok) return u
+  const total = computeEstimateCents(q.value, r.cents, m.value)
+  if (!total.ok) return total
+  return { ok: true, value: { quantityMilli: q.value, rateCents: r.cents, multiplierMilli: m.value, unitLabel: u.value, totalCents: total.cents } }
 }
 
 export function buildReviewRows(
@@ -98,23 +170,57 @@ export function buildReviewRows(
   return rows.map((row, index) => {
     const cell = (i: number | null) => (i === null ? "" : (row[i] ?? "").trim())
     const description = cell(mapping.description).slice(0, 300)
-    const money = mapping.amount === null ? null : parseMoneyToCents(cell(mapping.amount))
+    const amountText = cell(mapping.amount)
+    const money = mapping.amount === null ? null : parseMoneyToCents(amountText)
     const sourceCategory = cell(mapping.category).slice(0, 200)
     const match = sourceCategory ? byName.get(categoryNameKey(sourceCategory)) : undefined
     const target: CategoryTarget = match ? { kind: "existing", categoryId: match.id } : sourceCategory ? { kind: "new", name: sourceCategory } : null
     const fromColumn = mapping.feeOrCost === null ? null : parseFeeOrCost(cell(mapping.feeOrCost))
-    const amountError = money === null ? "No amount column chosen" : money.ok ? null : money.reason
+
+    let amountCents: number | null = null
+    let amountError: string | null = null
+    let amountNote: string | null = null
+    let math: RowMath | null = null
+    const rateText = cell(mapping.rate)
+    if (rateText) {
+      // A rate makes this a computed line. Quantity, multiplier and unit apply only with a rate.
+      const m = readRowMath(cell(mapping.quantity), rateText, cell(mapping.multiplier), cell(mapping.unit))
+      if (m.ok) {
+        const { totalCents, ...rest } = m.value
+        math = rest
+        amountCents = totalCents
+        if (money && money.ok && amountText && money.cents !== totalCents) {
+          amountNote = `File amount ${formatCents(money.cents)} replaced by Qty x Rate x multiplier`
+        }
+      } else amountError = m.reason
+    } else if (money === null) {
+      amountError = mapping.rate === null ? "No amount column chosen" : "No rate or amount"
+    } else if (money.ok) amountCents = money.cents
+    else amountError = mapping.rate !== null && !amountText ? "No rate or amount" : money.reason
+
     return {
       index,
       description,
-      amountCents: money && money.ok ? money.cents : null,
+      amountCents,
       amountError,
+      amountNote,
+      math,
       sourceCategory,
       target,
       feeOrCost: match ? match.fee_or_cost : fromColumn,
       include: Boolean(description) && amountError === null,
     }
   })
+}
+
+/** The API body fields for a reviewed row's amount: its math when it has a rate, else the estimate. */
+export function rowAmountBody(row: ReviewRow): Record<string, unknown> {
+  if (!row.math) return { estimate: centsToDecimalString(row.amountCents ?? 0) }
+  const body: Record<string, unknown> = { unitRate: centsToDecimalString(row.math.rateCents) }
+  if (row.math.quantityMilli !== null) body.quantity = milliToDecimalString(row.math.quantityMilli)
+  if (row.math.multiplierMilli !== null) body.multiplier = milliToDecimalString(row.math.multiplierMilli)
+  if (row.math.unitLabel !== null) body.unitLabel = row.math.unitLabel
+  return body
 }
 
 /** Why a row cannot be imported as it stands, or null when it can. */

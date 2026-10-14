@@ -1,6 +1,7 @@
 import { budgetFetch, BudgetApiError, projectBase } from "./client-api"
 import { downloadCsv, fileSlug, toCsv } from "./csv-export"
-import { centsToDecimalString, toCentsFromApi } from "./money"
+import { centsToDecimalString, percentCell, toCentsFromApi } from "./money"
+import { milliToPlain, rateCentsFromApi, toMilliFromApi } from "./line-math"
 import { buildSummaryView } from "./summary-view"
 import type { CategoryMerge, LedgerEntry, ProjectCategory, BudgetLine, SourceDocument } from "@/lib/server/budget/schema"
 import type { EstimateVsActual } from "@/lib/server/budget/summary"
@@ -23,37 +24,60 @@ async function readLedger(projectId: string): Promise<LedgerEntry[] | null> {
 
 export async function exportBudgetCsv(projectId: string, projectName: string): Promise<number> {
   const base = projectBase(projectId)
-  const [chart, summary, entries] = await Promise.all([
+  const [chart, summary, entries, lineList] = await Promise.all([
     budgetFetch<{ categories: ProjectCategory[]; merges: CategoryMerge[] }>(`${base}/chart?include_archived=1`),
     budgetFetch<{ summary: EstimateVsActual }>(`${base}/summary`),
     readLedger(projectId),
+    // Quantity, rate, multiplier and unit (116) live on the line rows, not in the summary.
+    budgetFetch<{ lines: BudgetLine[] }>(`${base}/lines?include_archived=1`),
   ])
   const retired = new Set(chart.merges.map((m) => m.from_category_id))
   const view = buildSummaryView(chart.categories, retired, summary.summary, entries ?? [])
   const hasActual = view.ledgerEnabled && entries !== null
   const money = (cents: number) => centsToDecimalString(cents)
   const actual = (cents: number) => (hasActual ? money(cents) : "")
+  const lineById = new Map(lineList.lines.map((l) => [l.id, l]))
+  /** Qty, Rate, Multiplier, Unit for a line; empty cells for a line without math. */
+  const math = (lineId: string | null): string[] => {
+    const l = lineId ? lineById.get(lineId) : undefined
+    if (!l) return ["", "", "", ""]
+    const q = toMilliFromApi(l.quantity)
+    const r = rateCentsFromApi(l.unit_rate)
+    const m = toMilliFromApi(l.multiplier)
+    return [q === null ? "" : milliToPlain(q), r === null ? "" : money(r), m === null ? "" : milliToPlain(m), l.unit_label ?? ""]
+  }
 
   const rows: unknown[][] = []
   for (const c of view.categories) {
-    for (const l of c.lines) rows.push([c.name, l.name, c.feeOrCost, money(l.estimateCents), actual(l.actualCents)])
-    if (c.offLineCount > 0) rows.push([c.name, "(not on a line)", c.feeOrCost, money(0), actual(c.offLineActualCents)])
-    if (c.lines.length === 0 && c.offLineCount === 0) rows.push([c.name, "", c.feeOrCost, money(0), actual(0)])
+    for (const l of c.lines) rows.push([c.name, l.name, c.feeOrCost, ...math(l.lineId), money(l.estimateCents), actual(l.actualCents)])
+    if (c.offLineCount > 0) rows.push([c.name, "(not on a line)", c.feeOrCost, ...math(null), money(0), actual(c.offLineActualCents)])
+    if (c.lines.length === 0 && c.offLineCount === 0) rows.push([c.name, "", c.feeOrCost, ...math(null), money(0), actual(0)])
   }
   rows.push([])
-  rows.push(["Fee total", "", "fee", money(view.fee.estimateCents), actual(view.fee.actualCents)])
-  rows.push(["Cost total", "", "cost", money(view.cost.estimateCents), actual(view.cost.actualCents)])
-  rows.push(["Project total", "", "", money(view.totals.estimateCents), actual(view.totals.actualCents)])
-  rows.push(["Margin (fee total)", "", "", money(view.margin.estimate.amountCents), actual(view.margin.actual.amountCents)])
+  rows.push(["Fee total", "", "fee", ...math(null), money(view.fee.estimateCents), actual(view.fee.actualCents)])
+  rows.push(["Cost total", "", "cost", ...math(null), money(view.cost.estimateCents), actual(view.cost.actualCents)])
+  rows.push(["Project total", "", "", ...math(null), money(view.totals.estimateCents), actual(view.totals.actualCents)])
+  rows.push(["Margin (fee total)", "", "", ...math(null), money(view.margin.estimate.amountCents), actual(view.margin.actual.amountCents)])
+  // Both readings of margin, from the same computeMargin() the Summary tab shows. "-" when the
+  // denominator is 0 (the CSV neutraliser prefixes it with a quote, like every cell starting "-").
   rows.push([
-    "Margin percent (fee / (fee + cost))",
+    "Margin (share of total) %, fee / (fee + cost)",
     "",
     "",
-    view.margin.estimate.percent === null ? "" : view.margin.estimate.percent.toFixed(1),
-    hasActual && view.margin.actual.percent !== null ? view.margin.actual.percent.toFixed(1) : "",
+    ...math(null),
+    percentCell(view.margin.estimate.shareOfTotalPercent),
+    hasActual ? percentCell(view.margin.actual.shareOfTotalPercent) : "",
+  ])
+  rows.push([
+    "Markup on cost %, fee / cost",
+    "",
+    "",
+    ...math(null),
+    percentCell(view.margin.estimate.markupOnCostPercent),
+    hasActual ? percentCell(view.margin.actual.markupOnCostPercent) : "",
   ])
 
-  const csv = toCsv(["Category", "Line", "Fee or cost", "Estimate", "Actual"], rows)
+  const csv = toCsv(["Category", "Line", "Fee or cost", "Qty", "Rate", "Multiplier", "Unit", "Estimate", "Actual"], rows)
   downloadCsv(`${fileSlug(projectName)}-budget.csv`, csv)
   return view.categories.reduce((a, c) => a + c.lines.length, 0)
 }

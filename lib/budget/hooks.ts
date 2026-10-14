@@ -43,8 +43,9 @@ export const useChart = (projectId: string, includeArchived: boolean) =>
     projectId ? `${projectBase(projectId)}/chart${includeArchived ? "?include_archived=1" : ""}` : null
   )
 
+/** `lineMath` is false until migration 116 adds quantity, rate, multiplier and unit. */
 export const useLines = (projectId: string, includeArchived: boolean) =>
-  useBudget<{ lines: BudgetLine[] }>(projectId ? `${projectBase(projectId)}/lines${includeArchived ? "?include_archived=1" : ""}` : null)
+  useBudget<{ lines: BudgetLine[]; lineMath?: boolean }>(projectId ? `${projectBase(projectId)}/lines${includeArchived ? "?include_archived=1" : ""}` : null)
 
 export const useSummary = (projectId: string) =>
   useBudget<{ summary: EstimateVsActual }>(projectId ? `${projectBase(projectId)}/summary` : null)
