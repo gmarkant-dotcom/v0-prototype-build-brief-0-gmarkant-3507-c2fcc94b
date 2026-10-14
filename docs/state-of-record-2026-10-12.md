@@ -1,5 +1,18 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (feat/rfp-record-a).** **117 is applied and catalog-verified 2026-10-14**
+> (unchanged from the banner below). **R-D3 re-tag APPLIED 2026-10-14** (owner): the data-fix that
+> ran is **v2, pinned to project category `e57719fe` and template category `42a8ab0a`**, after **v1
+> failed with 42P01**. v2 is not in this repository: `supabase/data-fixes/2026-10-14-retag-categories_*.sql`
+> on this branch are the v1 files and were not edited. **118 (`118_rfp_records.sql`, the agency-owned
+> RFP record) is authored on `feat/rfp-record-a`, NOT applied**; its pre-apply test
+> (`118_preapply_test.sql`, 82 assertions) has not been run. **Next free migration number: 118
+> until it is applied; the next one to author after this run is 119.** Owner rulings 2026-10-14:
+> RFP record D1-D9 all approved as proposed (`docs/rfp-source-of-truth-design.md` section 6);
+> actuals feeder section 7 approved as recommended except the new 2b, entries pending review count
+> toward Actual (`docs/budget-actuals-feeder-plan.md` section 7). Order: RFP record A / 118, B / 119,
+> C / 120, then the feeder (121 or later). Report: `docs/rfp-record-a-report.md`.
+
 > **UPDATED 2026-10-14 (feat/budget-kind-defaults).** **117 is applied and catalog-verified
 > 2026-10-14**: pre-apply test 29/29 PASS; `budget_lines.fee_or_cost` is a nullable text column; CHECK
 > allows NULL, 'fee', 'cost'; 0 lines were given a kind; 155 public policies; `budget_lines` has its 4
@@ -47,10 +60,12 @@ Branch facts were checked in the repository on 2026-10-12. Anything not listed h
 | **115** | **Applied and verified 2026-10-12.** Pre-apply test 16/16 PASS. `115_discoverable_profiles.sql`. |
 | **116** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 40/40 PASS. `116_budget_line_math.sql`: 4 nullable columns; trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW; SECURITY INVOKER; search_path pinned; anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4 policies. |
 | **117** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 29/29 PASS. `117_budget_line_kind.sql`: nullable text `budget_lines.fee_or_cost` (NULL inherits the category); CHECK NULL/fee/cost; 0 lines given a kind; 155 policies; `budget_lines` 4 policies; 116 trigger intact. |
+| **118** | **Authored 2026-10-14 on `feat/rfp-record-a`, NOT applied, pre-apply test NOT run.** `118_rfp_records.sql`: `rfp_records`, `rfp_record_lines` (paid-lead-agency RLS, 6 policies, no DELETE), `current_user_entitled_lead_org_ids()`, D5 snapshot and line guards, five nullable link columns on `partner_rfp_inbox` / `rfp_magic_tokens` with the link-column guard. COMMIT at line 845. Expected after apply: 161 public policies. |
 | 073 | **Never applied. Must never be applied.** Superseded by 111/112. |
 | 101 | **Never applied. Must never be applied.** Superseded by 102. |
 
-**Next free migration number: 118** (2026-10-14: 116 and 117 are applied).
+**Next free migration number: 118** (2026-10-14: 116 and 117 are applied). 118 is authored on
+`feat/rfp-record-a` and not applied; the next number to author is **119** (the RFP record backfill).
 
 **Default privileges (finding, 2026-10-12).** `postgres`'s default privileges in `public` no longer
 grant TRUNCATE, REFERENCES or TRIGGER to anon or authenticated. `supabase_admin`'s still do, but they do
@@ -113,9 +128,10 @@ feat/budget-spine-server` = `020432a`, no conflicts), report `docs/budget-spine-
    scope it to the caller's partnerships). See WS-A in the run report.
 4. ~~**Merge `feat/budget-spine-integrated`, then 103 and 104.**~~ **Done 2026-10-12** (corrected
    2026-10-14): merged, and 103 and 104 applied and verified.
-5. **Agency-owned RFP record:** owner decisions D1-D9 in `docs/rfp-source-of-truth-design.md`,
-   then code A, 118, code B, 119, code C, 120 (renumbered 2026-10-14 from 116-118, then from
-   117-119; 116 is budget line math, 117 is budget line kind).
+5. **Agency-owned RFP record:** owner decisions D1-D9 **ruled 2026-10-14** (all as proposed). Code A
+   and 118 are authored on `feat/rfp-record-a` (not merged, not applied); then code B, 119, code C,
+   120 (renumbered 2026-10-14 from 116-118, then from 117-119; 116 is budget line math, 117 is
+   budget line kind). The actuals feeder follows, at 121 or later.
 6. **The full profiles split** (`profile_private`, `organization_private`;
    `docs/profiles-exposure-design.md` section 3): live counterparties and same-org colleagues
    still read whole rows, legal and billing included, and `organizations.is_paid` is readable by

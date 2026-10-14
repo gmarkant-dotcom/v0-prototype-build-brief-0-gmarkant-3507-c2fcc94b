@@ -126,6 +126,17 @@ kind; 155 public policies; `budget_lines` 4 policies; 116's trigger intact). The
 the pre-apply test failed with 42725 (`text || "char"` on `pg_trigger.tgenabled`); the repository
 copy now casts it to text (F4, `feat/budget-kind-defaults`). **Next free migration number: still 118.** RFP record: 118 to 120.
 
+**2026-10-14 (feat/rfp-record-a): R-D3 re-tag applied; 118 authored, NOT applied.** The owner applied
+the R-D3 re-tag on 2026-10-14 with **data-fix v2, pinned to project category `e57719fe` and template
+category `42a8ab0a`**, after **v1 failed with 42P01**. v2 is not in this repository (the
+`supabase/data-fixes/2026-10-14-retag-categories_*.sql` files here are v1). **118**
+(`118_rfp_records.sql`, the agency-owned RFP record) is authored with its down file and pre-apply test
+(82 assertions, not run). **Next free migration number: 118 until it is applied; the next to author
+is 119.** Order: RFP record A / 118, B / 119, C / 120, then the actuals feeder (121 or later). Owner
+rulings 2026-10-14: RFP record D1-D9 all approved as proposed (`docs/rfp-source-of-truth-design.md`
+section 6); feeder section 7 approved as recommended except the new 2b (entries pending review count
+toward Actual; the display note "Actual X, including Y pending review" is proposed, not ruled).
+
 **Budget fee/cost owner rulings (2026-10-14):**
 - **R-K1** A line may carry its own kind (`budget_lines.fee_or_cost`), overriding its category; NULL
   inherits. Every total, margin and export goes by the effective kind.
@@ -140,7 +151,8 @@ copy now casts it to text (F4, `feat/budget-kind-defaults`). **Next free migrati
   `brand_design` categories (owner ruled brand-keep).
 - **R-D3** Re-tag existing data for test project `e533075f-95f0-414e-bbca-742c7d344aad` and its
   organization's template only, then normalise that project's lines per R-K4
-  (`supabase/data-fixes/2026-10-14-retag-categories_*.sql`).
+  (`supabase/data-fixes/2026-10-14-retag-categories_*.sql`). **Applied 2026-10-14** with v2 (pinned to
+  categories `e57719fe` and `42a8ab0a`) after v1 failed 42P01; v2 is not in the repository.
 
 **Default privileges:** `postgres`'s default privileges in `public` no longer grant TRUNCATE,
 REFERENCES or TRIGGER to anon or authenticated; `supabase_admin`'s still do but do not apply to
@@ -200,6 +212,7 @@ older notes are quoted as prior evidence only, not as current status).
 | 115 | **applied and verified 2026-10-12** (pre-apply test 16/16 PASS) | `public.discoverable_profiles(p_role, p_ids)`: public discovery fields only; drops the whole-row policy "Authenticated users can read discoverable profiles". Catalog after apply: that policy is gone; the function is SECURITY DEFINER, search_path pinned, and anon cannot execute it. |
 | 116 | **applied and catalog-verified 2026-10-14** (pre-apply test 40/40 PASS) | Budget line math: `budget_lines.quantity`, `unit_rate`, `multiplier`, `unit_label` (4 nullable columns); trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW sets estimate = round(qty x rate x multiplier, 2) when a rate is set; SECURITY INVOKER, search_path pinned, anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4 policies. |
 | 117 | **applied and catalog-verified 2026-10-14** (pre-apply test 29/29 PASS; the owner's first run failed with 42725, and the repository copy of the test now carries the F4 `tgenabled::text` cast) | Budget line kind (R-K1): nullable `budget_lines.fee_or_cost` text, CHECK NULL or 'fee' or 'cost'. NULL inherits the category's kind; effective kind = coalesce(line, category). No backfill, no policy or grant change. Down file drops the column and every override with it. Catalog after apply: text nullable column; CHECK NULL/fee/cost; 0 lines given a kind; 155 policies; `budget_lines` 4 policies; 116 trigger intact. |
+| 118 | **authored 2026-10-14 on `feat/rfp-record-a`, NOT applied** (pre-apply test 82 assertions, not run; 4 INCONCLUSIVE by design) | Agency-owned RFP record: `rfp_records`, `rfp_record_lines` (RLS through the new `current_user_entitled_lead_org_ids()`, paid lead agency only, no DELETE, no vendor policy); D5 snapshot guard and line guard (LG118); five nullable link columns (`partner_rfp_inbox.rfp_line_id`, `client_name_released`; `rfp_magic_tokens.rfp_line_id`, `attached_inbox_id`, `client_name_released`) with a link-column guard (42501 / 23514). Down file refuses while records or links exist unless `ligament.allow_drop_rfp_records = 'on'`. |
 
 **Nulled legacy columns (106, 108, 110, 112) are deliberately empty.** Do not repopulate them and
 do not drop them until a quiet period has passed; the 42P01/PGRST205 fallback code is removed in
@@ -208,7 +221,7 @@ INCONCLUSIVE rows were the NO SUBJECT cross-agency checks (A6, B1, B2), accepted
 precedent because m a r k a n t is the only lead organization with members.
 
 
-> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 118** (2026-10-14; 116 and 117 are applied). The agency-owned RFP record claims 118 to 120 (`docs/rfp-source-of-truth-design.md`).
+> **Numbering:** 078 is the signup trigger fix. 079 is Organizations M1 (applied). **Next free number: 118** (2026-10-14; 116 and 117 are applied; 118 is authored on `feat/rfp-record-a`, not applied, so the next to author is 119). The agency-owned RFP record claims 118 to 120 (`docs/rfp-source-of-truth-design.md`); the actuals feeder is 121 or later.
 > Older notes that reserve 078 for M1 are superseded - see `docs/schema-truth.md` section 2.
 >
 > **THE PER-ACCOUNT ROLE BACKFILL IS RETIRED. 2026-08-20. It has no members.**
