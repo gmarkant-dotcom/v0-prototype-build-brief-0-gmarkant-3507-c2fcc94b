@@ -91,7 +91,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ respons
   // render its rows before the first score is saved. Empty means this RFP uses the agency's
   // global criteria, which is every legacy RFP and every RFP at all before migration 075.
   const perRfpAvailable = await rfpScoreColumnsAvailable(supabase)
-  const rubric = await resolveRfpRubricForResponse(supabase, responseId, callerOrgIds)
+  const rubric = await resolveRfpRubricForResponse(supabase, responseId, callerOrgIds, "session")
   const rfpCriteria = rubricToWireCriteria(rubric)
 
   if (!evaluation) return NextResponse.json({ evaluation: null, rfp_criteria: rfpCriteria })
@@ -169,7 +169,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
     // cross-RFP aggregate that reads it. The two kinds are upserted separately because they
     // have different conflict targets.
     const perRfpAvailable = await rfpScoreColumnsAvailable(supabase)
-    const rubric = perRfpAvailable ? await resolveRfpRubricForResponse(supabase, responseId, callerOrgIds) : []
+    const rubric = perRfpAvailable ? await resolveRfpRubricForResponse(supabase, responseId, callerOrgIds, "session") : []
     const rubricByKey = new Map(rubric.map((c) => [c.key, c]))
 
     if (scoresInput.length > 0) {
@@ -339,7 +339,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ response
 
     let aiRecommendation: string | null = null
     if (status === "complete") {
-      const ctx = await loadBidAnalysisContext(supabase, responseId, callerOrgIds)
+      const ctx = await loadBidAnalysisContext(supabase, responseId, callerOrgIds, "session")
       if (ctx) {
         const bidContext = formatBidContextForPrompt(ctx)
         const scoreSummary =
