@@ -1,12 +1,12 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Archive, ArchiveRestore, ArrowUpFromLine, GitMerge, Pencil, Repeat, Trash2, Upload } from "lucide-react"
+import { Archive, ArchiveRestore, ArrowUpFromLine, GitMerge, Pencil, Repeat, RotateCcw, Trash2, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { BudgetDialog } from "./budget-dialog"
-import { ActionMessage, BudgetErrorState, BudgetLoading, FeeCostBadge, labelClass, QuietEmpty, selectClass } from "./budget-states"
+import { ActionMessage, BudgetErrorState, BudgetLoading, FeeCostBadge, KindChip, labelClass, QuietEmpty, selectClass } from "./budget-states"
 import { ImportSheet } from "./import-sheet"
 import { useChart, useLines } from "@/lib/budget/hooks"
 import { useRefreshProject, useRefreshTemplate } from "@/lib/budget/use-refresh"
@@ -89,6 +89,9 @@ export function BudgetTab({ projectId }: { projectId: string }) {
 
   // 116 applied: quantity, rate, multiplier and unit exist. Until then every line is typed only.
   const lineMath = lines.data?.lineMath === true
+  // 117 applied: a line may override its category's fee or cost. Until then every line inherits and
+  // the toggle is not shown.
+  const lineKind = lines.data?.lineKind === true
   const visibleCategories = model.live.filter((c) => showArchived || !c.archived_at)
   const activeCategories = model.live.filter((c) => !c.archived_at)
 
@@ -298,6 +301,9 @@ export function BudgetTab({ projectId }: { projectId: string }) {
       {lineMath && hasChart ? (
         <p className="text-xs text-foreground-muted">
           Total = Qty x Rate x multiplier, rounded to the cent. An empty Qty or x counts as 1. Leave Rate empty to type the total yourself.
+          {lineKind
+            ? " Each line follows its category's fee or cost (dashed chip); click the chip to set the line to the other kind (solid chip)."
+            : ""}
         </p>
       ) : null}
 
@@ -333,6 +339,7 @@ export function BudgetTab({ projectId }: { projectId: string }) {
             category={c}
             lines={(model.linesByCategory.get(c.id) ?? []).filter((l) => showArchived || !l.archived_at)}
             lineMath={lineMath}
+            lineKind={lineKind}
             busy={busy}
             onMessage={setMessage}
             onRefresh={refresh}
@@ -476,6 +483,7 @@ export function BudgetTab({ projectId }: { projectId: string }) {
           projectId={projectId}
           categories={activeCategories}
           lineMath={lineMath}
+          lineKind={lineKind}
           open={importOpen}
           onOpenChange={setImportOpen}
           onFinished={() => refresh()}
@@ -490,6 +498,7 @@ function CategoryCard({
   category,
   lines,
   lineMath,
+  lineKind,
   busy,
   onMessage,
   onRefresh,
@@ -505,6 +514,7 @@ function CategoryCard({
   category: ProjectCategory
   lines: BudgetLine[]
   lineMath: boolean
+  lineKind: boolean
   busy: boolean
   onMessage: (m: Msg) => void
   onRefresh: () => Promise<unknown>
@@ -526,6 +536,7 @@ function CategoryCard({
   const subtotal = lines.filter((l) => !l.archived_at).reduce((a, l) => a + toCentsFromApi(l.estimate), 0)
   const archived = Boolean(category.archived_at)
   const preview = lineMath ? previewTotal(qty, rate, mult) : null
+  const grid = lineKind ? MATH_GRID_KIND : MATH_GRID
 
   async function addLine() {
     if (!name.trim()) return onMessage({ tone: "error", text: "Name the line." })
@@ -600,24 +611,34 @@ function CategoryCard({
       </header>
       {lineMath ? (
         <div className="overflow-x-auto">
-          <div className="min-w-[44rem] divide-y divide-border">
+          <div className={`${lineKind ? "min-w-[50rem]" : "min-w-[44rem]"} divide-y divide-border`}>
             {lines.length === 0 ? <p className="px-4 py-3 text-sm text-foreground-muted">No lines yet.</p> : null}
             {lines.length > 0 ? (
-              <div className={`${MATH_GRID} px-4 pt-2 pb-1 font-mono text-2xs uppercase tracking-wider text-foreground-muted`} aria-hidden>
+              <div className={`${grid} px-4 pt-2 pb-1 font-mono text-2xs uppercase tracking-wider text-foreground-muted`} aria-hidden>
                 <span>Line</span>
                 <span className="text-right">Qty</span>
+                <span>Unit</span>
                 <span className="text-right">Rate</span>
                 <span className="text-right">x</span>
-                <span>Unit</span>
                 <span className="text-right">Total</span>
+                {lineKind ? <span>Kind</span> : null}
                 <span />
               </div>
             ) : null}
             {lines.map((l) => (
-              <MathLineRow key={l.id} projectId={projectId} line={l} onMessage={onMessage} onRefresh={onRefresh} onDelete={() => onDeleteLine(l)} />
+              <MathLineRow
+                key={l.id}
+                projectId={projectId}
+                line={l}
+                categoryKind={category.fee_or_cost}
+                lineKind={lineKind}
+                onMessage={onMessage}
+                onRefresh={onRefresh}
+                onDelete={() => onDeleteLine(l)}
+              />
             ))}
             {!archived ? (
-              <div className={`${MATH_GRID} px-4 py-3`}>
+              <div className={`${grid} px-4 py-3`}>
                 <Input
                   aria-label="New line name"
                   value={name}
@@ -628,9 +649,9 @@ function CategoryCard({
                   onKeyDown={(e) => e.key === "Enter" && addLine()}
                 />
                 <Input aria-label="New line quantity" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="1" inputMode="decimal" className={newCell} onKeyDown={(e) => e.key === "Enter" && addLine()} />
+                <Input aria-label="New line unit" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="day" maxLength={24} className="bg-background border-border text-foreground h-8" onKeyDown={(e) => e.key === "Enter" && addLine()} />
                 <Input aria-label="New line rate" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="Rate" inputMode="decimal" className={newCell} onKeyDown={(e) => e.key === "Enter" && addLine()} />
                 <Input aria-label="New line multiplier" value={mult} onChange={(e) => setMult(e.target.value)} placeholder="1" inputMode="decimal" className={newCell} onKeyDown={(e) => e.key === "Enter" && addLine()} />
-                <Input aria-label="New line unit" value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="day" maxLength={24} className="bg-background border-border text-foreground h-8" onKeyDown={(e) => e.key === "Enter" && addLine()} />
                 {preview ? (
                   <span className={`text-right font-mono text-sm ${"error" in preview ? "text-destructive" : "text-foreground"}`} title={"error" in preview ? preview.error : "Computed: Qty x Rate x multiplier"}>
                     {"error" in preview ? "-" : formatCents(preview.cents)}
@@ -638,6 +659,11 @@ function CategoryCard({
                 ) : (
                   <Input aria-label="New line total" value={estimate} onChange={(e) => setEstimate(e.target.value)} placeholder="0.00" inputMode="decimal" className={newCell} onKeyDown={(e) => e.key === "Enter" && addLine()} />
                 )}
+                {lineKind ? (
+                  <span title="A new line follows its category. Change it after adding.">
+                    <KindChip kind={category.fee_or_cost} source="inherited" />
+                  </span>
+                ) : null}
                 <Button size="sm" variant="outline" className="border-border font-mono h-8 px-2" disabled={adding} onClick={addLine}>
                   {adding ? "..." : "Add"}
                 </Button>
@@ -649,7 +675,16 @@ function CategoryCard({
         <div className="divide-y divide-border">
           {lines.length === 0 ? <p className="px-4 py-3 text-sm text-foreground-muted">No lines yet.</p> : null}
           {lines.map((l) => (
-            <LineRow key={`${l.id}:${l.name}:${l.estimate}:${l.archived_at ?? ""}`} projectId={projectId} line={l} onMessage={onMessage} onRefresh={onRefresh} onDelete={() => onDeleteLine(l)} />
+            <LineRow
+              key={`${l.id}:${l.name}:${l.estimate}:${l.archived_at ?? ""}`}
+              projectId={projectId}
+              line={l}
+              categoryKind={category.fee_or_cost}
+              lineKind={lineKind}
+              onMessage={onMessage}
+              onRefresh={onRefresh}
+              onDelete={() => onDeleteLine(l)}
+            />
           ))}
         </div>
       )}
@@ -682,7 +717,10 @@ function CategoryCard({
 
 // ---- Line math (116). Same rules as the server: lib/budget/line-math.ts. ----
 
-const MATH_GRID = "grid grid-cols-[minmax(11rem,1fr)_5rem_7.5rem_4.5rem_5.5rem_8rem_4.75rem] items-center gap-2"
+// Line, Qty, Unit, Rate, x, Total, [Kind], actions (F2: Unit sits directly after Qty). DOM order is
+// the visual order, so Tab follows it.
+const MATH_GRID = "grid grid-cols-[minmax(11rem,1fr)_5rem_5.5rem_7.5rem_4.5rem_8rem_4.75rem] items-center gap-2"
+const MATH_GRID_KIND = "grid grid-cols-[minmax(11rem,1fr)_5rem_5.5rem_7.5rem_4.5rem_8rem_5.5rem_4.75rem] items-center gap-2"
 const newCell = "bg-background border-border text-foreground h-8 text-right font-mono"
 const inlineCell = "h-8 bg-transparent border-transparent hover:border-border focus:border-border text-foreground"
 
@@ -746,6 +784,55 @@ function formulaText(qty: number | null, rate: number, mult: number | null, unit
   return `${formatMilli(qty ?? 1000)}${unit ? ` ${unit}` : ""} x ${formatCents(rate)}${mult !== null ? ` x ${formatMilli(mult)}` : ""} = ${formatCents(total)}`
 }
 
+/**
+ * A line's effective kind (117, R-K1): the chip toggles the line to the other kind (an override);
+ * an override also offers Reset to category, which clears it so the line follows its category again.
+ */
+function LineKindCell({
+  lineName,
+  kind,
+  source,
+  categoryKind,
+  archived,
+  busy,
+  onSet,
+}: {
+  lineName: string
+  kind: FeeOrCost
+  source: "inherited" | "override"
+  categoryKind: FeeOrCost
+  archived: boolean
+  busy: boolean
+  onSet: (next: FeeOrCost | null) => void
+}) {
+  if (archived) return <KindChip kind={kind} source={source} />
+  const other: FeeOrCost = kind === "fee" ? "cost" : "fee"
+  return (
+    <div className="flex items-center gap-1">
+      <KindChip
+        kind={kind}
+        source={source}
+        disabled={busy}
+        label={`${lineName}: ${kind}${source === "override" ? ", set on this line" : ", from the category"}. Mark ${other}`}
+        onClick={() => onSet(other)}
+      />
+      {source === "override" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-1 text-foreground hover:text-accent"
+          title={`Reset to category (${categoryKind})`}
+          disabled={busy}
+          onClick={() => onSet(null)}
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span className="sr-only">{`${lineName}: reset to category (${categoryKind})`}</span>
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
 type MathField = "name" | "quantity" | "rate" | "multiplier" | "unit" | "estimate"
 
 /**
@@ -756,12 +843,16 @@ type MathField = "name" | "quantity" | "rate" | "multiplier" | "unit" | "estimat
 function MathLineRow({
   projectId,
   line,
+  categoryKind,
+  lineKind,
   onMessage,
   onRefresh,
   onDelete,
 }: {
   projectId: string
   line: BudgetLine
+  categoryKind: FeeOrCost
+  lineKind: boolean
   onMessage: (m: Msg) => void
   onRefresh: () => Promise<unknown>
   onDelete: () => void
@@ -777,7 +868,8 @@ function MathLineRow({
   const text = {
     name: saved.name,
     quantity: saved.quantity === null ? "" : milliToPlain(saved.quantity),
-    rate: saved.rate === null ? "" : centsToDecimalString(saved.rate),
+    // F1: thousands separators, as the Total shows them. readRate() accepts the commas back.
+    rate: saved.rate === null ? "" : formatCents(saved.rate),
     multiplier: saved.multiplier === null ? "" : milliToPlain(saved.multiplier),
     unit: saved.unit ?? "",
     estimate: centsToDecimalString(saved.cents),
@@ -907,11 +999,26 @@ function MathLineRow({
     }
   }
 
+  async function setKind(next: FeeOrCost | null) {
+    setBusy(true)
+    try {
+      await budgetPatch(`${projectBase(projectId)}/lines/${line.id}`, { kind: next })
+      onMessage(null)
+      await onRefresh()
+    } catch (e) {
+      onMessage({ tone: "error", text: `${line.name}: ${errorMessage(e)}` })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const num = `${inlineCell} text-right font-mono`
   const plain = "text-right font-mono text-sm text-foreground-muted truncate"
+  const kind = line.fee_or_cost ?? categoryKind
+  const kindSource = line.fee_or_cost === null ? "inherited" : "override"
 
   return (
-    <div className={`${MATH_GRID} px-4 py-2 ${archived ? "opacity-60" : ""}`}>
+    <div className={`${lineKind ? MATH_GRID_KIND : MATH_GRID} px-4 py-2 ${archived ? "opacity-60" : ""}`}>
       {archived ? (
         <span className="min-w-0 text-sm text-foreground-muted truncate">
           {line.name} <span className="font-mono text-2xs uppercase tracking-wider">· Archived</span>
@@ -922,9 +1029,9 @@ function MathLineRow({
       {archived ? (
         <>
           <span className={plain}>{saved.quantity === null ? "" : formatMilli(saved.quantity)}</span>
+          <span className="text-sm text-foreground-muted truncate">{saved.unit ?? ""}</span>
           <span className={plain}>{saved.rate === null ? "" : formatCents(saved.rate)}</span>
           <span className={plain}>{saved.multiplier === null ? "" : formatMilli(saved.multiplier)}</span>
-          <span className="text-sm text-foreground-muted truncate">{saved.unit ?? ""}</span>
           <span className={plain} title={formula}>
             {formatCents(saved.cents)}
           </span>
@@ -932,9 +1039,9 @@ function MathLineRow({
       ) : (
         <>
           <Input aria-label={`${line.name} quantity`} inputMode="decimal" placeholder="1" className={num} {...cellProps("quantity")} />
+          <Input aria-label={`${line.name} unit`} maxLength={24} placeholder="-" className={inlineCell} {...cellProps("unit")} />
           <Input aria-label={`${line.name} rate`} inputMode="decimal" placeholder="-" className={num} {...cellProps("rate")} />
           <Input aria-label={`${line.name} multiplier`} inputMode="decimal" placeholder="1" className={num} {...cellProps("multiplier")} />
-          <Input aria-label={`${line.name} unit`} maxLength={24} placeholder="-" className={inlineCell} {...cellProps("unit")} />
           {showComputed ? (
             <span
               className={`text-right font-mono text-sm ${preview && "error" in preview ? "text-destructive" : "text-foreground"}`}
@@ -948,6 +1055,17 @@ function MathLineRow({
           )}
         </>
       )}
+      {lineKind ? (
+        <LineKindCell
+          lineName={line.name}
+          kind={kind}
+          source={kindSource}
+          categoryKind={categoryKind}
+          archived={archived}
+          busy={busy}
+          onSet={setKind}
+        />
+      ) : null}
       <div className="flex items-center justify-end">
         <Button variant="ghost" size="sm" className="h-8 px-2 text-foreground-muted hover:text-foreground" title={archived ? "Restore" : "Archive"} disabled={busy} onClick={toggleArchive}>
           {archived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
@@ -965,12 +1083,16 @@ function MathLineRow({
 function LineRow({
   projectId,
   line,
+  categoryKind,
+  lineKind,
   onMessage,
   onRefresh,
   onDelete,
 }: {
   projectId: string
   line: BudgetLine
+  categoryKind: FeeOrCost
+  lineKind: boolean
   onMessage: (m: Msg) => void
   onRefresh: () => Promise<unknown>
   onDelete: () => void
@@ -1045,6 +1167,17 @@ function LineRow({
           disabled={saving}
         />
       )}
+      {lineKind ? (
+        <LineKindCell
+          lineName={line.name}
+          kind={line.fee_or_cost ?? categoryKind}
+          source={line.fee_or_cost === null ? "inherited" : "override"}
+          categoryKind={categoryKind}
+          archived={archived}
+          busy={saving}
+          onSet={(kind) => void save({ kind })}
+        />
+      ) : null}
       <Button
         variant="ghost"
         size="sm"

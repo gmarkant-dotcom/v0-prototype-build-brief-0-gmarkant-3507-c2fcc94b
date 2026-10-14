@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { labelClass, selectClass } from "./budget-states"
+import { KindChip, labelClass, selectClass } from "./budget-states"
 import {
   EMPTY_MAPPING,
   IMPORT_MAX_ROWS,
@@ -61,6 +61,7 @@ export function ImportSheet({
   projectId,
   categories,
   lineMath,
+  lineKind,
   open,
   onOpenChange,
   onFinished,
@@ -69,6 +70,8 @@ export function ImportSheet({
   categories: ProjectCategory[]
   /** 116 applied. Before it, a rate still sets each line's total, but the breakdown is not kept. */
   lineMath: boolean
+  /** 117 applied. Before it the Kind column is not offered and every line inherits its category. */
+  lineKind: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
   onFinished: () => void
@@ -100,7 +103,8 @@ export function ImportSheet({
       return
     }
     setParsed({ ...res.file, fileName: file.name })
-    setMapping(guessMapping(res.file.headers))
+    const guessed = guessMapping(res.file.headers)
+    setMapping(lineKind ? guessed : { ...guessed, kind: null })
     setStep("mapping")
   }
 
@@ -260,7 +264,13 @@ export function ImportSheet({
         }
       }
       try {
-        await budgetPost(`${projectBase(projectId)}/lines`, { categoryId, name: r.description, ...rowAmountBody(r) })
+        await budgetPost(`${projectBase(projectId)}/lines`, {
+          categoryId,
+          name: r.description,
+          ...rowAmountBody(r),
+          // 117: a Kind cell sets the line's own fee or cost; an empty one leaves it inheriting.
+          ...(lineKind && r.kind ? { kind: r.kind } : {}),
+        })
         out.push({ index: r.index, ok: true, message: "Imported" })
       } catch (e) {
         out.push({ index: r.index, ok: false, message: errorMessage(e) })
@@ -273,6 +283,7 @@ export function ImportSheet({
     onFinished()
   }
 
+  const showKind = lineKind && mapping.kind !== null
   const okCount = results.filter((r) => r.ok).length
   const failed = results.filter((r) => !r.ok)
   const pageRows = rows.slice(page * PAGE, page * PAGE + PAGE)
@@ -332,13 +343,16 @@ export function ImportSheet({
                   ["description", "Description (required)"],
                   ["amount", mapping.rate === null ? "Amount (required)" : "Amount (optional with a rate)"],
                   ["category", "Category (optional)"],
-                  ["feeOrCost", "Fee or cost (optional)"],
+                  ["feeOrCost", "Category fee or cost (optional)"],
                   ["quantity", "Quantity (optional)"],
                   ["rate", "Rate (optional)"],
                   ["multiplier", "Multiplier, x (optional)"],
                   ["unit", "Unit (optional)"],
+                  ["kind", "Kind, per line: fee or cost (optional)"],
                 ] as const
-              ).map(([key, label]) => (
+              )
+                .filter(([key]) => key !== "kind" || lineKind)
+                .map(([key, label]) => (
                 <div key={key}>
                   <label className={labelClass}>{label}</label>
                   <select
@@ -363,6 +377,12 @@ export function ImportSheet({
               amount.
               {lineMath ? "" : " Line math is not enabled yet for this workspace: each total is computed and saved, but the quantity, rate and multiplier are not kept."}
             </p>
+            {lineKind ? (
+              <p className="text-xs text-foreground-muted">
+                Category fee or cost marks a new category. Kind marks the line itself: fee or cost (any capitalisation) sets that line apart from its
+                category; an empty cell follows the category. Any other value excludes the row and says why.
+              </p>
+            ) : null}
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-sm">
                 <thead>
@@ -426,6 +446,7 @@ export function ImportSheet({
                     <th className="px-2 py-2 font-mono text-2xs uppercase tracking-wider text-foreground-muted text-right">Amount</th>
                     <th className="px-2 py-2 font-mono text-2xs uppercase tracking-wider text-foreground-muted">Category</th>
                     <th className="px-2 py-2 font-mono text-2xs uppercase tracking-wider text-foreground-muted">Fee or cost</th>
+                    {showKind ? <th className="px-2 py-2 font-mono text-2xs uppercase tracking-wider text-foreground-muted">Line kind</th> : null}
                     <th className="px-2 py-2 font-mono text-2xs uppercase tracking-wider text-foreground-muted">Status</th>
                   </tr>
                 </thead>
@@ -504,6 +525,17 @@ export function ImportSheet({
                             </select>
                           )}
                         </td>
+                        {showKind ? (
+                          <td className="px-2 py-2">
+                            {r.kindError ? (
+                              <span className="text-xs text-destructive">-</span>
+                            ) : r.kind ? (
+                              <KindChip kind={r.kind} source="override" />
+                            ) : (
+                              <span className="font-mono text-2xs uppercase tracking-wider text-foreground-muted">Category</span>
+                            )}
+                          </td>
+                        ) : null}
                         <td className="px-2 py-2 text-xs">
                           {!r.include ? (
                             <span className="text-foreground-muted">

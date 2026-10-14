@@ -120,6 +120,64 @@ export function FeeCostBadge({ value }: { value: "fee" | "cost" }) {
   )
 }
 
+/** A category whose lines are not all of its kind (R-K1). */
+export function MixedBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full border border-warning/50 bg-warning/10 px-2 py-0.5 font-mono text-2xs uppercase tracking-wider text-warning">
+      Mixed
+    </span>
+  )
+}
+
+const kindChipBase = "inline-flex items-center justify-center rounded-full border px-2 py-0.5 font-mono text-2xs uppercase tracking-wider"
+
+/**
+ * A line's EFFECTIVE kind (117, R-K1). Inherited from the category: outlined and dashed, no fill.
+ * Overridden on the line: solid. With onClick it is the toggle (a button); without, a label.
+ */
+export function KindChip({
+  kind,
+  source,
+  onClick,
+  disabled,
+  label,
+}: {
+  kind: "fee" | "cost"
+  source: "inherited" | "override"
+  onClick?: () => void
+  disabled?: boolean
+  label?: string
+}) {
+  const tone =
+    source === "override"
+      ? kind === "fee"
+        ? "border-accent bg-accent text-accent-foreground"
+        : "border-foreground bg-foreground text-background"
+      : kind === "fee"
+        ? "border-dashed border-accent/50 bg-transparent text-accent"
+        : "border-dashed border-foreground/40 bg-transparent text-foreground"
+  const title = source === "override" ? `${kind}, set on this line` : `${kind}, from the category`
+  if (!onClick) {
+    return (
+      <span className={`${kindChipBase} ${tone}`} title={title}>
+        {kind}
+      </span>
+    )
+  }
+  return (
+    <button
+      type="button"
+      className={`${kindChipBase} ${tone} min-w-[3.25rem] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50`}
+      title={`${title}. Click to mark ${kind === "fee" ? "cost" : "fee"}.`}
+      aria-label={label ?? `${title}. Mark ${kind === "fee" ? "cost" : "fee"}`}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {kind}
+    </button>
+  )
+}
+
 export const selectClass =
   "h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground [color-scheme:dark] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
 

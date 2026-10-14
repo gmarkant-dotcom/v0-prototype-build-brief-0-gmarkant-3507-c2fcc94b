@@ -3,15 +3,17 @@
 **Written:** 2026-10-12, branch `feat/budget-ui`. Unattended session. **Nothing here is authored as a
 migration, applied, or built.**
 
-**Numbering (renumbered 2026-10-14).** **116 is taken** by `116_budget_line_math.sql` (quantity x
-unit rate x multiplier, `feat/budget-line-math`), so every migration planned here starts at **117** or
-later. `docs/rfp-source-of-truth-design.md` section 3 now claims **117, 118 and 119** for `rfp_records`
-(renumbered from 116 to 118 the same day). The budget migrations below stay written **B1 to B5**
-(budget migration 1 to 5) and `docs/budget-actuals-feeder-plan.md` is **B0** (it says "116"; read that
-as "the next free number, 117 or later"). They take the next free numbers at authoring time, in the
-order of section 6: **from 120** if the RFP record keeps 117 to 119, or **from 117** if the owner
-authors budget work first, in which case the RFP record moves up by the same count. The file name of
-this plan keeps "116" for its links; its content is "117 and later".
+**Numbering (renumbered 2026-10-14, twice).** **116 is taken and applied** (2026-10-14) by
+`116_budget_line_math.sql` (quantity x unit rate x multiplier). **117 is taken** by
+`117_budget_line_kind.sql` (per-line fee or cost override, `feat/budget-line-kind`), so every
+migration planned here starts at **118** or later. `docs/rfp-source-of-truth-design.md` section 3 now
+claims **118, 119 and 120** for `rfp_records` (written as 116 to 118, moved to 117 to 119, then to 118
+to 120 the same day). The budget migrations below stay written **B1 to B5** (budget migration 1 to 5)
+and `docs/budget-actuals-feeder-plan.md` is **B0** (it says "116"; read that as "the next free number,
+118 or later"). They take the next free numbers at authoring time, in the order of section 6: **from
+121** if the RFP record keeps 118 to 120, or **from 118** if the owner authors budget work first, in
+which case the RFP record moves up by the same count. The file name of this plan keeps "116" for its
+links; its content is "118 and later".
 
 **Read with:** `docs/ligament-00-budgeting-spec.md` (2b, 2c, 2d, 2e, section 4), the RULINGS 2026-10-09
 section of `docs/budget-spine-build-plan.md`, `docs/budget-ui-report.md`.
@@ -225,5 +227,6 @@ Committed (section 2) then defaults its line from this column on award.
 8. The margin formula. Since 2026-10-14 the UI and the CSV show both readings: margin (share of total)
    = fee / (fee + cost) and markup on cost = fee / cost, with margin amount = fee total. Confirm which
    one the client-facing documents use.
-9. Migration numbering: 116 is budget line math; the RFP record claims 117 to 119; B0 to B5 follow from
-   120 unless the owner orders budget work first (see Numbering above).
+9. Migration numbering: 116 is budget line math (applied); 117 is budget line kind; the RFP record
+   claims 118 to 120; B0 to B5 follow from 121 unless the owner orders budget work first (see
+   Numbering above).

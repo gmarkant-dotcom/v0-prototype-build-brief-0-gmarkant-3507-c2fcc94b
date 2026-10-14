@@ -1,5 +1,16 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (feat/budget-line-kind).** **116 is applied and catalog-verified
+> 2026-10-14**: pre-apply test 40/40 PASS (after the subject-selection fix in `4d3fa5a`: the vendor
+> is found through `partnerships.vendor_org_id`; `partner_id` was renamed in 079). Catalog after
+> apply: 4 nullable columns on `budget_lines` (`quantity` numeric(12,3), `unit_rate` numeric(14,2),
+> `multiplier` numeric(12,3), `unit_label` text); trigger `budget_lines_compute_estimate` BEFORE
+> INSERT OR UPDATE FOR EACH ROW; its function SECURITY INVOKER with search_path pinned; anon and
+> authenticated cannot EXECUTE it; 155 public policies, unchanged; `budget_lines` has its 4 policies.
+> **117** (`117_budget_line_kind.sql`, per-line fee or cost override) is authored on
+> `feat/budget-line-kind` and NOT applied. The next free number is **118**. The agency-owned RFP
+> record now claims 118 to 120.
+
 > **CORRECTED 2026-10-14 (feat/budget-line-math).** This record was written before the owner
 > applied the budget spine and 115 the same day. **103, 104 and 115 were applied and verified on
 > 2026-10-12** (owner catalog check; test figures as recorded in `docs/roadmap-state.md` at commit
@@ -21,11 +32,12 @@ Branch facts were checked in the repository on 2026-10-12. Anything not listed h
 | **103** | **Applied and verified 2026-10-12.** Pre-apply test 73 PASS, 0 FAIL, 23 INCONCLUSIVE (all NO SUBJECT). The grant defect (anon revoked but not authenticated) had been fixed on `fix/103-104-rulings` before the apply. |
 | **104** | **Applied and verified 2026-10-12.** Pre-apply test 91 PASS, 13 INCONCLUSIVE (all NO SUBJECT), 4 FAIL accepted by the owner as test-expectation errors (W1, PE3, AA1, AA3; see `docs/roadmap-state.md`). The migration is unchanged. |
 | **115** | **Applied and verified 2026-10-12.** Pre-apply test 16/16 PASS. `115_discoverable_profiles.sql`. |
-| **116** | **Authored 2026-10-14, NOT applied.** `116_budget_line_math.sql`, on `feat/budget-line-math`. |
+| **116** | **Applied and catalog-verified 2026-10-14.** Pre-apply test 40/40 PASS. `116_budget_line_math.sql`: 4 nullable columns; trigger `budget_lines_compute_estimate` BEFORE INSERT OR UPDATE FOR EACH ROW; SECURITY INVOKER; search_path pinned; anon and authenticated cannot EXECUTE; 155 policies unchanged; `budget_lines` 4 policies. |
+| **117** | **Authored 2026-10-14, NOT applied.** `117_budget_line_kind.sql`, on `feat/budget-line-kind`: nullable `budget_lines.fee_or_cost` (NULL inherits the category). Pre-apply test expects 29 assertions. |
 | 073 | **Never applied. Must never be applied.** Superseded by 111/112. |
 | 101 | **Never applied. Must never be applied.** Superseded by 102. |
 
-**Next free migration number: 117** (corrected 2026-10-14: 116 is taken by `116_budget_line_math.sql`).
+**Next free migration number: 118** (2026-10-14: 116 is applied; 117 is taken by `117_budget_line_kind.sql`).
 
 **Default privileges (finding, 2026-10-12).** `postgres`'s default privileges in `public` no longer
 grant TRUNCATE, REFERENCES or TRIGGER to anon or authenticated. `supabase_admin`'s still do, but they do
@@ -65,7 +77,8 @@ feat/budget-spine-server` = `020432a`, no conflicts), report `docs/budget-spine-
 - This record (final commit on that branch; identical text in `docs/state-of-record-2026-10-12.md`
   for cherry-picking onto `fix/guest-profiles-records`).
 
-**Applied and verified 2026-10-12 (corrected):** 115, 103, 104. **Not yet applied:** 116.
+**Applied and verified 2026-10-12 (corrected):** 115, 103, 104. **Applied and verified 2026-10-14:**
+116. **Not yet applied:** 117.
 
 ## Closed since 2026-10-09
 
@@ -88,8 +101,8 @@ feat/budget-spine-server` = `020432a`, no conflicts), report `docs/budget-spine-
 4. ~~**Merge `feat/budget-spine-integrated`, then 103 and 104.**~~ **Done 2026-10-12** (corrected
    2026-10-14): merged, and 103 and 104 applied and verified.
 5. **Agency-owned RFP record:** owner decisions D1-D9 in `docs/rfp-source-of-truth-design.md`,
-   then code A, 117, code B, 118, code C, 119 (renumbered 2026-10-14 from 116-118; 116 is budget
-   line math).
+   then code A, 118, code B, 119, code C, 120 (renumbered 2026-10-14 from 116-118, then from
+   117-119; 116 is budget line math, 117 is budget line kind).
 6. **The full profiles split** (`profile_private`, `organization_private`;
    `docs/profiles-exposure-design.md` section 3): live counterparties and same-org colleagues
    still read whole rows, legal and billing included, and `organizations.is_paid` is readable by

@@ -6,9 +6,10 @@ export const dynamic = "force-dynamic"
 type Ctx = { params: Promise<{ projectId: string; lineId: string }> }
 
 /**
- * PATCH { name?, estimate?, categoryId?, archived?, quantity?, unitRate?, multiplier?, unitLabel? }.
+ * PATCH { name?, estimate?, categoryId?, archived?, quantity?, unitRate?, multiplier?, unitLabel?, kind? }.
  * Archive is R1's alternative to delete. A math field sent as null is cleared; clearing unitRate
- * keeps the last estimate, which is typed from then on.
+ * keeps the last estimate, which is typed from then on. kind: "fee" | "cost" overrides the
+ * category's kind, null resets the line to inherit it (117; LINE_KIND_DISABLED before 117).
  */
 export async function PATCH(req: Request, { params }: Ctx) {
   try {
@@ -27,6 +28,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
         unitRate: body.unitRate,
         multiplier: body.multiplier,
         unitLabel: body.unitLabel,
+        kind: body.kind,
       }),
       "line",
       "line PATCH"
