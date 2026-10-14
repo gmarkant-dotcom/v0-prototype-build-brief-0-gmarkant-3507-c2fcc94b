@@ -136,3 +136,27 @@ columns are empty.
 Gates: `pnpm exec tsc --noEmit` completed with no output (no errors). `pnpm lint --format json
 --output-file /tmp/lint116.json` then `jq` over the touched files: no findings in them (the repo-wide
 lint exit 1 comes from pre-existing findings in other files).
+
+---
+
+## Part 3. Margin, both ways
+
+One calculation module: `lib/budget/money.ts` `computeMargin(fee, cost)` now returns
+`{ amountCents, shareOfTotalPercent, markupOnCostPercent }`:
+- **Margin (share of total)** = fee / (fee + cost), null when fee + cost is 0;
+- **Markup on cost** = fee / cost, null when cost is 0.
+
+`lib/budget/summary-view.ts` `buildSummaryView()` calls it for estimate and actual; both the Summary tab
+and the budget CSV read that view, so screen and export cannot disagree.
+
+- **Summary tab** (`components/budgeting/summary-tab.tsx`): the two margin cards read
+  "x% share of total · y% markup on cost"; the Totals table gains two rows, "Margin (share of total)"
+  and "Markup on cost", with Estimate and Actual columns. `formatPercent(null)` shows "-". Actual shows
+  "-" while there is no ledger. The footnote explains both formulas and the "-".
+- **Budget CSV** (`lib/budget/export.ts`): the old single "Margin percent (fee / (fee + cost))" row is
+  replaced by "Margin (share of total) %, fee / (fee + cost)" and "Markup on cost %, fee / cost",
+  estimate and actual, one decimal, `-` when the denominator is 0 (`percentCell`). The CSV neutraliser
+  writes that cell as `'-`, as it does for every cell starting with "-" (formula-injection rule kept
+  intact; a spreadsheet shows `-`). Actual stays empty when there is no ledger, as before.
+
+Gates: `pnpm exec tsc --noEmit` no output.

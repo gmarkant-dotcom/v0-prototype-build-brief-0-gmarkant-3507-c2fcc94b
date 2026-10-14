@@ -1,4 +1,4 @@
-import { computeMargin, toCentsFromApi } from "./money"
+import { computeMargin, toCentsFromApi, type Margin } from "./money"
 import type { FeeOrCost, LedgerEntry, ProjectCategory } from "@/lib/server/budget/schema"
 import type { EstimateVsActual } from "@/lib/server/budget/summary"
 
@@ -10,7 +10,8 @@ import type { EstimateVsActual } from "@/lib/server/budget/summary"
  *  - A category's Actual is its lines' Actual plus its non-voided entries that are not on a live
  *    line (no line yet, or the line is archived). So category Actuals add up to the project's total
  *    Actual exactly, and the fee / cost split of Actual covers every non-voided entry.
- *  - Fee and cost come from the category's flag. Margin: lib/budget/money.ts computeMargin().
+ *  - Fee and cost come from the category's flag. Margin: lib/budget/money.ts computeMargin(), which
+ *    gives the amount, the share of total (fee / (fee + cost)) and the markup on cost (fee / cost).
  */
 
 export type LineView = { lineId: string; name: string; estimateCents: number; actualCents: number; varianceCents: number; entryCount: number }
@@ -35,8 +36,8 @@ export type SummaryView = {
   fee: { estimateCents: number; actualCents: number }
   cost: { estimateCents: number; actualCents: number }
   margin: {
-    estimate: { amountCents: number; percent: number | null }
-    actual: { amountCents: number; percent: number | null }
+    estimate: Margin
+    actual: Margin
   }
   /** Entries whose category is not in the chart response at all (should be 0; shown if not). */
   unplacedActualCents: number

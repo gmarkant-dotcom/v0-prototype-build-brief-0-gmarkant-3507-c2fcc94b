@@ -48,12 +48,16 @@ export function SummaryTab({ projectId }: { projectId: string }) {
         <Metric
           label="Margin (estimate)"
           value={formatCents(view.margin.estimate.amountCents)}
-          basis={`${formatPercent(view.margin.estimate.percent)} of fee plus cost`}
+          basis={`${formatPercent(view.margin.estimate.shareOfTotalPercent)} share of total · ${formatPercent(view.margin.estimate.markupOnCostPercent)} markup on cost`}
         />
         <Metric
           label="Margin (actual)"
           value={hasActual ? formatCents(view.margin.actual.amountCents) : "No ledger yet"}
-          basis={hasActual ? `${formatPercent(view.margin.actual.percent)} of fee plus cost` : undefined}
+          basis={
+            hasActual
+              ? `${formatPercent(view.margin.actual.shareOfTotalPercent)} share of total · ${formatPercent(view.margin.actual.markupOnCostPercent)} markup on cost`
+              : undefined
+          }
         />
       </section>
 
@@ -87,10 +91,24 @@ export function SummaryTab({ projectId }: { projectId: string }) {
               <td className="px-3 py-2 text-right font-mono text-foreground">{actual(view.totals.actualCents)}</td>
               <td className="px-3 py-2 text-right font-mono text-foreground">{hasActual ? formatCents(view.totals.estimateCents - view.totals.actualCents) : "-"}</td>
             </tr>
+            {(
+              [
+                ["Margin (share of total)", view.margin.estimate.shareOfTotalPercent, view.margin.actual.shareOfTotalPercent],
+                ["Markup on cost", view.margin.estimate.markupOnCostPercent, view.margin.actual.markupOnCostPercent],
+              ] as const
+            ).map(([label, estimate, actualPercent]) => (
+              <tr key={label} className="border-t border-border">
+                <td className="px-3 py-2 text-foreground">{label}</td>
+                <td className="px-3 py-2 text-right font-mono text-foreground">{formatPercent(estimate)}</td>
+                <td className="px-3 py-2 text-right font-mono text-foreground">{hasActual ? formatPercent(actualPercent) : "-"}</td>
+                <td />
+              </tr>
+            ))}
           </tbody>
         </table>
         <p className="px-3 py-2 border-t border-border text-xs text-foreground-muted">
-          Margin is the fee total; the percentage is fee divided by fee plus cost. Variance is estimate minus actual. Voided ledger entries are excluded.
+          Margin is the fee total. Margin (share of total) is fee divided by fee plus cost; markup on cost is fee divided by cost. Each shows
+          &quot;-&quot; when what it divides by is 0. Variance is estimate minus actual. Voided ledger entries are excluded.
         </p>
       </section>
 

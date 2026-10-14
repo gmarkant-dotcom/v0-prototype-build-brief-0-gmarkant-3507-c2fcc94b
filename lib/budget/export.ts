@@ -1,6 +1,6 @@
 import { budgetFetch, BudgetApiError, projectBase } from "./client-api"
 import { downloadCsv, fileSlug, toCsv } from "./csv-export"
-import { centsToDecimalString, toCentsFromApi } from "./money"
+import { centsToDecimalString, percentCell, toCentsFromApi } from "./money"
 import { milliToPlain, rateCentsFromApi, toMilliFromApi } from "./line-math"
 import { buildSummaryView } from "./summary-view"
 import type { CategoryMerge, LedgerEntry, ProjectCategory, BudgetLine, SourceDocument } from "@/lib/server/budget/schema"
@@ -58,13 +58,23 @@ export async function exportBudgetCsv(projectId: string, projectName: string): P
   rows.push(["Cost total", "", "cost", ...math(null), money(view.cost.estimateCents), actual(view.cost.actualCents)])
   rows.push(["Project total", "", "", ...math(null), money(view.totals.estimateCents), actual(view.totals.actualCents)])
   rows.push(["Margin (fee total)", "", "", ...math(null), money(view.margin.estimate.amountCents), actual(view.margin.actual.amountCents)])
+  // Both readings of margin, from the same computeMargin() the Summary tab shows. "-" when the
+  // denominator is 0 (the CSV neutraliser prefixes it with a quote, like every cell starting "-").
   rows.push([
-    "Margin percent (fee / (fee + cost))",
+    "Margin (share of total) %, fee / (fee + cost)",
     "",
     "",
     ...math(null),
-    view.margin.estimate.percent === null ? "" : view.margin.estimate.percent.toFixed(1),
-    hasActual && view.margin.actual.percent !== null ? view.margin.actual.percent.toFixed(1) : "",
+    percentCell(view.margin.estimate.shareOfTotalPercent),
+    hasActual ? percentCell(view.margin.actual.shareOfTotalPercent) : "",
+  ])
+  rows.push([
+    "Markup on cost %, fee / cost",
+    "",
+    "",
+    ...math(null),
+    percentCell(view.margin.estimate.markupOnCostPercent),
+    hasActual ? percentCell(view.margin.actual.markupOnCostPercent) : "",
   ])
 
   const csv = toCsv(["Category", "Line", "Fee or cost", "Qty", "Rate", "Multiplier", "Unit", "Estimate", "Actual"], rows)

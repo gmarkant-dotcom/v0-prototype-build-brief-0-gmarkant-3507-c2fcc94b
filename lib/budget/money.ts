@@ -84,16 +84,28 @@ export function sumCents(values: number[]): number {
 }
 
 /**
- * MARGIN. The spec rules that the fee-or-cost flag is what makes margin computable (spec 2b) and
- * does not state a formula (docs/budget-spine-build-plan.md, Phase B step 4). The owner's run
- * brief gives the fallback used here:
- *   margin amount  = fee total
- *   margin percent = fee / (fee + cost)
- * Percent is null when fee + cost is 0, so no naked percentage is shown on nothing.
+ * MARGIN, BOTH WAYS. The fee-or-cost flag is what makes margin computable (spec 2b). The owner's
+ * brief of 2026-10-14 asks for both readings, side by side, on screen and in the CSV:
+ *   margin amount             = fee total
+ *   margin (share of total)   = fee / (fee + cost)
+ *   markup on cost            = fee / cost
+ * Each percentage is null when its own denominator is 0 (shown as "-"), so no naked percentage is
+ * shown on nothing. The Summary tab and the budget CSV both read these through buildSummaryView().
  */
-export function computeMargin(feeCents: number, costCents: number): { amountCents: number; percent: number | null } {
-  const denom = feeCents + costCents
-  return { amountCents: feeCents, percent: denom === 0 ? null : (feeCents / denom) * 100 }
+export type Margin = { amountCents: number; shareOfTotalPercent: number | null; markupOnCostPercent: number | null }
+
+export function computeMargin(feeCents: number, costCents: number): Margin {
+  const total = feeCents + costCents
+  return {
+    amountCents: feeCents,
+    shareOfTotalPercent: total === 0 ? null : (feeCents / total) * 100,
+    markupOnCostPercent: costCents === 0 ? null : (feeCents / costCents) * 100,
+  }
+}
+
+/** A percentage for a CSV cell: one decimal, or "-" when its denominator is 0. */
+export function percentCell(p: number | null): string {
+  return p === null ? "-" : p.toFixed(1)
 }
 
 export function formatPercent(p: number | null): string {
