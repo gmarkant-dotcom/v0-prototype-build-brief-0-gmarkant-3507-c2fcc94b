@@ -178,7 +178,7 @@ BEGIN
     AND EXISTS (SELECT 1 FROM public.org_members m WHERE m.org_id = ps.lead_org_id)
     AND EXISTS (SELECT 1 FROM public.projects pr WHERE pr.org_id = ps.lead_org_id)
     AND NOT EXISTS (SELECT 1 FROM public.org_members x WHERE x.user_id = vm.user_id AND x.org_id = ps.lead_org_id)
-  ORDER BY (ps.partner_id = vm.user_id
+  ORDER BY (ps.vendor_org_id = vm.org_id
             AND EXISTS (SELECT 1 FROM public.project_assignments pa JOIN public.projects pr ON pr.id = pa.project_id
                         WHERE pa.partnership_id = ps.id AND pr.org_id = ps.lead_org_id)) DESC,
            (EXISTS (SELECT 1 FROM public.project_assignments pa WHERE pa.partnership_id = ps.id)) DESC,
