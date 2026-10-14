@@ -288,3 +288,121 @@ change only what the agency's own tables hold, plus the two link columns no vend
 
 **Stopped on:** nothing. No scope question was left open that changes vendor behaviour; the readings
 above are recorded for the owner to overrule.
+
+## 8. Addendum 2026-10-14 (branch `feat/rfp-record-a2`): closing F1 in 118 - STOPPED AT STEP 0
+
+**Result: STOP CONDITION HIT. Migration 118 and its down file and pre-apply test are UNCHANGED. F1 is
+still OPEN.** 118 is still unapplied, `COMMIT;` is still on line 845, the expected assertion count is
+still 82, and no `-- >>> 118 BODY START` / `-- <<< 118 BODY END` markers were added. This section is
+the only change on the branch.
+
+F1 background: found 2026-10-14 (section 6). The owner checked the 97 inbox rows on 2026-10-14 and
+found no sign of exploitation.
+
+### 8a. Every vendor-session write to `partner_rfp_inbox`
+
+All five use `createClient()` from `lib/supabase/server` (the vendor's session, RLS applies). None is
+an INSERT. No browser-side Supabase call in `app/partner/**` or `components/**` writes this table (every
+match there is a type or a comment); no SQL function in `supabase/migrations/` or `scripts/` writes it.
+
+| # | Site | Verb | Columns written | Fits the brief's allow-set? |
+|---|---|---|---|---|
+| V1 | `app/api/partner/rfps/[id]/route.ts:71-78` (first view) | UPDATE | `viewed_at` | yes, viewing-state timestamp |
+| V2 | `app/api/partner/rfps/[id]/intent/route.ts:92-99` | UPDATE | `partner_intent`, `intent_set_at` | yes, arguably (response-state value and its timestamp) |
+| V3 | `app/api/partner/rfps/[id]/nda-notify/route.ts:115-118` | UPDATE | `agency_nda_notified_at`, `updated_at` | yes, arguably (records the vendor's own NDA notification) |
+| V4 | `app/api/partner/rfps/[id]/response/route.ts:380-383` (on submit) | UPDATE | `status` (`'bid_submitted'`), `updated_at` | yes |
+| **V5** | **`app/api/partner/rfps/claim/route.ts:76-84`** (`claimByToken`, from POST `:140` and GET `:178`) | UPDATE | **`vendor_org_id`** (= `resolveCallerWriteOrgId`, `:37`), `claimed_at`, `updated_at` | **NO: `vendor_org_id` is an ownership column, not a viewing/response timestamp or flag** |
+
+`nda_confirmed_at`, which 099's comment (099:799-803) lists among vendor writes, has no vendor writer
+in the current code; the only writer is the agency broadcast INSERT (`app/api/agency/broadcast-rfp/route.ts:460`).
+
+### 8b. Service-role writers (exempt, bypass RLS)
+
+| Site | Verb | Runs on behalf of | Column values from |
+|---|---|---|---|
+| `lib/magic-token-attach.ts:167` merge, `:195` delete, `:356` insert, `:395` heal | UPDATE / DELETE / INSERT | callers below | the agency-written `rfp_magic_tokens` row, plus `partnerId` |
+| caller `app/api/partner/rfps/route.ts:72` (sweep, from `:190`) | | vendor (login sweep) | `partnerId` = `resolveCallerWriteOrgId` (server-derived); tokens matched by the caller's own email |
+| caller `app/api/partner/rfps/bids/route.ts:56` (from `:122`) | | vendor | same |
+| caller `app/api/rfp/guest/[token]/attach-existing-account/route.ts:77` | | vendor | `partnerId` = `resolveCallerWriteOrgId` `:71`; token's `vendor_email` must equal the account email `:61-64` |
+| caller `app/api/agency/rfp/magic-link/route.ts:454` | | agency | agency request, server-validated |
+| `lib/server/rfp-record.ts:305` `setLinkColumn`, from `app/api/agency/rfp/magic-link/route.ts:480` | UPDATE | agency | `rfp_line_id` the route itself just wrote |
+
+Three of these run on behalf of a vendor, but **no column value is vendor-chosen**: every value is
+either copied from the agency's token row or is the server-resolved acting organization. No request
+body field reaches an inbox column. The agency session writers (`broadcast-rfp/route.ts:587-606`
+INSERT, `broadcast-rfp/resend-invite/route.ts:76`, `rfp-closure/route.ts:189-190`,
+`rfp-responses/[id]/route.ts:766-767`) are not vendor paths.
+
+### 8c. The 099 vendor UPDATE policy as live after 099
+
+USING, from `supabase/migrations/079_organizations.sql:1356-1364` (099 does not name it):
+
+```sql
+CREATE POLICY "Partners update own inbox rows"
+  ON public.partner_rfp_inbox AS PERMISSIVE FOR UPDATE TO authenticated
+  USING (
+    vendor_org_id IN (SELECT public.current_user_org_ids())
+    OR (recipient_email IS NOT NULL AND EXISTS (
+          SELECT 1 FROM public.profiles pr
+          WHERE pr.id = auth.uid()
+            AND lower(btrim(pr.email)) = lower(btrim(partner_rfp_inbox.recipient_email))))
+  );
+```
+
+WITH CHECK, from `supabase/migrations/099_rfp_closure.sql:748-839` (comments removed):
+
+```sql
+ALTER POLICY "Partners update own inbox rows"
+  ON public.partner_rfp_inbox
+  WITH CHECK (
+    (
+      vendor_org_id IN (SELECT public.current_user_org_ids())
+      OR (recipient_email IS NOT NULL AND EXISTS (
+            SELECT 1 FROM public.profiles pr
+            WHERE pr.id = auth.uid()
+              AND lower(btrim(pr.email)) = lower(btrim(partner_rfp_inbox.recipient_email))))
+    )
+    AND (
+      vendor_org_id IS NULL
+      OR vendor_org_id IN (SELECT public.current_user_org_ids())
+    )
+    AND (
+      status = public.partner_rfp_inbox_status_before(id)
+      OR (
+        status = 'bid_submitted'
+        AND public.partner_rfp_inbox_status_before(id) <> 'closed'
+        AND public.partner_rfp_inbox_status_before(id) <> 'not_selected'
+      )
+    )
+  );
+```
+
+### 8d. Why the run stopped
+
+The brief's stop condition: any vendor-session UPDATE of a column outside {`status`, `updated_at`, and
+timestamp or flag columns whose only purpose is recording the vendor's own viewing/response state}.
+V5, the invitation claim, writes `vendor_org_id` on the vendor's session. That is an identity column
+(099's clause B exists to constrain it), not a viewing/response marker. The brief says not to widen the
+allow-list beyond that set on my own judgement, so 118 was not changed. A deny-by-default guard built
+on that set alone would refuse every invitation claim on the platform with 42501.
+
+### 8e. Owner decision needed (pick one; nothing below is implemented)
+
+1. **Admit `vendor_org_id` and `claimed_at` on the claim transition only:** the guard allows them to
+   change only when `OLD.claimed_at IS NULL AND OLD.vendor_org_id IS NULL` and
+   `NEW.vendor_org_id IN current_user_org_ids()` (099 clause B still applies). This also closes the
+   gap 099:783-790 names (moving a claimed row between two of the caller's orgs). Smallest change;
+   keeps the claim on the session client.
+2. **Move the claim to the service role** after the route's own email and token checks, and keep the
+   vendor allow-list to V1-V4. Application change, outside this run's limits.
+3. Admit `vendor_org_id` unconditionally (weakest; not recommended).
+
+Also for the owner: whether `partner_intent` (V2) and `agency_nda_notified_at` (V3) count as
+"viewing/response state". I read them as yes; they would be on the allow-list with `viewed_at`,
+`intent_set_at`, `status` and `updated_at` once V5 is ruled on.
+
+### 8f. Not done
+
+No change to 118, its down file or its test; no markers; no assertion count or COMMIT line change;
+`docs/rfp-record-test-script.md`, the state of record and `LIGAMENT_CONTEXT.md` were not updated
+because they would describe F1 as closed, and it is not. No application code changed.
