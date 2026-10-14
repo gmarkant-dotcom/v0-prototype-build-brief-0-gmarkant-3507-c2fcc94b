@@ -8,10 +8,13 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { labelClass, selectClass } from "./budget-states"
 import {
+  EMPTY_MAPPING,
   IMPORT_MAX_ROWS,
   buildReviewRows,
   guessMapping,
+  mappingReady,
   readImportFile,
+  rowAmountBody,
   rowProblem,
   type ColumnMapping,
   type ParsedImportFile,
@@ -19,13 +22,16 @@ import {
 } from "@/lib/budget/import"
 import { BudgetApiError, budgetPost, errorMessage, projectBase } from "@/lib/budget/client-api"
 import { centsToDecimalString, formatCents } from "@/lib/budget/money"
+import { formatMilli } from "@/lib/budget/line-math"
 import { categoryNameKey } from "@/lib/budget/starter-templates"
 import type { FeeOrCost, ProjectCategory } from "@/lib/server/budget/schema"
 
 /**
  * U3, BUDGET IMPORT. Every step runs in the browser:
  *   1 file      CSV or .xlsx, at most 5 MB and 2,000 rows (lib/budget/import.ts)
- *   2 mapping   description, amount, optional category and fee-or-cost columns
+ *   2 mapping   description, amount, optional category and fee-or-cost columns, and optional
+ *               quantity, rate, multiplier and unit (a row with a rate imports as
+ *               qty x rate x multiplier; with rate mapped the amount column is optional)
  *   3 review    per row: category (existing or new), fee or cost, include or exclude;
  *               optional AI suggestions through the gated suggest-categories route
  *   4 import    new categories first, then lines in file order, one request each, with a
@@ -54,12 +60,15 @@ function sameFlagPerNewCategory(rows: ReviewRow[]): ReviewRow[] {
 export function ImportSheet({
   projectId,
   categories,
+  lineMath,
   open,
   onOpenChange,
   onFinished,
 }: {
   projectId: string
   categories: ProjectCategory[]
+  /** 116 applied. Before it, a rate still sets each line's total, but the breakdown is not kept. */
+  lineMath: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
   onFinished: () => void
@@ -69,7 +78,7 @@ export function ImportSheet({
   const [fileError, setFileError] = useState<string | null>(null)
   const [reading, setReading] = useState(false)
   const [parsed, setParsed] = useState<(ParsedImportFile & { fileName: string }) | null>(null)
-  const [mapping, setMapping] = useState<ColumnMapping>({ description: null, category: null, amount: null, feeOrCost: null })
+  const [mapping, setMapping] = useState<ColumnMapping>(EMPTY_MAPPING)
   const [rows, setRows] = useState<ReviewRow[]>([])
   const [page, setPage] = useState(0)
   const [aiState, setAiState] = useState<{ status: "idle" | "running" | "done" | "unavailable"; text?: string }>({ status: "idle" })
@@ -96,7 +105,7 @@ export function ImportSheet({
   }
 
   function toReview() {
-    if (!parsed || mapping.description === null || mapping.amount === null) return
+    if (!parsed || !mappingReady(mapping)) return
     setRows(sameFlagPerNewCategory(buildReviewRows(parsed.rows, mapping, categories)))
     setSuggested(new Set())
     setPage(0)
@@ -251,7 +260,7 @@ export function ImportSheet({
         }
       }
       try {
-        await budgetPost(`${projectBase(projectId)}/lines`, { categoryId, name: r.description, estimate: centsToDecimalString(r.amountCents ?? 0) })
+        await budgetPost(`${projectBase(projectId)}/lines`, { categoryId, name: r.description, ...rowAmountBody(r) })
         out.push({ index: r.index, ok: true, message: "Imported" })
       } catch (e) {
         out.push({ index: r.index, ok: false, message: errorMessage(e) })
@@ -321,19 +330,24 @@ export function ImportSheet({
               {(
                 [
                   ["description", "Description (required)"],
-                  ["amount", "Amount (required)"],
+                  ["amount", mapping.rate === null ? "Amount (required)" : "Amount (optional with a rate)"],
                   ["category", "Category (optional)"],
                   ["feeOrCost", "Fee or cost (optional)"],
+                  ["quantity", "Quantity (optional)"],
+                  ["rate", "Rate (optional)"],
+                  ["multiplier", "Multiplier, x (optional)"],
+                  ["unit", "Unit (optional)"],
                 ] as const
               ).map(([key, label]) => (
                 <div key={key}>
                   <label className={labelClass}>{label}</label>
                   <select
+                    aria-label={label}
                     className={`${selectClass} w-full`}
                     value={mapping[key] ?? ""}
                     onChange={(e) => setMapping((m) => ({ ...m, [key]: e.target.value === "" ? null : Number(e.target.value) }))}
                   >
-                    <option value="">{key === "description" || key === "amount" ? "Choose a column" : "None"}</option>
+                    <option value="">{key === "description" || (key === "amount" && mapping.rate === null) ? "Choose a column" : "None"}</option>
                     {colOptions}
                   </select>
                 </div>
@@ -342,6 +356,12 @@ export function ImportSheet({
             <p className="text-xs text-foreground-muted">
               Amounts may include currency symbols and thousands separators ($1,250.00). A dot is the decimal point. Negative amounts and (bracketed)
               amounts are credits. More than two decimals is refused, not rounded.
+            </p>
+            <p className="text-xs text-foreground-muted">
+              A row with a rate becomes Qty x Rate x multiplier, rounded to the cent (an empty Qty or x counts as 1); its amount cell is not used.
+              Quantity and multiplier take up to three decimals and must be above 0. A unit is up to 24 characters. Rows without a rate use the
+              amount.
+              {lineMath ? "" : " Line math is not enabled yet for this workspace: each total is computed and saved, but the quantity, rate and multiplier are not kept."}
             </p>
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-sm">
@@ -373,7 +393,7 @@ export function ImportSheet({
               </Button>
               <Button
                 className="bg-accent text-accent-foreground hover:bg-accent/90 font-mono"
-                disabled={mapping.description === null || mapping.amount === null}
+                disabled={!mappingReady(mapping)}
                 onClick={toReview}
               >
                 Review rows
@@ -430,6 +450,14 @@ export function ImportSheet({
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-foreground whitespace-nowrap">
                           {r.amountCents === null ? <span className="text-destructive">-</span> : formatCents(r.amountCents)}
+                          {r.math ? (
+                            <div className="font-mono text-2xs text-foreground-muted">
+                              {formatMilli(r.math.quantityMilli ?? 1000)}
+                              {r.math.unitLabel ? ` ${r.math.unitLabel}` : ""} x {formatCents(r.math.rateCents)}
+                              {r.math.multiplierMilli !== null ? ` x ${formatMilli(r.math.multiplierMilli)}` : ""}
+                            </div>
+                          ) : null}
+                          {r.amountNote ? <div className="text-2xs text-warning whitespace-normal max-w-[12rem] ml-auto">{r.amountNote}</div> : null}
                         </td>
                         <td className="px-2 py-2 space-y-1 min-w-[14rem]">
                           <select aria-label="Category" className={`${selectClass} w-full h-8`} value={value} onChange={(e) => setTarget(r, e.target.value)}>

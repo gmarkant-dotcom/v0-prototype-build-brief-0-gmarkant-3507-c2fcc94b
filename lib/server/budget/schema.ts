@@ -43,6 +43,11 @@ export const TABLES_103 = [
 export const TEMPLATE_CATEGORY_COLUMNS = ["id", "org_id", "name", "fee_or_cost", "archived_at", "created_at"] as const
 export const PROJECT_CATEGORY_COLUMNS = ["id", "project_id", "name", "fee_or_cost", "archived_at", "created_at"] as const
 export const LINE_COLUMNS = ["id", "project_id", "category_id", "name", "estimate", "archived_at", "created_at"] as const
+/**
+ * 116 (budget line math). Read and written only when the columns exist: lib/server/budget/lines.ts
+ * drops them from the select and the payload on 42703 / PGRST204, so the code runs before 116.
+ */
+export const LINE_MATH_COLUMNS = ["quantity", "unit_rate", "multiplier", "unit_label"] as const
 export const MERGE_COLUMNS = ["id", "project_id", "from_category_id", "into_category_id", "merged_at"] as const
 export const SOURCE_DOCUMENT_COLUMNS = [
   "id",
@@ -105,6 +110,15 @@ export type BudgetLine = {
   estimate: number
   archived_at: string | null
   created_at: string
+  /**
+   * 116. numeric(12,3), numeric(14,2), numeric(12,3), text. NULL on a line without math, and on
+   * every line while 116 is not applied. When unit_rate is set, estimate is computed by the
+   * database (round(coalesce(quantity,1) * unit_rate * coalesce(multiplier,1), 2)).
+   */
+  quantity: number | null
+  unit_rate: number | null
+  multiplier: number | null
+  unit_label: string | null
 }
 
 export type CategoryMerge = {

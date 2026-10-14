@@ -97,3 +97,42 @@ and are identical. Not machine-verified.
 must still return zero rows.
 
 Not run against Postgres: no database here. The test is the parse check.
+
+---
+
+## Part 2. Code (works before and after 116)
+
+| File | Change | Before 116 is applied |
+|---|---|---|
+| `lib/budget/line-math.ts` (new) | One set of rules for browser and server: `parseDecimal3ToMilli` (qty / multiplier: > 0, at most 999,999,999.999, at most 3 decimals, refused not rounded), `parseRateToCents` (the money rules: 2 decimals, negatives allowed, below 1e12), `parseUnitLabel` (trimmed, 1 to 24 code points, no C0/C1 control characters), `computeEstimateCents` (BigInt, half away from zero, refuses above numeric(14,2)), display and API converters. No float carries a number. | pure functions, no I/O |
+| `lib/server/budget/schema.ts` | `LINE_MATH_COLUMNS`; `BudgetLine` gains `quantity`, `unit_rate`, `multiplier`, `unit_label` (nullable). | fields are `null` |
+| `lib/server/budget/lines.ts` | zod schema over the shared rules for `quantity`, `unitRate`, `multiplier`, `unitLabel` (undefined = unchanged, null = clear). With a rate the server computes the estimate (the trigger would overwrite anything else). `listLines` returns `{ lines, lineMath }`. 22003 -> 400 "The line total is too large..."; 23514 on the three checks -> 400 in words. | every select, insert and update is retried WITHOUT the four columns on 42703 / PGRST204 naming one of them (caught BEFORE `fromDbError`, which would otherwise read "budget_lines ... does not exist" as "spine not enabled"). A rate still sets the estimate (computed server-side, stored typed). An update carrying only math answers 400 `LINE_MATH_DISABLED`. |
+| `app/api/agency/budget/projects/[projectId]/lines/route.ts` | GET returns `{ lines, lineMath }`; POST passes the four fields. | `lineMath: false` |
+| `.../lines/[lineId]/route.ts` | PATCH passes the four fields. | as above |
+| `lib/budget/hooks.ts` | `useLines` type gains `lineMath`. | |
+| `components/budgeting/budget-tab.tsx` | When `lineMath`: one-line formula hint; per category a grid with Line, Qty, Rate, x, Unit, Total; new-line row with the same cells and a live computed total. `MathLineRow`: each cell saves on blur or Enter (one field per PATCH, inputs never disabled, so Tab-through is safe), Escape reverts; Total read-only with a rate (live preview, formula in its tooltip), typed input without one. Client validation = the shared rules, plus an overflow check before sending. Refreshed values are adopted in every cell except the one being typed in. | `lineMath` false: the original rows and add-line row, unchanged |
+
+AI suggest route: unchanged.
+
+## Import and export (Part 2 scope)
+
+**Import** (`lib/budget/import.ts`, `components/budgeting/import-sheet.tsx`): optional mappings Quantity,
+Rate, Multiplier (x), Unit, with header guesses (`qty`, `rate`/`unit rate`/`day rate`, `x`/`multiplier`,
+`unit`/`uom`). The mapping step needs Description plus Amount OR Rate. A row with a rate is computed
+(same parser and BigInt product; errors such as "Quantity has more than three decimal places" or the
+too-large message exclude the row with its reason); if the file also has a differing amount, the review
+shows "File amount X replaced by Qty x Rate x multiplier". A row with no rate uses the amount; with rate
+mapped and neither present: "No rate or amount". The review's Amount cell shows the breakdown. The
+import posts `unitRate` / `quantity` / `multiplier` / `unitLabel` for computed rows and `estimate`
+otherwise. Before 116 the mapping note says the breakdown is not kept (the server still saves each
+computed total).
+
+**Export** (`lib/budget/export.ts`): the budget CSV also reads `/lines?include_archived=1` and adds
+**Qty, Rate, Multiplier, Unit** after "Fee or cost" (header: Category, Line, Fee or cost, Qty, Rate,
+Multiplier, Unit, Estimate, Actual). Totals rows carry empty cells there. Every cell still goes through
+`toCsv` (quoted, quotes doubled, formula-start characters prefixed with `'`). Before 116 the four
+columns are empty.
+
+Gates: `pnpm exec tsc --noEmit` completed with no output (no errors). `pnpm lint --format json
+--output-file /tmp/lint116.json` then `jq` over the touched files: no findings in them (the repo-wide
+lint exit 1 comes from pre-existing findings in other files).
