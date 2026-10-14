@@ -160,3 +160,19 @@ and the budget CSV read that view, so screen and export cannot disagree.
   intact; a spreadsheet shows `-`). Actual stays empty when there is no ledger, as before.
 
 Gates: `pnpm exec tsc --noEmit` no output.
+
+---
+
+## Part 4. Nav: Creative Treatment Analysis under 00 Budgeting
+
+`components/agency-layout.tsx`. The item existed as described (a link to `/agency/brief` inside the
+RFP Broadcast hover dropdown on desktop and its inline sub-list on mobile), and the header comment
+recorded the ruling "move under 00 Budgeting when 00 becomes navigable".
+
+- Removed from `RfpBroadcastNavItem` (desktop HoverCard and mobile list; the divider before Lightning
+  RFP went with it). Lightning RFP Magic Link is unchanged.
+- New `BudgetingSubItems`: an always-visible indented sub-link, "◆ Creative Treatment Analysis" ->
+  `/agency/brief`, rendered directly under the 00 Budgeting item in BOTH of 00's states (link when
+  the spine probe answers, plain "Coming soon" text otherwise), so the probe can never orphan the
+  feature. Same markup as the existing mobile sub-lists, plus an active state on `/agency/brief*`.
+- No href, route, middleware or page changed. Header comment rewritten to record the move.
