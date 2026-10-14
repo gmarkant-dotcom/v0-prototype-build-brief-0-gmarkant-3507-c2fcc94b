@@ -40,9 +40,12 @@ The code must behave exactly as `main` does, apart from the two new controls.
 ## Part B. Apply 118 (owner)
 
 - **RB1** Run `118_rfp_records.sql`'s P1 to P3. Expected as written in the file.
-- **RB2** Paste `118_preapply_test.sql`, run once. First line: **"SAFE TO APPLY 118."**; 82 assertions;
-  0 FAIL; the only INCONCLUSIVE rows are U1, U2, X1, X2 (NO SUBJECT, by design). Anything else: stop.
-- **RB3** Dry run (COMMIT at line 845 changed to ROLLBACK), then P2 still answers null, null, null and
+- **RB2** Paste `118_preapply_test.sql`, run once. First line: **"SAFE TO APPLY 118."**; 97 assertions;
+  0 FAIL; the only INCONCLUSIVE rows are U1, U2, X1, X2 and C3 (NO SUBJECT, by design; C3 runs and must
+  PASS if some user outside the lead agency belongs to two organizations). A1 to A6 must read PASS with
+  phase 1 `OK:1` and phase 2 `E:42501` (F1 open before, closed after). The INFO line must read 0 and 0;
+  if not, read `docs/rfp-record-a-report.md` section 8g before going on. Anything else: stop.
+- **RB3** Dry run (COMMIT at line 924 changed to ROLLBACK), then P2 still answers null, null, null and
   zero rows.
 - **RB4** Real run, then V1 to V7 exactly as EXPECTED. 161 public policies.
 
@@ -115,7 +118,23 @@ The code must behave exactly as `main` does, apart from the two new controls.
   `GET /api/partner/rfps` and `GET /api/partner/rfps/<id>` rows now include `rfp_line_id` (an id) and
   `client_name_released` (null). This is the one accepted vendor-visible change.
 - **RC12** Vendor: opening the RFP, setting an intent ("Will respond") and submitting a bid all work.
-  (The link-column guard leaves every vendor write that does not touch a link column alone.)
+  These are vendor allow-list writes (rulings O1): `viewed_at`, `partner_intent` / `intent_set_at`,
+  `status` / `updated_at`.
+- **RC12a** Vendor NDA notice: on an RFP that requires an NDA, the vendor's "notify the agency" action
+  succeeds (`agency_nda_notified_at`, `updated_at`).
+- **RC12b** The invitation claim (ruling O2): agency broadcasts to a manually typed address that has no
+  account yet; create the account with that address, open the invitation link. The claim succeeds and
+  the RFP appears in `/partner/rfps`. Opening the same link again still lands on the RFP (already
+  claimed by your own organization).
+- **RC12c** F1 closed (owner SQL, as the vendor, inside BEGIN ... ROLLBACK):
+  ```sql
+  BEGIN;
+  SELECT set_config('request.jwt.claims', json_build_object('sub', '<vendor user id>', 'role', 'authenticated')::text, true);
+  SET LOCAL ROLE authenticated;
+  UPDATE public.partner_rfp_inbox SET estimated_budget = 'changed' WHERE id = '<the vendor''s inbox row id>';
+  ROLLBACK;
+  ```
+  Refused: 42501 "A vendor cannot change partner_rfp_inbox.estimated_budget."
 
 ### Fail closed (code reading plus one live check)
 
@@ -129,3 +148,5 @@ The code must behave exactly as `main` does, apart from the two new controls.
 - **RD1** With records present, run `118_rfp_records_down.sql` as is: refused, LG118, nothing changed.
 - **RD2** Forcing it (`SET LOCAL ligament.allow_drop_rfp_records = 'on';` after BEGIN) LOSES EVERY
   RECORD AND EVERY LINK. Part A then holds again.
+- **RD3** Rolling back also drops the vendor allow-list with the inbox guard: F1 is open again until 118
+  is re-applied.

@@ -4,11 +4,11 @@
 -- AUTHORED 2026-10-14 on feat/rfp-record-a (unattended run). NOT RUN: THERE IS NO LOCAL POSTGRES AND
 -- NO CREDENTIALS HERE. Expect to fix a typo on the first run; a typo ends in a plain error, not in
 -- "SAFE TO APPLY". OWNER-RUN, in the Supabase SQL Editor.
--- The inlined migration code below (between $m118$ markers) is 118_rfp_records.sql, lines 282-843
--- (the body between BEGIN; and COMMIT;, without the blank first and last lines; 562 lines, and the
--- copy here is 562 lines). It was copied by hand, not by a tool (the run could not use shell
--- redirection or hashing): byte identity is NOT machine-verified. If you edit the migration, re-copy
--- it here.
+-- The inlined migration code below (inside the $m118$ string) is 118_rfp_records.sql from the line
+-- "-- >>> 118 BODY START" to the line "-- <<< 118 BODY END" inclusive: the whole body between BEGIN;
+-- and COMMIT;. Both files carry those two marker lines, so the copies can be compared mechanically.
+-- Checked 2026-10-14 (feat/rfp-record-a2) with git diff --no-index: no hunk falls between the markers.
+-- If you edit the migration, re-copy the marked block here and re-check.
 --
 -- 116 AND 117 ARE LIVE (applied 2026-10-14). This test applies only 118, inside its own transaction,
 -- between phase 1 and phase 2.
@@ -26,8 +26,11 @@
 -- maintained); the line guard (lead_org_id forced from the parent, rfp_id change refused); the
 -- link-column guard (the vendor cannot set rfp_line_id or client_name_released on its own inbox
 -- row, cannot get round it by repointing lead_org_id, and keeps its existing updates; the agency and
--- the service role link; a link to another organization's line or inbox row is refused); a vendor
--- reads nothing of either table and writes nothing; anon nothing; no DELETE; D7 (deleting the
+-- the service role link; a link to another organization's line or inbox row is refused); the vendor
+-- allow-list on partner_rfp_inbox (rulings O1 and O2: F1's columns refused for a vendor after 118
+-- and accepted before it, every app vendor write accepted, the claim accepted only for an unclaimed
+-- row to the vendor's own org with claimed_at, a re-claim and claimed_at alone refused, the agency
+-- unaffected); a vendor reads nothing of either table and writes nothing; anon nothing; no DELETE; D7 (deleting the
 -- project of a sent record keeps the record with project_id NULL); the helper's answers and ACLs; no
 -- TRUNCATE/REFERENCES/TRIGGER for authenticated; no policy, grant or trigger changed outside the
 -- new tables and the five columns; existing inbox and token rows unchanged.
@@ -53,13 +56,22 @@
 -- Rows read PASS, FAIL, INCONCLUSIVE, NOT DISCRIMINATING (same expectation in both phases, reported
 -- as PASS with that note) or NO SUBJECT (reported as INCONCLUSIVE, never PASS).
 --
--- EXPECTED COUNT: 72 scenarios + 9 self-checks + M = 82 assertions.
+-- EXPECTED COUNT: 87 scenarios + 9 self-checks + M = 97 assertions.
 --
 -- INCONCLUSIVE BY DESIGN: U1, U2 (a member of an UNPAID lead agency) and X1, X2 (a member of a
 -- SECOND paid lead agency). m a r k a n t is the only lead organization with members today, so these
--- four report NO SUBJECT. They are not FAIL, and they are the only INCONCLUSIVE rows the headline
--- may carry and still read "SAFE TO APPLY 118.". If a subject exists for them, they run and are
--- judged like every other row.
+-- four report NO SUBJECT. C3 (a user outside o1 who belongs to TWO organizations, for the re-claim)
+-- reports NO SUBJECT when no such user exists. They are not FAIL, and they are the only INCONCLUSIVE
+-- rows the headline may carry and still read "SAFE TO APPLY 118.". If a subject exists for them,
+-- they run and are judged like every other row.
+--
+-- NOT DISCRIMINATING BY DESIGN (same expectation before and after 118, reported as PASS with that
+-- note): K3, K4, P1-P3 and C1 (the app's vendor writes, accepted both times), C2 (099 clause B
+-- refuses before 118, rule (4) after), Y1 (the agency, accepted both times).
+--
+-- INFO LINE (not an assertion): inbox rows whose project belongs to another organization, and
+-- unclaimed invitation rows that already carry a vendor_org_id. Both are expected to be 0; read
+-- docs/rfp-record-a-report.md section 8g if either is not.
 --
 -- =====================================================================
 -- THE SUBJECTS
@@ -76,6 +88,10 @@
 -- unpaid : a sole member of a lead agency with is_paid not true. NO SUBJECT by design today.
 -- other  : a sole member of a second paid lead agency. NO SUBJECT by design today.
 -- oo     : "another organization" for foreign rows: the vendor's organization (or any other).
+-- inbc   : a throwaway UNCLAIMED inbox row of o1 (vendor_org_id NULL) addressed to the vendor's
+--          profile email (C1, C2, C5). No profile email: NO SUBJECT.
+-- multi  : a user outside o1 who belongs to two organizations (oma, omb), the vendor first; inbm is
+--          a throwaway inbox row of o1 claimed for oma (C3). NO SUBJECT by design if none exists.
 -- px     : a project of another organization; if none exists a random id is used (reported).
 -- Each scenario's SETUP runs as the table owner (no end-user session; the trusted path), with fixed
 -- throwaway ids. IT IMPERSONATES AND PROVES IT DID: request.jwt.claims + SET LOCAL ROLE, then
@@ -103,9 +119,17 @@ BEGIN;
 
 DO $test$
 DECLARE
-  c_expected     CONSTANT integer := 81;
+  c_expected     CONSTANT integer := 96;
   c_phases       CONSTANT integer := 2;
-  c_by_design    CONSTANT text[]  := ARRAY['U1', 'U2', 'X1', 'X2'];
+  c_by_design    CONSTANT text[]  := ARRAY['U1', 'U2', 'X1', 'X2', 'C3'];
+  v_uv_email     text;
+  v_um           uuid;
+  v_oma          uuid;
+  v_omb          uuid;
+  v_inbc         uuid := gen_random_uuid();
+  v_inbm         uuid := gen_random_uuid();
+  v_info_xproj   text := 'unreadable';
+  v_info_unclm   text := 'unreadable';
   v_o1           uuid;
   v_p1           uuid;
   v_u1           uuid;
@@ -223,6 +247,7 @@ DECLARE
   -- Setup fragments, run as the owner. format() arguments everywhere:
   --   %1$L p1  %2$L o1  %3$L rec  %4$L line  %5$L inbox  %6$L tok  %7$L px  %8$L ptmp
   --   %9$L inbx  %10$L oo  %11$L rec2  %12$L recx  %13$L linex  %14$L m1  %15$L ou  %16$L recu
+  --   %17$L ov (the vendor's org)  %18$L inbc  %19$L vendor email  %20$L inbm  %21$L oma  %22$L omb
   s_rec   CONSTANT text := $s$INSERT INTO public.rfp_records (id, lead_org_id, project_id, source, master_rfp, created_by, updated_at) VALUES (%3$L, %2$L, %1$L, 'wizard', '{"projectName": "LG118 test"}'::jsonb, %14$L, '2000-01-01T00:00:00Z');$s$;
   s_line  CONSTANT text := $s$INSERT INTO public.rfp_record_lines (id, rfp_id, scope_item_key, scope_item_name, estimated_budget) VALUES (%4$L, %3$L, 'LG118-1', 'LG118 line', '1000');$s$;
   s_sent  CONSTANT text := $s$UPDATE public.rfp_records SET broadcast_at = now() WHERE id = %3$L;$s$;
@@ -231,6 +256,9 @@ DECLARE
   s_recx  CONSTANT text := $s$INSERT INTO public.rfp_records (id, lead_org_id, project_id, source, master_rfp) VALUES (%12$L, %10$L, NULL, 'wizard', '{}'::jsonb); INSERT INTO public.rfp_record_lines (id, rfp_id, scope_item_key, scope_item_name) VALUES (%13$L, %12$L, 'LG118-X', 'LG118 other org line');$s$;
   s_inbx  CONSTANT text := $s$INSERT INTO public.partner_rfp_inbox (id, lead_org_id, recipient_email, scope_item_id, scope_item_name) VALUES (%9$L, %10$L, 'lg118-test@example.invalid', 'LG118-X', 'LG118 other org row');$s$;
   s_recu  CONSTANT text := $s$INSERT INTO public.rfp_records (id, lead_org_id, project_id, source, master_rfp) VALUES (%16$L, %15$L, NULL, 'wizard', '{}'::jsonb);$s$;
+  s_inbc  CONSTANT text := $s$INSERT INTO public.partner_rfp_inbox (id, lead_org_id, recipient_email, scope_item_id, scope_item_name) VALUES (%18$L, %2$L, %19$L, 'LG118-C', 'LG118 unclaimed row');$s$;
+  s_inbm  CONSTANT text := $s$INSERT INTO public.partner_rfp_inbox (id, lead_org_id, vendor_org_id, scope_item_id, scope_item_name, claimed_at) VALUES (%20$L, %2$L, %21$L, 'LG118-M', 'LG118 claimed row', now());$s$;
+  s_new   CONSTANT text := $s$UPDATE public.partner_rfp_inbox SET status = 'new' WHERE id = %5$L;$s$;
   s_ptmp  CONSTANT text := $s$INSERT INTO public.projects SELECT (jsonb_populate_record(NULL::public.projects, to_jsonb(p) || jsonb_build_object('id', %8$L::uuid, 'name', 'LG118 throwaway project'))).* FROM public.projects p WHERE p.id = %1$L; INSERT INTO public.rfp_records (id, lead_org_id, project_id, source, master_rfp) VALUES (%3$L, %2$L, %8$L, 'wizard', '{}'::jsonb); UPDATE public.rfp_records SET broadcast_at = now() WHERE id = %3$L;$s$;
 
   -- Scenario SQL shapes. Each returns ONE text value. '|NEXT|' separates statements run first.
@@ -324,6 +352,35 @@ BEGIN
     AND (SELECT count(*) FROM public.org_members x WHERE x.user_id = m.user_id) = 1
   ORDER BY m.org_id, m.user_id LIMIT 1;
 
+  -- The claim scenarios (C1, C2, C5) address a throwaway unclaimed row to the vendor's own profile
+  -- email, so 099's recipient_email arm admits the vendor exactly as it admits a real invitee.
+  SELECT nullif(btrim(p.email), '') INTO v_uv_email FROM public.profiles p WHERE p.id = v_uv;
+
+  -- C3: a user outside o1 who belongs to two organizations (the vendor itself first). NO SUBJECT
+  -- by design when nobody does.
+  SELECT a.user_id, a.org_id, b.org_id INTO v_um, v_oma, v_omb
+  FROM public.org_members a
+  JOIN public.org_members b ON b.user_id = a.user_id AND b.org_id <> a.org_id
+  WHERE NOT EXISTS (SELECT 1 FROM public.org_members x WHERE x.user_id = a.user_id AND x.org_id = v_o1)
+  ORDER BY (a.user_id IS NOT DISTINCT FROM v_uv) DESC, (a.org_id IS NOT DISTINCT FROM v_ov) DESC,
+           a.user_id, a.org_id, b.org_id
+  LIMIT 1;
+
+  -- INFO, NOT ASSERTIONS. (a) Inbox rows whose project belongs to another organization than the
+  -- row's lead organization: deleting that project as its own members would SET NULL project_id
+  -- under a session that rule (4) treats as a vendor, so the delete would be refused. (b) Unclaimed
+  -- invitation rows that already carry a vendor_org_id: O2 admits no claim on them.
+  BEGIN
+    EXECUTE $c$SELECT count(*)::text FROM public.partner_rfp_inbox i JOIN public.projects p ON p.id = i.project_id
+               WHERE p.org_id IS DISTINCT FROM i.lead_org_id$c$ INTO v_info_xproj;
+  EXCEPTION WHEN OTHERS THEN v_info_xproj := 'unreadable (' || SQLSTATE || ')';
+  END;
+  BEGIN
+    EXECUTE $c$SELECT count(*)::text FROM public.partner_rfp_inbox
+               WHERE invite_token IS NOT NULL AND claimed_at IS NULL AND vendor_org_id IS NOT NULL$c$ INTO v_info_unclm;
+  EXCEPTION WHEN OTHERS THEN v_info_unclm := 'unreadable (' || SQLSTATE || ')';
+  END;
+
   ---------------------------------------------------------------------
   -- THE SCENARIOS. Parallel arrays; position i describes scenario i. sc_setup runs as the owner
   -- (may be several statements), sc_sql as the actor. sc_needs names the subjects a scenario needs
@@ -334,7 +391,8 @@ BEGIN
                  'W1', 'W2', 'W3', 'W4', 'W5', 'B1', 'B2', 'L1', 'L2', 'G1', 'G2', 'G3',
                  'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7',
                  'K1', 'K2', 'K3', 'K4', 'K5', 'K6', 'K7', 'K8', 'K9', 'K10', 'K11', 'K12', 'K13', 'K14', 'K15', 'K16',
-                 'N1', 'N2', 'N3', 'N4', 'H1', 'H2', 'D1', 'D2', 'D7', 'U1', 'U2', 'X1', 'X2'];
+                 'N1', 'N2', 'N3', 'N4', 'H1', 'H2', 'D1', 'D2', 'D7', 'U1', 'U2', 'X1', 'X2',
+                 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'P1', 'P2', 'P3', 'C1', 'C2', 'C3', 'C4', 'C5', 'Y1'];
 
   sc_label := ARRAY[
     $l$R1  agency: INSERT own record on own project$l$,
@@ -408,21 +466,40 @@ BEGIN
     $l$U1  unpaid lead agency: reads 0 of own org's records$l$,
     $l$U2  unpaid lead agency: cannot INSERT a record$l$,
     $l$X1  second lead agency: reads 0 of o1's records$l$,
-    $l$X2  second lead agency: cannot INSERT as o1$l$];
+    $l$X2  second lead agency: cannot INSERT as o1$l$,
+    $l$A1  allow-list: vendor cannot change lead_org_id$l$,
+    $l$A2  allow-list: vendor cannot replace master_rfp_json$l$,
+    $l$A3  allow-list: vendor cannot change evaluation_criteria$l$,
+    $l$A4  allow-list: vendor cannot change estimated_budget$l$,
+    $l$A5  allow-list: vendor cannot change project_id$l$,
+    $l$A6  allow-list: vendor cannot change scope_item_id$l$,
+    $l$P1  allow-list: vendor first view (viewed_at) accepted$l$,
+    $l$P2  allow-list: vendor NDA notice (agency_nda_notified_at)$l$,
+    $l$P3  allow-list: vendor bid submit (status, updated_at)$l$,
+    $l$C1  claim: unclaimed row to own org with claimed_at$l$,
+    $l$C2  claim: to an org the vendor is not in refused$l$,
+    $l$C3  claim: re-claim to the caller's other org refused$l$,
+    $l$C4  claim: claimed_at alone on a claimed row refused$l$,
+    $l$C5  claim: vendor_org_id without claimed_at refused$l$,
+    $l$Y1  agency: non-allow-listed column still accepted$l$];
 
   sc_actor := ARRAY['m1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1',
                     'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1',
                     'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1',
                     'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor',
                     'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'm1', 'm1', 'm1', 'm1', 'm1', 'm1', 'svc', 'svc', 'vendor',
-                    'anon', 'anon', 'anon', 'anon', 'm1', 'vendor', 'm1', 'm1', 'svc', 'unpaid', 'unpaid', 'other', 'other'];
+                    'anon', 'anon', 'anon', 'anon', 'm1', 'vendor', 'm1', 'm1', 'svc', 'unpaid', 'unpaid', 'other', 'other',
+                    'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor', 'vendor',
+                    'vendor', 'vendor', 'multi', 'vendor', 'vendor', 'm1'];
 
   sc_needs := ARRAY['', '', '', '', '', 'oo', '', '', '',
                     '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'oo',
                     '', '', '', '', '', '', '', '', '', 'oo', '', 'oo',
                     '', '', '', '', '', '', '',
                     'inbox', 'inbox', 'inbox', 'inbox', 'inbox', 'inbox', 'inbox,oo', 'inbox', 'inbox,oo', 'inbox', 'tok', 'tok,inbox', 'tok,oo', 'inbox', 'inbox,oo', '',
-                    '', '', '', '', '', '', '', '', '', '', '', '', ''];
+                    '', '', '', '', '', '', '', '', '', '', '', '', '',
+                    'inbox,oo', 'inbox', 'inbox', 'inbox', 'inbox', 'inbox', 'inbox', 'inbox', 'inbox',
+                    'vemail', 'vemail', '', 'inbox', 'vemail', 'inbox'];
 
   sc_setup := ARRAY[
     '', s_rec, s_rec, s_rec || s_line, '', '', s_rec, s_rec || s_line, s_rec || s_line,                     -- R1-R9
@@ -440,7 +517,11 @@ BEGIN
     s_rec || s_line, s_recx, '', s_rec || s_line, '', s_inbx, s_rec || s_line, s_recx, '',                    -- K8-K16
     '', '', '', '', '', '',                                                                                   -- N1-N4, H1-H2
     s_rec, s_rec || s_line, s_ptmp,                                                                           -- D1, D2, D7
-    s_recu, '', s_rec, ''];                                                                                   -- U1, U2, X1, X2
+    s_recu, '', s_rec, '',                                                                                    -- U1, U2, X1, X2
+    '', '', '', '', '', '',                                                                                   -- A1-A6
+    '', '', s_new,                                                                                            -- P1-P3
+    s_inbc, s_inbc, s_inbm, '', s_inbc,                                                                       -- C1-C5
+    ''];                                                                                                      -- Y1
 
   sc_sql := ARRAY[
     -- R1-R9
@@ -527,7 +608,26 @@ BEGIN
     $q$SELECT count(*)::text FROM public.rfp_records WHERE id = %16$L$q$,
     $q$WITH i AS (INSERT INTO public.rfp_records (lead_org_id, project_id, source, master_rfp) VALUES (%15$L, NULL, 'wizard', '{}'::jsonb) RETURNING 1) SELECT count(*)::text FROM i$q$,
     $q$SELECT count(*)::text FROM public.rfp_records WHERE id = %3$L$q$,
-    $q$WITH i AS (INSERT INTO public.rfp_records (lead_org_id, project_id, source, master_rfp) VALUES (%2$L, NULL, 'wizard', '{}'::jsonb) RETURNING 1) SELECT count(*)::text FROM i$q$];
+    $q$WITH i AS (INSERT INTO public.rfp_records (lead_org_id, project_id, source, master_rfp) VALUES (%2$L, NULL, 'wizard', '{}'::jsonb) RETURNING 1) SELECT count(*)::text FROM i$q$,
+    -- A1-A6 (vendor, own claimed row: F1's columns)
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET lead_org_id = %10$L WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET master_rfp_json = '{"lg118": "replaced by a vendor"}'::jsonb WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET master_rfp_json = coalesce(master_rfp_json, '{}'::jsonb) || '{"evaluation_criteria": [{"name": "LG118 vendor rubric", "weight": 100}]}'::jsonb WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET estimated_budget = 'LG118 vendor budget' WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET project_id = CASE WHEN project_id IS NULL THEN %1$L::uuid ELSE NULL END WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET scope_item_id = 'LG118-vendor-scope' WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    -- P1-P3 (vendor, the O1 writes exactly as the routes make them; K4 is the intent route's)
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET viewed_at = now() WHERE id = %5$L AND vendor_org_id = %17$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET agency_nda_notified_at = now(), updated_at = now() WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET status = 'bid_submitted', updated_at = now() WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    -- C1-C5 (the claim, O2; C1 is claim/route.ts:76-84 exactly)
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET vendor_org_id = %17$L, claimed_at = now(), updated_at = now() WHERE id = %18$L AND claimed_at IS NULL RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET vendor_org_id = %2$L, claimed_at = now(), updated_at = now() WHERE id = %18$L AND claimed_at IS NULL RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET vendor_org_id = %22$L, claimed_at = now(), updated_at = now() WHERE id = %20$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET claimed_at = coalesce(claimed_at, now()) - interval '1 day' WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET vendor_org_id = %17$L, updated_at = now() WHERE id = %18$L RETURNING 1) SELECT count(*)::text FROM u$q$,
+    -- Y1 (agency member, a column outside the vendor allow-list)
+    $q$WITH u AS (UPDATE public.partner_rfp_inbox SET estimated_budget = 'LG118 agency budget' WHERE id = %5$L RETURNING 1) SELECT count(*)::text FROM u$q$];
 
   sc_exp := ARRAY[
     'MISSING', 'OK:1',                     -- R1
@@ -601,10 +701,25 @@ BEGIN
     'MISSING', 'OK:0',                     -- U1
     'MISSING', 'E:42501',                  -- U2
     'MISSING', 'OK:0',                     -- X1
-    'MISSING', 'E:42501'];                 -- X2
+    'MISSING', 'E:42501',                  -- X2
+    'OK:1', 'E:42501',                     -- A1 (F1 open before 118, closed after)
+    'OK:1', 'E:42501',                     -- A2
+    'OK:1', 'E:42501',                     -- A3
+    'OK:1', 'E:42501',                     -- A4
+    'OK:1', 'E:42501',                     -- A5
+    'OK:1', 'E:42501',                     -- A6
+    'OK:1', 'OK:1',                        -- P1
+    'OK:1', 'OK:1',                        -- P2
+    'OK:1', 'OK:1',                        -- P3
+    'OK:1', 'OK:1',                        -- C1
+    'E:42501', 'E:42501',                  -- C2 (099 clause B before, rule (4) after)
+    'OK:1', 'E:42501',                     -- C3 (the 099:783-790 gap)
+    'OK:1', 'E:42501',                     -- C4
+    'OK:1', 'E:42501',                     -- C5
+    'OK:1', 'OK:1'];                       -- Y1
 
   v_n := array_length(sc_id, 1);
-  IF v_n <> 72 OR array_length(sc_label, 1) <> v_n OR array_length(sc_actor, 1) <> v_n
+  IF v_n <> 87 OR array_length(sc_label, 1) <> v_n OR array_length(sc_actor, 1) <> v_n
      OR array_length(sc_needs, 1) <> v_n OR array_length(sc_setup, 1) <> v_n
      OR array_length(sc_sql, 1) <> v_n OR array_length(sc_exp, 1) <> v_n * c_phases THEN
     RAISE EXCEPTION 'THE TEST ITSELF IS BROKEN: the scenario arrays disagree in length (ids %, labels %, actors %, needs %, setups %, sqls %, expectations %)',
@@ -633,12 +748,14 @@ BEGIN
     FOR v_i IN 1 .. v_n LOOP
       v_idx := (v_i - 1) * c_phases + v_ph;
       v_actor := sc_actor[v_i];
-      v_uid := CASE v_actor WHEN 'm1' THEN v_u1 WHEN 'vendor' THEN v_uv WHEN 'unpaid' THEN v_uu WHEN 'other' THEN v_ux ELSE NULL END;
+      v_uid := CASE v_actor WHEN 'm1' THEN v_u1 WHEN 'vendor' THEN v_uv WHEN 'unpaid' THEN v_uu WHEN 'other' THEN v_ux
+                            WHEN 'multi' THEN v_um ELSE NULL END;
 
       v_nosubj := v_p1 IS NULL
-               OR (v_actor IN ('m1', 'vendor', 'unpaid', 'other') AND v_uid IS NULL);
+               OR (v_actor IN ('m1', 'vendor', 'unpaid', 'other', 'multi') AND v_uid IS NULL);
       FOREACH v_need IN ARRAY string_to_array(sc_needs[v_i], ',') LOOP
-        IF (v_need = 'inbox' AND v_inbox IS NULL) OR (v_need = 'tok' AND v_tok IS NULL) OR (v_need = 'oo' AND v_oo IS NULL) THEN
+        IF (v_need = 'inbox' AND v_inbox IS NULL) OR (v_need = 'tok' AND v_tok IS NULL) OR (v_need = 'oo' AND v_oo IS NULL)
+           OR (v_need = 'vemail' AND v_uv_email IS NULL) THEN
           v_nosubj := true;
         END IF;
       END LOOP;
@@ -660,7 +777,8 @@ BEGIN
           IF sc_setup[v_i] <> '' THEN
             BEGIN
               EXECUTE format(sc_setup[v_i], v_p1, v_o1, v_rec, v_line, v_inbox, v_tok, v_px, v_ptmp,
-                             v_inbx, v_oo, v_rec2, v_recx, v_linex, v_u1, v_ou, v_recu);
+                             v_inbx, v_oo, v_rec2, v_recx, v_linex, v_u1, v_ou, v_recu,
+                             v_ov, v_inbc, v_uv_email, v_inbm, v_oma, v_omb);
             EXCEPTION WHEN OTHERS THEN
               IF SQLSTATE IN ('42P01', '42703', '42883') THEN
                 RAISE EXCEPTION 'setup: object missing' USING ERRCODE = 'LG096';
@@ -697,7 +815,8 @@ BEGIN
 
           v_parts := string_to_array(
             format(sc_sql[v_i], v_p1, v_o1, v_rec, v_line, v_inbox, v_tok, v_px, v_ptmp,
-                   v_inbx, v_oo, v_rec2, v_recx, v_linex, v_u1, v_ou, v_recu),
+                   v_inbx, v_oo, v_rec2, v_recx, v_linex, v_u1, v_ou, v_recu,
+                   v_ov, v_inbc, v_uv_email, v_inbm, v_oma, v_omb),
             '|NEXT|');
           FOR v_k IN 1 .. array_length(v_parts, 1) - 1 LOOP
             EXECUTE v_parts[v_k];
@@ -743,6 +862,7 @@ BEGIN
       PERFORM set_config('request.jwt.claim.sub', '', true);
       BEGIN
         EXECUTE $m118$
+-- >>> 118 BODY START
 -- ---------------------------------------------------------------------
 -- 0. FAIL-CLOSED PRE-FLIGHT, INSIDE THE TRANSACTION.
 -- ---------------------------------------------------------------------
@@ -1163,7 +1283,8 @@ COMMENT ON COLUMN public.rfp_magic_tokens.client_name_released IS
 
 
 -- ---------------------------------------------------------------------
--- 8. THE LINK-COLUMN GUARDS. See the header section of that name for the three rules.
+-- 8. THE LINK-COLUMN GUARDS. See the header section of that name for the three rules, and THE
+--    VENDOR ALLOW-LIST for the inbox guard's rule (4).
 -- ---------------------------------------------------------------------
 CREATE FUNCTION public.partner_rfp_inbox_link_columns_guard()
 RETURNS trigger
@@ -1171,9 +1292,14 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_changed  boolean;
-  v_trusted  boolean;
-  v_line_org uuid;
+  v_changed   boolean;
+  v_trusted   boolean;
+  v_line_org  uuid;
+  -- Rule (4), ruling O1: the columns a vendor may change. Everything else is refused for a vendor,
+  -- including any column added to this table later.
+  v_vendor_ok text[] := ARRAY['status', 'updated_at', 'viewed_at', 'partner_intent', 'intent_set_at',
+                              'agency_nda_notified_at'];
+  v_offending text;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     v_changed := NEW.rfp_line_id IS NOT NULL OR NEW.client_name_released IS NOT NULL;
@@ -1207,6 +1333,35 @@ BEGIN
     END IF;
   END IF;
 
+  -- (4) THE VENDOR ALLOW-LIST (rulings O1 and O2). Anyone who is not a member of the row's lead
+  -- organization before AND after the write, and is not on the trusted path, is a vendor here.
+  IF TG_OP = 'UPDATE' AND NOT v_trusted
+     AND NOT (coalesce(OLD.lead_org_id IN (SELECT public.current_user_org_ids()), false)
+              AND coalesce(NEW.lead_org_id IN (SELECT public.current_user_org_ids()), false)) THEN
+    -- O2, the claim: an unclaimed row, claimed for one of the caller's own organizations (099
+    -- clause B's test), with claimed_at set in the same update. Never once vendor_org_id is set.
+    IF OLD.vendor_org_id IS NULL
+       AND coalesce(NEW.vendor_org_id IN (SELECT public.current_user_org_ids()), false)
+       AND NEW.claimed_at IS NOT NULL
+       AND NEW.claimed_at IS DISTINCT FROM OLD.claimed_at THEN
+      v_vendor_ok := v_vendor_ok || ARRAY['vendor_org_id', 'claimed_at'];
+    END IF;
+
+    SELECT o.key
+      INTO v_offending
+      FROM jsonb_each(to_jsonb(OLD) - v_vendor_ok) o
+      LEFT JOIN jsonb_each(to_jsonb(NEW) - v_vendor_ok) n ON n.key = o.key
+     WHERE n.value IS DISTINCT FROM o.value
+     ORDER BY o.key
+     LIMIT 1;
+
+    IF v_offending IS NOT NULL THEN
+      RAISE EXCEPTION 'A vendor cannot change partner_rfp_inbox.%.', v_offending
+        USING ERRCODE = '42501',
+              DETAIL  = 'Vendors may change status, updated_at, viewed_at, partner_intent, intent_set_at and agency_nda_notified_at, and may claim an unclaimed row for their own organization (vendor_org_id with claimed_at). Nothing else (migration 118, rulings O1 and O2).';
+    END IF;
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -1215,7 +1370,11 @@ COMMENT ON FUNCTION public.partner_rfp_inbox_link_columns_guard() IS
   'Migration 118. BEFORE INSERT OR UPDATE on partner_rfp_inbox: rfp_line_id and client_name_released '
   'may be set or changed only by a member of the row''s lead organization (before and after the write) '
   'or a trusted path with no session (42501); rfp_line_id must reference a line of the same lead '
-  'organization (23514). Every other write, every vendor write included, passes untouched.';
+  'organization (23514). VENDOR ALLOW-LIST (rulings O1, O2): on UPDATE, a caller who is neither on '
+  'the trusted path nor a member of the lead organization before and after may change only status, '
+  'updated_at, viewed_at, partner_intent, intent_set_at, agency_nda_notified_at, plus vendor_org_id '
+  'and claimed_at when claiming an unclaimed row for one of its own organizations with claimed_at set. '
+  'Any other change raises 42501 naming the column. Deny by default: new columns are refused too.';
 
 CREATE TRIGGER partner_rfp_inbox_link_columns_guard
   BEFORE INSERT OR UPDATE ON public.partner_rfp_inbox
@@ -1305,6 +1464,7 @@ REVOKE EXECUTE ON FUNCTION public.rfp_magic_tokens_link_columns_guard() FROM aut
 
 -- PostgREST must see the tables and columns at commit.
 NOTIFY pgrst, 'reload schema';
+-- <<< 118 BODY END
         $m118$;
       EXCEPTION WHEN OTHERS THEN
         v_apply_err := v_apply_err || ('118 raised ' || SQLSTATE || ': ' || left(SQLERRM, 300));
@@ -1375,7 +1535,9 @@ NOTIFY pgrst, 'reload schema';
     IF v_st = 'INCONCLUSIVE' AND v_all_nosubj AND sc_id[v_i] = ANY (c_by_design) THEN
       v_inconc_dsg := v_inconc_dsg + 1;
       v_dsg_ids := v_dsg_ids || CASE WHEN v_dsg_ids = '' THEN '' ELSE ', ' END || sc_id[v_i];
-      v_detail := v_detail || ' (BY DESIGN: no unpaid or second lead agency exists)';
+      v_detail := v_detail || CASE WHEN sc_id[v_i] = 'C3'
+                                   THEN ' (BY DESIGN: no user outside o1 belongs to two organizations)'
+                                   ELSE ' (BY DESIGN: no unpaid or second lead agency exists)' END;
     END IF;
     IF v_st = 'PASS' THEN v_pass := v_pass + 1;
     ELSIF v_st = 'FAIL' THEN v_fail := v_fail + 1;
@@ -1549,7 +1711,7 @@ NOTIFY pgrst, 'reload schema';
     v_headline := format('SAFE TO APPLY 118.  All %s assertions passed.', v_pass);
   ELSIF v_fail = 0 AND v_inconc = v_inconc_dsg THEN
     v_verdict_text := 'SAFE TO APPLY 118. The only INCONCLUSIVE rows are the NO SUBJECT cases the brief rules INCONCLUSIVE BY DESIGN.';
-    v_headline := format('SAFE TO APPLY 118.  %s assertions passed; %s INCONCLUSIVE BY DESIGN (NO SUBJECT: %s - no unpaid or second lead agency exists). Nothing FAILED.',
+    v_headline := format('SAFE TO APPLY 118.  %s assertions passed; %s INCONCLUSIVE BY DESIGN (NO SUBJECT: %s - no unpaid or second lead agency, or no two-organization user outside o1, exists). Nothing FAILED.',
                          v_pass, v_inconc_dsg, v_dsg_ids);
   ELSIF v_fail = 0 THEN
     v_verdict_text := 'nothing is BROKEN, but an assertion beyond the by-design ones could not be exercised. Settle it before applying.';
@@ -1563,19 +1725,23 @@ NOTIFY pgrst, 'reload schema';
        E'\n=====================================================\n'
     || v_headline || E'\n'
     || E'=====================================================\n'
-    || format(E'assertions run  : %s   (expected %s: 72 scenarios + 9 self-checks + M)\n', v_ran, c_expected + 1)
+    || format(E'assertions run  : %s   (expected %s: 87 scenarios + 9 self-checks + M)\n', v_ran, c_expected + 1)
     || format(E'PASS            : %s\n', v_pass)
     || format(E'FAIL            : %s   (expected 0)\n', v_fail)
-    || format(E'INCONCLUSIVE    : %s   (expected 4, all by design: U1, U2, X1, X2; NO SUBJECT counts here)\n', v_inconc)
+    || format(E'INCONCLUSIVE    : %s   (expected 4 or 5, all by design: U1, U2, X1, X2, and C3 unless a two-organization user exists; NO SUBJECT counts here)\n', v_inconc)
+    || format(E'INFO (not judged): %s inbox row(s) point at a project of another organization than their lead_org_id (deleting such a project as its own members would be refused by rule (4)); %s unclaimed invitation row(s) already carry a vendor_org_id (O2 admits no vendor claim on them). Both expected 0.\n',
+              v_info_xproj, v_info_unclm)
     || format(E'isolation check : %s scenario run(s) compared to the pre-phase fingerprint of partner_rfp_inbox, rfp_magic_tokens, projects (and rfp_records, rfp_record_lines once they exist): %s\n',
               v_iso_runs, CASE WHEN v_iso_bad = 0 THEN 'OK' ELSE 'BROKEN' || v_iso_note END)
-    || format(E'SUBJECT         : lead org %s, project %s, agency member %s (entitled through the new helper: %s); vendor %s of org %s on partnership %s; vendor inbox row %s; token %s; other-org project %s%s; other org %s; unpaid %s/%s; second lead agency %s/%s%s\n',
+    || format(E'SUBJECT         : lead org %s, project %s, agency member %s (entitled through the new helper: %s); vendor %s of org %s on partnership %s (profile email %s); vendor inbox row %s; token %s; other-org project %s%s; other org %s; unpaid %s/%s; second lead agency %s/%s; two-organization user %s (%s, %s)%s\n',
               v_o1, coalesce(v_p1::text, 'NONE'), coalesce(v_u1::text, 'NONE'), v_m1_entitled,
               coalesce(v_uv::text, 'NONE'), coalesce(v_ov::text, 'NONE'), coalesce(v_ps1::text, 'NONE'),
+              CASE WHEN v_uv_email IS NULL THEN 'NONE' ELSE 'present' END,
               coalesce(v_inbox::text, 'NONE'), coalesce(v_tok, 'NONE'), v_px,
               CASE WHEN v_px_real THEN '' ELSE ' (none exists: a random id)' END,
               coalesce(v_oo::text, 'NONE'), coalesce(v_uu::text, 'NONE'), coalesce(v_ou::text, 'NONE'),
               coalesce(v_ux::text, 'NONE'), coalesce(v_ox::text, 'NONE'),
+              coalesce(v_um::text, 'NONE'), coalesce(v_oma::text, 'NONE'), coalesce(v_omb::text, 'NONE'),
               CASE WHEN v_fallback THEN ' [FALLBACK: no qualifying partnership, vendor scenarios are NO SUBJECT]' ELSE '' END)
     || 'VERDICT         : ' || v_verdict_text || E'\n'
     || E'\nEVERY SCENARIO, IN EVERY PHASE\n  phase 1 = BEFORE 118\n  phase 2 = AFTER 118\n'

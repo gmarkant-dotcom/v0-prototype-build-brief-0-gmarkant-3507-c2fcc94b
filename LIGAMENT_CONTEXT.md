@@ -131,11 +131,23 @@ the R-D3 re-tag on 2026-10-14 with **data-fix v2, pinned to project category `e5
 category `42a8ab0a`**, after **v1 failed with 42P01**. v2 is not in this repository (the
 `supabase/data-fixes/2026-10-14-retag-categories_*.sql` files here are v1). **118**
 (`118_rfp_records.sql`, the agency-owned RFP record) is authored with its down file and pre-apply test
-(82 assertions, not run). **Next free migration number: 118 until it is applied; the next to author
+(82 assertions then; 97 since F1's closure below; not run). **Next free migration number: 118 until it is applied; the next to author
 is 119.** Order: RFP record A / 118, B / 119, C / 120, then the actuals feeder (121 or later). Owner
 rulings 2026-10-14: RFP record D1-D9 all approved as proposed (`docs/rfp-source-of-truth-design.md`
 section 6); feeder section 7 approved as recommended except the new 2b (entries pending review count
 toward Actual; the display note "Actual X, including Y pending review" is proposed, not ruled).
+
+**2026-10-14 (feat/rfp-record-a2): F1 closed in 118, PENDING APPLY.** F1, found 2026-10-14: the 099
+vendor UPDATE policy on `partner_rfp_inbox` constrained only `vendor_org_id` and `status`, so a vendor
+could rewrite the rest of its own row through raw PostgREST. The owner found no sign of exploitation
+across the 97 inbox rows. Owner rulings O1 (vendor allow-list: `status`, `updated_at`, `viewed_at`,
+`partner_intent`, `intent_set_at`, `agency_nda_notified_at`; everything else refused, new columns
+included) and O2 (a vendor may set `vendor_org_id` and `claimed_at` only when claiming an unclaimed row
+for one of its own organizations with `claimed_at` in the same update; never again once claimed) are
+rule (4) of 118's `partner_rfp_inbox_link_columns_guard`. That also closes the 099:783-790 re-claim gap.
+**F1 stays open in production until 118 is applied.** 118: `COMMIT;` at line 924; pre-apply test 97
+assertions. Any new vendor write to `partner_rfp_inbox` must be added to that allow-list (an owner
+ruling), or it fails with 42501. Details: `docs/rfp-record-a-report.md` section 8g.
 
 **Budget fee/cost owner rulings (2026-10-14):**
 - **R-K1** A line may carry its own kind (`budget_lines.fee_or_cost`), overriding its category; NULL
