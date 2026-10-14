@@ -4,8 +4,10 @@ Branch `fix/guest-profiles-records`. **Design, not implemented.** No migration, 
 Built from the repository at `ed6fa95` (migrations, route code, the WS3 stop in
 `docs/agency-gate-and-leaks-report.md` sections WS3 and 4). **Renumbered 2026-10-14:** 115 is
 `115_discoverable_profiles.sql` (applied 2026-10-12) and 116 is `116_budget_line_math.sql`
-(`feat/budget-line-math`), so this design's three migrations are **117, 118 and 119** (they were
-written as 116, 117 and 118). Check the next free number again at authoring time.
+(`feat/budget-line-math`), so this design's three migrations were moved to 117, 118 and 119 (they
+were written as 116, 117 and 118). **Renumbered again 2026-10-14:** 116 is applied (2026-10-14) and
+117 is `117_budget_line_kind.sql` (`feat/budget-line-kind`, per-line fee or cost), so this design's
+three migrations are now **118, 119 and 120**. Check the next free number again at authoring time.
 
 ## 0. The problem, from the code
 
@@ -49,7 +51,7 @@ written as 116, 117 and 118). Check the next free number again at authoring time
 ## 1. Schema sketch (agency-only)
 
 ```sql
--- 117. Agency-only. No vendor policy. No DELETE policy (archive, never delete).
+-- 118. Agency-only. No vendor policy. No DELETE policy (archive, never delete).
 CREATE TABLE public.rfp_records (
   id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   lead_org_id               uuid NOT NULL REFERENCES public.organizations(id),
@@ -72,7 +74,7 @@ CREATE TABLE public.rfp_records (
   created_by                uuid REFERENCES auth.users(id),
   created_at                timestamptz NOT NULL DEFAULT now(),
   updated_at                timestamptz NOT NULL DEFAULT now(),
-  backfill_note             text                     -- the backfill (118) only: how the row was reconstructed
+  backfill_note             text                     -- the backfill (119) only: how the row was reconstructed
 );
 
 CREATE TABLE public.rfp_record_lines (
@@ -134,20 +136,20 @@ it). Vendor routes stop joining `projects.client_name` and read `client_name_rel
 | Step | Kind | What | Works before its migration because |
 |---|---|---|---|
 | **A** | code | `broadcast-rfp` and `magic-link` write an `rfp_records` row and its lines at broadcast, and set `rfp_line_id` / `attached_inbox_id` on what they write. Wizard gains the client toggle (stored in the request; written once the table exists) | every new write is skipped on 42P01/PGRST205 (table) and retried without the column on 42703/PGRST204, logged once |
-| **117** | migration | create both tables, RLS, grants, guards, the five link columns, `current_user_entitled_lead_org_ids()` | - |
+| **118** | migration | create both tables, RLS, grants, guards, the five link columns, `current_user_entitled_lead_org_ids()` | - |
 | **B** | code | move every agency reader in the section 0 table onto the record: rubric, compare (requirements, categories), award/decline (`projectName`, scope, NDA), guest-bid join via `rfp_magic_tokens.attached_inbox_id`, engagement history, AI context. **Each keeps the inbox read as the fallback when `rfp_line_id` is NULL** (rows from before step A) | fallback |
-| **118** | migration | **backfill** (section 4); refuses (LG118) on any group it cannot reconstruct unambiguously and lists it | - |
+| **119** | migration | **backfill** (section 4); refuses (LG119) on any group it cannot reconstruct unambiguously and lists it | - |
 | **C** | code | broadcast writes **per-vendor copies**: `master_rfp_json` with only the vendor's own line, its `released_budget`, no `totalBudget`, no other line, no rubric, no `_magic_token`; `client` only when the toggle is on. Vendor routes read `client_name_released`. `lib/magic-token-attach.ts` stops writing `_magic_token` into JSON and notification `data` (`:319`, `:421`). Agency readers drop the inbox fallback for any row with `rfp_line_id` | no schema need |
-| **119** | migration | **scrub** existing vendor copies: remove `evaluation_criteria`, `totalBudget`, other lines' `scopeItems`, `_magic_token`, and `client` where the toggle is off. Pre-flight fingerprint: refuses unless every inbox row with a non-empty `master_rfp_json` has `rfp_line_id` and its record holds the rubric/categories it would remove (no data loss). Adds a guard trigger refusing those keys on INSERT/UPDATE of `partner_rfp_inbox.master_rfp_json` (110's shape) | - |
+| **120** | migration | **scrub** existing vendor copies: remove `evaluation_criteria`, `totalBudget`, other lines' `scopeItems`, `_magic_token`, and `client` where the toggle is off. Pre-flight fingerprint: refuses unless every inbox row with a non-empty `master_rfp_json` has `rfp_line_id` and its record holds the rubric/categories it would remove (no data loss). Adds a guard trigger refusing those keys on INSERT/UPDATE of `partner_rfp_inbox.master_rfp_json` (110's shape) | - |
 | **D** | code, later | remove the inbox fallbacks; optionally restore wizard drafts from `rfp_records` instead of `localStorage` | - |
 
-Each migration ships with a `_down` file and a pre-apply test in the 109/113 format. 117 tests:
+Each migration ships with a `_down` file and a pre-apply test in the 109/113 format. 118 tests:
 vendor cannot SELECT either table (0 rows), agency of another org cannot (NO SUBJECT today: one lead
 org with members), unpaid org cannot (if D1 = paid at RLS), agency can insert with its own project
 and is refused with another org's project, anon nothing, no TRUNCATE/REFERENCES/TRIGGER for
 authenticated, function ACLs.
 
-## 4. Backfill from inbox copies (118)
+## 4. Backfill from inbox copies (119)
 
 Inputs: `partner_rfp_inbox` rows with non-null `master_rfp_json`, `rfp_magic_tokens` rows.
 
@@ -156,7 +158,7 @@ Inputs: `partner_rfp_inbox` rows with non-null `master_rfp_json`, `rfp_magic_tok
    request)`: broadcast inserts all its rows in one batch (`broadcast-rfp/route.ts:494`), so a
    broadcast's rows share `created_at` to the transaction (the milestone feed already groups on it,
    `:562-566`). Within a group, `master_rfp_json` is identical by construction (`:258`, `:403`);
-   118 takes it from the earliest row and **refuses the group** if two rows of one group carry
+   119 takes it from the earliest row and **refuses the group** if two rows of one group carry
    different rubric/categories/requirements (reported, not guessed).
    `show_client_to_vendors := false` (decision D3), `client_name_snapshot := master.client`,
    `estimated_budget := inbox.estimated_budget`, `released_budget := inbox.estimated_budget`
@@ -175,7 +177,7 @@ Inputs: `partner_rfp_inbox` rows with non-null `master_rfp_json`, `rfp_magic_tok
   `lib/magic-token-attach.ts`, `app/agency/page.tsx` (toggle, send), `app/agency/magic-rfp/page.tsx`
   (toggle), new `lib/server/rfp-record.ts` (write + read helpers with the 42P01/PGRST205/42703
   fallbacks).
-- **117:** `supabase/migrations/117_rfp_records{,_down}.sql`, `117_preapply_test.sql`.
+- **118:** `supabase/migrations/118_rfp_records{,_down}.sql`, `118_preapply_test.sql`.
 - **B:** `lib/rfp-evaluation-criteria-server.ts`, `app/api/agency/rfp-responses/route.ts`,
   `app/api/agency/rfp-responses/[id]/route.ts` (award, decline, guest resolver `:60-109`),
   `lib/engagement-history.ts`, `app/api/agency/pool/[partnerId]/route.ts`,
@@ -183,13 +185,13 @@ Inputs: `partner_rfp_inbox` rows with non-null `master_rfp_json`, `rfp_magic_tok
   `app/api/agency/bids/[responseId]/ai-score/route.ts`, `lib/bid-summary-generation.ts`,
   `app/api/agency/rfp-closure/route.ts` (group by `rfp_line_id` where present), new
   `app/api/agency/rfp-records/[id]/route.ts` (toggle PATCH, writes the denormalized columns).
-- **118:** `supabase/migrations/118_rfp_records_backfill{,_down}.sql`, `118_preapply_test.sql`.
+- **119:** `supabase/migrations/119_rfp_records_backfill{,_down}.sql`, `119_preapply_test.sql`.
 - **C:** `app/api/agency/broadcast-rfp/route.ts`, `lib/magic-token-attach.ts`,
   `app/api/partner/rfps/route.ts` (also replace `select("*")` at `:233`),
   `app/api/partner/rfps/[id]/route.ts`, `app/api/partner/rfps/bids/route.ts`,
   `app/partner/rfps/[id]/page.tsx` (program budget and other lines disappear),
   `components/partner-rfp-surface.tsx` (client grouping), `app/api/partner/dashboard/route.ts`.
-- **119:** `supabase/migrations/119_rfp_vendor_copy_scrub{,_down}.sql`, `119_preapply_test.sql`.
+- **120:** `supabase/migrations/120_rfp_vendor_copy_scrub{,_down}.sql`, `120_preapply_test.sql`.
 - **D:** the fallbacks added in B; `app/agency/page.tsx` draft restore.
 
 ## 6. Decisions the owner must make
