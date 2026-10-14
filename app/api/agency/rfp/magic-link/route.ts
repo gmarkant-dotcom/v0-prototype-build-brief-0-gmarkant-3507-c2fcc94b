@@ -12,8 +12,18 @@ import { attachMagicTokenToPartnerInbox, type MagicTokenForAttach } from "@/lib/
 import { recordMilestones, type MilestoneEvent } from "@/lib/milestone-events"
 import { defaultResponseDeadlineIso } from "@/lib/rfp-response-deadline"
 import { exactEmailIlike } from "@/lib/server/account-existence"
+import {
+  createRfpRecordDraft,
+  logColumnMissingOnce,
+  magicLinkRecordFieldsSchema,
+  markRfpRecordBroadcast,
+  missingColumnName,
+  setLinkColumn,
+} from "@/lib/server/rfp-record"
 
 export const dynamic = "force-dynamic"
+
+const RECORD_SITE = "POST /api/agency/rfp/magic-link"
 
 function getServiceSupabase() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -68,7 +78,9 @@ async function requireAgency() {
     .select("role, active_role, company_name, full_name, display_name")
     .eq("id", user.id)
     .single()
-  return { ok: true as const, userId: user.id, profile }
+  // `supabase` is the caller's session client: the RFP record (step A) is written on it, so 118's
+  // RLS applies even though this route's other writes use the service role.
+  return { ok: true as const, userId: user.id, profile, supabase }
 }
 
 export async function POST(request: NextRequest) {
@@ -95,6 +107,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}))
+    // Step A (migration 118): the three new request fields, validated. Everything else on the RFP
+    // record is taken from what this route already validates below, or derived on the server.
+    const recordFields = magicLinkRecordFieldsSchema.safeParse(body)
+    if (!recordFields.success) {
+      return NextResponse.json(
+        { error: "Invalid request: show_client_to_vendors and release_budget must be true or false, estimated_budget a short text" },
+        { status: 400 }
+      )
+    }
     const vendorEmail = String(body.vendor_email || "").trim().toLowerCase()
     const vendorName = String(body.vendor_name || "").trim() || null
     const projectId = String(body.project_id || "").trim()
@@ -231,6 +252,62 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Your account is not linked to an organization yet" }, { status: 403 })
     }
 
+    // Step A, write order (1) and (2): this send's RFP record WITHOUT broadcast_at, then its one
+    // line (D4: one record per send; D6: a magic-link send is its own record, source 'magic_link').
+    // Written on the SESSION client, so 118's RLS (paid lead agency, D1) applies, and the project
+    // must be writeOrgId's own (118's WITH CHECK). FAIL CLOSED: any error other than the two
+    // fallbacks returns before the token is written or any mail leaves. A missing table (118 not
+    // applied) skips the record and this route behaves exactly as before.
+    const recordEstimatedBudget =
+      (recordFields.data.estimated_budget || "").trim() || (project.budget_range as string | null) || null
+    const recordDraft = await createRfpRecordDraft(
+      auth.supabase,
+      RECORD_SITE,
+      {
+        leadOrgId: writeOrgId,
+        projectId: project.id as string,
+        source: "magic_link",
+        createdBy: auth.userId,
+        masterRfp: {
+          projectName: project.name ?? null,
+          scopeItems: [{ id: rawScopeItemId || null, name: scopeItemName, description: scopeItemDescription }],
+          referenceMaterials,
+        },
+        evaluationCriteria,
+        budgetCategories,
+        businessCriteriaRequired,
+        // D9: the output template lives on the record. The token keeps its copy until step C.
+        outputTemplateConfig,
+        totalBudget: (project.budget_range as string | null) ?? null,
+        showClientToVendors: recordFields.data.show_client_to_vendors === true,
+        clientNameSnapshot: (project.client_name as string | null) ?? null,
+        responseDeadline,
+        closeBiddingAtDeadline,
+        // A resend that omits it leaves the token's value alone; the record takes the column default.
+        requireTermsDisclosure: hasRequireTermsDisclosure ? requireTermsDisclosure : true,
+        ndaLink: null,
+      },
+      [
+        {
+          scopeItemKey: rawScopeItemId || "magic",
+          scopeItemName: scopeItemName || (project.name as string | null)?.trim() || "Scope item",
+          scopeItemDescription,
+          estimatedBudget: recordEstimatedBudget,
+          // D2: hidden unless the agency released this line. Only an explicit true releases it.
+          releasedBudget: recordFields.data.release_budget === true ? recordEstimatedBudget : null,
+          sortOrder: 0,
+        },
+      ]
+    )
+    if (recordDraft.status === "failed") {
+      return NextResponse.json(
+        { error: "Could not save the RFP record, so the invitation was not sent. Please try again." },
+        { status: 500 }
+      )
+    }
+    const recordLineId =
+      recordDraft.status === "created" ? recordDraft.lineIdByKey.get(rawScopeItemId || "magic") ?? null : null
+
     // The deadline this send is about to OVERWRITE, read before the upsert discards it.
     //
     // This is what tells rfp.deadline_set from rfp.deadline_change, and it is the whole
@@ -304,6 +381,9 @@ export async function POST(request: NextRequest) {
       budget_categories: budgetCategories,
       evaluation_criteria: evaluationCriteria,
       close_bidding_at_deadline: closeBiddingAtDeadline,
+      // Step A, write order (3): the token carries the line it was sent from. A resend is a new
+      // send (D4), so the token moves to the newest record's line, the one matching its content.
+      ...(recordLineId ? { rfp_line_id: recordLineId } : {}),
     }
 
     // Pre-migration safety, progressive. Each retry drops one more optional column that a
@@ -318,6 +398,17 @@ export async function POST(request: NextRequest) {
       .upsert(payloadAttempt, { onConflict: "org_id,project_id,vendor_email" })
       .select()
       .single()
+    // Step A fallback: rfp_line_id does not exist before 118. Dropped and retried, logged once.
+    if (missingColumnName(upsertErr) === "rfp_line_id") {
+      logColumnMissingOnce(RECORD_SITE, "rfp_magic_tokens", "rfp_line_id")
+      const { rfp_line_id: _omitted, ...rest } = payloadAttempt
+      payloadAttempt = rest
+      ;({ data: tokenRow, error: upsertErr } = await service
+        .from("rfp_magic_tokens")
+        .upsert(payloadAttempt, { onConflict: "org_id,project_id,vendor_email" })
+        .select()
+        .single())
+    }
     for (const column of OPTIONAL_TOKEN_COLUMNS) {
       if (upsertErr?.code !== "42703") break
       console.warn(`[api] rfp/magic-link: optional column missing, retrying without it - ${column}`)
@@ -331,6 +422,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (upsertErr || !tokenRow) {
+      // The record, if one was written, stays an unsent draft: broadcast_at is not set.
       console.error("[api] failure", { route, method: "POST", code: 500, message: upsertErr?.message })
       return NextResponse.json({ error: "Failed to create invitation" }, { status: 500 })
     }
@@ -350,6 +442,7 @@ export async function POST(request: NextRequest) {
       ? await resolveOrgIdForUser(matchedProfile.id as string, service)
       : null
     let attached = false
+    let attachedInboxId: string | null = null
     if (matchedProfile?.id && !matchedVendorOrgId) {
       console.error("[api] rfp/magic-link: matched account belongs to no organization, skipping portal attach", {
         route,
@@ -364,6 +457,7 @@ export async function POST(request: NextRequest) {
       })
       if (attachResult.attached) {
         attached = true
+        attachedInboxId = attachResult.inboxId
       } else {
         console.error("[api] rfp/magic-link: send-time portal attach failed", {
           route,
@@ -371,6 +465,26 @@ export async function POST(request: NextRequest) {
           reason: attachResult.reason,
         })
       }
+    }
+
+    // Step A, write order (3) and (4), on the service client like every other write here: the
+    // attached inbox row carries this send's line, and the token points at the inbox row
+    // (attached_inbox_id, which replaces the _magic_token JSON join in step B). The attach helper
+    // itself is unchanged; _magic_token is still written (stripped in step C, D8). A failure here
+    // is logged, leaves broadcast_at unset, and does not fail the send, exactly as a failed attach
+    // never has.
+    let recordLinksOk = true
+    if (recordDraft.status === "created" && attachedInboxId) {
+      if (recordLineId) {
+        recordLinksOk =
+          (await setLinkColumn(service, RECORD_SITE, "partner_rfp_inbox", { column: "id", value: attachedInboxId }, {
+            rfp_line_id: recordLineId,
+          })) && recordLinksOk
+      }
+      recordLinksOk =
+        (await setLinkColumn(service, RECORD_SITE, "rfp_magic_tokens", { column: "token", value: tokenRow.token as string }, {
+          attached_inbox_id: attachedInboxId,
+        })) && recordLinksOk
     }
 
     const agencyName =
@@ -413,6 +527,14 @@ export async function POST(request: NextRequest) {
         vendorEmail,
         message: emailErr instanceof Error ? emailErr.message : String(emailErr),
       })
+    }
+
+    // Step A, write order (5): broadcast_at LAST, only when every send succeeded: the token is
+    // written, the invitation reached the vendor (the email, or the portal attach), and the link
+    // writes above succeeded. Otherwise the record stays an honest unsent draft. Never fails the
+    // route: the token already exists.
+    if (recordDraft.status === "created" && (emailSent || attached) && recordLinksOk) {
+      await markRfpRecordBroadcast(auth.supabase, RECORD_SITE, recordDraft.recordId)
     }
 
     let partnershipId: string | null = null
