@@ -1,5 +1,11 @@
 # Agency-owned RFP record: design only, 2026-10-12
 
+> **UPDATED 2026-10-14 (feat/rfp-record-b).** **118 is applied and catalog-verified (2026-10-14); F1 is
+> closed in production.** **Step B and migration 119 are authored on `feat/rfp-record-b`** (119 NOT
+> applied): section 8 below records them as built, the provenance rule, one deliberate departure from
+> section 4.2 (one Lightning record per token, not per project), and the vendor-side attach paths step C
+> must change. Report: `docs/rfp-record-b-report.md`.
+>
 > **UPDATED 2026-10-14 (feat/rfp-record-a).** **The owner ruled D1-D9 on 2026-10-14, all as proposed**
 > (section 6 now records the rulings). **Step A and migration 118 are authored on `feat/rfp-record-a`:**
 > `supabase/migrations/118_rfp_records{,_down}.sql`, `118_preapply_test.sql` (82 assertions; NOT
@@ -293,3 +299,101 @@ reconstructed record with `broadcast_at` NULL, its lines, link the inbox rows an
 Rules 2 and 3 run when the column is set or changed, or when the lead organization of a row that
 already carries one changes. Every other vendor write passes untouched, so vendors keep every update
 they have today (099's policy still decides those).
+
+## 8. As built in step B and 119 (2026-10-14, `feat/rfp-record-b`)
+
+### 8a. Step B: the agency readers
+
+One shared helper, `lib/server/rfp-record.ts:304-543`. Rules, in the file's own words:
+
+1. **The record wins when the row is linked.** An inbox row (or, for a guest bid, its token) that
+   carries `rfp_line_id` is answered from `rfp_records` / `rfp_record_lines`. The vendor copy
+   (`master_rfp_json`) is read only when `rfp_line_id` is NULL. A linked row whose record cannot be read
+   answers with nothing, never with the vendor copy.
+2. **"Unknown" is not "linked".** If the link column cannot be read (before 118, or any error, logged
+   once), the row is treated as unlinked: exactly the behaviour before step B.
+3. **Only the signed-in agency session reads the record.** Callers state a mode, `"session"` (an agency
+   route after G1, on its session client) or `"skip"` (the default). Every read also filters
+   `lead_org_id` to the caller's own organizations. No reader uses the service role.
+
+For one bid the line is the inbox row's `rfp_line_id`, else the bid's token's (`rfp_magic_tokens` by
+`response_id`): a magic-link row attached by the vendor-side path after a step A send carries no line
+of its own, but its token does.
+
+| Reader | Now reads from the record | Fallback (row unlinked) | file:line |
+|---|---|---|---|
+| Rubric | `evaluation_criteria` | `master_rfp_json.evaluation_criteria`, token column | `lib/rfp-evaluation-criteria-server.ts:83-88`; session from `bids/[responseId]/evaluation:94,172`, `ai-score:194`, `generate-summary:30` |
+| AI context | scope name, description | inbox / token columns | `lib/bid-analysis-context.ts:84-91`; session from `decompose:154`, `evaluation:342`, `ai-score:232`, `compare:144,149`, `generate-summary` |
+| Bid list / compare / detail | `business_criteria_required`, `budget_categories` | `master_rfp_json`, token column | `app/api/agency/rfp-responses/route.ts:236-249`, `:324-350` |
+| Award | `projectName`, scope name | `master_rfp_json.projectName`, inbox column | `app/api/agency/rfp-responses/[id]/route.ts:794-810` |
+| Decline | `projectName`, scope name | same | same file `:1247-1265` |
+| Guest bid context (feedback, milestones, decline) | `projectName`, scope name | synthesized row | same file `:100-161` |
+| Guest-bid join | `rfp_magic_tokens.attached_inbox_id` | `.contains("master_rfp_json", {_magic_token})` | same file `:77-98` (used at `:128` and the award at `:467`) |
+| Engagement history (agency side) | `projectName` when the project row has no name | `master_rfp_json.projectName` | `app/api/agency/pool/[partnerId]/route.ts:242-264`, `lib/engagement-history.ts:41-89` |
+
+**Left on today's reads, deliberately:**
+
+- The summary generated after a **vendor or guest bid submission** (`app/api/partner/rfps/[id]/response/route.ts:433`,
+  `app/api/rfp/guest/[token]/route.ts:660,776`) runs on the service role after a request the agency gate
+  never saw, so it may not read the record (`"skip"`, the default). Those routes are unchanged.
+- `resolveResponseScope` (ranking group): its hash must equal the browser's `scopeKeyForRow`, which reads
+  the row's own `project_id` and `scope_item_name`; neither is a vendor-copy key.
+- `scope_item_name` reads on portal bids for the feedback mail and the shortlist / meeting milestones
+  (`[id]/route.ts` feedback and `resolveBidMilestoneContext` inbox branch): a row column, not a
+  vendor-copy key; step C does not scrub it.
+- `app/api/agency/rfp-closure/route.ts` ("group by `rfp_line_id` where present", section 5): a writer, not
+  a reader of the copy; changing what "close the whole RFP" covers is a product decision, not taken here.
+- `lib/magic-token-attach.ts:108` (the attach's own `_magic_token` lookup): locked until step C.
+
+### 8b. The client toggle on an existing record
+
+`PATCH /api/agency/rfp-records/[id]` (`app/api/agency/rfp-records/[id]/route.ts`): session, G1 (402),
+zod (`id` uuid; body exactly `{ show_client_to_vendors: boolean }`), organization scope (the record is
+re-read under RLS and `lead_org_id IN` the caller's organizations; another organization's record or an
+unknown id is 404), then ONE call to 119's `rfp_record_set_client_visibility(record, show)` on the
+session client. Before 119 the function is missing (42883 / PGRST202): 503 "not enabled yet", nothing
+written. The bids page lists sent records (browser client, RLS) with the toggle
+(`components/rfp-record-client-toggle.tsx`); its copy says vendors see the change in the next release
+while `RFP_VENDOR_COPY_SCRUBBED` is false.
+
+### 8c. Migration 119 as built
+
+- **The function** (`119_rfp_records_backfill.sql:263-322`): SECURITY INVOKER, `search_path` pinned,
+  EXECUTE revoked from PUBLIC and anon, granted to authenticated. Updates the record's toggle under RLS
+  (zero rows raises P0002 before anything is written), then sets `client_name_released` on every inbox
+  row and token linked to the record's lines (the snapshot when on, NULL when off). One call, one
+  transaction.
+- **Wizard sends**: one record per `(lead_org_id, project_id, created_at)` of unlinked, non-Lightning
+  inbox rows; lines per `scope_item_id`; master from the first copy by id, `nda_link` split out.
+- **Lightning sends: ONE RECORD PER TOKEN**, not per `(org_id, project_id)` as section 4.2 sketched. D4
+  (one record per send) and D6 (sourced from the agency-only token) both point there: the magic-link
+  route keeps one token per (org, project, vendor) and each is its own send, and tokens of one project
+  can carry different rubrics. This matches what step A writes.
+- **Lightning inbox rows attached after a step A send** carry no line; 119 links them to their token's
+  existing step A line and changes nothing else of step A.
+- **The provenance rule.** A wizard group of 2+ copies must agree on `evaluation_criteria`,
+  `budget_categories`, `business_criteria_required`, and per line on name, description and estimated
+  budget, or it is refused (RAISE WARNING LG119, listed, rows left unlinked). A single-copy group is
+  built with `backfill_note` starting `unverified single copy` and listed. The client name is always
+  taken from `projects.client_name`; a mismatch with the copy is noted `client name taken from project`.
+  A group or token whose project is missing or another organization's is refused.
+- **Write order** per record: record without `broadcast_at`, lines, `rfp_line_id` on rows and tokens,
+  `attached_inbox_id`, `broadcast_at` last (the original send time).
+- Refuses a second run (LG119) and checks 118's trusted path first; ends by proving every inbox row and
+  token is linked or listed as refused. Down file: unlinks and deletes `source = 'backfill'` records only.
+
+### 8d. Vendor-side attach paths that do not set `attached_inbox_id` (for step C)
+
+All call `attachMagicTokenToPartnerInbox` (`lib/magic-token-attach.ts:229`), which creates or collapses the
+inbox row and sets neither `rfp_line_id` nor `attached_inbox_id`:
+
+| Path | file:line | Sets `attached_inbox_id` |
+|---|---|---|
+| Agency send-time attach (existing account) | `app/api/agency/rfp/magic-link/route.ts:454`, then `:484-487` | yes (step A), and `rfp_line_id` on the row `:478-482` |
+| Guest "attach to my existing account" | `app/api/rfp/guest/[token]/attach-existing-account/route.ts:77` | no |
+| Vendor portal sweep, RFP list | `app/api/partner/rfps/route.ts:72` | no |
+| Vendor portal sweep, bids list | `app/api/partner/rfps/bids/route.ts:56` | no |
+| Portal claim (broadcast invite token) | `app/api/partner/rfps/claim/route.ts:76-84` | n/a: claims a broadcast inbox row, not a magic token |
+
+Until step C changes these, the readers fall back to the `_magic_token` join for such rows, and 119
+links whatever exists at apply time.

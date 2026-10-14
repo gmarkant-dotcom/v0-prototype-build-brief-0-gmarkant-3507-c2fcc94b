@@ -1,5 +1,19 @@
 # CURRENT STATE, 2026-10-12 (read this instead of every banner below)
 
+> **UPDATED 2026-10-14 (feat/rfp-record-b). THIS BANNER SUPERSEDES THE ONE BELOW.** **118 is applied
+> and catalog-verified (2026-10-14); F1 is closed in production.** Step B code and **119** (the
+> backfill and the client toggle function) are authored on `feat/rfp-record-b`; 119 is NOT applied.
+> Next free number: **119** until it is applied, then **120**. Full record:
+> `docs/state-of-record-2026-10-12.md`; report: `docs/rfp-record-b-report.md`.
+>
+> **CURRENT ORDER OF WORK:**
+> 1. **RFP record step B + 119** (`feat/rfp-record-b`): deploy B (it works on either side of 119),
+>    then 119's pre-apply test, dry run, apply.
+> 2. **RFP record step C + 120**: per-vendor copies, vendor routes read `client_name_released`,
+>    `_magic_token` stripped (D8), the vendor-side attach paths set `attached_inbox_id`,
+>    `RFP_VENDOR_COPY_SCRUBBED` flipped to true; then the scrub.
+> 3. **The actuals feeder**, migration 121 or later.
+
 > **UPDATED 2026-10-14 (feat/rfp-record-a). THIS BANNER SUPERSEDES THE MIGRATION AND ORDER LINES
 > BELOW.** Applied and catalog-verified: everything through **117** (116 and 117 on 2026-10-14; 103,
 > 104, 115 on 2026-10-12). R-D3 re-tag applied 2026-10-14 (data-fix v2, pinned to categories
